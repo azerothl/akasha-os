@@ -11,6 +11,7 @@ pub mod canvas_scene;
 pub mod context_budget;
 pub mod deep_thinking;
 pub mod device_tools;
+pub mod host_folder;
 pub mod document_index;
 pub mod document_prep;
 pub mod health;

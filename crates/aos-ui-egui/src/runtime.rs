@@ -1722,11 +1722,15 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::Confirm { id, approved } => {
+        Cmd::Confirm { id, approved, persistent } => {
             match bus
                 .call::<ConfirmResponseRequest, bool>(
                     "confirm.respond",
-                    &ConfirmResponseRequest { id, approved },
+                    &ConfirmResponseRequest {
+                        id,
+                        approved,
+                        persistent,
+                    },
                     vec![],
                 )
                 .await

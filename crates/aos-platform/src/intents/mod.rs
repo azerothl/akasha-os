@@ -5,6 +5,7 @@ pub mod device;
 pub mod device_usb;
 pub mod fs;
 pub mod helpers;
+pub mod host_folder;
 
 use aos_ipc::BusService;
 use crate::subsystem::PlatformSubsystem;
@@ -14,5 +15,6 @@ pub fn register_audit_and_fs(svc: &mut BusService, sub: &Arc<PlatformSubsystem>)
     audit::register(svc, sub.clone());
     device::register(svc, sub.clone());
     device_usb::register(svc, sub.clone());
+    host_folder::register(svc, sub.clone());
     fs::register(svc, sub.clone());
 }

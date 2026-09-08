@@ -182,7 +182,9 @@ fn register_capture(
                 context.insert("device.id".into(), req.device_id.clone());
                 context.insert("device.kind".into(), format!("{:?}", req.kind).to_lowercase());
                 context.insert("capture.mode".into(), format!("{:?}", req.mode).to_lowercase());
-                s.policy_gate(context, &actor, &cap, &req.device_id, "device-capture").await
+                s.policy_gate(context, &actor, &cap, &req.device_id, "device-capture")
+                    .await
+                    .approved
             };
             if !allowed {
                 let _ = ctx.respond_error(aos_ipc::msg::Status::PermissionDenied, "capture refusée ou confirmation expirée").await;

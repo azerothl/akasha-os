@@ -2944,7 +2944,8 @@ impl eframe::App for UiApp {
                             let device_capture = c.action.starts_with("device.camera.")
                                 || c.action.starts_with("device.mic.");
                             let device_usb = c.action.starts_with("device.usb.");
-                            let device_grant = device_capture || device_usb;
+                            let folder_grant = c.action == aos_proto::HOST_FOLDER_ACCESS_ACTION;
+                            let device_grant = device_capture || device_usb || folder_grant;
                             let rich = device_grant
                                 || matches!(
                                     c.action.as_str(),
@@ -2958,12 +2959,23 @@ impl eframe::App for UiApp {
                                         | "media.audio.generate"
                                 );
                             ui.label(
-                                t.confirm_wants_action.replace(
-                                    "{action}",
-                                    &i18n::confirm_action_label(&t, &c.action),
-                                ),
+                                if folder_grant {
+                                    t.folder_grant_title.to_string()
+                                } else {
+                                    t.confirm_wants_action.replace(
+                                        "{action}",
+                                        &i18n::confirm_action_label(&t, &c.action),
+                                    )
+                                },
                             );
-                            ui.monospace(format!("{} → {}", c.target, c.reason));
+                            if folder_grant {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(220, 180, 80),
+                                    &c.target,
+                                );
+                            } else {
+                                ui.monospace(format!("{} → {}", c.target, c.reason));
+                            }
                             if device_capture {
                                 ui.colored_label(
                                     egui::Color32::from_rgb(220, 180, 80),
@@ -2987,16 +2999,15 @@ impl eframe::App for UiApp {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: true,
+                                        persistent: false,
                                     });
                                     self.scenario_ui.confirm = true;
                                 }
                                 if device_grant && ui.button(t.device_always).clicked() {
-                                    // La durée de permission est portée par la
-                                    // requête device ; ce clic ne demande jamais
-                                    // directement la permission Windows.
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: true,
+                                        persistent: true,
                                     });
                                     self.scenario_ui.confirm = true;
                                 }
@@ -3011,6 +3022,7 @@ impl eframe::App for UiApp {
                                     let _ = self.cmd_tx.send(Cmd::Confirm {
                                         id: c.id.clone(),
                                         approved: false,
+                                        persistent: false,
                                     });
                                     self.scenario_ui.confirm = true;
                                 }
