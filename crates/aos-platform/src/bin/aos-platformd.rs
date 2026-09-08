@@ -3049,12 +3049,12 @@ async fn main() {
                                 .await;
                             return;
                         }
-                        if aos_proto::decl_ui::is_bundled_module(&req.module) {
+                        if aos_proto::decl_ui::is_protected_by_host(&req.module) {
                             let _ = ctx
                                 .respond_error(
                                     aos_ipc::msg::Status::PermissionDenied,
                                     &format!(
-                                        "module bundlé {} : désinstallation refusée",
+                                        "module protégé par l'hôte {} : désinstallation refusée",
                                         req.module
                                     ),
                                 )

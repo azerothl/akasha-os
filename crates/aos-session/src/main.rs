@@ -903,6 +903,7 @@ fn ensure_layout(home: &Path) -> Vec<String> {
     }
 
     // Module tasks (Preview 0.3 / E3) — même resync au boot.
+    // Lot 4: gate on registry `user_removed` via `ModuleRuntime::should_auto_install("tasks")`.
     let tasks_share = home.join("share/modules/tasks.aospkg");
     let tasks_installed = home.join("var/modules/tasks");
     if tasks_share.exists() && bootstrap::sync_packaged_module(&tasks_share, &tasks_installed) {

@@ -2745,6 +2745,9 @@ mod preview_prompt_tests {
 // Modules (§7, §11.4) — P2
 // ---------------------------------------------------------------------------
 
+/// Host module API level (`manifest.min_os_api` must be ≤ this value).
+pub const OS_API_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleManifest {
     pub name: String,

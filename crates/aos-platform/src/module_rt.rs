@@ -21,8 +21,8 @@
 //!   sont admin en v1 mono-utilisateur, §12) ;
 //! - bornes par invocation : fuel CPU + mémoire linéaire limitée (§7.4).
 
-use aos_proto::decl_ui::{DeclUiDocument, ModuleUiResponse};
-use aos_proto::{ModuleInfo, ModuleManifest};
+use aos_proto::decl_ui::{self, DeclUiDocument, ModuleUiResponse};
+use aos_proto::{ModuleInfo, ModuleManifest, OS_API_VERSION};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -36,6 +36,8 @@ pub enum ModuleError {
     NotFound(String),
     #[error("outil inconnu: {0}")]
     UnknownTool(String),
+    #[error("module protégé par l'hôte (politique): {0}")]
+    ProtectedByHost(String),
     #[error("module en quarantaine: {0}")]
     Quarantined(String),
     #[error("permission refusée: l'acteur doit détenir tool.invoke:{0}")]
@@ -58,6 +60,10 @@ pub enum ModuleError {
     DeclUiInvalid(String),
     #[error("module bundlé non désinstallable: {0}")]
     Bundled(String),
+    #[error("min_os_api trop récent: le module exige {required}, l'hôte expose {current}")]
+    OsApiTooNew { required: u32, current: u32 },
+    #[error("intégrité du package: {0}")]
+    PackageIntegrity(String),
     #[error("io: {0}")]
     Io(String),
 }
@@ -144,11 +150,23 @@ pub fn is_unknown_tool_guest_error(err: &str, tool: &str) -> bool {
     err == format!("outil inconnu: {tool}")
 }
 
+/// Registry record for a module the user explicitly removed (survives file wipe).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemovedModuleEntry {
+    pub name: String,
+    pub user_removed: bool,
+    #[serde(default)]
+    pub preinstalled: bool,
+    #[serde(default)]
+    pub granted_caps: Vec<String>,
+}
+
 /// Le runtime de modules.
 pub struct ModuleRuntime {
     engine: Engine,
     dir: PathBuf,
     installed: HashMap<String, InstalledModule>,
+    removed: HashMap<String, RemovedModuleEntry>,
     services: Arc<dyn HostServices>,
     catalogue: Option<crate::catalogue::SignedCatalogue>,
     extra_catalogue: Option<crate::catalogue::SignedCatalogue>,
@@ -172,10 +190,12 @@ impl ModuleRuntime {
             engine,
             dir,
             installed: HashMap::new(),
+            removed: HashMap::new(),
             services,
             catalogue: None,
             extra_catalogue: None,
         };
+        rt.recover_incomplete_installs()?;
         rt.load_registry()?;
         Ok(rt)
     }
@@ -201,10 +221,46 @@ impl ModuleRuntime {
         self.dir.join("registry.yaml")
     }
 
+    fn staging_root(&self) -> PathBuf {
+        self.dir.join(".staging")
+    }
+
+    fn previous_root(&self) -> PathBuf {
+        self.dir.join(".previous")
+    }
+
+    /// True when the user explicitly uninstalled this module (registry survives file wipe).
+    pub fn user_removed(&self, name: &str) -> bool {
+        self.removed
+            .get(name)
+            .is_some_and(|e| e.user_removed)
+    }
+
+    /// Whether an automatic preinstall/sync may install this module.
+    pub fn should_auto_install(&self, name: &str) -> bool {
+        !self.user_removed(name)
+    }
+
+    /// Install or upgrade from a packaged source unless the user removed it.
+    pub fn install_preinstalled(
+        &mut self,
+        source_dir: &Path,
+        approved_caps: Option<Vec<String>>,
+    ) -> Result<Option<ModuleInfo>, ModuleError> {
+        let manifest = read_manifest_from_dir(source_dir)?;
+        if self.user_removed(&manifest.name) {
+            return Ok(None);
+        }
+        self.install(source_dir, approved_caps).map(Some)
+    }
+
     fn load_registry(&mut self) -> Result<(), ModuleError> {
         #[derive(Deserialize)]
         struct Reg {
+            #[serde(default)]
             installed: Vec<RegEntry>,
+            #[serde(default)]
+            removed: Vec<RemovedModuleEntry>,
         }
         #[derive(Deserialize)]
         struct RegEntry {
@@ -212,6 +268,9 @@ impl ModuleRuntime {
             granted_caps: Vec<String>,
             #[serde(default)]
             quarantined: bool,
+            #[serde(default)]
+            #[allow(dead_code)]
+            preinstalled: bool,
         }
         let path = self.registry_path();
         if !path.exists() {
@@ -219,11 +278,17 @@ impl ModuleRuntime {
         }
         let reg: Reg = serde_yaml::from_str(&std::fs::read_to_string(&path)?)
             .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
+        for entry in reg.removed {
+            if entry.user_removed {
+                self.removed.insert(entry.name.clone(), entry);
+            }
+        }
         for entry in reg.installed {
             let mdir = self.dir.join(&entry.name);
-            let manifest: ModuleManifest =
-                serde_yaml::from_str(&std::fs::read_to_string(mdir.join("manifest.yaml"))?)
-                    .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
+            if !mdir.join("manifest.yaml").exists() {
+                continue;
+            }
+            let manifest = read_manifest_from_dir(&mdir)?;
             let compiled = self.compile(&mdir.join("module.wasm"))?;
             let verified_tools = self.verify_manifest_tools(
                 &manifest,
@@ -251,25 +316,65 @@ impl ModuleRuntime {
         #[derive(Serialize)]
         struct Reg<'a> {
             installed: Vec<RegEntry<'a>>,
+            removed: Vec<&'a RemovedModuleEntry>,
         }
         #[derive(Serialize)]
         struct RegEntry<'a> {
             name: &'a str,
             granted_caps: &'a [String],
             quarantined: bool,
+            preinstalled: bool,
         }
+        let mut installed: Vec<_> = self
+            .installed
+            .values()
+            .map(|m| RegEntry {
+                name: &m.manifest.name,
+                granted_caps: &m.granted_caps,
+                quarantined: m.quarantined,
+                preinstalled: decl_ui::is_preinstalled_module(&m.manifest.name),
+            })
+            .collect();
+        installed.sort_by(|a, b| a.name.cmp(b.name));
+        let mut removed: Vec<_> = self.removed.values().collect();
+        removed.sort_by(|a, b| a.name.cmp(&b.name));
         let reg = Reg {
-            installed: self
-                .installed
-                .values()
-                .map(|m| RegEntry {
-                    name: &m.manifest.name,
-                    granted_caps: &m.granted_caps,
-                    quarantined: m.quarantined,
-                })
-                .collect(),
+            installed,
+            removed,
         };
-        std::fs::write(self.registry_path(), serde_yaml::to_string(&reg).unwrap())?;
+        let path = self.registry_path();
+        let tmp = path.with_extension("yaml.tmp");
+        std::fs::write(&tmp, serde_yaml::to_string(&reg).unwrap())?;
+        std::fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
+    fn recover_incomplete_installs(&self) -> Result<(), ModuleError> {
+        let staging_root = self.staging_root();
+        if staging_root.is_dir() {
+            let _ = std::fs::remove_dir_all(&staging_root);
+        }
+        if !self.previous_root().is_dir() {
+            return Ok(());
+        }
+        for entry in std::fs::read_dir(self.previous_root())? {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let active = self.dir.join(&name);
+            let needs_restore = !active.is_dir()
+                || !active.join("module.wasm").exists()
+                || !active.join("manifest.yaml").exists();
+            if needs_restore {
+                if active.is_dir() {
+                    let _ = std::fs::remove_dir_all(&active);
+                }
+                std::fs::rename(entry.path(), &active).map_err(|e| ModuleError::Io(e.to_string()))?;
+            }
+        }
+        let _ = std::fs::remove_dir_all(self.previous_root());
         Ok(())
     }
 
@@ -278,18 +383,114 @@ impl ModuleRuntime {
             .map_err(|e| ModuleError::BadManifest(format!("compile {}: {e}", wasm_path.display())))
     }
 
-    /// `module.install` : vérifie le package, copie, enregistre (F-MOD-01).
-    /// `approved_caps` est **obligatoire** (revue F-EXT-05) — `None` →
-    /// [`ModuleError::CapReviewRequired`] avec la liste demandée.
+    /// `module.install` : stage, validate, activate atomically (F-MOD-01).
+    /// `approved_caps` is **obligatoire** for first install (revue F-EXT-05) — `None` →
+    /// [`ModuleError::CapReviewRequired`] with the liste demandée.
     pub fn install(
         &mut self,
         source_dir: &Path,
         approved_caps: Option<Vec<String>>,
     ) -> Result<ModuleInfo, ModuleError> {
-        let manifest: ModuleManifest =
-            serde_yaml::from_str(&std::fs::read_to_string(source_dir.join("manifest.yaml"))?)
-                .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
-        let wasm = std::fs::read(source_dir.join("module.wasm"))?;
+        let validated = self.validate_package(source_dir)?;
+        let manifest = validated.manifest.clone();
+        let existing = self.installed.get(&manifest.name);
+        let granted = self.resolve_granted_caps(&manifest, existing, approved_caps)?;
+        for cap in &granted {
+            if !manifest.permissions.required_caps.contains(cap) {
+                return Err(ModuleError::BadManifest(format!(
+                    "cap approuvée non demandée par le manifeste: {cap}"
+                )));
+            }
+        }
+        let quarantined = granted.is_empty() && !manifest.permissions.required_caps.is_empty();
+        let dest = self.dir.join(&manifest.name);
+        let staging = self.staging_root().join(&manifest.name);
+        let backup = self.previous_root().join(&manifest.name);
+        let _ = std::fs::remove_dir_all(&staging);
+        let _ = std::fs::remove_dir_all(&backup);
+        std::fs::create_dir_all(self.staging_root())?;
+        copy_dir(source_dir, &staging)?;
+        self.validate_package(&staging)?;
+        let compiled = self.compile(&staging.join("module.wasm"))?;
+        let verified_tools = self.verify_manifest_tools(
+            &manifest,
+            &manifest.name,
+            &staging,
+            &granted,
+            &compiled,
+        );
+        if dest.exists() {
+            std::fs::create_dir_all(self.previous_root())?;
+            std::fs::rename(&dest, &backup).map_err(|e| ModuleError::Io(e.to_string()))?;
+        }
+        if let Err(e) = (|| -> Result<(), ModuleError> {
+            std::fs::rename(&staging, &dest).map_err(|e| ModuleError::Io(e.to_string()))?;
+            self.installed.insert(
+                manifest.name.clone(),
+                InstalledModule {
+                    manifest: manifest.clone(),
+                    granted_caps: granted.clone(),
+                    quarantined,
+                    verified_tools: verified_tools.clone(),
+                    dir: dest.clone(),
+                    compiled,
+                },
+            );
+            self.removed.remove(&manifest.name);
+            self.save_registry()?;
+            Ok(())
+        })() {
+            if backup.is_dir() {
+                let _ = std::fs::remove_dir_all(&dest);
+                let _ = std::fs::rename(&backup, &dest);
+            }
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(e);
+        }
+        let _ = std::fs::remove_dir_all(&backup);
+        let _ = std::fs::remove_dir_all(&staging);
+        Ok(module_info_from_installed(
+            &manifest,
+            &verified_tools,
+            granted,
+            quarantined,
+            Some(&dest),
+        ))
+    }
+
+    fn resolve_granted_caps(
+        &self,
+        manifest: &ModuleManifest,
+        existing: Option<&InstalledModule>,
+        approved_caps: Option<Vec<String>>,
+    ) -> Result<Vec<String>, ModuleError> {
+        let increased = existing
+            .map(|m| caps_increased(&m.manifest, &m.granted_caps, manifest))
+            .unwrap_or_default();
+        match (existing, approved_caps) {
+            (_, Some(caps)) => Ok(caps),
+            (Some(existing), None) if !increased.is_empty() => Err(ModuleError::CapReviewRequired(
+                increased.join(", "),
+            )),
+            (Some(existing), None) => Ok(existing.granted_caps.clone()),
+            (None, None) if manifest.permissions.required_caps.is_empty() => Ok(Vec::new()),
+            (None, None) => Err(ModuleError::CapReviewRequired(
+                manifest.permissions.required_caps.join(", "),
+            )),
+        }
+    }
+
+    fn validate_package(&self, source_dir: &Path) -> Result<ValidatedPackage, ModuleError> {
+        validate_package_tree(source_dir)?;
+        let manifest = read_manifest_from_dir(source_dir)?;
+        if manifest.min_os_api > OS_API_VERSION {
+            return Err(ModuleError::OsApiTooNew {
+                required: manifest.min_os_api,
+                current: OS_API_VERSION,
+            });
+        }
+        let wasm_path = source_dir.join("module.wasm");
+        let wasm = std::fs::read(&wasm_path)?;
         let hash = sha256_hex(&wasm);
         if manifest.hash != hash && manifest.hash != format!("sha256:{hash}") {
             return Err(ModuleError::HashMismatch);
@@ -308,58 +509,9 @@ impl ModuleRuntime {
             crate::catalogue::CatalogueError::BadSignature => ModuleError::CatalogueSignature,
             other => ModuleError::BadManifest(other.to_string()),
         })?;
-        let granted = match approved_caps {
-            Some(caps) => caps,
-            None if manifest.permissions.required_caps.is_empty() => Vec::new(),
-            None => {
-                return Err(ModuleError::CapReviewRequired(
-                    manifest.permissions.required_caps.join(", "),
-                ));
-            }
-        };
-        // Les caps approuvées ne peuvent excéder celles demandées (least
-        // privilege, §7 règles métier). Empty granted = install quarantined.
-        for cap in &granted {
-            if !manifest.permissions.required_caps.contains(cap) {
-                return Err(ModuleError::BadManifest(format!(
-                    "cap approuvée non demandée par le manifeste: {cap}"
-                )));
-            }
-        }
-        let quarantined = granted.is_empty() && !manifest.permissions.required_caps.is_empty();
-        let dest = self.dir.join(&manifest.name);
-        if dest.exists() {
-            std::fs::remove_dir_all(&dest)?;
-        }
-        copy_dir(source_dir, &dest)?;
-        let compiled = self.compile(&dest.join("module.wasm"))?;
-        let verified_tools = self.verify_manifest_tools(
-            &manifest,
-            &manifest.name,
-            &dest,
-            &granted,
-            &compiled,
-        );
-        let info = module_info_from_installed(
-            &manifest,
-            &verified_tools,
-            granted.clone(),
-            quarantined,
-            Some(&dest),
-        );
-        self.installed.insert(
-            manifest.name.clone(),
-            InstalledModule {
-                manifest,
-                granted_caps: granted,
-                quarantined,
-                verified_tools,
-                dir: dest,
-                compiled,
-            },
-        );
-        self.save_registry()?;
-        Ok(info)
+        validate_package_descriptors(source_dir, &manifest)?;
+        let _ = self.compile(&wasm_path)?;
+        Ok(ValidatedPackage { manifest })
     }
 
     /// Lit le manifeste d'un package sans installer (pour revue UI).
@@ -374,14 +526,23 @@ impl ModuleRuntime {
     }
 
     pub fn uninstall(&mut self, name: &str) -> Result<(), ModuleError> {
-        if aos_proto::decl_ui::is_bundled_module(name) {
-            return Err(ModuleError::Bundled(name.into()));
+        if decl_ui::is_protected_by_host(name) {
+            return Err(ModuleError::ProtectedByHost(name.into()));
         }
         let m = self
             .installed
             .remove(name)
             .ok_or_else(|| ModuleError::NotFound(name.into()))?;
         let _ = std::fs::remove_dir_all(&m.dir);
+        self.removed.insert(
+            name.to_string(),
+            RemovedModuleEntry {
+                name: name.to_string(),
+                user_removed: true,
+                preinstalled: decl_ui::is_preinstalled_module(name),
+                granted_caps: m.granted_caps,
+            },
+        );
         self.save_registry()?;
         Ok(())
     }
@@ -780,6 +941,123 @@ fn sha256_hex(bytes: &[u8]) -> String {
     s
 }
 
+struct ValidatedPackage {
+    manifest: ModuleManifest,
+}
+
+fn read_manifest_from_dir(dir: &Path) -> Result<ModuleManifest, ModuleError> {
+    serde_yaml::from_str(&std::fs::read_to_string(dir.join("manifest.yaml"))?)
+        .map_err(|e| ModuleError::BadManifest(e.to_string()))
+}
+
+fn caps_increased(
+    old_manifest: &ModuleManifest,
+    _old_granted: &[String],
+    new_manifest: &ModuleManifest,
+) -> Vec<String> {
+    new_manifest
+        .permissions
+        .required_caps
+        .iter()
+        .filter(|cap| !old_manifest.permissions.required_caps.contains(cap))
+        .cloned()
+        .collect()
+}
+
+fn validate_package_tree(source_dir: &Path) -> Result<(), ModuleError> {
+    if !source_dir.join("manifest.yaml").is_file() {
+        return Err(ModuleError::PackageIntegrity(
+            "manifest.yaml manquant".into(),
+        ));
+    }
+    if !source_dir.join("module.wasm").is_file() {
+        return Err(ModuleError::PackageIntegrity("module.wasm manquant".into()));
+    }
+    walk_package_files(source_dir, source_dir, &mut |rel| {
+        if rel.contains("..") {
+            return Err(ModuleError::PackageIntegrity(format!(
+                "chemin package invalide: {rel}"
+            )));
+        }
+        Ok(())
+    })
+}
+
+fn validate_package_descriptors(
+    source_dir: &Path,
+    manifest: &ModuleManifest,
+) -> Result<(), ModuleError> {
+    for tool in &manifest.tools {
+        if tool.name.trim().is_empty() {
+            return Err(ModuleError::PackageIntegrity(
+                "outil sans nom dans le manifeste".into(),
+            ));
+        }
+        if tool.description.trim().is_empty() {
+            return Err(ModuleError::PackageIntegrity(format!(
+                "outil {} sans description",
+                tool.name
+            )));
+        }
+    }
+    if let Some(ui) = manifest.ui.as_ref() {
+        if ui.entry.contains("..") {
+            return Err(ModuleError::PackageIntegrity(
+                "chemin ui.entry invalide".into(),
+            ));
+        }
+        let ui_path = source_dir.join(&ui.entry);
+        if !ui_path.starts_with(source_dir) {
+            return Err(ModuleError::PackageIntegrity(
+                "ui.entry hors du package".into(),
+            ));
+        }
+        if !ui_path.is_file() {
+            return Err(ModuleError::PackageIntegrity(format!(
+                "ui.entry introuvable: {}",
+                ui.entry
+            )));
+        }
+        let raw = std::fs::read(&ui_path).map_err(|e| ModuleError::Io(e.to_string()))?;
+        if ui.mode == "declarative_ui" {
+            let doc: serde_json::Value =
+                serde_json::from_slice(&raw).map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+            if doc.get("type").and_then(|t| t.as_str()) != Some("declarative_ui") {
+                return Err(ModuleError::DeclUiInvalid(
+                    "type must be declarative_ui".into(),
+                ));
+            }
+            // Stub UI (commands-only, lot 0 native tabs) may omit `root` until lot 2.
+            if doc.get("root").is_some() {
+                DeclUiDocument::parse_json(&raw)
+                    .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn walk_package_files(
+    root: &Path,
+    dir: &Path,
+    visit: &mut dyn FnMut(&str) -> Result<(), ModuleError>,
+) -> Result<(), ModuleError> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|_| ModuleError::PackageIntegrity("chemin package hors racine".into()))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        visit(&rel)?;
+        if entry.file_type()?.is_dir() {
+            walk_package_files(root, &path, visit)?;
+        }
+    }
+    Ok(())
+}
+
 fn copy_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
@@ -833,7 +1111,7 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
             "points": [{"x": 0.1, "y": 0.1}, {"x": 0.2, "y": 0.2}]
         }),
         "notes.create" => serde_json::json!({
-            "title": "__probe__",
+            "title": "",
             "content": ""
         }),
         "notes.update" => serde_json::json!({
@@ -847,6 +1125,9 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
             "query": "__probe__"
         }),
         "notes.list" => serde_json::json!({}),
+        "tasks.list" => serde_json::json!({}),
+        "tasks.create" => serde_json::json!({"title": ""}),
+        "tasks.update" | "tasks.complete" => serde_json::json!({"id": "__probe_nonexistent__"}),
         _ => serde_json::json!({"session_id": "__probe__"}),
     }
 }
@@ -955,11 +1236,209 @@ min_os_api: 1
     }
 
     #[test]
-    fn refuse_uninstall_bundled() {
-        let base = tmpbase("bundled");
+    fn preinstalled_module_can_uninstall_and_persists_user_removed() {
+        let base = tmpbase("user-removed");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
-        let err = rt.uninstall("notes").unwrap_err();
-        assert!(matches!(err, ModuleError::Bundled(_)));
+        rt.install(&pkg, Some(vec![])).unwrap();
+        rt.uninstall("echo-test").unwrap();
+        assert!(rt.user_removed("echo-test"));
+        assert!(!rt.should_auto_install("echo-test"));
+        let reg = std::fs::read_to_string(base.join("modules/registry.yaml")).unwrap();
+        assert!(reg.contains("user_removed: true"));
+        assert!(reg.contains("removed:"));
+        // Simulate file wipe (boot sync deleting var/modules/* without registry).
+        assert!(!base.join("modules/echo-test").exists());
+        let rt2 = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        assert!(rt2.user_removed("echo-test"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn invalid_install_keeps_last_good_version() {
+        let base = tmpbase("stage-fail");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.install(&pkg, Some(vec![])).unwrap();
+        let good_wasm = std::fs::read(base.join("modules/echo-test/module.wasm")).unwrap();
+        let bad_pkg = base.join("bad");
+        copy_dir(&pkg, &bad_pkg).unwrap();
+        let manifest = std::fs::read_to_string(bad_pkg.join("manifest.yaml")).unwrap();
+        std::fs::write(
+            bad_pkg.join("manifest.yaml"),
+            manifest.replace("version: 0.1.0", "version: 9.9.9"),
+        )
+        .unwrap();
+        std::fs::write(bad_pkg.join("module.wasm"), b"not valid wasm").unwrap();
+        let err = rt.install(&bad_pkg, Some(vec![])).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ModuleError::Trap(_)
+                    | ModuleError::BadManifest(_)
+                    | ModuleError::HashMismatch
+                    | ModuleError::PackageIntegrity(_)
+            ),
+            "unexpected err: {err}"
+        );
+        let kept = std::fs::read(base.join("modules/echo-test/module.wasm")).unwrap();
+        assert_eq!(kept, good_wasm);
+        assert!(rt.describe("echo-test").is_ok());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn refuses_min_os_api_too_new() {
+        let base = tmpbase("os-api");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let manifest = std::fs::read_to_string(pkg.join("manifest.yaml")).unwrap();
+        std::fs::write(
+            pkg.join("manifest.yaml"),
+            manifest.replace("min_os_api: 1", "min_os_api: 999"),
+        )
+        .unwrap();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let err = rt.install(&pkg, Some(vec![])).unwrap_err();
+        assert!(matches!(
+            err,
+            ModuleError::OsApiTooNew {
+                required: 999,
+                current: 1
+            }
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn install_preinstalled_skips_user_removed() {
+        let base = tmpbase("preinstalled-skip");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.install(&pkg, Some(vec![])).unwrap();
+        rt.uninstall("echo-test").unwrap();
+        let out = rt
+            .install_preinstalled(&pkg, Some(vec![]))
+            .unwrap();
+        assert!(out.is_none());
+        assert!(rt.list().is_empty());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn cap_increase_requires_review_on_replace() {
+        let base = tmpbase("cap-inc");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.install(&pkg, Some(vec![])).unwrap();
+        let manifest = format!(
+            r#"name: echo-test
+version: 0.2.0
+hash: PLACEHOLDER
+permissions:
+  required_caps:
+    - fs.read:/documents/**
+tools:
+  - name: echo.ping
+    description: renvoie les args
+ui: ~
+min_os_api: 1
+"#
+        );
+        let bad_pkg = base.join("bad");
+        copy_dir(&pkg, &bad_pkg).unwrap();
+        let wasm = std::fs::read(bad_pkg.join("module.wasm")).unwrap();
+        let hash = sha256_hex(&wasm);
+        std::fs::write(
+            bad_pkg.join("manifest.yaml"),
+            manifest.replace("PLACEHOLDER", &hash),
+        )
+        .unwrap();
+        let err = rt.install(&bad_pkg, None).unwrap_err();
+        assert!(matches!(err, ModuleError::CapReviewRequired(_)));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn probe_verification_does_not_write_user_documents() {
+        struct TrackingHost {
+            writes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        }
+        impl HostServices for TrackingHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                service: &str,
+                args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                if service == "fs.write" {
+                    if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+                        self.writes.lock().unwrap().push(path.to_string());
+                    }
+                    return Ok(serde_json::json!({"version": 1u64}));
+                }
+                if service == "fs.read" {
+                    return Ok(serde_json::json!({"content": "{\"tasks\":[]}"}));
+                }
+                Err(format!("unexpected service: {service}"))
+            }
+        }
+
+        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/tasks.aospkg");
+        if !share_pkg.join("module.wasm").is_file() {
+            eprintln!("skip probe write test: tasks wasm missing");
+            return;
+        }
+
+        let writes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let base = tmpbase("tasks-probe");
+        let mut rt = ModuleRuntime::open(
+            base.join("modules"),
+            Arc::new(TrackingHost {
+                writes: writes.clone(),
+            }),
+        )
+        .unwrap();
+        let caps = vec![
+            "fs.read:/documents/tasks/**".into(),
+            "fs.write:/documents/tasks/**".into(),
+        ];
+        rt.install(&share_pkg, Some(caps)).expect("install tasks");
+        assert!(
+            writes.lock().unwrap().is_empty(),
+            "tool probes must not fs.write user documents: {:?}",
+            writes.lock().unwrap()
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn preinstalled_echo_uninstalls_when_not_protected() {
+        let base = tmpbase("bundled");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.install(&pkg, Some(vec![])).unwrap();
+        assert!(!decl_ui::is_protected_by_host("echo-test"));
+        rt.uninstall("echo-test").unwrap();
+        assert!(rt.user_removed("echo-test"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn rejects_package_path_escape() {
+        let base = tmpbase("escape");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        std::fs::write(pkg.join("bad..slot.txt"), b"evil").unwrap();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let err = rt.install(&pkg, Some(vec![])).unwrap_err();
+        assert!(matches!(err, ModuleError::PackageIntegrity(_)));
         let _ = std::fs::remove_dir_all(&base);
     }
 
@@ -1519,7 +1998,7 @@ min_os_api: 1
     #[test]
     fn probe_args_for_notes_create_includes_title() {
         let args = probe_args_for_tool("notes.create");
-        assert_eq!(args["title"], "__probe__");
+        assert_eq!(args["title"], "");
         assert!(args.get("content").is_some());
     }
 

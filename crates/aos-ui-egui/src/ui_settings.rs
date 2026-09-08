@@ -1210,7 +1210,7 @@ impl UiApp {
                                     ui.label(label);
                                     match e.kind.as_str() {
                                         "module" => {
-                                            if aos_proto::decl_ui::is_bundled_module(&e.name) {
+                                            if aos_proto::decl_ui::is_protected_by_host(&e.name) {
                                                 ui.weak(t.settings_bundled_locked);
                                             } else if installed_mod.is_some() {
                                                 if ui
@@ -1285,7 +1285,7 @@ impl UiApp {
                     for m in self.settings_ui.installed_modules.clone() {
                         ui.horizontal(|ui| {
                             ui.label(format!("{} v{}", m.name, m.version));
-                            if aos_proto::decl_ui::is_bundled_module(&m.name) {
+                            if aos_proto::decl_ui::is_protected_by_host(&m.name) {
                                 ui.weak(t.settings_bundled_locked);
                             } else if ui.button(t.settings_catalogue_uninstall).clicked() {
                                 let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
