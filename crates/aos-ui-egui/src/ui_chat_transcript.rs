@@ -16,7 +16,8 @@ use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
 
 /// Comfortable gap between the last bubble and the composer when scrolled to the end.
-pub(crate) const TRANSCRIPT_BOTTOM_PADDING: f32 = 16.0;
+/// One full text line plus breathing room so the last line never sits under the input.
+pub(crate) const TRANSCRIPT_BOTTOM_PADDING: f32 = 36.0;
 /// Pixels from the bottom still treated as "following" the latest messages.
 const TRANSCRIPT_NEAR_BOTTOM_PX: f32 = 48.0;
 
@@ -764,7 +765,7 @@ mod tests {
 
     #[test]
     fn bottom_padding_is_comfortable_gap() {
-        const { assert!(TRANSCRIPT_BOTTOM_PADDING >= 8.0); };
+        const { assert!(TRANSCRIPT_BOTTOM_PADDING >= 32.0); };
     }
 
     #[test]

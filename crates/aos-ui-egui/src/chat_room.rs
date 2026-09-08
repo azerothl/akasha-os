@@ -678,6 +678,53 @@ fn split_prose_prefix_from_json_block(para: &str) -> (&str, &str) {
     (para, "")
 }
 
+fn prose_line_bullet_body(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+}
+
+fn paint_prose_lines(
+    ui: &mut egui::Ui,
+    text: &str,
+    body_w: f32,
+    labels: &[(String, String)],
+    chip_fill: egui::Color32,
+    chip_text: egui::Color32,
+    chip_stroke: egui::Stroke,
+) {
+    for line in text.split('\n') {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Some(body) = prose_line_bullet_body(line) {
+            ui.horizontal_top(|ui| {
+                ui.set_max_width(body_w);
+                ui.label("•");
+                paint_line_with_mention_chips(
+                    ui,
+                    body,
+                    labels,
+                    chip_fill,
+                    chip_text,
+                    chip_stroke,
+                );
+            });
+        } else {
+            paint_line_with_mention_chips(
+                ui,
+                line.trim_start(),
+                labels,
+                chip_fill,
+                chip_text,
+                chip_stroke,
+            );
+        }
+        ui.add_space(2.0);
+    }
+}
+
 fn paint_bubble_paragraph(
     ui: &mut egui::Ui,
     para: &str,
@@ -690,14 +737,14 @@ fn paint_bubble_paragraph(
     if is_json_block_paragraph(para) {
         let (prose, json) = split_prose_prefix_from_json_block(para);
         if !prose.is_empty() {
-            paint_line_with_mention_chips(ui, prose, labels, chip_fill, chip_text, chip_stroke);
+            paint_prose_lines(ui, prose, body_w, labels, chip_fill, chip_text, chip_stroke);
         }
         if !json.is_empty() {
             paint_wrapped_prose_block(ui, json, body_w);
         }
         return;
     }
-    paint_line_with_mention_chips(ui, para, labels, chip_fill, chip_text, chip_stroke);
+    paint_prose_lines(ui, para, body_w, labels, chip_fill, chip_text, chip_stroke);
 }
 
 fn split_mention_segments(text: &str, labels: &[(String, String)]) -> Vec<BubbleSegment> {
@@ -868,43 +915,15 @@ pub fn paint_room_bubble_body(
         if para.is_empty() {
             continue;
         }
-        if let Some(body) = para.strip_prefix("- ") {
-            ui.horizontal_top(|ui| {
-                ui.set_max_width(body_w);
-                ui.label("•");
-                paint_line_with_mention_chips(
-                    ui,
-                    body,
-                    &labels,
-                    chip_fill,
-                    chip_text,
-                    chip_stroke,
-                );
-            });
-        } else if let Some(body) = para.strip_prefix("* ") {
-            ui.horizontal_top(|ui| {
-                ui.set_max_width(body_w);
-                ui.label("•");
-                paint_line_with_mention_chips(
-                    ui,
-                    body,
-                    &labels,
-                    chip_fill,
-                    chip_text,
-                    chip_stroke,
-                );
-            });
-        } else {
-            paint_bubble_paragraph(
-                ui,
-                para,
-                body_w,
-                &labels,
-                chip_fill,
-                chip_text,
-                chip_stroke,
-            );
-        }
+        paint_bubble_paragraph(
+            ui,
+            para,
+            body_w,
+            &labels,
+            chip_fill,
+            chip_text,
+            chip_stroke,
+        );
         ui.add_space(4.0);
     }
 }
@@ -1987,6 +2006,19 @@ mod tests {
             segs,
             vec![BubbleSegment::Text("Merci Inconnu pour l'alerte.".to_string())]
         );
+    }
+
+    #[test]
+    fn prose_line_bullet_body_strips_asterisk_list_marker() {
+        assert_eq!(
+            prose_line_bullet_body("* Manque : L'OS ne connaît pas"),
+            Some("Manque : L'OS ne connaît pas")
+        );
+        assert_eq!(
+            prose_line_bullet_body("* Solution : Créer une bibliothèque"),
+            Some("Solution : Créer une bibliothèque")
+        );
+        assert_eq!(prose_line_bullet_body("1. Absence de patterns"), None);
     }
 
     #[test]
