@@ -7,8 +7,8 @@ use crate::chat_bubble::{
 use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
-    agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_media, chat_room, i18n,
-    local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
+    agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_ask, chat_media, chat_room,
+    i18n, local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
     skill_offer, Tab, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
@@ -97,7 +97,23 @@ impl UiApp {
                 let mut schedule_act: Option<(String, usize, bool)> = None;
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
-                let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
+                let reply_id = self
+                    .blocked_ask_agent()
+                    .map(|a| a.agent_id.clone())
+                    .or_else(|| {
+                        if room_mode
+                            && pending
+                            && self
+                                .chat_state
+                                .active_session
+                                .as_ref()
+                                .is_some_and(|sid| self.chat_state.session_chat.is_pending(sid))
+                        {
+                            chat_ask::open_ask_target(&self.chat).map(|(id, _)| id)
+                        } else {
+                            None
+                        }
+                    });
                 let mut last_day: Option<i64> = None;
                 for i in 0..n {
                     let role = self.chat[i].role.clone();

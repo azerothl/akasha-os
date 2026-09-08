@@ -15,6 +15,7 @@ use crate::context_budget::{
 use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
+use crate::room_ask::handle_room_user_ask;
 use crate::room_conductor::{
     apply_peer_followups, build_initial_queue, effective_max_turns,
     effective_peer_followup_budget, format_roster_for_prompt, initial_schedule,
@@ -61,13 +62,15 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - Document / présentation / rapport demandé par l'utilisateur : `files.generate` sous `/downloads/` (md), **pas** `notes.create`.
 - Notes du carnet interne uniquement si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
-- Pas de `agent.spawn`, `user.ask`, ni collègues inventés."#;
+- `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
+- Pas de `agent.spawn` ni collègues inventés."#;
 
 /// État d'un tour de salon en cours (annulation cooperative).
 #[derive(Debug)]
 pub struct RoomRoundState {
     pub cancelled: AtomicBool,
     pub current_inference: Mutex<Option<u64>>,
+    pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
 }
 
 impl Default for RoomRoundState {
@@ -81,6 +84,7 @@ impl RoomRoundState {
         Self {
             cancelled: AtomicBool::new(false),
             current_inference: Mutex::new(None),
+            ask_reply_tx: Mutex::new(None),
         }
     }
 
@@ -544,6 +548,7 @@ async fn run_room_tool_loop(
     bus: &BusClient,
     round: &RoomRoundState,
     agent_id: &str,
+    display_name: &str,
     session_id: &str,
     model_id: Option<String>,
     mut messages: Vec<ChatMessage>,
@@ -643,31 +648,44 @@ async fn run_room_tool_loop(
 
         for action in parsed_actions {
             let trace_id = format!("{trace_base}-{step}");
-            let mut outcome = execute_room_tool(
-                bus,
-                agent_id,
-                caps,
-                tool_descs,
-                &action.action,
-                &action.args,
-                &trace_id,
-                Some(session_id),
-                &mut mcp_sessions,
-            )
-            .await;
+            let outcome = if canonicalize_tool_name(&action.action) == "user.ask" {
+                handle_room_user_ask(
+                    bus,
+                    round,
+                    session_id,
+                    agent_id,
+                    display_name,
+                    &action.args,
+                )
+                .await?
+            } else {
+                let mut outcome = execute_room_tool(
+                    bus,
+                    agent_id,
+                    caps,
+                    tool_descs,
+                    &action.action,
+                    &action.args,
+                    &trace_id,
+                    Some(session_id),
+                    &mut mcp_sessions,
+                )
+                .await;
 
-            if canvas_tool_mutates_scene(&action.action) {
-                let scene = refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
-                outcome = scene.text;
-                if let Some(png) = scene.png_path {
-                    pending_canvas_png = Some(png);
+                if canvas_tool_mutates_scene(&action.action) {
+                    let scene = refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
+                    outcome = scene.text;
+                    if let Some(png) = scene.png_path {
+                        pending_canvas_png = Some(png);
+                    }
                 }
-            }
-            if canonicalize_tool_name(&action.action).starts_with("device.camera") {
-                if let Some(path) = capture_png_path_from_tool_result(&outcome) {
-                    pending_device_png = Some(path);
+                if canonicalize_tool_name(&action.action).starts_with("device.camera") {
+                    if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                        pending_device_png = Some(path);
+                    }
                 }
-            }
+                outcome
+            };
 
             messages.push(ChatMessage {
                 role: "user".into(),
@@ -771,6 +789,7 @@ pub async fn execute_room_turn(
             bus,
             round,
             &req.agent_id,
+            display_name,
             &req.session_id,
             model_id,
             messages,
@@ -1410,5 +1429,12 @@ mod tests {
         let pairs = chat_messages_as_pairs(&msgs);
         let after = crate::context_budget::estimate_messages_tokens(&pairs);
         assert!(after < 8749);
+    }
+
+    #[test]
+    fn room_action_protocol_allows_user_ask_not_spawn() {
+        assert!(ROOM_ACTION_PROTOCOL.contains("user.ask"));
+        assert!(!ROOM_ACTION_PROTOCOL.contains("agent.spawn :"));
+        assert!(ROOM_ACTION_PROTOCOL.contains("Pas de `agent.spawn`"));
     }
 }

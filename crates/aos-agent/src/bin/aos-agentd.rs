@@ -9,6 +9,7 @@ use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_place
 use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
+use aos_agent::room_ask::deliver_room_ask_reply;
 use aos_agent::room_runtime::{self, RoomRoundState};
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
 use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
@@ -23,7 +24,7 @@ use aos_proto::{
     AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse, AgentStartRequest, AgentState,
     AgentSteerRequest, AgentStepRecord, AgentTrace, CapInfo, CapListRequest, CapMintRequest,
     CapMintResponse, ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest,
+    ChatSessionIdRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest,
     CancelRequest, CognitiveMode,
     InferParams, InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest,
     PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse,
@@ -2253,6 +2254,80 @@ async fn main() {
                     }
                 };
                 cancel_room_round(&shared, &bus, &req.session_id).await;
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+            }
+        });
+    }
+
+    // --- agent.room_ask_reply ---
+    {
+        let shared = shared.clone();
+        let bus2 = bus.clone();
+        svc.on(intents::ROOM_ASK_REPLY, move |ctx| {
+            let shared = shared.clone();
+            let bus = bus2.clone();
+            async move {
+                let req: ChatSessionRoomAskReplyRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let round = {
+                    let rt = shared.lock().await;
+                    rt.room_rounds.get(&req.session_id).cloned()
+                };
+                let Some(round) = round else {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::NotFound,
+                            "aucun tour salon en attente",
+                        )
+                        .await;
+                    return;
+                };
+                let append_ok = bus
+                    .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                        "chat.session.append",
+                        &ChatSessionAppendRequest {
+                            session_id: req.session_id.clone(),
+                            role: "user".into(),
+                            content: req.content.clone(),
+                            attachments: vec![ChatAttachment::AgentRef {
+                                agent_id: req.agent_id.clone(),
+                                title: req.title.clone(),
+                                origin: "ask-reply".into(),
+                            }],
+                            speaker_id: None,
+                            speaker_name: None,
+                            thinking: None,
+                        },
+                        vec![],
+                    )
+                    .await
+                    .is_ok();
+                if !append_ok {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::InternalError,
+                            "impossible d'enregistrer la réponse",
+                        )
+                        .await;
+                    return;
+                }
+                let delivered = deliver_room_ask_reply(round.as_ref(), req.content.clone()).await;
+                if !delivered {
+                    let _ = ctx
+                        .respond_error(
+                            aos_ipc::msg::Status::BadRequest,
+                            "aucune question salon en attente",
+                        )
+                        .await;
+                    return;
+                }
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
             }
         });

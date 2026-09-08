@@ -24,7 +24,8 @@ use aos_proto::{
     ChatAttachment, ChatMessage, ChatRoomMember, ChatSessionAppendRequest,
     ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
     ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
-    ChatSessionRenameRequest, ChatSessionRoomTurnCancelRequest, ChatSessionRoomTurnRequest,
+    ChatSessionRenameRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
+    ChatSessionRoomTurnRequest,
     ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest, ChatSessionSetModeRequest,
     ChatSessionSetModelRequest, ChatSessionSetPinnedRequest, ConfirmResponseRequest,
     DeviceCaptureStopRequest, DevicePermissionRevokeRequest, FeedbackSubmitRequest,
@@ -3871,6 +3872,36 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::RoomAskReply {
+            session_id,
+            agent_id,
+            title,
+            content,
+        } => {
+            match bus
+                .call::<ChatSessionRoomAskReplyRequest, bool>(
+                    "chat.session.room.ask.reply",
+                    &ChatSessionRoomAskReplyRequest {
+                        session_id: session_id.clone(),
+                        agent_id: agent_id.clone(),
+                        title: title.clone(),
+                        content: content.clone(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    load_session(&bus, &evt_tx, &session_id).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ChatError {
+                        session_id,
+                        message: e.to_string(),
+                    });
                 }
             }
         }

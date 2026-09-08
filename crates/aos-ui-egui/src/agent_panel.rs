@@ -775,7 +775,7 @@ pub fn chat_agent_card(
     } else {
         ("…".into(), Color32::GRAY, 0, 0, String::new(), None, false)
     };
-    let ask_card = origin == "ask" && is_blocked;
+    let ask_card = origin == "ask" && (is_blocked || selected_for_reply);
     let stroke_color = if selected_for_reply && ask_card {
         Color32::from_rgb(250, 190, 80)
     } else {

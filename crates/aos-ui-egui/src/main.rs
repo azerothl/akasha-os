@@ -727,7 +727,22 @@ impl UiApp {
     }
 
     fn pending_ask_queue(&self) -> Vec<String> {
-        pending_ask_ids(&self.chat, &self.blocked_ask_ids())
+        let mut queue = pending_ask_ids(&self.chat, &self.blocked_ask_ids());
+        if let Some(sid) = self.chat_state.active_session.as_deref() {
+            if self.chat_state.session_chat.is_pending(sid)
+                && chat_room::session_is_room(chat_room::active_session_meta(
+                    &self.chat_state.sessions,
+                    Some(sid),
+                ))
+            {
+                if let Some((id, _)) = chat_ask::open_ask_target(&self.chat) {
+                    if !queue.iter().any(|x| x == &id) {
+                        queue.push(id);
+                    }
+                }
+            }
+        }
+        queue
     }
 
     fn blocked_ask_agent(&self) -> Option<&AgentInfo> {
@@ -856,6 +871,36 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
+    }
+
+    fn send_room_ask_reply(
+        &mut self,
+        session_id: String,
+        agent_id: String,
+        title: String,
+        text: String,
+    ) {
+        self.chat.push(ChatLine {
+            role: "user".into(),
+            text: text.clone(),
+            attachments: vec![ChatAttachment::AgentRef {
+                agent_id: agent_id.clone(),
+                title: title.clone(),
+                origin: "ask-reply".into(),
+            }],
+            speaker_id: None,
+            speaker_name: None,
+            thinking: None,
+            ..Default::default()
+        });
+        let _ = self.cmd_tx.send(Cmd::RoomAskReply {
+            session_id,
+            agent_id: agent_id.clone(),
+            title,
+            content: text,
+        });
+        self.agent_ui.clear_ask_reply_if(&agent_id);
+        self.status = "réponse envoyée à l'agent".into();
     }
 
     fn send_ask_reply(

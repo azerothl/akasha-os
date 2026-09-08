@@ -3,8 +3,9 @@
 use crate::cmd::{ChatLine, ChatRetryTurn, Cmd};
 use crate::research_ui_state::ResearchPendingChat;
 use crate::{
-    chat_agent_max_steps, chat_canvas, chat_room, chrono_like_stamp, i18n, local_tz_offset_minutes,
-    models_page, now_ms, session_chat, session_model_supports_vision, UiApp,
+    chat_agent_max_steps, chat_ask, chat_canvas, chat_room, chrono_like_stamp, i18n,
+    local_tz_offset_minutes, models_page, now_ms, session_chat, session_model_supports_vision,
+    UiApp,
 };
 use aos_agent::schedule_parse;
 use aos_proto::{chat_tts_request, ChatAttachment};
@@ -65,6 +66,15 @@ impl UiApp {
             {
                 self.send_ask_reply(session_id, agent_id, title, text);
                 return;
+            }
+            if chat_room::session_is_room(chat_room::active_session_meta(
+                &self.chat_state.sessions,
+                self.chat_state.active_session.as_deref(),
+            )) && self.chat_state.session_chat.is_pending(&session_id) {
+                if let Some((agent_id, title)) = chat_ask::open_ask_target(&self.chat) {
+                    self.send_room_ask_reply(session_id, agent_id, title, text);
+                    return;
+                }
             }
         }
         if self

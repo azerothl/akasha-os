@@ -53,6 +53,27 @@ pub(crate) fn chat_has_open_ask(chat: &[ChatLine], agent_id: &str) -> bool {
     open
 }
 
+pub(crate) fn open_ask_target(chat: &[ChatLine]) -> Option<(String, String)> {
+    let mut open: Option<(String, String)> = None;
+    for line in chat {
+        for att in &line.attachments {
+            let Some((agent_id, title, origin)) = att.as_agent_ref() else {
+                continue;
+            };
+            if origin == "ask" {
+                open = Some((agent_id.to_string(), title.to_string()));
+            } else if ask_origin_closes(origin)
+                && open
+                    .as_ref()
+                    .is_some_and(|(id, _)| id == agent_id)
+            {
+                open = None;
+            }
+        }
+    }
+    open
+}
+
 pub(crate) fn agent_display_title(ag: &AgentInfo) -> String {
     ag.display_title().to_string()
 }
@@ -91,6 +112,21 @@ mod ask_queue_tests {
         ];
         let q = pending_ask_ids(&chat, &["b".into()]);
         assert_eq!(q, vec!["b"]);
+    }
+
+    #[test]
+    fn open_ask_target_tracks_latest_open() {
+        let chat = vec![
+            ask_line("a", "ask"),
+            ask_line("a", "ask-reply"),
+            ask_line("b", "ask"),
+        ];
+        assert_eq!(
+            open_ask_target(&chat),
+            Some(("b".to_string(), "b".to_string()))
+        );
+        let chat = vec![ask_line("a", "ask"), ask_line("a", "ask-reply")];
+        assert!(open_ask_target(&chat).is_none());
     }
 
     #[test]
