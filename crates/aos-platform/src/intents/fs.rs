@@ -287,7 +287,8 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
                                 &req.path,
                                 &trace,
                             )
-                            .await;
+                            .await
+                            .approved;
                         if !allowed {
                             let _ = ctx
                                 .respond_error(

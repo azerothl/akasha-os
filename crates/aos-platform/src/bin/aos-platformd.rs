@@ -3243,7 +3243,8 @@ async fn main() {
                                             &req.name,
                                             &format!("compile-{}", req.name),
                                         )
-                                        .await;
+                                        .await
+                                        .approved;
                                     if !ok {
                                         let _ = ctx
                                             .respond_error(
@@ -3357,7 +3358,8 @@ async fn main() {
                                             &req.name,
                                             &format!("skill-create-{}", req.name),
                                         )
-                                        .await;
+                                        .await
+                                        .approved;
                                     if !ok {
                                         let _ = ctx
                                             .respond_error(
@@ -3563,7 +3565,10 @@ async fn main() {
             async move {
                 match ctx.payload::<ConfirmResponseRequest>() {
                     Ok(req) => {
-                        let found = s.confirm.respond(&req.id, req.approved).await;
+                        let found = s
+                            .confirm
+                            .respond(&req.id, req.approved, req.persistent)
+                            .await;
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &found).await;
                     }
                     Err(_) => {
@@ -3703,7 +3708,8 @@ async fn main() {
                                         &req.cap,
                                         &trace,
                                     )
-                                    .await;
+                                    .await
+                                    .approved;
                                 if allowed {
                                     s.grant_cap(&req.agent_id, &req.cap);
                                     if let Some(bus) = s.bus() {

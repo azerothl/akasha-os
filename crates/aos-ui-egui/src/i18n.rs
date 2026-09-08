@@ -67,6 +67,7 @@ pub struct UiStrings {
     pub device_allow_once: &'static str,
     pub device_always: &'static str,
     pub device_deny: &'static str,
+    pub folder_grant_title: &'static str,
     pub device_stop: &'static str,
     pub device_permissions_heading: &'static str,
     pub device_permissions_blurb: &'static str,
@@ -1026,6 +1027,7 @@ const EN: UiStrings = UiStrings {
     device_allow_once: "Allow once",
     device_always: "Always",
     device_deny: "Deny",
+    folder_grant_title: "Allow access to this folder?",
     device_stop: "Stop",
     device_permissions_heading: "Device permissions",
     device_permissions_blurb: "Persistent permissions are scoped to one agent and one device.",
@@ -1980,6 +1982,7 @@ const FR: UiStrings = UiStrings {
     device_allow_once: "Autoriser une fois",
     device_always: "Toujours",
     device_deny: "Refuser",
+    folder_grant_title: "Autoriser l'accès à ce dossier ?",
     device_stop: "Arrêter",
     device_permissions_heading: "Permissions périphériques",
     device_permissions_blurb: "Les permissions persistantes sont limitées à un agent et un périphérique.",
@@ -3142,6 +3145,34 @@ mod tests {
         assert_eq!(confirm_action_label(&fr, "device.usb.io"), "Ouvrir USB");
         assert_eq!(confirm_action_label(&en, "device.usb.io"), "Open USB device");
         assert_eq!(confirm_action_label(&fr, "device.usb.open"), "Ouvrir USB");
+    }
+
+    #[test]
+    fn folder_grant_dialog_strings_match_locked_copy() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.folder_grant_title, "Allow access to this folder?");
+        assert_eq!(fr.folder_grant_title, "Autoriser l'accès à ce dossier ?");
+        assert_eq!(en.device_allow_once, "Allow once");
+        assert_eq!(fr.device_allow_once, "Autoriser une fois");
+        assert_eq!(en.device_always, "Always");
+        assert_eq!(fr.device_always, "Toujours");
+        assert_eq!(en.device_deny, "Deny");
+        assert_eq!(fr.device_deny, "Refuser");
+        let all = [
+            en.folder_grant_title,
+            fr.folder_grant_title,
+            en.device_allow_once,
+            fr.device_allow_once,
+            en.device_always,
+            fr.device_always,
+            en.device_deny,
+            fr.device_deny,
+        ];
+        for s in all {
+            assert!(!s.to_ascii_lowercase().contains("ultimate trust"));
+            assert!(!s.to_ascii_lowercase().contains("confiance ultime"));
+        }
     }
 
     #[test]

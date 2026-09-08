@@ -6,6 +6,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 
+/// Résultat d'une confirmation humaine (fail-closed par défaut).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfirmationResult {
+    pub approved: bool,
+    pub persistent: bool,
+}
+
 /// Gestionnaire de confirmations en attente.
 pub struct ConfirmManager {
     pending: Mutex<HashMap<String, PendingInner>>,
@@ -17,7 +24,7 @@ pub struct ConfirmManager {
 
 struct PendingInner {
     pub info: PendingConfirmation,
-    pub respond: Option<oneshot::Sender<bool>>,
+    pub respond: Option<oneshot::Sender<ConfirmationResult>>,
 }
 
 impl ConfirmManager {
@@ -46,7 +53,7 @@ impl ConfirmManager {
         target: String,
         reason: String,
         timeout_sec: Option<u64>,
-    ) -> (String, oneshot::Receiver<bool>) {
+    ) -> (String, oneshot::Receiver<ConfirmationResult>) {
         let id = {
             let mut n = self.next_id.lock().await;
             let id = format!("confirm-{}", *n);
@@ -84,7 +91,10 @@ impl ConfirmManager {
             let mut pend = this.pending.lock().await;
             if let Some(inner) = pend.remove(&id2) {
                 if let Some(tx) = inner.respond {
-                    let _ = tx.send(false); // timeout → refus
+                    let _ = tx.send(ConfirmationResult {
+                        approved: false,
+                        persistent: false,
+                    });
                 }
             }
         });
@@ -92,11 +102,14 @@ impl ConfirmManager {
     }
 
     /// Réponse humaine (`confirm.respond`).
-    pub async fn respond(&self, id: &str, approved: bool) -> bool {
+    pub async fn respond(&self, id: &str, approved: bool, persistent: bool) -> bool {
         let mut pend = self.pending.lock().await;
         if let Some(inner) = pend.remove(id) {
             if let Some(tx) = inner.respond {
-                let _ = tx.send(approved);
+                let _ = tx.send(ConfirmationResult {
+                    approved,
+                    persistent: approved && persistent,
+                });
                 return true;
             }
         }

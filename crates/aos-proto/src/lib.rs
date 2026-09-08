@@ -14,6 +14,7 @@ pub mod chat_document;
 pub mod decl_ui;
 pub mod device_capture;
 pub mod device_usb;
+pub mod host_folder;
 pub mod mem_extract;
 
 pub use device_capture::{
@@ -30,6 +31,13 @@ pub use device_usb::{
     UsbDeviceDescriptor, UsbEnumerateResponse, UsbOpenRequest, UsbOpenResponse, UsbPermission,
     UsbPermissionInfo, UsbPermissionRevokeRequest, UsbReadRequest, UsbReadResponse,
     UsbWriteRequest, UsbWriteResponse,
+};
+
+pub use host_folder::{
+    folder_display_name, grant_folder_for_path, looks_like_host_path, normalize_folder_key,
+    HostFolderAccessRequest, HostFolderAccessResponse, HostFolderEntry, HostFolderOperation,
+    HostFolderPermission, HostFolderPermissionInfo, HostFolderPermissionRevokeRequest,
+    HOST_FOLDER_ACCESS_ACTION,
 };
 
 pub use canvas_layers::{
@@ -3038,6 +3046,9 @@ pub struct PendingConfirmation {
 pub struct ConfirmResponseRequest {
     pub id: String,
     pub approved: bool,
+    /// `true` when the user chose « Always » (persistent grant for this target only).
+    #[serde(default)]
+    pub persistent: bool,
 }
 
 /// Profil de confiance d'un agent (§4.7).

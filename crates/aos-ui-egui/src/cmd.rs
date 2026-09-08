@@ -157,6 +157,7 @@ pub(crate) enum Cmd {
     Confirm {
         id: String,
         approved: bool,
+        persistent: bool,
     },
     AgentCreate {
         display_name: String,
