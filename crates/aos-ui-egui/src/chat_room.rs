@@ -3,6 +3,8 @@
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
 use aos_agent::room_conductor::resolve_mention_token;
+use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
+use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 use aos_proto::{
     AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMeta, ChatSessionMode,
 };
@@ -211,8 +213,129 @@ pub fn prepare_room_bubble_text(
     let base = aos_agent::room_reply::strip_salon_transcript_prefix(&base);
     let base = strip_tool_id_tokens(&base);
     let base = strip_salon_markdown_markers(&base);
+    let base = strip_salon_sentinels(&base);
+    let base = localize_roster_persona_names_in_prose(t, &base, members);
     let base = aos_agent::room_reply::sanitize_visible_chars(&base);
     format_room_mention_destinations(t, &base, members)
+}
+
+/// Remove runtime sentinels from visible salon prose (toast copy is shown separately).
+pub fn strip_salon_sentinels(text: &str) -> String {
+    let mut work = text.to_string();
+    for sentinel in [ROOM_HOST_PATH_DISALLOWED, ROOM_ACTION_UNAVAILABLE] {
+        work = work.replace(&format!("`{sentinel}`"), "");
+        work = remove_bare_token(&work, sentinel);
+    }
+    collapse_paint_spaces(&work)
+}
+
+fn remove_bare_token(text: &str, token: &str) -> String {
+    if token.is_empty() {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0usize;
+    while i < text.len() {
+        let mut matched = false;
+        if let Some(rest) = text.get(i..) {
+            if let Some(candidate) = rest.get(..token.len()) {
+                if candidate.eq_ignore_ascii_case(token) {
+                    let before_ok = i == 0
+                        || text[..i]
+                            .chars()
+                            .next_back()
+                            .map(|c| !is_ident_char(c))
+                            .unwrap_or(true);
+                    let after_idx = i + token.len();
+                    let after_ok = text
+                        .get(after_idx..)
+                        .and_then(|s| s.chars().next())
+                        .map(|c| !is_ident_char(c))
+                        .unwrap_or(true);
+                    if before_ok && after_ok {
+                        i = after_idx;
+                        matched = true;
+                    }
+                }
+            }
+        }
+        if !matched {
+            let ch = text[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    collapse_paint_spaces(&out)
+}
+
+fn is_ident_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Swap built-in English persona ids for the roster member's localized header label.
+fn localize_roster_persona_names_in_prose(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+) -> String {
+    let mut out = text.to_string();
+    for member in members {
+        let pid = member.persona_id.as_deref().filter(|p| !p.is_empty());
+        let Some(pid) = pid else {
+            continue;
+        };
+        let Some(persona) = persona_by_id(pid) else {
+            continue;
+        };
+        if member.display_name.trim() != persona.display_name {
+            continue;
+        }
+        let localized = persona_label(t, pid);
+        if localized != persona.display_name {
+            out = replace_word_ignore_case(&out, persona.display_name, localized);
+        }
+    }
+    out
+}
+
+fn replace_word_ignore_case(haystack: &str, needle: &str, replacement: &str) -> String {
+    if needle.is_empty() {
+        return haystack.to_string();
+    }
+    let mut out = String::with_capacity(haystack.len());
+    let mut i = 0usize;
+    while i < haystack.len() {
+        let mut matched = false;
+        if let Some(rest) = haystack.get(i..) {
+            if let Some(candidate) = rest.get(..needle.len()) {
+                if candidate.eq_ignore_ascii_case(needle) {
+                    let before_ok = i == 0
+                        || haystack[..i]
+                            .chars()
+                            .next_back()
+                            .map(|c| !c.is_ascii_alphanumeric())
+                            .unwrap_or(true);
+                    let after_idx = i + needle.len();
+                    let after_ok = haystack
+                        .get(after_idx..)
+                        .and_then(|s| s.chars().next())
+                        .map(|c| !c.is_ascii_alphanumeric())
+                        .unwrap_or(true);
+                    if before_ok && after_ok {
+                        out.push_str(replacement);
+                        i = after_idx;
+                        matched = true;
+                    }
+                }
+            }
+        }
+        if !matched {
+            let ch = haystack[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
 }
 
 /// Never paint `tool.id` tokens (inline code or bare) in salon bubbles.
@@ -446,6 +569,55 @@ pub fn paint_room_bubble_body(
     }
 }
 
+fn trim_prose_after_leading_mention_run(segments: Vec<BubbleSegment>) -> Vec<BubbleSegment> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < segments.len() {
+        match &segments[i] {
+            BubbleSegment::Mention(label) => {
+                out.push(BubbleSegment::Mention(label.clone()));
+                i += 1;
+            }
+            BubbleSegment::Text(s) if s.trim().is_empty() || is_mention_row_separator(s) => {
+                i += 1;
+            }
+            BubbleSegment::Text(_) => break,
+        }
+    }
+    if !out.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))) {
+        return segments;
+    }
+    let mut first_text = true;
+    while i < segments.len() {
+        match segments[i].clone() {
+            BubbleSegment::Mention(label) => out.push(BubbleSegment::Mention(label)),
+            BubbleSegment::Text(s) => {
+                let body = if first_text {
+                    first_text = false;
+                    trim_leading_mention_prose_separator(&s)
+                } else {
+                    s
+                };
+                if !body.trim().is_empty() {
+                    out.push(BubbleSegment::Text(body));
+                }
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+fn is_mention_row_separator(s: &str) -> bool {
+    s.chars().all(|c| c == ',' || c.is_whitespace())
+}
+
+fn trim_leading_mention_prose_separator(s: &str) -> String {
+    s.trim_start()
+        .trim_start_matches(|c: char| c == ',' || c.is_whitespace())
+        .to_string()
+}
+
 fn paint_line_with_mention_chips(
     ui: &mut egui::Ui,
     line: &str,
@@ -454,9 +626,10 @@ fn paint_line_with_mention_chips(
     chip_text: egui::Color32,
     chip_stroke: egui::Stroke,
 ) {
+    let segments = trim_prose_after_leading_mention_run(split_mention_segments(line, labels));
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
-        for seg in split_mention_segments(line, labels) {
+        for seg in segments {
             match seg {
                 BubbleSegment::Text(s) if !s.trim().is_empty() => {
                     ui.add(
@@ -1265,6 +1438,59 @@ mod tests {
             Some(&BubbleSegment::Mention("Critique".to_string()))
         );
         assert!(matches!(segs.get(1), Some(BubbleSegment::Text(t)) if t.starts_with(" —")));
+    }
+
+    #[test]
+    fn trim_prose_after_leading_mention_run_drops_stray_comma() {
+        let t = i18n::strings("fr");
+        let mut supervisor = member("persona-critic", "supervisor");
+        supervisor.persona_id = Some("critic".into());
+        let mut researcher = member("persona-researcher", "Researcher");
+        researcher.persona_id = Some("researcher".into());
+        let mut planner = member("persona-planner", "Planner");
+        planner.persona_id = Some("planner".into());
+        let members = vec![supervisor, researcher, planner];
+        let labels = mention_labels_longest_first(&t, &members);
+        let raw = "@supervisor @Chercheur @Planificateur, Je valide l'arrêt.";
+        let segs = trim_prose_after_leading_mention_run(split_mention_segments(raw, &labels));
+        let prose = segs
+            .iter()
+            .find_map(|seg| match seg {
+                BubbleSegment::Text(s) => Some(s.as_str()),
+                _ => None,
+            })
+            .unwrap();
+        assert!(
+            !prose.starts_with(','),
+            "prose must not start with comma: {prose:?}"
+        );
+        assert!(prose.starts_with("Je valide"));
+    }
+
+    #[test]
+    fn strip_salon_sentinels_removes_host_path_token() {
+        let raw = "Le blocage **room_host_path_disallowed** est absolu.";
+        let stripped = strip_salon_sentinels(&strip_salon_markdown_markers(raw));
+        assert!(!stripped.contains("room_host_path_disallowed"));
+        assert!(stripped.contains("Le blocage"));
+        assert!(stripped.contains("est absolu"));
+    }
+
+    #[test]
+    fn prepare_room_bubble_text_strips_sentinel_and_localizes_persona_names() {
+        let t = i18n::strings("fr");
+        let mut planner = member("persona-planner", "Planner");
+        planner.persona_id = Some("planner".into());
+        let mut researcher = member("persona-researcher", "Researcher");
+        researcher.persona_id = Some("researcher".into());
+        let members = vec![planner, researcher];
+        let raw = "En tant que **Planner**, j'appuie **Researcher** sur room_host_path_disallowed.";
+        let painted = prepare_room_bubble_text(&t, raw, &members, true);
+        assert!(!painted.contains("room_host_path_disallowed"));
+        assert!(painted.contains("Planificateur"));
+        assert!(painted.contains("Chercheur"));
+        assert!(!painted.contains("Planner"));
+        assert!(!painted.contains("Researcher"));
     }
 
     #[test]
