@@ -994,8 +994,21 @@ fn is_mention_row_separator(s: &str) -> bool {
 
 fn trim_leading_mention_prose_separator(s: &str) -> String {
     s.trim_start()
-        .trim_start_matches(|c: char| c == ',' || c.is_whitespace())
+        .trim_start_matches(',')
+        .trim_start()
         .to_string()
+}
+
+fn mention_following_text_display(s: &str) -> String {
+    let body = trim_leading_mention_prose_separator(s);
+    if body.is_empty() {
+        return body;
+    }
+    if body.starts_with(' ') {
+        body
+    } else {
+        format!(" {body}")
+    }
 }
 
 fn trim_trailing_mention_separator(s: &str) -> String {
@@ -1019,17 +1032,28 @@ fn paint_line_with_mention_chips(
     ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
     ui.horizontal_wrapped(|ui| {
         ui.set_max_width(line_w);
+        let mut after_mention = false;
         for seg in segments {
             match seg {
                 BubbleSegment::Text(s) if !s.trim().is_empty() => {
+                    let display = if after_mention {
+                        mention_following_text_display(&s)
+                    } else {
+                        s.trim().to_string()
+                    };
+                    after_mention = false;
+                    if display.trim().is_empty() {
+                        continue;
+                    }
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new(s.trim()).color(ui.visuals().text_color()),
+                            egui::RichText::new(display).color(ui.visuals().text_color()),
                         )
                         .wrap_mode(egui::TextWrapMode::Wrap),
                     );
                 }
                 BubbleSegment::Mention(label) if !label.trim().is_empty() => {
+                    after_mention = true;
                     egui::Frame::NONE
                         .fill(chip_fill)
                         .stroke(chip_stroke)
@@ -1043,7 +1067,9 @@ fn paint_line_with_mention_chips(
                             );
                         });
                 }
-                BubbleSegment::Mention(_) => {}
+                BubbleSegment::Mention(_) => {
+                    after_mention = false;
+                }
                 BubbleSegment::Text(_) => {}
             }
         }
@@ -1960,6 +1986,22 @@ mod tests {
         assert_eq!(
             segs,
             vec![BubbleSegment::Text("Merci Inconnu pour l'alerte.".to_string())]
+        );
+    }
+
+    #[test]
+    fn mention_following_text_display_keeps_word_space_after_chip() {
+        assert_eq!(
+            mention_following_text_display(" ta proposition"),
+            " ta proposition"
+        );
+        assert_eq!(
+            mention_following_text_display("ta proposition"),
+            " ta proposition"
+        );
+        assert_eq!(
+            mention_following_text_display(", ta proposition"),
+            " ta proposition"
         );
     }
 
