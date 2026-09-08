@@ -1,6 +1,8 @@
 //! User-visible chat error copy — never leak filesystem paths into bubbles.
 
 use crate::i18n::UiStrings;
+use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
+use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 
 /// True when the runtime error is a model weight load failure (often embeds a `.gguf` path).
 pub(crate) fn is_model_load_fail_error(msg: &str) -> bool {
@@ -38,8 +40,37 @@ pub(crate) fn leaks_filesystem_path(msg: &str) -> bool {
         .any(|w| w[0].is_ascii_alphabetic() && w[1] == b':')
 }
 
+/// True when the runtime posted the host-path sentinel (toast hook only).
+pub(crate) fn is_room_host_path_sentinel(msg: &str) -> bool {
+    msg.trim() == ROOM_HOST_PATH_DISALLOWED
+}
+
+/// CM-locked toast copy for disallowed host paths (no raw path in the message).
+pub(crate) fn room_host_path_disallowed_toast(t: &UiStrings) -> Option<&'static str> {
+    if t.room_host_path_disallowed.is_empty() {
+        None
+    } else {
+        Some(t.room_host_path_disallowed)
+    }
+}
+
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
+    if is_room_host_path_sentinel(raw) {
+        return room_host_path_disallowed_toast(t)
+            .map(str::to_string)
+            .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string());
+    }
+    if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
+        return t.room_action_unavailable.to_string();
+    }
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("indisponible en tour de salon")
+        || lower.contains("indisponible en salon")
+        || lower.contains("isn't available in the room")
+    {
+        return t.room_action_unavailable.to_string();
+    }
     if is_model_load_fail_error(raw) {
         return t.chat_load_fail_message.to_string();
     }
@@ -52,6 +83,24 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn room_action_unavailable_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        assert_eq!(
+            user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE),
+            en.room_action_unavailable
+        );
+        assert_eq!(
+            user_visible_chat_error(&fr, ROOM_ACTION_UNAVAILABLE),
+            fr.room_action_unavailable
+        );
+        assert_eq!(
+            user_visible_chat_error(&en, "action notes.create indisponible en tour de salon"),
+            en.room_action_unavailable
+        );
+    }
 
     #[test]
     fn model_load_fail_detects_gguf_path() {
@@ -74,5 +123,27 @@ mod tests {
         let t = crate::i18n::strings("en");
         let out = user_visible_chat_error(&t, "open failed: /var/run/aos-modeld.stderr.log");
         assert_eq!(out, t.chat_error_generic);
+    }
+
+    #[test]
+    fn room_host_path_disallowed_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        assert_eq!(
+            user_visible_chat_error(&en, ROOM_HOST_PATH_DISALLOWED),
+            en.room_host_path_disallowed
+        );
+        assert_eq!(
+            user_visible_chat_error(&fr, ROOM_HOST_PATH_DISALLOWED),
+            fr.room_host_path_disallowed
+        );
+        assert_eq!(
+            room_host_path_disallowed_toast(&en),
+            Some(en.room_host_path_disallowed)
+        );
+        assert!(!en.room_host_path_disallowed.contains('/'));
+        assert!(!en.room_host_path_disallowed.contains(':'));
+        assert!(!fr.room_host_path_disallowed.contains('/'));
+        assert!(!fr.room_host_path_disallowed.contains(':'));
     }
 }

@@ -1500,6 +1500,52 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("chat.session.room.ask.reply", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionRoomAskReplyRequest>() {
+                    Ok(req) => {
+                        let Some(bus) = s.bus() else {
+                            let _ = ctx
+                                .respond_error(
+                                    aos_ipc::msg::Status::InternalError,
+                                    "bus injoignable — agentd requis",
+                                )
+                                .await;
+                            return;
+                        };
+                        match bus
+                            .call::<ChatSessionRoomAskReplyRequest, bool>(
+                                "agent.room_ask_reply",
+                                &req,
+                                vec![],
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(
+                                        aos_ipc::msg::Status::InternalError,
+                                        &e.to_string(),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("chat.session.archive", move |ctx| {
             let s = s.clone();
             async move {

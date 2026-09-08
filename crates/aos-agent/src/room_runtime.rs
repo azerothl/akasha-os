@@ -15,16 +15,19 @@ use crate::context_budget::{
 use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
+use crate::room_ask::handle_room_user_ask;
+use crate::storage_path::{post_room_host_path_notice, ROOM_HOST_PATH_DISALLOWED};
 use crate::room_conductor::{
-    build_initial_queue, detect_peer_addresses, effective_max_turns, format_roster_for_prompt,
-    sanitize_member_queue,
+    apply_peer_followups, build_initial_queue, effective_max_turns,
+    effective_peer_followup_budget, format_roster_for_prompt, initial_schedule,
+    peers_requesting_response, pop_next_scheduled_turn, sanitize_member_queue,
 };
 use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, merge_canvas_tools,
-    select_tools, ToolDesc,
+    canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, default_agent_tools,
+    merge_canvas_tools, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -46,6 +49,9 @@ const ROOM_INFER_MAX_TOKENS: u32 = 768;
 /// get replayed verbatim across rebound speakers in the same round.
 const ROOM_INFER_PRIORITY: u8 = 1;
 
+/// Sentinel returned to the UI when a salon turn cannot invoke the tools an ask requires.
+pub const ROOM_ACTION_UNAVAILABLE: &str = "room_action_unavailable";
+
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
 Quand tu dois utiliser un outil, réponds par un objet JSON unique :
@@ -57,13 +63,15 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - Document / présentation / rapport demandé par l'utilisateur : `files.generate` sous `/downloads/` (md), **pas** `notes.create`.
 - Notes du carnet interne uniquement si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
-- Pas de `agent.spawn`, `user.ask`, ni collègues inventés."#;
+- `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
+- Pas de `agent.spawn` ni collègues inventés."#;
 
 /// État d'un tour de salon en cours (annulation cooperative).
 #[derive(Debug)]
 pub struct RoomRoundState {
     pub cancelled: AtomicBool,
     pub current_inference: Mutex<Option<u64>>,
+    pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
 }
 
 impl Default for RoomRoundState {
@@ -77,6 +85,7 @@ impl RoomRoundState {
         Self {
             cancelled: AtomicBool::new(false),
             current_inference: Mutex::new(None),
+            ask_reply_tx: Mutex::new(None),
         }
     }
 
@@ -164,32 +173,84 @@ fn member_display_name<'a>(
         .ok_or_else(|| format!("membre {agent_id} absent du salon"))
 }
 
-/// Assemble tool ids + caps for a roster member turn.
+fn room_kit_lacks_required_tools(tool_ids: &[String], user_message: &str) -> bool {
+    if crate::research_detect::user_requested_document(user_message) {
+        return !tool_ids.iter().any(|t| t == "files.generate");
+    }
+    if crate::research_detect::user_requested_note(user_message) {
+        return !tool_ids.iter().any(|t| t == "notes.create");
+    }
+    false
+}
+
+/// Assemble tool ids + caps for a roster member salon turn.
 ///
-/// When `document_ask` is true (user asked for a presentation/report file), inject
-/// `file-author` + `files.generate` even if the roster spec only listed notes tools.
+/// Built-in personas often ship with empty `tools`/`skills`; merge the same baseline
+/// notes/tasks/fs/web kit as solo chat. Custom agents keep the tools and caps granted
+/// at creation — baseline and derived caps apply only when the spec ships empty.
+pub fn assemble_room_member_tools(
+    spec: &AgentSpec,
+    canvas_open: bool,
+    canvas_exported: &[String],
+    user_message: &str,
+) -> (Vec<String>, Vec<String>) {
+    let spec_tools_empty = spec.tools.is_empty();
+    let mut skills = spec.skills.clone();
+    let mut base_tools = spec.tools.clone();
+    if spec_tools_empty {
+        for t in default_agent_tools() {
+            if !base_tools.iter().any(|x| x == &t) {
+                base_tools.push(t);
+            }
+        }
+        if !skills.iter().any(|s| s == "notes-writer") {
+            skills.push("notes-writer".into());
+        }
+    }
+    let had_files_generate = base_tools.iter().any(|t| t == "files.generate");
+    if crate::research_detect::user_requested_document(user_message) {
+        crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
+    }
+    let injected_document_tools =
+        !had_files_generate && base_tools.iter().any(|t| t == "files.generate");
+    let skill_docs = load_skills(&skills);
+    let mut tool_ids = merge_skill_tools(&base_tools, &skill_docs);
+    let canvas_granted = base_tools.iter().any(|t| t.starts_with("canvas."));
+    if canvas_open && (canvas_granted || spec_tools_empty) {
+        merge_canvas_tools(&mut tool_ids, true, canvas_exported);
+    }
+    let tools = select_tools(&tool_ids, &[]);
+    let mut caps = spec.caps.clone();
+    if spec_tools_empty {
+        for c in caps_for_tools(&tools, &spec.mcp_servers) {
+            if !caps.contains(&c) {
+                caps.push(c);
+            }
+        }
+    } else if injected_document_tools {
+        let fg_tools = select_tools(&["files.generate".into()], &[]);
+        for c in caps_for_tools(&fg_tools, &spec.mcp_servers) {
+            if !caps.contains(&c) {
+                caps.push(c);
+            }
+        }
+    }
+    (tool_ids, caps)
+}
+
+/// Back-compat alias for [`assemble_room_member_tools`].
 pub fn room_member_kit(
     spec: &AgentSpec,
     canvas_open: bool,
     canvas_exported: &[String],
     document_ask: bool,
 ) -> (Vec<String>, Vec<String>) {
-    let mut skills = spec.skills.clone();
-    let mut base_tools = spec.tools.clone();
-    if document_ask {
-        crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
-    }
-    let skill_docs = load_skills(&skills);
-    let mut tool_ids = merge_skill_tools(&base_tools, &skill_docs);
-    merge_canvas_tools(&mut tool_ids, canvas_open, canvas_exported);
-    let tools = select_tools(&tool_ids, &[]);
-    let mut caps = spec.caps.clone();
-    for c in caps_for_tools(&tools, &spec.mcp_servers) {
-        if !caps.contains(&c) {
-            caps.push(c);
-        }
-    }
-    (tool_ids, caps)
+    let user_message = if document_ask {
+        "prepare a document"
+    } else {
+        ""
+    };
+    assemble_room_member_tools(spec, canvas_open, canvas_exported, user_message)
 }
 
 fn last_user_message_text(session: &ChatSessionGetResponse) -> &str {
@@ -504,6 +565,7 @@ async fn run_room_tool_loop(
     bus: &BusClient,
     round: &RoomRoundState,
     agent_id: &str,
+    display_name: &str,
     session_id: &str,
     model_id: Option<String>,
     mut messages: Vec<ChatMessage>,
@@ -603,30 +665,46 @@ async fn run_room_tool_loop(
 
         for action in parsed_actions {
             let trace_id = format!("{trace_base}-{step}");
-            let mut outcome = execute_room_tool(
-                bus,
-                agent_id,
-                caps,
-                tool_descs,
-                &action.action,
-                &action.args,
-                &trace_id,
-                Some(session_id),
-                &mut mcp_sessions,
-            )
-            .await;
+            let outcome = if canonicalize_tool_name(&action.action) == "user.ask" {
+                handle_room_user_ask(
+                    bus,
+                    round,
+                    session_id,
+                    agent_id,
+                    display_name,
+                    &action.args,
+                )
+                .await?
+            } else {
+                let mut outcome = execute_room_tool(
+                    bus,
+                    agent_id,
+                    caps,
+                    tool_descs,
+                    &action.action,
+                    &action.args,
+                    &trace_id,
+                    Some(session_id),
+                    &mut mcp_sessions,
+                )
+                .await;
 
-            if canvas_tool_mutates_scene(&action.action) {
-                let scene = refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
-                outcome = scene.text;
-                if let Some(png) = scene.png_path {
-                    pending_canvas_png = Some(png);
+                if canvas_tool_mutates_scene(&action.action) {
+                    let scene = refresh_canvas_scene_after_op(bus, session_id, &outcome).await;
+                    outcome = scene.text;
+                    if let Some(png) = scene.png_path {
+                        pending_canvas_png = Some(png);
+                    }
                 }
-            }
-            if canonicalize_tool_name(&action.action).starts_with("device.camera") {
-                if let Some(path) = capture_png_path_from_tool_result(&outcome) {
-                    pending_device_png = Some(path);
+                if canonicalize_tool_name(&action.action).starts_with("device.camera") {
+                    if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                        pending_device_png = Some(path);
+                    }
                 }
+                outcome
+            };
+            if outcome == ROOM_HOST_PATH_DISALLOWED {
+                let _ = post_room_host_path_notice(bus, session_id).await;
             }
 
             messages.push(ChatMessage {
@@ -659,10 +737,13 @@ pub async fn execute_room_turn(
     } else {
         Vec::new()
     };
-    let document_ask =
-        crate::research_detect::user_requested_document(last_user_message_text(&session));
-    let (tool_ids, caps) =
-        room_member_kit(&spec, session.meta.canvas_open, &canvas_exported, document_ask);
+    let user_message = last_user_message_text(&session);
+    let (tool_ids, caps) = assemble_room_member_tools(
+        &spec,
+        session.meta.canvas_open,
+        &canvas_exported,
+        user_message,
+    );
     let tool_descs = if tool_ids.is_empty() {
         Vec::new()
     } else {
@@ -689,6 +770,10 @@ pub async fn execute_room_turn(
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);
+    if room_kit_lacks_required_tools(&tool_ids, user_message) {
+        return Err(ROOM_ACTION_UNAVAILABLE.into());
+    }
+
     let (content, thinking) = if tool_descs.is_empty() {
         let mut refs = images.clone();
         let canvas_png = if session.meta.canvas_open {
@@ -724,6 +809,7 @@ pub async fn execute_room_turn(
             bus,
             round,
             &req.agent_id,
+            display_name,
             &req.session_id,
             model_id,
             messages,
@@ -772,9 +858,13 @@ pub async fn execute_room_conduct(
     }
 
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
-    let mut queue = sanitize_member_queue(
-        build_initial_queue(&req.content, &session.meta.members),
-        &session.meta.members,
+    let peer_budget =
+        effective_peer_followup_budget(session.meta.conductor_policy.max_agent_turns_per_user);
+    let mut queue = initial_schedule(
+        sanitize_member_queue(
+            build_initial_queue(&req.content, &session.meta.members),
+            &session.meta.members,
+        ),
     );
     queue.truncate(max);
     if queue.is_empty() {
@@ -785,7 +875,8 @@ pub async fn execute_room_conduct(
     }
 
     let mut agent_turns = 0u32;
-    let mut spoken = std::collections::HashSet::<String>::new();
+    let mut initial_done = std::collections::HashSet::<String>::new();
+    let mut peer_followups_run = 0u32;
 
     while (agent_turns as usize) < max {
         if round.is_cancelled() {
@@ -795,19 +886,10 @@ pub async fn execute_room_conduct(
             });
         }
 
-        let agent_id = loop {
-            if queue.is_empty() {
-                break None;
-            }
-            let id = queue.remove(0);
-            if spoken.contains(&id) {
-                continue;
-            }
-            break Some(id);
-        };
-        let Some(agent_id) = agent_id else {
+        let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) else {
             break;
         };
+        let agent_id = turn.agent_id;
         let member = session
             .meta
             .members
@@ -832,23 +914,28 @@ pub async fn execute_room_conduct(
             }
             Err(e) => return Err(e),
         };
-        spoken.insert(agent_id);
+        if turn.peer_followup {
+            peer_followups_run += 1;
+        } else {
+            initial_done.insert(agent_id);
+        }
         agent_turns += 1;
 
-        if (agent_turns as usize) >= max {
-            break;
-        }
-
+        // Slice C: optional supervisor-directed speaker selection could replace or
+        // augment this peer rebound queue without changing mention parsing.
         if session.meta.conductor_policy.allow_peer_debate {
-            for peer_id in
-                detect_peer_addresses(&reply.content, &session.meta.members, &member.agent_id)
-            {
-                if spoken.contains(&peer_id) {
-                    continue;
-                }
-                queue.retain(|id| id != &peer_id);
-                queue.insert(0, peer_id);
-            }
+            let peers = peers_requesting_response(
+                &reply.content,
+                &session.meta.members,
+                &member.agent_id,
+            );
+            apply_peer_followups(
+                &mut queue,
+                &peers,
+                &initial_done,
+                peer_followups_run,
+                peer_budget,
+            );
         }
     }
 
@@ -1103,6 +1190,35 @@ mod tests {
     }
 
     #[test]
+    fn room_member_kit_adds_baseline_tools_when_spec_empty() {
+        let spec = AgentSpec {
+            agent_id: "persona-coder".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Coder".into()),
+            persona_id: Some("coder".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) = room_member_kit(&spec, false, &[], false);
+        assert!(ids.iter().any(|x| x == "notes.create"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
+    }
+
+    #[test]
     fn room_member_kit_adds_canvas_when_open() {
         let spec = AgentSpec {
             agent_id: "persona-coder".into(),
@@ -1169,6 +1285,66 @@ mod tests {
     }
 
     #[test]
+    fn assemble_room_member_tools_injects_baseline_when_spec_empty() {
+        let spec = AgentSpec {
+            agent_id: "persona-researcher".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Researcher".into()),
+            persona_id: Some("researcher".into()),
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) = assemble_room_member_tools(&spec, false, &[], "écris une note rapide");
+        assert!(ids.iter().any(|x| x == "notes.create"));
+        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
+        assert!(!ids.iter().any(|x| x == "files.generate"));
+    }
+
+    #[test]
+    fn assemble_room_member_tools_injects_files_generate_on_document_ask() {
+        let spec = AgentSpec {
+            agent_id: "agent-x".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: None,
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let (ids, caps) =
+            assemble_room_member_tools(&spec, false, &[], "prepare a document about rust");
+        assert!(ids.iter().any(|x| x == "files.generate"));
+        assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
+    }
+
+    #[test]
     fn room_member_kit_injects_files_generate_on_document_ask() {
         let spec = AgentSpec {
             agent_id: "agent-x".into(),
@@ -1200,6 +1376,51 @@ mod tests {
     }
 
     #[test]
+    fn room_kit_lacks_required_tools_detects_missing_note_tool() {
+        assert!(room_kit_lacks_required_tools(&["canvas.stroke".into()], "écris une note"));
+        assert!(!room_kit_lacks_required_tools(&["notes.create".into()], "écris une note"));
+        assert!(room_kit_lacks_required_tools(
+            &["notes.create".into()],
+            "prepare a document about rust"
+        ));
+        assert!(!room_kit_lacks_required_tools(
+            &["files.generate".into()],
+            "prepare a document about rust"
+        ));
+    }
+
+    #[test]
+    fn execute_room_turn_rejects_missing_note_tool_kit() {
+        let session = room_session_with_user("écris une note rapide");
+        let spec = AgentSpec {
+            agent_id: "agent-a".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Alpha".into()),
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["canvas.stroke".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec![],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let user_message = last_user_message_text(&session);
+        let (tool_ids, _) = assemble_room_member_tools(&spec, false, &[], user_message);
+        assert!(room_kit_lacks_required_tools(&tool_ids, user_message));
+        assert_eq!(ROOM_ACTION_UNAVAILABLE, "room_action_unavailable");
+    }
+
+    #[test]
     fn room_messages_compact_on_overflow_signal() {
         let mut msgs = vec![
             ChatMessage {
@@ -1228,5 +1449,45 @@ mod tests {
         let pairs = chat_messages_as_pairs(&msgs);
         let after = crate::context_budget::estimate_messages_tokens(&pairs);
         assert!(after < 8749);
+    }
+
+    #[test]
+    fn room_action_protocol_allows_user_ask_not_spawn() {
+        assert!(ROOM_ACTION_PROTOCOL.contains("user.ask"));
+        assert!(!ROOM_ACTION_PROTOCOL.contains("agent.spawn :"));
+        assert!(ROOM_ACTION_PROTOCOL.contains("Pas de `agent.spawn`"));
+    }
+
+    #[test]
+    fn custom_agent_keeps_granted_tools_and_caps_without_canvas_floor() {
+        use crate::tools::CANVAS_TOOL_IDS;
+        let spec = AgentSpec {
+            agent_id: "agent-custom".into(),
+            goal: AgentGoal::default(),
+            kind: Default::default(),
+            display_name: Some("Custom".into()),
+            persona_id: None,
+            system_prompt: None,
+            skills: vec![],
+            tools: vec!["web.search".into()],
+            mcp_servers: vec![],
+            documents: vec![],
+            caps: vec!["net.connect:*:*".into()],
+            model_id: None,
+            policy: None,
+            parent_id: None,
+            session_id: None,
+            budget: Default::default(),
+            optimize_prompt: false,
+            gate_mode: "ask".into(),
+            origin: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+        };
+        let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
+        let (ids, caps) = assemble_room_member_tools(&spec, true, &exported, "");
+        assert!(ids.iter().any(|x| x == "web.search"));
+        assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
+        assert!(!ids.iter().any(|x| x == "notes.create"));
+        assert_eq!(caps, vec!["net.connect:*:*".to_string()]);
     }
 }

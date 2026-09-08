@@ -71,6 +71,39 @@ pub fn user_requested_document(text: &str) -> bool {
     MARKERS.iter().any(|m| lower.contains(m))
 }
 
+/// User asked for an internal note / carnet entry (not a `/downloads/` document file).
+pub fn user_requested_note(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "write a note",
+        "make a note",
+        "create a note",
+        "add a note",
+        "note about",
+        "quick note",
+        "écris une note",
+        "ecris une note",
+        "écris-moi une note",
+        "ecris-moi une note",
+        "crée une note",
+        "cree une note",
+        "créer une note",
+        "creer une note",
+        "fais une note",
+        "fais-moi une note",
+        "fais moi une note",
+        "note rapide",
+        "dans le carnet",
+        "au carnet",
+    ];
+    MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Document or note delivery that should invoke salon tools — not prose-only talk.
+pub fn user_implies_room_tool_action(text: &str) -> bool {
+    user_requested_document(text) || user_requested_note(text)
+}
+
 /// Ensure `file-author` + `files.generate` so a document ask can land under `/downloads/`.
 pub fn ensure_document_file_tools(skills: &mut Vec<String>, tool_ids: &mut Vec<String>) {
     if !skills.iter().any(|s| s == "file-author") {
@@ -261,6 +294,9 @@ mod tests {
         assert!(user_requested_document("rédige moi un document là-dessus"));
         assert!(!user_requested_document("what is the state of the art?"));
         assert!(!user_requested_document("écris une note rapide"));
+        assert!(user_requested_note("écris une note rapide"));
+        assert!(user_implies_room_tool_action("écris une note rapide"));
+        assert!(user_implies_room_tool_action("prepare a document about rust"));
     }
 
     #[test]

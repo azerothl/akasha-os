@@ -4,11 +4,12 @@ use crate::chat_bubble::{
     chat_bubble_colors, chat_bubble_kind, chat_markdown_viewer, chat_message_frame,
     chat_role_label, ChatBubbleKind,
 };
+use crate::chat_error_copy;
 use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
-    agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_media, chat_room, i18n,
-    local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
+    agent_act_phrase, agent_canvas_session_ops, agent_panel, chat_ask, chat_media, chat_room,
+    i18n, local_tz_offset_minutes, now_ms, research_choice, research_document, schedule_card,
     skill_offer, Tab, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
@@ -97,11 +98,33 @@ impl UiApp {
                 let mut schedule_act: Option<(String, usize, bool)> = None;
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
-                let reply_id = self.blocked_ask_agent().map(|a| a.agent_id.clone());
+                let reply_id = self
+                    .blocked_ask_agent()
+                    .map(|a| a.agent_id.clone())
+                    .or_else(|| {
+                        if room_mode
+                            && pending
+                            && self
+                                .chat_state
+                                .active_session
+                                .as_ref()
+                                .is_some_and(|sid| self.chat_state.session_chat.is_pending(sid))
+                        {
+                            chat_ask::open_ask_target(&self.chat).map(|(id, _)| id)
+                        } else {
+                            None
+                        }
+                    });
                 let mut last_day: Option<i64> = None;
                 for i in 0..n {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
+                    if chat_error_copy::is_room_host_path_sentinel(&text) {
+                        if let Some(msg) = chat_error_copy::room_host_path_disallowed_toast(t) {
+                            self.toasts.push_error(msg);
+                        }
+                        continue;
+                    }
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
                     let speaker_name = self.chat[i].speaker_name.clone();
@@ -145,9 +168,15 @@ impl UiApp {
                         text = i18n::agent_could_not_continue_message(t);
                     }
                     let kind = chat_bubble_kind(&role, speaker_id.as_deref(), room_mode);
-                    let text = if kind == ChatBubbleKind::RoomSpeaker {
-                        let visible = chat_room::format_room_visible_bubble(&text);
-                        chat_room::strip_roster_agent_id_mentions(t, &visible, room_members)
+                    let text = if room_mode
+                        && (kind == ChatBubbleKind::RoomSpeaker || kind == ChatBubbleKind::User)
+                    {
+                        chat_room::prepare_room_bubble_text(
+                            t,
+                            &text,
+                            room_members,
+                            kind == ChatBubbleKind::RoomSpeaker,
+                        )
                     } else if role == "assistant" && !is_completion && speaker_id.is_none() {
                         agent_panel::format_chat_assistant_display(&text)
                     } else {
@@ -231,9 +260,20 @@ impl UiApp {
                             }
                         }
                         if !text.is_empty() {
-                            // Markdown des deux côtés : le user colle aussi du
-                            // code/blocs, le viewer gère le texte brut.
-                            if role == "assistant" || role == "user" || role == "vous" {
+                            if room_mode
+                                && (kind == ChatBubbleKind::RoomSpeaker
+                                    || kind == ChatBubbleKind::User)
+                            {
+                                ui.push_id(("room_bubble", i), |ui| {
+                                    chat_room::paint_room_bubble_body(
+                                        ui,
+                                        &text,
+                                        role_color,
+                                        t,
+                                        room_members,
+                                    );
+                                });
+                            } else if role == "assistant" || role == "user" || role == "vous" {
                                 ui.push_id(("chat_md", i), |ui| {
                                     chat_markdown_viewer(ui).show(
                                         ui,

@@ -1,9 +1,92 @@
 //! Conducteur déterministe pour les salons multi-agent (`ChatSessionMode::Room`).
 
+use crate::room_personas::persona_mention_labels;
 use aos_proto::{ChatRoomConductorPolicy, ChatRoomMember};
 
 /// Plafond dur des tours agent par message utilisateur (indépendamment de la politique).
 pub const HARD_MAX_AGENT_TURNS: u32 = 4;
+
+/// Plafond des tours relancés par un `@` pair après le passage initial du roster.
+pub const HARD_MAX_PEER_FOLLOWUPS: u32 = 2;
+
+/// Tour planifié : passage initial du strip ou relance `@` pair.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScheduledTurn {
+    pub agent_id: String,
+    pub peer_followup: bool,
+}
+
+/// Convertit la file initiale (`build_initial_queue`) en tours planifiés.
+pub fn initial_schedule(queue: Vec<String>) -> Vec<ScheduledTurn> {
+    queue
+        .into_iter()
+        .map(|agent_id| ScheduledTurn {
+            agent_id,
+            peer_followup: false,
+        })
+        .collect()
+}
+
+/// Prochain tour exécutable : relances `@` pair ou premier passage initial non encore fait.
+pub fn pop_next_scheduled_turn(
+    queue: &mut Vec<ScheduledTurn>,
+    initial_done: &std::collections::HashSet<String>,
+) -> Option<ScheduledTurn> {
+    let mut idx = 0;
+    while idx < queue.len() {
+        let turn = &queue[idx];
+        if turn.peer_followup || !initial_done.contains(&turn.agent_id) {
+            return Some(queue.remove(idx));
+        }
+        idx += 1;
+    }
+    None
+}
+
+fn scheduled_peer_followups(queue: &[ScheduledTurn]) -> usize {
+    queue.iter().filter(|t| t.peer_followup).count()
+}
+
+/// Après une réplique, priorise ou relance les pairs `@` mentionnés.
+///
+/// - Membre pas encore passé dans le strip initial → remonte son tour initial (pas de doublon).
+/// - Membre déjà passé → relance `@` pair (budget `peer_followup_budget`).
+pub fn apply_peer_followups(
+    queue: &mut Vec<ScheduledTurn>,
+    peers: &[String],
+    initial_done: &std::collections::HashSet<String>,
+    peer_followups_run: u32,
+    peer_followup_budget: u32,
+) {
+    let mut reserved = peer_followups_run + scheduled_peer_followups(queue) as u32;
+    for peer_id in peers {
+        if initial_done.contains(peer_id) {
+            if reserved >= peer_followup_budget {
+                continue;
+            }
+            queue.retain(|t| !(t.agent_id == *peer_id && t.peer_followup));
+            queue.insert(
+                0,
+                ScheduledTurn {
+                    agent_id: peer_id.clone(),
+                    peer_followup: true,
+                },
+            );
+            reserved += 1;
+        } else if let Some(pos) = queue
+            .iter()
+            .position(|t| t.agent_id == *peer_id && !t.peer_followup)
+        {
+            let entry = queue.remove(pos);
+            queue.insert(0, entry);
+        }
+    }
+}
+
+/// Budget effectif de relances `@` pair pour une ronde utilisateur.
+pub fn effective_peer_followup_budget(max_agent_turns: u32) -> u32 {
+    HARD_MAX_PEER_FOLLOWUPS.min(max_agent_turns.saturating_sub(1))
+}
 
 /// `agent_id` présent dans le roster de session.
 pub fn is_roster_member(agent_id: &str, members: &[ChatRoomMember]) -> bool {
@@ -73,6 +156,9 @@ fn mention_labels_longest_first(members: &[ChatRoomMember]) -> Vec<(String, Stri
         }
         if let Some(p) = m.persona_id.as_deref().filter(|p| !p.is_empty()) {
             labels.push((p.to_string(), m.agent_id.clone()));
+            for alias in persona_mention_labels(p) {
+                labels.push((alias.to_string(), m.agent_id.clone()));
+            }
         }
         labels.push((m.agent_id.clone(), m.agent_id.clone()));
     }
@@ -199,6 +285,66 @@ pub fn detect_peer_addresses(
         .into_iter()
         .filter(|id| id != exclude_agent_id)
         .collect()
+}
+
+/// Pairs `@` mentionnés quand la réplique pose une question ou formule une demande.
+pub fn peers_requesting_response(
+    reply: &str,
+    members: &[ChatRoomMember],
+    exclude_agent_id: &str,
+) -> Vec<String> {
+    if !reply_invites_peer_response(reply) {
+        return Vec::new();
+    }
+    detect_peer_addresses(reply, members, exclude_agent_id)
+}
+
+/// True when an agent reply expects a peer to answer (question or explicit request).
+pub fn reply_invites_peer_response(reply: &str) -> bool {
+    if !reply.contains('@') {
+        return false;
+    }
+    if reply.contains('?') || reply.contains('？') {
+        return true;
+    }
+    let lower = reply.to_ascii_lowercase();
+    if lower.contains("merci")
+        || lower.contains("thanks")
+        || lower.contains("thank you")
+        || lower.contains("got it")
+        || lower.contains("bien noté")
+    {
+        return false;
+    }
+    const REQUEST_MARKERS: &[&str] = &[
+        "peux-tu",
+        "peux tu",
+        "pourrais-tu",
+        "pourriez-vous",
+        "pouvez-vous",
+        "can you",
+        "could you",
+        "would you",
+        "please",
+        "s'il te plaît",
+        "s'il vous plaît",
+        "confirmes",
+        "confirme",
+        "confirm",
+        "acceptes",
+        "acceptez",
+        "accept",
+        "valide",
+        "dis-moi",
+        "tell me",
+        "your thoughts",
+        "ton avis",
+        "your view",
+        "weigh in",
+        "est-ce que",
+        "peux-tu confirmer",
+    ];
+    REQUEST_MARKERS.iter().any(|m| lower.contains(m))
 }
 
 /// Premier membre mentionné (compat tests / appels simples).
@@ -331,6 +477,26 @@ mod tests {
         let capped: Vec<_> = queue.into_iter().take(max).collect();
         assert_eq!(capped.len(), 1);
         assert_eq!(capped[0], "agent-alpha");
+    }
+
+    #[test]
+    fn peer_followup_when_reply_mentions_localized_persona_label() {
+        let m = vec![
+            ChatRoomMember {
+                agent_id: "persona-researcher".into(),
+                display_name: "Researcher".into(),
+                persona_id: Some("researcher".into()),
+                joined_ms: 1,
+            },
+            ChatRoomMember {
+                agent_id: "persona-critic".into(),
+                display_name: "Critic".into(),
+                persona_id: Some("critic".into()),
+                joined_ms: 2,
+            },
+        ];
+        let peer = detect_peer_address("@Critique peux-tu confirmer ?", &m, "persona-researcher");
+        assert_eq!(peer, Some("persona-critic".into()));
     }
 
     #[test]
@@ -521,39 +687,221 @@ mod tests {
     }
 
     #[test]
-    fn peer_followup_skips_member_who_already_spoke() {
+    fn peer_followup_requeues_member_who_already_spoke() {
         use std::collections::HashSet;
 
-        let m = members();
-        let peer = detect_peer_address("@Beta can you confirm?", &m, "agent-alpha").unwrap();
-        let spoken: HashSet<String> = HashSet::from([peer.clone()]);
-        let allowed = (!spoken.contains(&peer)).then_some(peer);
-        assert!(allowed.is_none());
+        let mut queue = Vec::new();
+        let initial_done = HashSet::from([String::from("agent-beta")]);
+        apply_peer_followups(
+            &mut queue,
+            &[String::from("agent-beta")],
+            &initial_done,
+            0,
+            HARD_MAX_PEER_FOLLOWUPS,
+        );
+        assert_eq!(
+            queue,
+            vec![ScheduledTurn {
+                agent_id: "agent-beta".into(),
+                peer_followup: true,
+            }]
+        );
     }
 
     #[test]
-    fn conduct_queue_skips_members_who_already_spoke() {
+    fn peer_followup_bumps_unspoken_member_to_front_without_duplicate() {
         use std::collections::HashSet;
 
-        let mut queue = vec![
+        let mut queue = initial_schedule(vec![
+            String::from("agent-alpha"),
+            String::from("agent-beta"),
+            String::from("agent-gamma"),
+        ]);
+        let initial_done = HashSet::from([String::from("agent-alpha")]);
+        apply_peer_followups(
+            &mut queue,
+            &[String::from("agent-gamma")],
+            &initial_done,
+            0,
+            HARD_MAX_PEER_FOLLOWUPS,
+        );
+        assert_eq!(queue[0].agent_id, "agent-gamma");
+        assert!(!queue[0].peer_followup);
+        assert_eq!(queue.len(), 3);
+    }
+
+    #[test]
+    fn peer_followup_budget_caps_requeues() {
+        use std::collections::HashSet;
+
+        let mut queue = Vec::new();
+        let initial_done = HashSet::from([
+            String::from("agent-alpha"),
+            String::from("agent-beta"),
+            String::from("agent-gamma"),
+        ]);
+        apply_peer_followups(
+            &mut queue,
+            &[
+                String::from("agent-beta"),
+                String::from("agent-gamma"),
+                String::from("agent-alpha"),
+            ],
+            &initial_done,
+            0,
+            2,
+        );
+        assert_eq!(queue.len(), 2);
+        assert!(queue.iter().all(|t| t.peer_followup));
+    }
+
+    #[test]
+    fn conduct_queue_skips_duplicate_initial_slots() {
+        use std::collections::HashSet;
+
+        let mut queue = initial_schedule(vec![
             String::from("agent-alpha"),
             String::from("agent-beta"),
             String::from("agent-alpha"),
-        ];
-        let mut spoken = HashSet::<String>::new();
+        ]);
+        let mut initial_done = HashSet::<String>::new();
         let mut turns = Vec::new();
-        while let Some(id) = queue.first().cloned() {
-            queue.remove(0);
-            if spoken.contains(&id) {
-                continue;
-            }
-            spoken.insert(id.clone());
-            turns.push(id);
+        while let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) {
+            assert!(!turn.peer_followup);
+            initial_done.insert(turn.agent_id.clone());
+            turns.push(turn.agent_id);
         }
         assert_eq!(
             turns,
             vec![String::from("agent-alpha"), String::from("agent-beta")]
         );
+    }
+
+    #[test]
+    fn debate_schedules_peer_followup_after_initial_strip() {
+        use std::collections::HashSet;
+
+        let m = members();
+        let mut queue = initial_schedule(build_initial_queue("Quels risques ?", &m));
+        let mut initial_done = HashSet::<String>::new();
+        let mut peer_followups_run = 0u32;
+        let peer_budget = effective_peer_followup_budget(effective_max_turns(
+            &ChatRoomConductorPolicy::default(),
+        ));
+        let max = effective_max_turns(&ChatRoomConductorPolicy::default()) as usize;
+        let mut spoken = Vec::new();
+        let replies = [
+            ("agent-alpha", "@Beta ton avis ?"),
+            ("agent-beta", "@Alpha confirmes ?"),
+            ("agent-alpha", "oui"),
+            ("agent-gamma", "ok"),
+        ];
+        let mut step = 0usize;
+        while spoken.len() < max {
+            let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) else {
+                break;
+            };
+            spoken.push(turn.agent_id.clone());
+            if turn.peer_followup {
+                peer_followups_run += 1;
+            } else {
+                initial_done.insert(turn.agent_id.clone());
+            }
+            if step < replies.len() {
+                let (speaker, reply) = replies[step];
+                assert_eq!(speaker, turn.agent_id);
+                let peers = peers_requesting_response(reply, &m, speaker);
+                apply_peer_followups(
+                    &mut queue,
+                    &peers,
+                    &initial_done,
+                    peer_followups_run,
+                    peer_budget,
+                );
+            }
+            step += 1;
+        }
+        assert_eq!(
+            spoken,
+            vec![
+                "agent-alpha",
+                "agent-beta",
+                "agent-alpha",
+                "agent-gamma",
+            ]
+        );
+        assert_eq!(peer_followups_run, 1);
+    }
+
+    #[test]
+    fn no_peer_followup_when_reply_has_no_address() {
+        use std::collections::HashSet;
+
+        let m = members();
+        let mut queue = initial_schedule(build_initial_queue("Hello", &m));
+        let mut initial_done = HashSet::new();
+        let turn = pop_next_scheduled_turn(&mut queue, &initial_done).unwrap();
+        let speaker = turn.agent_id.clone();
+        initial_done.insert(turn.agent_id);
+        let peers = peers_requesting_response("I agree, no need to tag anyone.", &m, &speaker);
+        assert!(peers.is_empty());
+        apply_peer_followups(
+            &mut queue,
+            &peers,
+            &initial_done,
+            0,
+            HARD_MAX_PEER_FOLLOWUPS,
+        );
+        assert_eq!(queue.len(), 2);
+        assert!(queue.iter().all(|t| !t.peer_followup));
+    }
+
+    #[test]
+    fn thanks_only_mention_does_not_request_peer_response() {
+        let m = members();
+        let reply = "Merci @Beta pour la synthèse.";
+        assert_eq!(
+            detect_peer_addresses(reply, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+        assert!(peers_requesting_response(reply, &m, "agent-alpha").is_empty());
+    }
+
+    #[test]
+    fn question_mention_requests_peer_response() {
+        let m = members();
+        let reply = "@Beta, peux-tu détailler les sources ?";
+        assert_eq!(
+            peers_requesting_response(reply, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+    }
+
+    #[test]
+    fn reply_invites_peer_response_for_questions_and_requests() {
+        assert!(reply_invites_peer_response("@Beta, peux-tu détailler ?"));
+        assert!(reply_invites_peer_response("@Beta, please share sources."));
+        assert!(!reply_invites_peer_response("Merci @Beta pour la synthèse."));
+        assert!(!reply_invites_peer_response("I agree with the direction."));
+    }
+
+    #[test]
+    fn parse_mentions_localized_persona_label() {
+        let m = vec![ChatRoomMember {
+            agent_id: "persona-researcher".into(),
+            display_name: "Researcher".into(),
+            persona_id: Some("researcher".into()),
+            joined_ms: 1,
+        }];
+        let ids = parse_mentions("@Chercheur peux-tu résumer ?", &m);
+        assert_eq!(ids, vec![String::from("persona-researcher")]);
+    }
+
+    #[test]
+    fn directed_mention_queues_only_target_member() {
+        let m = members();
+        let queue = build_initial_queue("@Beta what do you think?", &m);
+        assert_eq!(queue, vec![String::from("agent-beta")]);
     }
 
     #[test]

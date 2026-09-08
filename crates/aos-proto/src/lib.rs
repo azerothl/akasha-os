@@ -4614,6 +4614,15 @@ pub struct ChatSessionRoomTurnCancelRequest {
     pub session_id: String,
 }
 
+/// Réponse utilisateur à un `user.ask` salon en cours (`chat.session.room.ask.reply`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionRoomAskReplyRequest {
+    pub session_id: String,
+    pub agent_id: String,
+    pub title: String,
+    pub content: String,
+}
+
 /// Réponse `chat.session.room.turn` après orchestration conducteur.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionRoomTurnResponse {

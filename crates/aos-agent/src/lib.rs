@@ -17,6 +17,7 @@ pub mod mcp;
 pub mod persist;
 pub mod policy;
 pub mod prompt;
+pub mod room_ask;
 pub mod room_conductor;
 pub mod room_personas;
 pub mod room_reply;
@@ -26,6 +27,7 @@ pub mod schedule;
 pub mod schedule_parse;
 pub mod skills;
 pub mod state;
+pub mod storage_path;
 pub mod tool_exec;
 pub mod tools;
 
@@ -63,6 +65,7 @@ pub mod intents {
     pub const ROOM_TURN: &str = "agent.room_turn";
     pub const ROOM_CONDUCT: &str = "agent.room_conduct";
     pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";
+    pub const ROOM_ASK_REPLY: &str = "agent.room_ask_reply";
     pub const SPEC_GET: &str = "agent.spec.get";
     pub const ROSTER_UPDATE: &str = "agent.roster.update";
     /// Politique par agent (S6 phase 2) : lecture/écriture via agentd,

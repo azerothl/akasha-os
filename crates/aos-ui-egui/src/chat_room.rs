@@ -2,6 +2,7 @@
 
 use crate::i18n::{self, UiStrings};
 use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
+use aos_agent::room_conductor::resolve_mention_token;
 use aos_proto::{
     AgentInfo, AgentKind, AgentState, ChatRoomMember, ChatSessionMeta, ChatSessionMode,
 };
@@ -195,6 +196,239 @@ pub fn format_room_visible_bubble(text: &str) -> String {
     }
 }
 
+/// Full salon bubble paint pipeline: visible prose, no transcript prefix, no tool ids, human `@`.
+pub fn prepare_room_bubble_text(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+    from_speaker_bubble: bool,
+) -> String {
+    let base = if from_speaker_bubble {
+        format_room_visible_bubble(text)
+    } else {
+        text.trim().to_string()
+    };
+    let base = aos_agent::room_reply::strip_salon_transcript_prefix(&base);
+    let base = strip_tool_id_tokens(&base);
+    let base = aos_agent::room_reply::sanitize_visible_chars(&base);
+    format_room_mention_destinations(t, &base, members)
+}
+
+/// Never paint `tool.id` tokens (inline code or bare) in salon bubbles.
+pub fn strip_tool_id_tokens(text: &str) -> String {
+    let mut work = text.to_string();
+    while let Some(start) = work.find('`') {
+        if let Some(end_rel) = work[start + 1..].find('`') {
+            let inner = work[start + 1..start + 1 + end_rel].trim();
+            if looks_like_tool_id(inner) {
+                let before = work[..start].trim_end();
+                let after = work[start + 1 + end_rel + 1..].trim_start();
+                work = match (before.is_empty(), after.is_empty()) {
+                    (true, true) => String::new(),
+                    (true, false) => after.to_string(),
+                    (false, true) => before.to_string(),
+                    (false, false) => format!("{before} {after}"),
+                };
+                continue;
+            }
+        }
+        break;
+    }
+    collapse_paint_spaces(&strip_bare_tool_id_tokens(&work))
+}
+
+fn looks_like_tool_id(token: &str) -> bool {
+    let token = token.trim();
+    if token.is_empty() || !token.contains('.') {
+        return false;
+    }
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 || parts.len() > 4 {
+        return false;
+    }
+    parts.iter().all(|part| {
+        !part.is_empty()
+            && part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    })
+}
+
+fn strip_bare_tool_id_tokens(text: &str) -> String {
+    let mut out = String::new();
+    let mut token = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
+            token.push(ch);
+        } else {
+            if !token.is_empty() {
+                if !looks_like_tool_id(&token) {
+                    out.push_str(&token);
+                }
+                token.clear();
+            }
+            out.push(ch);
+        }
+    }
+    if !token.is_empty() && !looks_like_tool_id(&token) {
+        out.push_str(&token);
+    }
+    out
+}
+
+fn collapse_paint_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev_space = false;
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !prev_space {
+                out.push(' ');
+                prev_space = true;
+            }
+        } else {
+            out.push(ch);
+            prev_space = false;
+        }
+    }
+    out.trim().to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BubbleSegment {
+    Text(String),
+    Mention(String),
+}
+
+fn mention_labels_longest_first(t: &UiStrings, members: &[ChatRoomMember]) -> Vec<String> {
+    let mut labels: Vec<String> = members
+        .iter()
+        .map(|m| member_display_label(t, m))
+        .collect();
+    labels.sort_by_key(|l| std::cmp::Reverse(l.len()));
+    labels.dedup();
+    labels
+}
+
+fn split_mention_segments(text: &str, labels: &[String]) -> Vec<BubbleSegment> {
+    let mut out = Vec::new();
+    let mut plain_start = 0usize;
+    let mut i = 0usize;
+    while i < text.len() {
+        if text.as_bytes().get(i) != Some(&b'@') {
+            i += text[i..].chars().next().unwrap().len_utf8();
+            continue;
+        }
+        let tail = &text[i + 1..];
+        let mut matched_label = None::<String>;
+        for label in labels {
+            if tail.len() < label.len() || !tail[..label.len()].eq_ignore_ascii_case(label) {
+                continue;
+            }
+            let boundary = tail.get(label.len()..).and_then(|s| s.chars().next());
+            if boundary.is_some_and(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                continue;
+            }
+            matched_label = Some(label.clone());
+            break;
+        }
+        if let Some(label) = matched_label {
+            push_text_segment(&mut out, &text[plain_start..i]);
+            let label_len = label.len();
+            out.push(BubbleSegment::Mention(label));
+            i += 1 + label_len;
+            plain_start = i;
+        } else {
+            i += 1;
+        }
+    }
+    push_text_segment(&mut out, &text[plain_start..]);
+    out
+}
+
+fn push_text_segment(out: &mut Vec<BubbleSegment>, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some(BubbleSegment::Text(prev)) = out.last_mut() {
+        prev.push_str(text);
+    } else {
+        out.push(BubbleSegment::Text(text.to_string()));
+    }
+}
+
+/// Render salon bubble body with `@` mention chips (human labels only).
+pub fn paint_room_bubble_body(
+    ui: &mut egui::Ui,
+    text: &str,
+    accent: egui::Color32,
+    t: &UiStrings,
+    members: &[ChatRoomMember],
+) {
+    if text.trim().is_empty() {
+        return;
+    }
+    let labels = mention_labels_longest_first(t, members);
+    let chip_fill = egui::Color32::from_rgba_premultiplied(
+        accent.r(),
+        accent.g(),
+        accent.b(),
+        if ui.visuals().dark_mode { 56 } else { 40 },
+    );
+    for para in text.split("\n\n") {
+        let para = para.trim();
+        if para.is_empty() {
+            continue;
+        }
+        if let Some(body) = para.strip_prefix("- ") {
+            ui.horizontal_top(|ui| {
+                ui.label("•");
+                paint_line_with_mention_chips(ui, body, &labels, accent, chip_fill);
+            });
+        } else if let Some(body) = para.strip_prefix("* ") {
+            ui.horizontal_top(|ui| {
+                ui.label("•");
+                paint_line_with_mention_chips(ui, body, &labels, accent, chip_fill);
+            });
+        } else {
+            paint_line_with_mention_chips(ui, para, &labels, accent, chip_fill);
+        }
+        ui.add_space(4.0);
+    }
+}
+
+fn paint_line_with_mention_chips(
+    ui: &mut egui::Ui,
+    line: &str,
+    labels: &[String],
+    accent: egui::Color32,
+    chip_fill: egui::Color32,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for seg in split_mention_segments(line, labels) {
+            match seg {
+                BubbleSegment::Text(s) if !s.trim().is_empty() => {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(s.trim()).color(ui.visuals().text_color()))
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                }
+                BubbleSegment::Mention(label) => {
+                    egui::Frame::NONE
+                        .fill(chip_fill)
+                        .stroke(egui::Stroke::new(1.0_f32, accent.gamma_multiply(0.65)))
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::symmetric(5, 2))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(format!("@{label}")).strong().color(accent));
+                        });
+                }
+                BubbleSegment::Text(_) => {}
+            }
+        }
+    });
+}
+
 /// Collapsible thinking block inside a salon speaker bubble.
 pub fn room_thinking_toggle(
     ui: &mut egui::Ui,
@@ -235,8 +469,8 @@ pub fn room_turn_done_status(_agent_turns: u32, _cancelled: bool) -> Option<Stri
     None
 }
 
-/// Strip roster `agent_id` echoes (`@agent-2`, `(@agent-3)`) from text painted in bubbles.
-pub fn strip_roster_agent_id_mentions(
+/// Paint `@` destinations with human roster labels only — never technical `agent_id` tokens.
+pub fn format_room_mention_destinations(
     t: &UiStrings,
     text: &str,
     members: &[ChatRoomMember],
@@ -244,43 +478,83 @@ pub fn strip_roster_agent_id_mentions(
     let mut out = text.to_string();
     for m in members {
         let id = &m.agent_id;
-        let replace_name = member_display_label(t, m);
+        let human = member_display_label(t, m);
+        let mention = format!("@{human}");
         for pattern in [format!("(@{id})"), format!("@{id}")] {
-            out = out.replace(&pattern, &replace_name);
+            out = out.replace(&pattern, &mention);
         }
-    }
-    strip_bare_agent_id_tokens(&out)
-}
-
-fn strip_bare_agent_id_tokens(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while !rest.is_empty() {
-        if let Some(at) = rest.find('@') {
-            out.push_str(&rest[..at]);
-            let after_at = &rest[at + 1..];
-            if let Some(agent_suffix) = after_at.strip_prefix("agent-") {
-                let mut byte_end = 6;
-                for (i, c) in agent_suffix.char_indices() {
-                    if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                        byte_end = 6 + i + c.len_utf8();
-                    } else {
-                        break;
-                    }
-                }
-                if byte_end > 6 {
-                    rest = &after_at[byte_end..];
+        let stored = m.display_name.trim();
+        if !stored.is_empty() && !stored.eq_ignore_ascii_case(&human) {
+            for pattern in [format!("(@{stored})"), format!("@{stored}")] {
+                out = out.replace(&pattern, &mention);
+            }
+        }
+        if let Some(pid) = m.persona_id.as_deref() {
+            for alias in aos_agent::room_personas::persona_mention_labels(pid) {
+                if alias.eq_ignore_ascii_case(&human) || alias.eq_ignore_ascii_case(stored) {
                     continue;
                 }
+                out = out.replace(&format!("@{alias}"), &mention);
+                out = out.replace(&format!("(@{alias})"), &mention);
             }
-            out.push('@');
-            rest = &rest[at + 1..];
-        } else {
-            out.push_str(rest);
-            break;
         }
     }
+    replace_remaining_technical_mentions(t, &out, members)
+}
+
+/// Back-compat alias — prefer [`format_room_mention_destinations`].
+pub fn strip_roster_agent_id_mentions(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+) -> String {
+    format_room_mention_destinations(t, text, members)
+}
+
+fn replace_remaining_technical_mentions(
+    t: &UiStrings,
+    text: &str,
+    members: &[ChatRoomMember],
+) -> String {
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'@' {
+            let start = i + 1;
+            let mut end = start;
+            while end < bytes.len() {
+                let c = bytes[end];
+                if c.is_ascii_alphanumeric() || c == b'-' || c == b'_' {
+                    end += 1;
+                } else {
+                    break;
+                }
+            }
+            if end > start {
+                if let Some(token) = text.get(start..end) {
+                    if looks_like_technical_agent_token(token) {
+                        if let Some(id) = resolve_mention_token(token, members) {
+                            if let Some(m) = members.iter().find(|m| m.agent_id == id) {
+                                out.push('@');
+                                out.push_str(&member_display_label(t, m));
+                            }
+                        }
+                        i = end;
+                        continue;
+                    }
+                }
+            }
+        }
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
     out
+}
+
+fn looks_like_technical_agent_token(token: &str) -> bool {
+    token.starts_with("agent-") || token.starts_with("persona-") || token.starts_with("agent_id")
 }
 
 fn mention_token_end(input: &str, at: usize) -> usize {
@@ -299,12 +573,15 @@ fn mention_token_end(input: &str, at: usize) -> usize {
 
 /// Replace the partial `@token` at `at` with `@display_name ` (drops the unfinished token tail).
 pub fn insert_mention(input: &str, at: usize, display_name: &str) -> String {
-    let _end = mention_token_end(input, at);
+    let end = mention_token_end(input, at);
     let mut out = String::new();
     out.push_str(&input[..at]);
     out.push('@');
     out.push_str(display_name);
     out.push(' ');
+    if end < input.len() {
+        out.push_str(input[end..].trim_start());
+    }
     out
 }
 
@@ -358,6 +635,7 @@ pub fn mention_completions(
     let mut out = Vec::new();
     for m in members {
         let label = member_display_label(t, m);
+        let mention_token = m.display_name.trim();
         let name_match = !needle.is_empty() && label.to_ascii_lowercase().starts_with(&needle);
         let stored_name_match =
             !needle.is_empty() && m.display_name.to_ascii_lowercase().starts_with(&needle);
@@ -367,7 +645,7 @@ pub fn mention_completions(
             .as_deref()
             .is_some_and(|p| !needle.is_empty() && p.to_ascii_lowercase().starts_with(&needle));
         if needle.is_empty() || name_match || stored_name_match || id_match || persona_match {
-            out.push((insert_mention(input, at, &label), label));
+            out.push((insert_mention(input, at, mention_token), label));
         }
     }
     out
@@ -463,17 +741,43 @@ mod tests {
         let t = i18n::strings("fr");
         let members = vec![member("agent-2", "Maya"), member("agent-3", "Leo")];
         let raw = "Bonjour! Leo (@agent-3) et moi, Maya (@agent-2), sommes là.";
-        let painted = strip_roster_agent_id_mentions(&t, raw, &members);
+        let painted = format_room_mention_destinations(&t, raw, &members);
         assert!(!painted.contains("@agent-"));
-        assert!(painted.contains("Maya"));
-        assert!(painted.contains("Leo"));
+        assert!(painted.contains("@Maya"));
+        assert!(painted.contains("@Leo"));
+    }
+
+    #[test]
+    fn format_room_mention_destinations_uses_localized_persona_label() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let members = vec![m1];
+        let painted = format_room_mention_destinations(&t, "@persona-critic confirme ?", &members);
+        assert!(painted.contains("@Critique"));
+        assert!(!painted.contains("persona-critic"));
+    }
+
+    #[test]
+    fn room_action_unavailable_copy_locked() {
+        let en = i18n::strings("en");
+        let fr = i18n::strings("fr");
+        assert_eq!(
+            en.room_action_unavailable,
+            "That action isn't available in the room."
+        );
+        assert_eq!(fr.room_action_unavailable, "Action indisponible dans le salon.");
+        assert_eq!(en.room_policy_one_agent, "One agent");
+        assert_eq!(fr.room_policy_one_agent, "Un agent");
+        assert_eq!(en.room_policy_open_floor, "Open floor");
+        assert_eq!(fr.room_policy_open_floor, "Tout le salon");
     }
 
     #[test]
     fn insert_mention_drops_partial_token_tail() {
         let out = insert_mention("bonjour @agent-2?", 8, "Maya");
-        assert_eq!(out, "bonjour @Maya ");
-        assert!(!out.contains('?'));
+        assert_eq!(out, "bonjour @Maya ?");
+        assert!(!out.contains("agent-2"));
     }
 
     #[test]
@@ -492,6 +796,32 @@ mod tests {
         let c = speaker_color_rgb("agent-beta", true);
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn mention_completions_insert_roster_display_name_not_localized_label() {
+        let mut m1 = member("persona-researcher", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let members = vec![m1];
+        let t_fr = i18n::strings("fr");
+        let hits = mention_completions("hello @Cher", &members, &t_fr);
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].0.contains("@Researcher"));
+        assert!(!hits[0].0.contains("@Chercheur"));
+        assert_eq!(hits[0].1, t_fr.persona_researcher);
+    }
+
+    #[test]
+    fn turn_queue_directed_mention_only_target() {
+        let t = i18n::strings("en");
+        let mut m1 = member("a1", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let mut m2 = member("a2", "Coder");
+        m2.persona_id = Some("coder".into());
+        let members = vec![m1, m2];
+        let q = format_turn_speaker_queue(&t, "@Coder review this", &members, None).expect("queue");
+        assert!(q.contains(t.persona_coder));
+        assert!(!q.contains(t.persona_researcher));
     }
 
     #[test]
@@ -764,6 +1094,48 @@ mod tests {
         assert!(is_salon_picker_candidate(&agent));
         let candidates = library_add_candidates(&[agent], &[], &t);
         assert!(candidates.iter().any(|a| a.agent_id == "agent-11"));
+    }
+
+    #[test]
+    fn strip_tool_id_tokens_removes_inline_and_bare_ids() {
+        let raw = "J'ai consulté `notes.read` et notes.list pour la synthèse.";
+        let stripped = strip_tool_id_tokens(raw);
+        assert!(!stripped.contains("notes.read"));
+        assert!(!stripped.contains("notes.list"));
+        assert!(stripped.contains("synthèse"));
+    }
+
+    #[test]
+    fn prepare_room_bubble_text_strips_prefix_and_tool_ids() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let mut m2 = member("persona-researcher", "Researcher");
+        m2.persona_id = Some("researcher".into());
+        let members = vec![m1, m2];
+        let raw = "[Salon — Critique]\n@Chercheur, j'ai utilisé `web.search` — peux-tu confirmer ?";
+        let painted = prepare_room_bubble_text(&t, raw, &members, true);
+        assert!(!painted.contains("[Salon —"));
+        assert!(!painted.contains("web.search"));
+        assert!(painted.contains("@Chercheur"));
+        assert!(!painted.contains("@Researcher"));
+    }
+
+    #[test]
+    fn split_mention_segments_finds_localized_labels() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-researcher", "Researcher");
+        m1.persona_id = Some("researcher".into());
+        let members = vec![m1];
+        let labels = mention_labels_longest_first(&t, &members);
+        let segs = split_mention_segments("@Chercheur, peux-tu détailler ?", &labels);
+        assert_eq!(
+            segs,
+            vec![
+                BubbleSegment::Mention("Chercheur".to_string()),
+                BubbleSegment::Text(", peux-tu détailler ?".to_string()),
+            ]
+        );
     }
 
     #[test]

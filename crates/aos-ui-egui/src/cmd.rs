@@ -445,6 +445,12 @@ pub(crate) enum Cmd {
     RoomTurnCancel {
         session_id: String,
     },
+    RoomAskReply {
+        session_id: String,
+        agent_id: String,
+        title: String,
+        content: String,
+    },
     CanvasSetOpen {
         session_id: String,
         open: bool,

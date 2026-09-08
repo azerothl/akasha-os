@@ -92,7 +92,51 @@ fn visible_prose(text: &str) -> String {
         }
         break;
     }
-    collapse_blank_lines(&out)
+    collapse_blank_lines(&sanitize_visible_chars(&strip_salon_transcript_prefix(&out)))
+}
+
+/// Remove echoed transcript attribution — the bubble header already names the speaker.
+pub fn strip_salon_transcript_prefix(text: &str) -> String {
+    let mut lines_out = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("[Salon — tour de ") {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("[Salon — ") {
+            if let Some(idx) = rest.find(']') {
+                let after = rest[idx + 1..].trim_start();
+                if !after.is_empty() {
+                    lines_out.push(after.to_string());
+                }
+                continue;
+            }
+        }
+        lines_out.push(line.to_string());
+    }
+    lines_out.join("\n").trim().to_string()
+}
+
+/// Drop replacement glyphs and control chars that paint as □ in the UI.
+pub fn sanitize_visible_chars(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if ch == '\u{FFFD}' || is_private_use_char(ch) {
+            continue;
+        }
+        if ch.is_control() && ch != '\n' && ch != '\t' && ch != '\r' {
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn is_private_use_char(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}'
+    )
 }
 
 fn extract_first_json_object(text: &str) -> Option<String> {
@@ -139,6 +183,22 @@ fn collapse_blank_lines(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strips_salon_transcript_prefix_from_visible_reply() {
+        let raw = "[Salon — Researcher] @supervisor, voici le protocole.";
+        let (visible, _) = split_room_reply(raw);
+        assert_eq!(visible, "@supervisor, voici le protocole.");
+        assert!(!visible.contains("[Salon —"));
+    }
+
+    #[test]
+    fn strips_replacement_glyphs_from_visible_reply() {
+        let raw = "Pour un rapport technique ou\u{FFFD}\u{FFFD}\u{FFFD} fin.";
+        let (visible, _) = split_room_reply(raw);
+        assert_eq!(visible, "Pour un rapport technique ou fin.");
+        assert!(!visible.contains('\u{FFFD}'));
+    }
 
     #[test]
     fn strips_thought_json_from_visible_reply() {
