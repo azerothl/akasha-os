@@ -212,6 +212,7 @@ pub fn prepare_room_bubble_text(
     };
     let base = aos_agent::room_reply::strip_salon_transcript_prefix(&base);
     let base = strip_tool_id_tokens(&base);
+    let base = format_salon_json_for_display(&base);
     let base = strip_salon_markdown_markers(&base);
     let base = strip_salon_sentinels(&base);
     let base = localize_roster_persona_names_in_prose(t, &base, members);
@@ -402,19 +403,129 @@ fn strip_bare_tool_id_tokens(text: &str) -> String {
 
 fn collapse_paint_spaces(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut prev_space = false;
+    let mut prev_space_on_line = false;
     for ch in text.chars() {
-        if ch.is_whitespace() {
-            if !prev_space {
+        if ch == '\n' {
+            out.push('\n');
+            prev_space_on_line = false;
+        } else if ch.is_whitespace() {
+            if !prev_space_on_line {
                 out.push(' ');
-                prev_space = true;
+                prev_space_on_line = true;
             }
         } else {
             out.push(ch);
-            prev_space = false;
+            prev_space_on_line = false;
         }
     }
     out.trim().to_string()
+}
+
+/// Pretty-print embedded JSON and preserve line breaks for wrapped salon bubbles.
+pub fn format_salon_json_for_display(text: &str) -> String {
+    let work = expand_fenced_json_blocks(text);
+    let work = pretty_format_embedded_json_objects(&work);
+    soft_wrap_long_lines(&work, 96)
+}
+
+fn expand_fenced_json_blocks(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("```") {
+        out.push_str(&rest[..start]);
+        let after_ticks = &rest[start + 3..];
+        let body_start = match after_ticks.find('\n') {
+            Some(nl) => start + 3 + nl + 1,
+            None => {
+                out.push_str(&rest[start..]);
+                return out;
+            }
+        };
+        let close_rel = rest[body_start..].find("```");
+        let Some(close_rel) = close_rel else {
+            out.push_str(&rest[start..]);
+            return out;
+        };
+        let body = rest[body_start..body_start + close_rel].trim();
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(&pretty_json_text(body));
+        out.push('\n');
+        rest = &rest[body_start + close_rel + 3..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn pretty_format_embedded_json_objects(text: &str) -> String {
+    let mut out = String::new();
+    let mut i = 0usize;
+    while i < text.len() {
+        let rel = text[i..].find('{');
+        let rel = match rel {
+            Some(r) => r,
+            None => {
+                out.push_str(&text[i..]);
+                break;
+            }
+        };
+        let start = i + rel;
+        out.push_str(&text[i..start]);
+        trim_trailing_json_label(&mut out);
+        if let Some(obj) = aos_agent::room_reply::extract_first_json_object(&text[start..]) {
+            if serde_json::from_str::<serde_json::Value>(&obj).is_ok() {
+                out.push_str(&pretty_json_text(&obj));
+                i = start + obj.len();
+                continue;
+            }
+        }
+        let ch = text[start..].chars().next().unwrap();
+        out.push(ch);
+        i = start + ch.len_utf8();
+    }
+    out
+}
+
+fn trim_trailing_json_label(out: &mut String) {
+    let trimmed = out.trim_end();
+    if trimmed.ends_with("json") {
+        let keep = trimmed.len() - 4;
+        *out = trimmed[..keep].trim_end().to_string();
+    }
+}
+
+fn pretty_json_text(raw: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(raw.trim())
+        .ok()
+        .and_then(|v| serde_json::to_string_pretty(&v).ok())
+        .unwrap_or_else(|| raw.trim().to_string())
+}
+
+const JSON_SOFT_BREAK: char = '\u{200B}';
+
+fn soft_wrap_long_lines(text: &str, max_len: usize) -> String {
+    text.lines()
+        .map(|line| {
+            if line.len() <= max_len {
+                line.to_string()
+            } else {
+                insert_json_soft_breaks(line)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn insert_json_soft_breaks(line: &str) -> String {
+    let mut out = String::with_capacity(line.len() + line.len() / 8);
+    for ch in line.chars() {
+        out.push(ch);
+        if matches!(ch, ',' | ':' | '{' | '}' | '[' | ']') {
+            out.push(JSON_SOFT_BREAK);
+        }
+    }
+    out
 }
 
 /// Strip common markdown markers from salon bubble prose (not rendered as markdown).
@@ -645,6 +756,8 @@ pub fn paint_room_bubble_body(
                     chip_stroke,
                 );
             });
+        } else if para.contains('\n') && para.trim_start().starts_with('{') {
+            paint_wrapped_prose_block(ui, para, body_w);
         } else {
             paint_line_with_mention_chips(ui, para, &labels, chip_fill, chip_text, chip_stroke);
         }
@@ -792,6 +905,20 @@ fn paint_line_with_mention_chips(
                     BubbleSegment::Text(_) => {}
                 }
             }
+        },
+    );
+}
+
+fn paint_wrapped_prose_block(ui: &mut egui::Ui, text: &str, max_w: f32) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(max_w, 0.0),
+        egui::Layout::top_down(egui::Align::Min),
+        |ui| {
+            ui.set_max_width(max_w);
+            ui.add(
+                egui::Label::new(egui::RichText::new(text).color(ui.visuals().text_color()))
+                    .wrap_mode(egui::TextWrapMode::Wrap),
+            );
         },
     );
 }
@@ -1692,6 +1819,35 @@ mod tests {
             segs,
             vec![BubbleSegment::Text("Merci Inconnu pour l'alerte.".to_string())]
         );
+    }
+
+    #[test]
+    fn format_salon_json_for_display_pretty_prints_plan_block() {
+        let raw = r#"Voici le plan :
+json {"args":{"nodes":[{"id":"phase-1","status":"pending"}]},"thought":"Plan"}"#;
+        let formatted = format_salon_json_for_display(raw);
+        assert!(formatted.contains("\"nodes\""));
+        assert!(formatted.contains("phase-1"));
+        assert!(formatted.contains('\n'));
+        assert!(!formatted.contains("json {"));
+    }
+
+    #[test]
+    fn format_salon_json_for_display_expands_fenced_block() {
+        let raw = "Prologue\n```json\n{\"id\":\"phase-1\",\"status\":\"pending\"}\n```\nEpilogue";
+        let formatted = format_salon_json_for_display(raw);
+        assert!(formatted.contains("\"id\": \"phase-1\""));
+        assert!(!formatted.contains("```"));
+        assert!(formatted.contains("Prologue"));
+        assert!(formatted.contains("Epilogue"));
+    }
+
+    #[test]
+    fn collapse_paint_spaces_preserves_newlines() {
+        let raw = "{\n  \"id\": \"phase-1\"\n}";
+        let collapsed = collapse_paint_spaces(raw);
+        assert!(collapsed.contains('\n'));
+        assert!(collapsed.contains("\"id\": \"phase-1\""));
     }
 
     #[test]
