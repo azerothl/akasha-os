@@ -6,6 +6,88 @@ use aos_proto::{ChatRoomConductorPolicy, ChatRoomMember};
 /// Plafond dur des tours agent par message utilisateur (indépendamment de la politique).
 pub const HARD_MAX_AGENT_TURNS: u32 = 4;
 
+/// Plafond des tours relancés par un `@` pair après le passage initial du roster.
+pub const HARD_MAX_PEER_FOLLOWUPS: u32 = 2;
+
+/// Tour planifié : passage initial du strip ou relance `@` pair.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScheduledTurn {
+    pub agent_id: String,
+    pub peer_followup: bool,
+}
+
+/// Convertit la file initiale (`build_initial_queue`) en tours planifiés.
+pub fn initial_schedule(queue: Vec<String>) -> Vec<ScheduledTurn> {
+    queue
+        .into_iter()
+        .map(|agent_id| ScheduledTurn {
+            agent_id,
+            peer_followup: false,
+        })
+        .collect()
+}
+
+/// Prochain tour exécutable : relances `@` pair ou premier passage initial non encore fait.
+pub fn pop_next_scheduled_turn(
+    queue: &mut Vec<ScheduledTurn>,
+    initial_done: &std::collections::HashSet<String>,
+) -> Option<ScheduledTurn> {
+    let mut idx = 0;
+    while idx < queue.len() {
+        let turn = &queue[idx];
+        if turn.peer_followup || !initial_done.contains(&turn.agent_id) {
+            return Some(queue.remove(idx));
+        }
+        idx += 1;
+    }
+    None
+}
+
+fn scheduled_peer_followups(queue: &[ScheduledTurn]) -> usize {
+    queue.iter().filter(|t| t.peer_followup).count()
+}
+
+/// Après une réplique, priorise ou relance les pairs `@` mentionnés.
+///
+/// - Membre pas encore passé dans le strip initial → remonte son tour initial (pas de doublon).
+/// - Membre déjà passé → relance `@` pair (budget `peer_followup_budget`).
+pub fn apply_peer_followups(
+    queue: &mut Vec<ScheduledTurn>,
+    peers: &[String],
+    initial_done: &std::collections::HashSet<String>,
+    peer_followups_run: u32,
+    peer_followup_budget: u32,
+) {
+    let mut reserved = peer_followups_run + scheduled_peer_followups(queue) as u32;
+    for peer_id in peers {
+        if initial_done.contains(peer_id) {
+            if reserved >= peer_followup_budget {
+                continue;
+            }
+            queue.retain(|t| !(t.agent_id == *peer_id && t.peer_followup));
+            queue.insert(
+                0,
+                ScheduledTurn {
+                    agent_id: peer_id.clone(),
+                    peer_followup: true,
+                },
+            );
+            reserved += 1;
+        } else if let Some(pos) = queue
+            .iter()
+            .position(|t| t.agent_id == *peer_id && !t.peer_followup)
+        {
+            let entry = queue.remove(pos);
+            queue.insert(0, entry);
+        }
+    }
+}
+
+/// Budget effectif de relances `@` pair pour une ronde utilisateur.
+pub fn effective_peer_followup_budget(max_agent_turns: u32) -> u32 {
+    HARD_MAX_PEER_FOLLOWUPS.min(max_agent_turns.saturating_sub(1))
+}
+
 /// `agent_id` présent dans le roster de session.
 pub fn is_roster_member(agent_id: &str, members: &[ChatRoomMember]) -> bool {
     members.iter().any(|m| m.agent_id == agent_id)
@@ -545,39 +627,173 @@ mod tests {
     }
 
     #[test]
-    fn peer_followup_skips_member_who_already_spoke() {
+    fn peer_followup_requeues_member_who_already_spoke() {
         use std::collections::HashSet;
 
-        let m = members();
-        let peer = detect_peer_address("@Beta can you confirm?", &m, "agent-alpha").unwrap();
-        let spoken: HashSet<String> = HashSet::from([peer.clone()]);
-        let allowed = (!spoken.contains(&peer)).then_some(peer);
-        assert!(allowed.is_none());
+        let mut queue = Vec::new();
+        let initial_done = HashSet::from([String::from("agent-beta")]);
+        apply_peer_followups(
+            &mut queue,
+            &[String::from("agent-beta")],
+            &initial_done,
+            0,
+            HARD_MAX_PEER_FOLLOWUPS,
+        );
+        assert_eq!(
+            queue,
+            vec![ScheduledTurn {
+                agent_id: "agent-beta".into(),
+                peer_followup: true,
+            }]
+        );
     }
 
     #[test]
-    fn conduct_queue_skips_members_who_already_spoke() {
+    fn peer_followup_bumps_unspoken_member_to_front_without_duplicate() {
         use std::collections::HashSet;
 
-        let mut queue = vec![
+        let mut queue = initial_schedule(vec![
+            String::from("agent-alpha"),
+            String::from("agent-beta"),
+            String::from("agent-gamma"),
+        ]);
+        let initial_done = HashSet::from([String::from("agent-alpha")]);
+        apply_peer_followups(
+            &mut queue,
+            &[String::from("agent-gamma")],
+            &initial_done,
+            0,
+            HARD_MAX_PEER_FOLLOWUPS,
+        );
+        assert_eq!(queue[0].agent_id, "agent-gamma");
+        assert!(!queue[0].peer_followup);
+        assert_eq!(queue.len(), 3);
+    }
+
+    #[test]
+    fn peer_followup_budget_caps_requeues() {
+        use std::collections::HashSet;
+
+        let mut queue = Vec::new();
+        let initial_done = HashSet::from([
+            String::from("agent-alpha"),
+            String::from("agent-beta"),
+            String::from("agent-gamma"),
+        ]);
+        apply_peer_followups(
+            &mut queue,
+            &[
+                String::from("agent-beta"),
+                String::from("agent-gamma"),
+                String::from("agent-alpha"),
+            ],
+            &initial_done,
+            0,
+            2,
+        );
+        assert_eq!(queue.len(), 2);
+        assert!(queue.iter().all(|t| t.peer_followup));
+    }
+
+    #[test]
+    fn conduct_queue_skips_duplicate_initial_slots() {
+        use std::collections::HashSet;
+
+        let mut queue = initial_schedule(vec![
             String::from("agent-alpha"),
             String::from("agent-beta"),
             String::from("agent-alpha"),
-        ];
-        let mut spoken = HashSet::<String>::new();
+        ]);
+        let mut initial_done = HashSet::<String>::new();
         let mut turns = Vec::new();
-        while let Some(id) = queue.first().cloned() {
-            queue.remove(0);
-            if spoken.contains(&id) {
-                continue;
-            }
-            spoken.insert(id.clone());
-            turns.push(id);
+        while let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) {
+            assert!(!turn.peer_followup);
+            initial_done.insert(turn.agent_id.clone());
+            turns.push(turn.agent_id);
         }
         assert_eq!(
             turns,
             vec![String::from("agent-alpha"), String::from("agent-beta")]
         );
+    }
+
+    #[test]
+    fn debate_schedules_peer_followup_after_initial_strip() {
+        use std::collections::HashSet;
+
+        let m = members();
+        let mut queue = initial_schedule(build_initial_queue("Quels risques ?", &m));
+        let mut initial_done = HashSet::<String>::new();
+        let mut peer_followups_run = 0u32;
+        let peer_budget = effective_peer_followup_budget(effective_max_turns(
+            &ChatRoomConductorPolicy::default(),
+        ));
+        let max = effective_max_turns(&ChatRoomConductorPolicy::default()) as usize;
+        let mut spoken = Vec::new();
+        let replies = [
+            ("agent-alpha", "@Beta ton avis ?"),
+            ("agent-beta", "@Alpha confirmes ?"),
+            ("agent-alpha", "oui"),
+            ("agent-gamma", "ok"),
+        ];
+        let mut step = 0usize;
+        while spoken.len() < max {
+            let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) else {
+                break;
+            };
+            spoken.push(turn.agent_id.clone());
+            if turn.peer_followup {
+                peer_followups_run += 1;
+            } else {
+                initial_done.insert(turn.agent_id.clone());
+            }
+            if step < replies.len() {
+                let (speaker, reply) = replies[step];
+                assert_eq!(speaker, turn.agent_id);
+                let peers = detect_peer_addresses(reply, &m, speaker);
+                apply_peer_followups(
+                    &mut queue,
+                    &peers,
+                    &initial_done,
+                    peer_followups_run,
+                    peer_budget,
+                );
+            }
+            step += 1;
+        }
+        assert_eq!(
+            spoken,
+            vec![
+                "agent-alpha",
+                "agent-beta",
+                "agent-alpha",
+                "agent-gamma",
+            ]
+        );
+        assert_eq!(peer_followups_run, 1);
+    }
+
+    #[test]
+    fn no_peer_followup_when_reply_has_no_address() {
+        use std::collections::HashSet;
+
+        let m = members();
+        let mut queue = initial_schedule(build_initial_queue("Hello", &m));
+        let mut initial_done = HashSet::new();
+        let turn = pop_next_scheduled_turn(&mut queue, &initial_done).unwrap();
+        let speaker = turn.agent_id.clone();
+        initial_done.insert(turn.agent_id);
+        let peers = detect_peer_addresses("I agree, no need to tag anyone.", &m, &speaker);
+        assert!(peers.is_empty());
+        apply_peer_followups(
+            &mut queue,
+            &peers,
+            &initial_done,
+            0,
+            HARD_MAX_PEER_FOLLOWUPS,
+        );
+        assert_eq!(queue.len(), 2);
+        assert!(queue.iter().all(|t| !t.peer_followup));
     }
 
     #[test]

@@ -92,7 +92,22 @@ fn visible_prose(text: &str) -> String {
         }
         break;
     }
-    collapse_blank_lines(&out)
+    collapse_blank_lines(&strip_unrenderable_chars(&out))
+}
+
+/// Drop replacement glyphs and control chars that paint as □ in the UI.
+fn strip_unrenderable_chars(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if ch == '\u{FFFD}' {
+            continue;
+        }
+        if ch.is_control() && ch != '\n' && ch != '\t' && ch != '\r' {
+            continue;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn extract_first_json_object(text: &str) -> Option<String> {
@@ -139,6 +154,14 @@ fn collapse_blank_lines(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strips_replacement_glyphs_from_visible_reply() {
+        let raw = "Pour un rapport technique ou\u{FFFD}\u{FFFD}\u{FFFD} fin.";
+        let (visible, _) = split_room_reply(raw);
+        assert_eq!(visible, "Pour un rapport technique ou fin.");
+        assert!(!visible.contains('\u{FFFD}'));
+    }
 
     #[test]
     fn strips_thought_json_from_visible_reply() {

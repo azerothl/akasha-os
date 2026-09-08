@@ -16,8 +16,9 @@ use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
 use crate::persist;
 use crate::room_conductor::{
-    build_initial_queue, detect_peer_addresses, effective_max_turns, format_roster_for_prompt,
-    sanitize_member_queue,
+    apply_peer_followups, build_initial_queue, detect_peer_addresses, effective_max_turns,
+    effective_peer_followup_budget, format_roster_for_prompt, initial_schedule,
+    pop_next_scheduled_turn, sanitize_member_queue,
 };
 use crate::room_reply::split_room_reply;
 use crate::skills::{load_skills, merge_skill_tools};
@@ -818,9 +819,13 @@ pub async fn execute_room_conduct(
     }
 
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
-    let mut queue = sanitize_member_queue(
-        build_initial_queue(&req.content, &session.meta.members),
-        &session.meta.members,
+    let peer_budget =
+        effective_peer_followup_budget(session.meta.conductor_policy.max_agent_turns_per_user);
+    let mut queue = initial_schedule(
+        sanitize_member_queue(
+            build_initial_queue(&req.content, &session.meta.members),
+            &session.meta.members,
+        ),
     );
     queue.truncate(max);
     if queue.is_empty() {
@@ -831,7 +836,8 @@ pub async fn execute_room_conduct(
     }
 
     let mut agent_turns = 0u32;
-    let mut spoken = std::collections::HashSet::<String>::new();
+    let mut initial_done = std::collections::HashSet::<String>::new();
+    let mut peer_followups_run = 0u32;
 
     while (agent_turns as usize) < max {
         if round.is_cancelled() {
@@ -841,19 +847,10 @@ pub async fn execute_room_conduct(
             });
         }
 
-        let agent_id = loop {
-            if queue.is_empty() {
-                break None;
-            }
-            let id = queue.remove(0);
-            if spoken.contains(&id) {
-                continue;
-            }
-            break Some(id);
-        };
-        let Some(agent_id) = agent_id else {
+        let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) else {
             break;
         };
+        let agent_id = turn.agent_id;
         let member = session
             .meta
             .members
@@ -878,25 +875,28 @@ pub async fn execute_room_conduct(
             }
             Err(e) => return Err(e),
         };
-        spoken.insert(agent_id);
-        agent_turns += 1;
-
-        if (agent_turns as usize) >= max {
-            break;
+        if turn.peer_followup {
+            peer_followups_run += 1;
+        } else {
+            initial_done.insert(agent_id);
         }
+        agent_turns += 1;
 
         // Slice C: optional supervisor-directed speaker selection could replace or
         // augment this peer rebound queue without changing mention parsing.
         if session.meta.conductor_policy.allow_peer_debate {
-            for peer_id in
-                detect_peer_addresses(&reply.content, &session.meta.members, &member.agent_id)
-            {
-                if spoken.contains(&peer_id) {
-                    continue;
-                }
-                queue.retain(|id| id != &peer_id);
-                queue.insert(0, peer_id);
-            }
+            let peers = detect_peer_addresses(
+                &reply.content,
+                &session.meta.members,
+                &member.agent_id,
+            );
+            apply_peer_followups(
+                &mut queue,
+                &peers,
+                &initial_done,
+                peer_followups_run,
+                peer_budget,
+            );
         }
     }
 
