@@ -3,6 +3,7 @@
 use crate::composer_layout::{
     bounded_chat_workspace_width, chat_sessions_split, ChatSessionsSplit,
 };
+use crate::prefs::UiPresentationMode;
 use crate::{chat_room, i18n, UiApp};
 use eframe::egui;
 
@@ -18,14 +19,18 @@ impl UiApp {
         .map(|m| m.canvas_open)
         .unwrap_or(false);
         let ChatSessionsSplit { side_w, chat_w } = chat_sessions_split(full.x, gap, canvas_open);
+        let hide_chat_sidebar = matches!(
+            self.prefs.ui_presentation,
+            UiPresentationMode::Focus | UiPresentationMode::Zen
+        );
 
         ui.horizontal(|ui| {
             ui.set_min_height(full.y);
-            if !self.prefs.ui_layout.canvas_focus {
+            if !self.prefs.ui_layout.canvas_focus && !hide_chat_sidebar {
                 self.ui_chat_sidebar(ui, side_w, full.y, &t);
             }
 
-            if !self.prefs.ui_layout.canvas_focus {
+            if !self.prefs.ui_layout.canvas_focus && !hide_chat_sidebar {
                 ui.add_space(gap);
             }
 
@@ -34,7 +39,7 @@ impl UiApp {
             // not the old split estimate, so the canvas and composer stay
             // inside the application viewport.
             let workspace_w = bounded_chat_workspace_width(
-                if self.prefs.ui_layout.canvas_focus {
+                if self.prefs.ui_layout.canvas_focus || hide_chat_sidebar {
                     full.x
                 } else {
                     chat_w

@@ -613,6 +613,72 @@ fn ui_roster_tool_checkboxes(ui: &mut egui::Ui, t: &i18n::UiStrings, selected: &
 }
 
 impl UiApp {
+    fn current_tab_label<'a>(&self, t: &'a i18n::UiStrings) -> &'a str {
+        match &self.tab {
+            Tab::Chat => t.tab_chat,
+            Tab::Memory => t.tab_memory,
+            Tab::Notes => t.tab_notes,
+            Tab::Tasks => t.tab_tasks,
+            Tab::Library => t.tab_library,
+            Tab::Agents => t.tab_agents,
+            Tab::Models => t.tab_models,
+            Tab::Image => t.tab_create,
+            Tab::Providers => t.tab_providers,
+            Tab::Audit => t.tab_audit,
+            Tab::Caps => t.tab_caps,
+            Tab::Scenarios => t.tab_scenarios,
+            Tab::Feedback => t.tab_feedback,
+            Tab::Settings => t.tab_settings,
+            Tab::Files => t.tab_files,
+            Tab::Module(_) => t.nav_modules,
+        }
+    }
+
+    fn minimal_chrome_button(&mut self, ctx: &egui::Context, t: &i18n::UiStrings) {
+        let mode = self.prefs.ui_presentation;
+        if matches!(
+            mode,
+            prefs::UiPresentationMode::Classic | prefs::UiPresentationMode::Rail
+        ) {
+            return;
+        }
+        egui::TopBottomPanel::top("minimal_presentation_bar")
+            .exact_height(if mode == prefs::UiPresentationMode::Zen {
+                34.0
+            } else {
+                42.0
+            })
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(t.presentation_menu)
+                        .on_hover_text(t.presentation_menu_hint)
+                        .clicked()
+                    {
+                        self.show_go_to_palette = true;
+                        self.spotlight_query.clear();
+                    }
+                    if mode != prefs::UiPresentationMode::Zen {
+                        ui.separator();
+                        ui.weak(self.current_tab_label(t));
+                    }
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if ui
+                                .button(t.presentation_exit)
+                                .on_hover_text(t.presentation_exit_hint)
+                                .clicked()
+                            {
+                                self.prefs.ui_presentation = prefs::UiPresentationMode::Classic;
+                                save_preferences(&self.prefs);
+                            }
+                        },
+                    );
+                });
+            });
+    }
+
     fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
         let onboarding = load_onboarding();
         let mut prefs = load_preferences();
@@ -1700,7 +1766,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             // These glyphs are covered by egui's bundled emoji font (monochrome
             // in egui), unlike arbitrary geometric Unicode symbols.
             let icon = ['🔘', '⛃', '🖼', '🗀'][idx];
-            let label_text = if self.prefs.ui_density == prefs::UiDensity::Compact {
+            let label_text = if self.prefs.ui_density == prefs::UiDensity::Compact
+                || self.prefs.ui_presentation == prefs::UiPresentationMode::Rail
+            {
                 icon.to_string()
             } else {
                 format!("{icon} {label}")
@@ -1718,6 +1786,22 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             {
                 self.on_tab_open(tab);
             }
+        }
+
+        if self.prefs.ui_presentation == prefs::UiPresentationMode::Rail {
+            ui.separator();
+            if ui
+                .add_sized(
+                    egui::vec2(ui.available_width().max(1.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                    egui::Button::new("☰"),
+                )
+                .on_hover_text(t.presentation_menu_hint)
+                .clicked()
+            {
+                self.show_go_to_palette = true;
+                self.spotlight_query.clear();
+            }
+            return;
         }
 
         ui.separator();
@@ -1898,8 +1982,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     });
                     ui.close_menu();
                 }
-            });
-            ui.separator();
+                    });
+                    ui.separator();
             if ui
                 .small_button(format!(
                     "{}: {}",
@@ -2114,6 +2198,16 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         }
                     }
                 }
+                if i.modifiers.shift && i.key_pressed(egui::Key::F) {
+                    self.prefs.ui_presentation = if self.prefs.ui_presentation
+                        == prefs::UiPresentationMode::Classic
+                    {
+                        prefs::UiPresentationMode::Focus
+                    } else {
+                        prefs::UiPresentationMode::Classic
+                    };
+                    save_preferences(&self.prefs);
+                }
             }
         });
     }
@@ -2122,12 +2216,34 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         if !self.show_go_to_palette {
             return;
         }
-        egui::Window::new(t.go_to_title)
+        let compact_menu = self.prefs.ui_presentation != prefs::UiPresentationMode::Classic;
+        let mut window = egui::Window::new(if compact_menu {
+            t.presentation_menu
+        } else {
+            t.go_to_title
+        })
             .collapsible(false)
-            .resizable(false)
-            .default_width(420.0)
-            .anchor(egui::Align2::CENTER_TOP, [0.0, 48.0])
-            .show(ctx, |ui| {
+            .resizable(false);
+        window = if compact_menu {
+            window
+                .title_bar(false)
+                .default_width(300.0)
+                .anchor(egui::Align2::LEFT_TOP, [8.0, 48.0])
+        } else {
+            window
+                .default_width(420.0)
+                .anchor(egui::Align2::CENTER_TOP, [0.0, 48.0])
+        };
+        window.show(ctx, |ui| {
+                if compact_menu {
+                    ui.horizontal(|ui| {
+                        ui.strong(t.presentation_menu);
+                        if ui.small_button("×").clicked() {
+                            self.show_go_to_palette = false;
+                            self.spotlight_query.clear();
+                        }
+                    });
+                }
                 ui.weak(t.go_to_hint);
                 ui.add_space(4.0);
                 let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
@@ -2208,19 +2324,49 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 {
                     ui.weak(t.settings_search_empty);
                 }
-                for idx in tab_hits {
-                    let (label, tab) = &destinations[idx];
-                    if ui
-                        .add_sized(
-                            egui::vec2(ui.available_width(), 36.0),
-                            egui::Button::new(*label),
-                        )
-                        .clicked()
-                    {
-                        pick = Some(Pick::Tab(tab.clone()));
+                if compact_menu && query.is_empty() {
+                    ui.weak(if self.prefs.language == "fr" {
+                        "Sections principales"
+                    } else {
+                        "Primary sections"
+                    });
+                    for idx in 0..4 {
+                        let (label, tab) = &destinations[idx];
+                        if ui.button(*label).clicked() {
+                            pick = Some(Pick::Tab(tab.clone()));
+                        }
+                    }
+                    egui::CollapsingHeader::new(t.nav_more)
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            for idx in 4..destinations.len() {
+                                let (label, tab) = &destinations[idx];
+                                if ui
+                                    .add_sized(
+                                        egui::vec2(ui.available_width(), 30.0),
+                                        egui::Button::new(*label),
+                                    )
+                                    .clicked()
+                                {
+                                    pick = Some(Pick::Tab(tab.clone()));
+                                }
+                            }
+                        });
+                } else {
+                    for idx in tab_hits {
+                        let (label, tab) = &destinations[idx];
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 32.0),
+                                egui::Button::new(*label),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Tab(tab.clone()));
+                        }
                     }
                 }
-                if !session_hits.is_empty() {
+                if !session_hits.is_empty() && (!compact_menu || !query.is_empty()) {
                     ui.separator();
                     ui.weak("Sessions");
                     for (id, title) in &session_hits {
@@ -3021,24 +3167,33 @@ impl eframe::App for UiApp {
             }
         });
 
+        let show_sidebar = matches!(
+            self.prefs.ui_presentation,
+            prefs::UiPresentationMode::Classic | prefs::UiPresentationMode::Rail
+        );
+        if show_sidebar {
+        let rail_mode = self.prefs.ui_presentation == prefs::UiPresentationMode::Rail;
         let sidebar_panel = egui::SidePanel::left("tabs")
-            .default_width(
+            .default_width(if rail_mode {
+                64.0
+            } else {
                 self.prefs
                     .ui_layout
                     .chat_sidebar_width
-                    .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0),
-            )
-            .min_width(self.prefs.ui_density.rail_width().max(88.0))
-            .max_width(220.0)
-            .resizable(true)
+                    .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0)
+            })
+            .min_width(if rail_mode { 56.0 } else { self.prefs.ui_density.rail_width().max(88.0) })
+            .max_width(if rail_mode { 72.0 } else { 220.0 })
+            .resizable(!rail_mode)
             .show(ctx, |ui| {
                 overflow_scroll(ui, "nav_sidebar", |ui| {
-                    ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                    ui.heading(if rail_mode || self.prefs.ui_density == prefs::UiDensity::Compact {
                         "A"
                     } else {
                         "Akasha"
                     });
                     self.ui_nav_rail(ui, &t);
+                    if !rail_mode {
                     ui.separator();
                     ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
                         "RAM / CPU"
@@ -3077,6 +3232,7 @@ impl eframe::App for UiApp {
                     } else {
                         ui.label("…");
                     }
+                    }
                 });
             });
         let sidebar_width = sidebar_panel.response.rect.width();
@@ -3084,7 +3240,9 @@ impl eframe::App for UiApp {
             self.prefs.ui_layout.chat_sidebar_width = sidebar_width;
             save_preferences(&self.prefs);
         }
+        }
 
+        if show_sidebar {
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(28.0)
             .show(ctx, |ui| {
@@ -3105,6 +3263,9 @@ impl eframe::App for UiApp {
                     ui.weak(&self.status).on_hover_text(tip);
                 }
             });
+        }
+
+        self.minimal_chrome_button(ctx, &t);
 
         self.ui_go_to_palette(ctx, &t);
         // Toasts transitoires (opensourceui `toast-notification`) : la status
@@ -3141,7 +3302,13 @@ impl eframe::App for UiApp {
         }
 
         self.poll_agent_trace(ctx);
-        if !self.agent_ui.open_tabs.is_empty() || self.prefs.ui_layout.activity_panel_open {
+        let hide_secondary_panels = matches!(
+            self.prefs.ui_presentation,
+            prefs::UiPresentationMode::Focus | prefs::UiPresentationMode::Zen
+        );
+        if !hide_secondary_panels
+            && (!self.agent_ui.open_tabs.is_empty() || self.prefs.ui_layout.activity_panel_open)
+        {
             self.ui_agent_detail_panel(ctx);
         }
 

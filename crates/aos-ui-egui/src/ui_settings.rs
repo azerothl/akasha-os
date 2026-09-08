@@ -3,7 +3,7 @@
 use crate::cmd::Cmd;
 use crate::onboarding::save_onboarding;
 use crate::os_open::aos_home;
-use crate::prefs::{save_preferences, UiDensity, UI_SCALE_PRESETS};
+use crate::prefs::{save_preferences, UiDensity, UiPresentationMode, UI_SCALE_PRESETS};
 use crate::{i18n, Tab, UiApp};
 use eframe::egui;
 
@@ -285,6 +285,27 @@ impl UiApp {
                                 .clicked()
                             {
                                 self.prefs.ui_density = density;
+                                save_preferences(&self.prefs);
+                                self.status = t.settings_saved.into();
+                            }
+                        }
+                    });
+                    ui.end_row();
+
+                    ui.label(t.settings_presentation);
+                    ui.horizontal_wrapped(|ui| {
+                        for (mode, label) in [
+                            (UiPresentationMode::Classic, t.settings_presentation_classic),
+                            (UiPresentationMode::Focus, t.settings_presentation_focus),
+                            (UiPresentationMode::Zen, t.settings_presentation_zen),
+                            (UiPresentationMode::Rail, t.settings_presentation_rail),
+                        ] {
+                            if ui
+                                .selectable_label(self.prefs.ui_presentation == mode, label)
+                                .on_hover_text(t.settings_presentation_hint)
+                                .clicked()
+                            {
+                                self.prefs.ui_presentation = mode;
                                 save_preferences(&self.prefs);
                                 self.status = t.settings_saved.into();
                             }
