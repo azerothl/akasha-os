@@ -210,6 +210,7 @@ pub fn prepare_room_bubble_text(
     };
     let base = aos_agent::room_reply::strip_salon_transcript_prefix(&base);
     let base = strip_tool_id_tokens(&base);
+    let base = strip_salon_markdown_markers(&base);
     let base = aos_agent::room_reply::sanitize_visible_chars(&base);
     format_room_mention_destinations(t, &base, members)
 }
@@ -293,6 +294,56 @@ fn collapse_paint_spaces(text: &str) -> String {
     out.trim().to_string()
 }
 
+/// Strip common markdown markers from salon bubble prose (not rendered as markdown).
+pub fn strip_salon_markdown_markers(text: &str) -> String {
+    let mut work = text.to_string();
+    while let Some(start) = work.find("**") {
+        let rest = &work[start + 2..];
+        if let Some(end) = rest.find("**") {
+            let inner = rest[..end].to_string();
+            let tail = rest[end + 2..].to_string();
+            work = format!("{}{}{}", &work[..start], inner, tail);
+        } else {
+            break;
+        }
+    }
+    work = work
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if let Some(rest) = trimmed.strip_prefix("### ") {
+                rest
+            } else if let Some(rest) = trimmed.strip_prefix("## ") {
+                rest
+            } else if let Some(rest) = trimmed.strip_prefix("# ") {
+                rest
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    while let Some(start) = work.find('`') {
+        if let Some(end_rel) = work[start + 1..].find('`') {
+            let inner = work[start + 1..start + 1 + end_rel].to_string();
+            let tail = work[start + 1 + end_rel + 1..].to_string();
+            work = format!("{}{}{}", &work[..start], inner, tail);
+        } else {
+            break;
+        }
+    }
+    collapse_paint_spaces(&work)
+}
+
+fn mention_chip_style(ui: &egui::Ui) -> (egui::Color32, egui::Color32, egui::Stroke) {
+    let visuals = ui.visuals();
+    (
+        visuals.widgets.inactive.bg_fill,
+        visuals.text_color(),
+        visuals.widgets.noninteractive.bg_stroke,
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum BubbleSegment {
     Text(String),
@@ -360,7 +411,7 @@ fn push_text_segment(out: &mut Vec<BubbleSegment>, text: &str) {
 pub fn paint_room_bubble_body(
     ui: &mut egui::Ui,
     text: &str,
-    accent: egui::Color32,
+    _accent: egui::Color32,
     t: &UiStrings,
     members: &[ChatRoomMember],
 ) {
@@ -368,12 +419,7 @@ pub fn paint_room_bubble_body(
         return;
     }
     let labels = mention_labels_longest_first(t, members);
-    let chip_fill = egui::Color32::from_rgba_premultiplied(
-        accent.r(),
-        accent.g(),
-        accent.b(),
-        if ui.visuals().dark_mode { 56 } else { 40 },
-    );
+    let (chip_fill, chip_text, chip_stroke) = mention_chip_style(ui);
     for para in text.split("\n\n") {
         let para = para.trim();
         if para.is_empty() {
@@ -382,15 +428,15 @@ pub fn paint_room_bubble_body(
         if let Some(body) = para.strip_prefix("- ") {
             ui.horizontal_top(|ui| {
                 ui.label("•");
-                paint_line_with_mention_chips(ui, body, &labels, accent, chip_fill);
+                paint_line_with_mention_chips(ui, body, &labels, chip_fill, chip_text, chip_stroke);
             });
         } else if let Some(body) = para.strip_prefix("* ") {
             ui.horizontal_top(|ui| {
                 ui.label("•");
-                paint_line_with_mention_chips(ui, body, &labels, accent, chip_fill);
+                paint_line_with_mention_chips(ui, body, &labels, chip_fill, chip_text, chip_stroke);
             });
         } else {
-            paint_line_with_mention_chips(ui, para, &labels, accent, chip_fill);
+            paint_line_with_mention_chips(ui, para, &labels, chip_fill, chip_text, chip_stroke);
         }
         ui.add_space(4.0);
     }
@@ -400,11 +446,12 @@ fn paint_line_with_mention_chips(
     ui: &mut egui::Ui,
     line: &str,
     labels: &[String],
-    accent: egui::Color32,
     chip_fill: egui::Color32,
+    chip_text: egui::Color32,
+    chip_stroke: egui::Stroke,
 ) {
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
         for seg in split_mention_segments(line, labels) {
             match seg {
                 BubbleSegment::Text(s) if !s.trim().is_empty() => {
@@ -416,11 +463,15 @@ fn paint_line_with_mention_chips(
                 BubbleSegment::Mention(label) => {
                     egui::Frame::NONE
                         .fill(chip_fill)
-                        .stroke(egui::Stroke::new(1.0_f32, accent.gamma_multiply(0.65)))
-                        .corner_radius(4.0)
-                        .inner_margin(egui::Margin::symmetric(5, 2))
+                        .stroke(chip_stroke)
+                        .corner_radius(3.0)
+                        .inner_margin(egui::Margin::symmetric(3, 1))
                         .show(ui, |ui| {
-                            ui.label(egui::RichText::new(format!("@{label}")).strong().color(accent));
+                            ui.label(
+                                egui::RichText::new(format!("@{label}"))
+                                    .small()
+                                    .color(chip_text),
+                            );
                         });
                 }
                 BubbleSegment::Text(_) => {}
@@ -1103,6 +1154,27 @@ mod tests {
         assert!(!stripped.contains("notes.read"));
         assert!(!stripped.contains("notes.list"));
         assert!(stripped.contains("synthèse"));
+    }
+
+    #[test]
+    fn strip_salon_markdown_markers_removes_bold_and_headings() {
+        let raw = "**Supervisor** Merci @Codeur.\n## Ce que j'ai fait\n- point";
+        let stripped = strip_salon_markdown_markers(raw);
+        assert!(!stripped.contains("**"));
+        assert!(!stripped.contains("##"));
+        assert!(stripped.contains("Supervisor"));
+        assert!(stripped.contains("Ce que j'ai fait"));
+    }
+
+    #[test]
+    fn format_room_mention_destinations_maps_supervisor_to_critic_label() {
+        let t = i18n::strings("fr");
+        let mut m1 = member("persona-critic", "Critic");
+        m1.persona_id = Some("critic".into());
+        let members = vec![m1];
+        let painted = format_room_mention_destinations(&t, "@supervisor, confirme ?", &members);
+        assert!(painted.contains("@Critique"));
+        assert!(!painted.contains("@supervisor"));
     }
 
     #[test]

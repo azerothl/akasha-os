@@ -50,7 +50,7 @@ pub fn persona_by_id(id: &str) -> Option<&'static RoomPersona> {
 pub fn persona_mention_labels(persona_id: &str) -> &'static [&'static str] {
     match persona_id {
         "researcher" => &["Researcher", "Chercheur", "researcher"],
-        "critic" => &["Critic", "Critique", "critic"],
+        "critic" => &["Critic", "Critique", "critic", "supervisor"],
         "coder" => &["Coder", "Codeur", "coder"],
         "planner" => &["Planner", "Planificateur", "planner"],
         _ => &[],
