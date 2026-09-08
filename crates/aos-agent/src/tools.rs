@@ -1731,6 +1731,21 @@ mod tests {
     }
 
     #[test]
+    fn static_tasks_catalog_matches_frozen_contract() {
+        use aos_proto::TASKS_TOOL_IDS;
+
+        let selected: Vec<String> = TASKS_TOOL_IDS.iter().map(|s| s.to_string()).collect();
+        let tools = select_tools(&selected, &[]);
+        for id in TASKS_TOOL_IDS {
+            let tool = tools
+                .iter()
+                .find(|t| t.name == *id)
+                .unwrap_or_else(|| panic!("static catalog missing {id}"));
+            assert_eq!(tool.required_caps, vec![aos_proto::INVOKE_CAP.to_string()]);
+        }
+    }
+
+    #[test]
     fn canvas_shape_tool_descriptions_name_bbox_contract() {
         let tools = select_tools(&["canvas.rect".into(), "canvas.ellipse".into()], &[]);
         let rect = tools.iter().find(|t| t.name == "canvas.rect").unwrap();
