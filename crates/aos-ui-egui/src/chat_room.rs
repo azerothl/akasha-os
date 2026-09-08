@@ -710,6 +710,85 @@ fn push_text_segment(out: &mut Vec<BubbleSegment>, text: &str) {
     }
 }
 
+/// Collapse blank-line paragraph gaps inside JSON `{`…`}` spans.
+fn seal_json_intrablock_blank_lines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut depth = 0u32;
+    let mut in_string = false;
+    let mut escape = false;
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if in_string {
+            out.push(ch);
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => {
+                in_string = true;
+                out.push(ch);
+            }
+            '{' => {
+                depth += 1;
+                out.push(ch);
+            }
+            '}' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                out.push(ch);
+            }
+            '\n' if depth > 0 => {
+                out.push('\n');
+                while chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+fn is_orphan_json_brace_paragraph(para: &str) -> bool {
+    let trimmed = para.trim();
+    trimmed == "{" || trimmed == "}"
+}
+
+/// Split salon bubble prose on paragraph breaks without orphan JSON braces.
+fn bubble_paragraphs(text: &str) -> Vec<String> {
+    let sealed = seal_json_intrablock_blank_lines(text);
+    let mut paragraphs: Vec<String> = sealed
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|para| !para.is_empty())
+        .map(str::to_string)
+        .collect();
+    let mut i = 0usize;
+    while i < paragraphs.len() {
+        if is_orphan_json_brace_paragraph(&paragraphs[i]) {
+            if paragraphs[i].trim() == "{" && i + 1 < paragraphs.len() {
+                let next = paragraphs.remove(i + 1);
+                paragraphs[i] = format!("{}\n\n{}", paragraphs[i].trim(), next);
+                continue;
+            }
+            if paragraphs[i].trim() == "}" && i > 0 {
+                let brace = paragraphs.remove(i);
+                paragraphs[i - 1] = format!("{}\n\n{}", paragraphs[i - 1], brace.trim());
+                continue;
+            }
+        }
+        i += 1;
+    }
+    paragraphs
+}
+
 /// Render salon bubble body with `@` mention chips (human labels only).
 pub fn paint_room_bubble_body(
     ui: &mut egui::Ui,
@@ -725,7 +804,7 @@ pub fn paint_room_bubble_body(
     ui.set_max_width(body_w);
     let labels = mention_labels_longest_first(t, members);
     let (chip_fill, chip_text, chip_stroke) = mention_chip_style(ui);
-    for para in text.split("\n\n") {
+    for para in bubble_paragraphs(text) {
         let para = para.trim();
         if para.is_empty() {
             continue;
@@ -873,55 +952,46 @@ fn paint_line_with_mention_chips(
     let line_w = ui.available_width().max(1.0);
     let segments =
         normalize_mention_chip_segments(split_mention_segments(line, labels));
-    ui.allocate_ui_with_layout(
-        egui::vec2(line_w, 0.0),
-        egui::Layout::left_to_right(egui::Align::TOP).with_main_wrap(true),
-        |ui| {
-            ui.set_max_width(line_w);
-            ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
-            for seg in segments {
-                match seg {
-                    BubbleSegment::Text(s) if !s.trim().is_empty() => {
-                        ui.add(
-                            egui::Label::new(
-                                egui::RichText::new(s.trim()).color(ui.visuals().text_color()),
-                            )
-                            .wrap_mode(egui::TextWrapMode::Wrap),
-                        );
-                    }
-                    BubbleSegment::Mention(label) if !label.trim().is_empty() => {
-                        egui::Frame::NONE
-                            .fill(chip_fill)
-                            .stroke(chip_stroke)
-                            .corner_radius(3.0)
-                            .inner_margin(egui::Margin::symmetric(3, 1))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    egui::RichText::new(format!("@{label}"))
-                                        .small()
-                                        .color(chip_text),
-                                );
-                            });
-                    }
-                    BubbleSegment::Mention(_) => {}
-                    BubbleSegment::Text(_) => {}
+    ui.set_max_width(line_w);
+    ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.set_max_width(line_w);
+        for seg in segments {
+            match seg {
+                BubbleSegment::Text(s) if !s.trim().is_empty() => {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(s.trim()).color(ui.visuals().text_color()),
+                        )
+                        .wrap_mode(egui::TextWrapMode::Wrap),
+                    );
                 }
+                BubbleSegment::Mention(label) if !label.trim().is_empty() => {
+                    egui::Frame::NONE
+                        .fill(chip_fill)
+                        .stroke(chip_stroke)
+                        .corner_radius(3.0)
+                        .inner_margin(egui::Margin::symmetric(3, 1))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(format!("@{label}"))
+                                    .small()
+                                    .color(chip_text),
+                            );
+                        });
+                }
+                BubbleSegment::Mention(_) => {}
+                BubbleSegment::Text(_) => {}
             }
-        },
-    );
+        }
+    });
 }
 
 fn paint_wrapped_prose_block(ui: &mut egui::Ui, text: &str, max_w: f32) {
-    ui.allocate_ui_with_layout(
-        egui::vec2(max_w, 0.0),
-        egui::Layout::top_down(egui::Align::Min),
-        |ui| {
-            ui.set_max_width(max_w);
-            ui.add(
-                egui::Label::new(egui::RichText::new(text).color(ui.visuals().text_color()))
-                    .wrap_mode(egui::TextWrapMode::Wrap),
-            );
-        },
+    ui.set_max_width(max_w);
+    ui.add(
+        egui::Label::new(egui::RichText::new(text).color(ui.visuals().text_color()))
+            .wrap_mode(egui::TextWrapMode::Wrap),
     );
 }
 
@@ -1850,6 +1920,39 @@ json {"args":{"nodes":[{"id":"phase-1","status":"pending"}]},"thought":"Plan"}"#
         let collapsed = collapse_paint_spaces(raw);
         assert!(collapsed.contains('\n'));
         assert!(collapsed.contains("\"id\": \"phase-1\""));
+    }
+
+    #[test]
+    fn bubble_paragraphs_coalesces_orphan_opening_brace() {
+        let raw = "{\n\n  \"thought\": \"Plan\",\n  \"args\": {}\n}";
+        let paras = bubble_paragraphs(raw);
+        assert_eq!(paras.len(), 1);
+        assert!(paras[0].starts_with('{'));
+        assert!(paras[0].contains("\"thought\""));
+    }
+
+    #[test]
+    fn bubble_paragraphs_coalesces_orphan_closing_brace() {
+        let raw = "{\n  \"thought\": \"Plan\"\n\n}";
+        let paras = bubble_paragraphs(raw);
+        assert_eq!(paras.len(), 1);
+        assert!(paras[0].ends_with('}'));
+        assert!(paras[0].contains("\"thought\""));
+    }
+
+    #[test]
+    fn seal_json_intrablock_blank_lines_keeps_prose_breaks() {
+        let raw = "Prologue\n\n{\n  \"id\": 1\n}\n\nEpilogue";
+        let sealed = seal_json_intrablock_blank_lines(raw);
+        let paras: Vec<_> = sealed
+            .split("\n\n")
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .collect();
+        assert_eq!(paras.len(), 3);
+        assert_eq!(paras[0], "Prologue");
+        assert!(paras[1].starts_with('{'));
+        assert_eq!(paras[2], "Epilogue");
     }
 
     #[test]
