@@ -9,7 +9,7 @@
 use crate::bootstrap;
 use crate::update;
 use aos_proto::tasks_contract::{MANIFEST_FS_CAPS, MODULE_NAME};
-use aos_proto::ModuleManifest;
+use aos_proto::{decl_ui, ModuleManifest};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -63,7 +63,7 @@ pub fn manage_tasks_module(home: &Path) -> bool {
 }
 
 fn manage_tasks_module_inner(home: &Path) -> Result<bool, String> {
-    let share = resolve_tasks_share_pkg(home)?;
+    let profile = decl_ui::resolve_preview_profile(home);
     let registry_path = modules_root(home).join("registry.yaml");
     let installed_dir = modules_root(home).join(MODULE_NAME);
     let mut registry = load_registry(&registry_path);
@@ -73,6 +73,28 @@ fn manage_tasks_module_inner(home: &Path) -> Result<bool, String> {
     }
 
     let had_historical = is_historical_tasks_install(home, &registry);
+    let preinstall = decl_ui::is_preinstalled_for_profile(MODULE_NAME, profile);
+    if !preinstall && !had_historical && !installed_dir.is_dir() {
+        return Ok(false);
+    }
+
+    let share = match resolve_tasks_share_pkg(home) {
+        Ok(p) => p,
+        Err(e) => {
+            if had_historical || installed_dir.is_dir() {
+                ensure_managed_registry_entry(&installed_dir, &mut registry);
+                if registry_dirty(&registry_path, &registry) {
+                    backup_registry(&registry_path);
+                    save_registry(&registry_path, &registry)?;
+                }
+                return Ok(false);
+            }
+            if !preinstall {
+                return Ok(false);
+            }
+            return Err(e);
+        }
+    };
     if !migration_marker_exists(home) && had_historical {
         migrate_historical_install(home, &registry_path, &installed_dir, &mut registry)?;
         write_migration_marker(home)?;
@@ -469,6 +491,16 @@ mod tests {
         let reg2 = fs::read_to_string(modules_root(&home).join("registry.yaml")).unwrap();
         assert_eq!(reg1, reg2);
         assert!(home.join(MIGRATION_MARKER).is_file());
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn minimal_profile_skips_fresh_preinstall() {
+        let home = temp_home("minimal-profile");
+        write_share_pkg(&home, "1.0.0", b"fresh wasm");
+        fs::write(home.join("share/preview-profile.yaml"), "profile: minimal\n").unwrap();
+        assert!(!manage_tasks_module(&home));
+        assert!(!modules_root(&home).join(MODULE_NAME).exists());
         let _ = fs::remove_dir_all(&home);
     }
 

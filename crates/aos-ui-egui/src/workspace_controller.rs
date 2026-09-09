@@ -1,7 +1,6 @@
-//! Workspace panel controller — notes / tasks / library event handlers.
+//! Workspace panel controller — notes / library event handlers.
 
 use crate::notes_panel::{NoteDetail, NoteListItem, NoteRelatedHit, NoteSearchHit};
-use crate::tasks_panel::TaskItem;
 use crate::{i18n, UiApp};
 use aos_proto::UserLibraryDoc;
 
@@ -61,10 +60,5 @@ impl UiApp {
 
     pub(crate) fn on_user_library_listed(&mut self, docs: Vec<UserLibraryDoc>) {
         self.workspace_ui.set_library_docs(docs);
-    }
-
-    pub(crate) fn on_tasks_listed(&mut self, tasks: Vec<TaskItem>) {
-        let t = i18n::strings(&self.prefs.language);
-        self.workspace_ui.apply_tasks_listed(tasks, t.tasks_count);
     }
 }

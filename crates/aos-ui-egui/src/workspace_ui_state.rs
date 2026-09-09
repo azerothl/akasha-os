@@ -1,10 +1,9 @@
-//! Mutable state owned by the Tasks / Library / Notes workspace panels.
+//! Mutable state owned by the Library / Notes workspace panels.
 
 use crate::library_panel::LibraryPanelState;
 use crate::notes_panel::{
     NoteDetail, NoteListItem, NoteRelatedHit, NoteSearchHit, NotesPanelState,
 };
-use crate::tasks_panel::{TaskItem, TasksPanelState};
 use aos_proto::UserLibraryDoc;
 
 #[derive(Default)]
@@ -12,7 +11,6 @@ pub(crate) struct WorkspaceUiState {
     pub(crate) notes: NotesPanelState,
     /// Last raw notes payload (scenarios / debug).
     pub(crate) notes_out: String,
-    pub(crate) tasks: TasksPanelState,
     pub(crate) library: LibraryPanelState,
 }
 
@@ -63,10 +61,6 @@ impl WorkspaceUiState {
     pub(crate) fn set_library_docs(&mut self, docs: Vec<UserLibraryDoc>) {
         self.library.docs = docs;
     }
-
-    pub(crate) fn apply_tasks_listed(&mut self, tasks: Vec<TaskItem>, count_tpl: &str) {
-        self.tasks.apply_listed(tasks, count_tpl);
-    }
 }
 
 #[cfg(test)]
@@ -103,21 +97,5 @@ mod tests {
         assert_eq!(state.library.docs.len(), 1);
         state.set_library_docs(Vec::new());
         assert!(state.library.docs.is_empty());
-    }
-
-    #[test]
-    fn apply_tasks_listed_updates_status() {
-        let mut state = WorkspaceUiState::default();
-        state.apply_tasks_listed(
-            vec![TaskItem {
-                id: "t1".into(),
-                title: "do it".into(),
-                notes: String::new(),
-                done: false,
-            }],
-            "{n} task(s)",
-        );
-        assert_eq!(state.tasks.tasks.len(), 1);
-        assert_eq!(state.tasks.status, "1 task(s)");
     }
 }

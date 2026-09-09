@@ -19,7 +19,6 @@ pub enum TabKind {
     Memory,
     Notes,
     Library,
-    Tasks,
     Files,
     Models,
     Settings,
@@ -41,11 +40,9 @@ impl TabKind {
     /// (Chat/Agents/Create/Memory) are excluded — they never render in More.
     pub fn nav_group(self) -> Option<NavGroup> {
         match self {
-            TabKind::Notes
-            | TabKind::Library
-            | TabKind::Tasks
-            | TabKind::Files
-            | TabKind::Models => Some(NavGroup::Daily),
+            TabKind::Notes | TabKind::Library | TabKind::Files | TabKind::Models => {
+                Some(NavGroup::Daily)
+            }
             TabKind::Providers => Some(NavGroup::System),
             TabKind::Caps
             | TabKind::Audit
@@ -100,7 +97,6 @@ pub fn tab_kind(tab: &Tab) -> TabKind {
         Tab::Memory => TabKind::Memory,
         Tab::Notes => TabKind::Notes,
         Tab::Library => TabKind::Library,
-        Tab::Tasks => TabKind::Tasks,
         Tab::Files => TabKind::Files,
         Tab::Models => TabKind::Models,
         Tab::Settings => TabKind::Settings,

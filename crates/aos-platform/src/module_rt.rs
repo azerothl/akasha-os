@@ -21,7 +21,7 @@
 //!   sont admin en v1 mono-utilisateur, §12) ;
 //! - bornes par invocation : fuel CPU + mémoire linéaire limitée (§7.4).
 
-use aos_proto::decl_ui::{self, DeclUiDocument, ModuleUiResponse};
+use aos_proto::decl_ui::{self, DeclUiDocument, ModuleUiResponse, PreviewProfile};
 use aos_proto::{ModuleInfo, ModuleManifest, OS_API_VERSION};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -330,7 +330,7 @@ impl ModuleRuntime {
                 name: &m.manifest.name,
                 granted_caps: &m.granted_caps,
                 quarantined: m.quarantined,
-                preinstalled: decl_ui::is_preinstalled_module(&m.manifest.name),
+                preinstalled: is_preinstalled_for_runtime(&self.dir, &m.manifest.name),
             })
             .collect();
         installed.sort_by(|a, b| a.name.cmp(b.name));
@@ -525,7 +525,7 @@ impl ModuleRuntime {
             RemovedModuleEntry {
                 name: name.to_string(),
                 user_removed: true,
-                preinstalled: decl_ui::is_preinstalled_module(name),
+                preinstalled: is_preinstalled_for_runtime(&self.dir, name),
                 granted_caps: m.granted_caps,
             },
         );
@@ -929,6 +929,19 @@ struct ValidatedPackage {
 fn read_manifest_from_dir(dir: &Path) -> Result<ModuleManifest, ModuleError> {
     serde_yaml::from_str(&std::fs::read_to_string(dir.join("manifest.yaml"))?)
         .map_err(|e| ModuleError::BadManifest(e.to_string()))
+}
+
+fn preview_profile_for_modules_dir(dir: &Path) -> PreviewProfile {
+    let home = dir
+        .parent()
+        .and_then(|var| var.parent())
+        .unwrap_or_else(|| Path::new("."));
+    decl_ui::resolve_preview_profile(home)
+}
+
+fn is_preinstalled_for_runtime(dir: &Path, name: &str) -> bool {
+    let profile = preview_profile_for_modules_dir(dir);
+    decl_ui::is_preinstalled_for_profile(name, profile)
 }
 
 fn caps_increased(

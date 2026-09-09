@@ -82,7 +82,6 @@ mod settings_controller;
 mod settings_ui_state;
 mod skill_offer;
 mod slash;
-mod tasks_panel;
 mod theme;
 mod troubleshoot;
 mod ui_agents;
@@ -131,7 +130,7 @@ use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 use eframe::egui;
 use egui_commonmark::CommonMarkCache;
 use module_actions::{
-    agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
+    agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes,
     load_module_ui,
 };
 use onboarding::{load_onboarding, save_onboarding, OnboardingState};
@@ -178,7 +177,6 @@ enum Tab {
     Chat,
     Memory,
     Notes,
-    Tasks,
     Library,
     Agents,
     Models,
@@ -649,7 +647,6 @@ impl UiApp {
             Tab::Chat => t.tab_chat,
             Tab::Memory => t.tab_memory,
             Tab::Notes => t.tab_notes,
-            Tab::Tasks => t.tab_tasks,
             Tab::Library => t.tab_library,
             Tab::Agents => t.tab_agents,
             Tab::Models => t.tab_models,
@@ -661,8 +658,31 @@ impl UiApp {
             Tab::Feedback => t.tab_feedback,
             Tab::Settings => t.tab_settings,
             Tab::Files => t.tab_files,
+            Tab::Module(name) if name == "tasks" => t.tab_tasks,
             Tab::Module(_) => t.nav_modules,
         }
+    }
+
+    fn tasks_module_installed(&self) -> bool {
+        self.settings_ui
+            .installed_modules
+            .iter()
+            .any(|m| m.name == "tasks")
+    }
+
+    fn tasks_tab(&self) -> Tab {
+        Tab::Module("tasks".into())
+    }
+
+    fn tab_is_selected(&self, tab: &Tab) -> bool {
+        match (&self.tab, tab) {
+            (Tab::Module(a), Tab::Module(b)) => a == b,
+            (left, right) => left == right,
+        }
+    }
+
+    fn open_module_tab(&mut self, name: String) {
+        self.on_tab_open(Tab::Module(name));
     }
 
     fn minimal_chrome_button(&mut self, ctx: &egui::Context, t: &i18n::UiStrings) {
@@ -1754,8 +1774,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.send_mem_list();
                 let _ = self.cmd_tx.send(Cmd::MemSweepStatus);
             }
-            Tab::Tasks => {
-                let _ = self.cmd_tx.send(Cmd::TasksList);
+            Tab::Module(name) => {
+                let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
             }
             Tab::Files => {
                 let _ = self.cmd_tx.send(Cmd::FilesList {
@@ -1864,19 +1884,27 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 // Chat/Agents/Create/Memory, More ne duplique jamais le rail.
                 let lang = self.prefs.language.clone();
                 ui.weak(nav::NavGroup::Daily.label(&lang));
-                for (tab, label, hint) in [
+                let mut daily: Vec<(Tab, &str, &str)> = vec![
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
                     (Tab::Library, t.tab_library, t.tab_hint_library),
-                    (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
+                ];
+                if self.tasks_module_installed() {
+                    daily.push((self.tasks_tab(), t.tab_tasks, t.tab_hint_tasks));
+                }
+                daily.extend([
                     (Tab::Files, t.tab_files, t.tab_hint_files),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
-                ] {
+                ]);
+                for (tab, label, hint) in daily {
                     if ui
-                        .selectable_label(self.tab == tab, label)
+                        .selectable_label(self.tab_is_selected(&tab), label)
                         .on_hover_text(hint)
                         .clicked()
                     {
-                        self.on_tab_open(tab);
+                        match &tab {
+                            Tab::Module(name) => self.open_module_tab(name.clone()),
+                            other => self.on_tab_open(other.clone()),
+                        }
                     }
                 }
                 // Documents reste un overlay (research_ui), pas un Tab :
@@ -1949,9 +1977,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     ui.weak(t.nav_modules);
                     for (name, label) in decl_mods {
                         let tab = Tab::Module(name.clone());
-                        if ui.selectable_label(self.tab == tab, &label).clicked() {
-                            self.on_tab_open(tab);
-                            let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
+                        if ui.selectable_label(self.tab_is_selected(&tab), &label).clicked() {
+                            self.open_module_tab(name);
                         }
                     }
                 }
@@ -2285,8 +2312,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         } else {
             t.go_to_title
         })
-        .collapsible(false)
-        .resizable(false);
+            .collapsible(false)
+            .resizable(false);
         window = if compact_menu {
             window
                 .title_bar(false)
@@ -2298,244 +2325,254 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 .anchor(egui::Align2::CENTER_TOP, [0.0, 48.0])
         };
         window.show(ctx, |ui| {
-            if compact_menu {
-                ui.horizontal(|ui| {
-                    ui.strong(t.presentation_menu);
-                    if ui.small_button("×").clicked() {
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    }
-                });
-            }
-            ui.weak(t.go_to_hint);
-            ui.add_space(4.0);
-            let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
-            // Focus le champ à l'ouverture (opensourceui `spotlight-bar`).
-            if self.spotlight_query.is_empty() && !search.has_focus() {
-                ui.memory_mut(|m| m.request_focus(search.id));
-            }
-            ui.separator();
-            let query = self.spotlight_query.trim().to_lowercase();
-            let destinations: [(&str, Tab); 15] = [
-                (t.tab_chat, Tab::Chat),
-                (t.tab_agents, Tab::Agents),
-                (t.tab_create, Tab::Image),
-                (t.tab_memory, Tab::Memory),
-                (t.tab_notes, Tab::Notes),
-                (t.tab_library, Tab::Library),
-                (t.tab_tasks, Tab::Tasks),
-                (t.tab_files, Tab::Files),
-                (t.tab_models, Tab::Models),
-                (t.tab_settings, Tab::Settings),
-                (t.tab_caps, Tab::Caps),
-                (t.tab_audit, Tab::Audit),
-                (t.tab_providers, Tab::Providers),
-                (t.tab_scenarios, Tab::Scenarios),
-                (t.tab_feedback, Tab::Feedback),
-            ];
-            let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
-            let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
-            // S7.2 : recherche globale — sessions, notes, mémoire en plus
-            // des onglets. Sessions même à requête vide (accès rapide).
-            let session_hits: Vec<(String, String)> = self
-                .chat_state
-                .sessions
-                .iter()
-                .filter(|s| query.is_empty() || s.title.to_lowercase().contains(query.as_str()))
-                .take(8)
-                .map(|s| (s.id.clone(), s.title.clone()))
-                .collect();
-            let note_hits: Vec<(String, String)> = if query.is_empty() {
-                Vec::new()
-            } else {
-                self.workspace_ui
-                    .notes
-                    .notes
-                    .iter()
-                    .filter(|n| {
-                        n.title.to_lowercase().contains(query.as_str())
-                            || n.path.to_lowercase().contains(query.as_str())
-                    })
-                    .take(8)
-                    .map(|n| (n.path.clone(), n.title.clone()))
-                    .collect()
-            };
-            let mem_hits: Vec<String> = if query.is_empty() {
-                Vec::new()
-            } else {
-                self.memory_ui
-                    .hits
-                    .iter()
-                    .filter(|h| h.text.to_lowercase().contains(query.as_str()))
-                    .take(5)
-                    .map(|h| h.text.clone())
-                    .collect()
-            };
-            enum Pick {
-                Tab(Tab),
-                Session(String),
-                Note(String),
-                Memory(String),
-            }
-            let mut pick: Option<Pick> = None;
-            if tab_hits.is_empty()
-                && session_hits.is_empty()
-                && note_hits.is_empty()
-                && mem_hits.is_empty()
-            {
-                ui.weak(t.settings_search_empty);
-            }
-            if compact_menu && query.is_empty() {
-                ui.weak(if self.prefs.language == "fr" {
-                    "Sections principales"
-                } else {
-                    "Primary sections"
-                });
-                for idx in 0..4 {
-                    let (label, tab) = &destinations[idx];
-                    if ui.button(*label).clicked() {
-                        pick = Some(Pick::Tab(tab.clone()));
-                    }
-                }
-                egui::CollapsingHeader::new(t.nav_more)
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        for idx in 4..destinations.len() {
-                            let (label, tab) = &destinations[idx];
-                            if ui
-                                .add_sized(
-                                    egui::vec2(ui.available_width(), 30.0),
-                                    egui::Button::new(*label),
-                                )
-                                .clicked()
-                            {
-                                pick = Some(Pick::Tab(tab.clone()));
-                            }
+                if compact_menu {
+                    ui.horizontal(|ui| {
+                        ui.strong(t.presentation_menu);
+                        if ui.small_button("×").clicked() {
+                            self.show_go_to_palette = false;
+                            self.spotlight_query.clear();
                         }
                     });
-            } else {
-                for idx in tab_hits {
-                    let (label, tab) = &destinations[idx];
-                    if ui
-                        .add_sized(
-                            egui::vec2(ui.available_width(), 32.0),
-                            egui::Button::new(*label),
-                        )
-                        .clicked()
-                    {
-                        pick = Some(Pick::Tab(tab.clone()));
-                    }
                 }
-            }
-            if !session_hits.is_empty() && (!compact_menu || !query.is_empty()) {
+                ui.weak(t.go_to_hint);
+                ui.add_space(4.0);
+                let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
+                // Focus le champ à l'ouverture (opensourceui `spotlight-bar`).
+                if self.spotlight_query.is_empty() && !search.has_focus() {
+                    ui.memory_mut(|m| m.request_focus(search.id));
+                }
                 ui.separator();
-                ui.weak("Sessions");
-                for (id, title) in &session_hits {
-                    if ui
-                        .add_sized(
-                            egui::vec2(ui.available_width(), 36.0),
-                            egui::Button::new(title),
-                        )
-                        .clicked()
-                    {
-                        pick = Some(Pick::Session(id.clone()));
-                    }
+                let query = self.spotlight_query.trim().to_lowercase();
+                let mut destinations: Vec<(&str, Tab)> = vec![
+                    (t.tab_chat, Tab::Chat),
+                    (t.tab_agents, Tab::Agents),
+                    (t.tab_create, Tab::Image),
+                    (t.tab_memory, Tab::Memory),
+                    (t.tab_notes, Tab::Notes),
+                    (t.tab_library, Tab::Library),
+                ];
+                if self.tasks_module_installed() {
+                    destinations.push((t.tab_tasks, self.tasks_tab()));
                 }
-            }
-            if !note_hits.is_empty() {
-                ui.separator();
-                ui.weak(t.tab_notes);
-                for (path, title) in &note_hits {
-                    if ui
-                        .add_sized(
-                            egui::vec2(ui.available_width(), 36.0),
-                            egui::Button::new(title),
-                        )
-                        .clicked()
-                    {
-                        pick = Some(Pick::Note(path.clone()));
-                    }
-                }
-            }
-            if !mem_hits.is_empty() {
-                ui.separator();
-                ui.weak(t.tab_memory);
-                for text in &mem_hits {
-                    let short: String = text.chars().take(80).collect();
-                    if ui
-                        .add_sized(
-                            egui::vec2(ui.available_width(), 36.0),
-                            egui::Button::new(&short),
-                        )
-                        .clicked()
-                    {
-                        pick = Some(Pick::Memory(text.clone()));
-                    }
-                }
-            }
-            match pick {
-                Some(Pick::Tab(tab)) => {
-                    self.on_tab_open(tab);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
-                }
-                Some(Pick::Session(id)) => {
-                    self.request_session_select(id);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
-                }
-                Some(Pick::Note(path)) => {
-                    let title = note_hits
-                        .iter()
-                        .find(|(p, _)| p == &path)
-                        .map(|(_, ti)| ti.clone())
-                        .unwrap_or_default();
-                    self.workspace_ui.notes.filter = title;
-                    self.on_tab_open(Tab::Notes);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
-                }
-                Some(Pick::Memory(text)) => {
-                    self.memory_ui.query = text.chars().take(80).collect();
-                    self.on_tab_open(Tab::Memory);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
-                }
-                None => {}
-            }
-            // Enter ouvre le 1er résultat : session, note, mémoire, onglet.
-            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                if let Some((id, _)) = session_hits.first() {
-                    self.request_session_select(id.clone());
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
-                } else if let Some((_, title)) = note_hits.first() {
-                    self.workspace_ui.notes.filter = title.clone();
-                    self.on_tab_open(Tab::Notes);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
-                } else if let Some(text) = mem_hits.first() {
-                    self.memory_ui.query = text.chars().take(80).collect();
-                    self.on_tab_open(Tab::Memory);
-                    self.show_go_to_palette = false;
-                    self.spotlight_query.clear();
+                destinations.extend([
+                    (t.tab_files, Tab::Files),
+                    (t.tab_models, Tab::Models),
+                    (t.tab_settings, Tab::Settings),
+                    (t.tab_caps, Tab::Caps),
+                    (t.tab_audit, Tab::Audit),
+                    (t.tab_providers, Tab::Providers),
+                    (t.tab_scenarios, Tab::Scenarios),
+                    (t.tab_feedback, Tab::Feedback),
+                ]);
+                let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
+                let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
+                // S7.2 : recherche globale — sessions, notes, mémoire en plus
+                // des onglets. Sessions même à requête vide (accès rapide).
+                let session_hits: Vec<(String, String)> = self
+                    .chat_state
+                    .sessions
+                    .iter()
+                    .filter(|s| {
+                        query.is_empty() || s.title.to_lowercase().contains(query.as_str())
+                    })
+                    .take(8)
+                    .map(|s| (s.id.clone(), s.title.clone()))
+                    .collect();
+                let note_hits: Vec<(String, String)> = if query.is_empty() {
+                    Vec::new()
                 } else {
-                    let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
-                    if let Some(first) =
-                        ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
-                    {
-                        let (_, tab) = &destinations[*first];
-                        self.on_tab_open(tab.clone());
+                    self.workspace_ui
+                        .notes
+                        .notes
+                        .iter()
+                        .filter(|n| {
+                            n.title.to_lowercase().contains(query.as_str())
+                                || n.path.to_lowercase().contains(query.as_str())
+                        })
+                        .take(8)
+                        .map(|n| (n.path.clone(), n.title.clone()))
+                        .collect()
+                };
+                let mem_hits: Vec<String> = if query.is_empty() {
+                    Vec::new()
+                } else {
+                    self.memory_ui
+                        .hits
+                        .iter()
+                        .filter(|h| h.text.to_lowercase().contains(query.as_str()))
+                        .take(5)
+                        .map(|h| h.text.clone())
+                        .collect()
+                };
+                enum Pick {
+                    Tab(Tab),
+                    Session(String),
+                    Note(String),
+                    Memory(String),
+                }
+                let mut pick: Option<Pick> = None;
+                if tab_hits.is_empty()
+                    && session_hits.is_empty()
+                    && note_hits.is_empty()
+                    && mem_hits.is_empty()
+                {
+                    ui.weak(t.settings_search_empty);
+                }
+                if compact_menu && query.is_empty() {
+                    ui.weak(if self.prefs.language == "fr" {
+                        "Sections principales"
+                    } else {
+                        "Primary sections"
+                    });
+                    for idx in 0..4 {
+                        let (label, tab) = &destinations[idx];
+                        if ui.button(*label).clicked() {
+                            pick = Some(Pick::Tab(tab.clone()));
+                        }
+                    }
+                    egui::CollapsingHeader::new(t.nav_more)
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            for idx in 4..destinations.len() {
+                                let (label, tab) = &destinations[idx];
+                                if ui
+                                    .add_sized(
+                                        egui::vec2(ui.available_width(), 30.0),
+                                        egui::Button::new(*label),
+                                    )
+                                    .clicked()
+                                {
+                                    pick = Some(Pick::Tab(tab.clone()));
+                                }
+                            }
+                        });
+                } else {
+                    for idx in tab_hits {
+                        let (label, tab) = &destinations[idx];
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 32.0),
+                                egui::Button::new(*label),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Tab(tab.clone()));
+                        }
+                    }
+                }
+                if !session_hits.is_empty() && (!compact_menu || !query.is_empty()) {
+                    ui.separator();
+                    ui.weak("Sessions");
+                    for (id, title) in &session_hits {
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 36.0),
+                                egui::Button::new(title),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Session(id.clone()));
+                        }
+                    }
+                }
+                if !note_hits.is_empty() {
+                    ui.separator();
+                    ui.weak(t.tab_notes);
+                    for (path, title) in &note_hits {
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 36.0),
+                                egui::Button::new(title),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Note(path.clone()));
+                        }
+                    }
+                }
+                if !mem_hits.is_empty() {
+                    ui.separator();
+                    ui.weak(t.tab_memory);
+                    for text in &mem_hits {
+                        let short: String = text.chars().take(80).collect();
+                        if ui
+                            .add_sized(
+                                egui::vec2(ui.available_width(), 36.0),
+                                egui::Button::new(&short),
+                            )
+                            .clicked()
+                        {
+                            pick = Some(Pick::Memory(text.clone()));
+                        }
+                    }
+                }
+                match pick {
+                    Some(Pick::Tab(tab)) => {
+                        match &tab {
+                            Tab::Module(name) => self.open_module_tab(name.clone()),
+                            other => self.on_tab_open(other.clone()),
+                        }
                         self.show_go_to_palette = false;
                         self.spotlight_query.clear();
                     }
+                    Some(Pick::Session(id)) => {
+                        self.request_session_select(id);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                    Some(Pick::Note(path)) => {
+                        let title = note_hits
+                            .iter()
+                            .find(|(p, _)| p == &path)
+                            .map(|(_, ti)| ti.clone())
+                            .unwrap_or_default();
+                        self.workspace_ui.notes.filter = title;
+                        self.on_tab_open(Tab::Notes);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                    Some(Pick::Memory(text)) => {
+                        self.memory_ui.query = text.chars().take(80).collect();
+                        self.on_tab_open(Tab::Memory);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                    None => {}
                 }
-            }
-            if ui.button(t.skip).clicked() {
-                self.show_go_to_palette = false;
-                self.spotlight_query.clear();
-            }
-        });
+                // Enter ouvre le 1er résultat : session, note, mémoire, onglet.
+                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    if let Some((id, _)) = session_hits.first() {
+                        self.request_session_select(id.clone());
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    } else if let Some((_, title)) = note_hits.first() {
+                        self.workspace_ui.notes.filter = title.clone();
+                        self.on_tab_open(Tab::Notes);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    } else if let Some(text) = mem_hits.first() {
+                        self.memory_ui.query = text.chars().take(80).collect();
+                        self.on_tab_open(Tab::Memory);
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    } else {
+                        let labels: Vec<&str> =
+                            destinations.iter().map(|(l, _)| *l).collect();
+                        if let Some(first) =
+                            ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
+                        {
+                            let (_, tab) = &destinations[*first];
+                            self.on_tab_open(tab.clone());
+                            self.show_go_to_palette = false;
+                            self.spotlight_query.clear();
+                        }
+                    }
+                }
+                if ui.button(t.skip).clicked() {
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                }
+            });
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.show_go_to_palette = false;
             self.spotlight_query.clear();
@@ -2662,7 +2699,6 @@ impl eframe::App for UiApp {
                 Evt::ScheduleUpdated(entry) => {
                     schedule_event_controller::on_schedule_updated(self, entry);
                 }
-                Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
                 Evt::Confirms(c) => self.confirmations_ui.replace(c),
                 Evt::FeedbackOk(r) => {
                     feedback_event_controller::on_feedback_ok(self, r);
@@ -3403,7 +3439,6 @@ impl eframe::App for UiApp {
             Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
             Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
             Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
-            Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
             Tab::Image => overflow_scroll(ui, "image", |ui| {

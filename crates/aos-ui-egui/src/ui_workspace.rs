@@ -1,26 +1,10 @@
-//! Tasks, library, and notes workspace panels.
+//! Library and notes workspace panels.
 
 use crate::cmd::Cmd;
 use crate::{guide, i18n, library_panel, notes_panel, os_open, Tab, UiApp};
 use eframe::egui;
 
 impl UiApp {
-    pub(crate) fn ui_tasks(&mut self, ui: &mut egui::Ui) {
-        let t = i18n::strings(&self.prefs.language);
-        ui.weak(t.tasks_blurb);
-        ui.separator();
-        let actions = self.workspace_ui.tasks.ui(ui, &t);
-        if actions.list {
-            let _ = self.cmd_tx.send(Cmd::TasksList);
-        }
-        if let Some((title, notes)) = actions.create {
-            let _ = self.cmd_tx.send(Cmd::TasksCreate { title, notes });
-        }
-        if let Some((id, done)) = actions.complete {
-            let _ = self.cmd_tx.send(Cmd::TasksComplete { id, done });
-        }
-    }
-
     pub(crate) fn ui_library(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         let g = guide::strings(&self.prefs.language);
