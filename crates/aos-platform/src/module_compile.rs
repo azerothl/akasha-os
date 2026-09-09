@@ -139,7 +139,10 @@ impl ModuleAuthor {
                 ui: Some(ModuleUi {
                     entry: "ui/index.html".into(),
                     mode: "declarative_ui".into(),
+                    contract: None,
+                    document: None,
                 }),
+                services: Default::default(),
                 min_os_api: 1,
             };
             let yaml =
@@ -190,7 +193,10 @@ serde_json = "1"
                 ui: Some(ModuleUi {
                     entry: "ui/index.html".into(),
                     mode: "declarative_ui".into(),
+                    contract: None,
+                    document: None,
                 }),
+                services: Default::default(),
                 min_os_api: 1,
             };
             let yaml =
@@ -270,6 +276,7 @@ serde_json = "1"
                     output_schema: serde_json::json!({"type":"object"}),
                 }],
                 ui: None,
+                services: Default::default(),
                 min_os_api: 1,
             }
         };
