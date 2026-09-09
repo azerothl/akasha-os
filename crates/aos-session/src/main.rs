@@ -7,6 +7,7 @@ mod bootstrap;
 mod engines;
 mod hardware;
 mod offerings;
+mod create_migration;
 mod tasks_migration;
 mod update;
 
@@ -906,6 +907,11 @@ fn ensure_layout(home: &Path) -> Vec<String> {
     // Module tasks (#149 lot 4) — migration + preinstall gérée ; pas de resync aveugle au boot.
     if tasks_migration::manage_tasks_module(home) {
         synced.push("tasks".into());
+    }
+
+    // Module create (#150 lot 3) — optional app ; upgrade + user_removed ; pas de préinstall forcée.
+    if create_migration::manage_create_module(home) {
+        synced.push("create".into());
     }
 
     // Module canvas (chat drawing) — même resync au boot.

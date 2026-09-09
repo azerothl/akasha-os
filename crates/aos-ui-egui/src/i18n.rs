@@ -3226,10 +3226,14 @@ mod tests {
             "create.history.get",
             "create.history.record",
             "create.result.get",
+            "create.document.load",
+            "create.document.save",
         ] {
             let label = tool_human_label(&en, tool).expect(tool);
-            assert!(!label.contains('.'), "{label}");
+            assert!(!label.contains("create."), "{label}");
             assert!(!label.contains("media.image"), "{label}");
+            let fr_label = tool_human_label(&fr, tool).expect(tool);
+            assert!(!fr_label.contains("create."), "{fr_label}");
         }
     }
 
