@@ -511,6 +511,30 @@ fn image_model_presets(model_id: &str) -> PresetTriplet {
                 sampler: "heun",
             },
         },
+        // Distilled MiniMax-H3: cfg must stay 1.0; 24 fps; 32-aligned canvas.
+        "local:minimax-h3" => PresetTriplet {
+            fast: ImageModelPreset {
+                width: 640,
+                height: 384,
+                steps: 4,
+                cfg: 1.0,
+                sampler: "euler",
+            },
+            balanced: ImageModelPreset {
+                width: 864,
+                height: 480,
+                steps: 4,
+                cfg: 1.0,
+                sampler: "euler",
+            },
+            quality: ImageModelPreset {
+                width: 864,
+                height: 480,
+                steps: 8,
+                cfg: 1.0,
+                sampler: "euler",
+            },
+        },
         // Fallback for unknown models.
         _ => PresetTriplet {
             fast: ImageModelPreset {
@@ -556,8 +580,16 @@ fn pick_preset(model_id: &str, profile: &str) -> ImageModelPreset {
     }
 }
 
-fn video_frames_for_duration(seconds: u32) -> u32 {
-    // ~16 fps, 4n+1 frame counts for Wan/LTX vid_gen.
+/// Frame counts for short clips. Wan/LTX use ~16 fps with 4n+1; MiniMax-H3
+/// runs at 24 fps on the 17k+5 grid (sd.cpp also aligns upward).
+fn video_frames_for_duration_model(seconds: u32, model_id: &str) -> u32 {
+    if model_id.contains("minimax") {
+        return match seconds {
+            2 => 56,
+            4 => 90,
+            _ => 73,
+        };
+    }
     match seconds {
         2 => 33,
         4 => 65,
@@ -1116,7 +1148,10 @@ impl ImageStudioState {
                 CreateMode::Image => None,
             },
             video_frames: match self.create_mode {
-                CreateMode::Video => Some(video_frames_for_duration(self.video_duration_secs)),
+                CreateMode::Video => Some(video_frames_for_duration_model(
+                    self.video_duration_secs,
+                    &self.model_id,
+                )),
                 CreateMode::Image if self.expert_mode => parse_opt_u32(&self.video_frames),
                 CreateMode::Image => None,
             },
@@ -1329,7 +1364,8 @@ impl ImageStudioState {
                 });
             ui.weak(t.studio_video_frames_estimate.replace(
                 "{frames}",
-                &video_frames_for_duration(self.video_duration_secs).to_string(),
+                &video_frames_for_duration_model(self.video_duration_secs, &self.model_id)
+                    .to_string(),
             ));
         });
         ui.horizontal(|ui| {

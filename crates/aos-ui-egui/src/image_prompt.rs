@@ -59,7 +59,7 @@ Rules:
 5. One paragraph or a few comma-separated phrases; keep under 120 words."##;
 
 pub fn is_video_prompt_model(model_id: Option<&str>) -> bool {
-    model_id.is_some_and(|id| id.contains("wan") || id.contains("ltx"))
+    model_id.is_some_and(|id| id.contains("wan") || id.contains("ltx") || id.contains("minimax"))
 }
 
 fn is_upscale_model(id: &str) -> bool {
@@ -79,7 +79,8 @@ fn is_image_generation_model(id: &str) -> bool {
             || id.contains("qwen-image")
             || id.contains("krea")
             || id.contains("wan")
-            || id.contains("ltx"))
+            || id.contains("ltx")
+            || id.contains("minimax"))
 }
 
 /// Which JSON schema applies to this image model, if any.
@@ -130,6 +131,7 @@ pub fn is_heavy_image_model(model_id: &str) -> bool {
         || model_id.contains("krea")
         || model_id.contains("wan")
         || model_id.contains("ltx")
+        || model_id.contains("minimax")
         || model_id.contains("sdxl")
 }
 
@@ -141,6 +143,7 @@ mod tests {
     fn video_models_use_temporal_prompt_enrichment() {
         assert!(is_video_prompt_model(Some("local:ltx2.3-dev")));
         assert!(is_video_prompt_model(Some("local:wan2.2-t2v")));
+        assert!(is_video_prompt_model(Some("local:minimax-h3")));
         assert!(!is_video_prompt_model(Some("local:sd-v1-5")));
         assert!(!is_video_prompt_model(None));
     }

@@ -52,7 +52,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 - **Reference image**: pass a reference image when generating in Create — guides style and composition
 - **Fix a region**: paint a mask on a generated image and regenerate just that area (Create → Fix a region)
-- **Short video**: generate 2–4 second clips from Create when a Wan or LTX pack is installed
+- **Short video**: generate 2–4 second clips from Create when a Wan, LTX, or MiniMax-H3 pack is installed
 - **Chat documents**: attach PDF, txt, or md from the same paperclip as images; the model reads the text in context
 
 ### What's new in 0.12.1
@@ -86,7 +86,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **E7 TPM**: vault master key prefers a real host TPM seal when available (Windows Platform Crypto `NCrypt` / `TPM_RSA_SRK_SEAL_KEY`); Linux falls back to OS keyring then file until tpm2 seal is wired. Presence of a TPM device alone does not set `master.backend=tpm`. No PCR sealing
 - **E8 live bridge**: optional separate binary `aos-bridged` — loopback HTTP `/v1` JSON↔CBOR to the intent bus (mem + secrets.list; secrets.get/set service-style only). Not inside `aos-session`
 - **E9 multi-GPU path**: Placement / llama layer `tensor_split` plumbing; P5 gate **skips** on 1-GPU hosts (honest STATUS — hard-green needs a 2-GPU run)
-- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX short-video Create flow is available with typed WebM output, configurable FPS, image-of-start/force, progress and cancellation. The advanced video workflow remains experimental (see AK-024).
+- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX/MiniMax-H3 short-video Create flow is available with typed WebM output, configurable FPS, image-of-start/force, progress and cancellation. The advanced video workflow remains experimental (see AK-024).
 - **Image history**: studio reloads prior PNG sidecars (`*.meta.json`) — prompt, enriched prompt, composition
 - **Chat UX**: distinct user / assistant bubbles; clearer thread roles
 - **Product RAG**: at boot, `aos-platformd` indexes `docs/FEATURES|STATUS|TESTER` (+ `fr/`) into `product:docs`; each `mem.context` retrieves top-k chunks (budget-capped) so the assistant answers UI / changelog questions without stuffing the full catalogue into the system prompt

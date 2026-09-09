@@ -571,6 +571,24 @@ mod tests {
     }
 
     #[test]
+    fn minimax_h3_forces_cfg_scale_one() {
+        let opts = build_image_gen_opts(
+            "local:minimax-h3",
+            &aos_proto::MediaImageOptions {
+                sd_mode: Some("vid_gen".into()),
+                video_frames: Some(56),
+                cfg_scale: Some(7.0),
+                ..Default::default()
+            },
+            "auto",
+        )
+        .unwrap();
+        assert_eq!(opts.cfg_scale, Some(1.0));
+        assert_eq!(opts.sd_mode.as_deref(), Some("vid_gen"));
+        assert_eq!(opts.fps, Some(24));
+    }
+
+    #[test]
     fn missing_video_sidecars_are_reported() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         if !root.join("share/models/catalog-offerings.json").is_file() {
@@ -624,7 +642,14 @@ fn is_heavy_image_model(model_id: &str) -> bool {
         || model_id.contains("krea")
         || model_id.contains("wan")
         || model_id.contains("ltx")
+        || model_id.contains("minimax")
         || model_id.contains("sdxl")
+}
+
+/// MiniMax-H3 is distilled / cfg-free: sd.cpp aborts when cfg > 1.0.
+fn is_minimax_h3_model(model_id: &str) -> bool {
+    let id = model_id.to_ascii_lowercase();
+    id.contains("minimax") || id.contains("minimax-h3") || id.contains("minimax_h3")
 }
 
 /// Mixed sd.cpp backend for DiT + LLM packs: encoders on CPU, diffusion on GPU.
@@ -642,6 +667,13 @@ fn build_image_gen_opts(
     apply_user_image_opts(&mut opts, user);
     apply_heavy_image_defaults(&mut opts, model_id);
     apply_inference_backend(&mut opts, pin, model_id);
+    if is_minimax_h3_model(model_id) {
+        // Distilled pack: ignore UI CFG leftovers from a previous model.
+        opts.cfg_scale = Some(1.0);
+        if opts.fps.is_none() {
+            opts.fps = Some(24);
+        }
+    }
     Ok(opts)
 }
 
@@ -1037,6 +1069,24 @@ fn apply_offering_sidecars(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {
         } else if let Some(vf) = args.get("video-frames").and_then(|x| x.as_str()) {
             if let Ok(v) = vf.parse::<u32>() {
                 opts.video_frames = Some(v);
+            }
+        }
+    }
+    if opts.cfg_scale.is_none() {
+        if let Some(cfg) = args.get("cfg-scale").and_then(|x| x.as_f64()) {
+            opts.cfg_scale = Some(cfg as f32);
+        } else if let Some(cfg) = args.get("cfg-scale").and_then(|x| x.as_str()) {
+            if let Ok(v) = cfg.parse::<f32>() {
+                opts.cfg_scale = Some(v);
+            }
+        }
+    }
+    if opts.fps.is_none() {
+        if let Some(fps) = args.get("fps").and_then(|x| x.as_u64()) {
+            opts.fps = Some(fps as u32);
+        } else if let Some(fps) = args.get("fps").and_then(|x| x.as_str()) {
+            if let Ok(v) = fps.parse::<u32>() {
+                opts.fps = Some(v);
             }
         }
     }

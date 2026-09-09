@@ -1309,6 +1309,75 @@
       }
     },
     {
+      "id": "local:minimax-h3",
+      "name": "MiniMax H3 (vid_gen T2VA)",
+      "profiles": [
+        "video"
+      ],
+      "filename": "minimax_h3_fl2va_pruned-Q4_K_M.gguf",
+      "url": "https://huggingface.co/leejet/MiniMax-H3-GGUF/resolve/main/minimax_h3_fl2va_pruned-Q4_K_M.gguf",
+      "bytes": 11420663904,
+      "sha256": "",
+      "min_vram_mib": 16384,
+      "min_disk_bytes": 40000000000,
+      "quality_score": 93,
+      "speed_score": 20,
+      "n_layers": 0,
+      "n_params": 0.0,
+      "weights_bytes": 11420663904,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 0,
+      "replaces": [],
+      "optional": true,
+      "modality": "video",
+      "format": "gguf",
+      "engine": "sdcpp",
+      "tags": [
+        "minimax",
+        "h3",
+        "video",
+        "audio",
+        "large"
+      ],
+      "description": "MiniMax-H3 joint video+stereo-audio via sd.cpp vid_gen (T2VA). Distilled: cfg-scale must stay 1.0. Needs pruned DiT, Qwen3-VL-32B MiniMax text encoder, video VAE and audio VAE. Ref2VA/FL2VA UI not wired yet.",
+      "extra_files": [
+        {
+          "filename": "minimax_h3_video_vae_fp16.safetensors",
+          "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors",
+          "bytes": 5207808496,
+          "sha256": "",
+          "role": "vae"
+        },
+        {
+          "filename": "minimax_h3_audio_vae_fp32.safetensors",
+          "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors",
+          "bytes": 605254808,
+          "sha256": "",
+          "role": "audio-vae"
+        },
+        {
+          "filename": "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+          "url": "https://huggingface.co/leejet/MiniMax-H3-GGUF/resolve/main/qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+          "bytes": 18218065024,
+          "sha256": "",
+          "role": "llm"
+        }
+      ],
+      "engine_args": {
+        "mode": "vid_gen",
+        "cfg-scale": "1.0",
+        "fps": "24",
+        "diffusion-model": "minimax_h3_fl2va_pruned-Q4_K_M.gguf",
+        "llm": "qwen3vl_32b_minimax_h3-Q4_K_M.gguf",
+        "backend": "te=cpu,llm=cpu,diffusion=gpu,vae=cpu",
+        "params-backend": "cpu",
+        "offload-to-cpu": "1",
+        "diffusion-fa": "1",
+        "max-vram": "-1",
+        "stream-layers": "1"
+      }
+    },
+    {
       "id": "local:realesrgan-x4plus-anime",
       "name": "RealESRGAN x4plus anime 6B",
       "profiles": [
