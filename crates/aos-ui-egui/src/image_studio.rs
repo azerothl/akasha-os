@@ -828,6 +828,25 @@ impl ImageStudioState {
         }
     }
 
+    /// Restore model-safe generation controls without discarding the user's prompt.
+    fn reset_generation_controls(&mut self) {
+        self.format_preset = "custom".into();
+        self.intent_preset = "custom".into();
+        self.camera_preset = "custom".into();
+        self.negative.clear();
+        self.seed.clear();
+        self.sampler.clear();
+        self.selected_styles.clear();
+        self.selected_loras.clear();
+        self.vae.clear();
+        self.pending_reference.clear();
+        self.pending_end_reference.clear();
+        self.reference_strength = 0.75;
+        self.upscale_enabled = false;
+        self.last_preset_key.clear();
+        self.apply_preset_for_current_model();
+    }
+
     fn load_expert_defaults_from_catalog(&mut self) {
         let Some(args) = catalog_engine_args(&self.model_id) else {
             self.flow_shift.clear();
@@ -3169,6 +3188,13 @@ fn ui_create_preset_controls(ui: &mut egui::Ui, studio: &mut ImageStudioState) {
                 eprintln!("preset load: {err}");
             }
         }
+        if ui
+            .small_button("Réinitialiser")
+            .on_hover_text("Remettre les réglages sûrs du modèle sans effacer le prompt")
+            .clicked()
+        {
+            studio.reset_generation_controls();
+        }
     });
 }
 
@@ -3615,6 +3641,28 @@ mod tests {
         let opts = studio.to_options();
         assert_eq!(opts.init_image.as_deref(), Some("/downloads/first.png"));
         assert_eq!(opts.end_image.as_deref(), Some("/downloads/last.png"));
+    }
+
+    #[test]
+    fn reset_generation_controls_keeps_prompt_and_clears_experiment_state() {
+        let mut studio = ImageStudioState {
+            prompt: "un lever de soleil sur Mars".into(),
+            negative: "flou".into(),
+            seed: "42".into(),
+            sampler: "euler".into(),
+            intent_preset: "cinematic".into(),
+            camera_preset: "push".into(),
+            pending_reference: vec!["/downloads/ref.png".into()],
+            ..ImageStudioState::default()
+        };
+        studio.reset_generation_controls();
+        assert_eq!(studio.prompt, "un lever de soleil sur Mars");
+        assert!(studio.negative.is_empty());
+        assert!(studio.seed.is_empty());
+        assert!(studio.sampler.is_empty());
+        assert_eq!(studio.intent_preset, "custom");
+        assert_eq!(studio.camera_preset, "custom");
+        assert!(studio.pending_reference.is_empty());
     }
 
     #[test]
