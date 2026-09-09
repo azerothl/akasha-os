@@ -26,6 +26,6 @@ Recette du 9 septembre 2026. Les tickets sont locaux au checkout et liés au rap
 | AK-021 pack vidéo proposé en mode Image | P1 | Corrigé, déployé et vérifié avec Stable Diffusion |
 | AK-022 erreur de génération vidéo ambiguë | P1 | Corrigé dans l’UI, déployé et vérifié sur interruption |
 | AK-023 coût/annulation create vidéo | P1 | Partiellement corrigé : frames + annulation vérifiées ; ETA calibrée restante |
-| AK-024 workflow vidéo avancé type ComfyUI | P2 | Ouvert : options typées (FPS, keyframes, conditionnement) à ajouter au contrat |
+| AK-024 workflow vidéo avancé type ComfyUI | P2 | Partiel : FPS + image de départ livrés ; keyframes/conditionnement à typer |
 
 Les améliorations non bloquantes restantes sont listées dans la section « Axes d’amélioration » du rapport ; elles ne sont pas masquées comme des tickets clos.

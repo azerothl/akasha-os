@@ -213,6 +213,8 @@ pub struct ImageGenOpts {
     pub flow_shift: Option<f32>,
     /// Video frame count (`--video-frames`; `1` ≈ single image for Wan/LTX).
     pub video_frames: Option<u32>,
+    /// Output frame rate (`--fps`) for video generation.
+    pub fps: Option<u32>,
     /// LTX `--embeddings-connectors`.
     pub embeddings_connectors: Option<PathBuf>,
     /// LTX `--audio-vae`.
@@ -260,6 +262,7 @@ impl Default for ImageGenOpts {
             high_noise_diffusion_model: None,
             flow_shift: None,
             video_frames: None,
+            fps: None,
             embeddings_connectors: None,
             audio_vae_path: None,
             init_image_path: None,
@@ -489,6 +492,10 @@ fn collect_image_args(
     if let Some(vf) = opts.video_frames.filter(|n| *n > 0) {
         a.push("--video-frames".into());
         a.push(vf.to_string());
+    }
+    if let Some(fps) = opts.fps.filter(|n| (1..=120).contains(n)) {
+        a.push("--fps".into());
+        a.push(fps.to_string());
     }
     if opts.auto_fit {
         a.push("--auto-fit".into());
@@ -1065,6 +1072,7 @@ mod tests {
         let opts = ImageGenOpts {
             sd_mode: Some("vid_gen".into()),
             video_frames: Some(33),
+            fps: Some(30),
             flow_shift: Some(3.0),
             ..Default::default()
         };
@@ -1079,6 +1087,8 @@ mod tests {
         assert!(args.contains(&"vid_gen".into()));
         assert!(args.contains(&"--video-frames".into()));
         assert!(args.contains(&"33".into()));
+        assert!(args.contains(&"--fps".into()));
+        assert!(args.contains(&"30".into()));
         assert!(args.contains(&"--flow-shift".into()));
         assert!(args.contains(&"3".into()));
         assert!(args.iter().any(|a| a.ends_with("out.webm")));

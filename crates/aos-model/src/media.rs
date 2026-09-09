@@ -707,6 +707,9 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
     if let Some(v) = o.video_frames.filter(|n| *n > 0) {
         opts.video_frames = Some(v);
     }
+    if let Some(v) = o.fps.filter(|n| (1..=120).contains(n)) {
+        opts.fps = Some(v);
+    }
     if let Some(raw) = o
         .mask_image
         .as_deref()

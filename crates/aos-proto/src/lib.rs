@@ -5241,6 +5241,8 @@ pub struct MediaImageOptions {
     pub sd_mode: Option<String>,
     /// sd.cpp `--video-frames` (Wan/LTX; `1` ≈ single still).
     pub video_frames: Option<u32>,
+    /// sd.cpp `--fps` output frame rate for video generation (1..=120).
+    pub fps: Option<u32>,
     /// ESRGAN upscaler filename/id in `share/models/upscale/` (`.pth` / `.safetensors`).
     pub upscale_model: Option<String>,
     /// sd.cpp `--upscale-repeats` (default 1 when upscale_model is set).

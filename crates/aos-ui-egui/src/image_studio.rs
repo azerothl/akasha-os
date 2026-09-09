@@ -46,6 +46,8 @@ pub struct ImageStudioState {
     pub create_mode: CreateMode,
     /// Target clip length when `create_mode` is video (seconds).
     pub video_duration_secs: u32,
+    /// Output frame rate passed to sd.cpp (`--fps`).
+    pub video_fps: u32,
     /// Last successful short-video logical path (`/downloads/video-*.webm`).
     pub video_result: Option<String>,
     pub preview: Option<String>,
@@ -130,6 +132,7 @@ impl Default for ImageStudioState {
             profile: "balanced".to_string(),
             create_mode: CreateMode::Image,
             video_duration_secs: 3,
+            video_fps: 24,
             video_result: None,
             preview: None,
             preview_overlay_opacity: 0.5,
@@ -1117,6 +1120,7 @@ impl ImageStudioState {
                 CreateMode::Image if self.expert_mode => parse_opt_u32(&self.video_frames),
                 CreateMode::Image => None,
             },
+            fps: (self.create_mode == CreateMode::Video).then_some(self.video_fps.clamp(1, 120)),
             backend: if self.expert_mode && !self.backend.trim().is_empty() {
                 Some(self.backend.trim().to_string())
             } else {
@@ -1198,7 +1202,7 @@ impl ImageStudioState {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.set_min_width(avail.max(280.0));
-                    self.ui_form_column_video(ui, t, cmd, generating);
+                    self.ui_form_column_video(ui, t, cmd, generating, last_session_image);
                 });
             return;
         }
@@ -1278,6 +1282,7 @@ impl ImageStudioState {
         t: &UiStrings,
         cmd: &Sender<Cmd>,
         generating: Option<&ImageGenUiState>,
+        last_session_image: &mut Option<String>,
     ) {
         ui.horizontal(|ui| {
             let prev = self.create_mode;
@@ -1327,6 +1332,15 @@ impl ImageStudioState {
                 &video_frames_for_duration(self.video_duration_secs).to_string(),
             ));
         });
+        ui.horizontal(|ui| {
+            ui.label("Images/s");
+            help_icon(ui, "Cadence de sortie passée à sd.cpp (--fps), indépendante de la durée et du nombre d'images.");
+            ui.add(egui::DragValue::new(&mut self.video_fps)
+                .range(1..=120)
+                .speed(1)
+                .suffix(" fps"));
+            ui.weak("24 recommandé");
+        });
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
@@ -1340,6 +1354,40 @@ impl ImageStudioState {
         if prompt_response.changed() && !self.prompt.trim().is_empty() {
             self.show_empty_prompt_hint = false;
         }
+        ui.horizontal(|ui| {
+            let mut attach = false;
+            let mut reuse = false;
+            crate::icons::attach_menu(ui, "video_attach", "Image de départ", |ui| {
+                if last_session_image.is_some()
+                    && ui.button("Réutiliser la dernière image").clicked()
+                {
+                    reuse = true;
+                }
+                if ui.button("Choisir une image…").clicked() {
+                    attach = true;
+                }
+            });
+            if attach {
+                if let Some(path) = pick_os_file(
+                    "Image de départ vidéo",
+                    &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                    user_downloads_dir().as_deref(),
+                ) {
+                    let path = path.to_string_lossy().into_owned();
+                    self.queue_reference_image(path.clone());
+                    *last_session_image = Some(path);
+                }
+            } else if reuse {
+                if let Some(path) = last_session_image.clone() {
+                    self.queue_reference_image(path);
+                }
+            }
+            if !self.pending_reference.is_empty() {
+                let ctx = ui.ctx().clone();
+                chat_media::render_pending_image_chips(ui, &ctx, &mut self.pending_reference);
+                ui.add(egui::Slider::new(&mut self.reference_strength, 0.05..=1.0).text("Force"));
+            }
+        });
         let video_prompt_model = crate::image_prompt::is_video_prompt_model(Some(&self.model_id));
         egui::CollapsingHeader::new(t.studio_section_enrichment)
             .default_open(false)
