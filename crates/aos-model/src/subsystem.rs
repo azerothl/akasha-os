@@ -902,7 +902,15 @@ impl ModelSubsystem {
                 top_p: req.params.top_p,
                 seed: req.params.seed.unwrap_or(42),
             },
-            images: req.images.clone(),
+            // The UI and Canvas APIs use logical `/downloads/...` paths while
+            // the mtmd backend reads host filesystem paths. Resolve only an
+            // existing, contained Preview storage file; keep picker-provided
+            // absolute paths unchanged and never let `..` escape the store.
+            images: req
+                .images
+                .iter()
+                .map(|path| resolve_infer_image_path(path))
+                .collect(),
             abort,
             pause,
             resumed: false,
@@ -927,12 +935,7 @@ impl ModelSubsystem {
     pub fn adapter_runtime(
         &self,
         backend: aos_placement::BackendKind,
-    ) -> Option<(
-        String,
-        u64,
-        Vec<String>,
-        Vec<aos_placement::Quantization>,
-    )> {
+    ) -> Option<(String, u64, Vec<String>, Vec<aos_placement::Quantization>)> {
         let sim = self.sim.lock().unwrap();
         match backend {
             aos_placement::BackendKind::Npu => sim.hw.npu.as_ref().and_then(|caps| {
@@ -1036,8 +1039,10 @@ impl ModelSubsystem {
             let block = tokio::task::spawn_blocking(move || {
                 let model = aos_placement::GgufModel::open(&path)?;
                 let rope_theta = model.metadata_f32("llama.rope.freq_base");
-                let block =
-                    aos_placement::CpuTransformerBlock::from_gguf_auto(&model, layer_index as usize)?;
+                let block = aos_placement::CpuTransformerBlock::from_gguf_auto(
+                    &model,
+                    layer_index as usize,
+                )?;
                 Ok::<_, String>(LayerBlockRuntime {
                     block,
                     rope_theta,
@@ -1056,7 +1061,11 @@ impl ModelSubsystem {
         };
         tokio::task::spawn_blocking(move || {
             let tensor = aos_placement::F32Tensor::decode(&input)?;
-            let tokens = tensor.shape.get(1).copied().ok_or("activation non matricielle")?;
+            let tokens = tensor
+                .shape
+                .get(1)
+                .copied()
+                .ok_or("activation non matricielle")?;
             if tokens == 0 {
                 return Err("activation sans token".into());
             }
@@ -1076,11 +1085,7 @@ impl ModelSubsystem {
                 }
                 caches.insert(
                     request_id.clone(),
-                    aos_placement::CpuKvCache::new(
-                        block.block.n_kv_heads,
-                        head_dim,
-                        1_048_576,
-                    )?,
+                    aos_placement::CpuKvCache::new(block.block.n_kv_heads, head_dim, 1_048_576)?,
                 );
             } else if !caches.contains_key(&request_id) {
                 return Err("cache KV absente pour une position de continuation".into());
@@ -1089,22 +1094,12 @@ impl ModelSubsystem {
             if tokens == 1 {
                 block
                     .block
-                    .decode_with_cache(
-                        &tensor,
-                        position_start,
-                        cache,
-                        block.rope_theta,
-                    )
+                    .decode_with_cache(&tensor, position_start, cache, block.rope_theta)
                     .map(|output| output.encode())
             } else {
                 block
                     .block
-                    .prefill_with_cache(
-                        &tensor,
-                        position_start,
-                        cache,
-                        block.rope_theta,
-                    )
+                    .prefill_with_cache(&tensor, position_start, cache, block.rope_theta)
                     .map(|output| output.encode())
             }
         })
@@ -1227,11 +1222,7 @@ impl ModelSubsystem {
 
     /// Calcule les logits finaux d'une activation [hidden, 1] après le
     /// pipeline réparti.
-    pub async fn worker_logits(
-        &self,
-        model_id: &str,
-        input: Vec<u8>,
-    ) -> Result<Vec<f32>, String> {
+    pub async fn worker_logits(&self, model_id: &str, input: Vec<u8>) -> Result<Vec<f32>, String> {
         let io = self.worker_model_io(model_id).await?;
         tokio::task::spawn_blocking(move || {
             let tensor = aos_placement::F32Tensor::decode(&input)?;
@@ -1249,11 +1240,7 @@ impl ModelSubsystem {
     pub fn clear_worker_layer_caches(&self) {
         let blocks = {
             let inner = self.inner.lock().unwrap();
-            inner
-                .layer_blocks
-                .values()
-                .cloned()
-                .collect::<Vec<_>>()
+            inner.layer_blocks.values().cloned().collect::<Vec<_>>()
         };
         for block in blocks {
             if let Ok(mut caches) = block.kv_cache.lock() {
@@ -1385,7 +1372,10 @@ impl ModelSubsystem {
         last_layer: u32,
     ) -> Result<(u64, Vec<(u64, u64)>), String> {
         let io = self.worker_model_io(model_id).await?;
-        Ok((io.file_len(), io.layer_data_ranges(first_layer, last_layer)?))
+        Ok((
+            io.file_len(),
+            io.layer_data_ranges(first_layer, last_layer)?,
+        ))
     }
 
     /// Importe l'état KV d'une séquence reçue via le transport LAN.
@@ -2634,6 +2624,33 @@ fn should_use_vision_infer(has_vision: bool, images: &[String]) -> bool {
     has_vision && !images.is_empty()
 }
 
+fn resolve_infer_image_path(raw: &str) -> String {
+    let direct = std::path::Path::new(raw);
+    if direct.is_file() {
+        return raw.to_string();
+    }
+    let Some(relative) = raw.strip_prefix('/') else {
+        return raw.to_string();
+    };
+    if relative
+        .split('/')
+        .any(|component| component.is_empty() || component == "..")
+    {
+        return raw.to_string();
+    }
+    let Some(home) = std::env::var_os("AOS_HOME") else {
+        return raw.to_string();
+    };
+    let candidate = std::path::PathBuf::from(home)
+        .join("var/storage/data")
+        .join(relative);
+    if candidate.is_file() {
+        candidate.to_string_lossy().into_owned()
+    } else {
+        raw.to_string()
+    }
+}
+
 /// Résout le sidecar `mmproj` du catalogue à côté des poids GGUF.
 fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> Option<PathBuf> {
     let models_dir = weights_path.parent()?;
@@ -2669,7 +2686,7 @@ fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> O
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_workload, resolve_mmproj_for_model, resume_messages,
+        classify_workload, resolve_infer_image_path, resolve_mmproj_for_model, resume_messages,
         should_use_lookup_speculation, should_use_vision_infer,
     };
     use aos_llama::StopReason;
@@ -2733,6 +2750,32 @@ mod tests {
             &["/downloads/canvas.png".into()]
         ));
         assert!(!should_use_vision_infer(true, &[]));
+    }
+
+    #[test]
+    fn logical_infer_image_path_resolves_preview_storage() {
+        let root =
+            std::env::temp_dir().join(format!("aos-infer-image-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let image = root.join("var/storage/data/downloads/canvas-live.png");
+        std::fs::create_dir_all(image.parent().unwrap()).unwrap();
+        std::fs::write(&image, b"png").unwrap();
+        let previous_home = std::env::var_os("AOS_HOME");
+        std::env::set_var("AOS_HOME", &root);
+        assert_eq!(
+            std::path::PathBuf::from(resolve_infer_image_path("/downloads/canvas-live.png")),
+            image
+        );
+        assert_eq!(
+            resolve_infer_image_path("/downloads/../outside.png"),
+            "/downloads/../outside.png"
+        );
+        if let Some(home) = previous_home {
+            std::env::set_var("AOS_HOME", home);
+        } else {
+            std::env::remove_var("AOS_HOME");
+        }
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
