@@ -1,11 +1,21 @@
 //! Bus actions for declarative modules and bundled Notes/Tasks modules.
 
 use crate::cmd::Evt;
-use crate::rich_decl::{demo_job_tick, demo_jobs, DemoJobRegistry};
+use crate::decl_media_job::{
+    media_job_cancelled, media_job_failed, media_job_queued, media_job_running,
+    media_job_succeeded, media_jobs, new_media_job_id, parse_media_generate_request,
+    read_image_gen_progress_file,
+};
+use crate::rich_decl::{demo_job_tick, demo_jobs};
 use crate::notes_panel;
 use aos_ipc::BusClient;
 use aos_proto::decl_ui::ModuleUiResponse;
-use aos_proto::{AgentIdRequest, ModuleIdRequest, ModuleInvokeRequest, ModuleInvokeResponse};
+use aos_proto::{
+    AgentIdRequest, MediaGenerateResponse, ModuleIdRequest, ModuleInvokeRequest,
+    ModuleInvokeResponse,
+};
+use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -129,6 +139,30 @@ pub(crate) async fn invoke_module_tool(
                 error: Some(e.to_string()),
             });
         }
+    }
+}
+
+pub(crate) async fn invoke_module_tool_quiet(
+    bus: &Arc<BusClient>,
+    module: &str,
+    tool: &str,
+    args: Value,
+) -> Result<Value, String> {
+    let req = ModuleInvokeRequest {
+        module: module.to_string(),
+        tool: tool.to_string(),
+        args,
+        actor: "human:ui".into(),
+        actor_caps: vec![format!("tool.invoke:{module}")],
+        trace_id: format!("ui-mod-quiet-{module}-{tool}"),
+    };
+    match bus
+        .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
+        .await
+    {
+        Ok(r) if r.ok => Ok(r.result),
+        Ok(r) => Err(r.error.unwrap_or_else(|| "module tool failed".into())),
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -377,6 +411,105 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             });
         }
+        "media.image.generate" => {
+            run_media_image_generate(
+                bus,
+                evt_tx,
+                module,
+                action_id,
+                input,
+                refresh_binds,
+                subscription_id,
+            )
+            .await;
+        }
+        "media.image.cancel" => {
+            let job_id = input
+                .get("job_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let ok = media_jobs().lock().unwrap().contains(&job_id);
+            if ok {
+                if let Err(e) = bus.call::<(), bool>("media.image.cancel", &(), vec![]).await {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: serde_json::Value::Null,
+                        error: Some(e.to_string()),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok,
+                result: serde_json::Value::Null,
+                error: if ok {
+                    None
+                } else {
+                    Some("job not found".into())
+                },
+                refresh_binds,
+            });
+        }
+        "files.save_as" => {
+            let source = input
+                .get("source_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if source.is_empty() {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: serde_json::Value::Null,
+                    error: Some("missing source_path".into()),
+                    refresh_binds,
+                });
+                return;
+            }
+            let host_src = logical_downloads_path(source);
+            if !host_src.is_file() {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: serde_json::Value::Null,
+                    error: Some("source image not found".into()),
+                    refresh_binds,
+                });
+                return;
+            }
+            let default_name = host_src
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("image.png");
+            let dest = crate::os_open::save_os_file(
+                "Save image",
+                default_name,
+                &[("PNG image", &["png"])],
+                crate::os_open::user_downloads_dir().as_deref(),
+            );
+            let outcome = match dest {
+                Some(dest_path) => std::fs::copy(&host_src, &dest_path)
+                    .map(|_| serde_json::json!({"path": dest_path.display().to_string()}))
+                    .map_err(|e| e.to_string()),
+                None => Err("cancelled".into()),
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: outcome.is_ok(),
+                result: outcome.clone().unwrap_or(Value::Null),
+                error: outcome.err(),
+                refresh_binds,
+            });
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -390,17 +523,197 @@ pub(crate) async fn run_decl_service_action(
     }
 }
 
+async fn run_media_image_generate(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+    subscription_id: Option<String>,
+) {
+    let request = match parse_media_generate_request(&input) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let prompt = request.prompt.clone();
+    let steps = request.options.steps.unwrap_or(20);
+    let job_id = new_media_job_id();
+    let sub = subscription_id.clone().unwrap_or_else(|| "generate_job".into());
+    media_jobs()
+        .lock()
+        .unwrap()
+        .register(&job_id, &sub, steps);
+    let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+        module: module.to_string(),
+        subscription_id: sub.clone(),
+        job: media_job_queued(&job_id, steps),
+    });
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({"job_id": job_id}),
+        error: None,
+        refresh_binds: Vec::new(),
+    });
+
+    let bus_bg = bus.clone();
+    let evt_tx_bg = evt_tx.clone();
+    let module_bg = module.to_string();
+    let action_id_bg = action_id.to_string();
+    let refresh = refresh_binds.clone();
+    tokio::spawn(async move {
+        let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
+            module: module_bg.clone(),
+            subscription_id: sub.clone(),
+            job: media_job_running(&job_id, 0, steps),
+        });
+        let ticker = tokio::spawn({
+            let evt_tx_t = evt_tx_bg.clone();
+            let module_t = module_bg.clone();
+            let sub_t = sub.clone();
+            let job_id_t = job_id.clone();
+            async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    let (step, total) = read_image_gen_progress_file().unwrap_or((0, steps));
+                    let total = if total > 0 { total } else { steps };
+                    let allow = media_jobs()
+                        .lock()
+                        .unwrap()
+                        .allow_progress_emit(&job_id_t);
+                    if allow {
+                        let _ = evt_tx_t.send(Evt::ModuleUiJobUpdate {
+                            module: module_t.clone(),
+                            subscription_id: sub_t.clone(),
+                            job: media_job_running(&job_id_t, step, total),
+                        });
+                    }
+                }
+            }
+        });
+        let mut req = request;
+        req.actor = "human:ui".into();
+        req.caps = vec![
+            "media.generate".into(),
+            "fs.write:/downloads/**".into(),
+        ];
+        req.trace_id = format!("decl-ui-{module_bg}-{job_id}");
+        let result = bus_bg
+            .call::<aos_proto::MediaImageGenerateRequest, MediaGenerateResponse>(
+                "media.image.generate",
+                &req,
+                vec![],
+            )
+            .await;
+        ticker.abort();
+        let _ = std::fs::remove_file(crate::decl_media_job::image_gen_progress_path());
+        media_jobs().lock().unwrap().remove(&job_id);
+
+        match result {
+            Ok(response) => {
+                let job = media_job_succeeded(&job_id, &response, &prompt);
+                let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
+                    module: module_bg.clone(),
+                    subscription_id: sub.clone(),
+                    job: job.clone(),
+                });
+                if module_bg == "create" {
+                    let record_args = serde_json::json!({
+                        "path": response.path,
+                        "prompt": prompt,
+                        "model_id": response.model_id,
+                        "engine": response.engine,
+                        "width": req.options.width,
+                        "height": req.options.height,
+                        "steps": req.options.steps,
+                    });
+                    let _ = invoke_module_tool_quiet(
+                        &bus_bg,
+                        "create",
+                        "create.history.record",
+                        record_args,
+                    )
+                    .await;
+                }
+                let _ = evt_tx_bg.send(Evt::ModuleUiServiceDone {
+                    module: module_bg.clone(),
+                    action_id: action_id_bg.clone(),
+                    ok: true,
+                    result: job.result.clone().unwrap_or(Value::Null),
+                    error: None,
+                    refresh_binds: refresh,
+                });
+            }
+            Err(e) => {
+                let message = e.to_string();
+                let cancelled = message.to_ascii_lowercase().contains("annul")
+                    || message.to_ascii_lowercase().contains("cancel");
+                let (step, total) = read_image_gen_progress_file().unwrap_or((0, steps));
+                let job = if cancelled {
+                    media_job_cancelled(&job_id, step, total.max(steps))
+                } else {
+                    media_job_failed(&job_id, &message)
+                };
+                let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
+                    module: module_bg.clone(),
+                    subscription_id: sub.clone(),
+                    job,
+                });
+                let _ = evt_tx_bg.send(Evt::ModuleUiServiceDone {
+                    module: module_bg.clone(),
+                    action_id: action_id_bg.clone(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(message),
+                    refresh_binds: Vec::new(),
+                });
+            }
+        }
+    });
+}
+
+fn logical_downloads_path(logical: &str) -> PathBuf {
+    let rel = logical.trim_start_matches('/');
+    crate::os_open::aos_home()
+        .join("var/storage/data")
+        .join(rel)
+}
+
 pub(crate) async fn cancel_decl_job(
+    bus: &Arc<BusClient>,
     evt_tx: &Sender<Evt>,
     module: &str,
     job_id: &str,
     subscription_id: &str,
 ) {
     let demo_jobs = demo_jobs();
-    let _ = demo_jobs.lock().unwrap().cancel(job_id);
-    let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
-        module: module.to_string(),
-        subscription_id: subscription_id.to_string(),
-        job: demo_job_tick(job_id, 0, 1, true),
-    });
+    if demo_jobs.lock().unwrap().cancel(job_id) {
+        let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+            module: module.to_string(),
+            subscription_id: subscription_id.to_string(),
+            job: demo_job_tick(job_id, 0, 1, true),
+        });
+        return;
+    }
+    if media_jobs().lock().unwrap().contains(job_id) {
+        let _ = bus.call::<(), bool>("media.image.cancel", &(), vec![]).await;
+        let (step, total) = read_image_gen_progress_file().unwrap_or((0, 1));
+        let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+            module: module.to_string(),
+            subscription_id: subscription_id.to_string(),
+            job: media_job_cancelled(job_id, step, total.max(1)),
+        });
+    }
 }

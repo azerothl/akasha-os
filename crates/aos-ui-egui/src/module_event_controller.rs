@@ -119,7 +119,14 @@ pub(crate) fn on_ui_invoke_done(
         clear_form_keys = std::mem::take(&mut panel.pending_clear_form_keys);
         panel.set_pending_invoke(false);
         if ok {
-            panel.set_bind_result(&tool, result);
+            panel.set_bind_result(&tool, result.clone());
+            if module == "create" && tool == "create.history.get" {
+                if let Some(params) = result.get("params").and_then(|p| p.as_object()) {
+                    for (key, value) in params {
+                        panel.local_state.insert(key.clone(), value.clone());
+                    }
+                }
+            }
             if !clear_form_keys.is_empty() {
                 panel.clear_form_keys(&clear_form_keys);
             }
@@ -174,6 +181,18 @@ pub(crate) fn on_ui_job_update(
     job: aos_proto::rich_decl_ui::RichJobHandle,
 ) {
     if let Some(panel) = app.decl_panels.get_mut(&module) {
-        panel.set_job_update(&subscription_id, job);
+        panel.set_job_update(&subscription_id, job.clone());
+        if module == "create" && job.state.as_deref() == Some("succeeded") {
+            if let Some(path) = job
+                .result
+                .as_ref()
+                .and_then(|r| r.get("path"))
+                .and_then(|p| p.as_str())
+            {
+                panel
+                    .local_state
+                    .insert("result_path".into(), Value::String(path.to_string()));
+            }
+        }
     }
 }

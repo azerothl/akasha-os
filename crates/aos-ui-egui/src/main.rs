@@ -33,6 +33,7 @@ mod cmd;
 mod composer_drafts;
 mod composer_layout;
 mod confirmation_ui_state;
+mod decl_media_job;
 mod decl_ui;
 mod rich_decl;
 mod deep_plan_ui;
@@ -659,6 +660,7 @@ impl UiApp {
             Tab::Settings => t.tab_settings,
             Tab::Files => t.tab_files,
             Tab::Module(name) if name == "tasks" => t.tab_tasks,
+            Tab::Module(name) if name == "create" => t.tab_create,
             Tab::Module(_) => t.nav_modules,
         }
     }

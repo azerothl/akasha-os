@@ -397,10 +397,28 @@ impl DeclUiPanelState {
                 }
             }
             "textarea" => {
-                let key = w.label.clone().unwrap_or_else(|| "text".into());
-                form_fields.entry(key.clone()).or_default();
-                ui.label(&key);
-                ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
+                if let Some(state_key) = &w.state_key {
+                    let label = widget_text(w, doc, language)
+                        .unwrap_or_else(|| state_key.clone());
+                    let mut text = local_state
+                        .get(state_key)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.label(label);
+                        if ui.text_edit_multiline(&mut text).changed() {
+                            actions
+                                .local_patch
+                                .insert(state_key.clone(), Value::String(text));
+                        }
+                    });
+                } else {
+                    let key = w.label.clone().unwrap_or_else(|| "text".into());
+                    form_fields.entry(key.clone()).or_default();
+                    ui.label(&key);
+                    ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
+                }
             }
             "image" => {
                 let path = media_path(w, cache);
