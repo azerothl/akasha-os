@@ -847,6 +847,31 @@ impl ImageStudioState {
         self.apply_preset_for_current_model();
     }
 
+    /// Clamp user-edited video controls to the selected model's declared limits.
+    /// Presets are only a starting point; this final guard keeps manual edits
+    /// from sending dimensions/duration the backend cannot accept.
+    fn normalize_video_constraints(&mut self) {
+        let Some(v) = catalog_video_defaults(&self.model_id) else {
+            self.width = self.width.clamp(64, 2048);
+            self.height = self.height.clamp(64, 2048);
+            self.video_fps = self.video_fps.clamp(1, 120);
+            self.video_duration_secs = self.video_duration_secs.clamp(2, 15);
+            return;
+        };
+        self.width = self
+            .width
+            .clamp(v.min_width.unwrap_or(64), v.max_width.unwrap_or(2048));
+        self.height = self
+            .height
+            .clamp(v.min_height.unwrap_or(64), v.max_height.unwrap_or(2048));
+        self.video_fps = self.video_fps.clamp(1, 120);
+        if let Some(max_duration) = v.max_duration_secs {
+            self.video_duration_secs = self.video_duration_secs.clamp(2, max_duration.max(2));
+        } else {
+            self.video_duration_secs = self.video_duration_secs.clamp(2, 15);
+        }
+    }
+
     fn load_expert_defaults_from_catalog(&mut self) {
         let Some(args) = catalog_engine_args(&self.model_id) else {
             self.flow_shift.clear();
@@ -1945,6 +1970,7 @@ impl ImageStudioState {
         }
         if generate_clicked && !self.prompt.trim().is_empty() && model_ready {
             self.video_result = None;
+            self.normalize_video_constraints();
             let use_edited = self.use_edited_enriched && !self.enriched_prompt.trim().is_empty();
             let wants_json_enrich = !video_prompt_model
                 && self.enrich_prompt
@@ -3663,6 +3689,23 @@ mod tests {
         assert_eq!(studio.intent_preset, "custom");
         assert_eq!(studio.camera_preset, "custom");
         assert!(studio.pending_reference.is_empty());
+    }
+
+    #[test]
+    fn normalize_video_constraints_clamps_without_catalog() {
+        let mut studio = ImageStudioState {
+            create_mode: CreateMode::Video,
+            width: 4096,
+            height: 1,
+            video_fps: 240,
+            video_duration_secs: 99,
+            ..ImageStudioState::default()
+        };
+        studio.normalize_video_constraints();
+        assert_eq!(studio.width, 2048);
+        assert_eq!(studio.height, 64);
+        assert_eq!(studio.video_fps, 120);
+        assert_eq!(studio.video_duration_secs, 15);
     }
 
     #[test]
