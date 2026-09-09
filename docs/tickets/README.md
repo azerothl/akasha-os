@@ -18,5 +18,10 @@ Recette du 9 septembre 2026. Les tickets sont locaux au checkout et liés au rap
 | AK-013 bootstrap race session | P1 | Corrigé, déployé et vérifié sur démarrage devancé |
 | AK-014 débordement barre de statut minimum | P1 | Corrigé, déployé et vérifié visuellement |
 | AK-015 vision chemins logiques | P1 | Corrigé, déployé et vérifié avec Qwen3-VL |
+| AK-016 cartes média audio/vidéo | P1 | Corrigé, déployé et vérifié visuellement |
+| AK-017 recette native accessibilité/DPI | P1 | Planifié : runner Windows instrumenté requis |
+| AK-018 lecteur multimédia intégré | P1 | Planifié : décodage/progression à choisir |
+| AK-019 nettoyage terminal salon sous charge | P2 | Planifié : benchmark multi-agent requis |
+| AK-020 révocation permission end-to-end | P2 | Planifié : grant réel requis pour la recette |
 
 Les améliorations non bloquantes restantes sont listées dans la section « Axes d’amélioration » du rapport ; elles ne sont pas masquées comme des tickets clos.
