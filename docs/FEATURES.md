@@ -107,7 +107,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - Chat slash `/image` / `/speak` shows the PNG and plays the clip; E15 `image` / `audio` widgets bind the same paths
 - Optional media packs (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — download from Models, **not** in the zip; first-run does not pull them. The same download fetches the sd.cpp / piper engine into `bin/` if it is missing
 - **Unified host artefact** (E17): one Win zip + one Linux tarball; `aos-modeld` (CUDA) + `aos-modeld-cpu` inside; Settings **auto / gpu / cpu** (0.9 migrates in-process; 0.8 restarted modeld)
-- **Module uninstall** (F-MOD-01): Settings lists installed modules; confirm; revoke `tool.invoke:<name>`; refuse bundled `notes` / `tasks` / `ext-rt` / `canvas`
+- **Module uninstall** (F-MOD-01): Settings lists installed modules; confirm; revoke `tool.invoke:<name>`; preinstalled apps (`notes`, `tasks`, `ext-rt`, `canvas`) may be uninstalled — choice persists across boots
 - **E15 widgets**: typed `form` (JSON Schema), `select` / `radio` / `checkbox` / `textarea` / `bar_chart` / `image` / `audio`
 - **Providers** tab (F-MDL-04): OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault; Chat combo groups local vs provider; `local_only` still allows loopback
 - One-liner install: `irm https://azerothl.github.io/akasha-os/install.ps1 | iex` / `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh` (sha256 fail-closed + overlay)
@@ -119,7 +119,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **`module.ui`** intent: platformd validates the document (fail-closed); host binds tool results and routes button/form submits through the same cap review as `module.invoke`
 - **`module.scaffold`** optional `ui` JSON; package/compile copy a real widget tree (default: heading + form + table on the primary tool)
 - JSON Schema export: [`docs/bridge/aos-proto-decl-ui.json`](bridge/aos-proto-decl-ui.json)
-- Notes and Tasks tabs stay hardcoded; `notes`, `tasks`, and `ext-rt` are excluded from dynamic module tabs
+- Notes tab stays hardcoded; `notes` and `ext-rt` are excluded from dynamic module tabs. **Tasks** keeps its historical Daily slot when installed (declarative surface; entry absent when uninstalled)
 - Chat **« crée un module »** launches an agent (host fallback if the model dumps UI JSON instead of `agent.spawn`)
 - Scenarios: launch an agent to scaffold / package / install a script module
 
@@ -262,11 +262,12 @@ Slash commands:
 
 ## 4b. Tasks (P03.5 / E3)
 
-- Dual-surface WASM module (`tasks.aospkg`)
-- Human UI: **Tasks** tab — create / list / complete
-- Agent tools: `tasks.create`, `tasks.list`, `tasks.update`, `tasks.complete`
+- Dual-surface WASM module (`tasks.aospkg`) — build with `modules/build-tasks.ps1` or `modules/build-tasks.sh` without rebuilding the host
+- Human UI: **Tâches / Tasks** in the Daily overflow (same slot as the former native tab) when installed — create / list / complete / reopen via declarative widgets
+- Agent tools: `tasks.create`, `tasks.list`, `tasks.update`, `tasks.complete` (discovered when the module is installed and allowed)
 - Same JSON store for humans and agents (`/documents/tasks/tasks.json`)
-- Resyncs on boot like notes; skill `tasks` shipped under `share/skills/`
+- Standard Preview profile preinstalls the verified local package; minimal profile omits it. User uninstall persists; core update does not reinstall after uninstall
+- Skill `tasks` shipped under `share/skills/` (tools only when module present)
 
 ---
 

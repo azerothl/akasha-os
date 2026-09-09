@@ -82,7 +82,6 @@ mod settings_controller;
 mod settings_ui_state;
 mod skill_offer;
 mod slash;
-mod tasks_panel;
 mod theme;
 mod troubleshoot;
 mod ui_agents;
@@ -131,7 +130,7 @@ use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 use eframe::egui;
 use egui_commonmark::CommonMarkCache;
 use module_actions::{
-    agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
+    agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes,
     load_module_ui,
 };
 use onboarding::{load_onboarding, save_onboarding, OnboardingState};
@@ -178,7 +177,6 @@ enum Tab {
     Chat,
     Memory,
     Notes,
-    Tasks,
     Library,
     Agents,
     Models,
@@ -618,7 +616,6 @@ impl UiApp {
             Tab::Chat => t.tab_chat,
             Tab::Memory => t.tab_memory,
             Tab::Notes => t.tab_notes,
-            Tab::Tasks => t.tab_tasks,
             Tab::Library => t.tab_library,
             Tab::Agents => t.tab_agents,
             Tab::Models => t.tab_models,
@@ -630,8 +627,31 @@ impl UiApp {
             Tab::Feedback => t.tab_feedback,
             Tab::Settings => t.tab_settings,
             Tab::Files => t.tab_files,
+            Tab::Module(name) if name == "tasks" => t.tab_tasks,
             Tab::Module(_) => t.nav_modules,
         }
+    }
+
+    fn tasks_module_installed(&self) -> bool {
+        self.settings_ui
+            .installed_modules
+            .iter()
+            .any(|m| m.name == "tasks")
+    }
+
+    fn tasks_tab(&self) -> Tab {
+        Tab::Module("tasks".into())
+    }
+
+    fn tab_is_selected(&self, tab: &Tab) -> bool {
+        match (&self.tab, tab) {
+            (Tab::Module(a), Tab::Module(b)) => a == b,
+            (left, right) => left == right,
+        }
+    }
+
+    fn open_module_tab(&mut self, name: String) {
+        self.on_tab_open(Tab::Module(name));
     }
 
     fn minimal_chrome_button(&mut self, ctx: &egui::Context, t: &i18n::UiStrings) {
@@ -1725,8 +1745,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.send_mem_list();
                 let _ = self.cmd_tx.send(Cmd::MemSweepStatus);
             }
-            Tab::Tasks => {
-                let _ = self.cmd_tx.send(Cmd::TasksList);
+            Tab::Module(name) => {
+                let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
             }
             Tab::Files => {
                 let _ = self.cmd_tx.send(Cmd::FilesList { prefix: String::new() });
@@ -1813,19 +1833,27 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 // Chat/Agents/Create/Memory, More ne duplique jamais le rail.
                 let lang = self.prefs.language.clone();
                 ui.weak(nav::NavGroup::Daily.label(&lang));
-                for (tab, label, hint) in [
+                let mut daily: Vec<(Tab, &str, &str)> = vec![
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
                     (Tab::Library, t.tab_library, t.tab_hint_library),
-                    (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
+                ];
+                if self.tasks_module_installed() {
+                    daily.push((self.tasks_tab(), t.tab_tasks, t.tab_hint_tasks));
+                }
+                daily.extend([
                     (Tab::Files, t.tab_files, t.tab_hint_files),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
-                ] {
+                ]);
+                for (tab, label, hint) in daily {
                     if ui
-                        .selectable_label(self.tab == tab, label)
+                        .selectable_label(self.tab_is_selected(&tab), label)
                         .on_hover_text(hint)
                         .clicked()
                     {
-                        self.on_tab_open(tab);
+                        match &tab {
+                            Tab::Module(name) => self.open_module_tab(name.clone()),
+                            other => self.on_tab_open(other.clone()),
+                        }
                     }
                 }
                 // Documents reste un overlay (research_ui), pas un Tab :
@@ -1898,9 +1926,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     ui.weak(t.nav_modules);
                     for (name, label) in decl_mods {
                         let tab = Tab::Module(name.clone());
-                        if ui.selectable_label(self.tab == tab, &label).clicked() {
-                            self.on_tab_open(tab);
-                            let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
+                        if ui.selectable_label(self.tab_is_selected(&tab), &label).clicked() {
+                            self.open_module_tab(name);
                         }
                     }
                 }
@@ -2253,14 +2280,18 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 ui.separator();
                 let query = self.spotlight_query.trim().to_lowercase();
-                let destinations: [(&str, Tab); 15] = [
+                let mut destinations: Vec<(&str, Tab)> = vec![
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
                     (t.tab_memory, Tab::Memory),
                     (t.tab_notes, Tab::Notes),
                     (t.tab_library, Tab::Library),
-                    (t.tab_tasks, Tab::Tasks),
+                ];
+                if self.tasks_module_installed() {
+                    destinations.push((t.tab_tasks, self.tasks_tab()));
+                }
+                destinations.extend([
                     (t.tab_files, Tab::Files),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
@@ -2269,7 +2300,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     (t.tab_providers, Tab::Providers),
                     (t.tab_scenarios, Tab::Scenarios),
                     (t.tab_feedback, Tab::Feedback),
-                ];
+                ]);
                 let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
                 let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
                 // S7.2 : recherche globale — sessions, notes, mémoire en plus
@@ -2414,7 +2445,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 match pick {
                     Some(Pick::Tab(tab)) => {
-                        self.on_tab_open(tab);
+                        match &tab {
+                            Tab::Module(name) => self.open_module_tab(name.clone()),
+                            other => self.on_tab_open(other.clone()),
+                        }
                         self.show_go_to_palette = false;
                         self.spotlight_query.clear();
                     }
@@ -2602,7 +2636,6 @@ impl eframe::App for UiApp {
                 Evt::ScheduleUpdated(entry) => {
                     schedule_event_controller::on_schedule_updated(self, entry);
                 }
-                Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
                 Evt::Confirms(c) => self.confirmations_ui.replace(c),
                 Evt::FeedbackOk(r) => {
                     feedback_event_controller::on_feedback_ok(self, r);
@@ -3330,7 +3363,6 @@ impl eframe::App for UiApp {
             Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
             Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
             Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
-            Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
             Tab::Image => overflow_scroll(ui, "image", |ui| {

@@ -7,7 +7,7 @@ use crate::os_open::{aos_home, bin_aos_session};
 use crate::{
     agent_id_cmd, agent_panel, announce_and_load_session, chat_delegate_agent_spec,
     chrono_like_stamp, format_local_time_hm, invoke_module_bind, invoke_module_tool, invoke_notes,
-    invoke_tasks, load_module_ui, load_session, run_troubleshoot, session_has_running_canvas_agent,
+    load_module_ui, load_session, run_troubleshoot, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
 use aos_agent::intents as agent_intents;
@@ -2580,27 +2580,6 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     let _ = evt_tx.send(Evt::Error(format!("schedule.resume: {e}")));
                 }
             }
-        }
-        Cmd::TasksList => {
-            invoke_tasks(&bus, &evt_tx, "tasks.list", serde_json::json!({})).await;
-        }
-        Cmd::TasksCreate { title, notes } => {
-            invoke_tasks(
-                &bus,
-                &evt_tx,
-                "tasks.create",
-                serde_json::json!({ "title": title, "notes": notes }),
-            )
-            .await;
-        }
-        Cmd::TasksComplete { id, done } => {
-            invoke_tasks(
-                &bus,
-                &evt_tx,
-                "tasks.complete",
-                serde_json::json!({ "id": id, "done": done }),
-            )
-            .await;
         }
         Cmd::Feedback(req) => {
             match bus

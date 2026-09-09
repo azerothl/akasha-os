@@ -86,15 +86,11 @@ min_os_api: 1
 "@
 [System.IO.File]::WriteAllText((Join-OsPath $pkg manifest.yaml), $manifest)
 
-$uiJson = @'
-{
-  "type": "declarative_ui",
-  "title": "Tasks",
-  "description": "Human + agent shared task list.",
-  "commands": ["tasks.create", "tasks.list", "tasks.update", "tasks.complete"]
+$uiSrc = Join-OsPath $root modules tasks ui index.html
+if (-not (Test-Path $uiSrc)) {
+    throw "UI source missing: $uiSrc"
 }
-'@
-[System.IO.File]::WriteAllText((Join-OsPath $pkg ui index.html), $uiJson)
+Copy-Item $uiSrc (Join-OsPath $pkg ui index.html) -Force
 
 $share = Join-OsPath $root share modules tasks.aospkg
 New-Item -ItemType Directory -Path $share -Force | Out-Null

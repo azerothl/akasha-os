@@ -1,7 +1,6 @@
 //! Bus commands (UI → runtime) and events (runtime → UI).
 
 use crate::notes_panel;
-use crate::tasks_panel;
 use aos_agent::schedule::ScheduleEntry;
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::McpServerInfo;
@@ -270,15 +269,6 @@ pub(crate) enum Cmd {
     },
     ScheduleResume {
         id: String,
-    },
-    TasksList,
-    TasksCreate {
-        title: String,
-        notes: String,
-    },
-    TasksComplete {
-        id: String,
-        done: bool,
     },
     /// S6 : confiance par agent (intents `trust.*`, audités côté serveur).
     TrustGet {
@@ -605,7 +595,6 @@ pub(crate) enum Evt {
     Schedules(Vec<ScheduleEntry>),
     ScheduleCreated(ScheduleEntry),
     ScheduleUpdated(ScheduleEntry),
-    TasksListed(Vec<tasks_panel::TaskItem>),
     Confirms(Vec<PendingConfirmation>),
     FeedbackOk(FeedbackSubmitResponse),
     /// Préremplit le formulaire Retour (dépannage) sans publier tout de suite.
