@@ -3,6 +3,7 @@
 //! Modules ship a JSON widget tree in `ui/index.html` (`type: declarative_ui`).
 //! The egui host paints a closed vocabulary — no HTML/JS webview.
 
+use crate::rich_decl_ui::{RichAction, RichBinding, RichStateDecl, RichSubscription};
 use crate::ModuleTool;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -174,11 +175,25 @@ pub struct DeclUiRowWhen {
     pub ne: Option<serde_json::Value>,
 }
 
-/// Root document stored in `ui/index.html`.
+/// Tab pane for the `tabs` layout widget (contract v2).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DeclUiTab {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<Box<DeclUiWidget>>,
+}
+
+/// Root document stored in `ui/index.html` or `ui/index.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DeclUiDocument {
     #[serde(rename = "type")]
     pub doc_type: String,
+    /// Document vocabulary version (mirrors manifest `ui.contract` when set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract: Option<u32>,
     pub title: String,
     /// Key into [`DeclUiLabels`] for the panel chrome heading (instead of raw [`Self::title`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -187,11 +202,19 @@ pub struct DeclUiDocument {
     pub poll_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<DeclUiLabels>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<RichStateDecl>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bindings: Vec<RichBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<RichAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subscriptions: Vec<RichSubscription>,
     pub root: DeclUiWidget,
 }
 
 /// One node in the widget tree.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct DeclUiWidget {
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -201,12 +224,37 @@ pub struct DeclUiWidget {
     /// Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bind: Option<String>,
+    /// Binding id (contract v2) — resolves through document `bindings`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding: Option<String>,
     /// JSON pointer or dotted path into the bind result (optional).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// Tool invoked by `button` / submitted by `form`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
+    /// Action id from document `actions` (contract v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    /// Subscription id for `job` widget (contract v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription: Option<String>,
+    /// Local/document state slot key for `slider` / `number` widgets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_key: Option<String>,
+    /// Authorized resource path or `$local.*` ref for `image_view`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split_ratio: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub columns: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -216,6 +264,8 @@ pub struct DeclUiWidget {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<DeclUiWidget>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tabs: Option<Vec<DeclUiTab>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<serde_json::Value>,
     /// Key into [`DeclUiDocument::labels`] for localized copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -223,6 +273,12 @@ pub struct DeclUiWidget {
     /// Label shown before inline form fields (e.g. « Nouvelle » / « New »).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prefix_label_key: Option<String>,
+    /// Typed predicate AST for visibility (contract v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<serde_json::Value>,
+    /// Typed predicate AST for enablement (contract v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<serde_json::Value>,
     /// When true, table renders rows without a header band.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_headers: Option<bool>,
@@ -246,35 +302,133 @@ pub struct ModuleUiResponse {
 }
 
 impl DeclUiDocument {
-    /// Parse JSON bytes and validate the closed vocabulary.
+    /// Parse JSON bytes and validate the closed vocabulary (v1 default).
     pub fn parse_json(raw: &[u8]) -> Result<Self, DeclUiError> {
-        let doc: Self =
-            serde_json::from_slice(raw).map_err(|e| DeclUiError::BadType(e.to_string()))?;
+        let doc = Self::parse_json_with_contract(raw, crate::rich_app_contract::UI_CONTRACT_V1)
+            .map_err(|e| match e {
+                crate::rich_decl_ui::RichDeclUiError::Widget(w) => w,
+                other => DeclUiError::BadType(other.to_string()),
+            })?;
         doc.validate()?;
         Ok(doc)
     }
 
+    /// Parse JSON for an explicit manifest/document contract version (structure only).
+    pub fn parse_json_with_contract(
+        raw: &[u8],
+        manifest_contract: u32,
+    ) -> Result<Self, crate::rich_decl_ui::RichDeclUiError> {
+        let doc: Self =
+            serde_json::from_slice(raw).map_err(|e| DeclUiError::BadType(e.to_string()))?;
+        if doc.doc_type != "declarative_ui" {
+            return Err(crate::rich_decl_ui::RichDeclUiError::Widget(
+                DeclUiError::BadType(doc.doc_type.clone()),
+            ));
+        }
+        if doc.title.trim().is_empty() {
+            return Err(crate::rich_decl_ui::RichDeclUiError::Widget(
+                DeclUiError::EmptyTitle,
+            ));
+        }
+        let _ = doc.contract_version(manifest_contract);
+        Ok(doc)
+    }
+
+    pub fn contract_version(&self, manifest_contract: u32) -> u32 {
+        self.contract.unwrap_or(manifest_contract)
+    }
+
     pub fn validate(&self) -> Result<(), DeclUiError> {
+        self.validate_with_contract(crate::rich_app_contract::UI_CONTRACT_V1, &[], &[])
+            .map_err(|e| match e {
+                crate::rich_decl_ui::RichDeclUiError::Widget(w) => w,
+                other => DeclUiError::BadType(other.to_string()),
+            })
+    }
+
+    pub fn validate_with_contract(
+        &self,
+        manifest_contract: u32,
+        manifest_tools: &[&str],
+        granted_caps: &[String],
+    ) -> Result<(), crate::rich_decl_ui::RichDeclUiError> {
         if self.doc_type != "declarative_ui" {
-            return Err(DeclUiError::BadType(self.doc_type.clone()));
+            return Err(crate::rich_decl_ui::RichDeclUiError::Widget(
+                DeclUiError::BadType(self.doc_type.clone()),
+            ));
         }
         if self.title.trim().is_empty() {
-            return Err(DeclUiError::EmptyTitle);
+            return Err(crate::rich_decl_ui::RichDeclUiError::Widget(
+                DeclUiError::EmptyTitle,
+            ));
         }
         if let Some(labels) = &self.labels {
-            labels.validate()?;
+            labels
+                .validate()
+                .map_err(crate::rich_decl_ui::RichDeclUiError::Widget)?;
         }
-        self.root.validate()?;
+        let contract = self.contract_version(manifest_contract);
+        crate::rich_decl_ui::validate_rich_document(
+            self,
+            contract,
+            manifest_tools,
+            granted_caps,
+        )?;
+        if contract < crate::rich_app_contract::UI_CONTRACT_V2 {
+            self.root.validate()?;
+        }
         Ok(())
     }
 
-    /// Collect distinct tool names referenced by `bind` only (initial data load).
+    /// True when the document references job widgets, subscriptions, or job services.
+    pub fn uses_jobs(&self) -> bool {
+        if !self.subscriptions.is_empty() {
+            return true;
+        }
+        let mut found = false;
+        self.root.walk_any(&mut |w| {
+            if w.kind == "job" || w.subscription.is_some() {
+                found = true;
+                return true;
+            }
+            false
+        });
+        if found {
+            return true;
+        }
+        self.actions.iter().any(|a| {
+            a.service.as_deref().is_some_and(|s| {
+                matches!(s, "jobs.demo.start" | "jobs.demo.cancel" | "job.cancel")
+            })
+        })
+    }
+
+    /// True when a declared action calls a platform media image service.
+    pub fn uses_media_image_service(&self) -> bool {
+        self.actions.iter().any(|a| {
+            a.service
+                .as_deref()
+                .is_some_and(|s| crate::rich_app_contract::PLATFORM_MEDIA_IMAGE_METHODS.contains(&s))
+        })
+    }
+
+    /// Collect distinct binding ids and legacy `bind` tool names for initial load.
     pub fn bind_tools(&self) -> Vec<String> {
         let mut out = Vec::new();
+        for binding in &self.bindings {
+            if !binding.tool.is_empty() {
+                out.push(binding.tool.clone());
+            }
+        }
         self.root.collect_binds(&mut out);
         out.sort();
         out.dedup();
         out
+    }
+
+    /// Binding ids declared in the document (v2).
+    pub fn binding_ids(&self) -> Vec<String> {
+        self.bindings.iter().map(|b| b.id.clone()).collect()
     }
 
     /// All tools referenced by `bind` or action widgets (audit / introspection).
@@ -414,12 +568,37 @@ impl DeclUiWidget {
         if !WIDGET_KINDS.contains(&self.kind.as_str()) {
             return Err(DeclUiError::UnknownKind(self.kind.clone()));
         }
-        match self.kind.as_str() {
+        self.validate_v1_only(&self.kind, crate::rich_app_contract::UI_CONTRACT_V1)
+            .map_err(|e| match e {
+                crate::rich_decl_ui::RichDeclUiError::Widget(w) => w,
+                other => DeclUiError::BadType(other.to_string()),
+            })
+    }
+
+    /// v1 widget validation rules (also used for v1 kinds under contract v2 trees).
+    pub fn validate_v1_only(
+        &self,
+        kind: &str,
+        contract: u32,
+    ) -> Result<(), crate::rich_decl_ui::RichDeclUiError> {
+        if contract >= crate::rich_app_contract::UI_CONTRACT_V2
+            && crate::rich_decl_ui::is_widget_kind_valid(kind, contract)
+            && !WIDGET_KINDS.contains(&kind)
+        {
+            return Ok(());
+        }
+        if !WIDGET_KINDS.contains(&kind) {
+            return Err(crate::rich_decl_ui::RichDeclUiError::Widget(
+                DeclUiError::UnknownKind(kind.to_string()),
+            ));
+        }
+        let err = |e: DeclUiError| crate::rich_decl_ui::RichDeclUiError::Widget(e);
+        match kind {
             "column" | "row" => {
                 let children = self
                     .children
                     .as_ref()
-                    .ok_or(DeclUiError::MissingField("children"))?;
+                    .ok_or_else(|| err(DeclUiError::MissingField("children")))?;
                 for c in children {
                     c.validate()?;
                 }
@@ -428,49 +607,51 @@ impl DeclUiWidget {
                 let has_text = self.text.as_ref().is_some_and(|t| !t.is_empty());
                 let has_label_key = self.label_key.as_ref().is_some_and(|k| !k.is_empty());
                 if !has_text && !has_label_key {
-                    return Err(DeclUiError::MissingField("text"));
+                    return Err(err(DeclUiError::MissingField("text")));
                 }
             }
             "empty_state" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
-                    return Err(DeclUiError::MissingField("bind"));
+                    return Err(err(DeclUiError::MissingField("bind")));
                 }
                 let has_text = self.text.as_ref().is_some_and(|t| !t.is_empty());
                 let has_label_key = self.label_key.as_ref().is_some_and(|k| !k.is_empty());
                 if !has_text && !has_label_key {
-                    return Err(DeclUiError::MissingField("text"));
+                    return Err(err(DeclUiError::MissingField("text")));
                 }
             }
             "count_label" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
-                    return Err(DeclUiError::MissingField("bind"));
+                    return Err(err(DeclUiError::MissingField("bind")));
                 }
                 if self.label_key.as_ref().is_none_or(|k| k.is_empty()) {
-                    return Err(DeclUiError::MissingField("label_key"));
+                    return Err(err(DeclUiError::MissingField("label_key")));
                 }
             }
             "stat_row" | "table" | "line_chart" | "bar_chart" | "pie" | "scatter" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
-                    return Err(DeclUiError::MissingField("bind"));
+                    return Err(err(DeclUiError::MissingField("bind")));
                 }
-                if self.kind == "table" {
+                if kind == "table" {
                     if let Some(actions) = &self.row_actions {
                         for action in actions {
-                            action.validate()?;
+                            action.validate().map_err(err)?;
                         }
                     }
                 }
             }
             "form" | "button" => {
-                if self.tool.as_ref().is_none_or(|t| t.is_empty()) {
-                    return Err(DeclUiError::MissingField("tool"));
+                if self.tool.as_ref().is_none_or(|t| t.is_empty())
+                    && self.action.as_ref().is_none_or(|a| a.is_empty())
+                {
+                    return Err(err(DeclUiError::MissingField("tool")));
                 }
             }
             "select" | "radio" => {
                 let has_items = self.items.as_ref().is_some_and(|i| !i.is_empty());
                 let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
                 if !has_items && !has_bind {
-                    return Err(DeclUiError::MissingField("items"));
+                    return Err(err(DeclUiError::MissingField("items")));
                 }
             }
             "checkbox" | "textarea" => {}
@@ -478,12 +659,35 @@ impl DeclUiWidget {
                 let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
                 let has_text = self.text.as_ref().is_some_and(|t| !t.is_empty());
                 if !has_bind && !has_text {
-                    return Err(DeclUiError::MissingField("bind"));
+                    return Err(err(DeclUiError::MissingField("bind")));
                 }
             }
             _ => {}
         }
         Ok(())
+    }
+
+    fn walk_any(&self, f: &mut dyn FnMut(&DeclUiWidget) -> bool) -> bool {
+        if f(self) {
+            return true;
+        }
+        if let Some(children) = &self.children {
+            for c in children {
+                if c.walk_any(f) {
+                    return true;
+                }
+            }
+        }
+        if let Some(tabs) = &self.tabs {
+            for tab in tabs {
+                if let Some(content) = &tab.content {
+                    if content.walk_any(f) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn collect_tools(&self, out: &mut Vec<String>) {
@@ -531,6 +735,13 @@ impl DeclUiWidget {
                 c.collect_kinds(out);
             }
         }
+        if let Some(tabs) = &self.tabs {
+            for tab in tabs {
+                if let Some(content) = &tab.content {
+                    content.collect_kinds(out);
+                }
+            }
+        }
     }
 }
 
@@ -548,21 +759,7 @@ pub fn default_document(
     fn blank(kind: &str) -> DeclUiWidget {
         DeclUiWidget {
             kind: kind.into(),
-            text: None,
-            label: None,
-            bind: None,
-            source: None,
-            tool: None,
-            columns: None,
-            items: None,
-            series: None,
-            children: None,
-            args: None,
-            label_key: None,
-            prefix_label_key: None,
-            hide_headers: None,
-            row_actions: None,
-            refresh_binds: None,
+            ..Default::default()
         }
     }
     let mut children = vec![
@@ -601,10 +798,15 @@ pub fn default_document(
     }
     DeclUiDocument {
         doc_type: "declarative_ui".into(),
+        contract: None,
         title: title.to_string(),
         poll_ms: None,
         labels: None,
         title_key: None,
+        state: None,
+        bindings: Vec::new(),
+        actions: Vec::new(),
+        subscriptions: Vec::new(),
         root: {
             let mut w = blank("column");
             w.children = Some(children);

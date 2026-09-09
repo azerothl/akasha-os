@@ -88,12 +88,54 @@
           ],
           "type": "object"
         },
+        "DeclUiTab": {
+          "description": "Tab pane for the `tabs` layout widget (contract v2).",
+          "properties": {
+            "content": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiWidget"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "DeclUiWidget": {
           "description": "One node in the widget tree.",
           "properties": {
+            "action": {
+              "description": "Action id from document `actions` (contract v2).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "args": true,
             "bind": {
               "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "binding": {
+              "description": "Binding id (contract v2) — resolves through document `bindings`.",
               "type": [
                 "string",
                 "null"
@@ -116,6 +158,9 @@
                 "array",
                 "null"
               ]
+            },
+            "enabled": {
+              "description": "Typed predicate AST for enablement (contract v2)."
             },
             "hide_headers": {
               "description": "When true, table renders rows without a header band.",
@@ -149,6 +194,20 @@
                 "null"
               ]
             },
+            "max": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "prefix_label_key": {
               "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
               "type": [
@@ -163,6 +222,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "resource": {
+              "description": "Authorized resource path or `$local.*` ref for `image_view`.",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -182,10 +248,54 @@
                 "null"
               ]
             },
+            "size": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "source": {
               "description": "JSON pointer or dotted path into the bind result (optional).",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "split_ratio": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "state_key": {
+              "description": "Local/document state slot key for `slider` / `number` widgets.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "step": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "subscription": {
+              "description": "Subscription id for `job` widget (contract v2).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tabs": {
+              "items": {
+                "$ref": "#/definitions/DeclUiTab"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
@@ -201,16 +311,181 @@
                 "string",
                 "null"
               ]
+            },
+            "visible": {
+              "description": "Typed predicate AST for visibility (contract v2)."
             }
           },
           "required": [
             "kind"
           ],
           "type": "object"
+        },
+        "RichAction": {
+          "description": "Declarative action — module tool or platform service.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "input": true,
+            "invalidate_on": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "refresh_binds": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "service": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        "RichBinding": {
+          "description": "Tool binding — fetches module tool JSON into renderer state.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "invalidate_on": {
+              "description": "Named state/resource keys that invalidate this binding (targeted refresh).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "target": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "tool"
+          ],
+          "type": "object"
+        },
+        "RichStateDecl": {
+          "properties": {
+            "document": {
+              "additionalProperties": {
+                "$ref": "#/definitions/RichStateSlot"
+              },
+              "type": "object"
+            },
+            "local": {
+              "additionalProperties": {
+                "$ref": "#/definitions/RichStateSlot"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "RichStateSlot": {
+          "description": "Declared state slot schema (local or document).",
+          "properties": {
+            "default": true,
+            "max_length": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "nullable": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "RichSubscription": {
+          "description": "Job/event subscription scoped to one app instance.",
+          "properties": {
+            "action": {
+              "description": "Action id whose returned `job_id` is tracked.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
         }
       },
-      "description": "Root document stored in `ui/index.html`.",
+      "description": "Root document stored in `ui/index.html` or `ui/index.json`.",
       "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/definitions/RichAction"
+          },
+          "type": "array"
+        },
+        "bindings": {
+          "items": {
+            "$ref": "#/definitions/RichBinding"
+          },
+          "type": "array"
+        },
+        "contract": {
+          "description": "Document vocabulary version (mirrors manifest `ui.contract` when set).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "labels": {
           "anyOf": [
             {
@@ -231,6 +506,22 @@
         },
         "root": {
           "$ref": "#/definitions/DeclUiWidget"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RichStateDecl"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subscriptions": {
+          "items": {
+            "$ref": "#/definitions/RichSubscription"
+          },
+          "type": "array"
         },
         "title": {
           "type": "string"
@@ -408,12 +699,54 @@
           ],
           "type": "object"
         },
+        "DeclUiTab": {
+          "description": "Tab pane for the `tabs` layout widget (contract v2).",
+          "properties": {
+            "content": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiWidget"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "DeclUiWidget": {
           "description": "One node in the widget tree.",
           "properties": {
+            "action": {
+              "description": "Action id from document `actions` (contract v2).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "args": true,
             "bind": {
               "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "binding": {
+              "description": "Binding id (contract v2) — resolves through document `bindings`.",
               "type": [
                 "string",
                 "null"
@@ -436,6 +769,9 @@
                 "array",
                 "null"
               ]
+            },
+            "enabled": {
+              "description": "Typed predicate AST for enablement (contract v2)."
             },
             "hide_headers": {
               "description": "When true, table renders rows without a header band.",
@@ -469,6 +805,20 @@
                 "null"
               ]
             },
+            "max": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "prefix_label_key": {
               "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
               "type": [
@@ -483,6 +833,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "resource": {
+              "description": "Authorized resource path or `$local.*` ref for `image_view`.",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -502,10 +859,54 @@
                 "null"
               ]
             },
+            "size": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "source": {
               "description": "JSON pointer or dotted path into the bind result (optional).",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "split_ratio": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "state_key": {
+              "description": "Local/document state slot key for `slider` / `number` widgets.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "step": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "subscription": {
+              "description": "Subscription id for `job` widget (contract v2).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tabs": {
+              "items": {
+                "$ref": "#/definitions/DeclUiTab"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
@@ -521,6 +922,9 @@
                 "string",
                 "null"
               ]
+            },
+            "visible": {
+              "description": "Typed predicate AST for visibility (contract v2)."
             }
           },
           "required": [
@@ -531,9 +935,23 @@
       },
       "description": "One node in the widget tree.",
       "properties": {
+        "action": {
+          "description": "Action id from document `actions` (contract v2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "args": true,
         "bind": {
           "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "binding": {
+          "description": "Binding id (contract v2) — resolves through document `bindings`.",
           "type": [
             "string",
             "null"
@@ -556,6 +974,9 @@
             "array",
             "null"
           ]
+        },
+        "enabled": {
+          "description": "Typed predicate AST for enablement (contract v2)."
         },
         "hide_headers": {
           "description": "When true, table renders rows without a header band.",
@@ -589,6 +1010,20 @@
             "null"
           ]
         },
+        "max": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "prefix_label_key": {
           "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
           "type": [
@@ -603,6 +1038,13 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "resource": {
+          "description": "Authorized resource path or `$local.*` ref for `image_view`.",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -622,10 +1064,54 @@
             "null"
           ]
         },
+        "size": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "source": {
           "description": "JSON pointer or dotted path into the bind result (optional).",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "split_ratio": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "state_key": {
+          "description": "Local/document state slot key for `slider` / `number` widgets.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "step": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "subscription": {
+          "description": "Subscription id for `job` widget (contract v2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tabs": {
+          "items": {
+            "$ref": "#/definitions/DeclUiTab"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -641,6 +1127,9 @@
             "string",
             "null"
           ]
+        },
+        "visible": {
+          "description": "Typed predicate AST for visibility (contract v2)."
         }
       },
       "required": [
@@ -653,8 +1142,29 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "definitions": {
         "DeclUiDocument": {
-          "description": "Root document stored in `ui/index.html`.",
+          "description": "Root document stored in `ui/index.html` or `ui/index.json`.",
           "properties": {
+            "actions": {
+              "items": {
+                "$ref": "#/definitions/RichAction"
+              },
+              "type": "array"
+            },
+            "bindings": {
+              "items": {
+                "$ref": "#/definitions/RichBinding"
+              },
+              "type": "array"
+            },
+            "contract": {
+              "description": "Document vocabulary version (mirrors manifest `ui.contract` when set).",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "labels": {
               "anyOf": [
                 {
@@ -675,6 +1185,22 @@
             },
             "root": {
               "$ref": "#/definitions/DeclUiWidget"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/RichStateDecl"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "subscriptions": {
+              "items": {
+                "$ref": "#/definitions/RichSubscription"
+              },
+              "type": "array"
             },
             "title": {
               "type": "string"
@@ -782,12 +1308,54 @@
           ],
           "type": "object"
         },
+        "DeclUiTab": {
+          "description": "Tab pane for the `tabs` layout widget (contract v2).",
+          "properties": {
+            "content": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiWidget"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "DeclUiWidget": {
           "description": "One node in the widget tree.",
           "properties": {
+            "action": {
+              "description": "Action id from document `actions` (contract v2).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "args": true,
             "bind": {
               "description": "Tool name whose JSON result feeds this widget (`table`, `stat_row`, `line_chart`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "binding": {
+              "description": "Binding id (contract v2) — resolves through document `bindings`.",
               "type": [
                 "string",
                 "null"
@@ -810,6 +1378,9 @@
                 "array",
                 "null"
               ]
+            },
+            "enabled": {
+              "description": "Typed predicate AST for enablement (contract v2)."
             },
             "hide_headers": {
               "description": "When true, table renders rows without a header band.",
@@ -843,6 +1414,20 @@
                 "null"
               ]
             },
+            "max": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "prefix_label_key": {
               "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
               "type": [
@@ -857,6 +1442,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "resource": {
+              "description": "Authorized resource path or `$local.*` ref for `image_view`.",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -876,10 +1468,54 @@
                 "null"
               ]
             },
+            "size": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "source": {
               "description": "JSON pointer or dotted path into the bind result (optional).",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "split_ratio": {
+              "format": "float",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "state_key": {
+              "description": "Local/document state slot key for `slider` / `number` widgets.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "step": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "subscription": {
+              "description": "Subscription id for `job` widget (contract v2).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tabs": {
+              "items": {
+                "$ref": "#/definitions/DeclUiTab"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
@@ -895,10 +1531,154 @@
                 "string",
                 "null"
               ]
+            },
+            "visible": {
+              "description": "Typed predicate AST for visibility (contract v2)."
             }
           },
           "required": [
             "kind"
+          ],
+          "type": "object"
+        },
+        "RichAction": {
+          "description": "Declarative action — module tool or platform service.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "input": true,
+            "invalidate_on": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "refresh_binds": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "service": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        "RichBinding": {
+          "description": "Tool binding — fetches module tool JSON into renderer state.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "invalidate_on": {
+              "description": "Named state/resource keys that invalidate this binding (targeted refresh).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "target": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "tool"
+          ],
+          "type": "object"
+        },
+        "RichStateDecl": {
+          "properties": {
+            "document": {
+              "additionalProperties": {
+                "$ref": "#/definitions/RichStateSlot"
+              },
+              "type": "object"
+            },
+            "local": {
+              "additionalProperties": {
+                "$ref": "#/definitions/RichStateSlot"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "RichStateSlot": {
+          "description": "Declared state slot schema (local or document).",
+          "properties": {
+            "default": true,
+            "max_length": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "nullable": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "RichSubscription": {
+          "description": "Job/event subscription scoped to one app instance.",
+          "properties": {
+            "action": {
+              "description": "Action id whose returned `job_id` is tracked.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id"
           ],
           "type": "object"
         }

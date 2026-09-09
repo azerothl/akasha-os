@@ -26,7 +26,9 @@ pub(crate) fn on_installed(app: &mut UiApp, message: String) {
 
 pub(crate) fn on_uninstalled(app: &mut UiApp, name: String) {
     app.status = format!("uninstalled {name}");
-    app.decl_panels.remove(&name);
+    if let Some(mut panel) = app.decl_panels.remove(&name) {
+        panel.close();
+    }
     if matches!(&app.tab, Tab::Module(module) if module == &name) {
         app.tab = Tab::Settings;
     }
@@ -69,7 +71,29 @@ pub(crate) fn on_ui_bind(
     error: Option<String>,
 ) {
     if let Some(panel) = app.decl_panels.get_mut(&module) {
-        panel.set_bind_result(&tool, result);
+        panel.set_bind_result(&tool, result.clone());
+        let binding_updates: Vec<(String, Value)> = panel
+            .document
+            .as_ref()
+            .map(|doc| {
+                doc.bindings
+                    .iter()
+                    .filter(|b| b.tool == tool)
+                    .map(|binding| {
+                        let mut val = result.clone();
+                        if let Some(target) = &binding.target {
+                            if let Some(slice) = val.pointer(target) {
+                                val = slice.clone();
+                            }
+                        }
+                        (binding.id.clone(), val)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (id, val) in binding_updates {
+            panel.set_binding_result(&id, val);
+        }
         if let Some(error) = error {
             panel.status = error;
         }
@@ -101,7 +125,9 @@ pub(crate) fn on_ui_invoke_done(
             }
             panel.status.clear();
         } else {
-            panel.status = error.unwrap_or_else(|| "Action failed".into());
+            let t = crate::i18n::strings(&app.prefs.language);
+            let _ = error;
+            panel.status = t.decl_ui_action_failed.to_string();
         }
     }
     if ok {
@@ -111,5 +137,43 @@ pub(crate) fn on_ui_invoke_done(
                 tool: bind,
             });
         }
+    }
+}
+
+pub(crate) fn on_ui_service_done(
+    app: &mut UiApp,
+    module: String,
+    ok: bool,
+    error: Option<String>,
+    refresh_binds: Vec<String>,
+) {
+    let t = crate::i18n::strings(&app.prefs.language);
+    if let Some(panel) = app.decl_panels.get_mut(&module) {
+        panel.set_pending_invoke(false);
+        if ok {
+            panel.status.clear();
+        } else {
+            let _ = error;
+            panel.status = t.decl_ui_action_failed.to_string();
+        }
+    }
+    if ok {
+        for bind in refresh_binds {
+            let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
+                module: module.clone(),
+                tool: bind,
+            });
+        }
+    }
+}
+
+pub(crate) fn on_ui_job_update(
+    app: &mut UiApp,
+    module: String,
+    subscription_id: String,
+    job: aos_proto::rich_decl_ui::RichJobHandle,
+) {
+    if let Some(panel) = app.decl_panels.get_mut(&module) {
+        panel.set_job_update(&subscription_id, job);
     }
 }

@@ -140,6 +140,14 @@ pub struct UiStrings {
     pub tab_feedback: &'static str,
     pub tab_settings: &'static str,
     pub decl_ui_refresh: &'static str,
+    pub decl_ui_action_failed: &'static str,
+    pub decl_job_cancel: &'static str,
+    pub decl_job_idle: &'static str,
+    pub decl_job_state_queued: &'static str,
+    pub decl_job_state_running: &'static str,
+    pub decl_job_state_succeeded: &'static str,
+    pub decl_job_state_failed: &'static str,
+    pub decl_job_state_cancelled: &'static str,
     pub tab_models: &'static str,
     pub network_heading: &'static str,
     pub allow_network: &'static str,
@@ -660,6 +668,8 @@ pub struct UiStrings {
     pub agents_tool_tasks_list: &'static str,
     pub agents_tool_tasks_update: &'static str,
     pub agents_tool_tasks_complete: &'static str,
+    pub agents_tool_gallery_preview_ensure: &'static str,
+    pub agents_tool_gallery_preview_get: &'static str,
     pub agents_tool_fs_read: &'static str,
     pub agents_tool_fs_write: &'static str,
     pub agents_tool_fs_list: &'static str,
@@ -1103,6 +1113,14 @@ const EN: UiStrings = UiStrings {
     tab_feedback: "Feedback",
     tab_settings: "Settings",
     decl_ui_refresh: "Refresh",
+    decl_ui_action_failed: "Action could not complete.",
+    decl_job_cancel: "Cancel",
+    decl_job_idle: "No task running",
+    decl_job_state_queued: "Waiting",
+    decl_job_state_running: "In progress",
+    decl_job_state_succeeded: "Done",
+    decl_job_state_failed: "Failed",
+    decl_job_state_cancelled: "Cancelled",
     tab_models: "Models",
     network_heading: "Network",
     allow_network: "Allow network",
@@ -1621,6 +1639,8 @@ const EN: UiStrings = UiStrings {
     agents_tool_tasks_list: "List tasks",
     agents_tool_tasks_update: "Update task",
     agents_tool_tasks_complete: "Complete task",
+    agents_tool_gallery_preview_ensure: "Prepare gallery preview",
+    agents_tool_gallery_preview_get: "Load gallery preview",
     agents_tool_fs_read: "Read file",
     agents_tool_fs_write: "Write file",
     agents_tool_fs_list: "List files",
@@ -2061,6 +2081,14 @@ const FR: UiStrings = UiStrings {
     tab_feedback: "Retour",
     tab_settings: "Paramètres",
     decl_ui_refresh: "Rafraîchir",
+    decl_ui_action_failed: "L'action n'a pas pu aboutir.",
+    decl_job_cancel: "Annuler",
+    decl_job_idle: "Aucune tâche en cours",
+    decl_job_state_queued: "En attente",
+    decl_job_state_running: "En cours",
+    decl_job_state_succeeded: "Terminé",
+    decl_job_state_failed: "Échec",
+    decl_job_state_cancelled: "Annulé",
     tab_models: "Modèles",
     network_heading: "Réseau",
     allow_network: "Autoriser le réseau",
@@ -2579,6 +2607,8 @@ const FR: UiStrings = UiStrings {
     agents_tool_tasks_list: "Lister les tâches",
     agents_tool_tasks_update: "Mettre à jour une tâche",
     agents_tool_tasks_complete: "Terminer une tâche",
+    agents_tool_gallery_preview_ensure: "Préparer l'aperçu galerie",
+    agents_tool_gallery_preview_get: "Charger l'aperçu galerie",
     agents_tool_fs_read: "Lire un fichier",
     agents_tool_fs_write: "Écrire un fichier",
     agents_tool_fs_list: "Lister les fichiers",
@@ -2942,6 +2972,8 @@ pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> 
         "tasks.list" => Some(t.agents_tool_tasks_list),
         "tasks.update" => Some(t.agents_tool_tasks_update),
         "tasks.complete" => Some(t.agents_tool_tasks_complete),
+        "gallery-demo.preview.ensure" => Some(t.agents_tool_gallery_preview_ensure),
+        "gallery-demo.preview.get" => Some(t.agents_tool_gallery_preview_get),
         "fs.read" => Some(t.agents_tool_fs_read),
         "fs.write" => Some(t.agents_tool_fs_write),
         "fs.list" => Some(t.agents_tool_fs_list),
@@ -2973,6 +3005,18 @@ pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> 
         "device.usb.write" => Some(t.agents_tool_device_usb_write),
         "device.usb.close" => Some(t.agents_tool_device_usb_close),
         _ => None,
+    }
+}
+
+/// Human-facing job progress state for declarative `job` widgets (never raw state ids).
+pub fn job_state_human_label<'a>(t: &'a UiStrings, state: &str) -> &'a str {
+    match state.trim().to_ascii_lowercase().as_str() {
+        "queued" | "pending" => t.decl_job_state_queued,
+        "running" | "in_progress" => t.decl_job_state_running,
+        "succeeded" | "success" | "done" => t.decl_job_state_succeeded,
+        "failed" | "error" => t.decl_job_state_failed,
+        "cancelled" | "canceled" => t.decl_job_state_cancelled,
+        _ => t.decl_job_state_running,
     }
 }
 
@@ -3100,6 +3144,35 @@ mod tests {
             "Photo webcam"
         );
         assert_eq!(t_fr.agents_skills, "Compétences");
+    }
+
+    #[test]
+    fn job_state_human_labels_avoid_wire_tokens() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(job_state_human_label(&en, "running"), "In progress");
+        assert_eq!(job_state_human_label(&fr, "succeeded"), "Terminé");
+        assert!(!job_state_human_label(&en, "queued").contains("queued"));
+        assert!(!job_state_human_label(&en, "jobs.demo").contains('.'));
+    }
+
+    #[test]
+    fn gallery_demo_tools_have_human_roster_labels() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(
+            tool_human_label(&en, "gallery-demo.preview.get"),
+            Some("Load gallery preview")
+        );
+        assert_eq!(
+            tool_human_label(&fr, "gallery-demo.preview.ensure"),
+            Some("Préparer l'aperçu galerie")
+        );
+        assert!(
+            !tool_human_label(&en, "gallery-demo.preview.get")
+                .unwrap()
+                .contains('.')
+        );
     }
 
     #[test]

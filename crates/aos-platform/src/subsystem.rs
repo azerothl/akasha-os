@@ -582,19 +582,36 @@ impl HostServices for PlatformSubsystem {
             }
             "fs.write" => {
                 let path = args["path"].as_str().unwrap_or("");
-                let content = args["content"].as_str().unwrap_or("");
                 Self::require_cap(ctx, "fs.write", path)?;
-                let version = self
-                    .fs
-                    .lock()
-                    .unwrap()
-                    .write(
-                        path,
-                        content,
-                        &format!("module:{}", ctx.module),
-                        &ctx.granted_caps,
-                    )
-                    .map_err(|e| e.to_string())?;
+                let version = if args.get("encoding").and_then(|v| v.as_str()) == Some("base64") {
+                    let content_b64 = args["content"].as_str().unwrap_or("");
+                    use base64::Engine;
+                    let bytes = base64::engine::general_purpose::STANDARD
+                        .decode(content_b64)
+                        .map_err(|e| format!("fs.write base64: {e}"))?;
+                    self.fs
+                        .lock()
+                        .unwrap()
+                        .write_bytes(
+                            path,
+                            &bytes,
+                            &format!("module:{}", ctx.module),
+                            &ctx.granted_caps,
+                        )
+                        .map_err(|e| e.to_string())?
+                } else {
+                    let content = args["content"].as_str().unwrap_or("");
+                    self.fs
+                        .lock()
+                        .unwrap()
+                        .write(
+                            path,
+                            content,
+                            &format!("module:{}", ctx.module),
+                            &ctx.granted_caps,
+                        )
+                        .map_err(|e| e.to_string())?
+                };
                 self.audit(AuditAppendRequest {
                     trace_id: ctx.trace_id.clone(),
                     actor: format!("module:{}", ctx.module),

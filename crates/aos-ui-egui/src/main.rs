@@ -34,6 +34,7 @@ mod composer_drafts;
 mod composer_layout;
 mod confirmation_ui_state;
 mod decl_ui;
+mod rich_decl;
 mod deep_plan_ui;
 mod feedback_event_controller;
 mod feedback_ui_state;
@@ -2964,6 +2965,30 @@ impl eframe::App for UiApp {
                         self, module, tool, ok, result, error,
                     );
                 }
+                Evt::ModuleUiJobUpdate {
+                    module,
+                    subscription_id,
+                    job,
+                } => module_event_controller::on_ui_job_update(
+                    self,
+                    module,
+                    subscription_id,
+                    job,
+                ),
+                Evt::ModuleUiServiceDone {
+                    module,
+                    action_id: _,
+                    ok,
+                    result: _,
+                    error,
+                    refresh_binds,
+                } => module_event_controller::on_ui_service_done(
+                    self,
+                    module,
+                    ok,
+                    error,
+                    refresh_binds,
+                ),
             }
         }
 

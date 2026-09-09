@@ -27,7 +27,7 @@ pub const UI_CONTRACT_V1: u32 = 1;
 pub const UI_CONTRACT_V2: u32 = 2;
 
 /// Highest UI contract major version this host generation is expected to render.
-pub const HOST_UI_CONTRACT_MAX: u32 = UI_CONTRACT_V1;
+pub const HOST_UI_CONTRACT_MAX: u32 = UI_CONTRACT_V2;
 
 /// Target UI contract for Create extraction (lot 2+).
 pub const CREATE_TARGET_UI_CONTRACT: u32 = UI_CONTRACT_V2;
@@ -182,9 +182,9 @@ mod tests {
     }
 
     #[test]
-    fn host_ui_max_is_current_shipped_contract() {
-        assert_eq!(HOST_UI_CONTRACT_MAX, UI_CONTRACT_V1);
-        assert!(CREATE_TARGET_UI_CONTRACT > HOST_UI_CONTRACT_MAX);
+    fn host_ui_max_includes_v2_rich_contract() {
+        assert_eq!(HOST_UI_CONTRACT_MAX, UI_CONTRACT_V2);
+        assert!(CREATE_TARGET_UI_CONTRACT <= HOST_UI_CONTRACT_MAX);
     }
 
     #[test]

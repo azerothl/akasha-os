@@ -22,6 +22,8 @@
 //! - bornes par invocation : fuel CPU + mémoire linéaire limitée (§7.4).
 
 use aos_proto::decl_ui::{self, DeclUiDocument, ModuleUiResponse, PreviewProfile};
+use aos_proto::rich_app_contract::UI_CONTRACT_V2;
+use aos_proto::rich_decl_ui::{validate_manifest_services, validate_ui_contract_supported};
 use aos_proto::{ModuleInfo, ModuleManifest, OS_API_VERSION};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -58,6 +60,10 @@ pub enum ModuleError {
     CatalogueSignature,
     #[error("UI déclarative invalide: {0}")]
     DeclUiInvalid(String),
+    #[error("ui.contract non supporté: le module exige {required}, l'hôte expose {current}")]
+    UiContractUnsupported { required: u32, current: u32 },
+    #[error("services.* incompatible: {0}")]
+    ServicesVersionInvalid(String),
     #[error("module bundlé non désinstallable: {0}")]
     Bundled(String),
     #[error("min_os_api trop récent: le module exige {required}, l'hôte expose {current}")]
@@ -610,8 +616,24 @@ impl ModuleRuntime {
                 ui.mode
             )));
         }
-        let raw = self.read_asset(name, &ui.entry)?;
-        let document = DeclUiDocument::parse_json(&raw)
+        let contract = ui.contract_version();
+        validate_ui_contract_supported(contract).map_err(|_| ModuleError::UiContractUnsupported {
+            required: contract,
+            current: aos_proto::rich_app_contract::HOST_UI_CONTRACT_MAX,
+        })?;
+        let raw = self.read_asset(name, ui.document_path())?;
+        let tool_names: Vec<&str> = m.manifest.tools.iter().map(|t| t.name.as_str()).collect();
+        let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
+            .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+        validate_manifest_services(
+            m.manifest.services.jobs,
+            m.manifest.services.media_image,
+            &document,
+            contract,
+        )
+        .map_err(|e| ModuleError::ServicesVersionInvalid(e.to_string()))?;
+        document
+            .validate_with_contract(contract, &tool_names, &m.granted_caps)
             .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
         Ok(ModuleUiResponse {
             module: name.to_string(),
@@ -995,23 +1017,28 @@ fn validate_package_descriptors(
         }
     }
     if let Some(ui) = manifest.ui.as_ref() {
-        if ui.entry.contains("..") {
+        if ui.entry.contains("..") || ui.document.as_ref().is_some_and(|d| d.contains("..")) {
             return Err(ModuleError::PackageIntegrity(
                 "chemin ui.entry invalide".into(),
             ));
         }
-        let ui_path = source_dir.join(&ui.entry);
+        let doc_path = ui.document_path();
+        let ui_path = source_dir.join(doc_path);
         if !ui_path.starts_with(source_dir) {
             return Err(ModuleError::PackageIntegrity(
-                "ui.entry hors du package".into(),
+                "ui.document hors du package".into(),
             ));
         }
         if !ui_path.is_file() {
             return Err(ModuleError::PackageIntegrity(format!(
-                "ui.entry introuvable: {}",
-                ui.entry
+                "ui.document introuvable: {doc_path}"
             )));
         }
+        let contract = ui.contract_version();
+        validate_ui_contract_supported(contract).map_err(|_| ModuleError::UiContractUnsupported {
+            required: contract,
+            current: aos_proto::rich_app_contract::HOST_UI_CONTRACT_MAX,
+        })?;
         let raw = std::fs::read(&ui_path).map_err(|e| ModuleError::Io(e.to_string()))?;
         if ui.mode == "declarative_ui" {
             let doc: serde_json::Value = serde_json::from_slice(&raw)
@@ -1021,9 +1048,20 @@ fn validate_package_descriptors(
                     "type must be declarative_ui".into(),
                 ));
             }
-            // Stub UI (commands-only, lot 0 native tabs) may omit `root` until lot 2.
             if doc.get("root").is_some() {
-                DeclUiDocument::parse_json(&raw)
+                let tool_names: Vec<&str> = manifest.tools.iter().map(|t| t.name.as_str()).collect();
+                let granted = manifest.permissions.required_caps.clone();
+                let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
+                    .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+                validate_manifest_services(
+                    manifest.services.jobs,
+                    manifest.services.media_image,
+                    &document,
+                    contract,
+                )
+                .map_err(|e| ModuleError::ServicesVersionInvalid(e.to_string()))?;
+                document
+                    .validate_with_contract(contract, &tool_names, &granted)
                     .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
             }
         }
@@ -2036,6 +2074,54 @@ min_os_api: 1
 
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    #[test]
+    fn rejects_ui_contract_above_host_max_at_install() {
+        let base = tmpbase("contract-reject");
+        let pkg = base.join("pkg");
+        make_package(&pkg);
+        let mut manifest = std::fs::read_to_string(pkg.join("manifest.yaml")).unwrap();
+        manifest = manifest
+            .replace("name: echo-test", "name: rich-v9")
+            .replace("ui: ~\n", "");
+        manifest.push_str(
+            "ui:\n  contract: 9\n  document: ui/index.json\n  entry: ui/index.json\n  mode: declarative_ui\nservices:\n  jobs: 1\n",
+        );
+        std::fs::write(pkg.join("manifest.yaml"), manifest).unwrap();
+        std::fs::create_dir_all(pkg.join("ui")).unwrap();
+        std::fs::write(
+            pkg.join("ui/index.json"),
+            br#"{"type":"declarative_ui","contract":9,"title":"X","root":{"kind":"column","children":[]}}"#,
+        )
+        .unwrap();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let err = rt.install(&pkg, Some(vec![])).unwrap_err();
+        assert!(matches!(err, ModuleError::UiContractUnsupported { .. }));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn gallery_demo_package_validates_at_install() {
+        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/gallery-demo.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip gallery-demo test: run modules/build-gallery-demo.sh first");
+            return;
+        }
+        let base = tmpbase("gallery-demo");
+        let caps = vec![
+            "fs.read:/documents/gallery-demo/**".into(),
+            "fs.write:/documents/gallery-demo/**".into(),
+            "tool.invoke:gallery-demo".into(),
+        ];
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let info = rt.install(&share, Some(caps)).expect("gallery-demo install");
+        assert_eq!(info.name, "gallery-demo");
+        let ui = rt.load_ui("gallery-demo").expect("load ui");
+        assert_eq!(ui.document.contract, Some(UI_CONTRACT_V2));
+        assert!(!ui.document.subscriptions.is_empty());
+        rt.uninstall("gallery-demo").unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 
 fn module_info_from_installed(
@@ -2068,9 +2154,12 @@ fn ui_meta_from_manifest(
     let mut title = Some(manifest.name.clone());
     if ui.mode == "declarative_ui" {
         if let Some(d) = dir {
-            let path = d.join(&ui.entry);
+            let path = d.join(ui.document_path());
             if let Ok(raw) = std::fs::read(&path) {
-                if let Ok(doc) = DeclUiDocument::parse_json(&raw) {
+                let contract = ui.contract_version();
+                if let Ok(doc) = DeclUiDocument::parse_json_with_contract(&raw, contract) {
+                    title = Some(doc.catalogue_title());
+                } else if let Ok(doc) = DeclUiDocument::parse_json(&raw) {
                     title = Some(doc.catalogue_title());
                 }
             }

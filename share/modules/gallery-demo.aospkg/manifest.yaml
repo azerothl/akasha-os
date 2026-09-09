@@ -1,0 +1,25 @@
+name: gallery-demo
+version: 1.0.0
+hash: 46f583db9863d518379068641088c0a56cf1755728c7b91779523ccfe3564a52
+permissions:
+  required_caps:
+    - fs.read:/documents/gallery-demo/**
+    - fs.write:/documents/gallery-demo/**
+    - tool.invoke:gallery-demo
+services:
+  jobs: 1
+tools:
+  - name: gallery-demo.preview.ensure
+    description: Ensure sample preview PNG exists
+    input_schema:
+      type: object
+  - name: gallery-demo.preview.get
+    description: Return authorized preview image path
+    input_schema:
+      type: object
+ui:
+  contract: 2
+  document: ui/index.json
+  entry: ui/index.json
+  mode: declarative_ui
+min_os_api: 1

@@ -1,17 +1,34 @@
 //! Host-rendered declarative module UI (E15 / Preview 0.7).
 
 use aos_proto::decl_ui::{resolve_row_args, DeclUiDocument, DeclUiRowAction, DeclUiWidget};
+use aos_proto::rich_decl_ui::{eval_predicate, resolve_action_input, RichAction, RichJobHandle};
 use aos_proto::ModuleTool;
+use crate::rich_decl::{
+    init_state_from_schema, ImageViewInteractionState, JobProgressThrottle, RichDeclSubscriptions,
+};
 use eframe::egui::{self, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints, Points};
 use serde_json::Value;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
+pub struct DeclUiServiceAction {
+    pub action_id: String,
+    pub service: Option<String>,
+    pub tool: Option<String>,
+    pub input: Value,
+    pub refresh_binds: Vec<String>,
+    pub subscription_id: Option<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct DeclUiActions {
     pub refresh: bool,
     pub invoke: Option<DeclUiInvokeAction>,
+    pub service_action: Option<DeclUiServiceAction>,
+    pub cancel_job: Option<(String, String)>,
+    pub local_patch: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,8 +44,15 @@ pub struct DeclUiPanelState {
     #[allow(dead_code)]
     pub module: String,
     pub document: Option<DeclUiDocument>,
+    pub contract: u32,
     pub error: String,
     pub bind_cache: HashMap<String, Value>,
+    pub binding_cache: HashMap<String, Value>,
+    pub local_state: HashMap<String, Value>,
+    pub document_state: HashMap<String, Value>,
+    pub subscriptions: RichDeclSubscriptions,
+    pub image_views: HashMap<String, ImageViewInteractionState>,
+    pub job_throttle: JobProgressThrottle,
     pub form_fields: HashMap<String, String>,
     pub status: String,
     pub tool_schemas: HashMap<String, Value>,
@@ -47,7 +71,34 @@ impl DeclUiPanelState {
 
     pub fn set_document(&mut self, doc: DeclUiDocument) {
         self.error.clear();
+        self.contract = doc.contract.unwrap_or(1);
+        if let Some(state) = &doc.state {
+            let (local, document) = init_state_from_schema(state);
+            self.local_state = local;
+            self.document_state = document;
+        }
+        self.subscriptions.clear();
+        for sub in &doc.subscriptions {
+            self.subscriptions.register(&sub.id);
+        }
         self.document = Some(doc);
+    }
+
+    pub fn close(&mut self) {
+        self.subscriptions.clear();
+        self.job_throttle.clear();
+        self.image_views.clear();
+        self.binding_cache.clear();
+    }
+
+    pub fn set_binding_result(&mut self, binding_id: &str, result: Value) {
+        self.binding_cache.insert(binding_id.to_string(), result);
+    }
+
+    pub fn set_job_update(&mut self, subscription_id: &str, job: RichJobHandle) {
+        if self.job_throttle.allow(job.job_id.as_deref().unwrap_or(subscription_id)) {
+            self.subscriptions.set_job(subscription_id, job);
+        }
     }
 
     pub fn set_error(&mut self, msg: impl Into<String>) {
@@ -73,6 +124,18 @@ impl DeclUiPanelState {
         self.document
             .as_ref()
             .map(|d| d.bind_tools())
+            .unwrap_or_default()
+    }
+
+    pub fn bindings_to_fetch(&self) -> Vec<(String, String)> {
+        self.document
+            .as_ref()
+            .map(|d| {
+                d.bindings
+                    .iter()
+                    .map(|b| (b.id.clone(), b.tool.clone()))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -115,6 +178,11 @@ impl DeclUiPanelState {
                     &doc,
                     language,
                     &self.bind_cache,
+                    &self.binding_cache,
+                    &self.local_state,
+                    &self.document_state,
+                    &self.subscriptions,
+                    &mut self.image_views,
                     &mut self.form_fields,
                     &self.tool_schemas,
                     self.pending_invoke,
@@ -129,6 +197,11 @@ impl DeclUiPanelState {
                 &doc,
                 language,
                 &self.bind_cache,
+                &self.binding_cache,
+                &self.local_state,
+                &self.document_state,
+                &self.subscriptions,
+                &mut self.image_views,
                 &mut self.form_fields,
                 &self.tool_schemas,
                 self.pending_invoke,
@@ -145,11 +218,26 @@ impl DeclUiPanelState {
         doc: &DeclUiDocument,
         language: &str,
         cache: &HashMap<String, Value>,
+        binding_cache: &HashMap<String, Value>,
+        local_state: &HashMap<String, Value>,
+        document_state: &HashMap<String, Value>,
+        subscriptions: &RichDeclSubscriptions,
+        image_views: &mut HashMap<String, ImageViewInteractionState>,
         form_fields: &mut HashMap<String, String>,
         tool_schemas: &HashMap<String, Value>,
         pending_invoke: bool,
         actions: &mut DeclUiActions,
     ) {
+        if let Some(pred) = &w.visible {
+            if !eval_predicate(pred, local_state, document_state) {
+                return;
+            }
+        }
+        let enabled = w
+            .enabled
+            .as_ref()
+            .map(|p| eval_predicate(p, local_state, document_state))
+            .unwrap_or(true);
         match w.kind.as_str() {
             "column" => {
                 let h = ui.available_height();
@@ -168,6 +256,11 @@ impl DeclUiPanelState {
                                         doc,
                                         language,
                                         cache,
+                                        binding_cache,
+                                        local_state,
+                                        document_state,
+                                        subscriptions,
+                                        image_views,
                                         form_fields,
                                         tool_schemas,
                                         pending_invoke,
@@ -189,6 +282,11 @@ impl DeclUiPanelState {
                                 doc,
                                 language,
                                 cache,
+                                binding_cache,
+                                local_state,
+                                document_state,
+                                subscriptions,
+                                image_views,
                                 form_fields,
                                 tool_schemas,
                                 pending_invoke,
@@ -325,9 +423,19 @@ impl DeclUiPanelState {
                     .or_else(|| w.label.clone())
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "Run".into());
-                let enabled = !pending_invoke && actions.invoke.is_none();
-                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
-                    if let Some(tool) = &w.tool {
+                let can_run = enabled && !pending_invoke && actions.invoke.is_none();
+                if ui.add_enabled(can_run, egui::Button::new(label)).clicked() {
+                    if let Some(action_id) = &w.action {
+                        if let Some(action) = doc.actions.iter().find(|a| &a.id == action_id) {
+                            queue_service_action(
+                                actions,
+                                action,
+                                local_state,
+                                document_state,
+                                doc,
+                            );
+                        }
+                    } else if let Some(tool) = &w.tool {
                         queue_invoke(
                             actions,
                             tool,
@@ -396,6 +504,255 @@ impl DeclUiPanelState {
                     });
                 }
             }
+            "scroll" => {
+                egui::ScrollArea::vertical()
+                    .id_salt(format!("decl_scroll_{}", w.label_key.as_deref().unwrap_or("")))
+                    .show(ui, |ui| {
+                        if let Some(children) = &w.children {
+                            for c in children {
+                                Self::render_widget(
+                                    ui,
+                                    md_cache,
+                                    c,
+                                    doc,
+                                    language,
+                                    cache,
+                                    binding_cache,
+                                    local_state,
+                                    document_state,
+                                    subscriptions,
+                                    image_views,
+                                    form_fields,
+                                    tool_schemas,
+                                    pending_invoke,
+                                    actions,
+                                );
+                            }
+                        }
+                    });
+            }
+            "split" => {
+                let ratio = w.split_ratio.unwrap_or(0.5).clamp(0.1, 0.9);
+                if let Some(children) = &w.children {
+                    if children.len() == 2 {
+                        ui.horizontal(|ui| {
+                            let w_left = ui.available_width() * ratio;
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(w_left, ui.available_height()),
+                                egui::Layout::top_down(egui::Align::LEFT),
+                                |ui| {
+                                    Self::render_widget(
+                                        ui,
+                                        md_cache,
+                                        &children[0],
+                                        doc,
+                                        language,
+                                        cache,
+                                        binding_cache,
+                                        local_state,
+                                        document_state,
+                                        subscriptions,
+                                        image_views,
+                                        form_fields,
+                                        tool_schemas,
+                                        pending_invoke,
+                                        actions,
+                                    );
+                                },
+                            );
+                            Self::render_widget(
+                                ui,
+                                md_cache,
+                                &children[1],
+                                doc,
+                                language,
+                                cache,
+                                binding_cache,
+                                local_state,
+                                document_state,
+                                subscriptions,
+                                image_views,
+                                form_fields,
+                                tool_schemas,
+                                pending_invoke,
+                                actions,
+                            );
+                        });
+                    }
+                }
+            }
+            "tabs" => {
+                if let Some(tabs) = &w.tabs {
+                    let labels: Vec<String> = tabs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, tab)| {
+                            tab.label
+                                .clone()
+                                .or_else(|| {
+                                    widget_text_from_key(tab.label_key.as_deref(), doc, language)
+                                })
+                                .unwrap_or_else(|| format!("Tab {}", i + 1))
+                        })
+                        .collect();
+                    let mut selected = 0usize;
+                    ui.horizontal(|ui| {
+                        for (i, label) in labels.iter().enumerate() {
+                            if ui.selectable_label(selected == i, label).clicked() {
+                                selected = i;
+                            }
+                        }
+                    });
+                    ui.separator();
+                    if let Some(tab) = tabs.get(selected) {
+                        if let Some(content) = &tab.content {
+                            Self::render_widget(
+                                ui,
+                                md_cache,
+                                content,
+                                doc,
+                                language,
+                                cache,
+                                binding_cache,
+                                local_state,
+                                document_state,
+                                subscriptions,
+                                image_views,
+                                form_fields,
+                                tool_schemas,
+                                pending_invoke,
+                                actions,
+                            );
+                        }
+                    }
+                }
+            }
+            "spacer" => {
+                let h = w.size.unwrap_or(8.0);
+                ui.add_space(h);
+            }
+            "slider" => {
+                if let Some(key) = &w.state_key {
+                    let min = w.min.unwrap_or(0.0) as f32;
+                    let max = w.max.unwrap_or(100.0) as f32;
+                    let mut val = local_state
+                        .get(key)
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(min as f64) as f32;
+                    let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+                            if ui.add(egui::Slider::new(&mut val, min..=max)).changed() {
+                                actions
+                                    .local_patch
+                                    .insert(key.clone(), Value::from(val as f64));
+                            }
+                        });
+                    });
+                }
+            }
+            "number" => {
+                if let Some(key) = &w.state_key {
+                    let mut text = local_state
+                        .get(key)
+                        .and_then(|v| v.as_f64())
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "0".into());
+                    let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+                            if ui.text_edit_singleline(&mut text).changed() {
+                                if let Ok(n) = text.parse::<f64>() {
+                                    actions.local_patch.insert(key.clone(), Value::from(n));
+                                }
+                            }
+                        });
+                    });
+                }
+            }
+            "progress" => {
+                let frac = if let Some(bind) = &w.bind {
+                    resolve_bind(cache, bind, w.source.as_deref())
+                } else if let Some(key) = &w.state_key {
+                    local_state.get(key).cloned().unwrap_or(Value::from(0))
+                } else {
+                    Value::from(0)
+                };
+                let (done, total) = progress_values(&frac);
+                let label = widget_text(w, doc, language).unwrap_or_else(|| "Progress".into());
+                ui.label(label);
+                ui.add(
+                    egui::ProgressBar::new(done as f32 / total.max(1) as f32)
+                        .text(format!("{done}/{total}")),
+                );
+            }
+            "job" => {
+                let t = crate::i18n::strings(language);
+                let sub_id = w
+                    .subscription
+                    .as_deref()
+                    .or(w.action.as_deref())
+                    .unwrap_or("job");
+                if let Some(job) = subscriptions.job(sub_id) {
+                    let state_key = job.state.as_deref().unwrap_or("queued");
+                    let state_label = crate::i18n::job_state_human_label(&t, state_key);
+                    let heading = widget_text(w, doc, language)
+                        .unwrap_or_else(|| t.decl_job_idle.to_string());
+                    ui.label(heading);
+                    ui.weak(state_label);
+                    if let Some(p) = &job.progress {
+                        ui.add(egui::ProgressBar::new(
+                            p.completed as f32 / p.total.max(1) as f32,
+                        )
+                        .text(format!("{}/{}", p.completed, p.total)));
+                    }
+                    if matches!(state_key, "running" | "queued") {
+                        if let Some(job_id) = &job.job_id {
+                            if ui.button(t.decl_job_cancel).clicked() {
+                                actions.cancel_job =
+                                    Some((job_id.clone(), sub_id.to_string()));
+                            }
+                        }
+                    }
+                } else {
+                    ui.weak(
+                        widget_text(w, doc, language)
+                            .unwrap_or_else(|| t.decl_job_idle.to_string()),
+                    );
+                }
+            }
+            "image_view" => {
+                let path = image_view_path(w, cache, binding_cache, local_state);
+                let id = w
+                    .label_key
+                    .clone()
+                    .or_else(|| w.state_key.clone())
+                    .unwrap_or_else(|| path.clone());
+                let view = image_views.entry(id.clone()).or_default();
+                ui.group(|ui| {
+                    if let Some(tex) = try_load_png(ui.ctx(), &path) {
+                        let size = tex.size_vec2() * view.zoom.max(0.1);
+                        let offset = egui::vec2(view.pan[0], view.pan[1]);
+                        ui.image((tex.id(), size));
+                        let rect = ui.min_rect().translate(offset);
+                        let response = ui.interact(rect, ui.id().with("iv"), egui::Sense::drag());
+                        if response.dragged() {
+                            view.pan[0] += response.drag_delta().x;
+                            view.pan[1] += response.drag_delta().y;
+                        }
+                        if response.hovered() {
+                            let scroll = ui.input(|i| i.raw_scroll_delta.y);
+                            if scroll.abs() > 0.0 {
+                                view.zoom = (view.zoom + scroll * 0.001).clamp(0.2, 8.0);
+                            }
+                        }
+                    } else {
+                        ui.weak(format!("image_view: {path}"));
+                    }
+                });
+            }
             _ => {
                 ui.colored_label(
                     egui::Color32::RED,
@@ -439,6 +796,73 @@ fn queue_invoke(
         refresh_binds,
         clear_form_keys,
     });
+}
+
+fn queue_service_action(
+    actions: &mut DeclUiActions,
+    action: &RichAction,
+    local_state: &HashMap<String, Value>,
+    document_state: &HashMap<String, Value>,
+    doc: &DeclUiDocument,
+) {
+    let input = action
+        .input
+        .as_ref()
+        .map(|t| resolve_action_input(t, local_state, document_state))
+        .unwrap_or_else(|| Value::Object(Default::default()));
+    let subscription_id = doc
+        .subscriptions
+        .iter()
+        .find(|s| s.action.as_deref() == Some(action.id.as_str()))
+        .map(|s| s.id.clone());
+    actions.service_action = Some(DeclUiServiceAction {
+        action_id: action.id.clone(),
+        service: action.service.clone(),
+        tool: action.tool.clone(),
+        input,
+        refresh_binds: action.refresh_binds.clone(),
+        subscription_id,
+    });
+}
+
+fn progress_values(val: &Value) -> (u32, u32) {
+    if let Some(n) = val.as_u64() {
+        return (n as u32, 100);
+    }
+    if let (Some(c), Some(t)) = (val.get("completed"), val.get("total")) {
+        return (
+            c.as_u64().unwrap_or(0) as u32,
+            t.as_u64().unwrap_or(1) as u32,
+        );
+    }
+    (0, 1)
+}
+
+fn image_view_path(
+    w: &DeclUiWidget,
+    cache: &HashMap<String, Value>,
+    binding_cache: &HashMap<String, Value>,
+    local_state: &HashMap<String, Value>,
+) -> String {
+    if let Some(resource) = &w.resource {
+        if let Some(rest) = resource.strip_prefix("$local.") {
+            if let Some(v) = local_state.get(rest).and_then(|x| x.as_str()) {
+                return v.to_string();
+            }
+        }
+        return resource.clone();
+    }
+    if let Some(binding_id) = &w.binding {
+        if let Some(val) = binding_cache.get(binding_id) {
+            if let Some(s) = val.as_str() {
+                return s.to_string();
+            }
+            if let Some(s) = val.get("path").and_then(|p| p.as_str()) {
+                return s.to_string();
+            }
+        }
+    }
+    media_path(w, cache)
 }
 
 fn render_form_fields(

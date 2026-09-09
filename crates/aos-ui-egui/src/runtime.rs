@@ -1260,6 +1260,36 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
         Cmd::ModuleUiInvoke { module, tool, args } => {
             invoke_module_tool(&bus, &evt_tx, &module, &tool, args).await;
         }
+        Cmd::ModuleUiServiceAction {
+            module,
+            action_id,
+            service,
+            tool,
+            input,
+            refresh_binds,
+            subscription_id,
+        } => {
+            crate::module_actions::run_decl_service_action(
+                &bus,
+                &evt_tx,
+                &module,
+                &action_id,
+                service.as_deref(),
+                tool.as_deref(),
+                input,
+                refresh_binds,
+                subscription_id,
+            )
+            .await;
+        }
+        Cmd::ModuleUiCancelJob {
+            module,
+            job_id,
+            subscription_id,
+        } => {
+            crate::module_actions::cancel_decl_job(&evt_tx, &module, &job_id, &subscription_id)
+                .await;
+        }
         Cmd::DocumentPrepSpawn {
             session_id,
             question,
