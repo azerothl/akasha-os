@@ -270,6 +270,12 @@ pub struct DeclUiWidget {
     /// Key into [`DeclUiDocument::labels`] for localized copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_key: Option<String>,
+    /// Empty-state copy for `image_view` when no image is loaded (never wire paths).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub empty_label_key: Option<String>,
+    /// Header label keys for `table` columns (parallel to `columns`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_label_keys: Option<Vec<String>>,
     /// Label shown before inline form fields (e.g. « Nouvelle » / « New »).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prefix_label_key: Option<String>,

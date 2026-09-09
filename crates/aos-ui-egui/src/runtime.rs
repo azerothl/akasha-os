@@ -1287,8 +1287,14 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             job_id,
             subscription_id,
         } => {
-            crate::module_actions::cancel_decl_job(&evt_tx, &module, &job_id, &subscription_id)
-                .await;
+            crate::module_actions::cancel_decl_job(
+                &bus,
+                &evt_tx,
+                &module,
+                &job_id,
+                &subscription_id,
+            )
+            .await;
         }
         Cmd::DocumentPrepSpawn {
             session_id,

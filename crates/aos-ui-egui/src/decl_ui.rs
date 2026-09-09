@@ -345,6 +345,7 @@ impl DeclUiPanelState {
                         ui,
                         &val,
                         w.columns.as_deref(),
+                        w.column_label_keys.as_deref(),
                         w.hide_headers.unwrap_or(false),
                         w.row_actions.as_deref(),
                         doc,
@@ -397,10 +398,28 @@ impl DeclUiPanelState {
                 }
             }
             "textarea" => {
-                let key = w.label.clone().unwrap_or_else(|| "text".into());
-                form_fields.entry(key.clone()).or_default();
-                ui.label(&key);
-                ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
+                if let Some(state_key) = &w.state_key {
+                    let label = widget_text(w, doc, language)
+                        .unwrap_or_else(|| state_key.clone());
+                    let mut text = local_state
+                        .get(state_key)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.label(label);
+                        if ui.text_edit_multiline(&mut text).changed() {
+                            actions
+                                .local_patch
+                                .insert(state_key.clone(), Value::String(text));
+                        }
+                    });
+                } else {
+                    let key = w.label.clone().unwrap_or_else(|| "text".into());
+                    form_fields.entry(key.clone()).or_default();
+                    ui.label(&key);
+                    ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
+                }
             }
             "image" => {
                 let path = media_path(w, cache);
@@ -724,12 +743,13 @@ impl DeclUiPanelState {
                 }
             }
             "image_view" => {
+                let t = crate::i18n::strings(language);
                 let path = image_view_path(w, cache, binding_cache, local_state);
                 let id = w
                     .label_key
                     .clone()
                     .or_else(|| w.state_key.clone())
-                    .unwrap_or_else(|| path.clone());
+                    .unwrap_or_else(|| "preview".into());
                 let view = image_views.entry(id.clone()).or_default();
                 ui.group(|ui| {
                     if let Some(tex) = try_load_png(ui.ctx(), &path) {
@@ -749,7 +769,9 @@ impl DeclUiPanelState {
                             }
                         }
                     } else {
-                        ui.weak(format!("image_view: {path}"));
+                        let empty = widget_text_from_key(w.empty_label_key.as_deref(), doc, language)
+                            .unwrap_or_else(|| t.decl_preview_empty.to_string());
+                        ui.weak(empty);
                     }
                 });
             }
@@ -1195,6 +1217,7 @@ fn render_table(
     ui: &mut Ui,
     val: &Value,
     columns: Option<&[String]>,
+    column_label_keys: Option<&[String]>,
     hide_headers: bool,
     row_actions: Option<&[DeclUiRowAction]>,
     doc: &DeclUiDocument,
@@ -1221,8 +1244,12 @@ fn render_table(
         .striped(true)
         .show(ui, |ui| {
             if !hide_headers {
-                for c in &cols {
-                    ui.strong(c);
+                for (i, c) in cols.iter().enumerate() {
+                    let header = column_label_keys
+                        .and_then(|keys| keys.get(i))
+                        .and_then(|key| widget_text_from_key(Some(key), doc, language))
+                        .unwrap_or_else(|| c.clone());
+                    ui.strong(header);
                 }
                 if show_actions {
                     ui.strong("");

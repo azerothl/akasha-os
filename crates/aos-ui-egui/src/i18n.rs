@@ -148,6 +148,7 @@ pub struct UiStrings {
     pub decl_job_state_succeeded: &'static str,
     pub decl_job_state_failed: &'static str,
     pub decl_job_state_cancelled: &'static str,
+    pub decl_preview_empty: &'static str,
     pub tab_models: &'static str,
     pub network_heading: &'static str,
     pub allow_network: &'static str,
@@ -670,6 +671,12 @@ pub struct UiStrings {
     pub agents_tool_tasks_complete: &'static str,
     pub agents_tool_gallery_preview_ensure: &'static str,
     pub agents_tool_gallery_preview_get: &'static str,
+    pub agents_tool_create_history_list: &'static str,
+    pub agents_tool_create_history_get: &'static str,
+    pub agents_tool_create_history_record: &'static str,
+    pub agents_tool_create_result_get: &'static str,
+    pub agents_tool_create_document_load: &'static str,
+    pub agents_tool_create_document_save: &'static str,
     pub agents_tool_fs_read: &'static str,
     pub agents_tool_fs_write: &'static str,
     pub agents_tool_fs_list: &'static str,
@@ -1121,6 +1128,7 @@ const EN: UiStrings = UiStrings {
     decl_job_state_succeeded: "Done",
     decl_job_state_failed: "Failed",
     decl_job_state_cancelled: "Cancelled",
+    decl_preview_empty: "No preview yet",
     tab_models: "Models",
     network_heading: "Network",
     allow_network: "Allow network",
@@ -1641,6 +1649,12 @@ const EN: UiStrings = UiStrings {
     agents_tool_tasks_complete: "Complete task",
     agents_tool_gallery_preview_ensure: "Prepare gallery preview",
     agents_tool_gallery_preview_get: "Load gallery preview",
+    agents_tool_create_history_list: "List generation history",
+    agents_tool_create_history_get: "Restore generation parameters",
+    agents_tool_create_history_record: "Record generation in history",
+    agents_tool_create_result_get: "Load image preview",
+    agents_tool_create_document_load: "Load Create document state",
+    agents_tool_create_document_save: "Save Create document state",
     agents_tool_fs_read: "Read file",
     agents_tool_fs_write: "Write file",
     agents_tool_fs_list: "List files",
@@ -2089,6 +2103,7 @@ const FR: UiStrings = UiStrings {
     decl_job_state_succeeded: "Terminé",
     decl_job_state_failed: "Échec",
     decl_job_state_cancelled: "Annulé",
+    decl_preview_empty: "Pas encore d'aperçu",
     tab_models: "Modèles",
     network_heading: "Réseau",
     allow_network: "Autoriser le réseau",
@@ -2609,6 +2624,12 @@ const FR: UiStrings = UiStrings {
     agents_tool_tasks_complete: "Terminer une tâche",
     agents_tool_gallery_preview_ensure: "Préparer l'aperçu galerie",
     agents_tool_gallery_preview_get: "Charger l'aperçu galerie",
+    agents_tool_create_history_list: "Lister l'historique des générations",
+    agents_tool_create_history_get: "Restaurer les paramètres de génération",
+    agents_tool_create_history_record: "Enregistrer la génération dans l'historique",
+    agents_tool_create_result_get: "Charger l'aperçu image",
+    agents_tool_create_document_load: "Charger l'état du document Créer",
+    agents_tool_create_document_save: "Enregistrer l'état du document Créer",
     agents_tool_fs_read: "Lire un fichier",
     agents_tool_fs_write: "Écrire un fichier",
     agents_tool_fs_list: "Lister les fichiers",
@@ -2974,6 +2995,12 @@ pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> 
         "tasks.complete" => Some(t.agents_tool_tasks_complete),
         "gallery-demo.preview.ensure" => Some(t.agents_tool_gallery_preview_ensure),
         "gallery-demo.preview.get" => Some(t.agents_tool_gallery_preview_get),
+        "create.history.list" => Some(t.agents_tool_create_history_list),
+        "create.history.get" => Some(t.agents_tool_create_history_get),
+        "create.history.record" => Some(t.agents_tool_create_history_record),
+        "create.result.get" => Some(t.agents_tool_create_result_get),
+        "create.document.load" => Some(t.agents_tool_create_document_load),
+        "create.document.save" => Some(t.agents_tool_create_document_save),
         "fs.read" => Some(t.agents_tool_fs_read),
         "fs.write" => Some(t.agents_tool_fs_write),
         "fs.list" => Some(t.agents_tool_fs_list),
@@ -3173,6 +3200,37 @@ mod tests {
                 .unwrap()
                 .contains('.')
         );
+    }
+
+    #[test]
+    fn decl_preview_empty_matches_gallery_demo_lock() {
+        let fr = strings("fr");
+        assert_eq!(fr.decl_preview_empty, "Pas encore d'aperçu");
+        assert!(!fr.decl_preview_empty.contains("image_view"));
+    }
+
+    #[test]
+    fn create_tools_have_human_roster_labels() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(
+            tool_human_label(&en, "create.history.list"),
+            Some("List generation history")
+        );
+        assert_eq!(
+            tool_human_label(&fr, "create.result.get"),
+            Some("Charger l'aperçu image")
+        );
+        for tool in [
+            "create.history.list",
+            "create.history.get",
+            "create.history.record",
+            "create.result.get",
+        ] {
+            let label = tool_human_label(&en, tool).expect(tool);
+            assert!(!label.contains('.'), "{label}");
+            assert!(!label.contains("media.image"), "{label}");
+        }
     }
 
     #[test]

@@ -530,6 +530,14 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        "files.save_as" => {
+            if !granted_caps.iter().any(|c| c.starts_with("fs.read:/downloads/")) {
+                return Err(RichDeclUiError::MissingCapability(
+                    "fs.read:/downloads/**".into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -897,6 +905,51 @@ mod tests {
         };
         let err = action.validate(&HashSet::new(), &[]).unwrap_err();
         assert!(matches!(err, RichDeclUiError::MissingCapability(_)));
+    }
+
+    #[test]
+    fn files_save_as_requires_downloads_read_cap() {
+        let action = RichAction {
+            id: "save".into(),
+            tool: None,
+            service: Some("files.save_as".into()),
+            input: Some(serde_json::json!({"source_path": "$local.result_path"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        let caps = vec!["fs.read:/downloads/**".into()];
+        action
+            .validate(&HashSet::new(), &caps)
+            .expect("downloads read cap");
+        let err = action.validate(&HashSet::new(), &[]).unwrap_err();
+        assert!(matches!(err, RichDeclUiError::MissingCapability(_)));
+    }
+
+    #[test]
+    fn create_ui_document_validates() {
+        let raw = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../modules/create/ui/index.json"),
+        )
+        .expect("create ui");
+        let doc = DeclUiDocument::parse_json_with_contract(raw.as_bytes(), UI_CONTRACT_V2)
+            .expect("parse");
+        let tools = [
+            "create.history.list",
+            "create.history.get",
+            "create.history.record",
+            "create.document.load",
+            "create.document.save",
+            "create.result.get",
+        ];
+        let caps = vec![
+            "media.generate".into(),
+            "fs.read:/downloads/**".into(),
+            "fs.write:/downloads/**".into(),
+            "fs.read:/documents/create/**".into(),
+            "fs.write:/documents/create/**".into(),
+        ];
+        validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps).expect("create ui valid");
     }
 
     #[test]

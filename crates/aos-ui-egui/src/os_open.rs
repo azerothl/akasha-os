@@ -81,6 +81,25 @@ pub(crate) fn pick_os_file(
     dlg.pick_file()
 }
 
+/// Native OS save dialog. Returns `None` if the user cancels.
+pub(crate) fn save_os_file(
+    title: &str,
+    default_name: &str,
+    filters: &[(&str, &[&str])],
+    start_dir: Option<&Path>,
+) -> Option<PathBuf> {
+    let mut dlg = rfd::FileDialog::new()
+        .set_title(title)
+        .set_file_name(default_name);
+    for (name, exts) in filters {
+        dlg = dlg.add_filter(*name, exts);
+    }
+    if let Some(dir) = start_dir.filter(|p| p.is_dir()) {
+        dlg = dlg.set_directory(dir);
+    }
+    dlg.save_file()
+}
+
 pub(crate) fn user_downloads_dir() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
     let dir = PathBuf::from(home).join("Downloads");

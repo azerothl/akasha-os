@@ -2101,6 +2101,42 @@ min_os_api: 1
     }
 
     #[test]
+    fn create_package_validates_at_install() {
+        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip create test: run modules/build-create.sh first");
+            return;
+        }
+        let base = tmpbase("create");
+        let caps = vec![
+            "fs.read:/documents/create/**".into(),
+            "fs.write:/documents/create/**".into(),
+            "fs.read:/downloads/**".into(),
+            "fs.write:/downloads/**".into(),
+            "media.generate".into(),
+            "tool.invoke:create".into(),
+        ];
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let info = rt.install(&share, Some(caps)).expect("create install");
+        assert_eq!(info.name, "create");
+        let ui = rt.load_ui("create").expect("load ui");
+        assert_eq!(ui.document.contract, Some(UI_CONTRACT_V2));
+        assert!(ui.document.uses_media_image_service());
+        assert!(!ui.document.subscriptions.is_empty());
+        assert_eq!(ui.document.catalogue_title(), "Create");
+        let docs = base.join("var/storage/data/documents/create");
+        std::fs::create_dir_all(&docs).unwrap();
+        std::fs::write(docs.join("history.json"), br#"{"items":[]}"#).unwrap();
+        rt.uninstall("create").unwrap();
+        assert!(!base.join("modules/create").exists());
+        assert!(
+            docs.join("history.json").is_file(),
+            "uninstall must keep /documents/create/**"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn gallery_demo_package_validates_at_install() {
         let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/gallery-demo.aospkg");
         if !share.join("module.wasm").is_file() {
@@ -2118,6 +2154,7 @@ min_os_api: 1
         assert_eq!(info.name, "gallery-demo");
         let ui = rt.load_ui("gallery-demo").expect("load ui");
         assert_eq!(ui.document.contract, Some(UI_CONTRACT_V2));
+        assert_eq!(ui.document.catalogue_title(), "Gallery Demo");
         assert!(!ui.document.subscriptions.is_empty());
         rt.uninstall("gallery-demo").unwrap();
         let _ = std::fs::remove_dir_all(&base);
