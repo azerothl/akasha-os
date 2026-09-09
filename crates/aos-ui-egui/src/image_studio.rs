@@ -38,6 +38,7 @@ pub struct ImageStudioState {
     /// High-level recipe applied to safe generation controls.
     pub intent_preset: String,
     pub saved_preset_name: String,
+    last_generation: Option<(String, Option<String>, MediaImageOptions)>,
     /// Single primary camera vector suggested for video prompts.
     pub camera_preset: String,
     pub steps: u32,
@@ -133,6 +134,7 @@ impl Default for ImageStudioState {
             format_preset: "custom".into(),
             intent_preset: "custom".into(),
             saved_preset_name: String::new(),
+            last_generation: None,
             camera_preset: "custom".into(),
             steps: 20,
             cfg: 7.0,
@@ -1883,6 +1885,12 @@ impl ImageStudioState {
                 && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
                 && !use_edited;
             let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
+            let render_options = self.to_options();
+            self.last_generation = Some((
+                self.prompt.clone(),
+                Some(self.model_id.clone()),
+                render_options.clone(),
+            ));
             let _ = cmd.send(Cmd::MediaImage {
                 prompt: self.prompt.clone(),
                 model_id: if self.model_id.is_empty() {
@@ -1890,7 +1898,7 @@ impl ImageStudioState {
                 } else {
                     Some(self.model_id.clone())
                 },
-                options: self.to_options(),
+                options: render_options,
                 output_path: Some(default_video_download_path()),
                 enrich_prompt: wants_json_enrich,
                 enhance_prompt_chat: wants_chat_enhance,
@@ -1903,7 +1911,7 @@ impl ImageStudioState {
             });
         }
         if let Some(path) = self.video_result.clone() {
-            ui_video_result_row(ui, t, &path, self);
+            ui_video_result_row(ui, t, &path, self, cmd);
         }
     }
 
@@ -2074,6 +2082,12 @@ impl ImageStudioState {
                 && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
                 && !use_edited;
             let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
+            let render_options = self.to_options();
+            self.last_generation = Some((
+                self.prompt.clone(),
+                Some(self.model_id.clone()),
+                render_options.clone(),
+            ));
             let _ = cmd.send(Cmd::MediaImage {
                 prompt: self.prompt.clone(),
                 model_id: if self.model_id.is_empty() {
@@ -2081,7 +2095,7 @@ impl ImageStudioState {
                 } else {
                     Some(self.model_id.clone())
                 },
-                options: self.to_options(),
+                options: render_options,
                 output_path: None,
                 enrich_prompt: wants_json_enrich,
                 enhance_prompt_chat: wants_chat_enhance,
@@ -2641,6 +2655,7 @@ fn ui_video_result_row(
     t: &UiStrings,
     path: &str,
     studio: &mut ImageStudioState,
+    cmd: &Sender<Cmd>,
 ) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
@@ -2652,6 +2667,20 @@ fn ui_video_result_row(
         }
         if ui.button("Réutiliser comme référence").clicked() {
             studio.queue_reference_image(path.to_string());
+        }
+        if ui.button("Régénérer").clicked() {
+            if let Some((prompt, model_id, options)) = studio.last_generation.clone() {
+                let _ = cmd.send(Cmd::MediaImage {
+                    prompt,
+                    model_id,
+                    options,
+                    output_path: Some(default_video_download_path()),
+                    enrich_prompt: false,
+                    enhance_prompt_chat: false,
+                    generation_prompt: None,
+                    composition_blocks: Vec::new(),
+                });
+            }
         }
     });
 }
