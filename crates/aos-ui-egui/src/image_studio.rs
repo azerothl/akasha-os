@@ -1437,14 +1437,37 @@ impl ImageStudioState {
                                     let upscale_repeats = self.upscale_repeats;
                                     let upscale_tile_size = self.upscale_tile_size;
                                     let path_for_cmd = path.clone();
-                                    ui_image_preview_actions(ui, t, &path, can_upscale, || {
-                                        let _ = cmd.send(Cmd::MediaImageUpscale {
-                                            source_path: path_for_cmd,
-                                            upscale_model,
-                                            upscale_repeats,
-                                            upscale_tile_size,
-                                        });
-                                    });
+                                    let last_generation = self.last_generation.clone();
+                                    ui_image_preview_actions(
+                                        ui,
+                                        t,
+                                        &path,
+                                        can_upscale,
+                                        || {
+                                            let _ = cmd.send(Cmd::MediaImageUpscale {
+                                                source_path: path_for_cmd,
+                                                upscale_model,
+                                                upscale_repeats,
+                                                upscale_tile_size,
+                                            });
+                                        },
+                                        || {
+                                            if let Some((prompt, model_id, options)) =
+                                                last_generation
+                                            {
+                                                let _ = cmd.send(Cmd::MediaImage {
+                                                    prompt,
+                                                    model_id,
+                                                    options,
+                                                    output_path: None,
+                                                    enrich_prompt: false,
+                                                    enhance_prompt_chat: false,
+                                                    generation_prompt: None,
+                                                    composition_blocks: Vec::new(),
+                                                });
+                                            }
+                                        },
+                                    );
                                 }
                                 ui_image_history(ui, t, self);
                             });
@@ -2691,6 +2714,7 @@ fn ui_image_preview_actions(
     path: &str,
     can_upscale: bool,
     on_upscale: impl FnOnce(),
+    on_regenerate: impl FnOnce(),
 ) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
@@ -2710,6 +2734,9 @@ fn ui_image_preview_actions(
             .clicked()
         {
             on_upscale();
+        }
+        if ui.button("Régénérer").clicked() {
+            on_regenerate();
         }
     });
 }
