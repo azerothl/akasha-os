@@ -37,6 +37,7 @@ pub struct ImageStudioState {
     pub format_preset: String,
     /// High-level recipe applied to safe generation controls.
     pub intent_preset: String,
+    pub saved_preset_name: String,
     /// Single primary camera vector suggested for video prompts.
     pub camera_preset: String,
     pub steps: u32,
@@ -131,6 +132,7 @@ impl Default for ImageStudioState {
             height: 512,
             format_preset: "custom".into(),
             intent_preset: "custom".into(),
+            saved_preset_name: String::new(),
             camera_preset: "custom".into(),
             steps: 20,
             cfg: 7.0,
@@ -662,6 +664,98 @@ pub fn image_options_for_model(model_id: Option<&str>, profile: Option<&str>) ->
 }
 
 impl ImageStudioState {
+    fn presets_path() -> PathBuf {
+        aos_home().join("var/run/create-presets.json")
+    }
+
+    fn save_named_preset(&self) -> Result<(), String> {
+        let name = self.saved_preset_name.trim();
+        if name.is_empty() {
+            return Err("Nom de preset vide".into());
+        }
+        let path = Self::presets_path();
+        let mut all: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        let snapshot = serde_json::json!({
+            "model_id": self.model_id,
+            "mode": if self.create_mode == CreateMode::Video { "video" } else { "image" },
+            "options": self.to_options(),
+            "prompt": self.prompt,
+            "negative": self.negative,
+        });
+        all.insert(name.to_string(), snapshot);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(&all).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    fn load_named_preset(&mut self) -> Result<(), String> {
+        let name = self.saved_preset_name.trim();
+        let raw = std::fs::read_to_string(Self::presets_path()).map_err(|e| e.to_string())?;
+        let all: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        let item = all
+            .get(name)
+            .ok_or_else(|| "Preset introuvable".to_string())?;
+        if let Some(model) = item.get("model_id").and_then(|v| v.as_str()) {
+            self.model_id = model.into();
+        }
+        if let Some(mode) = item.get("mode").and_then(|v| v.as_str()) {
+            self.create_mode = if mode == "video" {
+                CreateMode::Video
+            } else {
+                CreateMode::Image
+            };
+        }
+        if let Some(prompt) = item.get("prompt").and_then(|v| v.as_str()) {
+            self.prompt = prompt.into();
+        }
+        if let Some(negative) = item.get("negative").and_then(|v| v.as_str()) {
+            self.negative = negative.into();
+        }
+        if let Some(opts) = item
+            .get("options")
+            .and_then(|v| serde_json::from_value::<MediaImageOptions>(v.clone()).ok())
+        {
+            if let Some(v) = opts.width {
+                self.width = v;
+            }
+            if let Some(v) = opts.height {
+                self.height = v;
+            }
+            if let Some(v) = opts.steps {
+                self.steps = v;
+            }
+            if let Some(v) = opts.cfg_scale {
+                self.cfg = v;
+            }
+            if let Some(v) = opts.seed {
+                self.seed = v.to_string();
+            }
+            if let Some(v) = opts.sampling_method {
+                self.sampler = v;
+            }
+            if let Some(v) = opts.negative_prompt {
+                self.negative = v;
+            }
+            if let Some(v) = opts.fps {
+                self.video_fps = v;
+            }
+            if let Some(v) = opts.video_frames {
+                self.video_duration_secs =
+                    ((v as f32 / self.video_fps.max(1) as f32).ceil() as u32).clamp(2, 15);
+            }
+        }
+        self.last_preset_key.clear();
+        Ok(())
+    }
     fn ensure_pack_for_mode(&mut self) {
         let packs = match self.create_mode {
             CreateMode::Image => &self.packs,
@@ -1503,11 +1597,13 @@ impl ImageStudioState {
                     .replace(" Camera: steady follow shot.", "");
             }
         });
+        ui_create_preset_controls(ui, self);
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
             help_icon(ui, t.studio_prompt_help);
         });
+        ui_create_preset_controls(ui, self);
         let prompt_response = ui.add(
             egui::TextEdit::multiline(&mut self.prompt)
                 .desired_rows(3)
@@ -2828,6 +2924,27 @@ fn intent_label(id: &str) -> &'static str {
         "illustration" => "Illustration",
         _ => "personnalisé",
     }
+}
+
+fn ui_create_preset_controls(ui: &mut egui::Ui, studio: &mut ImageStudioState) {
+    ui.horizontal(|ui| {
+        ui.label("Preset");
+        ui.add(
+            egui::TextEdit::singleline(&mut studio.saved_preset_name)
+                .hint_text("Nom…")
+                .desired_width(130.0),
+        );
+        if ui.button("Enregistrer").clicked() {
+            if let Err(err) = studio.save_named_preset() {
+                eprintln!("preset save: {err}");
+            }
+        }
+        if ui.button("Charger").clicked() {
+            if let Err(err) = studio.load_named_preset() {
+                eprintln!("preset load: {err}");
+            }
+        }
+    });
 }
 
 fn apply_intent_preset(studio: &mut ImageStudioState) {
