@@ -84,27 +84,25 @@ impl DeclUiPanelState {
     ) -> DeclUiActions {
         let mut actions = DeclUiActions::default();
         if !self.error.is_empty() {
-            ui.colored_label(
-                egui::Color32::RED,
-                format!("{}: {}", self.module, self.error),
-            );
+            ui.colored_label(egui::Color32::RED, &self.error);
             if ui.button(refresh_label).clicked() {
                 actions.refresh = true;
             }
             return actions;
         }
         let Some(doc) = self.document.clone() else {
-            ui.weak(format!("{}…", self.module));
+            ui.weak("…");
             return actions;
         };
+        let heading = doc.chrome_title(language);
         ui.horizontal(|ui| {
-            ui.heading(&doc.title);
+            ui.heading(&heading);
             if ui.button(refresh_label).clicked() {
                 actions.refresh = true;
             }
         });
         if !self.status.is_empty() {
-            ui.colored_label(egui::Color32::from_rgb(180, 120, 60), &self.status);
+            ui.weak(&self.status);
         }
         ui.separator();
         if let Some(root) = doc.root.children.clone() {
@@ -224,6 +222,15 @@ impl DeclUiPanelState {
                     }
                 }
             }
+            "count_label" => {
+                if let Some(bind) = &w.bind {
+                    let val = resolve_bind(cache, bind, w.source.as_deref());
+                    let n = bind_rows(&val).len();
+                    if let Some(tpl) = widget_text(w, doc, language) {
+                        ui.weak(tpl.replace("{n}", &n.to_string()));
+                    }
+                }
+            }
             "stat_row" => {
                 if let Some(bind) = &w.bind {
                     let val = resolve_bind(cache, bind, w.source.as_deref());
@@ -239,6 +246,7 @@ impl DeclUiPanelState {
                         ui,
                         &val,
                         w.columns.as_deref(),
+                        w.hide_headers.unwrap_or(false),
                         w.row_actions.as_deref(),
                         doc,
                         language,
@@ -343,80 +351,53 @@ impl DeclUiPanelState {
                         .or_else(|| w.args.clone())
                         .unwrap_or_else(|| serde_json::json!({"type":"object","properties":{}}));
                     let fields = schema_fields(&schema, doc, language);
+                    let inline = w.prefix_label_key.is_some();
                     ui.group(|ui| {
-                        for field in &fields {
-                            form_fields
-                                .entry(field.key.clone())
-                                .or_insert_with(|| field.default_string());
+                        if inline {
                             ui.horizontal(|ui| {
-                                ui.label(&field.label);
-                                match &field.kind {
-                                    FieldKind::Bool => {
-                                        let mut on = form_fields
-                                            .get(&field.key)
-                                            .map(|s| s == "true")
-                                            .unwrap_or(false);
-                                        if ui.checkbox(&mut on, "").changed() {
-                                            form_fields.insert(
-                                                field.key.clone(),
-                                                if on { "true".into() } else { "false".into() },
-                                            );
-                                        }
-                                    }
-                                    FieldKind::Enum(vals) => {
-                                        let cur = form_fields
-                                            .get(&field.key)
-                                            .cloned()
-                                            .unwrap_or_default();
-                                        egui::ComboBox::from_id_salt(format!("form-{}", field.key))
-                                            .selected_text(&cur)
-                                            .show_ui(ui, |ui| {
-                                                for v in vals {
-                                                    ui.selectable_value(
-                                                        form_fields.get_mut(&field.key).unwrap(),
-                                                        v.clone(),
-                                                        v,
-                                                    );
-                                                }
-                                            });
-                                    }
-                                    FieldKind::Textarea => {
-                                        ui.text_edit_multiline(
-                                            form_fields.get_mut(&field.key).unwrap(),
-                                        );
-                                    }
-                                    FieldKind::Number | FieldKind::Text => {
-                                        ui.text_edit_singleline(
-                                            form_fields.get_mut(&field.key).unwrap(),
-                                        );
-                                    }
+                                if let Some(prefix) =
+                                    widget_text_from_key(w.prefix_label_key.as_deref(), doc, language)
+                                {
+                                    ui.label(prefix);
+                                }
+                                render_form_fields(ui, &fields, form_fields, inline);
+                                let submit = widget_text(w, doc, language)
+                                    .or_else(|| w.label.clone())
+                                    .unwrap_or_else(|| "Submit".into());
+                                let enabled = !pending_invoke && actions.invoke.is_none();
+                                if ui
+                                    .add_enabled(enabled, egui::Button::new(submit))
+                                    .clicked()
+                                {
+                                    submit_decl_form(
+                                        actions,
+                                        tool,
+                                        &fields,
+                                        form_fields,
+                                        w.refresh_binds.clone().unwrap_or_default(),
+                                        tool_schemas,
+                                    );
                                 }
                             });
-                        }
-                        let submit = widget_text(w, doc, language)
-                            .or_else(|| w.label.clone())
-                            .unwrap_or_else(|| "Submit".into());
-                        let enabled = !pending_invoke && actions.invoke.is_none();
-                        if ui
-                            .add_enabled(enabled, egui::Button::new(submit))
-                            .clicked()
-                        {
-                            let mut args = serde_json::Map::new();
-                            let mut clear_keys = Vec::new();
-                            for field in &fields {
-                                if let Some(v) = form_fields.get(&field.key) {
-                                    args.insert(field.key.clone(), field.parse_value(v));
-                                }
-                                clear_keys.push(field.key.clone());
+                        } else {
+                            render_form_fields(ui, &fields, form_fields, inline);
+                            let submit = widget_text(w, doc, language)
+                                .or_else(|| w.label.clone())
+                                .unwrap_or_else(|| "Submit".into());
+                            let enabled = !pending_invoke && actions.invoke.is_none();
+                            if ui
+                                .add_enabled(enabled, egui::Button::new(submit))
+                                .clicked()
+                            {
+                                submit_decl_form(
+                                    actions,
+                                    tool,
+                                    &fields,
+                                    form_fields,
+                                    w.refresh_binds.clone().unwrap_or_default(),
+                                    tool_schemas,
+                                );
                             }
-                            queue_invoke(
-                                actions,
-                                tool,
-                                Value::Object(args),
-                                w.refresh_binds.clone().unwrap_or_default(),
-                                clear_keys,
-                                tool_schemas,
-                            );
                         }
                     });
                 }
@@ -438,15 +419,18 @@ pub fn ingest_tool_schemas(manifest_tools: &[ModuleTool], out: &mut HashMap<Stri
 }
 
 fn widget_text(w: &DeclUiWidget, doc: &DeclUiDocument, language: &str) -> Option<String> {
-    if let Some(key) = w.label_key.as_deref().filter(|k| !k.is_empty()) {
-        if let Some(labels) = &doc.labels {
-            if let Some(text) = labels.resolve(language, key) {
-                return Some(text);
-            }
-            return Some(key.to_string());
-        }
-    }
-    w.text.clone().filter(|t| !t.is_empty())
+    widget_text_from_key(w.label_key.as_deref(), doc, language).or_else(|| {
+        w.text.clone().filter(|t| !t.is_empty())
+    })
+}
+
+fn widget_text_from_key(
+    key: Option<&str>,
+    doc: &DeclUiDocument,
+    language: &str,
+) -> Option<String> {
+    let key = key.filter(|k| !k.is_empty())?;
+    doc.labels.as_ref()?.resolve(language, key)
 }
 
 fn queue_invoke(
@@ -468,6 +452,131 @@ fn queue_invoke(
     });
 }
 
+fn render_form_fields(
+    ui: &mut Ui,
+    fields: &[SchemaField],
+    form_fields: &mut HashMap<String, String>,
+    inline: bool,
+) {
+    for field in fields {
+        form_fields
+            .entry(field.key.clone())
+            .or_insert_with(|| field.default_string());
+        if inline {
+            match &field.kind {
+                FieldKind::Bool => {
+                    let mut on = form_fields
+                        .get(&field.key)
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    if ui.checkbox(&mut on, "").changed() {
+                        form_fields.insert(
+                            field.key.clone(),
+                            if on { "true".into() } else { "false".into() },
+                        );
+                    }
+                }
+                FieldKind::Enum(vals) => {
+                    let cur = form_fields.get(&field.key).cloned().unwrap_or_default();
+                    egui::ComboBox::from_id_salt(format!("form-{}", field.key))
+                        .selected_text(&cur)
+                        .show_ui(ui, |ui| {
+                            for v in vals {
+                                ui.selectable_value(
+                                    form_fields.get_mut(&field.key).unwrap(),
+                                    v.clone(),
+                                    v,
+                                );
+                            }
+                        });
+                }
+                FieldKind::Textarea => {
+                    ui.add(
+                        egui::TextEdit::multiline(form_fields.get_mut(&field.key).unwrap())
+                            .hint_text(field.hint.as_deref().unwrap_or("")),
+                    );
+                }
+                FieldKind::Number | FieldKind::Text => {
+                    ui.add(
+                        egui::TextEdit::singleline(form_fields.get_mut(&field.key).unwrap())
+                            .hint_text(field.hint.as_deref().unwrap_or("")),
+                    );
+                }
+            }
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(&field.label);
+                match &field.kind {
+                    FieldKind::Bool => {
+                        let mut on = form_fields
+                            .get(&field.key)
+                            .map(|s| s == "true")
+                            .unwrap_or(false);
+                        if ui.checkbox(&mut on, "").changed() {
+                            form_fields.insert(
+                                field.key.clone(),
+                                if on { "true".into() } else { "false".into() },
+                            );
+                        }
+                    }
+                    FieldKind::Enum(vals) => {
+                        let cur = form_fields.get(&field.key).cloned().unwrap_or_default();
+                        egui::ComboBox::from_id_salt(format!("form-{}", field.key))
+                            .selected_text(&cur)
+                            .show_ui(ui, |ui| {
+                                for v in vals {
+                                    ui.selectable_value(
+                                        form_fields.get_mut(&field.key).unwrap(),
+                                        v.clone(),
+                                        v,
+                                    );
+                                }
+                            });
+                    }
+                    FieldKind::Textarea => {
+                        ui.add(
+                            egui::TextEdit::multiline(form_fields.get_mut(&field.key).unwrap())
+                                .hint_text(field.hint.as_deref().unwrap_or("")),
+                        );
+                    }
+                    FieldKind::Number | FieldKind::Text => {
+                        ui.add(
+                            egui::TextEdit::singleline(form_fields.get_mut(&field.key).unwrap())
+                                .hint_text(field.hint.as_deref().unwrap_or("")),
+                        );
+                    }
+                }
+            });
+        }
+    }
+}
+
+fn submit_decl_form(
+    actions: &mut DeclUiActions,
+    tool: &str,
+    fields: &[SchemaField],
+    form_fields: &HashMap<String, String>,
+    refresh_binds: Vec<String>,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    let mut args = serde_json::Map::new();
+    let mut clear_keys = Vec::new();
+    for field in fields {
+        if let Some(v) = form_fields.get(&field.key) {
+            args.insert(field.key.clone(), field.parse_value(v));
+        }
+        clear_keys.push(field.key.clone());
+    }
+    queue_invoke(
+        actions,
+        tool,
+        Value::Object(args),
+        refresh_binds,
+        clear_keys,
+        tool_schemas,
+    );
+}
+
 fn bind_rows(val: &Value) -> Vec<Value> {
     match val {
         Value::Array(a) => a.clone(),
@@ -486,19 +595,11 @@ fn row_action_label(
     action: &DeclUiRowAction,
     doc: &DeclUiDocument,
     language: &str,
-) -> String {
+) -> Option<String> {
     if let Some(label) = action.label.as_deref().filter(|l| !l.is_empty()) {
-        return label.to_string();
+        return Some(label.to_string());
     }
-    if let Some(key) = action.label_key.as_deref().filter(|k| !k.is_empty()) {
-        if let Some(labels) = &doc.labels {
-            if let Some(text) = labels.resolve(language, key) {
-                return text;
-            }
-        }
-        return key.to_string();
-    }
-    action.tool.clone()
+    widget_text_from_key(action.label_key.as_deref(), doc, language)
 }
 
 fn row_action_visible(action: &DeclUiRowAction, row: &Value) -> bool {
@@ -550,9 +651,14 @@ fn schema_fields(schema: &Value, doc: &DeclUiDocument, language: &str) -> Vec<Sc
                         .map(str::to_string)
                 })
                 .unwrap_or_else(|| k.clone());
+            let hint = v
+                .get("x-hint-key")
+                .and_then(|x| x.as_str())
+                .and_then(|hint_key| doc.labels.as_ref()?.resolve(language, hint_key));
             out.push(SchemaField {
                 key: k.clone(),
                 label,
+                hint,
                 kind: FieldKind::from_schema(v),
             });
         }
@@ -565,6 +671,7 @@ fn schema_fields(schema: &Value, doc: &DeclUiDocument, language: &str) -> Vec<Sc
 struct SchemaField {
     key: String,
     label: String,
+    hint: Option<String>,
     kind: FieldKind,
 }
 
@@ -675,6 +782,7 @@ fn render_table(
     ui: &mut Ui,
     val: &Value,
     columns: Option<&[String]>,
+    hide_headers: bool,
     row_actions: Option<&[DeclUiRowAction]>,
     doc: &DeclUiDocument,
     language: &str,
@@ -699,13 +807,15 @@ fn render_table(
     egui::Grid::new("decl_ui_table")
         .striped(true)
         .show(ui, |ui| {
-            for c in &cols {
-                ui.strong(c);
+            if !hide_headers {
+                for c in &cols {
+                    ui.strong(c);
+                }
+                if show_actions {
+                    ui.strong("");
+                }
+                ui.end_row();
             }
-            if show_actions {
-                ui.strong("");
-            }
-            ui.end_row();
             for row in &rows {
                 match row {
                     Value::Object(map) => {
@@ -718,7 +828,9 @@ fn render_table(
                                     if !row_action_visible(action, row) {
                                         continue;
                                     }
-                                    let label = row_action_label(action, doc, language);
+                                    let Some(label) = row_action_label(action, doc, language) else {
+                                        continue;
+                                    };
                                     let enabled =
                                         !pending_invoke && actions.invoke.is_none();
                                     if ui

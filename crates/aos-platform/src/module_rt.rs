@@ -2091,7 +2091,7 @@ fn ui_meta_from_manifest(manifest: &ModuleManifest, dir: Option<&Path>) -> (Opti
             let path = d.join(&ui.entry);
             if let Ok(raw) = std::fs::read(&path) {
                 if let Ok(doc) = DeclUiDocument::parse_json(&raw) {
-                    title = Some(doc.title);
+                    title = Some(doc.catalogue_title());
                 }
             }
         }

@@ -35,7 +35,6 @@ pub(crate) fn on_uninstalled(app: &mut UiApp, name: String) {
 
 pub(crate) fn on_ui_loaded(app: &mut UiApp, response: ModuleUiResponse) {
     let module = response.module.clone();
-    let title = response.document.title.clone();
     let binds = {
         let panel = app
             .decl_panels
@@ -43,7 +42,7 @@ pub(crate) fn on_ui_loaded(app: &mut UiApp, response: ModuleUiResponse) {
             .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
         panel.set_document(response.document);
         decl_ui::ingest_tool_schemas(&response.tools, &mut panel.tool_schemas);
-        panel.status = format!("loaded {title}");
+        panel.status.clear();
         panel.tools_to_bind()
     };
     for tool in binds {
@@ -72,7 +71,7 @@ pub(crate) fn on_ui_bind(
     if let Some(panel) = app.decl_panels.get_mut(&module) {
         panel.set_bind_result(&tool, result);
         if let Some(error) = error {
-            panel.status = format!("{tool}: {error}");
+            panel.status = error;
         }
     }
 }
@@ -99,12 +98,11 @@ pub(crate) fn on_ui_invoke_done(
             if !clear_form_keys.is_empty() {
                 panel.clear_form_keys(&clear_form_keys);
             }
-        }
-        panel.status = if ok {
-            format!("{tool} ok")
+            panel.status.clear();
         } else {
-            error.clone().unwrap_or_else(|| format!("{tool} failed"))
-        };
+            panel.status = error
+                .unwrap_or_else(|| "Action failed".into());
+        }
     }
     if ok {
         for bind in refresh_binds {

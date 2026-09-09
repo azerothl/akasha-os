@@ -31,6 +31,7 @@ pub const WIDGET_KINDS: &[&str] = &[
     "image",
     "audio",
     "empty_state",
+    "count_label",
 ];
 
 /// Modules shipped with the standard Preview profile (user may uninstall; choice persists).
@@ -128,6 +129,9 @@ pub struct DeclUiDocument {
     #[serde(rename = "type")]
     pub doc_type: String,
     pub title: String,
+    /// Key into [`DeclUiLabels`] for the panel chrome heading (instead of raw [`Self::title`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub poll_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -165,6 +169,12 @@ pub struct DeclUiWidget {
     /// Key into [`DeclUiDocument::labels`] for localized copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_key: Option<String>,
+    /// Label shown before inline form fields (e.g. « Nouvelle » / « New »).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix_label_key: Option<String>,
+    /// When true, table renders rows without a header band.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide_headers: Option<bool>,
     /// Per-row actions rendered beside each table row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_actions: Option<Vec<DeclUiRowAction>>,
@@ -230,6 +240,26 @@ impl DeclUiDocument {
         let mut out = Vec::new();
         self.root.collect_kinds(&mut out);
         out
+    }
+
+    /// Localized chrome title when [`Self::title_key`] and labels are present.
+    pub fn chrome_title(&self, language: &str) -> String {
+        if let (Some(key), Some(labels)) = (&self.title_key, &self.labels) {
+            if let Some(text) = labels.resolve(language, key) {
+                return text;
+            }
+        }
+        self.title.clone()
+    }
+
+    /// Sidebar/catalogue title using the document fallback locale.
+    pub fn catalogue_title(&self) -> String {
+        if let (Some(key), Some(labels)) = (&self.title_key, &self.labels) {
+            if let Some(text) = labels.resolve(&labels.fallback, key) {
+                return text;
+            }
+        }
+        self.title.clone()
     }
 }
 
@@ -359,6 +389,14 @@ impl DeclUiWidget {
                     return Err(DeclUiError::MissingField("text"));
                 }
             }
+            "count_label" => {
+                if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
+                    return Err(DeclUiError::MissingField("bind"));
+                }
+                if self.label_key.as_ref().is_none_or(|k| k.is_empty()) {
+                    return Err(DeclUiError::MissingField("label_key"));
+                }
+            }
             "stat_row" | "table" | "line_chart" | "bar_chart" | "pie" | "scatter" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
                     return Err(DeclUiError::MissingField("bind"));
@@ -469,6 +507,8 @@ pub fn default_document(
             children: None,
             args: None,
             label_key: None,
+            prefix_label_key: None,
+            hide_headers: None,
             row_actions: None,
             refresh_binds: None,
         }
@@ -512,6 +552,7 @@ pub fn default_document(
         title: title.to_string(),
         poll_ms: None,
         labels: None,
+        title_key: None,
         root: {
             let mut w = blank("column");
             w.children = Some(children);
@@ -646,6 +687,16 @@ mod tests {
     #[test]
     fn accepts_tasks_declarative_document() {
         let raw = include_bytes!("../../../share/modules/tasks.aospkg/ui/index.html");
-        DeclUiDocument::parse_json(raw).expect("tasks ui valid");
+        let doc = DeclUiDocument::parse_json(raw).expect("tasks ui valid");
+        let labels = doc.labels.as_ref().expect("tasks labels");
+        assert_eq!(
+            labels.resolve("fr", "tasks_new").as_deref(),
+            Some("Nouvelle")
+        );
+        assert_eq!(
+            labels.resolve("en", "tasks_empty").as_deref(),
+            Some("No tasks — create one or ask an agent `tasks.create`.")
+        );
+        assert_eq!(doc.chrome_title("fr"), "Tâches");
     }
 }
