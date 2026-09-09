@@ -18,35 +18,34 @@ use aos_agent::{ControlCmd, ControlResp};
 use aos_ipc::BusClient;
 use aos_proto::{
     format_chat_supervisor_lock, format_system_assistant_prompt, AgentCreateRequest, AgentGoal,
-    AgentIdRequest, AgentInfo, AgentKind, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
+    AgentIdRequest, AgentInfo, AgentKind, AgentPolicy, AgentPolicyGetRequest,
+    AgentPolicySetRequest, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
     AgentRosterUpdateRequest, AgentSpecResponse, AgentState, AgentSteerRequest, AgentTrace,
     AuditEvent, AuditQueryRequest, CancelRequest, CapInfo, CapListRequest, CapRevokeRequest,
     ChatAttachment, ChatMessage, ChatRoomMember, ChatSessionAppendRequest,
     ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
     ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
     ChatSessionRenameRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
-    ChatSessionRoomTurnRequest,
-    ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest, ChatSessionSetModeRequest,
-    ChatSessionSetModelRequest, ChatSessionSetPinnedRequest, ConfirmResponseRequest,
-    DeviceCaptureStopRequest, DevicePermissionRevokeRequest, FeedbackSubmitRequest,
-    FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse, FsDeleteRequest,
-    FsEntry, FsListRequest, FsReadRequest, FsReadResponse, FsSetClassRequest, FsWriteRequest,
-    InferParams, InferRequest, LanClusterDispatchRequest, LanClusterDispatchResponse,
-    LanClusterLayerPipelineRequest, LanClusterLayerPipelineResponse, LanClusterLayerStage,
-    LanClusterNodesResponse, LanClusterPlanRequest, LanClusterPlanResponse,
-    LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse,
-    LoadRequest, LoadResponse, McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse,
-    MediaImageGenerateRequest, MediaImageUpscaleRequest, MemContextRequest, MemContextResponse,
-    MemEpisodicDeleteRequest, MemExtractRequest, MemExtractResponse, MemHit, MemListRequest,
-    MemRememberResponse, MemSweepStatus, MemUpdateRequest, MemUserRecallRequest,
-    MemUserRememberRequest, MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo,
-    ModelState, ModuleCatalogue, ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest,
-    NetFetchRequest, NetFetchResponse, NetModeRequest, PendingConfirmation, ProviderIdRequest,
-    ProviderListResponse, ProviderRecord, ProviderTestResponse, ProviderUpsertRequest,
-    SecretListRequest, SecretListResponse, SecretSetRequest, SetRoutingRequest, SkillInfo,
-    SkillPassPendingOffer, SkillPassRequest, SystemMetrics, TokenEvent, TrustGetRequest,
-    TrustProfile, TrustSetRequest, UnloadRequest, AgentPolicyGetRequest, AgentPolicySetRequest,
-    AgentPolicy,    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
+    ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest,
+    ChatSessionSetModeRequest, ChatSessionSetModelRequest, ChatSessionSetPinnedRequest,
+    ConfirmResponseRequest, DeviceCaptureStopRequest, DevicePermissionRevokeRequest,
+    FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
+    FsDeleteRequest, FsEntry, FsListRequest, FsReadRequest, FsReadResponse, FsSetClassRequest,
+    FsWriteRequest, InferParams, InferRequest, LanClusterDispatchRequest,
+    LanClusterDispatchResponse, LanClusterLayerPipelineRequest, LanClusterLayerPipelineResponse,
+    LanClusterLayerStage, LanClusterNodesResponse, LanClusterPlanRequest, LanClusterPlanResponse,
+    LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse, LoadRequest, LoadResponse,
+    McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse, MediaImageGenerateRequest,
+    MediaImageUpscaleRequest, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
+    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemRememberResponse,
+    MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
+    MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo, ModelState, ModuleCatalogue,
+    ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest, NetFetchRequest, NetFetchResponse,
+    NetModeRequest, PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
+    ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
+    SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
+    SystemMetrics, TokenEvent, TrustGetRequest, TrustProfile, TrustSetRequest, UnloadRequest,
+    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
     UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
     WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
 };
@@ -65,13 +64,17 @@ pub(crate) async fn runtime_main(
     evt_tx: Sender<Evt>,
     egui_ctx: egui::Context,
 ) {
-    let bus = match BusClient::connect("127.0.0.1:24701", "ui-egui").await {
-        Ok(b) => b,
-        Err(e) => {
-            let _ = evt_tx.send(Evt::Error(format!(
-                "bus injoignable ({e}). Lancez via aos-session."
-            )));
-            return;
+    // aos-session starts the bus and platform services in sequence.  The UI
+    // can therefore win the startup race; keep the runtime alive and retry
+    // until the bus is ready instead of leaving a permanent empty/error shell.
+    let bus = loop {
+        match BusClient::connect("127.0.0.1:24701", "ui-egui").await {
+            Ok(b) => break b,
+            Err(e) => {
+                let _ = evt_tx.send(Evt::Status(format!("Connexion au bus… ({e})")));
+                egui_ctx.request_repaint();
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
         }
     };
 
@@ -185,22 +188,15 @@ fn push_evt(evt_tx: &Sender<Evt>, egui_ctx: &egui::Context, evt: Evt) {
 async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Context, cmd: Cmd) {
     match cmd {
         Cmd::SessionBootstrap => {
-            let list: Vec<ChatSessionMeta> = bus
-                .call("chat.session.list", &(), vec![])
-                .await
-                .unwrap_or_default();
+            let list = match session_list_retry(&bus).await {
+                Ok(list) => list,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("session list: {e}")));
+                    return;
+                }
+            };
             if list.is_empty() {
-                match bus
-                    .call::<ChatSessionCreateRequest, ChatSessionMeta>(
-                        "chat.session.create",
-                        &ChatSessionCreateRequest {
-                            title: Some("Session 1".into()),
-                            model_id: None,
-                        },
-                        vec![],
-                    )
-                    .await
-                {
+                match session_create_retry(&bus, "Session 1").await {
                     Ok(m) => {
                         let _ = evt_tx.send(Evt::Sessions(vec![m.clone()]));
                         announce_and_load_session(&bus, &evt_tx, &m.id).await;
@@ -1620,7 +1616,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<FsListRequest, Vec<FsEntry>>(
                     "fs.list",
-                    &FsListRequest { prefix, caps: vec![] },
+                    &FsListRequest {
+                        prefix,
+                        caps: vec![],
+                    },
                     vec![],
                 )
                 .await
@@ -1637,7 +1636,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<FsReadRequest, FsReadResponse>(
                     "fs.read",
-                    &FsReadRequest { path: path.clone(), actor: String::new(), caps: vec![] },
+                    &FsReadRequest {
+                        path: path.clone(),
+                        actor: String::new(),
+                        caps: vec![],
+                    },
                     vec![],
                 )
                 .await
@@ -1706,7 +1709,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<FsSetClassRequest, Result<(), String>>(
                     "fs.set_class",
-                    &FsSetClassRequest { path: path.clone(), class, caps: vec![] },
+                    &FsSetClassRequest {
+                        path: path.clone(),
+                        class,
+                        caps: vec![],
+                    },
                     vec![],
                 )
                 .await
@@ -1722,7 +1729,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::Confirm { id, approved, persistent } => {
+        Cmd::Confirm {
+            id,
+            approved,
+            persistent,
+        } => {
             match bus
                 .call::<ConfirmResponseRequest, bool>(
                     "confirm.respond",
@@ -2125,7 +2136,12 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::Audit { last, actor, action, trace_id } => {
+        Cmd::Audit {
+            last,
+            actor,
+            action,
+            trace_id,
+        } => {
             match bus
                 .call::<AuditQueryRequest, Vec<AuditEvent>>(
                     "audit.query",
@@ -2148,16 +2164,14 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             }
         }
         // S7.6 : intégrité de la chaîne (détection d'altération).
-        Cmd::AuditVerify => {
-            match bus.call::<(), bool>("audit.verify", &(), vec![]).await {
-                Ok(ok) => {
-                    let _ = evt_tx.send(Evt::AuditVerified(ok));
-                }
-                Err(e) => {
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
-                }
+        Cmd::AuditVerify => match bus.call::<(), bool>("audit.verify", &(), vec![]).await {
+            Ok(ok) => {
+                let _ = evt_tx.send(Evt::AuditVerified(ok));
             }
-        }
+            Err(e) => {
+                let _ = evt_tx.send(Evt::Error(e.to_string()));
+            }
+        },
         Cmd::CapList { holder } => {
             if let Some(agent_id) = holder.strip_prefix("agent:") {
                 // Ensure logical agent caps are present in aos-capkd before listing.
@@ -2258,7 +2272,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<TrustGetRequest, TrustProfile>(
                     "trust.get",
-                    &TrustGetRequest { agent_id: agent_id.clone() },
+                    &TrustGetRequest {
+                        agent_id: agent_id.clone(),
+                    },
                     vec![],
                 )
                 .await
@@ -2275,7 +2291,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<TrustSetRequest, bool>(
                     "trust.set",
-                    &TrustSetRequest { agent_id: agent_id.clone(), score },
+                    &TrustSetRequest {
+                        agent_id: agent_id.clone(),
+                        score,
+                    },
                     vec![],
                 )
                 .await
@@ -2284,7 +2303,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     if let Ok(profile) = bus
                         .call::<TrustGetRequest, TrustProfile>(
                             "trust.get",
-                            &TrustGetRequest { agent_id: agent_id.clone() },
+                            &TrustGetRequest {
+                                agent_id: agent_id.clone(),
+                            },
                             vec![],
                         )
                         .await
@@ -2301,7 +2322,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<TrustGetRequest, bool>(
                     "trust.reset",
-                    &TrustGetRequest { agent_id: agent_id.clone() },
+                    &TrustGetRequest {
+                        agent_id: agent_id.clone(),
+                    },
                     vec![],
                 )
                 .await
@@ -2328,7 +2351,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<AgentPolicyGetRequest, AgentPolicy>(
                     aos_agent::intents::POLICY_GET,
-                    &AgentPolicyGetRequest { agent_id: agent_id.clone() },
+                    &AgentPolicyGetRequest {
+                        agent_id: agent_id.clone(),
+                    },
                     vec![],
                 )
                 .await
@@ -2345,7 +2370,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             match bus
                 .call::<AgentPolicySetRequest, bool>(
                     aos_agent::intents::POLICY_SET,
-                    &AgentPolicySetRequest { agent_id: agent_id.clone(), policy },
+                    &AgentPolicySetRequest {
+                        agent_id: agent_id.clone(),
+                        policy,
+                    },
                     vec![],
                 )
                 .await
@@ -2354,7 +2382,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     if let Ok(policy) = bus
                         .call::<AgentPolicyGetRequest, AgentPolicy>(
                             aos_agent::intents::POLICY_GET,
-                            &AgentPolicyGetRequest { agent_id: agent_id.clone() },
+                            &AgentPolicyGetRequest {
+                                agent_id: agent_id.clone(),
+                            },
                             vec![],
                         )
                         .await
@@ -4507,6 +4537,55 @@ async fn refresh_sessions(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
     {
         let _ = evt_tx.send(Evt::Sessions(list));
     }
+}
+
+/// Session bootstrap runs while the supervisor is still bringing platformd
+/// online.  Retry transient bus/service failures so a fresh UI does not get
+/// stuck on the generic "try again" banner with an empty session list.
+async fn session_list_retry(bus: &Arc<BusClient>) -> Result<Vec<ChatSessionMeta>, String> {
+    const ATTEMPTS: usize = 8;
+    for attempt in 0..ATTEMPTS {
+        match bus
+            .call::<(), Vec<ChatSessionMeta>>("chat.session.list", &(), vec![])
+            .await
+        {
+            Ok(list) => return Ok(list),
+            Err(e) if attempt + 1 < ATTEMPTS => {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let _ = e;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    unreachable!("session list retry loop always returns")
+}
+
+async fn session_create_retry(
+    bus: &Arc<BusClient>,
+    title: &str,
+) -> Result<ChatSessionMeta, String> {
+    const ATTEMPTS: usize = 8;
+    for attempt in 0..ATTEMPTS {
+        match bus
+            .call::<ChatSessionCreateRequest, ChatSessionMeta>(
+                "chat.session.create",
+                &ChatSessionCreateRequest {
+                    title: Some(title.to_string()),
+                    model_id: None,
+                },
+                vec![],
+            )
+            .await
+        {
+            Ok(meta) => return Ok(meta),
+            Err(e) if attempt + 1 < ATTEMPTS => {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let _ = e;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    unreachable!("session create retry loop always returns")
 }
 
 fn image_gen_progress_path() -> std::path::PathBuf {
