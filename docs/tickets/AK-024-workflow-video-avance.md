@@ -19,3 +19,10 @@ Livré dans cette passe : `MediaImageOptions.fps` (borné 1–120, transmis à
 départ avec réglage de force (`--init-img`/`--strength`). Le codec reste celui
 produit par le moteur (WebM) ; les graphes/nœuds ComfyUI et keyframes restent
 hors contrat tant qu'ils ne disposent pas d'un backend catalogue explicite.
+
+Les presets vidéo sont désormais enrichis par `video_defaults` dans le catalogue
+(`width`, `height`, `fps`, `frames`, bornes de résolution et durée maximale).
+Les valeurs LTX 2.3 et Wan 2.2 ont été renseignées à partir de leurs model cards
+Hugging Face : LTX utilise notamment 768×512, 24 fps et des frames `8n+1` ; Wan
+utilise 832×480, 16 fps et des frames `4n+1`. Les prochaines versions peuvent
+être ajoutées au catalogue sans modifier l'UI.
