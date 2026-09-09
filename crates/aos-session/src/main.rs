@@ -7,6 +7,7 @@ mod bootstrap;
 mod engines;
 mod hardware;
 mod offerings;
+mod tasks_migration;
 mod update;
 
 use aos_ipc::BusClient;
@@ -902,38 +903,9 @@ fn ensure_layout(home: &Path) -> Vec<String> {
         bootstrap::ensure_notes_registry_entry(&reg);
     }
 
-    // Module tasks (Preview 0.3 / E3) — même resync au boot.
-    // Lot 4: gate on registry `user_removed` via `ModuleRuntime::should_auto_install("tasks")`.
-    let tasks_share = home.join("share/modules/tasks.aospkg");
-    let tasks_installed = home.join("var/modules/tasks");
-    if tasks_share.exists() && bootstrap::sync_packaged_module(&tasks_share, &tasks_installed) {
-            synced.push("tasks".into());
-            let reg = home.join("var/modules/registry.yaml");
-            if let Ok(mut raw) = fs::read_to_string(&reg) {
-                if !raw.contains("name: tasks") {
-                    raw.push_str(
-                        r#"
-  - name: tasks
-    granted_caps:
-      - fs.read:/documents/tasks/**
-      - fs.write:/documents/tasks/**
-    quarantined: false
-"#,
-                    );
-                    let _ = fs::write(&reg, raw);
-                }
-            } else {
-                let _ = fs::write(
-                    &reg,
-                    r#"installed:
-  - name: tasks
-    granted_caps:
-      - fs.read:/documents/tasks/**
-      - fs.write:/documents/tasks/**
-    quarantined: false
-"#,
-                );
-            }
+    // Module tasks (#149 lot 4) — migration + preinstall gérée ; pas de resync aveugle au boot.
+    if tasks_migration::manage_tasks_module(home) {
+        synced.push("tasks".into());
     }
 
     // Module canvas (chat drawing) — même resync au boot.
