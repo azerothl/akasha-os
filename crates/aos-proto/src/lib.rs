@@ -17,6 +17,7 @@ pub mod device_usb;
 pub mod host_folder;
 pub mod mem_extract;
 pub mod rich_app_contract;
+pub mod rich_decl_ui;
 pub mod tasks_contract;
 
 pub use rich_app_contract::{
@@ -2774,7 +2775,18 @@ pub struct ModuleManifest {
     #[serde(default)]
     pub ui: Option<ModuleUi>,
     #[serde(default)]
+    pub services: ModuleServices,
+    #[serde(default)]
     pub min_os_api: u32,
+}
+
+/// Service facade versions declared by rich-app packages (`services.jobs`, …).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModuleServices {
+    #[serde(default)]
+    pub jobs: Option<u32>,
+    #[serde(default, rename = "media_image")]
+    pub media_image: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -2797,6 +2809,24 @@ pub struct ModuleTool {
 pub struct ModuleUi {
     pub entry: String,
     pub mode: String,
+    /// Declarative UI vocabulary major version (`1` = Tasks/Notes, `2` = rich apps).
+    #[serde(default)]
+    pub contract: Option<u32>,
+    /// Preferred UI document path (`ui/index.json`); falls back to [`Self::entry`].
+    #[serde(default)]
+    pub document: Option<String>,
+}
+
+impl ModuleUi {
+    /// Resolved document path inside the package archive.
+    pub fn document_path(&self) -> &str {
+        self.document.as_deref().unwrap_or(&self.entry)
+    }
+
+    /// UI contract major version (defaults to v1 for legacy manifests).
+    pub fn contract_version(&self) -> u32 {
+        self.contract.unwrap_or(crate::rich_app_contract::UI_CONTRACT_V1)
+    }
 }
 
 /// `module.install` (depuis un répertoire `.aospkg`).
