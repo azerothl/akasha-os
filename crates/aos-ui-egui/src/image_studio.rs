@@ -46,7 +46,7 @@ pub struct ImageStudioState {
     pub create_mode: CreateMode,
     /// Target clip length when `create_mode` is video (seconds).
     pub video_duration_secs: u32,
-    /// Last successful short-video logical path (`/downloads/video-*.mp4`).
+    /// Last successful short-video logical path (`/downloads/video-*.webm`).
     pub video_result: Option<String>,
     pub preview: Option<String>,
     /// 0..1 opacity for painting `preview` over the composition canvas.
@@ -564,7 +564,7 @@ fn video_frames_for_duration(seconds: u32) -> u32 {
 
 pub fn default_video_download_path() -> String {
     format!(
-        "/downloads/video-{}.mp4",
+        "/downloads/video-{}.webm",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())

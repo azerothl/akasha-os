@@ -637,9 +637,17 @@ fn run_sd_cmd(
         });
     }
     if !dest.exists() {
+        let tail: String = all_log
+            .chars()
+            .rev()
+            .take(1600)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
         return Err(MediaError::EngineFailed {
             engine: "sd".into(),
-            detail: "pas de fichier de sortie".into(),
+            detail: format!("pas de fichier de sortie; journal sd.cpp: {tail}"),
         });
     }
     Ok(MediaEngine::SdCpp)
@@ -1023,7 +1031,7 @@ mod tests {
         let args = collect_image_args(
             Path::new("wan.gguf"),
             "a cat walking",
-            Path::new("out.mp4"),
+            Path::new("out.webm"),
             &opts,
             None,
         );
@@ -1033,7 +1041,7 @@ mod tests {
         assert!(args.contains(&"33".into()));
         assert!(args.contains(&"--flow-shift".into()));
         assert!(args.contains(&"3".into()));
-        assert!(args.iter().any(|a| a.ends_with("out.mp4")));
+        assert!(args.iter().any(|a| a.ends_with("out.webm")));
     }
 
     #[test]

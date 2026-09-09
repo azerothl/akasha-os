@@ -39,10 +39,7 @@ pub fn read_image_gen_progress() -> Option<(u32, u32)> {
 
 fn unique_media_temp(prefix: &str, ext: &str) -> PathBuf {
     let n = MEDIA_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!(
-        "{prefix}-{}-{n}.{ext}",
-        std::process::id()
-    ))
+    std::env::temp_dir().join(format!("{prefix}-{}-{n}.{ext}", std::process::id()))
 }
 
 pub fn actor_may_generate(actor: &str, caps: &[String]) -> bool {
@@ -54,14 +51,13 @@ pub fn actor_may_generate(actor: &str, caps: &[String]) -> bool {
 }
 
 pub fn default_image_path() -> String {
-    format!(
-        "/downloads/image-{}.png",
-        media_dest_timestamp()
-    )
+    format!("/downloads/image-{}.png", media_dest_timestamp())
 }
 
 pub fn default_video_path() -> String {
-    format!("/downloads/video-{}.mp4", media_dest_timestamp())
+    // The bundled sd.cpp build emits WebM/AVI/WebP for vid_gen; MP4 is not
+    // supported by its single-file video writer.
+    format!("/downloads/video-{}.webm", media_dest_timestamp())
 }
 
 fn media_dest_timestamp() -> u64 {
@@ -73,8 +69,7 @@ fn media_dest_timestamp() -> u64 {
 
 /// True when the request should run sd.cpp `vid_gen` (short clip, not a single still).
 pub fn is_video_request(options: &aos_proto::MediaImageOptions) -> bool {
-    options.sd_mode.as_deref() == Some("vid_gen")
-        || options.video_frames.unwrap_or(0) > 1
+    options.sd_mode.as_deref() == Some("vid_gen") || options.video_frames.unwrap_or(0) > 1
 }
 
 pub fn default_media_image_dest(options: &aos_proto::MediaImageOptions) -> String {
@@ -101,6 +96,18 @@ fn engine_name(eng: aos_sd::MediaEngine) -> &'static str {
         aos_sd::MediaEngine::Piper => "piper",
         aos_sd::MediaEngine::Stub => "stub",
     }
+}
+
+fn has_video_signature(path: &std::path::Path) -> bool {
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    // WebM/Matroska (EBML), AVI and animated WebP are the formats accepted by
+    // the bundled sd.cpp `vid_gen` writer. MP4 is deliberately not accepted:
+    // this build advertises it as unsupported in `sd --help`.
+    (bytes.len() >= 4 && &bytes[..4] == b"\x1a\x45\xdf\xa3")
+        || (bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"AVI ")
+        || (bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP")
 }
 
 /// Inline base64 IPC is capped (~8 MiB frames); larger media uses host file ingest.
@@ -247,6 +254,15 @@ pub async fn run_image(
             std::path::PathBuf::from("missing.safetensors"),
         ),
     };
+    if is_video_request(&req.options) {
+        let missing = missing_offering_sidecars(&model_id);
+        if !missing.is_empty() {
+            return Err(format!(
+                "modèle vidéo incomplet : fichiers auxiliaires manquants ({})",
+                missing.join(", ")
+            ));
+        }
+    }
     if weights.exists() && aos_sd::image_engine_available() {
         sub.ensure_loaded(&model_id, PlacementProfile::Balanced, 0)
             .await
@@ -260,16 +276,22 @@ pub async fn run_image(
     let sub_progress = sub.clone();
     let model_id_progress = model_id.clone();
     let tmp_ext = if is_video_request(&req.options) {
-        "mp4"
+        "webm"
     } else {
         "png"
     };
     let tmp = unique_media_temp("aos-img", tmp_ext);
     let engine_result = tokio::task::spawn_blocking(move || {
-        let result = aos_sd::generate_image_opts_progress(&weights, &prompt, &tmp, &opts, move |step, total| {
-            write_image_gen_progress(step, total);
-            sub_progress.media_gen_progress(&model_id_progress, step, total);
-        })
+        let result = aos_sd::generate_image_opts_progress(
+            &weights,
+            &prompt,
+            &tmp,
+            &opts,
+            move |step, total| {
+                write_image_gen_progress(step, total);
+                sub_progress.media_gen_progress(&model_id_progress, step, total);
+            },
+        )
         .map(|e| (e, tmp));
         clear_image_gen_progress();
         result
@@ -280,6 +302,12 @@ pub async fn run_image(
     let engine = engine_result.map_err(|e| e.to_string())?;
     let (eng, tmp) = engine;
     let engine_s = engine_name(eng);
+    if is_video_request(&req.options) && (engine_s == "stub" || !has_video_signature(&tmp)) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!(
+            "vidéo indisponible : le moteur {engine_s} n'a pas produit un conteneur WebM/AVI valide"
+        ));
+    }
     let n = persist_media_file(
         bus,
         dest,
@@ -315,7 +343,9 @@ pub fn default_upscaled_path(source: &str) -> String {
 fn logical_media_path(logical: &str) -> PathBuf {
     let trimmed = logical.trim();
     if trimmed.starts_with('/') {
-        aos_home().join("var/storage/data").join(trimmed.trim_start_matches('/'))
+        aos_home()
+            .join("var/storage/data")
+            .join(trimmed.trim_start_matches('/'))
     } else {
         PathBuf::from(trimmed)
     }
@@ -334,12 +364,13 @@ pub async fn run_image_upscale(
             source_host.display()
         ));
     }
-    let upscale_path = resolve_media_asset(Some("upscale"), &req.upscale_model).ok_or_else(|| {
-        format!(
-            "modèle upscale introuvable: {} (share/models/upscale/)",
-            req.upscale_model
-        )
-    })?;
+    let upscale_path =
+        resolve_media_asset(Some("upscale"), &req.upscale_model).ok_or_else(|| {
+            format!(
+                "modèle upscale introuvable: {} (share/models/upscale/)",
+                req.upscale_model
+            )
+        })?;
     let opts = aos_sd::UpscaleOpts {
         upscale_model_path: upscale_path,
         upscale_repeats: req.upscale_repeats.unwrap_or(1).clamp(1, 4),
@@ -438,10 +469,7 @@ mod tests {
     #[test]
     fn agent_sans_cap_refuse() {
         assert!(!actor_may_generate("agent:abc", &[]));
-        assert!(actor_may_generate(
-            "agent:abc",
-            &["media.generate".into()]
-        ));
+        assert!(actor_may_generate("agent:abc", &["media.generate".into()]));
         assert!(actor_may_generate("human:ui", &[]));
     }
 
@@ -454,8 +482,12 @@ mod tests {
 
     #[test]
     fn proto_image_opts_defaults() {
-        let o = build_image_gen_opts("local:unknown", &aos_proto::MediaImageOptions::default(), "auto")
-            .unwrap();
+        let o = build_image_gen_opts(
+            "local:unknown",
+            &aos_proto::MediaImageOptions::default(),
+            "auto",
+        )
+        .unwrap();
         assert_eq!(o.width, 512);
         assert_eq!(o.steps, 20);
     }
@@ -478,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn default_media_dest_picks_mp4_for_video() {
+    fn default_media_dest_picks_webm_for_video() {
         let image = default_media_image_dest(&aos_proto::MediaImageOptions::default());
         assert!(image.ends_with(".png"));
         let video = default_media_image_dest(&aos_proto::MediaImageOptions {
@@ -486,7 +518,37 @@ mod tests {
             video_frames: Some(33),
             ..Default::default()
         });
-        assert!(video.ends_with(".mp4"));
+        assert!(video.ends_with(".webm"));
+    }
+
+    #[test]
+    fn video_signature_rejects_png_stub() {
+        let path =
+            std::env::temp_dir().join(format!("aos-media-signature-{}.webm", std::process::id()));
+        std::fs::write(&path, b"\x89PNG\r\n\x1a\n").unwrap();
+        assert!(!has_video_signature(&path));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn video_signature_accepts_webm_ebml() {
+        let path = std::env::temp_dir().join(format!("aos-media-webm-{}.webm", std::process::id()));
+        std::fs::write(&path, b"\x1a\x45\xdf\xa3\x00").unwrap();
+        assert!(has_video_signature(&path));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn upscale_short_alias_maps_to_installed_filename() {
+        assert_eq!(
+            upscale_asset_alias("realesrgan-x4plus-anime"),
+            Some("RealESRGAN_x4plus_anime_6B.pth")
+        );
+        assert_eq!(
+            upscale_asset_alias("local:realesrgan-x4plus-anime-6b"),
+            Some("RealESRGAN_x4plus_anime_6B.pth")
+        );
+        assert_eq!(upscale_asset_alias("unknown-upscaler"), None);
     }
 
     #[test]
@@ -503,6 +565,17 @@ mod tests {
         .unwrap();
         assert_eq!(opts.sd_mode.as_deref(), Some("vid_gen"));
         assert_eq!(opts.video_frames, Some(33));
+    }
+
+    #[test]
+    fn missing_video_sidecars_are_reported() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        if !root.join("share/models/catalog-offerings.json").is_file() {
+            return;
+        }
+        std::env::set_var("AOS_HOME", &root);
+        let missing = missing_offering_sidecars("local:ltx2.3-dev");
+        assert!(missing.iter().any(|name| name.contains("gemma-3-12b")));
     }
 
     #[test]
@@ -595,10 +668,7 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
         opts.threads = o.threads;
     }
     if o.backend.is_some() {
-        opts.backend = o
-            .backend
-            .as_deref()
-            .and_then(aos_sd::sanitize_backend_spec);
+        opts.backend = o.backend.as_deref().and_then(aos_sd::sanitize_backend_spec);
     }
     if o.params_backend.is_some() {
         opts.params_backend = o
@@ -634,7 +704,12 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
     if let Some(v) = o.video_frames.filter(|n| *n > 0) {
         opts.video_frames = Some(v);
     }
-    if let Some(raw) = o.mask_image.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(raw) = o
+        .mask_image
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let host = logical_media_path(raw);
         if host.is_file() {
             opts.mask_image_path = Some(host);
@@ -643,7 +718,12 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
             }
         }
     }
-    if let Some(raw) = o.init_image.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(raw) = o
+        .init_image
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let host = logical_media_path(raw);
         if host.is_file() {
             opts.init_image_path = Some(host);
@@ -697,18 +777,42 @@ fn resolve_media_asset(role: Option<&str>, id: &str) -> Option<PathBuf> {
     }
     let dir = models_dir();
     let mut candidates = Vec::new();
+    let alias = role
+        .filter(|role| *role == "upscale")
+        .and_then(|_| upscale_asset_alias(id));
     if let Some(role) = role {
         let role_dir = dir.join(role);
         candidates.push(role_dir.join(id));
+        if let Some(alias) = alias {
+            candidates.push(role_dir.join(alias));
+        }
         for ext in ASSET_EXTS {
             candidates.push(role_dir.join(format!("{id}.{ext}")));
         }
+    }
+    if let Some(alias) = alias {
+        candidates.push(dir.join(alias));
     }
     candidates.push(dir.join(id));
     for ext in ASSET_EXTS {
         candidates.push(dir.join(format!("{id}.{ext}")));
     }
     candidates.into_iter().find(|p| p.is_file())
+}
+
+/// Stable API aliases for catalog assets whose on-disk filenames are verbose.
+/// Keep the canonical filename as the persisted model identifier; aliases only
+/// affect local resolution and therefore remain backwards compatible.
+fn upscale_asset_alias(id: &str) -> Option<&'static str> {
+    let bare = id.strip_prefix("local:").unwrap_or(id);
+    if bare.eq_ignore_ascii_case("realesrgan-x4plus-anime")
+        || bare.eq_ignore_ascii_case("realesrgan_x4plus_anime")
+        || bare.eq_ignore_ascii_case("realesrgan-x4plus-anime-6b")
+    {
+        Some("RealESRGAN_x4plus_anime_6B.pth")
+    } else {
+        None
+    }
 }
 
 fn resolve_style_text(id: &str) -> Option<String> {
@@ -773,6 +877,36 @@ fn apply_catalog_extras(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIma
     }
 }
 
+/// Return sidecars declared by an offering but absent from the model store.
+/// Video packs are multi-file bundles; fail before spawning sd.cpp so the error
+/// stays actionable and avoids an unnecessary GPU initialization.
+fn missing_offering_sidecars(model_id: &str) -> Vec<String> {
+    let path = models_dir().join("catalog-offerings.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return Vec::new();
+    };
+    let Some(models) = v.get("models").and_then(|m| m.as_array()) else {
+        return Vec::new();
+    };
+    let Some(m) = models
+        .iter()
+        .find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))
+    else {
+        return Vec::new();
+    };
+    m.get("extra_files")
+        .and_then(|e| e.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f.get("filename").and_then(|x| x.as_str()))
+        .filter(|fname| resolve_media_asset(None, fname).is_none())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 fn apply_upscale(
     opts: &mut aos_sd::ImageGenOpts,
     o: &aos_proto::MediaImageOptions,
@@ -802,7 +936,9 @@ fn apply_offering_sidecars(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {
     let Some(models) = v.get("models").and_then(|m| m.as_array()) else {
         return;
     };
-    let Some(m) = models.iter().find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))
+    let Some(m) = models
+        .iter()
+        .find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))
     else {
         return;
     };
@@ -829,9 +965,7 @@ fn apply_offering_sidecars(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {
                 "t5xxl" => opts.t5xxl_path = resolved,
                 "uncond" | "uncond-diffusion" => opts.uncond_diffusion_model = resolved,
                 "llm" => opts.llm_path = resolved,
-                "high-noise" | "high-noise-diffusion" => {
-                    opts.high_noise_diffusion_model = resolved
-                }
+                "high-noise" | "high-noise-diffusion" => opts.high_noise_diffusion_model = resolved,
                 "embeddings-connectors" | "embeddings_connectors" => {
                     opts.embeddings_connectors = resolved
                 }
@@ -868,10 +1002,7 @@ fn apply_offering_sidecars(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {
         }
     }
     if opts.embeddings_connectors.is_none() {
-        if let Some(c) = args
-            .get("embeddings-connectors")
-            .and_then(|x| x.as_str())
-        {
+        if let Some(c) = args.get("embeddings-connectors").and_then(|x| x.as_str()) {
             opts.embeddings_connectors = resolve_media_asset(None, c);
         }
     }
@@ -949,7 +1080,10 @@ fn truthy_engine_arg(v: Option<&serde_json::Value>) -> bool {
     match v {
         Some(serde_json::Value::Bool(b)) => *b,
         Some(serde_json::Value::String(s)) => {
-            matches!(s.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+            matches!(
+                s.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
         }
         Some(serde_json::Value::Number(n)) => n.as_u64() == Some(1),
         _ => false,

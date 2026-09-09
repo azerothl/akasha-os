@@ -41,7 +41,7 @@ pub struct ModelOffering {
     pub replaces: Vec<String>,
     #[serde(default)]
     pub optional: bool,
-    /// `text` | `embedding` | `image` | `audio` (E16).
+    /// `text` | `embedding` | `image` | `audio` | `video` (E16).
     #[serde(default)]
     pub modality: Option<String>,
     /// Weight format (`gguf`, `safetensors`, `onnx`).
@@ -113,8 +113,13 @@ pub struct OfferingFile {
 
 impl ModelOffering {
     pub fn is_media(&self) -> bool {
-        self.profiles.iter().any(|p| p == "image" || p == "tts")
-            || matches!(self.modality.as_deref(), Some("image") | Some("audio"))
+        self.profiles
+            .iter()
+            .any(|p| p == "image" || p == "tts" || p == "video")
+            || matches!(
+                self.modality.as_deref(),
+                Some("image") | Some("audio") | Some("video")
+            )
     }
 }
 
@@ -169,12 +174,8 @@ pub fn is_remote_model_id(id: &str) -> bool {
 }
 
 pub fn setup_defaults_complete(inst: &InstalledFile) -> bool {
-    inst.default_chat
-        .as_ref()
-        .is_some_and(|s| !s.is_empty())
-        && inst.default_embed
-            .as_ref()
-            .is_some_and(|s| !s.is_empty())
+    inst.default_chat.as_ref().is_some_and(|s| !s.is_empty())
+        && inst.default_embed.as_ref().is_some_and(|s| !s.is_empty())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -518,7 +519,10 @@ pub fn apply_choice(home: &Path, choice: &ModelSetupChoice) -> Result<(), String
 /// A usable first-run choice always includes a chat model and an embedding
 /// model. Validate this at the session boundary too: the setup window may be
 /// outdated or its choice file may have been edited before it is applied.
-fn validate_setup_choice(offerings: &OfferingsFile, choice: &ModelSetupChoice) -> Result<(), String> {
+fn validate_setup_choice(
+    offerings: &OfferingsFile,
+    choice: &ModelSetupChoice,
+) -> Result<(), String> {
     validate_default_model(offerings, &choice.default_chat, "chat")?;
     validate_default_model(offerings, &choice.default_embed, "embed")?;
     Ok(())
@@ -537,7 +541,11 @@ fn validate_default_model(
     }
     let model = find_offering(offerings, id)
         .ok_or_else(|| format!("modèle {required_profile} inconnu: {id}"))?;
-    if !model.profiles.iter().any(|profile| profile == required_profile) {
+    if !model
+        .profiles
+        .iter()
+        .any(|profile| profile == required_profile)
+    {
         return Err(format!(
             "le modèle par défaut {id} ne prend pas en charge le profil {required_profile}"
         ));
@@ -841,7 +849,42 @@ fn now_ms() -> u64 {
 
 #[cfg(test)]
 mod vision_catalog_tests {
-    use super::{is_remote_model_id, validate_setup_choice, ModelSetupChoice, OfferingsFile};
+    use super::{
+        is_remote_model_id, validate_setup_choice, ModelOffering, ModelSetupChoice, OfferingsFile,
+    };
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn video_offerings_are_runtime_media() {
+        let video = ModelOffering {
+            id: "local:video".into(),
+            name: "Video".into(),
+            profiles: vec!["video".into()],
+            filename: "video.gguf".into(),
+            url: String::new(),
+            bytes: 1,
+            sha256: String::new(),
+            min_vram_mib: 0,
+            min_disk_bytes: 0,
+            quality_score: 0,
+            speed_score: 0,
+            n_layers: 0,
+            n_params: 1.0,
+            weights_bytes: 1,
+            embed_bytes: 0,
+            kv_bytes_per_token: 0,
+            replaces: vec![],
+            optional: false,
+            modality: Some("video".into()),
+            format: "gguf".into(),
+            extra_files: vec![],
+            engine: Some("sdcpp".into()),
+            engine_args: BTreeMap::new(),
+            tags: vec![],
+            description: None,
+        };
+        assert!(video.is_media());
+    }
 
     #[test]
     fn catalog_parses_mmproj_role_and_vision_profile() {
@@ -865,21 +908,17 @@ mod vision_catalog_tests {
         assert_eq!(file.packs["low"].alternatives[0], "local:gemma-4-e4b");
         assert_eq!(file.packs["low"].alternatives[1], "local:qwen3-vl-4b");
         assert_eq!(file.packs["low"].alternatives[2], "local:llava-1.6");
-        assert!(file.packs["cpu"].alternatives.contains(&"local:qwen3-vl-4b".into()));
-        assert!(file
-            .packs["mid"]
+        assert!(file.packs["cpu"]
+            .alternatives
+            .contains(&"local:qwen3-vl-4b".into()));
+        assert!(file.packs["mid"]
             .alternatives
             .contains(&"local:qwen3-vl-8b".into()));
-        assert!(file
-            .packs["mid"]
+        assert!(file.packs["mid"]
             .alternatives
             .contains(&"local:llava-1.6".into()));
 
-        for id in [
-            "local:qwen3-vl-4b",
-            "local:qwen3-vl-8b",
-            "local:llava-1.6",
-        ] {
+        for id in ["local:qwen3-vl-4b", "local:qwen3-vl-8b", "local:llava-1.6"] {
             let model = file.models.iter().find(|m| m.id == id).expect(id);
             assert!(model.profiles.iter().any(|p| p == "vision"));
             assert!(model.tags.iter().any(|t| t == "vision"));

@@ -1291,8 +1291,8 @@
         {
           "filename": "gemma-3-12b-it-qat-UD-Q4_K_XL.gguf",
           "url": "https://huggingface.co/unsloth/gemma-3-12b-it-qat-GGUF/resolve/main/gemma-3-12b-it-qat-UD-Q4_K_XL.gguf",
-          "bytes": 8000000000,
-          "sha256": "",
+          "bytes": 7432229248,
+          "sha256": "da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b",
           "role": "llm"
         }
       ],
