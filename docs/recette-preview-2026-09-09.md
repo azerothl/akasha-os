@@ -113,7 +113,7 @@ Le client de recette, les garde-fous vidéo, les cartes média audio/vidéo, le 
 
 ## Axes d’amélioration priorisés
 
-1. **P1 — Vidéo** : conserver WebM comme format natif du binaire livré, compléter le lecteur intégré et le contrôle durée/codecs ; le garde-fou anti-faux-succès, l’indicateur de frames et la carte typée sont en place. Ajouter une estimation de durée et une annulation réellement propagée au moteur (AK-023).
+1. **P1 — Vidéo** : conserver WebM comme format natif du binaire livré, compléter le lecteur intégré et le contrôle durée/codecs ; le garde-fou anti-faux-succès, l’indicateur de frames et l’annulation propagée au moteur sont en place. Ajouter une ETA calibrée par matériel (AK-023).
 2. **P1 — Recette native** : exécuter les clics, focus clavier, redimensionnement, DPI élevé et lecture multimédia sur un runner Windows instrumenté ; conserver `AOS_UI_SELF_TEST` comme smoke-test rapide.
 3. **P1 — Stockage** : conserver le contrôle de seuil au démarrage (C: conforme, E: checkout à 18,69 Gio) et proposer une rétention transparente des artefacts de build/cache.
 4. **P2 — Audio** : compléter la lecture/pause/progression dans le fil ; la lecture native et la durée WAV sont déjà exposées, avec ouverture système en action secondaire.
