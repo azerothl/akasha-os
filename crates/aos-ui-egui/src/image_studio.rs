@@ -35,6 +35,8 @@ pub struct ImageStudioState {
     pub height: u32,
     /// Quick aspect-ratio choice; `custom` leaves width/height untouched.
     pub format_preset: String,
+    /// High-level recipe applied to safe generation controls.
+    pub intent_preset: String,
     pub steps: u32,
     pub cfg: f32,
     pub seed: String,
@@ -124,6 +126,7 @@ impl Default for ImageStudioState {
             width: 512,
             height: 512,
             format_preset: "custom".into(),
+            intent_preset: "custom".into(),
             steps: 20,
             cfg: 7.0,
             seed: String::new(),
@@ -1434,6 +1437,27 @@ impl ImageStudioState {
                 .suffix(" fps"));
             ui.weak("24 recommandé");
         });
+        ui.horizontal(|ui| {
+            ui.label("Intention");
+            egui::ComboBox::from_id_salt("studio_video_intent")
+                .selected_text(intent_label(&self.intent_preset))
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("custom", "personnalisé"),
+                        ("cinematic", "Cinématique"),
+                        ("product", "Produit"),
+                        ("gentle", "Action douce"),
+                    ] {
+                        if ui
+                            .selectable_value(&mut self.intent_preset, id.to_string(), label)
+                            .clicked()
+                        {
+                            apply_intent_preset(self);
+                        }
+                    }
+                });
+            ui.weak("Configure les réglages sûrs sans modifier le prompt");
+        });
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
@@ -1675,6 +1699,9 @@ impl ImageStudioState {
                     );
                 });
             });
+        if let Some(warning) = render_warning(self) {
+            ui.colored_label(egui::Color32::YELLOW, warning);
+        }
         let busy = generating.is_some();
         let model_ready = models_page::is_model_installed(&self.model_id);
         let generate_clicked = ui
@@ -1840,8 +1867,31 @@ impl ImageStudioState {
                 });
             ui.weak(render_estimate(self));
         });
+        ui.horizontal(|ui| {
+            ui.label("Intention");
+            egui::ComboBox::from_id_salt("studio_image_intent")
+                .selected_text(intent_label(&self.intent_preset))
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("custom", "personnalisé"),
+                        ("portrait", "Portrait"),
+                        ("product", "Produit"),
+                        ("illustration", "Illustration"),
+                    ] {
+                        if ui
+                            .selectable_value(&mut self.intent_preset, id.to_string(), label)
+                            .clicked()
+                        {
+                            apply_intent_preset(self);
+                        }
+                    }
+                });
+        });
         self.apply_preset_for_current_model();
 
+        if let Some(warning) = render_warning(self) {
+            ui.colored_label(egui::Color32::YELLOW, warning);
+        }
         let busy = generating.is_some();
         let model_ready = models_page::is_model_installed(&self.model_id);
         let generate_clicked = ui
@@ -2674,6 +2724,65 @@ fn render_estimate(studio: &ImageStudioState) -> String {
         seconds.ceil() as u32,
         frames as u32
     )
+}
+
+fn intent_label(id: &str) -> &'static str {
+    match id {
+        "cinematic" => "Cinématique",
+        "product" => "Produit",
+        "gentle" => "Action douce",
+        "portrait" => "Portrait",
+        "illustration" => "Illustration",
+        _ => "personnalisé",
+    }
+}
+
+fn apply_intent_preset(studio: &mut ImageStudioState) {
+    match studio.intent_preset.as_str() {
+        "cinematic" => {
+            studio.steps = 24;
+            studio.cfg = 6.5;
+            studio.sampler = "euler".into();
+        }
+        "product" => {
+            studio.steps = 20;
+            studio.cfg = 5.5;
+            studio.sampler = "euler".into();
+        }
+        "gentle" => {
+            studio.steps = 16;
+            studio.cfg = 4.5;
+            studio.sampler = "euler_a".into();
+        }
+        "portrait" => {
+            studio.steps = 24;
+            studio.cfg = 7.0;
+            studio.sampler = "euler_a".into();
+        }
+        "illustration" => {
+            studio.steps = 20;
+            studio.cfg = 6.0;
+            studio.sampler = "heun".into();
+        }
+        _ => {}
+    }
+}
+
+fn render_warning(studio: &ImageStudioState) -> Option<String> {
+    let frames = if studio.create_mode == CreateMode::Video {
+        video_frames_for_duration_model(studio.video_duration_secs, &studio.model_id)
+    } else {
+        1
+    } as u64;
+    let pixels = studio.width as u64 * studio.height as u64;
+    let work = pixels
+        .saturating_mul(frames)
+        .saturating_mul(studio.steps.max(1) as u64);
+    if work > 2_000_000_000 {
+        Some("Rendu lourd : réduisez la résolution, la durée ou les steps pour limiter le temps et la VRAM.".into())
+    } else {
+        None
+    }
 }
 
 fn max_vram_label(value: &str) -> &'static str {
