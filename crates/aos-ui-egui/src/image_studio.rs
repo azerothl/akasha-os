@@ -33,6 +33,8 @@ pub struct ImageStudioState {
     pub negative: String,
     pub width: u32,
     pub height: u32,
+    /// Quick aspect-ratio choice; `custom` leaves width/height untouched.
+    pub format_preset: String,
     pub steps: u32,
     pub cfg: f32,
     pub seed: String,
@@ -121,6 +123,7 @@ impl Default for ImageStudioState {
             negative: String::new(),
             width: 512,
             height: 512,
+            format_preset: "custom".into(),
             steps: 20,
             cfg: 7.0,
             seed: String::new(),
@@ -1402,6 +1405,27 @@ impl ImageStudioState {
             );
         });
         ui.horizontal(|ui| {
+            ui.label("Format");
+            egui::ComboBox::from_id_salt("studio_video_format")
+                .selected_text(self.format_preset.as_str())
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("16:9", "16:9"),
+                        ("9:16", "9:16"),
+                        ("1:1", "1:1"),
+                        ("custom", "personnalisé"),
+                    ] {
+                        if ui
+                            .selectable_value(&mut self.format_preset, id.to_string(), label)
+                            .clicked()
+                        {
+                            apply_format_preset(self);
+                        }
+                    }
+                });
+            ui.weak(render_estimate(self));
+        });
+        ui.horizontal(|ui| {
             ui.label("Images/s");
             help_icon(ui, "Cadence de sortie passée à sd.cpp (--fps), indépendante de la durée et du nombre d'images.");
             ui.add(egui::DragValue::new(&mut self.video_fps)
@@ -1794,6 +1818,27 @@ impl ImageStudioState {
                     ui.selectable_value(&mut self.profile, "balanced".to_string(), "balanced");
                     ui.selectable_value(&mut self.profile, "quality".to_string(), "quality");
                 });
+        });
+        ui.horizontal(|ui| {
+            ui.label("Format");
+            egui::ComboBox::from_id_salt("studio_image_format")
+                .selected_text(self.format_preset.as_str())
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("1:1", "1:1"),
+                        ("16:9", "16:9"),
+                        ("9:16", "9:16"),
+                        ("custom", "personnalisé"),
+                    ] {
+                        if ui
+                            .selectable_value(&mut self.format_preset, id.to_string(), label)
+                            .clicked()
+                        {
+                            apply_format_preset(self);
+                        }
+                    }
+                });
+            ui.weak(render_estimate(self));
         });
         self.apply_preset_for_current_model();
 
@@ -2597,6 +2642,38 @@ fn parse_opt_u32(raw: &str) -> Option<u32> {
         return None;
     }
     s.parse().ok()
+}
+
+fn apply_format_preset(studio: &mut ImageStudioState) {
+    let base = studio.width.max(studio.height).clamp(256, 2048);
+    let (w, h) = match studio.format_preset.as_str() {
+        "16:9" => (base, (base * 9 / 16).max(64)),
+        "9:16" => ((base * 9 / 16).max(64), base),
+        "1:1" => (base, base),
+        _ => return,
+    };
+    studio.width = w;
+    studio.height = h;
+}
+
+fn render_estimate(studio: &ImageStudioState) -> String {
+    let frames = if studio.create_mode == CreateMode::Video {
+        video_frames_for_duration_model(studio.video_duration_secs, &studio.model_id)
+    } else {
+        1
+    } as f64;
+    let work = studio.width as f64 * studio.height as f64 * frames * studio.steps.max(1) as f64;
+    let scale = if studio.create_mode == CreateMode::Video {
+        1.0e8
+    } else {
+        2.5e7
+    };
+    let seconds = (work / scale).max(1.0);
+    format!(
+        "Charge estimée : ~{} s · {} frames",
+        seconds.ceil() as u32,
+        frames as u32
+    )
 }
 
 fn max_vram_label(value: &str) -> &'static str {
