@@ -49,14 +49,15 @@ Rules:
 /// Video-specific prose enrichment. Keep the output plain text because sd.cpp
 /// receives it as the actual prompt, but add temporal/camera cues that an
 /// image-only rewrite would otherwise omit.
-pub const CHAT_ENHANCE_VIDEO_SYSTEM_PROMPT: &str = r##"You expand a short idea into a rich, concrete prompt for a short AI-generated video. Output ONLY the improved prompt as plain text — no markdown, no JSON, no labels, no commentary before or after.
-Include when relevant: subject, continuous action, environment, lighting, colors, materials, camera framing and movement, pacing, temporal continuity, and a clear beginning-to-end beat.
+pub const CHAT_ENHANCE_VIDEO_SYSTEM_PROMPT: &str = r##"You expand a short idea into a production-ready prompt for a short AI-generated video. Output ONLY the improved prompt as plain text — no markdown, no JSON, no labels, no commentary before or after.
+Use a compact three-sentence structure: (1) subject, setting and one continuous physical action; (2) exactly one primary camera move plus framing, pace and concrete light/material cues; (3) a positive continuity rule that keeps the subject, composition and motion stable. Add sound only when it is implied or useful.
 Rules:
 1. Preserve the user's core subject and any quoted text verbatim.
-2. Describe one coherent action that can remain visually consistent across frames.
-3. Add plausible, specific details — avoid vague filler ("beautiful", "stunning", "masterpiece").
-4. Do not add major characters, objects, or scene changes the user did not imply.
-5. One paragraph or a few comma-separated phrases; keep under 120 words."##;
+2. Prefer one shot and one camera vector (for example, slow push-in or lateral tracking); never stack pan, orbit, tilt and zoom together.
+3. Describe observable motion with a clear direction and speed; avoid vague quality adjectives and frantic speed words.
+4. For an image reference, do not re-describe the image: specify only the added motion, camera instruction and one consistency constraint.
+5. State constraints positively ("keep the silhouette stable") instead of a list of negative prompts.
+6. Do not add major characters, objects, or scene changes the user did not imply. Keep under 120 words."##;
 
 pub fn is_video_prompt_model(model_id: Option<&str>) -> bool {
     model_id.is_some_and(|id| id.contains("wan") || id.contains("ltx") || id.contains("minimax"))

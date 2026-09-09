@@ -1362,11 +1362,13 @@ impl ImageStudioState {
                     ui.selectable_value(&mut self.video_duration_secs, 3, "3s");
                     ui.selectable_value(&mut self.video_duration_secs, 4, "4s");
                 });
-            ui.weak(t.studio_video_frames_estimate.replace(
-                "{frames}",
-                &video_frames_for_duration_model(self.video_duration_secs, &self.model_id)
-                    .to_string(),
-            ));
+            ui.weak(
+                t.studio_video_frames_estimate.replace(
+                    "{frames}",
+                    &video_frames_for_duration_model(self.video_duration_secs, &self.model_id)
+                        .to_string(),
+                ),
+            );
         });
         ui.horizontal(|ui| {
             ui.label("Images/s");
@@ -2318,12 +2320,12 @@ fn ui_enriched_prompt_panel(
     if !*show {
         return;
     }
-    ui.weak(hint);
+    ui.add(egui::Label::new(hint).wrap());
     ui.add(
         egui::TextEdit::multiline(enriched_prompt)
             .font(egui::TextStyle::Monospace)
             .desired_rows(8)
-            .desired_width(f32::INFINITY),
+            .desired_width(ui.available_width().max(240.0)),
     );
 }
 
