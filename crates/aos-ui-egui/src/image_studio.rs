@@ -1582,6 +1582,7 @@ impl ImageStudioState {
                         hint,
                         &mut self.enriched_prompt,
                         &mut self.show_enriched_prompt,
+                        true,
                     );
                 }
             });
@@ -2019,6 +2020,7 @@ impl ImageStudioState {
                         hint,
                         &mut self.enriched_prompt,
                         &mut self.show_enriched_prompt,
+                        false,
                     );
                 }
             });
@@ -2464,6 +2466,7 @@ fn ui_enriched_prompt_panel(
     hint: &str,
     enriched_prompt: &mut String,
     show: &mut bool,
+    video: bool,
 ) {
     ui.add_space(4.0);
     ui.horizontal(|ui| {
@@ -2482,6 +2485,23 @@ fn ui_enriched_prompt_panel(
             .desired_rows(8)
             .desired_width(ui.available_width().max(240.0)),
     );
+    if video && !enriched_prompt.trim().is_empty() {
+        ui.separator();
+        ui.weak("Aperçu de structure vidéo");
+        let parts: Vec<&str> = enriched_prompt
+            .split(['.', ';'])
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .take(3)
+            .collect();
+        let labels = ["Sujet / action", "Caméra / rythme", "Continuité / ambiance"];
+        for (idx, label) in labels.iter().enumerate() {
+            ui.horizontal_wrapped(|ui| {
+                ui.strong(*label);
+                ui.label(parts.get(idx).copied().unwrap_or("À préciser"));
+            });
+        }
+    }
 }
 
 fn ui_video_result_row(ui: &mut egui::Ui, t: &UiStrings, path: &str) {
