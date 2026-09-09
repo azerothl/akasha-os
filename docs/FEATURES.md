@@ -86,7 +86,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **E7 TPM**: vault master key prefers a real host TPM seal when available (Windows Platform Crypto `NCrypt` / `TPM_RSA_SRK_SEAL_KEY`); Linux falls back to OS keyring then file until tpm2 seal is wired. Presence of a TPM device alone does not set `master.backend=tpm`. No PCR sealing
 - **E8 live bridge**: optional separate binary `aos-bridged` — loopback HTTP `/v1` JSON↔CBOR to the intent bus (mem + secrets.list; secrets.get/set service-style only). Not inside `aos-session`
 - **E9 multi-GPU path**: Placement / llama layer `tensor_split` plumbing; P5 gate **skips** on 1-GPU hosts (honest STATUS — hard-green needs a 2-GPU run)
-- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX catalogue rows are **experimental** (not TESTER-required). No product video UI
+- **Media/UX polish**: Image studio **composition** canvas (overlapping blocks → prompt injection), **upscale** (RealESRGAN / `media.image.upscale`), expert DiT knobs; Wan/LTX short-video Create flow is available with typed WebM output, progress and cancellation. The advanced video workflow remains experimental (see AK-024).
 - **Image history**: studio reloads prior PNG sidecars (`*.meta.json`) — prompt, enriched prompt, composition
 - **Chat UX**: distinct user / assistant bubbles; clearer thread roles
 - **Product RAG**: at boot, `aos-platformd` indexes `docs/FEATURES|STATUS|TESTER` (+ `fr/`) into `product:docs`; each `mem.context` retrieves top-k chunks (budget-capped) so the assistant answers UI / changelog questions without stuffing the full catalogue into the system prompt
@@ -95,7 +95,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 ### What's new in 0.9.0
 
 - **Mid-token migrate** (E18): Settings **auto / gpu / cpu** calls `model.migrate` — the live completion continues on the same stream (no Stop, no cancelled turn). On NVIDIA the **cpu** pin stays on the CUDA `aos-modeld` with `n_gpu_layers = 0`. Fail-closed fallback is the 0.8 cancel+restart path (audited)
-- **Closed media options** (E19): `media.image.generate` / `media.audio.generate` take a `deny_unknown_fields` object (size, steps, CFG, seed, sampler, negative, Piper knobs). Unknown keys are refused and audited. `aos-sd` maps only allowlisted flags — never a free-form argv string
+- **Closed media options** (E19): `media.image.generate` / `media.audio.generate` take a `deny_unknown_fields` object (size, steps, CFG, seed, sampler, negative, video frames/flow-shift, Piper knobs). Unknown keys are refused and audited. `aos-sd` maps only allowlisted flags — never a free-form argv string
 - Extra optional packs: Flux2-class, Ideogram4-class, Piper `en_GB`; `extra_files` for VAE / CLIP / T5 / LoRA; Download pulls sidecars
 - Settings / Models pick the default image pack and Piper voice; `/image` and tools honor them after restart
 - **Image studio** tab (prompt, size, steps, CFG, seed, sampler, catalogue style / LoRA / VAE); **Open in studio** on a chat PNG
