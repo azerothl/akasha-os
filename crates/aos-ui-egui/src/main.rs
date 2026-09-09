@@ -7,12 +7,11 @@ mod agent_act_phrase;
 mod agent_controller;
 mod agent_event_controller;
 mod agent_panel;
+mod agent_ui_state;
 mod artifact_card;
 mod backup;
 mod backup_state;
 mod billing;
-mod models_disk;
-mod agent_ui_state;
 mod canvas_event_controller;
 mod canvas_paint;
 mod chat_ask;
@@ -31,8 +30,8 @@ mod chat_sidebar_state;
 mod chat_state;
 mod chat_view_state;
 mod cmd;
-mod composer_layout;
 mod composer_drafts;
+mod composer_layout;
 mod confirmation_ui_state;
 mod decl_ui;
 mod deep_plan_ui;
@@ -53,6 +52,7 @@ mod memory_controller;
 mod memory_ui_state;
 mod model_setup;
 mod models_controller;
+mod models_disk;
 mod models_page;
 mod models_ui_state;
 mod module_actions;
@@ -86,6 +86,7 @@ mod tasks_panel;
 mod theme;
 mod troubleshoot;
 mod ui_agents;
+mod ui_audit;
 mod ui_chat;
 mod ui_chat_composer;
 mod ui_chat_session;
@@ -103,7 +104,6 @@ mod ui_providers;
 mod ui_scenarios;
 mod ui_security;
 mod ui_settings;
-mod ui_audit;
 mod ui_workspace;
 mod workspace_controller;
 mod workspace_ui_state;
@@ -236,6 +236,12 @@ fn main() -> eframe::Result<()> {
     if std::env::var_os("AOS_MODEL_SETUP").is_some() {
         return model_setup::run();
     }
+    if matches!(
+        std::env::var("AOS_UI_SELF_TEST").ok().as_deref(),
+        Some("1") | Some("true") | Some("yes")
+    ) {
+        return run_ui_self_test();
+    }
 
     let (cmd_tx, cmd_rx) = channel::<Cmd>();
     let (evt_tx, evt_rx) = channel::<Evt>();
@@ -262,6 +268,31 @@ fn main() -> eframe::Result<()> {
             Ok(Box::new(UiApp::new(cmd_tx, evt_rx, version)))
         }),
     )
+}
+
+/// Deterministic smoke test for CI and support bundles. It intentionally avoids
+/// opening a native window, but exercises the same localization, sizing and
+/// theme inputs used to construct the first frame.
+fn run_ui_self_test() -> eframe::Result<()> {
+    let fr = i18n::strings("fr");
+    let en = i18n::strings("en");
+    let min = preview_min_inner_size();
+    assert!(
+        min[0] > LEFT_NAV_W && min[1] >= 600.0,
+        "minimum viewport too small"
+    );
+    assert_ne!(
+        fr.agent_send, en.agent_send,
+        "localization fallback not loaded"
+    );
+    let custom = prefs::CustomThemePreferences::default();
+    let colors = theme::theme_colors("custom", &custom);
+    assert_ne!(colors.accent, eframe::egui::Color32::default());
+    println!(
+        "AOS_UI_SELF_TEST OK min_inner={}x{} locale=fr/en theme=custom",
+        min[0], min[1]
+    );
+    Ok(())
 }
 
 fn agent_is_live(state: &AgentState) -> bool {
@@ -662,19 +693,16 @@ impl UiApp {
                         ui.separator();
                         ui.weak(self.current_tab_label(t));
                     }
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            if ui
-                                .button(t.presentation_exit)
-                                .on_hover_text(t.presentation_exit_hint)
-                                .clicked()
-                            {
-                                self.prefs.ui_presentation = prefs::UiPresentationMode::Classic;
-                                save_preferences(&self.prefs);
-                            }
-                        },
-                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .button(t.presentation_exit)
+                            .on_hover_text(t.presentation_exit_hint)
+                            .clicked()
+                        {
+                            self.prefs.ui_presentation = prefs::UiPresentationMode::Classic;
+                            save_preferences(&self.prefs);
+                        }
+                    });
                 });
             });
     }
@@ -718,8 +746,7 @@ impl UiApp {
         let agent_max_steps = prefs.default_max_steps;
         let agent_timeout_secs = prefs.default_timeout_secs;
         let network_online = prefs.network_online;
-        let mut models_ui =
-            models_ui_state::ModelsUiState::with_updates_msg(model_updates_msg);
+        let mut models_ui = models_ui_state::ModelsUiState::with_updates_msg(model_updates_msg);
         // S7.3 : dernière activité modèles (persistée).
         models_ui.model_usage = models_disk::load_usage();
         let intro = format!(
@@ -754,7 +781,9 @@ impl UiApp {
             status: String::new(),
             status_history: std::collections::VecDeque::new(),
             backup_ui: backup_state::BackupUiState::with_defaults(
-                backup::default_backup_parent().to_string_lossy().into_owned(),
+                backup::default_backup_parent()
+                    .to_string_lossy()
+                    .into_owned(),
             ),
             billing: billing::load_ledger(),
             billing_pending: HashMap::new(),
@@ -1729,7 +1758,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::TasksList);
             }
             Tab::Files => {
-                let _ = self.cmd_tx.send(Cmd::FilesList { prefix: String::new() });
+                let _ = self.cmd_tx.send(Cmd::FilesList {
+                    prefix: String::new(),
+                });
             }
             Tab::Library => {
                 let _ = self.cmd_tx.send(Cmd::UserLibraryList);
@@ -1744,6 +1775,23 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn status_model_name(&self) -> String {
+        // The status bar describes the active chat context, not merely the
+        // first model reporting live metrics.  The latter can be a media
+        // worker (for example sd-v1-5) while the chat picker is on an
+        // instruct/room model, which is confusing and leads users to change
+        // the wrong setting.
+        if let Some(active_id) = self.chat_state.active_session.as_deref() {
+            if let Some(model_id) = self
+                .chat_state
+                .sessions
+                .iter()
+                .find(|session| session.id == active_id)
+                .and_then(|session| session.model_id.as_deref())
+                .filter(|model_id| !model_id.is_empty())
+            {
+                return model_id.to_string();
+            }
+        }
         if let Some(metrics) = &self.metrics {
             if let Some(m) = metrics.models.first() {
                 return m.model_id.clone();
@@ -1792,7 +1840,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             ui.separator();
             if ui
                 .add_sized(
-                    egui::vec2(ui.available_width().max(1.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                    egui::vec2(
+                        ui.available_width().max(1.0),
+                        theme::CONTROL_MIN_H_COMFORTABLE,
+                    ),
                     egui::Button::new("☰"),
                 )
                 .on_hover_text(t.presentation_menu_hint)
@@ -1951,6 +2002,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn ui_status_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        // The bar has a fixed 28 px height, so wrapping would clip vertically
+        // on the supported minimum viewport.  Compact labels keep every
+        // control reachable instead of letting the right side disappear.
+        let compact = ui.available_width() < 900.0;
         ui.horizontal(|ui| {
             let net_label = if self.network_online {
                 t.status_network_on
@@ -1984,18 +2039,26 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                     });
                     ui.separator();
+            let model_name = self.status_model_name();
+            let model_display = if compact {
+                agent_panel::truncate(&model_name, 18)
+            } else {
+                model_name
+            };
             if ui
-                .small_button(format!(
-                    "{}: {}",
-                    t.status_model_label,
-                    self.status_model_name()
-                ))
+                .small_button(format!("{}: {}", t.status_model_label, model_display))
                 .clicked()
             {
                 self.on_tab_open(Tab::Models);
             }
             ui.separator();
-            let caps_text = if self.security_ui.caps.is_empty() {
+            let caps_text = if compact {
+                if self.security_ui.caps.is_empty() {
+                    "Cap.: —".to_string()
+                } else {
+                    format!("Cap.: {}", self.security_ui.caps.len())
+                }
+            } else if self.security_ui.caps.is_empty() {
                 format!("{}: —", t.status_caps_label)
             } else {
                 format!(
@@ -2013,12 +2076,15 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 .prefs
                 .agent_gate_mode
                 .eq_ignore_ascii_case("autonomous");
-            let gate_label = if gate_ask {
+            let gate_label = if compact {
+                if gate_ask { "Dem." } else { "Auto" }
+            } else if gate_ask {
                 t.status_gate_ask
             } else {
                 t.status_gate_autonomous
             };
-            let gate_response = ui.small_button(format!("{}: {}", t.status_gate_label, gate_label));
+            let gate_title = if compact { "Mode" } else { t.status_gate_label };
+            let gate_response = ui.small_button(format!("{}: {}", gate_title, gate_label));
             gate_response.context_menu(|ui| {
                 ui.label("Les demandes d’autorisation restent explicites dans la conversation.");
                 if ui
@@ -2038,9 +2104,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     ui.close_menu();
                 }
             });
-            ui.separator();
-            // S3 : compteur tokens session (estimation ≈ + agents exacts).
-            {
+            if !compact {
+                ui.separator();
+                // S3 : compteur tokens session (estimation ≈ + agents exacts).
                 let (transcript_tok, agent_tok, agent_n) = self.session_token_estimate();
                 let total = transcript_tok + agent_tok;
                 let short = if total >= 10_000 {
@@ -2058,11 +2124,11 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     )
                 };
                 ui.weak(short).on_hover_text(tip);
+                ui.separator();
+                // S2 : badge budget cloud.
+                self.ui_billing_segment(ui);
+                ui.separator();
             }
-            ui.separator();
-            // S2 : badge budget cloud.
-            self.ui_billing_segment(ui);
-            ui.separator();
             if let Some(pending_ver) = load_pending_update_version() {
                 ui.label(t.status_update_pending.replace("{version}", &pending_ver));
                 if let Some(offer) = load_update_offer() {
@@ -2100,7 +2166,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     };
                     save_preferences(&self.prefs);
                 }
-                ui.weak(format!("v{}", self.version));
+                if !compact {
+                    ui.weak(format!("v{}", self.version));
+                }
             });
         });
     }
@@ -2124,11 +2192,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     /// S7.1 : stash le texte en cours sous la session active (avant switch).
     pub(crate) fn stash_composer_draft(&mut self) {
         if let Some(sid) = self.chat_state.active_session.clone() {
-            composer_drafts::stash_draft(
-                &mut self.drafts,
-                &sid,
-                &self.chat_state.composer.input,
-            );
+            composer_drafts::stash_draft(&mut self.drafts, &sid, &self.chat_state.composer.input);
             self.drafts_dirty = true;
         }
     }
@@ -2199,13 +2263,12 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     }
                 }
                 if i.modifiers.shift && i.key_pressed(egui::Key::F) {
-                    self.prefs.ui_presentation = if self.prefs.ui_presentation
-                        == prefs::UiPresentationMode::Classic
-                    {
-                        prefs::UiPresentationMode::Focus
-                    } else {
-                        prefs::UiPresentationMode::Classic
-                    };
+                    self.prefs.ui_presentation =
+                        if self.prefs.ui_presentation == prefs::UiPresentationMode::Classic {
+                            prefs::UiPresentationMode::Focus
+                        } else {
+                            prefs::UiPresentationMode::Classic
+                        };
                     save_preferences(&self.prefs);
                 }
             }
@@ -2222,8 +2285,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         } else {
             t.go_to_title
         })
-            .collapsible(false)
-            .resizable(false);
+        .collapsible(false)
+        .resizable(false);
         window = if compact_menu {
             window
                 .title_bar(false)
@@ -2235,247 +2298,244 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 .anchor(egui::Align2::CENTER_TOP, [0.0, 48.0])
         };
         window.show(ctx, |ui| {
-                if compact_menu {
-                    ui.horizontal(|ui| {
-                        ui.strong(t.presentation_menu);
-                        if ui.small_button("×").clicked() {
-                            self.show_go_to_palette = false;
-                            self.spotlight_query.clear();
-                        }
-                    });
-                }
-                ui.weak(t.go_to_hint);
-                ui.add_space(4.0);
-                let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
-                // Focus le champ à l'ouverture (opensourceui `spotlight-bar`).
-                if self.spotlight_query.is_empty() && !search.has_focus() {
-                    ui.memory_mut(|m| m.request_focus(search.id));
-                }
-                ui.separator();
-                let query = self.spotlight_query.trim().to_lowercase();
-                let destinations: [(&str, Tab); 15] = [
-                    (t.tab_chat, Tab::Chat),
-                    (t.tab_agents, Tab::Agents),
-                    (t.tab_create, Tab::Image),
-                    (t.tab_memory, Tab::Memory),
-                    (t.tab_notes, Tab::Notes),
-                    (t.tab_library, Tab::Library),
-                    (t.tab_tasks, Tab::Tasks),
-                    (t.tab_files, Tab::Files),
-                    (t.tab_models, Tab::Models),
-                    (t.tab_settings, Tab::Settings),
-                    (t.tab_caps, Tab::Caps),
-                    (t.tab_audit, Tab::Audit),
-                    (t.tab_providers, Tab::Providers),
-                    (t.tab_scenarios, Tab::Scenarios),
-                    (t.tab_feedback, Tab::Feedback),
-                ];
-                let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
-                let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
-                // S7.2 : recherche globale — sessions, notes, mémoire en plus
-                // des onglets. Sessions même à requête vide (accès rapide).
-                let session_hits: Vec<(String, String)> = self
-                    .chat_state
-                    .sessions
+            if compact_menu {
+                ui.horizontal(|ui| {
+                    ui.strong(t.presentation_menu);
+                    if ui.small_button("×").clicked() {
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                });
+            }
+            ui.weak(t.go_to_hint);
+            ui.add_space(4.0);
+            let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
+            // Focus le champ à l'ouverture (opensourceui `spotlight-bar`).
+            if self.spotlight_query.is_empty() && !search.has_focus() {
+                ui.memory_mut(|m| m.request_focus(search.id));
+            }
+            ui.separator();
+            let query = self.spotlight_query.trim().to_lowercase();
+            let destinations: [(&str, Tab); 15] = [
+                (t.tab_chat, Tab::Chat),
+                (t.tab_agents, Tab::Agents),
+                (t.tab_create, Tab::Image),
+                (t.tab_memory, Tab::Memory),
+                (t.tab_notes, Tab::Notes),
+                (t.tab_library, Tab::Library),
+                (t.tab_tasks, Tab::Tasks),
+                (t.tab_files, Tab::Files),
+                (t.tab_models, Tab::Models),
+                (t.tab_settings, Tab::Settings),
+                (t.tab_caps, Tab::Caps),
+                (t.tab_audit, Tab::Audit),
+                (t.tab_providers, Tab::Providers),
+                (t.tab_scenarios, Tab::Scenarios),
+                (t.tab_feedback, Tab::Feedback),
+            ];
+            let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
+            let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
+            // S7.2 : recherche globale — sessions, notes, mémoire en plus
+            // des onglets. Sessions même à requête vide (accès rapide).
+            let session_hits: Vec<(String, String)> = self
+                .chat_state
+                .sessions
+                .iter()
+                .filter(|s| query.is_empty() || s.title.to_lowercase().contains(query.as_str()))
+                .take(8)
+                .map(|s| (s.id.clone(), s.title.clone()))
+                .collect();
+            let note_hits: Vec<(String, String)> = if query.is_empty() {
+                Vec::new()
+            } else {
+                self.workspace_ui
+                    .notes
+                    .notes
                     .iter()
-                    .filter(|s| {
-                        query.is_empty() || s.title.to_lowercase().contains(query.as_str())
+                    .filter(|n| {
+                        n.title.to_lowercase().contains(query.as_str())
+                            || n.path.to_lowercase().contains(query.as_str())
                     })
                     .take(8)
-                    .map(|s| (s.id.clone(), s.title.clone()))
-                    .collect();
-                let note_hits: Vec<(String, String)> = if query.is_empty() {
-                    Vec::new()
+                    .map(|n| (n.path.clone(), n.title.clone()))
+                    .collect()
+            };
+            let mem_hits: Vec<String> = if query.is_empty() {
+                Vec::new()
+            } else {
+                self.memory_ui
+                    .hits
+                    .iter()
+                    .filter(|h| h.text.to_lowercase().contains(query.as_str()))
+                    .take(5)
+                    .map(|h| h.text.clone())
+                    .collect()
+            };
+            enum Pick {
+                Tab(Tab),
+                Session(String),
+                Note(String),
+                Memory(String),
+            }
+            let mut pick: Option<Pick> = None;
+            if tab_hits.is_empty()
+                && session_hits.is_empty()
+                && note_hits.is_empty()
+                && mem_hits.is_empty()
+            {
+                ui.weak(t.settings_search_empty);
+            }
+            if compact_menu && query.is_empty() {
+                ui.weak(if self.prefs.language == "fr" {
+                    "Sections principales"
                 } else {
-                    self.workspace_ui
-                        .notes
-                        .notes
-                        .iter()
-                        .filter(|n| {
-                            n.title.to_lowercase().contains(query.as_str())
-                                || n.path.to_lowercase().contains(query.as_str())
-                        })
-                        .take(8)
-                        .map(|n| (n.path.clone(), n.title.clone()))
-                        .collect()
-                };
-                let mem_hits: Vec<String> = if query.is_empty() {
-                    Vec::new()
-                } else {
-                    self.memory_ui
-                        .hits
-                        .iter()
-                        .filter(|h| h.text.to_lowercase().contains(query.as_str()))
-                        .take(5)
-                        .map(|h| h.text.clone())
-                        .collect()
-                };
-                enum Pick {
-                    Tab(Tab),
-                    Session(String),
-                    Note(String),
-                    Memory(String),
-                }
-                let mut pick: Option<Pick> = None;
-                if tab_hits.is_empty()
-                    && session_hits.is_empty()
-                    && note_hits.is_empty()
-                    && mem_hits.is_empty()
-                {
-                    ui.weak(t.settings_search_empty);
-                }
-                if compact_menu && query.is_empty() {
-                    ui.weak(if self.prefs.language == "fr" {
-                        "Sections principales"
-                    } else {
-                        "Primary sections"
-                    });
-                    for idx in 0..4 {
-                        let (label, tab) = &destinations[idx];
-                        if ui.button(*label).clicked() {
-                            pick = Some(Pick::Tab(tab.clone()));
-                        }
+                    "Primary sections"
+                });
+                for idx in 0..4 {
+                    let (label, tab) = &destinations[idx];
+                    if ui.button(*label).clicked() {
+                        pick = Some(Pick::Tab(tab.clone()));
                     }
-                    egui::CollapsingHeader::new(t.nav_more)
-                        .default_open(false)
-                        .show(ui, |ui| {
-                            for idx in 4..destinations.len() {
-                                let (label, tab) = &destinations[idx];
-                                if ui
-                                    .add_sized(
-                                        egui::vec2(ui.available_width(), 30.0),
-                                        egui::Button::new(*label),
-                                    )
-                                    .clicked()
-                                {
-                                    pick = Some(Pick::Tab(tab.clone()));
-                                }
+                }
+                egui::CollapsingHeader::new(t.nav_more)
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        for idx in 4..destinations.len() {
+                            let (label, tab) = &destinations[idx];
+                            if ui
+                                .add_sized(
+                                    egui::vec2(ui.available_width(), 30.0),
+                                    egui::Button::new(*label),
+                                )
+                                .clicked()
+                            {
+                                pick = Some(Pick::Tab(tab.clone()));
                             }
-                        });
-                } else {
-                    for idx in tab_hits {
-                        let (label, tab) = &destinations[idx];
-                        if ui
-                            .add_sized(
-                                egui::vec2(ui.available_width(), 32.0),
-                                egui::Button::new(*label),
-                            )
-                            .clicked()
-                        {
-                            pick = Some(Pick::Tab(tab.clone()));
                         }
+                    });
+            } else {
+                for idx in tab_hits {
+                    let (label, tab) = &destinations[idx];
+                    if ui
+                        .add_sized(
+                            egui::vec2(ui.available_width(), 32.0),
+                            egui::Button::new(*label),
+                        )
+                        .clicked()
+                    {
+                        pick = Some(Pick::Tab(tab.clone()));
                     }
                 }
-                if !session_hits.is_empty() && (!compact_menu || !query.is_empty()) {
-                    ui.separator();
-                    ui.weak("Sessions");
-                    for (id, title) in &session_hits {
-                        if ui
-                            .add_sized(
-                                egui::vec2(ui.available_width(), 36.0),
-                                egui::Button::new(title),
-                            )
-                            .clicked()
-                        {
-                            pick = Some(Pick::Session(id.clone()));
-                        }
+            }
+            if !session_hits.is_empty() && (!compact_menu || !query.is_empty()) {
+                ui.separator();
+                ui.weak("Sessions");
+                for (id, title) in &session_hits {
+                    if ui
+                        .add_sized(
+                            egui::vec2(ui.available_width(), 36.0),
+                            egui::Button::new(title),
+                        )
+                        .clicked()
+                    {
+                        pick = Some(Pick::Session(id.clone()));
                     }
                 }
-                if !note_hits.is_empty() {
-                    ui.separator();
-                    ui.weak(t.tab_notes);
-                    for (path, title) in &note_hits {
-                        if ui
-                            .add_sized(
-                                egui::vec2(ui.available_width(), 36.0),
-                                egui::Button::new(title),
-                            )
-                            .clicked()
-                        {
-                            pick = Some(Pick::Note(path.clone()));
-                        }
+            }
+            if !note_hits.is_empty() {
+                ui.separator();
+                ui.weak(t.tab_notes);
+                for (path, title) in &note_hits {
+                    if ui
+                        .add_sized(
+                            egui::vec2(ui.available_width(), 36.0),
+                            egui::Button::new(title),
+                        )
+                        .clicked()
+                    {
+                        pick = Some(Pick::Note(path.clone()));
                     }
                 }
-                if !mem_hits.is_empty() {
-                    ui.separator();
-                    ui.weak(t.tab_memory);
-                    for text in &mem_hits {
-                        let short: String = text.chars().take(80).collect();
-                        if ui
-                            .add_sized(
-                                egui::vec2(ui.available_width(), 36.0),
-                                egui::Button::new(&short),
-                            )
-                            .clicked()
-                        {
-                            pick = Some(Pick::Memory(text.clone()));
-                        }
+            }
+            if !mem_hits.is_empty() {
+                ui.separator();
+                ui.weak(t.tab_memory);
+                for text in &mem_hits {
+                    let short: String = text.chars().take(80).collect();
+                    if ui
+                        .add_sized(
+                            egui::vec2(ui.available_width(), 36.0),
+                            egui::Button::new(&short),
+                        )
+                        .clicked()
+                    {
+                        pick = Some(Pick::Memory(text.clone()));
                     }
                 }
-                match pick {
-                    Some(Pick::Tab(tab)) => {
-                        self.on_tab_open(tab);
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    }
-                    Some(Pick::Session(id)) => {
-                        self.request_session_select(id);
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    }
-                    Some(Pick::Note(path)) => {
-                        let title = note_hits
-                            .iter()
-                            .find(|(p, _)| p == &path)
-                            .map(|(_, ti)| ti.clone())
-                            .unwrap_or_default();
-                        self.workspace_ui.notes.filter = title;
-                        self.on_tab_open(Tab::Notes);
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    }
-                    Some(Pick::Memory(text)) => {
-                        self.memory_ui.query = text.chars().take(80).collect();
-                        self.on_tab_open(Tab::Memory);
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    }
-                    None => {}
-                }
-                // Enter ouvre le 1er résultat : session, note, mémoire, onglet.
-                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    if let Some((id, _)) = session_hits.first() {
-                        self.request_session_select(id.clone());
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    } else if let Some((_, title)) = note_hits.first() {
-                        self.workspace_ui.notes.filter = title.clone();
-                        self.on_tab_open(Tab::Notes);
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    } else if let Some(text) = mem_hits.first() {
-                        self.memory_ui.query = text.chars().take(80).collect();
-                        self.on_tab_open(Tab::Memory);
-                        self.show_go_to_palette = false;
-                        self.spotlight_query.clear();
-                    } else {
-                        let labels: Vec<&str> =
-                            destinations.iter().map(|(l, _)| *l).collect();
-                        if let Some(first) =
-                            ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
-                        {
-                            let (_, tab) = &destinations[*first];
-                            self.on_tab_open(tab.clone());
-                            self.show_go_to_palette = false;
-                            self.spotlight_query.clear();
-                        }
-                    }
-                }
-                if ui.button(t.skip).clicked() {
+            }
+            match pick {
+                Some(Pick::Tab(tab)) => {
+                    self.on_tab_open(tab);
                     self.show_go_to_palette = false;
                     self.spotlight_query.clear();
                 }
-            });
+                Some(Pick::Session(id)) => {
+                    self.request_session_select(id);
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                }
+                Some(Pick::Note(path)) => {
+                    let title = note_hits
+                        .iter()
+                        .find(|(p, _)| p == &path)
+                        .map(|(_, ti)| ti.clone())
+                        .unwrap_or_default();
+                    self.workspace_ui.notes.filter = title;
+                    self.on_tab_open(Tab::Notes);
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                }
+                Some(Pick::Memory(text)) => {
+                    self.memory_ui.query = text.chars().take(80).collect();
+                    self.on_tab_open(Tab::Memory);
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                }
+                None => {}
+            }
+            // Enter ouvre le 1er résultat : session, note, mémoire, onglet.
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if let Some((id, _)) = session_hits.first() {
+                    self.request_session_select(id.clone());
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                } else if let Some((_, title)) = note_hits.first() {
+                    self.workspace_ui.notes.filter = title.clone();
+                    self.on_tab_open(Tab::Notes);
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                } else if let Some(text) = mem_hits.first() {
+                    self.memory_ui.query = text.chars().take(80).collect();
+                    self.on_tab_open(Tab::Memory);
+                    self.show_go_to_palette = false;
+                    self.spotlight_query.clear();
+                } else {
+                    let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
+                    if let Some(first) =
+                        ui_primitives::filter_labels(&self.spotlight_query, &labels).first()
+                    {
+                        let (_, tab) = &destinations[*first];
+                        self.on_tab_open(tab.clone());
+                        self.show_go_to_palette = false;
+                        self.spotlight_query.clear();
+                    }
+                }
+            }
+            if ui.button(t.skip).clicked() {
+                self.show_go_to_palette = false;
+                self.spotlight_query.clear();
+            }
+        });
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.show_go_to_palette = false;
             self.spotlight_query.clear();
@@ -2700,7 +2760,12 @@ impl eframe::App for UiApp {
                 Evt::FilesListed { entries } => {
                     files_event_controller::on_listed(self, entries);
                 }
-                Evt::FilesRead { path, content, class, version } => {
+                Evt::FilesRead {
+                    path,
+                    content,
+                    class,
+                    version,
+                } => {
                     files_event_controller::on_read(self, path, content, class, version);
                 }
                 Evt::FilesOpOk(msg) => {
@@ -2795,7 +2860,9 @@ impl eframe::App for UiApp {
                 // S6 : profil de confiance (intents `trust.*`).
                 Evt::TrustProfile { profile } => {
                     self.agent_ui.trust_edit.remove(&profile.agent_id);
-                    self.agent_ui.trust.insert(profile.agent_id.clone(), profile);
+                    self.agent_ui
+                        .trust
+                        .insert(profile.agent_id.clone(), profile);
                 }
                 // S6 phase 2 : politique par agent.
                 Evt::AgentPolicy { agent_id, policy } => {
@@ -3029,11 +3096,14 @@ impl eframe::App for UiApp {
                         }
                     ));
                     if ui
-                        .small_button(if fr { "Tout marquer lu" } else { "Mark all read" })
+                        .small_button(if fr {
+                            "Tout marquer lu"
+                        } else {
+                            "Mark all read"
+                        })
                         .clicked()
                     {
-                        let ids: Vec<String> =
-                            notices.iter().map(|n| n.agent_id.clone()).collect();
+                        let ids: Vec<String> = notices.iter().map(|n| n.agent_id.clone()).collect();
                         self.agent_ui.dismiss_notices(&ids);
                         notices.clear();
                     }
@@ -3104,21 +3174,14 @@ impl eframe::App for UiApp {
                                         | "media.image.generate"
                                         | "media.audio.generate"
                                 );
-                            ui.label(
-                                if folder_grant {
-                                    t.folder_grant_title.to_string()
-                                } else {
-                                    t.confirm_wants_action.replace(
-                                        "{action}",
-                                        &i18n::confirm_action_label(&t, &c.action),
-                                    )
-                                },
-                            );
+                            ui.label(if folder_grant {
+                                t.folder_grant_title.to_string()
+                            } else {
+                                t.confirm_wants_action
+                                    .replace("{action}", &i18n::confirm_action_label(&t, &c.action))
+                            });
                             if folder_grant {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(220, 180, 80),
-                                    &c.target,
-                                );
+                                ui.colored_label(egui::Color32::from_rgb(220, 180, 80), &c.target);
                             } else {
                                 ui.monospace(format!("{} → {}", c.target, c.reason));
                             }
@@ -3184,97 +3247,107 @@ impl eframe::App for UiApp {
             prefs::UiPresentationMode::Classic | prefs::UiPresentationMode::Rail
         );
         if show_sidebar {
-        let rail_mode = self.prefs.ui_presentation == prefs::UiPresentationMode::Rail;
-        let sidebar_panel = egui::SidePanel::left("tabs")
-            .default_width(if rail_mode {
-                64.0
-            } else {
-                self.prefs
-                    .ui_layout
-                    .chat_sidebar_width
-                    .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0)
-            })
-            .min_width(if rail_mode { 56.0 } else { self.prefs.ui_density.rail_width().max(88.0) })
-            .max_width(if rail_mode { 72.0 } else { 220.0 })
-            .resizable(!rail_mode)
-            .show(ctx, |ui| {
-                overflow_scroll(ui, "nav_sidebar", |ui| {
-                    ui.heading(if rail_mode || self.prefs.ui_density == prefs::UiDensity::Compact {
-                        "A"
-                    } else {
-                        "Akasha"
+            let rail_mode = self.prefs.ui_presentation == prefs::UiPresentationMode::Rail;
+            let sidebar_panel = egui::SidePanel::left("tabs")
+                .default_width(if rail_mode {
+                    64.0
+                } else {
+                    self.prefs
+                        .ui_layout
+                        .chat_sidebar_width
+                        .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0)
+                })
+                .min_width(if rail_mode {
+                    56.0
+                } else {
+                    self.prefs.ui_density.rail_width().max(88.0)
+                })
+                .max_width(if rail_mode { 72.0 } else { 220.0 })
+                .resizable(!rail_mode)
+                .show(ctx, |ui| {
+                    overflow_scroll(ui, "nav_sidebar", |ui| {
+                        ui.heading(
+                            if rail_mode || self.prefs.ui_density == prefs::UiDensity::Compact {
+                                "A"
+                            } else {
+                                "Akasha"
+                            },
+                        );
+                        self.ui_nav_rail(ui, &t);
+                        if !rail_mode {
+                            ui.separator();
+                            ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                                "RAM / CPU"
+                            } else {
+                                t.resources_heading
+                            });
+                            if let Some(m) = &self.metrics {
+                                if self.prefs.ui_density != prefs::UiDensity::Compact {
+                                    let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
+                                    ui.add(egui::ProgressBar::new(ratio).text(format!(
+                                        "{} {:.1}/{:.1} GiB",
+                                        t.metrics_ram,
+                                        m.ram_used as f64 / (1 << 30) as f64,
+                                        m.ram_total as f64 / (1 << 30) as f64
+                                    )));
+                                } else {
+                                    ui.label(format!(
+                                        "RAM {:.0}%",
+                                        100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32
+                                    ));
+                                }
+                                ui.label(format!("CPU {:.0}%", m.cpu_percent));
+                                if self.prefs.ui_density != prefs::UiDensity::Compact {
+                                    ui.label(format!(
+                                        "{}: {}",
+                                        t.metrics_live,
+                                        m.live_inferences()
+                                    ));
+                                }
+                                // Keep technical model details progressive: the rail shows
+                                // only a compact resource summary and Models owns the list.
+                                ui.label(format!("{}: {}", t.tab_models, m.models.len()));
+                                if ui
+                                    .button(t.tab_models)
+                                    .on_hover_text(t.tab_hint_models)
+                                    .clicked()
+                                {
+                                    self.on_tab_open(Tab::Models);
+                                }
+                            } else {
+                                ui.label("…");
+                            }
+                        }
                     });
-                    self.ui_nav_rail(ui, &t);
-                    if !rail_mode {
-                    ui.separator();
-                    ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
-                        "RAM / CPU"
-                    } else {
-                        t.resources_heading
-                    });
-                    if let Some(m) = &self.metrics {
-                        if self.prefs.ui_density != prefs::UiDensity::Compact {
-                            let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
-                            ui.add(egui::ProgressBar::new(ratio).text(format!(
-                                "{} {:.1}/{:.1} GiB",
-                                t.metrics_ram,
-                                m.ram_used as f64 / (1 << 30) as f64,
-                                m.ram_total as f64 / (1 << 30) as f64
-                            )));
-                        } else {
-                            ui.label(format!(
-                                "RAM {:.0}%",
-                                100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32
-                            ));
-                        }
-                        ui.label(format!("CPU {:.0}%", m.cpu_percent));
-                        if self.prefs.ui_density != prefs::UiDensity::Compact {
-                            ui.label(format!("{}: {}", t.metrics_live, m.live_inferences()));
-                        }
-                        // Keep technical model details progressive: the rail shows
-                        // only a compact resource summary and Models owns the list.
-                        ui.label(format!("{}: {}", t.tab_models, m.models.len()));
-                        if ui
-                            .button(t.tab_models)
-                            .on_hover_text(t.tab_hint_models)
-                            .clicked()
-                        {
-                            self.on_tab_open(Tab::Models);
-                        }
-                    } else {
-                        ui.label("…");
-                    }
-                    }
                 });
-            });
-        let sidebar_width = sidebar_panel.response.rect.width();
-        if (sidebar_width - self.prefs.ui_layout.chat_sidebar_width).abs() > 1.0 {
-            self.prefs.ui_layout.chat_sidebar_width = sidebar_width;
-            save_preferences(&self.prefs);
-        }
+            let sidebar_width = sidebar_panel.response.rect.width();
+            if (sidebar_width - self.prefs.ui_layout.chat_sidebar_width).abs() > 1.0 {
+                self.prefs.ui_layout.chat_sidebar_width = sidebar_width;
+                save_preferences(&self.prefs);
+            }
         }
 
         if show_sidebar {
-        egui::TopBottomPanel::bottom("status_bar")
-            .exact_height(28.0)
-            .show(ctx, |ui| {
-                let r = ui.max_rect();
-                ui.painter().line_segment(
-                    [r.left_top(), r.right_top()],
-                    egui::Stroke::new(1.0_f32, theme::ICE_TRACK),
-                );
-                self.ui_status_bar(ui, &t);
-                if !self.status.is_empty() {
-                    ui.separator();
-                    let history: Vec<String> = self.status_history.iter().cloned().collect();
-                    let tip = if history.is_empty() {
-                        String::new()
-                    } else {
-                        format!("History:\n- {}", history.join("\n- "))
-                    };
-                    ui.weak(&self.status).on_hover_text(tip);
-                }
-            });
+            egui::TopBottomPanel::bottom("status_bar")
+                .exact_height(28.0)
+                .show(ctx, |ui| {
+                    let r = ui.max_rect();
+                    ui.painter().line_segment(
+                        [r.left_top(), r.right_top()],
+                        egui::Stroke::new(1.0_f32, theme::ICE_TRACK),
+                    );
+                    self.ui_status_bar(ui, &t);
+                    if !self.status.is_empty() {
+                        ui.separator();
+                        let history: Vec<String> = self.status_history.iter().cloned().collect();
+                        let tip = if history.is_empty() {
+                            String::new()
+                        } else {
+                            format!("History:\n- {}", history.join("\n- "))
+                        };
+                        ui.weak(&self.status).on_hover_text(tip);
+                    }
+                });
         }
 
         self.minimal_chrome_button(ctx, &t);
