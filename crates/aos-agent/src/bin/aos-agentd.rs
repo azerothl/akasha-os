@@ -12,8 +12,9 @@ use aos_agent::prompt::optimize_prompt_request;
 use aos_agent::room_ask::deliver_room_ask_reply;
 use aos_agent::room_runtime::{self, RoomRoundState};
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
+use aos_agent::module_discovery::{discover_module_tools, merge_skill_tools_for_modules};
 use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
-use aos_agent::tools::{caps_for_tools, default_agent_tools, select_tools};
+use aos_agent::tools::{caps_for_tools, default_agent_tools, select_tools, ToolDesc};
 use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload, SubscribeRequest};
 use aos_caps::{CapStore, HolderId};
 use aos_ipc::{BusClient, BusService};
@@ -369,10 +370,28 @@ async fn respond_control(ctx: aos_ipc::IntentCtx, r: ControlResp) {
 }
 
 fn build_spec(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
+    build_spec_with_module_tools(agent_id, req, &[])
+}
+
+fn build_spec_with_module_tools(
+    agent_id: &str,
+    req: &AgentCreateRequest,
+    module_tools: &[ToolDesc],
+) -> AgentSpec {
     let mut spec = room_personas::roster_spec_from_request(agent_id, req);
     let skill_docs = load_skills(&req.skills);
-    let tool_ids = merge_skill_tools(&req.tools, &skill_docs);
-    let tools = select_tools(&tool_ids, &[]);
+    let installed = module_tools
+        .iter()
+        .filter_map(|t| t.required_caps.first())
+        .filter_map(|c| c.strip_prefix("tool.invoke:"))
+        .map(str::to_string)
+        .collect::<std::collections::HashSet<_>>();
+    let tool_ids = if installed.is_empty() {
+        merge_skill_tools(&req.tools, &skill_docs)
+    } else {
+        merge_skill_tools_for_modules(&req.tools, &skill_docs, &installed)
+    };
+    let tools = select_tools(&tool_ids, module_tools);
     let mut caps = req.caps.clone();
     for c in caps_for_tools(&tools, &req.mcp_servers) {
         if !caps.contains(&c) {
@@ -2406,7 +2425,8 @@ async fn main() {
                     req.model_id = entry.model_id.clone();
                     req.tools = default_agent_tools();
                     let agent_id = persist::alloc_agent_id();
-                    let spec = build_spec(&agent_id, &req);
+                    let module_tools = discover_module_tools(&bus_tick).await;
+                    let spec = build_spec_with_module_tools(&agent_id, &req, &module_tools);
                     match spawn_worker(
                         &shared_tick,
                         &bus_addr_tick,

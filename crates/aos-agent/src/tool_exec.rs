@@ -9,9 +9,10 @@ use aos_proto::{
 use crate::device_tools::invoke_device_tool;
 use crate::host_folder::try_host_folder_tool;
 use crate::mcp::McpSession;
+use crate::module_discovery::{module_fallback_allowed, tool_in_catalog, tool_unavailable_message};
 use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use crate::tools::{
-    canonicalize_tool_name, canvas_tool_denied_by_allowlist, is_module_fallback_candidate, normalize_tool_args, resolve_tool_backend,
+    canonicalize_tool_name, canvas_tool_denied_by_allowlist, normalize_tool_args, resolve_tool_backend,
     ToolBackend, ToolDesc,
 };
 use std::collections::HashMap;
@@ -311,6 +312,10 @@ pub async fn execute_room_tool(
         return format!("action {name} indisponible en tour de salon — réponds en texte");
     }
 
+    if !tool_in_catalog(name, tools) {
+        return tool_unavailable_message(name, "absent du catalogue modules actif");
+    }
+
     let backend = resolve_tool_backend(name, tools);
     match backend {
         Some(ToolBackend::Module) => {
@@ -320,7 +325,7 @@ pub async fn execute_room_tool(
             "outil canvas non autorisé: {name}. Utilise uniquement les outils fournis ; \
              pour remplir une silhouette, passe `fill:true` à canvas.path/rect/ellipse."
         ),
-        None if is_module_fallback_candidate(name) => {
+        None if module_fallback_allowed(name, tools) => {
             invoke_module_tool(bus, agent_id, caps, name, args, trace_id, session_id).await
         }
         Some(ToolBackend::Native) => {

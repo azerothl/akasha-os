@@ -211,6 +211,7 @@ pub fn prepare_room_bubble_text(
         text.trim().to_string()
     };
     let base = aos_agent::room_reply::strip_salon_transcript_prefix(&base);
+    let base = humanize_tool_id_tokens(&base, t);
     let base = strip_tool_id_tokens(&base);
     let base = format_salon_json_for_display(&base);
     let base = strip_salon_markdown_markers(&base);
@@ -337,6 +338,66 @@ fn replace_word_ignore_case(haystack: &str, needle: &str, replacement: &str) -> 
         }
     }
     out
+}
+
+/// Replace known tool ids with human labels; strip unknown tool-like tokens.
+pub fn humanize_tool_id_tokens(text: &str, t: &crate::i18n::UiStrings) -> String {
+    let mut work = text.to_string();
+    while let Some(start) = work.find('`') {
+        if let Some(end_rel) = work[start + 1..].find('`') {
+            let inner = work[start + 1..start + 1 + end_rel].trim();
+            if looks_like_tool_id(inner) {
+                let replacement = crate::i18n::tool_human_label(t, inner)
+                    .map(|label| format!("{label}"))
+                    .unwrap_or_default();
+                let before = work[..start].trim_end();
+                let after = work[start + 1 + end_rel + 1..].trim_start();
+                work = match (before.is_empty(), after.is_empty(), replacement.is_empty()) {
+                    (true, true, _) => String::new(),
+                    (true, false, _) => after.to_string(),
+                    (false, true, _) => before.to_string(),
+                    (false, false, true) => format!("{before} {after}"),
+                    (false, false, false) => format!("{before} {replacement} {after}"),
+                };
+                continue;
+            }
+        }
+        break;
+    }
+    collapse_paint_spaces(&humanize_bare_tool_id_tokens(&work, t))
+}
+
+fn humanize_bare_tool_id_tokens(text: &str, t: &crate::i18n::UiStrings) -> String {
+    let mut out = String::new();
+    let mut token = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
+            token.push(ch);
+        } else {
+            if !token.is_empty() {
+                push_humanized_or_drop_token(&mut out, &token, t);
+                token.clear();
+            }
+            out.push(ch);
+        }
+    }
+    if !token.is_empty() {
+        push_humanized_or_drop_token(&mut out, &token, t);
+    }
+    out
+}
+
+fn push_humanized_or_drop_token(out: &mut String, token: &str, t: &crate::i18n::UiStrings) {
+    if !looks_like_tool_id(token) {
+        out.push_str(token);
+        return;
+    }
+    if let Some(label) = crate::i18n::tool_human_label(t, token) {
+        if !out.is_empty() && !out.ends_with(' ') && !out.ends_with('\n') {
+            out.push(' ');
+        }
+        out.push_str(label);
+    }
 }
 
 /// Never paint `tool.id` tokens (inline code or bare) in salon bubbles.
@@ -1990,6 +2051,28 @@ mod tests {
         assert!(!stripped.contains("notes.read"));
         assert!(!stripped.contains("notes.list"));
         assert!(stripped.contains("synthèse"));
+    }
+
+    #[test]
+    fn humanize_tool_id_tokens_replaces_locked_tasks_labels() {
+        let t_en = i18n::strings("en");
+        let t_fr = i18n::strings("fr");
+        let raw = "J'ai utilisé `tasks.list` pour vérifier.";
+        let en = humanize_tool_id_tokens(raw, &t_en);
+        assert!(en.contains(t_en.agents_tool_tasks_list));
+        assert!(!en.contains("tasks.list"), "{en}");
+        let fr = humanize_tool_id_tokens(raw, &t_fr);
+        assert!(fr.contains(t_fr.agents_tool_tasks_list));
+        assert!(!fr.contains("tasks.list"), "{fr}");
+    }
+
+    #[test]
+    fn humanize_tool_id_tokens_drops_unknown_module_tools() {
+        let t = i18n::strings("en");
+        let raw = "Module `windmill.run` a échoué.";
+        let out = humanize_tool_id_tokens(raw, &t);
+        assert!(!out.contains("windmill.run"), "{out}");
+        assert!(out.contains("échoué"), "{out}");
     }
 
     #[test]

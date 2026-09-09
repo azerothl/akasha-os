@@ -608,61 +608,6 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         });
     }
 
-    let tasks_tools = [
-        (
-            "tasks.create",
-            "Créer une tâche partagée (humain + agent)",
-            serde_json::json!({
-                "type":"object",
-                "properties":{
-                    "title":{"type":"string"},
-                    "notes":{"type":"string"}
-                },
-                "required":["title"]
-            }),
-        ),
-        (
-            "tasks.list",
-            "Lister les tâches",
-            serde_json::json!({"type":"object"}),
-        ),
-        (
-            "tasks.update",
-            "Mettre à jour une tâche",
-            serde_json::json!({
-                "type":"object",
-                "properties":{
-                    "id":{"type":"string"},
-                    "title":{"type":"string"},
-                    "notes":{"type":"string"},
-                    "done":{"type":"boolean"}
-                },
-                "required":["id"]
-            }),
-        ),
-        (
-            "tasks.complete",
-            "Marquer une tâche terminée (ou la réouvrir)",
-            serde_json::json!({
-                "type":"object",
-                "properties":{
-                    "id":{"type":"string"},
-                    "done":{"type":"boolean"}
-                },
-                "required":["id"]
-            }),
-        ),
-    ];
-    for (name, desc, schema) in tasks_tools {
-        v.push(ToolDesc {
-            name: name.into(),
-            description: desc.into(),
-            input_schema: schema,
-            backend: ToolBackend::Module,
-            required_caps: vec!["tool.invoke:tasks".into()],
-        });
-    }
-
     let sid_schema = || {
         serde_json::json!({
             "type":"string",
@@ -1162,6 +1107,21 @@ pub fn default_agent_tools() -> Vec<String> {
     .collect()
 }
 
+/// Merge static builtin catalog with discovered module tools.
+/// On name collision, discovered manifest tools win over static platform entries.
+pub fn merge_catalog_with_discovered(static_catalog: &[ToolDesc], discovered: &[ToolDesc]) -> Vec<ToolDesc> {
+    let mut out = discovered.to_vec();
+    let discovered_names: std::collections::HashSet<&str> =
+        discovered.iter().map(|t| t.name.as_str()).collect();
+    for t in static_catalog {
+        if discovered_names.contains(t.name.as_str()) {
+            continue;
+        }
+        out.push(t.clone());
+    }
+    out
+}
+
 /// Filtre le catalogue selon les ids sélectionnés (+ toujours les runtime de base).
 pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
     select_tools_mode(selected, extra, false)
@@ -1169,7 +1129,8 @@ pub fn select_tools(selected: &[String], extra: &[ToolDesc]) -> Vec<ToolDesc> {
 
 /// Comme [`select_tools`], avec outils Deep Thinking si `deep`.
 pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) -> Vec<ToolDesc> {
-    let catalog = builtin_catalog();
+    let catalog = merge_catalog_with_discovered(&builtin_catalog(), extra);
+    let module_prefixes = crate::module_discovery::discovered_module_prefixes(extra);
     let mut out: Vec<ToolDesc> = Vec::new();
     let deep_always = [
         "plan.create",
@@ -1204,7 +1165,7 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
     } else {
         always.push("plan.update");
     }
-    for t in catalog.iter().chain(extra.iter()) {
+    for t in catalog.iter() {
         // Hors mode deep : ne pas exposer les outils plan.* deep
         if !deep && deep_always.contains(&t.name.as_str()) {
             continue;
@@ -1213,10 +1174,12 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
             continue;
         }
         let keep = if selected.is_empty() {
-            // Mode permissif : notes + tasks + runtime + fs + extensions
+            // Mode permissif : notes + discovered module tools + runtime + fs + extensions
             matches!(t.backend, ToolBackend::Runtime)
                 || t.name.starts_with("notes.")
-                || t.name.starts_with("tasks.")
+                || module_prefixes
+                    .iter()
+                    .any(|p| t.name.starts_with(&format!("{p}.")))
                 || always.contains(&t.name.as_str())
                 || t.name == "fs.read"
                 || t.name == "fs.list"
@@ -1715,9 +1678,110 @@ mod tests {
     }
 
     #[test]
-    fn default_agent_tools_grant_notes_tasks_fs_web() {
+    fn discovered_tasks_catalog_matches_frozen_contract() {
+        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
+        use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::ModuleInfo;
+
+        let module = ModuleInfo {
+            name: "tasks".into(),
+            version: "1.0.0".into(),
+            granted_caps: vec![INVOKE_CAP.into()],
+            tools: TOOL_IDS.iter().map(|s| s.to_string()).collect(),
+            quarantined: false,
+            ui_mode: None,
+            ui_title: None,
+        };
+        let discovered = discover_module_tools_from_list(&[module], |_| None);
+        let selected: Vec<String> = TOOL_IDS.iter().map(|s| s.to_string()).collect();
+        let tools = select_tools(&selected, &discovered);
+        for id in TOOL_IDS {
+            let tool = tools
+                .iter()
+                .find(|t| t.name == *id)
+                .unwrap_or_else(|| panic!("discovered catalog missing {id}"));
+            assert_eq!(tool.required_caps, vec![INVOKE_CAP.to_string()]);
+        }
+    }
+
+    #[test]
+    fn merge_catalog_prefers_discovered_over_static_collision() {
+        let static_tool = ToolDesc {
+            name: "tasks.list".into(),
+            description: "static".into(),
+            input_schema: serde_json::json!({}),
+            backend: ToolBackend::Module,
+            required_caps: vec!["tool.invoke:tasks".into()],
+        };
+        let discovered = ToolDesc {
+            name: "tasks.list".into(),
+            description: "from manifest".into(),
+            input_schema: serde_json::json!({"type":"object"}),
+            backend: ToolBackend::Module,
+            required_caps: vec!["tool.invoke:tasks".into()],
+        };
+        let merged = merge_catalog_with_discovered(&[static_tool], &[discovered]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].description, "from manifest");
+    }
+
+    #[test]
+    fn static_builtin_catalog_has_no_tasks_tools() {
+        let catalog = builtin_catalog();
+        assert!(!catalog.iter().any(|t| t.name.starts_with("tasks.")));
+    }
+
+    #[test]
+    fn default_agent_tools_grant_notes_fs_web_without_static_tasks() {
         let ids = default_agent_tools();
         let tools = select_tools(&ids, &[]);
+        let caps = caps_for_tools(&tools, &[]);
+        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
+        assert!(!caps.iter().any(|c| c == "tool.invoke:tasks"));
+        assert!(!tools.iter().any(|t| t.name == "tasks.create"));
+    }
+
+    #[test]
+    fn default_agent_tools_include_tasks_when_module_discovered() {
+        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
+        use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::ModuleInfo;
+
+        let module = ModuleInfo {
+            name: "tasks".into(),
+            version: "1.0.0".into(),
+            granted_caps: vec![INVOKE_CAP.into()],
+            tools: TOOL_IDS.iter().map(|s| s.to_string()).collect(),
+            quarantined: false,
+            ui_mode: None,
+            ui_title: None,
+        };
+        let discovered = discover_module_tools_from_list(&[module], |_| None);
+        let ids = default_agent_tools();
+        let tools = select_tools(&ids, &discovered);
+        let caps = caps_for_tools(&tools, &[]);
+        assert!(caps.iter().any(|c| c == "tool.invoke:tasks"));
+        assert!(tools.iter().any(|t| t.name == "tasks.create"));
+    }
+
+    #[test]
+    fn default_agent_tools_grant_notes_tasks_fs_web() {
+        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
+        use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::ModuleInfo;
+
+        let module = ModuleInfo {
+            name: "tasks".into(),
+            version: "1.0.0".into(),
+            granted_caps: vec![INVOKE_CAP.into()],
+            tools: TOOL_IDS.iter().map(|s| s.to_string()).collect(),
+            quarantined: false,
+            ui_mode: None,
+            ui_title: None,
+        };
+        let discovered = discover_module_tools_from_list(&[module], |_| None);
+        let ids = default_agent_tools();
+        let tools = select_tools(&ids, &discovered);
         let caps = caps_for_tools(&tools, &[]);
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
         assert!(caps.iter().any(|c| c == "tool.invoke:tasks"));
@@ -1728,21 +1792,6 @@ mod tests {
         assert!(tools.iter().any(|t| t.name == "web.browse"));
         assert!(tools.iter().any(|t| t.name == "tasks.create"));
         assert!(!tools.iter().any(|t| t.name == "canvas.stroke"));
-    }
-
-    #[test]
-    fn static_tasks_catalog_matches_frozen_contract() {
-        use aos_proto::TASKS_TOOL_IDS;
-
-        let selected: Vec<String> = TASKS_TOOL_IDS.iter().map(|s| s.to_string()).collect();
-        let tools = select_tools(&selected, &[]);
-        for id in TASKS_TOOL_IDS {
-            let tool = tools
-                .iter()
-                .find(|t| t.name == *id)
-                .unwrap_or_else(|| panic!("static catalog missing {id}"));
-            assert_eq!(tool.required_caps, vec![aos_proto::INVOKE_CAP.to_string()]);
-        }
     }
 
     #[test]

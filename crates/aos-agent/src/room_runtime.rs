@@ -26,7 +26,11 @@ use crate::room_conductor::{
     peers_requesting_response, pop_next_scheduled_turn, sanitize_member_queue,
 };
 use crate::room_reply::split_room_reply;
-use crate::skills::{load_skills, merge_skill_tools};
+use crate::module_discovery::{
+    active_module_names, discover_module_tools, merge_skill_tools_for_modules,
+    tool_in_catalog, tool_unavailable_message,
+};
+use crate::skills::load_skills;
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
     canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, default_agent_tools,
@@ -196,6 +200,8 @@ pub fn assemble_room_member_tools(
     canvas_open: bool,
     canvas_exported: &[String],
     user_message: &str,
+    installed_modules: &std::collections::HashSet<String>,
+    module_tools: &[ToolDesc],
 ) -> (Vec<String>, Vec<String>) {
     let spec_tools_empty = spec.tools.is_empty();
     let mut skills = spec.skills.clone();
@@ -217,12 +223,12 @@ pub fn assemble_room_member_tools(
     let injected_document_tools =
         !had_files_generate && base_tools.iter().any(|t| t == "files.generate");
     let skill_docs = load_skills(&skills);
-    let mut tool_ids = merge_skill_tools(&base_tools, &skill_docs);
+    let mut tool_ids = merge_skill_tools_for_modules(&base_tools, &skill_docs, installed_modules);
     let canvas_granted = base_tools.iter().any(|t| t.starts_with("canvas."));
     if canvas_open && (canvas_granted || spec_tools_empty) {
         merge_canvas_tools(&mut tool_ids, true, canvas_exported);
     }
-    let tools = select_tools(&tool_ids, &[]);
+    let tools = select_tools(&tool_ids, module_tools);
     let mut caps = spec.caps.clone();
     if spec_tools_empty {
         for c in caps_for_tools(&tools, &spec.mcp_servers) {
@@ -231,7 +237,7 @@ pub fn assemble_room_member_tools(
             }
         }
     } else if injected_document_tools {
-        let fg_tools = select_tools(&["files.generate".into()], &[]);
+        let fg_tools = select_tools(&["files.generate".into()], module_tools);
         for c in caps_for_tools(&fg_tools, &spec.mcp_servers) {
             if !caps.contains(&c) {
                 caps.push(c);
@@ -247,13 +253,22 @@ pub fn room_member_kit(
     canvas_open: bool,
     canvas_exported: &[String],
     document_ask: bool,
+    installed_modules: &std::collections::HashSet<String>,
+    module_tools: &[ToolDesc],
 ) -> (Vec<String>, Vec<String>) {
     let user_message = if document_ask {
         "prepare a document"
     } else {
         ""
     };
-    assemble_room_member_tools(spec, canvas_open, canvas_exported, user_message)
+    assemble_room_member_tools(
+        spec,
+        canvas_open,
+        canvas_exported,
+        user_message,
+        installed_modules,
+        module_tools,
+    )
 }
 
 fn last_user_message_text(session: &ChatSessionGetResponse) -> &str {
@@ -576,7 +591,7 @@ async fn run_room_tool_loop(
     session_id: &str,
     model_id: Option<String>,
     mut messages: Vec<ChatMessage>,
-    tool_descs: &[ToolDesc],
+    tool_ids: &[String],
     caps: &[String],
     mcp_servers: &[String],
     images: &[String],
@@ -595,6 +610,8 @@ async fn run_room_tool_loop(
     let mut produced_artifacts: Vec<ProducedArtifact> = Vec::new();
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
+        let module_tools = discover_module_tools(bus).await;
+        let tool_descs = select_tools(tool_ids, &module_tools);
         let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
         let mut step_refs: Vec<String> = if step == 0 { images.to_vec() } else { vec![] };
         if let Some(ref png) = pending_canvas_png.take() {
@@ -683,12 +700,17 @@ async fn run_room_tool_loop(
                     &action.args,
                 )
                 .await?
+            } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs) {
+                tool_unavailable_message(
+                    &action.action,
+                    "absent du catalogue modules actif",
+                )
             } else {
                 let mut outcome = execute_room_tool(
                     bus,
                     agent_id,
                     caps,
-                    tool_descs,
+                    &tool_descs,
                     &action.action,
                     &action.args,
                     &trace_id,
@@ -724,7 +746,7 @@ async fn run_room_tool_loop(
 
             messages.push(ChatMessage {
                 role: "user".into(),
-                content: format!("[outil {}] {outcome}", action.action),
+                content: format!("[outil] {outcome}"),
             });
         }
     }
@@ -753,16 +775,24 @@ pub async fn execute_room_turn(
         Vec::new()
     };
     let user_message = last_user_message_text(&session);
+    let module_list = bus
+        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+        .await
+        .unwrap_or_default();
+    let installed_modules = active_module_names(&module_list);
+    let module_tools = discover_module_tools(bus).await;
     let (tool_ids, caps) = assemble_room_member_tools(
         &spec,
         session.meta.canvas_open,
         &canvas_exported,
         user_message,
+        &installed_modules,
+        &module_tools,
     );
     let tool_descs = if tool_ids.is_empty() {
         Vec::new()
     } else {
-        select_tools(&tool_ids, &[])
+        select_tools(&tool_ids, &module_tools)
     };
 
     let canvas_digest = if session.meta.canvas_open {
@@ -829,7 +859,7 @@ pub async fn execute_room_turn(
             &req.session_id,
             model_id,
             messages,
-            &tool_descs,
+            &tool_ids,
             &caps,
             &spec.mcp_servers,
             &images,
@@ -969,6 +999,15 @@ mod tests {
         AgentGoal, AgentSpec, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage,
         ChatSessionMeta, ChatSessionMode,
     };
+    use std::collections::HashSet;
+
+    fn no_modules() -> HashSet<String> {
+        HashSet::new()
+    }
+
+    fn empty_discovered() -> Vec<ToolDesc> {
+        Vec::new()
+    }
 
     fn room_session_with_user(content: &str) -> ChatSessionGetResponse {
         ChatSessionGetResponse {
@@ -1230,7 +1269,7 @@ mod tests {
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[], false);
+        let (ids, caps) = room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
         assert!(ids.iter().any(|x| x == "notes.create"));
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
     }
@@ -1261,7 +1300,7 @@ mod tests {
         };
         use crate::tools::CANVAS_TOOL_IDS;
         let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
-        let (ids, caps) = room_member_kit(&spec, true, &exported, false);
+        let (ids, caps) = room_member_kit(&spec, true, &exported, false, &no_modules(), &empty_discovered());
         assert!(ids.iter().any(|x| x == "canvas.set_style"));
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.line"));
@@ -1296,7 +1335,7 @@ mod tests {
             origin: None,
         cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[], false);
+        let (ids, caps) = room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
@@ -1325,7 +1364,14 @@ mod tests {
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = assemble_room_member_tools(&spec, false, &[], "écris une note rapide");
+        let (ids, caps) = assemble_room_member_tools(
+            &spec,
+            false,
+            &[],
+            "écris une note rapide",
+            &no_modules(),
+            &empty_discovered(),
+        );
         assert!(ids.iter().any(|x| x == "notes.create"));
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
         assert!(!ids.iter().any(|x| x == "files.generate"));
@@ -1355,8 +1401,14 @@ mod tests {
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) =
-            assemble_room_member_tools(&spec, false, &[], "prepare a document about rust");
+        let (ids, caps) = assemble_room_member_tools(
+            &spec,
+            false,
+            &[],
+            "prepare a document about rust",
+            &no_modules(),
+            &empty_discovered(),
+        );
         assert!(ids.iter().any(|x| x == "files.generate"));
         assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
     }
@@ -1385,10 +1437,10 @@ mod tests {
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[], true);
+        let (ids, caps) = room_member_kit(&spec, false, &[], true, &no_modules(), &empty_discovered());
         assert!(ids.iter().any(|x| x == "files.generate"));
         assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
-        let (ids_off, _) = room_member_kit(&spec, false, &[], false);
+        let (ids_off, _) = room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
         assert!(!ids_off.iter().any(|x| x == "files.generate"));
     }
 
@@ -1432,7 +1484,14 @@ mod tests {
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let user_message = last_user_message_text(&session);
-        let (tool_ids, _) = assemble_room_member_tools(&spec, false, &[], user_message);
+        let (tool_ids, _) = assemble_room_member_tools(
+            &spec,
+            false,
+            &[],
+            user_message,
+            &no_modules(),
+            &empty_discovered(),
+        );
         assert!(room_kit_lacks_required_tools(&tool_ids, user_message));
         assert_eq!(ROOM_ACTION_UNAVAILABLE, "room_action_unavailable");
     }
@@ -1501,7 +1560,14 @@ mod tests {
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
-        let (ids, caps) = assemble_room_member_tools(&spec, true, &exported, "");
+        let (ids, caps) = assemble_room_member_tools(
+            &spec,
+            true,
+            &exported,
+            "",
+            &no_modules(),
+            &empty_discovered(),
+        );
         assert!(ids.iter().any(|x| x == "web.search"));
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!ids.iter().any(|x| x == "notes.create"));

@@ -32,11 +32,15 @@ use aos_agent::canvas_scene::{
     CanvasRepeatVerdict,
 };
 use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
+use aos_agent::module_discovery::{
+    active_module_names, discover_module_tools, merge_skill_tools_for_modules,
+    missing_module_hints, module_fallback_allowed, tool_in_catalog, tool_unavailable_message,
+};
 use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list, caps_for_tools, caps_subset,
-    classify_action, canvas_draw_strategy_hint, is_module_fallback_candidate,
+    classify_action, canvas_draw_strategy_hint,
     normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool, restrict_canvas_tools, select_tools,
     select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend,
     ToolDesc,
@@ -328,12 +332,17 @@ async fn main() {
 
     // Skills + tools + MCP + modules installés (catalogue dynamique)
     let mut skill_docs = load_skills(&spec.skills);
-    let tool_ids = merge_skill_tools(&spec.tools, &skill_docs);
+    let module_list = bus
+        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+        .await
+        .unwrap_or_default();
+    let installed_modules = active_module_names(&module_list);
+    let tool_ids = merge_skill_tools_for_modules(&spec.tools, &skill_docs, &installed_modules);
     let mcp_secrets = load_mcp_secrets(&agent_id);
     let (mut mcp_sessions, mcp_tools) =
         open_mcp_tools_with_secrets(&spec.mcp_servers, &mcp_secrets).await;
     let mut module_tools = discover_module_tools(&bus).await;
-    module_tools.extend(mcp_tools);
+    module_tools.extend(mcp_tools.clone());
     let mut tools = select_tools_mode(&tool_ids, &module_tools, deep);
     strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
     // Enrich caps from tools if create didn't set them all
@@ -807,6 +816,20 @@ async fn main() {
 
         let step_t0 = Instant::now();
         let infer_t0 = Instant::now();
+        // Refresh module catalog each turn (install/uninstall may change availability).
+        let module_list = bus
+            .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+            .await
+            .unwrap_or_default();
+        let _installed_modules = active_module_names(&module_list);
+        module_tools = discover_module_tools(&bus).await;
+        module_tools.extend(mcp_tools.clone());
+        tools = select_tools_mode(
+            &tool_ids,
+            &module_tools,
+            spec.cognitive_mode.is_deep_thinking(),
+        );
+        strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
         let mut stall_retries = 0u32;
@@ -2332,6 +2355,12 @@ async fn execute_action(
                 }
             }
             let backend = resolve_tool_backend(other, tools);
+            if !tool_in_catalog(other, tools) {
+                return ActResult::Continue(tool_unavailable_message(
+                    other,
+                    "absent du catalogue modules actif",
+                ));
+            }
             match backend {
                 Some(ToolBackend::Module) => {
                     let outcome = invoke_module(
@@ -2352,7 +2381,7 @@ async fn execute_action(
                          pour remplir une silhouette, passe `fill:true` à canvas.path/rect/ellipse."
                     ))
                 }
-                None if is_module_fallback_candidate(other) => {
+                None if module_fallback_allowed(other, tools) => {
                     let outcome = invoke_module(
                         bus,
                         &agent_id,
@@ -3927,64 +3956,6 @@ async fn invoke_native(
     }
 }
 
-async fn discover_module_tools(bus: &BusClient) -> Vec<ToolDesc> {
-    let mut out = Vec::new();
-    let Ok(list) = bus
-        .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
-        .await
-    else {
-        return out;
-    };
-    for info in list {
-        for tool in &info.tools {
-            out.push(ToolDesc {
-                name: tool.clone(),
-                description: format!("outil module {}", info.name),
-                input_schema: serde_json::json!({"type":"object"}),
-                backend: ToolBackend::Module,
-                required_caps: vec![format!("tool.invoke:{}", info.name)],
-            });
-        }
-        // Enrichir via describe si possible
-        if let Ok(desc) = bus
-            .call::<aos_proto::ModuleIdRequest, serde_json::Value>(
-                "module.describe",
-                &aos_proto::ModuleIdRequest {
-                    module: info.name.clone(),
-                },
-                vec![],
-            )
-            .await
-        {
-            if let Some(tools) = desc
-                .get("manifest")
-                .and_then(|m| m.get("tools"))
-                .and_then(|t| t.as_array())
-            {
-                for t in tools {
-                    let name = t
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    if name.is_empty() {
-                        continue;
-                    }
-                    if let Some(existing) = out.iter_mut().find(|x| x.name == name) {
-                        if let Some(d) = t.get("description").and_then(|v| v.as_str()) {
-                            existing.description = d.to_string();
-                        }
-                        if let Some(schema) = t.get("input_schema") {
-                            existing.input_schema = schema.clone();
-                        }
-                    }
-                }
-            }
-        }
-    }
-    out
-}
-
 async fn read_fs(bus: &BusClient, path: &str, agent_id: &str, caps: &[String]) -> String {
     match bus
         .call::<FsReadRequest, FsReadResponse>(
@@ -4081,12 +4052,21 @@ async fn install_system_prompt(
     skills: &[SkillDoc],
     tools: &[ToolDesc],
 ) {
+    let module_list = bus
+        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+        .await
+        .unwrap_or_default();
+    let installed_modules = active_module_names(&module_list);
     let mut system = compile_system_prompt(&PromptCompileInput {
         spec,
         skills,
         tools,
         doc_index: &spec.documents,
     });
+    for hint in missing_module_hints(skills, &installed_modules) {
+        system.push_str("\n\n");
+        system.push_str(&hint);
+    }
     let has_canvas = tools.iter().any(|t| t.name.starts_with("canvas."));
     if has_canvas {
         if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {

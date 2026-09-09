@@ -56,7 +56,11 @@ pub fn fmt_ms(ms: u64) -> String {
     }
 }
 
-pub fn step_header(rec: &AgentStepRecord, tz_offset_min: i32) -> String {
+pub fn step_header(
+    rec: &AgentStepRecord,
+    tz_offset_min: i32,
+    t: &crate::i18n::UiStrings,
+) -> String {
     let mut parts = vec![format!("Tour {}", rec.step)];
     if rec.ts_ms > 0 {
         parts.push(crate::ui_format::format_local_time_hms(
@@ -67,8 +71,8 @@ pub fn step_header(rec: &AgentStepRecord, tz_offset_min: i32) -> String {
     if rec.duration_ms > 0 {
         parts.push(fmt_ms(rec.duration_ms));
     }
-    if !rec.action.is_empty() {
-        parts.push(rec.action.clone());
+    if let Some(label) = crate::i18n::tool_human_label(t, &rec.action) {
+        parts.push(label.to_string());
     }
     let toks = rec.prompt_tokens + rec.generated_tokens;
     if toks > 0 {
@@ -620,43 +624,43 @@ fn format_action_as_markdown(
     } else {
         match action.action.as_str() {
             "goal.complete" | "noop" | "" => {}
-            other => {
-                let mut line = format!("✓ `{other}`");
+            _ => {
                 if let Some(path) = action.args.get("path").and_then(|v| v.as_str()) {
-                    line.push_str(&format!(" → `{path}`"));
-                }
-                if let Some(q) = action
+                    parts.push(format!("→ `{path}`"));
+                } else if let Some(q) = action
                     .args
                     .get("query")
                     .or_else(|| action.args.get("brief"))
                     .and_then(|v| v.as_str())
                 {
-                    line.push_str(&format!(" — {}", truncate(q, 120)));
+                    parts.push(truncate(q, 120));
                 }
-                parts.push(line);
             }
         }
     }
     let joined = parts.join("\n\n");
     if joined.trim().is_empty() {
-        if action.action.is_empty() {
-            String::new()
-        } else {
-            format!("`{}`", action.action)
-        }
+        String::new()
     } else {
         joined
     }
 }
 
 /// Affichage chat final : prose lisible sans fuites meta internes.
-pub fn format_chat_assistant_display(raw: &str) -> String {
+pub fn format_chat_assistant_display(raw: &str, t: &crate::i18n::UiStrings) -> String {
+    let base = sanitize_chat_visible_bubble(&format_assistant_display(raw));
+    crate::chat_room::humanize_tool_id_tokens(&base, t)
+}
+
+/// Back-compat wrapper when locale is unavailable (strips ids, no human labels).
+pub fn format_chat_assistant_display_localeless(raw: &str) -> String {
     sanitize_chat_visible_bubble(&format_assistant_display(raw))
 }
 
 /// Pendant le stream chat : évite JSON/outils bruts et fuites meta.
-pub fn format_chat_streaming_preview(raw: &str) -> String {
-    sanitize_chat_visible_bubble(&format_streaming_preview(raw))
+pub fn format_chat_streaming_preview(raw: &str, t: &crate::i18n::UiStrings) -> String {
+    let base = sanitize_chat_visible_bubble(&format_streaming_preview(raw));
+    crate::chat_room::humanize_tool_id_tokens(&base, t)
 }
 
 /// Pendant le stream : évite d'afficher l'objet JSON brut incomplet.
@@ -1250,7 +1254,7 @@ fn draw_step(
     t: &crate::i18n::UiStrings,
     actions: &mut PanelActions,
 ) {
-    let header = step_header(rec, crate::local_tz_offset_minutes());
+    let header = step_header(rec, crate::local_tz_offset_minutes(), t);
     egui::CollapsingHeader::new(header)
         .id_salt(format!("step-{agent_id}-{}", rec.step))
         .default_open(default_open)
@@ -1432,10 +1436,19 @@ fn draw_step(
             } else if rec.action != "noop" {
                 card_frame(Color32::from_rgb(28, 36, 48)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.colored_label(
-                            tool_kind_color(&rec.tool_kind),
-                            RichText::new(format!("{} · {}", rec.action, rec.tool_kind)).strong(),
-                        );
+                        let action_label = crate::i18n::tool_human_label(t, &rec.action);
+                        let header = match (action_label, rec.tool_kind.as_str()) {
+                            (Some(label), "") => label.to_string(),
+                            (Some(label), kind) => format!("{label} · {kind}"),
+                            (None, kind) if !kind.is_empty() => kind.to_string(),
+                            _ => String::new(),
+                        };
+                        if !header.is_empty() {
+                            ui.colored_label(
+                                tool_kind_color(&rec.tool_kind),
+                                RichText::new(header).strong(),
+                            );
+                        }
                         if let Some(s) = &rec.skill {
                             ui.label(format!("skill: {s}"));
                         }
@@ -1511,9 +1524,15 @@ fn draw_step(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n;
+
+    fn t_en() -> i18n::UiStrings {
+        i18n::strings("en")
+    }
 
     #[test]
     fn step_header_includes_clock_duration_and_tokens() {
+        let t = t_en();
         let rec = AgentStepRecord {
             step: 3,
             action: "web.search".into(),
@@ -1523,11 +1542,12 @@ mod tests {
             generated_tokens: 40,
             ..AgentStepRecord::default()
         };
-        let header = step_header(&rec, 0);
+        let header = step_header(&rec, 0, &t);
         assert!(header.contains("Tour 3"), "{header}");
         assert!(header.contains("00:00:00"), "{header}");
         assert!(header.contains("1.2 s"), "{header}");
-        assert!(header.contains("web.search"), "{header}");
+        assert!(header.contains(t.agents_tool_web_search), "{header}");
+        assert!(!header.contains("web.search"), "{header}");
         assert!(header.contains("120 tok"), "{header}");
     }
 
@@ -1580,7 +1600,7 @@ mod tests {
 Selon les established rules for the Canvas tool, media.image.generate is used when closed. No JSON is needed as there is no spawn.
 
 Le canvas sert aux esquisses vectorielles."#;
-        let out = format_chat_assistant_display(raw);
+        let out = format_chat_assistant_display(raw, &t_en());
         let lower = out.to_ascii_lowercase();
         assert!(!lower.contains("media.image.generate"), "{out}");
         assert!(!out.contains("@agent-"), "{out}");
@@ -1592,7 +1612,7 @@ Le canvas sert aux esquisses vectorielles."#;
     #[test]
     fn chat_streaming_preview_strips_trailing_meta() {
         let raw = r#"Le Canvas permet des esquisses vectorielles. Je vais donc répondre en orientant l'utilisateur vers media.image.generate. No JSON is needed."#;
-        let out = format_chat_streaming_preview(raw);
+        let out = format_chat_streaming_preview(raw, &t_en());
         let lower = out.to_ascii_lowercase();
         assert!(!lower.contains("media.image.generate"), "{out}");
         assert!(!lower.contains("json"), "{out}");
@@ -1603,7 +1623,7 @@ Le canvas sert aux esquisses vectorielles."#;
     #[test]
     fn streaming_truncates_mid_token_before_tool_id() {
         let raw = "Le Canvas est un panneau vectoriel. Selon media.image.generate";
-        let out = format_chat_streaming_preview(raw);
+        let out = format_chat_streaming_preview(raw, &t_en());
         assert!(!out.to_ascii_lowercase().contains("media.image"), "{out}");
         assert!(out.contains("vectoriel"), "{out}");
     }
@@ -1612,7 +1632,7 @@ Le canvas sert aux esquisses vectorielles."#;
     fn streaming_truncates_before_rules_and_no_json() {
         let raw =
             "Bonne réponse. established rules for the Canvas tool. No JSON is needed as there";
-        let out = format_chat_streaming_preview(raw);
+        let out = format_chat_streaming_preview(raw, &t_en());
         let lower = out.to_ascii_lowercase();
         assert!(!lower.contains("rules"), "{out}");
         assert!(!lower.contains("json"), "{out}");
@@ -1622,7 +1642,7 @@ Le canvas sert aux esquisses vectorielles."#;
     #[test]
     fn streaming_truncates_chain_of_thought_before_it_streams() {
         let raw = "Le Canvas sert au trait vectoriel. Je vais donc répondre en orientant";
-        let out = format_chat_streaming_preview(raw);
+        let out = format_chat_streaming_preview(raw, &t_en());
         assert!(!out.to_ascii_lowercase().contains("je vais donc"), "{out}");
         assert!(out.contains("vectoriel"), "{out}");
     }
@@ -1631,7 +1651,7 @@ Le canvas sert aux esquisses vectorielles."#;
     fn session26_canvas_leak_keeps_only_human_answer() {
         let raw = r#"l'agent va ouvrir le panneau s'il est fermé et utiliser des fonctions comme `canvas.stroke` ou `canvas.rect` … (`media.image.generate`) pour créer une image.
 Since this is a general question about how it works, I will provide a concise, natural language explanation based on the established rules for the Canvas tool. No JSON is needed as there is no tool invocation loop in this chat session.<channel>Le Canvas est un outil qui permet le dessin vectoriel. Tu peux y dessiner au trait lorsque le panneau est ouvert."#;
-        let out = format_chat_assistant_display(raw);
+        let out = format_chat_assistant_display(raw, &t_en());
         let lower = out.to_ascii_lowercase();
         assert!(!out.contains("canvas.stroke"), "{out}");
         assert!(!out.contains("canvas.rect"), "{out}");
@@ -1649,7 +1669,7 @@ Since this is a general question about how it works, I will provide a concise, n
         let raw = r#"Le Canvas est un panneau vectoriel où vous pouvez dessiner. Si vous voulez dessiner avec un marqueur spécifique, vous devez explicitement le mentionner (par exemple, "sur le canvas"). Si vous ne le mentionnez pas, le dessin sera généré comme une image.
 
 Je vais répondre de manière naturelle et concise, en expliquant le concept humain du Canvas."#;
-        let out = format_chat_assistant_display(raw);
+        let out = format_chat_assistant_display(raw, &t_en());
         let lower = out.to_ascii_lowercase();
         assert!(out.contains("panneau vectoriel"), "{out}");
         assert!(!lower.contains("je vais répondre"), "{out}");
@@ -1662,7 +1682,7 @@ Je vais répondre de manière naturelle et concise, en expliquant le concept hum
         let raw = r#"Le Canvas est un panneau vectoriel où vous pouvez dessiner.
 
 Je vais répondre de manière naturelle"#;
-        let out = format_chat_streaming_preview(raw);
+        let out = format_chat_streaming_preview(raw, &t_en());
         assert!(out.contains("panneau vectoriel"), "{out}");
         assert!(
             !out.to_ascii_lowercase().contains("je vais répondre"),
@@ -1674,7 +1694,7 @@ Je vais répondre de manière naturelle"#;
     fn session33_collapses_verbatim_duplicate_paragraph() {
         let para = "Le Canvas est un panneau vectoriel où vous pouvez dessiner ou esquisser. Si vous le dessinez en utilisant un marqueur spécifique, les traits apparaissent sur ce panneau. Si vous le dessinez sans marqueur et que le panneau est fermé, l'agent utilisera un outil de génération d'images pour créer le dessin.";
         let raw = format!("{para}\n\n{para}");
-        let out = format_chat_assistant_display(&raw);
+        let out = format_chat_assistant_display(&raw, &t_en());
         assert_eq!(out, para, "{out}");
         assert!(out.contains("outil de génération d'images"), "{out}");
         assert_eq!(out.matches("panneau vectoriel").count(), 1, "{out}");
