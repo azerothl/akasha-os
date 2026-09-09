@@ -1538,6 +1538,7 @@ impl ImageStudioState {
             &mut self.install_prompt,
             Some(t.studio_video_pack_help),
         );
+        ui_model_guidance(ui, &self.model_id, CreateMode::Video);
         if self.video_packs.is_empty() {
             ui.colored_label(egui::Color32::YELLOW, t.studio_no_video_models_installed);
         } else if !models_page::is_model_installed(&self.model_id) {
@@ -2041,6 +2042,7 @@ impl ImageStudioState {
             &mut self.install_prompt,
             Some(t.studio_image_pack_help),
         );
+        ui_model_guidance(ui, &self.model_id, CreateMode::Image);
         if self.packs.is_empty() {
             ui.colored_label(egui::Color32::YELLOW, t.studio_no_models_installed);
         } else if !models_page::is_model_installed(&self.model_id) {
@@ -2956,6 +2958,58 @@ fn catalog_video_defaults(model_id: &str) -> Option<crate::models_page::VideoDef
         .iter()
         .find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))?;
     serde_json::from_value(m.get("video_defaults")?.clone()).ok()
+}
+
+/// Compact, actionable model-card guidance shown directly below the model picker.
+/// Keeping this next to the picker avoids forcing users into the Models page to
+/// discover resolution, duration or memory constraints.
+fn ui_model_guidance(ui: &mut egui::Ui, model_id: &str, mode: CreateMode) {
+    if model_id.is_empty() {
+        return;
+    }
+    let path = aos_home().join("share/models/catalog-offerings.json");
+    let Ok(raw) = std::fs::read_to_string(path) else { return };
+    let Ok(root) = serde_json::from_str::<serde_json::Value>(&raw) else { return };
+    let Some(model) = root
+        .get("models")
+        .and_then(|v| v.as_array())
+        .and_then(|models| models.iter().find(|m| m.get("id").and_then(|v| v.as_str()) == Some(model_id)))
+    else { return };
+    let mut facts = Vec::new();
+    if let Some(mib) = model.get("min_vram_mib").and_then(|v| v.as_u64()) {
+        if mib > 0 {
+            facts.push(format!("VRAM ≥ {} Go", (mib as f32 / 1024.0).ceil() as u32));
+        }
+    }
+    if mode == CreateMode::Video {
+        if let Some(v) = model.get("video_defaults") {
+            let w = v.get("width").and_then(|x| x.as_u64());
+            let h = v.get("height").and_then(|x| x.as_u64());
+            let fps = v.get("fps").and_then(|x| x.as_u64());
+            let max_s = v.get("max_duration_secs").and_then(|x| x.as_u64());
+            if let (Some(w), Some(h)) = (w, h) {
+                facts.push(format!("{}×{} conseillé", w, h));
+            }
+            if let Some(fps) = fps {
+                facts.push(format!("{} fps", fps));
+            }
+            if let Some(max_s) = max_s {
+                facts.push(format!("jusqu’à {} s", max_s));
+            }
+        }
+    }
+    if let Some(description) = model.get("description").and_then(|v| v.as_str()) {
+        let desc = description.trim();
+        if !desc.is_empty() {
+            facts.push(desc.to_string());
+        }
+    }
+    if !facts.is_empty() {
+        ui.add(
+            egui::Label::new(egui::RichText::new(format!("ⓘ {}", facts.join(" · "))).weak())
+                .wrap(),
+        );
+    }
 }
 
 fn json_arg_as_string(v: Option<&serde_json::Value>) -> String {
