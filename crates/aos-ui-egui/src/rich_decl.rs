@@ -1,4 +1,8 @@
 //! Rich declarative UI runtime (issue #150 lot 1): state, subscriptions, demo jobs.
+//!
+//! Surface lock: job handles carry technical ids internally; the host paints human
+//! progress copy only (see `i18n::job_state_human_label`). Never embed Create-specific
+//! widgets or chrome here.
 
 use aos_proto::rich_decl_ui::{RichInteractionEvent, RichJobHandle, RichJobProgress};
 use serde_json::{json, Value};

@@ -125,7 +125,9 @@ pub(crate) fn on_ui_invoke_done(
             }
             panel.status.clear();
         } else {
-            panel.status = error.unwrap_or_else(|| "Action failed".into());
+            let t = crate::i18n::strings(&app.prefs.language);
+            let _ = error;
+            panel.status = t.decl_ui_action_failed.to_string();
         }
     }
     if ok {
@@ -145,12 +147,14 @@ pub(crate) fn on_ui_service_done(
     error: Option<String>,
     refresh_binds: Vec<String>,
 ) {
+    let t = crate::i18n::strings(&app.prefs.language);
     if let Some(panel) = app.decl_panels.get_mut(&module) {
         panel.set_pending_invoke(false);
         if ok {
             panel.status.clear();
         } else {
-            panel.status = error.unwrap_or_else(|| "Action failed".into());
+            let _ = error;
+            panel.status = t.decl_ui_action_failed.to_string();
         }
     }
     if ok {

@@ -689,33 +689,38 @@ impl DeclUiPanelState {
                 );
             }
             "job" => {
+                let t = crate::i18n::strings(language);
                 let sub_id = w
                     .subscription
                     .as_deref()
                     .or(w.action.as_deref())
                     .unwrap_or("job");
                 if let Some(job) = subscriptions.job(sub_id) {
-                    let state = job.state.as_deref().unwrap_or("queued");
-                    let label = widget_text(w, doc, language).unwrap_or_else(|| state.into());
-                    ui.horizontal(|ui| {
-                        ui.label(label);
-                        ui.monospace(state);
-                    });
+                    let state_key = job.state.as_deref().unwrap_or("queued");
+                    let state_label = crate::i18n::job_state_human_label(&t, state_key);
+                    let heading = widget_text(w, doc, language)
+                        .unwrap_or_else(|| t.decl_job_idle.to_string());
+                    ui.label(heading);
+                    ui.weak(state_label);
                     if let Some(p) = &job.progress {
                         ui.add(egui::ProgressBar::new(
                             p.completed as f32 / p.total.max(1) as f32,
-                        ));
+                        )
+                        .text(format!("{}/{}", p.completed, p.total)));
                     }
-                    if state == "running" {
+                    if matches!(state_key, "running" | "queued") {
                         if let Some(job_id) = &job.job_id {
-                            if ui.button("Cancel").clicked() {
+                            if ui.button(t.decl_job_cancel).clicked() {
                                 actions.cancel_job =
                                     Some((job_id.clone(), sub_id.to_string()));
                             }
                         }
                     }
                 } else {
-                    ui.weak(widget_text(w, doc, language).unwrap_or_else(|| "No job".into()));
+                    ui.weak(
+                        widget_text(w, doc, language)
+                            .unwrap_or_else(|| t.decl_job_idle.to_string()),
+                    );
                 }
             }
             "image_view" => {

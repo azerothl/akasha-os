@@ -283,6 +283,25 @@ available image engine (not Preview stub).
 6. **Create `.aospkg`** — WASM + declarative UI (lot 2).
 7. **Composition primitives** — canvas/layers (lot 5).
 
+## Designer + supervisor surface locks (#150)
+
+Locked for all lots (Lot 1 applies now; Lot 2+ must not regress):
+
+| Lock | Rule |
+|------|------|
+| Create rail/tab | Human **Créer** / **Create** from host i18n or package `DeclUiLabels` — never the module id `create` in chrome |
+| Host renderer | **No `create_studio` mega-widget** — Create ships as generic v2 primitives only |
+| Tool discovery / chrome | Human names only in chat, roster, and module chrome — never raw ids such as `create.history.*`, `media.image.*`, or undiscovered module tool ids |
+| Jobs / progress | Human-facing states in UI and transcript — never technical `job_id`, service names, or raw state tokens |
+| Uninstall Create (Lot 2+) | Keep user data under `/documents/create/**`; agent `media.image.generate` remains available without Create installed |
+| Lot 1 sample | **`gallery-demo` is not Create** — independent harness; sidebar title from document labels (`Démo galerie` / `Gallery Demo`) |
+
+Lot 1 implementation notes:
+
+- `job` widget paints localized state via `i18n::job_state_human_label` (FR/EN).
+- Declarative panel errors use generic copy — internal service/tool ids are not shown.
+- Module sidebar titles come from `DeclUiDocument::catalogue_title()`, not package `name`.
+
 ## Consequences
 
 - Lot 0 PR is documentation + contract constants/tests only; runtime behaviour unchanged.

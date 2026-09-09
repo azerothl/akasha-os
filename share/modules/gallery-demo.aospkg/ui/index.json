@@ -12,7 +12,8 @@
       "steps_label": "Demo steps",
       "run_label": "Run demo job",
       "job_label": "Background job",
-      "preview_empty": "No preview yet"
+      "preview_empty": "No preview yet",
+      "about_body": "Independent rich UI sample (not Create). Exercises layout panels, image preview, bindings, and background tasks."
     },
     "fr": {
       "app_title": "Démo galerie",
@@ -21,7 +22,8 @@
       "steps_label": "Étapes démo",
       "run_label": "Lancer la tâche démo",
       "job_label": "Tâche en arrière-plan",
-      "preview_empty": "Pas encore d'aperçu"
+      "preview_empty": "Pas encore d'aperçu",
+      "about_body": "Exemple d'interface riche indépendant (pas Créer). Met en œuvre les panneaux, l'aperçu image, les liaisons et les tâches en arrière-plan."
     }
   },
   "state": {
@@ -117,7 +119,7 @@
           },
           {
             "kind": "markdown",
-            "text": "Independent rich UI sample (not Create). Exercises layout, `image_view`, bindings, and job subscriptions."
+            "label_key": "about_body"
           },
           {
             "kind": "progress",

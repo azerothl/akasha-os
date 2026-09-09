@@ -169,6 +169,23 @@ release build).  These are **targets**, not current performance claims.
 | Job progress UI | first update ≤ 250 ms after service event; ≤ 10 updates/s per job |
 | Resource cleanup | zero live subscriptions/textures after one event-loop turn on close/uninstall |
 
+## Designer + supervisor surface locks (#150)
+
+These rules apply to every lot; Lot 1 enforces them for generic v2 widgets and the
+`gallery-demo` sample:
+
+- **Create chrome (Lot 2+):** rail/tab label is human **Créer** / **Create**, never
+  module id `create`.
+- **No `create_studio`:** the host renderer stays generic; packages own business logic.
+- **Human chrome only:** tool discovery, roster labels, and module chrome never show
+  raw tool/service ids (`create.history.*`, `media.image.*`, …). Unknown discovered
+  tools paint nothing rather than the id (see `i18n::tool_human_label`).
+- **Human job copy:** `job` widgets and chat/transcript surfaces show localized progress
+  states only — not `job_id`, `kind`, or wire-format state tokens.
+- **Uninstall Create (Lot 2+):** documents under `/documents/create/**` remain; agents
+  keep `media.image.generate` without the Create app.
+- **Lot 1 sample:** `gallery-demo` validates the contract without Create semantics.
+
 ## What #149 already validated (reused by rich apps)
 
 | Capability | Status on `main` |
