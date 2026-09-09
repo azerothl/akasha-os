@@ -6,13 +6,13 @@
 use aos_agent::deep_thinking::{self, deep_thinking_caps, DeepThinkingEngine};
 use aos_agent::health::{self, HealthAction, HealthSample};
 use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_placeholder};
-use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
+use aos_agent::module_discovery::{discover_module_tools, merge_skill_tools_for_modules};
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
 use aos_agent::room_ask::deliver_room_ask_reply;
+use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
 use aos_agent::room_runtime::{self, RoomRoundState};
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
-use aos_agent::module_discovery::{discover_module_tools, merge_skill_tools_for_modules};
 use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
 use aos_agent::tools::{caps_for_tools, default_agent_tools, select_tools, ToolDesc};
 use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload, SubscribeRequest};
@@ -23,13 +23,13 @@ use aos_proto::{
     AgentOutputEvent, AgentPolicyGetRequest, AgentPolicySetRequest, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentRoomConductRequest, AgentRoomTurnRequest,
     AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse, AgentStartRequest, AgentState,
-    AgentSteerRequest, AgentStepRecord, AgentTrace, CapInfo, CapListRequest, CapMintRequest,
-    CapMintResponse, ChatAttachment, ChatMessage, ChatSessionAppendRequest, ChatSessionGetResponse,
-    ChatSessionIdRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest,
-    CancelRequest, CognitiveMode,
-    InferParams, InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest,
-    PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse,
-    PlanUpdateStepRequest, SecretGetRequest, SkillInfo, TokenEvent,
+    AgentSteerRequest, AgentStepRecord, AgentTrace, CancelRequest, CapInfo, CapListRequest,
+    CapMintRequest, CapMintResponse, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
+    ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionRoomAskReplyRequest,
+    ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest, CognitiveMode, InferParams,
+    InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest,
+    PlanGetRequest, PlanReplaceTreeRequest, PlanResponse, PlanUpdateStepRequest, SecretGetRequest,
+    SkillInfo, TokenEvent,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -93,11 +93,7 @@ async fn notify_parent_child_terminal(
             if let Some(entry) = rt.agents.get_mut(parent_id) {
                 entry.info.deep_plan = Some(plan.clone());
                 persist::update_info_sidecar(&entry.info);
-                broadcast(
-                    entry,
-                    &AgentOutputEvent::DeepPlanUpdated { plan },
-                )
-                .await;
+                broadcast(entry, &AgentOutputEvent::DeepPlanUpdated { plan }).await;
             }
         }
         if let Some(entry) = rt.agents.get_mut(parent_id) {
@@ -203,13 +199,9 @@ async fn apply_health_action(
         HealthAction::None => {}
         HealthAction::Nudge | HealthAction::Unblock => {
             let line = if action == HealthAction::Unblock {
-                format!(
-                    "health : déblocage automatique (aucune activité depuis {idle_secs}s)"
-                )
+                format!("health : déblocage automatique (aucune activité depuis {idle_secs}s)")
             } else {
-                format!(
-                    "health : reprise automatique (aucune activité depuis {idle_secs}s)"
-                )
+                format!("health : reprise automatique (aucune activité depuis {idle_secs}s)")
             };
             let _ = send_control(
                 bus,
@@ -232,11 +224,7 @@ async fn apply_health_action(
                     entry.info.fail_reason = None;
                 }
                 persist::update_info_sidecar(&entry.info);
-                broadcast(
-                    entry,
-                    &AgentOutputEvent::Log { line: line.clone() },
-                )
-                .await;
+                broadcast(entry, &AgentOutputEvent::Log { line: line.clone() }).await;
                 if action == HealthAction::Unblock {
                     broadcast(
                         entry,
@@ -263,8 +251,7 @@ async fn apply_health_action(
             let Some(spec) = persist::read_spec(&agent_id) else {
                 return;
             };
-            match spawn_worker(shared, bus_addr, &agent_id, &spec, true, Some(bus.clone())).await
-            {
+            match spawn_worker(shared, bus_addr, &agent_id, &spec, true, Some(bus.clone())).await {
                 Ok(_) => eprintln!("[aos-agentd] health {agent_id} worker relancé"),
                 Err(e) => {
                     eprintln!("[aos-agentd] health restart {agent_id}: {e}");
@@ -292,8 +279,7 @@ async fn apply_health_action(
                 let pid = rt.agents.get_mut(&agent_id).and_then(|e| e.info.pid.take());
                 if let Some(entry) = rt.agents.get_mut(&agent_id) {
                     entry.info.state = AgentState::Failed;
-                    entry.info.fail_reason =
-                        Some("bloqué sans activité (health check)".into());
+                    entry.info.fail_reason = Some("bloqué sans activité (health check)".into());
                     entry.last_activity = Instant::now();
                     persist::update_info_sidecar(&entry.info);
                     broadcast(
@@ -408,13 +394,21 @@ fn build_spec_with_module_tools(
                 caps.push(c);
             }
         }
-        if !spec.skills.iter().any(|s| s == "deep-thinking" || s == "planner") {
+        if !spec
+            .skills
+            .iter()
+            .any(|s| s == "deep-thinking" || s == "planner")
+        {
             spec.skills.push("deep-thinking".into());
         }
     }
     spec.tools = tool_ids;
     spec.caps = caps;
-    if spec.display_name.as_deref().is_none_or(|s| s.trim().is_empty()) {
+    if spec
+        .display_name
+        .as_deref()
+        .is_none_or(|s| s.trim().is_empty())
+    {
         let title = persist::agent_title(&spec.goal.statement);
         if !title.is_empty() {
             spec.display_name = Some(title);
@@ -513,10 +507,8 @@ async fn register_roster_agent(
     let info = roster_info_from_spec(spec);
     {
         let mut rt = shared.lock().await;
-        rt.agents.insert(
-            agent_id.to_string(),
-            AgentEntry::new(info, Vec::new()),
-        );
+        rt.agents
+            .insert(agent_id.to_string(), AgentEntry::new(info, Vec::new()));
         persist::update_info_sidecar(&rt.agents[agent_id].info);
     }
     Ok(())
@@ -538,7 +530,9 @@ async fn ensure_builtin_persona_agents(shared: &Shared) {
 }
 
 fn mcp_secrets_path(agent_id: &str) -> PathBuf {
-    PathBuf::from("var/agents").join(agent_id).join("mcp_secrets.json")
+    PathBuf::from("var/agents")
+        .join(agent_id)
+        .join("mcp_secrets.json")
 }
 
 /// Résout `${secret:…}` pour les serveurs MCP de l'agent et écrit un fichier
@@ -692,7 +686,10 @@ async fn spawn_worker(
     } else {
         None
     };
-    let restored_trace = restored.as_ref().map(|s| s.trace.clone()).unwrap_or_default();
+    let restored_trace = restored
+        .as_ref()
+        .map(|s| s.trace.clone())
+        .unwrap_or_default();
     let restored_tokens = restored.as_ref().map(|s| s.tokens_used).unwrap_or(0);
 
     {
@@ -705,48 +702,48 @@ async fn spawn_worker(
                 .mint(holder, uri.clone(), aos_caps::Rights::all(), None, None, 0);
         }
         let info = AgentInfo {
-                    agent_id: agent_id.to_string(),
-                    state: AgentState::Created,
-                    directive: spec.goal.statement.clone(),
-                    pid,
-                    caps: spec.caps.clone(),
-                    last_output: String::new(),
-                    step: restored.as_ref().map(|s| s.step).unwrap_or(0),
-                    max_steps: spec.goal.max_steps,
-                    current_task: None,
-                    parent_id: spec.parent_id.clone(),
-                    children: restored
-                        .as_ref()
-                        .map(|s| s.children.clone())
-                        .unwrap_or_default(),
-                    tokens_used: restored_tokens,
-                    skills: spec.skills.clone(),
-                    tools: spec.tools.clone(),
-                    mcp_servers: spec.mcp_servers.clone(),
-                    fail_reason: None,
-                    session_id: spec.session_id.clone(),
-                    model_id: spec.model_id.clone(),
-                    title: persist::read_info(agent_id)
-                        .map(|i| i.title)
-                        .filter(|t| !t.is_empty())
-                        .unwrap_or_else(|| {
-                            spec.display_name
-                                .clone()
-                                .filter(|t| !t.trim().is_empty())
-                                .unwrap_or_else(|| persist::agent_title(&spec.goal.statement))
-                        }),
-                    kind: spec.kind,
-                    display_name: spec.display_name.clone(),
-                    persona_id: spec.persona_id.clone(),
-                    origin: spec.origin.clone(),
-                    deep_plan: None,
-                    cognitive_mode: spec.cognitive_mode,
-                };
-                let mut entry = AgentEntry::new(info, restored_trace);
-                if let Some(prev) = rt.agents.remove(agent_id) {
-                    entry.subscribers = prev.subscribers;
-                }
-                rt.agents.insert(agent_id.to_string(), entry);
+            agent_id: agent_id.to_string(),
+            state: AgentState::Created,
+            directive: spec.goal.statement.clone(),
+            pid,
+            caps: spec.caps.clone(),
+            last_output: String::new(),
+            step: restored.as_ref().map(|s| s.step).unwrap_or(0),
+            max_steps: spec.goal.max_steps,
+            current_task: None,
+            parent_id: spec.parent_id.clone(),
+            children: restored
+                .as_ref()
+                .map(|s| s.children.clone())
+                .unwrap_or_default(),
+            tokens_used: restored_tokens,
+            skills: spec.skills.clone(),
+            tools: spec.tools.clone(),
+            mcp_servers: spec.mcp_servers.clone(),
+            fail_reason: None,
+            session_id: spec.session_id.clone(),
+            model_id: spec.model_id.clone(),
+            title: persist::read_info(agent_id)
+                .map(|i| i.title)
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| {
+                    spec.display_name
+                        .clone()
+                        .filter(|t| !t.trim().is_empty())
+                        .unwrap_or_else(|| persist::agent_title(&spec.goal.statement))
+                }),
+            kind: spec.kind,
+            display_name: spec.display_name.clone(),
+            persona_id: spec.persona_id.clone(),
+            origin: spec.origin.clone(),
+            deep_plan: None,
+            cognitive_mode: spec.cognitive_mode,
+        };
+        let mut entry = AgentEntry::new(info, restored_trace);
+        if let Some(prev) = rt.agents.remove(agent_id) {
+            entry.subscribers = prev.subscribers;
+        }
+        rt.agents.insert(agent_id.to_string(), entry);
         persist::update_info_sidecar(&rt.agents[agent_id].info);
     }
 
@@ -812,15 +809,7 @@ async fn spawn_worker(
             }
         }
         if let (Some(bus), Some((parent_id, result, ok))) = (bus_for_wait, unexpected_parent) {
-            notify_parent_child_terminal(
-                &shared2,
-                &bus,
-                &parent_id,
-                &agent_id2,
-                &result,
-                ok,
-            )
-            .await;
+            notify_parent_child_terminal(&shared2, &bus, &parent_id, &agent_id2, &result, ok).await;
         }
         if release_schedule {
             if let Err(e) = schedule::release_agent(&agent_id2) {
@@ -832,7 +821,7 @@ async fn spawn_worker(
     Ok(pid.unwrap_or(0))
 }
 
-async fn cancel_room_round(shared: &Shared, bus: &BusClient, session_id: &str) {
+async fn cancel_room_round(shared: &Shared, bus: &Arc<BusClient>, session_id: &str) {
     let prev = {
         let mut rt = shared.lock().await;
         rt.room_rounds.remove(session_id)
@@ -840,13 +829,19 @@ async fn cancel_room_round(shared: &Shared, bus: &BusClient, session_id: &str) {
     if let Some(prev) = prev {
         prev.cancel();
         if let Some(id) = *prev.current_inference.lock().await {
-            let _ = bus
-                .call::<CancelRequest, bool>(
-                    "model.cancel",
-                    &CancelRequest { inference_id: id },
-                    vec![],
-                )
-                .await;
+            // Do not hold the IPC handler open while modeld drains a long
+            // inference. The round flag is enough for the runtime to stop;
+            // ask modeld to reclaim the current inference in the background.
+            let bus = bus.clone();
+            tokio::spawn(async move {
+                let _ = bus
+                    .call::<CancelRequest, bool>(
+                        "model.cancel",
+                        &CancelRequest { inference_id: id },
+                        vec![],
+                    )
+                    .await;
+            });
         }
     }
 }
@@ -854,8 +849,7 @@ async fn cancel_room_round(shared: &Shared, bus: &BusClient, session_id: &str) {
 async fn begin_room_round(shared: &Shared, session_id: &str) -> Arc<RoomRoundState> {
     let round = Arc::new(RoomRoundState::new());
     let mut rt = shared.lock().await;
-    rt.room_rounds
-        .insert(session_id.to_string(), round.clone());
+    rt.room_rounds.insert(session_id.to_string(), round.clone());
     round
 }
 
@@ -932,11 +926,7 @@ async fn main() {
                             )
                             .await
                         {
-                            if let Some(mid) = resp
-                                .meta
-                                .model_id
-                                .filter(|s| !s.trim().is_empty())
-                            {
+                            if let Some(mid) = resp.meta.model_id.filter(|s| !s.trim().is_empty()) {
                                 spec.model_id = Some(mid);
                             }
                         }
@@ -947,16 +937,11 @@ async fn main() {
                         let mut rt = shared.lock().await;
                         if !rt.agents.contains_key(&agent_id) {
                             let info = roster_info_from_spec(&spec);
-                            rt.agents.insert(
-                                agent_id.clone(),
-                                AgentEntry::new(info, Vec::new()),
-                            );
+                            rt.agents
+                                .insert(agent_id.clone(), AgentEntry::new(info, Vec::new()));
                         }
                         let _ = ctx
-                            .respond(
-                                aos_ipc::msg::Status::Ok,
-                                &AgentCreateResponse { agent_id },
-                            )
+                            .respond(aos_ipc::msg::Status::Ok, &AgentCreateResponse { agent_id })
                             .await;
                         return;
                     }
@@ -978,14 +963,20 @@ async fn main() {
                     }
                     return;
                 }
-                match spawn_worker(&shared, &bus_addr, &agent_id, &spec, false, Some(bus.clone())).await {
+                match spawn_worker(
+                    &shared,
+                    &bus_addr,
+                    &agent_id,
+                    &spec,
+                    false,
+                    Some(bus.clone()),
+                )
+                .await
+                {
                     Ok(pid) => {
                         eprintln!("[aos-agentd] {agent_id} créé (pid {pid})");
                         let _ = ctx
-                            .respond(
-                                aos_ipc::msg::Status::Ok,
-                                &AgentCreateResponse { agent_id },
-                            )
+                            .respond(aos_ipc::msg::Status::Ok, &AgentCreateResponse { agent_id })
                             .await;
                     }
                     Err(e) => {
@@ -1178,7 +1169,16 @@ async fn main() {
                         }
                     }
                 }
-                match spawn_worker(&shared, &bus_addr, &req.agent_id, &spec, true, Some(bus.clone())).await {
+                match spawn_worker(
+                    &shared,
+                    &bus_addr,
+                    &req.agent_id,
+                    &spec,
+                    true,
+                    Some(bus.clone()),
+                )
+                .await
+                {
                     Ok(_) => {
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
@@ -2034,7 +2034,8 @@ async fn main() {
                                 let _ = persist::write_spec(&spec);
                             }
                         }
-                        publish_caps_to_capkd(&bus, &req.agent_id, std::slice::from_ref(&req.cap)).await;
+                        publish_caps_to_capkd(&bus, &req.agent_id, std::slice::from_ref(&req.cap))
+                            .await;
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
                     }
                     Err(_) => {
@@ -2083,34 +2084,30 @@ async fn main() {
 
     // --- skill.list / skill.get ---
     {
-        svc.on(intents::SKILL_LIST, move |ctx| {
-            async move {
-                let list: Vec<SkillInfo> = list_skills();
-                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &list).await;
-            }
+        svc.on(intents::SKILL_LIST, move |ctx| async move {
+            let list: Vec<SkillInfo> = list_skills();
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &list).await;
         });
     }
     {
-        svc.on(intents::SKILL_GET, move |ctx| {
-            async move {
-                let name: String = match ctx.payload() {
-                    Ok(n) => n,
-                    Err(_) => {
-                        let _ = ctx
-                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
-                            .await;
-                        return;
-                    }
-                };
-                match get_skill(&name) {
-                    Some(s) => {
-                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &s).await;
-                    }
-                    None => {
-                        let _ = ctx
-                            .respond_error(aos_ipc::msg::Status::NotFound, "skill inconnue")
-                            .await;
-                    }
+        svc.on(intents::SKILL_GET, move |ctx| async move {
+            let name: String = match ctx.payload() {
+                Ok(n) => n,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            match get_skill(&name) {
+                Some(s) => {
+                    let _ = ctx.respond(aos_ipc::msg::Status::Ok, &s).await;
+                }
+                None => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::NotFound, "skill inconnue")
+                        .await;
                 }
             }
         });
@@ -2118,11 +2115,9 @@ async fn main() {
 
     // --- mcp.list ---
     {
-        svc.on(intents::MCP_LIST, move |ctx| {
-            async move {
-                let list: Vec<McpServerInfo> = list_mcp_servers();
-                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &list).await;
-            }
+        svc.on(intents::MCP_LIST, move |ctx| async move {
+            let list: Vec<McpServerInfo> = list_mcp_servers();
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &list).await;
         });
     }
 
@@ -2185,10 +2180,7 @@ async fn main() {
                     }
                     Err(e) => {
                         let _ = ctx
-                            .respond_error(
-                                aos_ipc::msg::Status::InternalError,
-                                &e.to_string(),
-                            )
+                            .respond_error(aos_ipc::msg::Status::InternalError, &e.to_string())
                             .await;
                     }
                 }
@@ -2417,10 +2409,7 @@ async fn main() {
                     }
                 };
                 for entry in due {
-                    eprintln!(
-                        "[aos-agentd] schedule fire {} — {}",
-                        entry.id, entry.goal
-                    );
+                    eprintln!("[aos-agentd] schedule fire {} — {}", entry.id, entry.goal);
                     let mut req = AgentCreateRequest::simple(&entry.goal);
                     req.model_id = entry.model_id.clone();
                     req.tools = default_agent_tools();
@@ -2751,7 +2740,10 @@ async fn agent_caps_snapshot(shared: &Shared, agent_id: &str) -> Vec<String> {
 
 async fn caps_for_plan_id(shared: &Shared, plan_id: &str) -> Vec<String> {
     let rt = shared.lock().await;
-    match rt.deep_thinking.get(Some(plan_id), None, &["plan.read:*".into()]) {
+    match rt
+        .deep_thinking
+        .get(Some(plan_id), None, &["plan.read:*".into()])
+    {
         Ok(plan) => agent_caps_blocking(&rt, &plan.agent_id),
         Err(_) => Vec::new(),
     }
@@ -2801,16 +2793,18 @@ fn hydrate_persisted_agents(rt: &mut Runtime) {
         }
         let was_live = matches!(
             info.state,
-            AgentState::Running
-                | AgentState::Created
-                | AgentState::Paused
-                | AgentState::Blocked
+            AgentState::Running | AgentState::Created | AgentState::Paused | AgentState::Blocked
         );
         if info.state == AgentState::Roster || info.kind == AgentKind::Roster {
             // Roster specs stay idle across restarts.
         } else if was_live {
             info.state = AgentState::Killed;
-            if info.fail_reason.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+            if info
+                .fail_reason
+                .as_ref()
+                .map(|s| s.is_empty())
+                .unwrap_or(true)
+            {
                 info.fail_reason = Some("arrêté au redémarrage".into());
             }
             dirty = true;

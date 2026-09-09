@@ -3,6 +3,9 @@
 use crate::actions::{
     parse_actions, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
+use crate::artifact_card::{
+    attachments_from_artifacts, detect_from_tool, strip_paths_from_prose, ProducedArtifact,
+};
 use crate::canvas_scene::{
     begin_canvas_vision, canvas_scene_prompt_block, canvas_tool_mutates_scene, end_canvas_vision,
     fetch_canvas_aspect, fetch_canvas_scene_digest, merge_canvas_vision_refs,
@@ -12,28 +15,25 @@ use crate::context_budget::{
     compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
     DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
-use crate::artifact_card::{
-    attachments_from_artifacts, detect_from_tool, strip_paths_from_prose, ProducedArtifact,
-};
 use crate::device_tools::capture_png_path_from_tool_result;
 use crate::mcp::open_mcp_tools_with_secrets;
+use crate::module_discovery::{
+    active_module_names, discover_module_tools, merge_skill_tools_for_modules, tool_in_catalog,
+    tool_unavailable_message,
+};
 use crate::persist;
 use crate::room_ask::handle_room_user_ask;
-use crate::storage_path::{post_room_host_path_notice, ROOM_HOST_PATH_DISALLOWED};
 use crate::room_conductor::{
-    apply_peer_followups, build_initial_queue, effective_max_turns,
-    effective_peer_followup_budget, format_roster_for_prompt, initial_schedule,
-    peers_requesting_response, pop_next_scheduled_turn, sanitize_member_queue,
+    apply_peer_followups, build_initial_queue, effective_max_turns, effective_peer_followup_budget,
+    format_roster_for_prompt, initial_schedule, peers_requesting_response, pop_next_scheduled_turn,
+    sanitize_member_queue,
 };
 use crate::room_reply::split_room_reply;
-use crate::module_discovery::{
-    active_module_names, discover_module_tools, merge_skill_tools_for_modules,
-    tool_in_catalog, tool_unavailable_message,
-};
 use crate::skills::load_skills;
+use crate::storage_path::{post_room_host_path_notice, ROOM_HOST_PATH_DISALLOWED};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canvas_tools_from_module_list, caps_for_tools, canonicalize_tool_name, default_agent_tools,
+    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, default_agent_tools,
     merge_canvas_tools, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
@@ -46,7 +46,7 @@ use aos_proto::{
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 const TRANSCRIPT_LIMIT: usize = 40;
 const MAX_ROOM_TOOL_STEPS: usize = 20;
@@ -77,6 +77,7 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 #[derive(Debug)]
 pub struct RoomRoundState {
     pub cancelled: AtomicBool,
+    pub cancel_notify: Notify,
     pub current_inference: Mutex<Option<u64>>,
     pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
 }
@@ -91,6 +92,7 @@ impl RoomRoundState {
     pub fn new() -> Self {
         Self {
             cancelled: AtomicBool::new(false),
+            cancel_notify: Notify::new(),
             current_inference: Mutex::new(None),
             ask_reply_tx: Mutex::new(None),
         }
@@ -98,6 +100,7 @@ impl RoomRoundState {
 
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
+        self.cancel_notify.notify_waiters();
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -490,7 +493,35 @@ async fn run_infer_once(
         .map_err(|e| e.to_string())?;
 
     let mut full = String::new();
-    while let Some(ev) = rx.recv().await {
+    loop {
+        if round.is_cancelled() {
+            if let Some(id) = *round.current_inference.lock().await {
+                let _ = bus
+                    .call::<CancelRequest, bool>(
+                        "model.cancel",
+                        &CancelRequest { inference_id: id },
+                        vec![],
+                    )
+                    .await;
+                *round.current_inference.lock().await = None;
+            }
+            return Err("tour annulé".into());
+        }
+        // A model stream can be silent while loading or decoding. Await the
+        // notification so the Cancel button remains responsive without polling.
+        let ev = tokio::select! {
+            ev = rx.recv() => ev,
+            _ = round.cancel_notify.notified() => {
+                if let Some(id) = *round.current_inference.lock().await {
+                    let _ = bus.call::<CancelRequest, bool>(
+                        "model.cancel", &CancelRequest { inference_id: id }, vec![]
+                    ).await;
+                    *round.current_inference.lock().await = None;
+                }
+                return Err("tour annulé".into());
+            }
+        };
+        let Some(ev) = ev else { break };
         if round.is_cancelled() {
             if let Some(id) = *round.current_inference.lock().await {
                 let _ = bus
@@ -691,20 +722,10 @@ async fn run_room_tool_loop(
         for action in parsed_actions {
             let trace_id = format!("{trace_base}-{step}");
             let outcome = if canonicalize_tool_name(&action.action) == "user.ask" {
-                handle_room_user_ask(
-                    bus,
-                    round,
-                    session_id,
-                    agent_id,
-                    display_name,
-                    &action.args,
-                )
-                .await?
+                handle_room_user_ask(bus, round, session_id, agent_id, display_name, &action.args)
+                    .await?
             } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs) {
-                tool_unavailable_message(
-                    &action.action,
-                    "absent du catalogue modules actif",
-                )
+                tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
                 let mut outcome = execute_room_tool(
                     bus,
@@ -907,12 +928,10 @@ pub async fn execute_room_conduct(
     let max = effective_max_turns(&session.meta.conductor_policy) as usize;
     let peer_budget =
         effective_peer_followup_budget(session.meta.conductor_policy.max_agent_turns_per_user);
-    let mut queue = initial_schedule(
-        sanitize_member_queue(
-            build_initial_queue(&req.content, &session.meta.members),
-            &session.meta.members,
-        ),
-    );
+    let mut queue = initial_schedule(sanitize_member_queue(
+        build_initial_queue(&req.content, &session.meta.members),
+        &session.meta.members,
+    ));
     queue.truncate(max);
     if queue.is_empty() {
         return Ok(AgentRoomConductResponse {
@@ -971,11 +990,8 @@ pub async fn execute_room_conduct(
         // Slice C: optional supervisor-directed speaker selection could replace or
         // augment this peer rebound queue without changing mention parsing.
         if session.meta.conductor_policy.allow_peer_debate {
-            let peers = peers_requesting_response(
-                &reply.content,
-                &session.meta.members,
-                &member.agent_id,
-            );
+            let peers =
+                peers_requesting_response(&reply.content, &session.meta.members, &member.agent_id);
             apply_peer_followups(
                 &mut queue,
                 &peers,
@@ -1147,7 +1163,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let prompt =
             build_room_system_prompt(&spec, "Critic", &members, false, &[], "sess-1", None);
@@ -1191,7 +1207,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let prompt = build_room_system_prompt(&spec, "Critic", &members, true, &[], "sess-1", None);
         assert!(prompt.contains("Critic"));
@@ -1228,7 +1244,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let tools = select_tools(&spec.tools, &[]);
         let digest = "next_seq=2 aspect=square 1:1 ops=1\ncounts: stroke=1\nseq=1 stroke (0.1,0.1)-(0.2,0.2)";
@@ -1269,7 +1285,8 @@ mod tests {
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
+        let (ids, caps) =
+            room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
         assert!(ids.iter().any(|x| x == "notes.create"));
         assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
     }
@@ -1296,11 +1313,18 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         use crate::tools::CANVAS_TOOL_IDS;
         let exported: Vec<String> = CANVAS_TOOL_IDS.iter().map(|s| (*s).to_string()).collect();
-        let (ids, caps) = room_member_kit(&spec, true, &exported, false, &no_modules(), &empty_discovered());
+        let (ids, caps) = room_member_kit(
+            &spec,
+            true,
+            &exported,
+            false,
+            &no_modules(),
+            &empty_discovered(),
+        );
         assert!(ids.iter().any(|x| x == "canvas.set_style"));
         assert!(ids.iter().any(|x| x == "canvas.stroke"));
         assert!(ids.iter().any(|x| x == "canvas.line"));
@@ -1333,9 +1357,10 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
+        let (ids, caps) =
+            room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!caps.iter().any(|c| c == "tool.invoke:canvas"));
     }
@@ -1437,17 +1462,25 @@ mod tests {
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let (ids, caps) = room_member_kit(&spec, false, &[], true, &no_modules(), &empty_discovered());
+        let (ids, caps) =
+            room_member_kit(&spec, false, &[], true, &no_modules(), &empty_discovered());
         assert!(ids.iter().any(|x| x == "files.generate"));
         assert!(caps.iter().any(|c| c == "fs.write:/downloads/**"));
-        let (ids_off, _) = room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
+        let (ids_off, _) =
+            room_member_kit(&spec, false, &[], false, &no_modules(), &empty_discovered());
         assert!(!ids_off.iter().any(|x| x == "files.generate"));
     }
 
     #[test]
     fn room_kit_lacks_required_tools_detects_missing_note_tool() {
-        assert!(room_kit_lacks_required_tools(&["canvas.stroke".into()], "écris une note"));
-        assert!(!room_kit_lacks_required_tools(&["notes.create".into()], "écris une note"));
+        assert!(room_kit_lacks_required_tools(
+            &["canvas.stroke".into()],
+            "écris une note"
+        ));
+        assert!(!room_kit_lacks_required_tools(
+            &["notes.create".into()],
+            "écris une note"
+        ));
         assert!(room_kit_lacks_required_tools(
             &["notes.create".into()],
             "prepare a document about rust"
