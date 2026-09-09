@@ -3062,12 +3062,23 @@ fn render_estimate(studio: &ImageStudioState) -> String {
         2.5e7
     };
     let seconds = (work / scale).max(1.0);
+    // This is intentionally a range, not a fake hardware-calibrated ETA:
+    // profile and model complexity are known, while GPU throughput is not.
+    let profile_factor = match studio.profile.as_str() {
+        "fast" => 0.75,
+        "quality" => 1.45,
+        _ => 1.0,
+    };
+    let center = seconds * profile_factor;
+    let low = (center * 0.7).max(1.0).ceil() as u32;
+    let high = (center * 1.5).max((low + 1) as f64).ceil() as u32;
     let vram = catalog_min_vram(&studio.model_id)
         .map(|mib| format!(" · VRAM min. ~{} Go", (mib as f32 / 1024.0).ceil() as u32))
         .unwrap_or_default();
     format!(
-        "Charge estimée : ~{} s · {} frames{}",
-        seconds.ceil() as u32,
+        "Charge estimée : ~{}–{} s · {} frames{}",
+        low,
+        high,
         frames as u32,
         vram
     )

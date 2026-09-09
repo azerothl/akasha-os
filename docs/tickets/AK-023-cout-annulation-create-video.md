@@ -21,5 +21,6 @@ Vérification live : clip LTX 256×256 / 65 frames lancé via le bus, annulation
 aucun fichier `/downloads/akasha-cancel-test-2.webm` persistant.
 
 La fourchette temporelle calibrée sur plusieurs GPU reste à instrumenter ; le
-produit affiche donc pour l’instant une charge déterministe (durée → frames)
-plutôt qu’une fausse ETA.
+produit affiche désormais une estimation prudente sous forme d’intervalle,
+pondérée par le profil fast/balanced/quality, sans la présenter comme une
+mesure matérielle exacte.
