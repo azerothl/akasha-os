@@ -2081,11 +2081,14 @@ impl ImageStudioState {
                     .desired_rows(3)
                     .desired_width(f32::INFINITY),
             );
-            ui_prompt_starters(ui, &mut self.prompt, CreateMode::Image);
             if prompt_response.changed() && !self.prompt.trim().is_empty() {
                 self.show_empty_prompt_hint = false;
             }
         });
+        // Keep starters on their own full-width row. Nesting them beside the
+        // multiline prompt inside horizontal_top squeezes them into a vertical
+        // gutter between the form and the Composition panel.
+        ui_prompt_starters(ui, &mut self.prompt, CreateMode::Image);
         ui.horizontal(|ui| {
             let prev = self.create_mode;
             ui.selectable_value(
