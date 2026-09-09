@@ -16,6 +16,7 @@ pub mod document_index;
 pub mod document_prep;
 pub mod health;
 pub mod mcp;
+pub mod module_discovery;
 pub mod persist;
 pub mod policy;
 pub mod prompt;
