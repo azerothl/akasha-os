@@ -54,9 +54,62 @@ pub const UI_CONTRACT: u32 = CREATE_TARGET_UI_CONTRACT;
 /// Platform image generation remains available when Create is uninstalled.
 pub const PLATFORM_IMAGE_TOOL: &str = "media.image.generate";
 
+/// Designer + supervisor surface locks (issue #150 lot 2 revalidated on main 0998f06).
+/// Painted copy is frozen — Lot 3+ must not drift without explicit design review.
+pub mod surface {
+    /// Rail / panel title (FR). Never the module id `create`.
+    pub const FR_APP_TITLE: &str = "Créer";
+    pub const EN_APP_TITLE: &str = "Create";
+
+    pub const FR_TAB_PARAMS: &str = "Paramètres";
+    pub const FR_TAB_PREVIEW: &str = "Aperçu";
+    pub const FR_TAB_HISTORY: &str = "Historique";
+
+    pub const FR_PROMPT_LABEL: &str = "Invite";
+    pub const FR_WIDTH_LABEL: &str = "Largeur";
+    pub const FR_HEIGHT_LABEL: &str = "Hauteur";
+    pub const FR_STEPS_LABEL: &str = "Étapes";
+
+    pub const FR_GENERATE_LABEL: &str = "Générer";
+    pub const FR_SAVE_LABEL: &str = "Enregistrer l'image";
+    pub const FR_RESTORE_LABEL: &str = "Restaurer";
+    pub const FR_JOB_LABEL: &str = "Génération";
+
+    pub const FR_PREVIEW_EMPTY: &str =
+        "Pas encore d'image — saisissez une invite et générez.";
+    pub const FR_HISTORY_EMPTY: &str = "Aucune génération pour l'instant";
+
+    /// Label keys declared in `modules/create/ui/index.json`.
+    pub const LABEL_KEYS: &[&str] = &[
+        "app_title",
+        "tab_params",
+        "tab_preview",
+        "tab_history",
+        "prompt_label",
+        "width_label",
+        "height_label",
+        "steps_label",
+        "generate_label",
+        "save_label",
+        "job_label",
+        "preview_empty",
+        "history_restore",
+        "history_prompt",
+        "history_when",
+        "history_empty",
+    ];
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::surface::{
+        EN_APP_TITLE, FR_APP_TITLE, FR_GENERATE_LABEL, FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
+        FR_JOB_LABEL, FR_PREVIEW_EMPTY, FR_PROMPT_LABEL, FR_RESTORE_LABEL, FR_SAVE_LABEL,
+        FR_STEPS_LABEL, FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_WIDTH_LABEL,
+        LABEL_KEYS,
+    };
+    use crate::decl_ui::DeclUiDocument;
     use std::path::PathBuf;
 
     fn workspace_root() -> PathBuf {
@@ -187,5 +240,78 @@ mod tests {
             raw.contains(&format!("contract: {UI_CONTRACT}")),
             "create manifest ui.contract must match create_contract::UI_CONTRACT"
         );
+    }
+
+    fn read_ui_document() -> DeclUiDocument {
+        let path = workspace_root().join("share/modules/create.aospkg/ui/index.json");
+        let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        DeclUiDocument::parse_json_with_contract(&raw, UI_CONTRACT)
+            .unwrap_or_else(|e| panic!("parse create ui: {e}"))
+    }
+
+    #[test]
+    fn frozen_fr_surface_labels_match_shipped_ui_document() {
+        let doc = read_ui_document();
+        let labels = doc.labels.as_ref().expect("create ui must declare labels");
+        let fr = &labels.fr;
+        assert!(!fr.is_empty(), "create ui must declare fr labels");
+        assert_eq!(fr.get("app_title").map(String::as_str), Some(FR_APP_TITLE));
+        assert_eq!(fr.get("tab_params").map(String::as_str), Some(FR_TAB_PARAMS));
+        assert_eq!(fr.get("tab_preview").map(String::as_str), Some(FR_TAB_PREVIEW));
+        assert_eq!(fr.get("tab_history").map(String::as_str), Some(FR_TAB_HISTORY));
+        assert_eq!(fr.get("prompt_label").map(String::as_str), Some(FR_PROMPT_LABEL));
+        assert_eq!(fr.get("width_label").map(String::as_str), Some(FR_WIDTH_LABEL));
+        assert_eq!(fr.get("height_label").map(String::as_str), Some(FR_HEIGHT_LABEL));
+        assert_eq!(fr.get("steps_label").map(String::as_str), Some(FR_STEPS_LABEL));
+        assert_eq!(fr.get("generate_label").map(String::as_str), Some(FR_GENERATE_LABEL));
+        assert_eq!(fr.get("save_label").map(String::as_str), Some(FR_SAVE_LABEL));
+        assert_eq!(fr.get("job_label").map(String::as_str), Some(FR_JOB_LABEL));
+        assert_eq!(
+            fr.get("preview_empty").map(String::as_str),
+            Some(FR_PREVIEW_EMPTY)
+        );
+        assert_eq!(fr.get("history_restore").map(String::as_str), Some(FR_RESTORE_LABEL));
+        assert_eq!(
+            fr.get("history_empty").map(String::as_str),
+            Some(FR_HISTORY_EMPTY)
+        );
+        for key in LABEL_KEYS {
+            assert!(fr.contains_key(*key), "missing fr label key {key}");
+        }
+    }
+
+    #[test]
+    fn catalogue_title_uses_human_labels_not_module_id() {
+        let doc = read_ui_document();
+        assert_eq!(doc.catalogue_title(), EN_APP_TITLE);
+        assert_eq!(doc.chrome_title("fr"), FR_APP_TITLE);
+        let labels = doc.labels.as_ref().unwrap();
+        assert_eq!(
+            labels.resolve("fr", "app_title").as_deref(),
+            Some(FR_APP_TITLE)
+        );
+        // Wire module id must never appear in localized chrome (FR lock).
+        assert_ne!(doc.chrome_title("fr"), MODULE_NAME);
+        assert_ne!(labels.resolve("fr", "app_title").unwrap(), MODULE_NAME);
+    }
+
+    #[test]
+    fn fr_surface_labels_avoid_wire_tokens_in_chrome() {
+        let doc = read_ui_document();
+        let fr = &doc.labels.as_ref().unwrap().fr;
+        for (key, value) in fr {
+            assert!(
+                !value.contains("create."),
+                "label {key} must not expose wire id: {value}"
+            );
+            assert!(
+                !value.contains("media.image"),
+                "label {key} must not expose service id: {value}"
+            );
+            assert!(
+                !value.eq_ignore_ascii_case(MODULE_NAME),
+                "label {key} must not show module id in chrome: {value}"
+            );
+        }
     }
 }
