@@ -1702,6 +1702,7 @@ impl ImageStudioState {
                 .desired_rows(3)
                 .desired_width(f32::INFINITY),
         );
+        ui_prompt_starters(ui, &mut self.prompt, CreateMode::Video);
         if prompt_response.changed() && !self.prompt.trim().is_empty() {
             self.show_empty_prompt_hint = false;
         }
@@ -2058,6 +2059,7 @@ impl ImageStudioState {
                     .desired_rows(3)
                     .desired_width(f32::INFINITY),
             );
+            ui_prompt_starters(ui, &mut self.prompt, CreateMode::Image);
             if prompt_response.changed() && !self.prompt.trim().is_empty() {
                 self.show_empty_prompt_hint = false;
             }
@@ -3201,6 +3203,41 @@ fn ui_create_complexity_selector(ui: &mut egui::Ui, studio: &mut ImageStudioStat
         } else {
             "Réglages de rendu et assets"
         });
+    });
+}
+
+fn ui_prompt_starters(ui: &mut egui::Ui, prompt: &mut String, mode: CreateMode) {
+    let starters: &[(&str, &str)] = if mode == CreateMode::Video {
+        &[
+            ("Plan fixe", "Sujet principal, action lente, plan fixe, lumière douce"),
+            ("Cinématique", "Sujet principal en mouvement, travelling fluide, lumière cinématique"),
+            ("Produit", "Produit au centre, rotation lente, caméra stable, fond propre"),
+        ]
+    } else {
+        &[
+            ("Portrait", "Portrait détaillé, lumière douce, arrière-plan flou"),
+            ("Paysage", "Paysage grand angle, lumière naturelle, profondeur atmosphérique"),
+            ("Produit", "Produit au centre, éclairage studio, fond propre et net"),
+        ]
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.weak("Démarrer avec");
+        for (label, value) in starters {
+            if ui.small_button(*label).clicked() {
+                if prompt.trim().is_empty() {
+                    *prompt = (*value).into();
+                } else if !prompt
+                    .chars()
+                    .last()
+                    .is_some_and(|character| character.is_whitespace())
+                {
+                    prompt.push_str(", ");
+                    prompt.push_str(value);
+                } else {
+                    prompt.push_str(value);
+                }
+            }
+        }
     });
 }
 
