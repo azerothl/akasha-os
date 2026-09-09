@@ -77,6 +77,7 @@ Ces constats alimentent AK-002 à AK-004 et AK-009. AK-005 est corrigé par alia
 - AK-021 : corrigé, déployé et vérifié — le catalogue ne mélange plus les packs vidéo dans le mode Image ; Stable Diffusion est proposé par défaut côté image.
 - AK-022 : corrigé, déployé et vérifié — une interruption/erreur de génération média n’est plus présentée comme un échec de chargement de modèle.
 - AK-023 : partiellement corrigé, déployé et vérifié — frames visibles, bouton Arrêter, annulation propagée à sd.cpp et nettoyage du temporaire ; ETA calibrée restante.
+- AK-024 : créé — étendre le contrat fermé avec des options vidéo typées (FPS, keyframes, conditionnement) plutôt que des argv libres.
 - AK-017 à AK-020 : pris en charge comme tickets d’évolution planifiés — recette native accessibilité/DPI, lecteur multimédia intégré, benchmark de nettoyage salon et révocation end-to-end nécessitent respectivement un runner ou des ressources absentes de cette installation.
 
 ## Défaut prioritaire : faux succès vidéo
@@ -118,3 +119,4 @@ Le client de recette, les garde-fous vidéo, les cartes média audio/vidéo, le 
 4. **P2 — Audio** : compléter la lecture/pause/progression dans le fil ; la lecture native et la durée WAV sont déjà exposées, avec ouverture système en action secondaire.
 5. **P2 — Thème** : étendre les tokens sémantiques aux surfaces/outils spécialisés et tester le contraste en clair/sombre/custom.
 6. **P2 — Salon** : mesurer le nettoyage terminal sous charge et publier un événement `cancelled` avec identifiant de tour ; le contrôle UI est déjà découplé.
+7. **P2 — Workflow vidéo** : ajouter progressivement les options déclarées par le catalogue (FPS/codec, keyframes, image de départ, conditionnement) avec validation par moteur (AK-024).
