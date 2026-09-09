@@ -2568,7 +2568,7 @@ async fn main() {
                                         Some(120),
                                     )
                                     .await;
-                                let approved = rx.await.unwrap_or(false);
+                                let approved = rx.await.map(|result| result.approved).unwrap_or(false);
                                 let caps = if approved {
                                     Some(required)
                                 } else {
@@ -2811,7 +2811,7 @@ async fn main() {
                                         Some(120),
                                     )
                                     .await;
-                                let approved = rx.await.unwrap_or(false);
+                                let approved = rx.await.map(|result| result.approved).unwrap_or(false);
                                 let caps = if approved {
                                     Some(required)
                                 } else {
@@ -3074,7 +3074,7 @@ async fn main() {
                                 Some(120),
                             )
                             .await;
-                        if !rx.await.unwrap_or(false) {
+                        if !rx.await.map(|result| result.approved).unwrap_or(false) {
                             let _ = ctx
                                 .respond_error(
                                     aos_ipc::msg::Status::PermissionDenied,
