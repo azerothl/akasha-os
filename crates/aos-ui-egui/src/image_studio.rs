@@ -685,6 +685,28 @@ impl ImageStudioState {
         self.diffusion_fa = large;
         self.stream_layers = large;
         self.max_vram = if large { "-1".into() } else { String::new() };
+        if self.create_mode == CreateMode::Video {
+            if let Some(v) = catalog_video_defaults(&self.model_id) {
+                if let Some(width) = v.width {
+                    self.width =
+                        width.clamp(v.min_width.unwrap_or(64), v.max_width.unwrap_or(2048));
+                }
+                if let Some(height) = v.height {
+                    self.height =
+                        height.clamp(v.min_height.unwrap_or(64), v.max_height.unwrap_or(2048));
+                }
+                if let Some(fps) = v.fps {
+                    self.video_fps = fps.clamp(1, 120);
+                }
+                if let Some(frames) = v.frames {
+                    self.video_duration_secs =
+                        ((frames as f32 / self.video_fps.max(1) as f32).ceil() as u32).clamp(2, 10);
+                }
+                if let Some(max_duration) = v.max_duration_secs {
+                    self.video_duration_secs = self.video_duration_secs.min(max_duration.max(2));
+                }
+            }
+        }
         self.last_preset_key = key;
         if model_changed {
             self.enrich_prompt = crate::image_prompt::default_enrich_prompt(Some(&self.model_id));
@@ -1333,6 +1355,7 @@ impl ImageStudioState {
             );
             if prev != self.create_mode {
                 self.video_result = None;
+                self.last_preset_key.clear();
             }
         });
         self.ensure_pack_for_mode();
@@ -2526,6 +2549,21 @@ fn catalog_engine_args(model_id: &str) -> Option<serde_json::Map<String, serde_j
         .iter()
         .find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))?;
     m.get("engine_args")?.as_object().cloned()
+}
+
+fn catalog_video_defaults(model_id: &str) -> Option<crate::models_page::VideoDefaults> {
+    if model_id.is_empty() {
+        return None;
+    }
+    let path = aos_home().join("share/models/catalog-offerings.json");
+    let raw = std::fs::read_to_string(path).ok()?;
+    let v = serde_json::from_str::<serde_json::Value>(&raw).ok()?;
+    let m = v
+        .get("models")?
+        .as_array()?
+        .iter()
+        .find(|x| x.get("id").and_then(|i| i.as_str()) == Some(model_id))?;
+    serde_json::from_value(m.get("video_defaults")?.clone()).ok()
 }
 
 fn json_arg_as_string(v: Option<&serde_json::Value>) -> String {

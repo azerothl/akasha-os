@@ -1198,6 +1198,17 @@
         "large"
       ],
       "description": "Wan 2.2 video DiT via sd.cpp vid_gen with 1 frame (experimental T2I). Heavy VRAM; needs high-noise model, VAE, umt5.",
+      "video_defaults": {
+        "width": 832,
+        "height": 480,
+        "fps": 16,
+        "frames": 33,
+        "min_width": 16,
+        "max_width": 1280,
+        "min_height": 16,
+        "max_height": 1280,
+        "max_duration_secs": 5
+      },
       "extra_files": [
         {
           "filename": "Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf",
@@ -1266,6 +1277,17 @@
         "large"
       ],
       "description": "LTX 2.3 audio-video (sd.cpp vid_gen). Single-frame mode in Image Studio is experimental; full video UI coming later.",
+      "video_defaults": {
+        "width": 768,
+        "height": 512,
+        "fps": 24,
+        "frames": 97,
+        "min_width": 32,
+        "max_width": 2048,
+        "min_height": 32,
+        "max_height": 2048,
+        "max_duration_secs": 8
+      },
       "extra_files": [
         {
           "filename": "ltx-2.3-22b-dev_video_vae.safetensors",

@@ -49,6 +49,20 @@ pub struct CatalogModel {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+pub struct VideoDefaults {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub fps: Option<u32>,
+    pub frames: Option<u32>,
+    pub duration_secs: Option<u32>,
+    pub min_width: Option<u32>,
+    pub max_width: Option<u32>,
+    pub min_height: Option<u32>,
+    pub max_height: Option<u32>,
+    pub max_duration_secs: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 struct OfferingsRoot {
     #[serde(default)]
     models: Vec<CatalogModel>,
