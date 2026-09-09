@@ -3000,11 +3000,27 @@ fn render_estimate(studio: &ImageStudioState) -> String {
         2.5e7
     };
     let seconds = (work / scale).max(1.0);
+    let vram = catalog_min_vram(&studio.model_id)
+        .map(|mib| format!(" · VRAM min. ~{} Go", (mib as f32 / 1024.0).ceil() as u32))
+        .unwrap_or_default();
     format!(
-        "Charge estimée : ~{} s · {} frames",
+        "Charge estimée : ~{} s · {} frames{}",
         seconds.ceil() as u32,
-        frames as u32
+        frames as u32,
+        vram
     )
+}
+
+fn catalog_min_vram(model_id: &str) -> Option<u64> {
+    let raw =
+        std::fs::read_to_string(aos_home().join("share/models/catalog-offerings.json")).ok()?;
+    let root: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    root.get("models")?
+        .as_array()?
+        .iter()
+        .find(|m| m.get("id").and_then(|v| v.as_str()) == Some(model_id))?
+        .get("min_vram_mib")?
+        .as_u64()
 }
 
 fn intent_label(id: &str) -> &'static str {
