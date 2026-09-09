@@ -1770,8 +1770,8 @@ impl ImageStudioState {
                 composition_blocks: Vec::new(),
             });
         }
-        if let Some(path) = self.video_result.as_deref() {
-            ui_video_result_row(ui, t, path);
+        if let Some(path) = self.video_result.clone() {
+            ui_video_result_row(ui, t, &path, self);
         }
     }
 
@@ -2504,7 +2504,12 @@ fn ui_enriched_prompt_panel(
     }
 }
 
-fn ui_video_result_row(ui: &mut egui::Ui, t: &UiStrings, path: &str) {
+fn ui_video_result_row(
+    ui: &mut egui::Ui,
+    t: &UiStrings,
+    path: &str,
+    studio: &mut ImageStudioState,
+) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.weak(path);
@@ -2512,6 +2517,9 @@ fn ui_video_result_row(ui: &mut egui::Ui, t: &UiStrings, path: &str) {
     ui.horizontal(|ui| {
         if ui.button(t.studio_open_file).clicked() {
             let _ = decl_ui::open_host_path(path);
+        }
+        if ui.button("Réutiliser comme référence").clicked() {
+            studio.queue_reference_image(path.to_string());
         }
     });
 }
