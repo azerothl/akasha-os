@@ -153,10 +153,14 @@ fn try_load_chat_image(ctx: &egui::Context, logical: &str) -> Option<egui::Textu
     ))
 }
 
-pub fn render_audio(ui: &mut egui::Ui, path: &str) {
+pub fn render_audio(ui: &mut egui::Ui, t: &UiStrings, path: &str) {
     ui.horizontal(|ui| {
-        ui.label(format!("audio: {path}"));
-        if ui.button("Play").clicked() {
+        ui.label(format!("audio : {path}"));
+        if ui
+            .button(t.studio_open_file)
+            .on_hover_text("Ouvre le fichier avec le lecteur audio du système")
+            .clicked()
+        {
             let _ = decl_ui::open_host_path(path);
         }
     });

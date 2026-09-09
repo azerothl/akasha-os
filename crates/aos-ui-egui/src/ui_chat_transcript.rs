@@ -364,7 +364,7 @@ impl UiApp {
                                     );
                                 }
                                 ChatAttachment::Audio { path } => {
-                                    chat_media::render_audio(ui, path.as_str());
+                                    chat_media::render_audio(ui, t, path.as_str());
                                 }
                                 ChatAttachment::Document { path, label } => {
                                     chat_media::render_document(
@@ -464,7 +464,11 @@ impl UiApp {
                                         let action = ui
                                             .push_id(
                                                 ("chat_artifact_card", i, j, path.as_str()),
-                                                |ui| artifact_card::render_artifact_card(ui, t, &target),
+                                                |ui| {
+                                                    artifact_card::render_artifact_card(
+                                                        ui, t, &target,
+                                                    )
+                                                },
                                             )
                                             .inner;
                                         if let artifact_card::ArtifactCardAction::Open(open) =
@@ -766,7 +770,9 @@ mod tests {
 
     #[test]
     fn bottom_padding_is_comfortable_gap() {
-        const { assert!(TRANSCRIPT_BOTTOM_PADDING >= 32.0); };
+        const {
+            assert!(TRANSCRIPT_BOTTOM_PADDING >= 32.0);
+        };
     }
 
     #[test]
