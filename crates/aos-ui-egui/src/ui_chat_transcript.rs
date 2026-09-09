@@ -366,6 +366,9 @@ impl UiApp {
                                 ChatAttachment::Audio { path } => {
                                     chat_media::render_audio(ui, t, path.as_str());
                                 }
+                                ChatAttachment::Video { path, prompt } => {
+                                    chat_media::render_video(ui, t, path.as_str(), prompt.as_str());
+                                }
                                 ChatAttachment::Document { path, label } => {
                                     chat_media::render_document(
                                         ui,
