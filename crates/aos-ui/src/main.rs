@@ -466,15 +466,9 @@ fn format_notes_tool_result(tool: &str, result: &serde_json::Value) -> String {
                     out.push_str(&format!("  - {path}\n"));
                     continue;
                 }
-                let title = item
-                    .get("title")
-                    .and_then(|t| t.as_str())
-                    .unwrap_or("?");
+                let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("?");
                 let path = item.get("path").and_then(|p| p.as_str()).unwrap_or("");
-                let excerpt = item
-                    .get("excerpt")
-                    .and_then(|e| e.as_str())
-                    .unwrap_or("");
+                let excerpt = item.get("excerpt").and_then(|e| e.as_str()).unwrap_or("");
                 if excerpt.is_empty() {
                     out.push_str(&format!("  - {title} ({path})\n"));
                 } else {
@@ -860,6 +854,7 @@ async fn handle_command(
                             &aos_proto::ConfirmResponseRequest {
                                 id: id.clone(),
                                 approved,
+                                persistent: false,
                             },
                             vec![],
                         )
