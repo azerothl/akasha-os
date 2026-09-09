@@ -3263,6 +3263,19 @@ mod tests {
     }
 
     #[test]
+    fn video_mode_carries_first_and_last_frame_references() {
+        let mut studio = ImageStudioState {
+            create_mode: CreateMode::Video,
+            ..ImageStudioState::default()
+        };
+        studio.queue_reference_image("/downloads/first.png".into());
+        studio.queue_end_reference_image("/downloads/last.png".into());
+        let opts = studio.to_options();
+        assert_eq!(opts.init_image.as_deref(), Some("/downloads/first.png"));
+        assert_eq!(opts.end_image.as_deref(), Some("/downloads/last.png"));
+    }
+
+    #[test]
     fn video_mode_keeps_shared_render_controls() {
         let studio = ImageStudioState {
             create_mode: CreateMode::Video,

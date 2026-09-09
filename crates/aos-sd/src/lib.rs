@@ -1104,6 +1104,28 @@ mod tests {
     }
 
     #[test]
+    fn image_gen_fl2v_end_image_argv() {
+        let dir = std::env::temp_dir().join("aos-sd-fl2v");
+        let _ = std::fs::create_dir_all(&dir);
+        let last = dir.join("last.png");
+        std::fs::write(&last, b"fake").unwrap();
+        let opts = ImageGenOpts {
+            sd_mode: Some("vid_gen".into()),
+            end_image_path: Some(last.clone()),
+            ..Default::default()
+        };
+        let args = collect_image_args(
+            Path::new("minimax.gguf"),
+            "transition",
+            Path::new("out.webm"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"--end-img".into()));
+        assert!(args.iter().any(|a| a.ends_with("last.png")));
+    }
+
+    #[test]
     fn image_gen_inpaint_mask_argv() {
         let dir = std::env::temp_dir().join("aos-sd-inpaint");
         let _ = std::fs::create_dir_all(&dir);
