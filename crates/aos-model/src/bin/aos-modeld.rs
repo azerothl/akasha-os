@@ -5055,7 +5055,11 @@ async fn main() {
         });
     }
 
-    // --- media.image.generate / media.audio.generate (E16) ---
+    // --- media.image.generate / media.image.cancel / media.audio.generate (E16) ---
+    svc.on("media.image.cancel", move |ctx| async move {
+        aos_sd::request_media_cancel();
+        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+    });
     {
         let sub = subsystem.clone();
         let bus = bus.clone();

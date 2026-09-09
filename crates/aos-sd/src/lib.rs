@@ -8,7 +8,10 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
+
+static MEDIA_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Error)]
 pub enum MediaError {
@@ -16,8 +19,23 @@ pub enum MediaError {
     EngineMissing(String),
     #[error("échec {engine}: {detail}")]
     EngineFailed { engine: String, detail: String },
+    #[error("génération annulée")]
+    Cancelled,
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// Request cancellation of the currently running sd.cpp media job.
+pub fn request_media_cancel() {
+    MEDIA_CANCEL_REQUESTED.store(true, Ordering::SeqCst);
+}
+
+pub fn clear_media_cancel() {
+    MEDIA_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+}
+
+fn media_cancel_requested() -> bool {
+    MEDIA_CANCEL_REQUESTED.load(Ordering::SeqCst)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -618,16 +636,38 @@ fn run_sd_cmd(
 
     let mut all_log = String::new();
     let mut cb = on_progress;
-    while let Ok(line) = rx.recv() {
-        all_log.push_str(&line);
-        all_log.push('\n');
-        if let Some(ref mut f) = cb {
-            if let Some((step, total)) = parse_sd_step(&line) {
-                f(step, total);
+    let mut cancelled = false;
+    loop {
+        if media_cancel_requested() {
+            let _ = child.kill();
+            cancelled = true;
+            break;
+        }
+        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+            Ok(line) => {
+                all_log.push_str(&line);
+                all_log.push('\n');
+                if let Some(ref mut f) = cb {
+                    if let Some((step, total)) = parse_sd_step(&line) {
+                        f(step, total);
+                    }
+                }
             }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if media_cancel_requested() {
+                    let _ = child.kill();
+                    cancelled = true;
+                    break;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
     let status = child.wait()?;
+    if cancelled {
+        clear_media_cancel();
+        return Err(MediaError::Cancelled);
+    }
     if !status.success() {
         let tail = all_log.chars().rev().take(800).collect::<String>();
         let tail: String = tail.chars().rev().collect();

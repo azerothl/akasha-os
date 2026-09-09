@@ -46,6 +46,22 @@ Rules:
 3. Do not add major elements the user did not imply.
 4. One paragraph or a few comma-separated phrases; keep under 120 words unless the user idea is already long."##;
 
+/// Video-specific prose enrichment. Keep the output plain text because sd.cpp
+/// receives it as the actual prompt, but add temporal/camera cues that an
+/// image-only rewrite would otherwise omit.
+pub const CHAT_ENHANCE_VIDEO_SYSTEM_PROMPT: &str = r##"You expand a short idea into a rich, concrete prompt for a short AI-generated video. Output ONLY the improved prompt as plain text — no markdown, no JSON, no labels, no commentary before or after.
+Include when relevant: subject, continuous action, environment, lighting, colors, materials, camera framing and movement, pacing, temporal continuity, and a clear beginning-to-end beat.
+Rules:
+1. Preserve the user's core subject and any quoted text verbatim.
+2. Describe one coherent action that can remain visually consistent across frames.
+3. Add plausible, specific details — avoid vague filler ("beautiful", "stunning", "masterpiece").
+4. Do not add major characters, objects, or scene changes the user did not imply.
+5. One paragraph or a few comma-separated phrases; keep under 120 words."##;
+
+pub fn is_video_prompt_model(model_id: Option<&str>) -> bool {
+    model_id.is_some_and(|id| id.contains("wan") || id.contains("ltx"))
+}
+
 fn is_upscale_model(id: &str) -> bool {
     id.contains("realesrgan") || id.contains("upscale")
 }
@@ -115,4 +131,17 @@ pub fn is_heavy_image_model(model_id: &str) -> bool {
         || model_id.contains("wan")
         || model_id.contains("ltx")
         || model_id.contains("sdxl")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_video_prompt_model;
+
+    #[test]
+    fn video_models_use_temporal_prompt_enrichment() {
+        assert!(is_video_prompt_model(Some("local:ltx2.3-dev")));
+        assert!(is_video_prompt_model(Some("local:wan2.2-t2v")));
+        assert!(!is_video_prompt_model(Some("local:sd-v1-5")));
+        assert!(!is_video_prompt_model(None));
+    }
 }

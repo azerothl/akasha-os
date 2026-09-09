@@ -1183,7 +1183,12 @@ impl ImageStudioState {
         });
         ui.add_space(8.0);
         if let Some(gen) = generating {
-            ui_image_progress(ui, t, gen, self.create_mode == CreateMode::Video);
+            ui.horizontal(|ui| {
+                ui_image_progress(ui, t, gen, self.create_mode == CreateMode::Video);
+                if ui.button(t.chat_stop).clicked() {
+                    let _ = cmd.send(Cmd::MediaImageCancel);
+                }
+            });
             ui.add_space(6.0);
         }
         let avail = ui.available_width();
@@ -1335,6 +1340,200 @@ impl ImageStudioState {
         if prompt_response.changed() && !self.prompt.trim().is_empty() {
             self.show_empty_prompt_hint = false;
         }
+        let video_prompt_model = crate::image_prompt::is_video_prompt_model(Some(&self.model_id));
+        egui::CollapsingHeader::new(t.studio_section_enrichment)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.enhance_prompt_chat, t.studio_enhance_prompt_chat);
+                    help_icon(ui, t.studio_enhance_prompt_chat_help);
+                });
+                if self.enhance_prompt_chat {
+                    self.enrich_prompt = false;
+                }
+                if !video_prompt_model
+                    && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
+                {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.enrich_prompt, t.studio_enrich_prompt);
+                        help_icon(ui, t.studio_enrich_prompt_help);
+                    });
+                    if self.enrich_prompt {
+                        self.enhance_prompt_chat = false;
+                    }
+                }
+                let show_enriched_panel = self.enhance_prompt_chat
+                    || (!video_prompt_model
+                        && crate::image_prompt::supports_json_prompt_enrichment(Some(
+                            &self.model_id,
+                        )))
+                    || !self.enriched_prompt.trim().is_empty();
+                if show_enriched_panel {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.use_edited_enriched, t.studio_use_edited_enriched);
+                        help_icon(ui, t.studio_use_edited_enriched_help);
+                    });
+                    if self.use_edited_enriched {
+                        self.enrich_prompt = false;
+                        self.enhance_prompt_chat = false;
+                    }
+                    let hint = if self.enrich_prompt {
+                        enrichment_hint(t, &self.model_id)
+                    } else {
+                        t.studio_enriched_hint_prose
+                    };
+                    ui_enriched_prompt_panel(
+                        ui,
+                        t,
+                        hint,
+                        &mut self.enriched_prompt,
+                        &mut self.show_enriched_prompt,
+                    );
+                }
+            });
+        egui::CollapsingHeader::new("Video rendering")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(t.studio_width);
+                    help_icon(ui, t.studio_width_help);
+                    ui.add(egui::DragValue::new(&mut self.width).range(64..=2048));
+                    ui.label(t.studio_height);
+                    help_icon(ui, t.studio_height_help);
+                    ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
+                    ui.label(t.studio_profile);
+                    help_icon(ui, t.studio_profile_help);
+                    egui::ComboBox::from_id_salt("studio_video_profile")
+                        .selected_text(self.profile.as_str())
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.profile, "fast".to_string(), "fast");
+                            ui.selectable_value(
+                                &mut self.profile,
+                                "balanced".to_string(),
+                                "balanced",
+                            );
+                            ui.selectable_value(
+                                &mut self.profile,
+                                "quality".to_string(),
+                                "quality",
+                            );
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("steps");
+                    help_icon(ui, "Denoising iterations. More steps can improve quality but are slower.");
+                    ui.add(egui::DragValue::new(&mut self.steps).range(1..=150));
+                    ui.label("CFG");
+                    help_icon(ui, "Prompt guidance strength. Higher = closer to prompt, lower = more creative/flexible.");
+                    ui.add(egui::DragValue::new(&mut self.cfg).range(0.0..=20.0).speed(0.1));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("seed");
+                    help_icon(ui, "Random seed. Empty means random each run; fixed value makes outputs reproducible.");
+                    ui.add(egui::TextEdit::singleline(&mut self.seed).desired_width(80.0));
+                    ui.label("sampler");
+                    help_icon(ui, "Sampling algorithm used by the diffusion engine.");
+                    egui::ComboBox::from_id_salt("studio_video_sampler")
+                        .selected_text(if self.sampler.is_empty() {
+                            "default"
+                        } else {
+                            self.sampler.as_str()
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.sampler, String::new(), "default");
+                            for s in ["euler", "euler_a", "heun", "dpm2", "lcm", "ddim"] {
+                                ui.selectable_value(&mut self.sampler, s.to_string(), s);
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label(t.studio_negative);
+                    help_icon(ui, "Elements to avoid in the generated clip.");
+                });
+                ui.add(egui::TextEdit::singleline(&mut self.negative).desired_width(f32::INFINITY));
+            });
+        egui::CollapsingHeader::new(t.studio_section_styles)
+            .default_open(false)
+            .show(ui, |ui| {
+                multi_select_assets(
+                    ui,
+                    "video_style",
+                    "Styles",
+                    &mut self.selected_styles,
+                    &self.styles,
+                    Some("Optional style presets applied as a prompt prefix."),
+                );
+                multi_select_assets(
+                    ui,
+                    "video_lora",
+                    "LoRA",
+                    &mut self.selected_loras,
+                    &self.loras,
+                    Some("LoRA adapters supported by the selected sd.cpp pack."),
+                );
+                combo_plain(
+                    ui,
+                    "video_vae",
+                    "VAE",
+                    &mut self.vae,
+                    &self.vaes,
+                    Some("Optional VAE override when supported by the pack."),
+                );
+            });
+        egui::CollapsingHeader::new(t.studio_expert_heading)
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.weak(t.studio_expert_blurb);
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.offload_to_cpu, t.studio_expert_offload);
+                    help_icon(ui, t.studio_expert_offload_help);
+                    ui.checkbox(&mut self.diffusion_fa, t.studio_expert_diffusion_fa);
+                    help_icon(ui, t.studio_expert_diffusion_fa_help);
+                    ui.checkbox(&mut self.auto_fit, t.studio_expert_auto_fit);
+                    help_icon(ui, t.studio_expert_auto_fit_help);
+                    ui.checkbox(&mut self.stream_layers, t.studio_expert_stream_layers);
+                    help_icon(ui, t.studio_expert_stream_layers_help);
+                });
+                ui.horizontal(|ui| {
+                    ui.label(t.studio_expert_max_vram);
+                    help_icon(ui, t.studio_expert_max_vram_help);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.max_vram)
+                            .desired_width(90.0)
+                            .hint_text("-1 / 8"),
+                    );
+                    ui.label(t.studio_expert_flow_shift);
+                    help_icon(ui, t.studio_expert_flow_shift_help);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.flow_shift)
+                            .desired_width(56.0)
+                            .hint_text("3"),
+                    );
+                    ui.label(t.studio_expert_threads);
+                    help_icon(ui, t.studio_expert_threads_help);
+                    ui.add(egui::DragValue::new(&mut self.threads).range(0..=64));
+                });
+                ui.horizontal(|ui| {
+                    ui.label(t.studio_expert_backend);
+                    help_icon(ui, t.studio_expert_backend_help);
+                    coerce_backend_alias(&mut self.backend);
+                    backend_choice_combo(
+                        ui,
+                        "studio_video_backend",
+                        &mut self.backend,
+                        STUDIO_BACKEND_CHOICES,
+                    );
+                    ui.label(t.studio_expert_params_backend);
+                    help_icon(ui, t.studio_expert_params_backend_help);
+                    coerce_params_backend_alias(&mut self.params_backend);
+                    backend_choice_combo(
+                        ui,
+                        "studio_video_params_backend",
+                        &mut self.params_backend,
+                        STUDIO_PARAMS_BACKEND_CHOICES,
+                    );
+                });
+            });
         let busy = generating.is_some();
         let model_ready = models_page::is_model_installed(&self.model_id);
         let generate_clicked = ui
@@ -1348,6 +1547,12 @@ impl ImageStudioState {
         }
         if generate_clicked && !self.prompt.trim().is_empty() && model_ready {
             self.video_result = None;
+            let use_edited = self.use_edited_enriched && !self.enriched_prompt.trim().is_empty();
+            let wants_json_enrich = !video_prompt_model
+                && self.enrich_prompt
+                && crate::image_prompt::supports_json_prompt_enrichment(Some(&self.model_id))
+                && !use_edited;
+            let wants_chat_enhance = self.enhance_prompt_chat && !use_edited && !wants_json_enrich;
             let _ = cmd.send(Cmd::MediaImage {
                 prompt: self.prompt.clone(),
                 model_id: if self.model_id.is_empty() {
@@ -1357,9 +1562,13 @@ impl ImageStudioState {
                 },
                 options: self.to_options(),
                 output_path: Some(default_video_download_path()),
-                enrich_prompt: false,
-                enhance_prompt_chat: false,
-                generation_prompt: None,
+                enrich_prompt: wants_json_enrich,
+                enhance_prompt_chat: wants_chat_enhance,
+                generation_prompt: if use_edited {
+                    Some(self.enriched_prompt.trim().to_string())
+                } else {
+                    None
+                },
                 composition_blocks: Vec::new(),
             });
         }
@@ -2618,6 +2827,34 @@ mod tests {
         let opts = studio.to_options();
         assert_eq!(opts.sd_mode.as_deref(), Some("vid_gen"));
         assert_eq!(opts.video_frames, Some(49));
+    }
+
+    #[test]
+    fn video_mode_keeps_shared_render_controls() {
+        let studio = ImageStudioState {
+            create_mode: CreateMode::Video,
+            negative: "blurry".into(),
+            width: 512,
+            height: 288,
+            steps: 4,
+            cfg: 5.5,
+            seed: "42".into(),
+            sampler: "euler".into(),
+            offload_to_cpu: true,
+            expert_mode: true,
+            flow_shift: "3".into(),
+            ..ImageStudioState::default()
+        };
+        let opts = studio.to_options();
+        assert_eq!(opts.width, Some(512));
+        assert_eq!(opts.height, Some(288));
+        assert_eq!(opts.steps, Some(4));
+        assert_eq!(opts.cfg_scale, Some(5.5));
+        assert_eq!(opts.seed, Some(42));
+        assert_eq!(opts.sampling_method.as_deref(), Some("euler"));
+        assert_eq!(opts.negative_prompt.as_deref(), Some("blurry"));
+        assert_eq!(opts.offload_to_cpu, Some(true));
+        assert_eq!(opts.flow_shift, Some(3.0));
     }
 
     #[test]

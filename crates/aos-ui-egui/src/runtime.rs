@@ -3742,6 +3742,14 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
+        Cmd::MediaImageCancel => {
+            if let Err(e) = bus
+                .call::<(), bool>("media.image.cancel", &(), vec![])
+                .await
+            {
+                let _ = evt_tx.send(Evt::Error(format!("media.image.cancel: {e}")));
+            }
+        }
         Cmd::MediaImageUpscale {
             source_path,
             upscale_model,
@@ -4659,7 +4667,9 @@ async fn run_prompt_enrichment_phase(
     });
     let out = match mode {
         PromptEnhanceMode::Json => enrich_image_prompt(bus, evt_tx, prompt, model_id).await,
-        PromptEnhanceMode::ChatProse => enhance_image_prompt_chat(bus, evt_tx, prompt).await,
+        PromptEnhanceMode::ChatProse => {
+            enhance_image_prompt_chat(bus, evt_tx, prompt, model_id).await
+        }
     };
     enrich_ticker.abort();
     match out {
@@ -4698,10 +4708,17 @@ async fn enhance_image_prompt_chat(
     bus: &BusClient,
     evt_tx: &Sender<Evt>,
     user_prompt: &str,
+    model_id: Option<&str>,
 ) -> Result<String, String> {
-    use crate::image_prompt::CHAT_ENHANCE_SYSTEM_PROMPT;
-    let out =
-        infer_llm_rewrite(bus, evt_tx, "Chat", CHAT_ENHANCE_SYSTEM_PROMPT, user_prompt).await?;
+    use crate::image_prompt::{
+        is_video_prompt_model, CHAT_ENHANCE_SYSTEM_PROMPT, CHAT_ENHANCE_VIDEO_SYSTEM_PROMPT,
+    };
+    let system_prompt = if is_video_prompt_model(model_id) {
+        CHAT_ENHANCE_VIDEO_SYSTEM_PROMPT
+    } else {
+        CHAT_ENHANCE_SYSTEM_PROMPT
+    };
+    let out = infer_llm_rewrite(bus, evt_tx, "Chat", system_prompt, user_prompt).await?;
     Ok(normalize_prose_prompt(&out))
 }
 

@@ -72,6 +72,9 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
         return t.room_action_unavailable.to_string();
     }
     if raw.starts_with("media.image.generate:") {
+        if raw.to_ascii_lowercase().contains("annul") {
+            return t.studio_generation_cancelled.to_string();
+        }
         return t.studio_generation_failed.to_string();
     }
     if is_model_load_fail_error(raw) {
@@ -136,6 +139,13 @@ mod tests {
             "media.image.generate: failed to load C:\\share\\models\\ltx.gguf",
         );
         assert_eq!(out, t.studio_generation_failed);
+    }
+
+    #[test]
+    fn media_generation_cancel_maps_to_cancelled_copy() {
+        let t = crate::i18n::strings("fr");
+        let out = user_visible_chat_error(&t, "media.image.generate: génération annulée");
+        assert_eq!(out, t.studio_generation_cancelled);
     }
 
     #[test]

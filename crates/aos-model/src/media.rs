@@ -244,6 +244,9 @@ pub async fn run_image(
     dest: &str,
 ) -> Result<aos_proto::MediaGenerateResponse, String> {
     use aos_placement::PlacementProfile;
+    // Reset the latch for this request. Cancellation may arrive while model
+    // placement is still running and will be observed by sd.cpp afterwards.
+    aos_sd::clear_media_cancel();
     let lookup = sub.find_media_model("image", req.model_id.as_deref());
     let (model_id, weights) = match lookup {
         Ok((id, path)) => (id, path),

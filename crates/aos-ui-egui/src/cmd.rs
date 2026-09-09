@@ -395,6 +395,8 @@ pub(crate) enum Cmd {
         /// Visual composition blocks (normalized rects); merged into JSON/text after enrich.
         composition_blocks: Vec<crate::image_composition::CompositionBlock>,
     },
+    /// Cancel the currently running image/video media generation.
+    MediaImageCancel,
     /// Upscale an existing image (sd.cpp `--mode upscale`).
     MediaImageUpscale {
         source_path: String,
