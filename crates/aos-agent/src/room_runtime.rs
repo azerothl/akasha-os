@@ -418,6 +418,7 @@ fn room_images_from_session(session: &ChatSessionGetResponse) -> Vec<String> {
                 .iter()
                 .filter_map(|a| match a {
                     ChatAttachment::Image { path, .. } => Some(path.clone()),
+                    ChatAttachment::Video { .. } => None,
                     _ => None,
                 })
                 .take(4)

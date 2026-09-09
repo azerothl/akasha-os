@@ -958,6 +958,12 @@ impl ChatSessionStore {
                     ChatAttachment::Audio { path } => {
                         out.push_str(&format!("_audio: {path}_\n\n"));
                     }
+                    ChatAttachment::Video { path, prompt } => {
+                        out.push_str(&format!("_video: {path}_\n\n"));
+                        if !prompt.is_empty() {
+                            out.push_str(&format!("_prompt: {prompt}_\n\n"));
+                        }
+                    }
                     ChatAttachment::TtsDraft { text, .. } => {
                         out.push_str(&format!("_tts draft: {text}_\n\n"));
                     }

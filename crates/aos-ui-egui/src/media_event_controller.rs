@@ -75,13 +75,16 @@ pub(crate) fn on_media_ok(app: &mut UiApp, event: MediaOkEvent) {
     } = event;
     app.image_generating = None;
     app.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
-    let att = if kind == "audio" {
-        ChatAttachment::Audio { path: path.clone() }
-    } else {
-        ChatAttachment::Image {
+    let att = match kind.as_str() {
+        "audio" => ChatAttachment::Audio { path: path.clone() },
+        "video" => ChatAttachment::Video {
             path: path.clone(),
             prompt: prompt.clone(),
-        }
+        },
+        _ => ChatAttachment::Image {
+            path: path.clone(),
+            prompt: prompt.clone(),
+        },
     };
     if kind == "image" || kind == "video" {
         if kind == "image" {
