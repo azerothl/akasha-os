@@ -1903,6 +1903,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_expert_heading)
             .default_open(self.advanced_mode || self.expert_mode)
             .show(ui, |ui| {
+                if !self.advanced_mode && !self.expert_mode {
+                    ui.weak("Activez le niveau Avancé pour afficher ces réglages.");
+                    return;
+                }
                 ui.weak(t.studio_expert_blurb);
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.offload_to_cpu, t.studio_expert_offload);
@@ -2577,6 +2581,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_expert_heading)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_mode && !self.expert_mode {
+                    ui.weak("Activez le niveau Avancé pour afficher ces réglages.");
+                    return;
+                }
                 ui.weak(t.studio_expert_blurb);
                 ui.horizontal(|ui| {
                     let expert_toggled = ui
