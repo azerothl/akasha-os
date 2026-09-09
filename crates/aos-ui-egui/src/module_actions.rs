@@ -1,6 +1,7 @@
 //! Bus actions for declarative modules and bundled Notes/Tasks modules.
 
 use crate::cmd::Evt;
+use crate::rich_decl::{demo_job_tick, demo_jobs, DemoJobRegistry};
 use crate::notes_panel;
 use aos_ipc::BusClient;
 use aos_proto::decl_ui::ModuleUiResponse;
@@ -290,4 +291,116 @@ pub(crate) async fn agent_id_cmd(
             let _ = evt_tx.send(Evt::Error(e.to_string()));
         }
     }
+}
+
+pub(crate) async fn run_decl_service_action(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    service: Option<&str>,
+    tool: Option<&str>,
+    input: serde_json::Value,
+    refresh_binds: Vec<String>,
+    subscription_id: Option<String>,
+) {
+    let demo_jobs = demo_jobs();
+    if let Some(tool) = tool {
+        invoke_module_tool(bus, evt_tx, module, tool, input).await;
+        return;
+    }
+    let service = service.unwrap_or(action_id);
+    match service {
+        "jobs.demo.start" => {
+            let steps = input.get("steps").and_then(|v| v.as_u64()).unwrap_or(5) as u32;
+            let initial = {
+                let mut reg = demo_jobs.lock().unwrap();
+                reg.start(steps)
+            };
+            let job_id = initial.job_id.clone().unwrap_or_default();
+            let job_id_bg = job_id.clone();
+            let sub = subscription_id.clone().unwrap_or_else(|| "demo_job".into());
+            let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+                module: module.to_string(),
+                subscription_id: sub.clone(),
+                job: initial,
+            });
+            let evt_tx_bg = evt_tx.clone();
+            let module_bg = module.to_string();
+            tokio::spawn(async move {
+                for step in 1..=steps {
+                    tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+                    let cancelled = demo_jobs
+                        .lock()
+                        .unwrap()
+                        .cancel_flag(&job_id_bg)
+                        .map(|f| *f.lock().unwrap())
+                        .unwrap_or(false);
+                    let job = demo_job_tick(&job_id_bg, step, steps, cancelled);
+                    let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
+                        module: module_bg.clone(),
+                        subscription_id: sub.clone(),
+                        job: job.clone(),
+                    });
+                    if cancelled || job.state.as_deref() == Some("succeeded") {
+                        break;
+                    }
+                }
+                demo_jobs.lock().unwrap().remove(&job_id_bg);
+            });
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({"job_id": job_id}),
+                error: None,
+                refresh_binds,
+            });
+        }
+        "jobs.demo.cancel" | "job.cancel" => {
+            let job_id = input
+                .get("job_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let ok = demo_jobs.lock().unwrap().cancel(&job_id);
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok,
+                result: serde_json::Value::Null,
+                error: if ok {
+                    None
+                } else {
+                    Some("job not found".into())
+                },
+                refresh_binds,
+            });
+        }
+        other => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: serde_json::Value::Null,
+                error: Some(format!("unsupported declarative service action: {other}")),
+                refresh_binds,
+            });
+        }
+    }
+}
+
+pub(crate) async fn cancel_decl_job(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    job_id: &str,
+    subscription_id: &str,
+) {
+    let demo_jobs = demo_jobs();
+    let _ = demo_jobs.lock().unwrap().cancel(job_id);
+    let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+        module: module.to_string(),
+        subscription_id: subscription_id.to_string(),
+        job: demo_job_tick(job_id, 0, 1, true),
+    });
 }

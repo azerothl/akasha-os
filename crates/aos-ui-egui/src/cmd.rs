@@ -528,6 +528,21 @@ pub(crate) enum Cmd {
         tool: String,
         args: serde_json::Value,
     },
+    /// Run a declarative service action (`media.image.generate`, `jobs.demo.start`, …).
+    ModuleUiServiceAction {
+        module: String,
+        action_id: String,
+        service: Option<String>,
+        tool: Option<String>,
+        input: serde_json::Value,
+        refresh_binds: Vec<String>,
+        subscription_id: Option<String>,
+    },
+    ModuleUiCancelJob {
+        module: String,
+        job_id: String,
+        subscription_id: String,
+    },
     /// Spawn a document-prep agent (research + file-author) from a choice card.
     DocumentPrepSpawn {
         session_id: String,
@@ -786,6 +801,19 @@ pub(crate) enum Evt {
         ok: bool,
         result: serde_json::Value,
         error: Option<String>,
+    },
+    ModuleUiJobUpdate {
+        module: String,
+        subscription_id: String,
+        job: aos_proto::rich_decl_ui::RichJobHandle,
+    },
+    ModuleUiServiceDone {
+        module: String,
+        action_id: String,
+        ok: bool,
+        result: serde_json::Value,
+        error: Option<String>,
+        refresh_binds: Vec<String>,
     },
 }
 

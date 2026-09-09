@@ -22,6 +22,9 @@ impl UiApp {
                 t.decl_ui_refresh,
                 &self.prefs.language,
             );
+            for (key, value) in actions.local_patch.drain() {
+                panel.local_state.insert(key, value);
+            }
         }
         if actions.refresh {
             let _ = self.cmd_tx.send(Cmd::ModuleUiRefresh {
@@ -38,6 +41,28 @@ impl UiApp {
                 module: module.to_string(),
                 tool: inv.tool,
                 args: inv.args,
+            });
+        }
+        if let Some(svc) = actions.service_action {
+            if let Some(panel) = self.decl_panels.get_mut(module) {
+                panel.set_pending_invoke(true);
+                panel.pending_refresh_binds = svc.refresh_binds.clone();
+            }
+            let _ = self.cmd_tx.send(Cmd::ModuleUiServiceAction {
+                module: module.to_string(),
+                action_id: svc.action_id,
+                service: svc.service,
+                tool: svc.tool,
+                input: svc.input,
+                refresh_binds: svc.refresh_binds,
+                subscription_id: svc.subscription_id,
+            });
+        }
+        if let Some((job_id, subscription_id)) = actions.cancel_job {
+            let _ = self.cmd_tx.send(Cmd::ModuleUiCancelJob {
+                module: module.to_string(),
+                job_id,
+                subscription_id,
             });
         }
     }
