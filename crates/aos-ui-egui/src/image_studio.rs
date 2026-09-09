@@ -105,6 +105,8 @@ pub struct ImageStudioState {
     pub auto_fit: bool,
     pub stream_layers: bool,
     pub max_vram: String,
+    /// Progressive disclosure level for the Create form (simple, advanced, expert).
+    pub advanced_mode: bool,
     pub expert_mode: bool,
     pub flow_shift: String,
     pub sd_mode: String,
@@ -186,6 +188,7 @@ impl Default for ImageStudioState {
             auto_fit: false,
             stream_layers: false,
             max_vram: String::new(),
+            advanced_mode: false,
             expert_mode: false,
             flow_shift: String::new(),
             sd_mode: String::new(),
@@ -1522,6 +1525,7 @@ impl ImageStudioState {
                 self.last_preset_key.clear();
             }
         });
+        ui_create_complexity_selector(ui, self);
         self.ensure_pack_for_mode();
         combo_image_pack(
             ui,
@@ -1642,7 +1646,6 @@ impl ImageStudioState {
                     .replace(" Camera: steady follow shot.", "");
             }
         });
-        ui_create_preset_controls(ui, self);
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
@@ -1764,7 +1767,7 @@ impl ImageStudioState {
                 }
             });
         egui::CollapsingHeader::new("Video rendering")
-            .default_open(true)
+            .default_open(self.advanced_mode || self.expert_mode)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(t.studio_width);
@@ -1853,7 +1856,7 @@ impl ImageStudioState {
                 );
             });
         egui::CollapsingHeader::new(t.studio_expert_heading)
-            .default_open(false)
+            .default_open(self.advanced_mode || self.expert_mode)
             .show(ui, |ui| {
                 ui.weak(t.studio_expert_blurb);
                 ui.horizontal(|ui| {
@@ -2025,6 +2028,7 @@ impl ImageStudioState {
                 self.video_result = None;
             }
         });
+        ui_create_complexity_selector(ui, self);
         self.ensure_pack_for_mode();
         combo_image_pack(
             ui,
@@ -2533,6 +2537,7 @@ impl ImageStudioState {
                         .changed();
                     help_icon(ui, t.studio_expert_mode_help);
                     if expert_toggled && self.expert_mode {
+                        self.advanced_mode = true;
                         self.load_expert_defaults_from_catalog();
                     }
                     if self.expert_mode && ui.button(t.studio_expert_reset).clicked() {
@@ -3035,6 +3040,39 @@ fn intent_label(id: &str) -> &'static str {
         "illustration" => "Illustration",
         _ => "personnalisé",
     }
+}
+
+/// Progressive disclosure control shared by image and video creation.
+/// Simple keeps the form focused on prompt/model/format; advanced reveals
+/// rendering and asset sections; expert additionally enables backend knobs.
+fn ui_create_complexity_selector(ui: &mut egui::Ui, studio: &mut ImageStudioState) {
+    ui.horizontal(|ui| {
+        ui.label("Niveau");
+        let simple = !studio.advanced_mode && !studio.expert_mode;
+        if ui.selectable_label(simple, "Simple").clicked() {
+            studio.advanced_mode = false;
+            studio.expert_mode = false;
+        }
+        if ui
+            .selectable_label(studio.advanced_mode && !studio.expert_mode, "Avancé")
+            .clicked()
+        {
+            studio.advanced_mode = true;
+            studio.expert_mode = false;
+        }
+        if ui.selectable_label(studio.expert_mode, "Expert").clicked() {
+            studio.advanced_mode = true;
+            studio.expert_mode = true;
+            studio.load_expert_defaults_from_catalog();
+        }
+        ui.weak(if simple {
+            "Prompt + modèle + format"
+        } else if studio.expert_mode {
+            "Tous les paramètres"
+        } else {
+            "Réglages de rendu et assets"
+        });
+    });
 }
 
 fn ui_create_preset_controls(ui: &mut egui::Ui, studio: &mut ImageStudioState) {
