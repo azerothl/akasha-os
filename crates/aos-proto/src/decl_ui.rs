@@ -640,7 +640,10 @@ mod tests {
     #[test]
     fn preinstalled_is_not_protected_by_default() {
         assert!(is_preinstalled_module("tasks"));
-        assert!(!is_preinstalled_for_profile("tasks", PreviewProfile::Minimal));
+        assert!(!is_preinstalled_for_profile(
+            "tasks",
+            PreviewProfile::Minimal
+        ));
         assert!(!is_protected_by_host("tasks"));
         assert!(!has_native_ui("tasks"));
     }

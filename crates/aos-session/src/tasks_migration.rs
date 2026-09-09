@@ -498,7 +498,11 @@ mod tests {
     fn minimal_profile_skips_fresh_preinstall() {
         let home = temp_home("minimal-profile");
         write_share_pkg(&home, "1.0.0", b"fresh wasm");
-        fs::write(home.join("share/preview-profile.yaml"), "profile: minimal\n").unwrap();
+        fs::write(
+            home.join("share/preview-profile.yaml"),
+            "profile: minimal\n",
+        )
+        .unwrap();
         assert!(!manage_tasks_module(&home));
         assert!(!modules_root(&home).join(MODULE_NAME).exists());
         let _ = fs::remove_dir_all(&home);
