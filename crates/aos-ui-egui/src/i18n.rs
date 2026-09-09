@@ -534,6 +534,8 @@ pub struct UiStrings {
     pub settings_catalogue_unsigned: &'static str,
     pub settings_catalogue_install: &'static str,
     pub settings_catalogue_uninstall: &'static str,
+    /// Status after a module uninstall; `{name}` is the human tab label, never the wire id.
+    pub status_module_uninstalled: &'static str,
     pub settings_catalogue_installed: &'static str,
     pub settings_catalogue_caps: &'static str,
     pub settings_catalogue_community: &'static str,
@@ -1511,6 +1513,7 @@ const EN: UiStrings = UiStrings {
     settings_catalogue_unsigned: "Catalogue signature missing or invalid — install from folder still works.",
     settings_catalogue_install: "Install",
     settings_catalogue_uninstall: "Uninstall",
+    status_module_uninstalled: "{name} uninstalled",
     settings_catalogue_installed: "installed",
     settings_catalogue_caps: "attested caps",
     settings_catalogue_community: "Community catalogue",
@@ -2486,6 +2489,7 @@ const FR: UiStrings = UiStrings {
     settings_catalogue_unsigned: "Signature catalogue absente ou invalide — l'install depuis un dossier reste possible.",
     settings_catalogue_install: "Installer",
     settings_catalogue_uninstall: "Désinstaller",
+    status_module_uninstalled: "{name} désinstallé",
     settings_catalogue_installed: "installé",
     settings_catalogue_caps: "caps attestées",
     settings_catalogue_community: "Catalogue communautaire",
@@ -3035,6 +3039,21 @@ pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> 
     }
 }
 
+/// Human primary-rail / overflow tab label for a known official module (never the wire id).
+pub fn module_tab_label<'a>(t: &'a UiStrings, module_name: &str) -> Option<&'a str> {
+    match module_name {
+        "create" => Some(t.tab_create),
+        "tasks" => Some(t.tab_tasks),
+        _ => None,
+    }
+}
+
+/// Status line after uninstall — `{name}` is localized chrome, not `create` / `tasks`.
+pub fn status_module_uninstalled(t: &UiStrings, module_name: &str) -> String {
+    let human = module_tab_label(t, module_name).unwrap_or(module_name);
+    t.status_module_uninstalled.replace("{name}", human)
+}
+
 /// Human-facing job progress state for declarative `job` widgets (never raw state ids).
 pub fn job_state_human_label<'a>(t: &'a UiStrings, state: &str) -> &'a str {
     match state.trim().to_ascii_lowercase().as_str() {
@@ -3207,6 +3226,39 @@ mod tests {
         let fr = strings("fr");
         assert_eq!(fr.decl_preview_empty, "Pas encore d'aperçu");
         assert!(!fr.decl_preview_empty.contains("image_view"));
+    }
+
+    #[test]
+    fn lot4_create_rail_label_matches_frozen_surface_lock() {
+        use aos_proto::create_contract::surface::{EN_APP_TITLE, FR_APP_TITLE};
+        use aos_proto::create_contract::MODULE_NAME;
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.tab_create, EN_APP_TITLE);
+        assert_eq!(fr.tab_create, FR_APP_TITLE);
+        assert_ne!(en.tab_create, MODULE_NAME);
+        assert_ne!(fr.tab_create, MODULE_NAME);
+        assert_eq!(
+            module_tab_label(&en, MODULE_NAME),
+            Some(EN_APP_TITLE)
+        );
+        assert_eq!(
+            module_tab_label(&fr, MODULE_NAME),
+            Some(FR_APP_TITLE)
+        );
+    }
+
+    #[test]
+    fn lot4_uninstall_status_uses_human_label_not_wire_id() {
+        use aos_proto::create_contract::MODULE_NAME;
+        let en = strings("en");
+        let fr = strings("fr");
+        let en_status = status_module_uninstalled(&en, MODULE_NAME);
+        let fr_status = status_module_uninstalled(&fr, MODULE_NAME);
+        assert_eq!(en_status, "Create uninstalled");
+        assert_eq!(fr_status, "Créer désinstallé");
+        assert!(!en_status.contains(MODULE_NAME));
+        assert!(!fr_status.contains(MODULE_NAME));
     }
 
     #[test]

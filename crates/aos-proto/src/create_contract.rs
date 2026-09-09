@@ -296,6 +296,41 @@ mod tests {
     }
 
     #[test]
+    fn lot4_rail_labels_match_frozen_surface_lock() {
+        use super::surface::{EN_APP_TITLE, FR_APP_TITLE};
+        assert_ne!(EN_APP_TITLE, MODULE_NAME);
+        assert_ne!(FR_APP_TITLE, MODULE_NAME);
+        assert_eq!(EN_APP_TITLE, "Create");
+        assert_eq!(FR_APP_TITLE, "Créer");
+    }
+
+    #[test]
+    fn lot4_no_create_studio_widget_in_runtime_crates() {
+        fn scan_dir(dir: &std::path::Path) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    scan_dir(&path);
+                } else if path.extension().is_some_and(|e| e == "rs")
+                    && !path.ends_with("create_contract.rs")
+                {
+                    let raw = std::fs::read_to_string(&path).unwrap();
+                    let embeds_widget = raw.contains("mod create_studio")
+                        || raw.contains("create_studio::")
+                        || raw.contains("fn create_studio")
+                        || raw.contains("struct CreateStudio");
+                    assert!(
+                        !embeds_widget,
+                        "runtime crate must not embed create_studio widget: {}",
+                        path.display()
+                    );
+                }
+            }
+        }
+        scan_dir(&workspace_root().join("crates"));
+    }
+
+    #[test]
     fn lot4_primary_navigation_targets_module_not_native_image_tab() {
         let main_rs = workspace_root().join("crates/aos-ui-egui/src/main.rs");
         let raw = std::fs::read_to_string(&main_rs)

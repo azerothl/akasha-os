@@ -180,6 +180,14 @@ mod tests {
     }
 
     #[test]
+    fn lot4_create_keeps_primary_rail_slot_when_installed() {
+        let tabs = primary_rail_tabs(true);
+        assert_eq!(tabs.len(), 4);
+        assert_eq!(tabs[2], create_module_tab());
+        assert_eq!(primary_rail_index(&tabs[2]), Some(2));
+    }
+
+    #[test]
     fn scenarios_is_overflow_not_rail() {
         assert!(!is_primary_rail(&Tab::Scenarios));
         assert!(is_overflow_tab(&Tab::Scenarios));
