@@ -2124,7 +2124,15 @@ min_os_api: 1
         assert!(ui.document.uses_media_image_service());
         assert!(!ui.document.subscriptions.is_empty());
         assert_eq!(ui.document.catalogue_title(), "Create");
+        let docs = base.join("var/storage/data/documents/create");
+        std::fs::create_dir_all(&docs).unwrap();
+        std::fs::write(docs.join("history.json"), br#"{"items":[]}"#).unwrap();
         rt.uninstall("create").unwrap();
+        assert!(!base.join("modules/create").exists());
+        assert!(
+            docs.join("history.json").is_file(),
+            "uninstall must keep /documents/create/**"
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 
@@ -2146,6 +2154,7 @@ min_os_api: 1
         assert_eq!(info.name, "gallery-demo");
         let ui = rt.load_ui("gallery-demo").expect("load ui");
         assert_eq!(ui.document.contract, Some(UI_CONTRACT_V2));
+        assert_eq!(ui.document.catalogue_title(), "Gallery Demo");
         assert!(!ui.document.subscriptions.is_empty());
         rt.uninstall("gallery-demo").unwrap();
         let _ = std::fs::remove_dir_all(&base);

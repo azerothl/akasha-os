@@ -17,6 +17,8 @@ struct HistoryStore {
 struct HistoryEntry {
     id: String,
     created_unix: u64,
+    /// Human-facing timestamp for table chrome (never raw unix in UI).
+    when: String,
     path: String,
     prompt: String,
     #[serde(default)]
@@ -85,6 +87,32 @@ fn stamp(store: &HistoryStore) -> u64 {
         .unwrap_or(1)
 }
 
+fn utc_date_time_label(secs: u64) -> String {
+    if secs == 0 {
+        return "—".into();
+    }
+    let z = secs / 86_400;
+    let time = secs % 86_400;
+    let h = time / 3600;
+    let m = (time % 3600) / 60;
+    let (y, mo, d) = days_to_ymd(z);
+    format!("{:04}-{:02}-{:02} {:02}:{:02}", y, mo, d, h, m)
+}
+
+fn days_to_ymd(z: u64) -> (u64, u64, u64) {
+    let z = z + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mp < 10 { y } else { y + 1 };
+    (y, m, d)
+}
+
 fn history_list() -> Result<serde_json::Value, String> {
     let store = load_history()?;
     let items: Vec<serde_json::Value> = store
@@ -93,10 +121,10 @@ fn history_list() -> Result<serde_json::Value, String> {
         .map(|e| {
             json!({
                 "id": e.id,
-                "created_unix": e.created_unix,
                 "path": e.path,
                 "prompt": e.prompt,
                 "summary": e.prompt.chars().take(48).collect::<String>(),
+                "when": e.when,
                 "model_id": e.model_id,
             })
         })
@@ -157,6 +185,7 @@ fn history_record(args: &serde_json::Value) -> Result<serde_json::Value, String>
     let entry = HistoryEntry {
         id,
         created_unix: ts,
+        when: utc_date_time_label(ts),
         path: a.path,
         prompt: a.prompt,
         model_id: a.model_id,
@@ -201,6 +230,7 @@ mod tests {
         let e = HistoryEntry {
             id: "hist-1".into(),
             created_unix: 1,
+            when: "1970-01-01 00:00".into(),
             path: "/downloads/image-1.png".into(),
             prompt: "cat".into(),
             model_id: "local:sd".into(),

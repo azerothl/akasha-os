@@ -68,7 +68,8 @@
                     {
                       "kind": "image_view",
                       "binding": "preview",
-                      "label_key": "tab_preview"
+                      "label_key": "tab_preview",
+                      "empty_label_key": "preview_empty"
                     }
                   ]
                 }

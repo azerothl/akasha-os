@@ -20,7 +20,8 @@
       "preview_empty": "No image yet — enter a prompt and generate.",
       "history_restore": "Restore",
       "history_prompt": "Prompt",
-      "history_when": "When"
+      "history_when": "When",
+      "history_empty": "No generations yet"
     },
     "fr": {
       "app_title": "Créer",
@@ -37,7 +38,8 @@
       "preview_empty": "Pas encore d'image — saisissez une invite et générez.",
       "history_restore": "Restaurer",
       "history_prompt": "Invite",
-      "history_when": "Date"
+      "history_when": "Date",
+      "history_empty": "Aucune génération pour l'instant"
     }
   },
   "state": {
@@ -170,9 +172,17 @@
                   "kind": "column",
                   "children": [
                     {
+                      "kind": "empty_state",
+                      "bind": "create.history.list",
+                      "source": "items",
+                      "label_key": "history_empty"
+                    },
+                    {
                       "kind": "table",
-                      "bind": "history",
-                      "columns": ["summary", "created_unix"],
+                      "bind": "create.history.list",
+                      "source": "items",
+                      "columns": ["summary", "when"],
+                      "column_label_keys": ["history_prompt", "history_when"],
                       "hide_headers": false,
                       "row_actions": [
                         {
@@ -196,7 +206,8 @@
           {
             "kind": "image_view",
             "binding": "preview",
-            "label_key": "tab_preview"
+            "label_key": "tab_preview",
+            "empty_label_key": "preview_empty"
           },
           {
             "kind": "button",

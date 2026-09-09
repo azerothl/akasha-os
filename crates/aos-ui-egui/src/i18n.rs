@@ -148,6 +148,7 @@ pub struct UiStrings {
     pub decl_job_state_succeeded: &'static str,
     pub decl_job_state_failed: &'static str,
     pub decl_job_state_cancelled: &'static str,
+    pub decl_preview_empty: &'static str,
     pub tab_models: &'static str,
     pub network_heading: &'static str,
     pub allow_network: &'static str,
@@ -1127,6 +1128,7 @@ const EN: UiStrings = UiStrings {
     decl_job_state_succeeded: "Done",
     decl_job_state_failed: "Failed",
     decl_job_state_cancelled: "Cancelled",
+    decl_preview_empty: "No preview yet",
     tab_models: "Models",
     network_heading: "Network",
     allow_network: "Allow network",
@@ -2101,6 +2103,7 @@ const FR: UiStrings = UiStrings {
     decl_job_state_succeeded: "Terminé",
     decl_job_state_failed: "Échec",
     decl_job_state_cancelled: "Annulé",
+    decl_preview_empty: "Pas encore d'aperçu",
     tab_models: "Modèles",
     network_heading: "Réseau",
     allow_network: "Autoriser le réseau",
@@ -3197,6 +3200,13 @@ mod tests {
                 .unwrap()
                 .contains('.')
         );
+    }
+
+    #[test]
+    fn decl_preview_empty_matches_gallery_demo_lock() {
+        let fr = strings("fr");
+        assert_eq!(fr.decl_preview_empty, "Pas encore d'aperçu");
+        assert!(!fr.decl_preview_empty.contains("image_view"));
     }
 
     #[test]

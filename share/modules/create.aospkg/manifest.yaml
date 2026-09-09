@@ -1,6 +1,6 @@
 name: create
 version: 1.0.0
-hash: 9978c44ae3deac6d8ec522ada47ad94775ffc7d47cb6e4b10d78f4d4e05d3ee0
+hash: 44956ac15830a6c9610e0d67abe2ba2d9bbff95ce3aa3cec232af02146c3c49e
 permissions:
   required_caps:
     - fs.read:/documents/create/**
