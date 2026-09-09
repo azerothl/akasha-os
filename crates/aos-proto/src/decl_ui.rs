@@ -31,14 +31,36 @@ pub const WIDGET_KINDS: &[&str] = &[
     "audio",
 ];
 
-/// Bundled modules that must not be uninstalled (boot would restore them).
-pub const BUNDLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
+/// Modules shipped with the standard Preview profile (user may uninstall; choice persists).
+pub const PREINSTALLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
 
-/// Modules that keep dedicated hardcoded egui tabs in Preview.
-pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = BUNDLED_MODULES;
+/// Host policy: modules the host refuses to uninstall (never granted by the package manifest).
+pub const PROTECTED_BY_HOST_MODULES: &[&str] = &[];
 
+/// Modules that keep dedicated hardcoded egui tabs in Preview (distinct from declarative sidebar).
+pub const NATIVE_UI_MODULES: &[&str] = PREINSTALLED_MODULES;
+
+/// Sidebar hides native-tab modules until lot 2 generic navigation.
+pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = NATIVE_UI_MODULES;
+
+/// Deprecated alias — prefer [`is_preinstalled_module`] / [`is_protected_by_host`].
+pub const BUNDLED_MODULES: &[&str] = PREINSTALLED_MODULES;
+
+pub fn is_preinstalled_module(name: &str) -> bool {
+    PREINSTALLED_MODULES.contains(&name)
+}
+
+pub fn is_protected_by_host(name: &str) -> bool {
+    PROTECTED_BY_HOST_MODULES.contains(&name)
+}
+
+pub fn has_native_ui(name: &str) -> bool {
+    NATIVE_UI_MODULES.contains(&name)
+}
+
+/// Deprecated — preinstalled ≠ protected; use [`is_protected_by_host`] for uninstall gates.
 pub fn is_bundled_module(name: &str) -> bool {
-    BUNDLED_MODULES.contains(&name)
+    is_preinstalled_module(name)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -377,6 +399,13 @@ fn first_enum_property(schema: &serde_json::Value) -> Option<(String, Vec<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preinstalled_is_not_protected_by_default() {
+        assert!(is_preinstalled_module("tasks"));
+        assert!(!is_protected_by_host("tasks"));
+        assert!(has_native_ui("tasks"));
+    }
 
     #[test]
     fn accepts_pie_and_scatter() {
