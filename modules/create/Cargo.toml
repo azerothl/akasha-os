@@ -1,0 +1,18 @@
+[package]
+name = "module-create"
+description = "Create — rich UI first slice (issue #150 lot 2)"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+name = "module_create"
+
+[dependencies]
+aos-module-sdk = { path = "../sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

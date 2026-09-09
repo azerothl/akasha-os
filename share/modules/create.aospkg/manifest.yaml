@@ -1,0 +1,49 @@
+name: create
+version: 1.0.0
+hash: 9978c44ae3deac6d8ec522ada47ad94775ffc7d47cb6e4b10d78f4d4e05d3ee0
+permissions:
+  required_caps:
+    - fs.read:/documents/create/**
+    - fs.write:/documents/create/**
+    - fs.read:/downloads/**
+    - fs.write:/downloads/**
+    - media.generate
+    - tool.invoke:create
+services:
+  jobs: 1
+  media_image: 1
+tools:
+  - name: create.history.list
+    description: List generation history entries
+    input_schema:
+      type: object
+  - name: create.history.get
+    description: Fetch one history entry and restore params
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+      required: [id]
+  - name: create.history.record
+    description: Append a generation to history
+    input_schema:
+      type: object
+  - name: create.document.load
+    description: Load package document state
+    input_schema:
+      type: object
+  - name: create.document.save
+    description: Persist package document state
+    input_schema:
+      type: object
+  - name: create.result.get
+    description: Return last generated image path for preview
+    input_schema:
+      type: object
+ui:
+  contract: 2
+  document: ui/index.json
+  entry: ui/index.json
+  mode: declarative_ui
+min_os_api: 1

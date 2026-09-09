@@ -1,0 +1,210 @@
+{
+  "type": "declarative_ui",
+  "contract": 2,
+  "title": "Create",
+  "title_key": "app_title",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "app_title": "Create",
+      "tab_params": "Parameters",
+      "tab_preview": "Preview",
+      "tab_history": "History",
+      "prompt_label": "Prompt",
+      "width_label": "Width",
+      "height_label": "Height",
+      "steps_label": "Steps",
+      "generate_label": "Generate",
+      "save_label": "Save image",
+      "job_label": "Generation",
+      "preview_empty": "No image yet — enter a prompt and generate.",
+      "history_restore": "Restore",
+      "history_prompt": "Prompt",
+      "history_when": "When"
+    },
+    "fr": {
+      "app_title": "Créer",
+      "tab_params": "Paramètres",
+      "tab_preview": "Aperçu",
+      "tab_history": "Historique",
+      "prompt_label": "Invite",
+      "width_label": "Largeur",
+      "height_label": "Hauteur",
+      "steps_label": "Étapes",
+      "generate_label": "Générer",
+      "save_label": "Enregistrer l'image",
+      "job_label": "Génération",
+      "preview_empty": "Pas encore d'image — saisissez une invite et générez.",
+      "history_restore": "Restaurer",
+      "history_prompt": "Invite",
+      "history_when": "Date"
+    }
+  },
+  "state": {
+    "local": {
+      "prompt": { "type": "string", "default": "" },
+      "result_path": { "type": "string", "default": "" },
+      "width": { "type": "number", "default": 512 },
+      "height": { "type": "number", "default": 512 },
+      "steps": { "type": "number", "default": 20 }
+    }
+  },
+  "bindings": [
+    {
+      "id": "preview",
+      "tool": "create.result.get",
+      "target": "/path"
+    },
+    {
+      "id": "history",
+      "tool": "create.history.list",
+      "target": "/items"
+    }
+  ],
+  "actions": [
+    {
+      "id": "generate",
+      "service": "media.image.generate",
+      "input": {
+        "prompt": "$local.prompt",
+        "options": {
+          "width": "$local.width",
+          "height": "$local.height",
+          "steps": "$local.steps"
+        }
+      },
+      "refresh_binds": ["create.result.get", "create.history.list"]
+    },
+    {
+      "id": "save_result",
+      "service": "files.save_as",
+      "input": {
+        "source_path": "$local.result_path"
+      }
+    }
+  ],
+  "subscriptions": [
+    { "id": "generate_job", "action": "generate", "kind": "media.image.generate" }
+  ],
+  "root": {
+    "kind": "split",
+    "split_ratio": 0.42,
+    "children": [
+      {
+        "kind": "scroll",
+        "children": [
+          {
+            "kind": "tabs",
+            "tabs": [
+              {
+                "label_key": "tab_params",
+                "content": {
+                  "kind": "column",
+                  "children": [
+                    {
+                      "kind": "textarea",
+                      "state_key": "prompt",
+                      "label_key": "prompt_label"
+                    },
+                    {
+                      "kind": "slider",
+                      "state_key": "width",
+                      "min": 256,
+                      "max": 1024,
+                      "step": 64,
+                      "label_key": "width_label"
+                    },
+                    {
+                      "kind": "number",
+                      "state_key": "width",
+                      "min": 256,
+                      "max": 1024,
+                      "label_key": "width_label"
+                    },
+                    {
+                      "kind": "slider",
+                      "state_key": "height",
+                      "min": 256,
+                      "max": 1024,
+                      "step": 64,
+                      "label_key": "height_label"
+                    },
+                    {
+                      "kind": "number",
+                      "state_key": "height",
+                      "min": 256,
+                      "max": 1024,
+                      "label_key": "height_label"
+                    },
+                    {
+                      "kind": "slider",
+                      "state_key": "steps",
+                      "min": 4,
+                      "max": 40,
+                      "step": 1,
+                      "label_key": "steps_label"
+                    },
+                    {
+                      "kind": "number",
+                      "state_key": "steps",
+                      "min": 1,
+                      "max": 50,
+                      "label_key": "steps_label"
+                    },
+                    {
+                      "kind": "button",
+                      "action": "generate",
+                      "label_key": "generate_label"
+                    },
+                    {
+                      "kind": "job",
+                      "subscription": "generate_job",
+                      "label_key": "job_label"
+                    }
+                  ]
+                }
+              },
+              {
+                "label_key": "tab_history",
+                "content": {
+                  "kind": "column",
+                  "children": [
+                    {
+                      "kind": "table",
+                      "bind": "history",
+                      "columns": ["summary", "created_unix"],
+                      "hide_headers": false,
+                      "row_actions": [
+                        {
+                          "tool": "create.history.get",
+                          "label_key": "history_restore",
+                          "args": { "id": "$row.id" },
+                          "refresh_binds": ["create.result.get"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "column",
+        "children": [
+          {
+            "kind": "image_view",
+            "binding": "preview",
+            "label_key": "tab_preview"
+          },
+          {
+            "kind": "button",
+            "action": "save_result",
+            "label_key": "save_label"
+          }
+        ]
+      }
+    ]
+  }
+}
