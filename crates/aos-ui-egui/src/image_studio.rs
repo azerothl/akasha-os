@@ -2770,6 +2770,13 @@ fn ui_video_result_row(
         if ui.button(t.studio_open_file).clicked() {
             let _ = decl_ui::open_host_path(path);
         }
+        if ui
+            .small_button("Copier le chemin")
+            .on_hover_text("Copier le chemin logique dans le presse-papiers")
+            .clicked()
+        {
+            ui.ctx().copy_text(path.to_string());
+        }
         if ui.button("Réutiliser comme référence").clicked() {
             studio.queue_reference_image(path.to_string());
         }
@@ -2817,6 +2824,13 @@ fn ui_image_preview_actions(
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.weak(path);
+        if ui
+            .small_button("Copier le chemin")
+            .on_hover_text("Copier le chemin logique dans le presse-papiers")
+            .clicked()
+        {
+            ui.ctx().copy_text(path.to_string());
+        }
         if let Some(tex) = decl_ui::try_load_png(ui.ctx(), path) {
             let [tw, th] = tex.size();
             ui.weak(format!("{tw}×{th}"));
