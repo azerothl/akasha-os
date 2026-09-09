@@ -1,11 +1,11 @@
 //! Demande d'accès hors sandbox via `fs.host.access` (issue #157).
 
+use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use aos_ipc::BusClient;
 use aos_proto::host_folder::intents;
 use aos_proto::{
     HostFolderAccessRequest, HostFolderAccessResponse, HostFolderOperation, HostFolderPermission,
 };
-use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use serde_json::Value;
 
 pub async fn try_host_folder_tool(
@@ -68,7 +68,9 @@ fn storage_path_arg<'a>(tool: &str, args: &'a Value) -> Option<&'a str> {
         "fs.list" => "prefix",
         _ => return None,
     };
-    args.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
+    args.get(key)
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

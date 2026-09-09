@@ -76,7 +76,10 @@ pub fn evaluate(sample: &HealthSample) -> HealthAction {
     }
     if sample.state == AgentState::Failed {
         // Infer/bus stall is transient: restore the worker instead of leaving it dead.
-        return if sample.fail_reason.as_deref().is_some_and(is_infer_stall_error)
+        return if sample
+            .fail_reason
+            .as_deref()
+            .is_some_and(is_infer_stall_error)
             && sample.recoveries < MAX_RECOVERIES
         {
             HealthAction::Restart
@@ -185,7 +188,13 @@ mod tests {
 
     #[test]
     fn running_stall_nudges_then_restarts_then_fails() {
-        let fresh = sample(AgentState::Running, Some(1), "web.search", Duration::from_secs(30), 0);
+        let fresh = sample(
+            AgentState::Running,
+            Some(1),
+            "web.search",
+            Duration::from_secs(30),
+            0,
+        );
         assert_eq!(evaluate(&fresh), HealthAction::None);
         let stall = sample(AgentState::Running, Some(1), "web.search", RUNNING_STALL, 0);
         assert_eq!(evaluate(&stall), HealthAction::Nudge);
@@ -219,21 +228,45 @@ mod tests {
             0,
         );
         assert_eq!(evaluate(&s), HealthAction::None);
-        let late = sample(AgentState::Blocked, Some(1), "notes.create", BLOCKED_GATE, 0);
+        let late = sample(
+            AgentState::Blocked,
+            Some(1),
+            "notes.create",
+            BLOCKED_GATE,
+            0,
+        );
         assert_eq!(evaluate(&late), HealthAction::Unblock);
     }
 
     #[test]
     fn other_blocked_unblocks_after_three_minutes() {
-        let s = sample(AgentState::Blocked, Some(1), "agent.await", BLOCKED_OTHER, 0);
+        let s = sample(
+            AgentState::Blocked,
+            Some(1),
+            "agent.await",
+            BLOCKED_OTHER,
+            0,
+        );
         assert_eq!(evaluate(&s), HealthAction::Unblock);
     }
 
     #[test]
     fn dead_worker_restarts_unless_user_paused() {
-        let running = sample(AgentState::Running, None, "fs.read", Duration::from_secs(1), 0);
+        let running = sample(
+            AgentState::Running,
+            None,
+            "fs.read",
+            Duration::from_secs(1),
+            0,
+        );
         assert_eq!(evaluate(&running), HealthAction::Restart);
-        let paused = sample(AgentState::Paused, None, "fs.read", Duration::from_secs(1), 0);
+        let paused = sample(
+            AgentState::Paused,
+            None,
+            "fs.read",
+            Duration::from_secs(1),
+            0,
+        );
         assert_eq!(evaluate(&paused), HealthAction::MarkFailed);
     }
 
@@ -246,9 +279,8 @@ mod tests {
             Duration::from_secs(1),
             0,
         );
-        s.fail_reason = Some(
-            "timeout inférence (180 s) — le modèle ou le bus ne répond plus".into(),
-        );
+        s.fail_reason =
+            Some("timeout inférence (180 s) — le modèle ou le bus ne répond plus".into());
         assert_eq!(evaluate(&s), HealthAction::Restart);
         s.recoveries = MAX_RECOVERIES;
         assert_eq!(evaluate(&s), HealthAction::None);

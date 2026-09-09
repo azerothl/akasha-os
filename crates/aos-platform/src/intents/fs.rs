@@ -1,9 +1,9 @@
 //! `fs.*` intents.
 
-use aos_ipc::BusService;
-use aos_proto::*;
 use crate::intents::helpers::resolve_fs_caps;
 use crate::subsystem::PlatformSubsystem;
+use aos_ipc::BusService;
+use aos_proto::*;
 use std::sync::Arc;
 
 pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {

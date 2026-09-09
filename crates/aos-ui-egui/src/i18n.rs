@@ -3025,8 +3025,18 @@ mod tests {
             assert!(!t.settings_me.is_empty());
             assert!(!t.settings_models.is_empty());
             assert!(!t.settings_trust.is_empty());
-            assert_eq!(t.settings_trust, if lang == "fr" { "Confiance" } else { "Trust" });
-            assert_eq!(t.agents_policies, if lang == "fr" { "Politiques" } else { "Policies" });
+            assert_eq!(
+                t.settings_trust,
+                if lang == "fr" { "Confiance" } else { "Trust" }
+            );
+            assert_eq!(
+                t.agents_policies,
+                if lang == "fr" {
+                    "Politiques"
+                } else {
+                    "Policies"
+                }
+            );
         }
     }
 
@@ -3154,7 +3164,10 @@ mod tests {
         let fr = strings("fr");
         let en = strings("en");
         assert_eq!(confirm_action_label(&fr, "device.usb.io"), "Ouvrir USB");
-        assert_eq!(confirm_action_label(&en, "device.usb.io"), "Open USB device");
+        assert_eq!(
+            confirm_action_label(&en, "device.usb.io"),
+            "Open USB device"
+        );
         assert_eq!(confirm_action_label(&fr, "device.usb.open"), "Ouvrir USB");
     }
 
@@ -3193,7 +3206,10 @@ mod tests {
         assert_eq!(tool_human_label(&en, "tasks.create"), Some("Create task"));
         assert_eq!(tool_human_label(&en, "tasks.list"), Some("List tasks"));
         assert_eq!(tool_human_label(&en, "tasks.update"), Some("Update task"));
-        assert_eq!(tool_human_label(&en, "tasks.complete"), Some("Complete task"));
+        assert_eq!(
+            tool_human_label(&en, "tasks.complete"),
+            Some("Complete task")
+        );
         assert_eq!(
             tool_human_label(&fr, "tasks.create"),
             Some("Créer une tâche")
@@ -3210,7 +3226,10 @@ mod tests {
             tool_human_label(&fr, "tasks.complete"),
             Some("Terminer une tâche")
         );
-        assert_eq!(module_tool_ok_status(&en, "tasks.list"), Some("List tasks OK".into()));
+        assert_eq!(
+            module_tool_ok_status(&en, "tasks.list"),
+            Some("List tasks OK".into())
+        );
         assert_eq!(tool_human_label(&en, "windmill.run"), None);
     }
 

@@ -42,9 +42,7 @@ pub fn hardware_profile_from_json(
 ) -> HardwareProfile {
     let path = home.join("var/run/hardware.json");
     let raw = std::fs::read_to_string(&path).ok();
-    let parsed: Option<HardwareJson> = raw
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok());
+    let parsed: Option<HardwareJson> = raw.as_deref().and_then(|s| serde_json::from_str(s).ok());
     let has_gpu = config_gpu && vram_total_bytes > 0;
     let disk_total = parsed
         .as_ref()
@@ -164,18 +162,12 @@ mod tests {
   "thermal": {"temperature_c":52.0,"sustained_temperature_c":50.0,"throttling":false,"power_w":120.0}
 }"#;
         fs::write(run.join("hardware.json"), json).unwrap();
-        let hw = hardware_profile_from_json(
-            &base,
-            false,
-            0,
-            8 << 30,
-            0,
-            1 << 30,
-            1,
-            vec![],
-        );
+        let hw = hardware_profile_from_json(&base, false, 0, 8 << 30, 0, 1 << 30, 1, vec![]);
         assert_eq!(hw.npu.as_ref().map(|v| v.name.as_str()), Some("test-npu"));
-        assert_eq!(hw.webgpu.as_ref().map(|v| v.adapter.as_str()), Some("test-webgpu"));
+        assert_eq!(
+            hw.webgpu.as_ref().map(|v| v.adapter.as_str()),
+            Some("test-webgpu")
+        );
         assert_eq!(
             hw.npu.as_ref().and_then(|v| v.runtime_endpoint.as_deref()),
             Some("akasha://npu-test")

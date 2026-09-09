@@ -121,9 +121,12 @@ impl SignedCatalogue {
         kind: Option<&str>,
         file_hash_hex: &str,
     ) -> Result<(), CatalogueError> {
-        let Some(entry) = self.inner.entries.iter().find(|e| {
-            e.name == name && kind.map(|k| e.kind == k).unwrap_or(true)
-        }) else {
+        let Some(entry) = self
+            .inner
+            .entries
+            .iter()
+            .find(|e| e.name == name && kind.map(|k| e.kind == k).unwrap_or(true))
+        else {
             return Ok(());
         };
         if !self.inner.signature_ok {
@@ -143,7 +146,10 @@ impl SignedCatalogue {
     }
 }
 
-fn parse_catalogue_file(bytes: &[u8], signature_ok: bool) -> Result<ModuleCatalogue, CatalogueError> {
+fn parse_catalogue_file(
+    bytes: &[u8],
+    signature_ok: bool,
+) -> Result<ModuleCatalogue, CatalogueError> {
     let file: CatalogueFile =
         serde_yaml::from_slice(bytes).map_err(|e| CatalogueError::Yaml(e.to_string()))?;
     Ok(ModuleCatalogue {
@@ -279,8 +285,10 @@ impl ExtraCatalogueSource {
                 self.last_error = e.to_string();
                 // Keep a previously verified cache so listing still works offline
                 // after a failed refresh — unless the new bytes were tampered.
-                if matches!(e, CatalogueError::BadSignature | CatalogueError::HashMismatch(_))
-                {
+                if matches!(
+                    e,
+                    CatalogueError::BadSignature | CatalogueError::HashMismatch(_)
+                ) {
                     self.loaded = None;
                     self.cached = false;
                 } else if self.loaded.is_none() {
@@ -356,7 +364,12 @@ pub fn load_with_pinned_key(yaml_path: &Path) -> Result<SignedCatalogue, Catalog
         return Err(CatalogueError::BadSignature);
     }
     let sig = std::fs::read_to_string(sig_path)?;
-    SignedCatalogue::from_signed_bytes(&bytes, sig.trim(), &preview_verifying_key(), yaml_path.to_path_buf())
+    SignedCatalogue::from_signed_bytes(
+        &bytes,
+        sig.trim(),
+        &preview_verifying_key(),
+        yaml_path.to_path_buf(),
+    )
 }
 
 pub fn preview_verifying_key() -> VerifyingKey {
@@ -657,7 +670,9 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, CatalogueError> {
             return Err(CatalogueError::Fetch("payload too large".into()));
         }
     }
-    let buf = resp.bytes().map_err(|e| CatalogueError::Fetch(e.to_string()))?;
+    let buf = resp
+        .bytes()
+        .map_err(|e| CatalogueError::Fetch(e.to_string()))?;
     if buf.len() as u64 > limit {
         return Err(CatalogueError::Fetch("payload too large".into()));
     }
@@ -710,7 +725,10 @@ mod tests {
         let yaml_path = write_signed(&dir, yaml);
         let cat = SignedCatalogue::load(&yaml_path).unwrap();
         assert!(matches!(
-            cat.check_module_hash("notes", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            cat.check_module_hash(
+                "notes",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            ),
             Err(CatalogueError::HashMismatch(_))
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -791,8 +809,11 @@ mod tests {
             .unwrap();
         assert!(extra.loaded.is_some());
 
-        std::fs::write(remote.join("catalogue.yaml"), b"version: 1\nentries: []\n# tampered\n")
-            .unwrap();
+        std::fs::write(
+            remote.join("catalogue.yaml"),
+            b"version: 1\nentries: []\n# tampered\n",
+        )
+        .unwrap();
         let err = extra
             .refresh_with(|url| {
                 let path = url.strip_prefix("file://").unwrap();

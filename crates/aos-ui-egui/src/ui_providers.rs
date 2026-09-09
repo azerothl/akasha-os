@@ -136,7 +136,11 @@ impl UiApp {
             if ui
                 .checkbox(
                     &mut cut,
-                    if fr { "Couper (local_only forcé)" } else { "Cut (force local_only)" },
+                    if fr {
+                        "Couper (local_only forcé)"
+                    } else {
+                        "Cut (force local_only)"
+                    },
                 )
                 .changed()
             {
@@ -152,7 +156,11 @@ impl UiApp {
                 self.billing.turns,
             ));
             if ui
-                .small_button(if fr { "Réinitialiser le mois" } else { "Reset month" })
+                .small_button(if fr {
+                    "Réinitialiser le mois"
+                } else {
+                    "Reset month"
+                })
                 .clicked()
             {
                 self.billing = crate::billing::BillingLedger {

@@ -436,12 +436,11 @@ fn windows_camera_png(
     use std::ptr::null_mut;
     use windows::Win32::Media::MediaFoundation::{
         IMFActivate, IMFMediaType, MFCreateAttributes, MFCreateMediaType,
-        MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFShutdown, MFStartup,
-        MFSTARTUP_FULL, MFVideoFormat_RGB32, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+        MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFMediaType_Video, MFShutdown,
+        MFStartup, MFVideoFormat_RGB32, MFSTARTUP_FULL, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
         MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE,
         MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MF_SOURCE_READERF_ENDOFSTREAM,
         MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_VERSION,
-        MFMediaType_Video,
     };
     use windows::Win32::System::Com::{
         CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED,
@@ -511,7 +510,9 @@ fn windows_camera_png(
             let packed = current.GetUINT64(&MF_MT_FRAME_SIZE).map_err(mf_error)?;
             let width = (packed >> 32) as u32;
             let height = packed as u32;
-            let stride_attr = current.GetUINT32(&MF_MT_DEFAULT_STRIDE).unwrap_or(width * 4);
+            let stride_attr = current
+                .GetUINT32(&MF_MT_DEFAULT_STRIDE)
+                .unwrap_or(width * 4);
             let stride_i = stride_attr as i32;
             let flip = stride_i < 0;
             let stride = stride_i.unsigned_abs() as usize;

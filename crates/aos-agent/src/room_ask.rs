@@ -71,9 +71,7 @@ pub async fn post_room_ask_timeout(
     display_name: &str,
     mins: u64,
 ) -> Result<(), String> {
-    let content = format!(
-        "**Question expirée** ({mins} min) — l'agent continue sans réponse."
-    );
+    let content = format!("**Question expirée** ({mins} min) — l'agent continue sans réponse.");
     bus.call::<ChatSessionAppendRequest, ChatSessionMessage>(
         "chat.session.append",
         &ChatSessionAppendRequest {

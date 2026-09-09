@@ -229,11 +229,7 @@ async fn main() {
         .await;
     checks.push(Check {
         name: "module.describe notes",
-        ok: desc
-            .as_ref()
-            .ok()
-            .and_then(|v| v.get("manifest"))
-            .is_some(),
+        ok: desc.as_ref().ok().and_then(|v| v.get("manifest")).is_some(),
         detail: format!("{desc:?}").chars().take(120).collect(),
     });
 
@@ -287,10 +283,6 @@ async fn main() {
         }
         println!("[{mark}] {} — {}", c.name, c.detail);
     }
-    println!(
-        "Résultat : {}/{} OK",
-        checks.len() - failed,
-        checks.len()
-    );
+    println!("Résultat : {}/{} OK", checks.len() - failed, checks.len());
     std::process::exit(if failed == 0 { 0 } else { 1 });
 }

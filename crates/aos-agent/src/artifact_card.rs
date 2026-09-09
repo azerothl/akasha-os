@@ -182,9 +182,8 @@ fn detect_image_at_path(args: &serde_json::Value, path: &str) -> Option<Produced
 
 fn detect_from_path_token(tool_result: &str) -> Option<ProducedArtifact> {
     for token in tool_result.split_whitespace() {
-        let cleaned = token.trim_matches(|c: char| {
-            matches!(c, '`' | '"' | '\'' | '(' | ')' | ',' | ';' | ':')
-        });
+        let cleaned = token
+            .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '(' | ')' | ',' | ';' | ':'));
         if is_note_path(cleaned) {
             return Some(ProducedArtifact {
                 title: human_title_from_path(cleaned).unwrap_or_else(|| "Note".to_string()),
@@ -222,9 +221,8 @@ fn extract_image_path(s: &str) -> Option<String> {
         return None;
     }
     for token in s.split_whitespace() {
-        let cleaned = token.trim_matches(|c: char| {
-            matches!(c, '`' | '"' | '\'' | '(' | ')' | ',' | ';')
-        });
+        let cleaned =
+            token.trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '(' | ')' | ',' | ';'));
         if is_image_path(cleaned) {
             return Some(cleaned.to_string());
         }
@@ -257,10 +255,7 @@ fn human_title_from_path(path: &str) -> Option<String> {
     if name.is_empty() {
         return None;
     }
-    let stem = name
-        .rsplit_once('.')
-        .map(|(s, _)| s)
-        .unwrap_or(name);
+    let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name);
     if stem.is_empty() {
         return None;
     }
@@ -343,7 +338,8 @@ mod tests {
 
     #[test]
     fn detect_note_from_create_json() {
-        let result = r#"{"path":"/documents/notes/cohort.md","slug":"cohort","title":"Cohort plan"}"#;
+        let result =
+            r#"{"path":"/documents/notes/cohort.md","slug":"cohort","title":"Cohort plan"}"#;
         let art = detect_from_tool("notes.create", &serde_json::json!({}), result).unwrap();
         assert_eq!(art.kind, ArtifactKind::Note);
         assert_eq!(art.title, "Cohort plan");
@@ -389,7 +385,8 @@ mod tests {
             kind: ArtifactKind::Note,
             slug: "cohort".into(),
         }];
-        let raw = "J'ai créé la note.\n✓ `notes.create` → `/documents/notes/cohort.md`\nVoir cohort.md";
+        let raw =
+            "J'ai créé la note.\n✓ `notes.create` → `/documents/notes/cohort.md`\nVoir cohort.md";
         let cleaned = strip_paths_from_prose(raw, &arts);
         assert!(!cleaned.contains("/documents/"));
         assert!(!cleaned.contains("notes.create"));

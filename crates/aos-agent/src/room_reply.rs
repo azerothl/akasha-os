@@ -95,7 +95,9 @@ fn visible_prose(text: &str) -> String {
         }
         break;
     }
-    collapse_blank_lines(&sanitize_visible_chars(&strip_salon_transcript_prefix(&out)))
+    collapse_blank_lines(&sanitize_visible_chars(&strip_salon_transcript_prefix(
+        &out,
+    )))
 }
 
 fn has_substantive_plan_args(args: Option<&serde_json::Value>) -> bool {

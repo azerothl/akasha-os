@@ -45,8 +45,9 @@ pub fn check_plan_cap(caps: &[String], agent_id: &str, write: bool) -> Result<()
         format!("plan.read:agent:{agent_id}")
     };
     let alt_write = format!("plan.write:agent:{agent_id}");
-    if caps.iter().any(|c| c == &need || (!write && c == &alt_write) || c == "plan.write:*" || c == "plan.read:*")
-    {
+    if caps.iter().any(|c| {
+        c == &need || (!write && c == &alt_write) || c == "plan.write:*" || c == "plan.read:*"
+    }) {
         return Ok(());
     }
     // Holder du plan (agent lui-même) : accepter aussi l'absence explicite si caps
@@ -142,9 +143,7 @@ impl DeepThinkingEngine {
         } else if let Some(aid) = agent_id.filter(|s| !s.is_empty()) {
             self.store.get_by_agent(aid)?
         } else {
-            return Err(EngineError::Invalid(
-                "plan_id ou agent_id requis".into(),
-            ));
+            return Err(EngineError::Invalid("plan_id ou agent_id requis".into()));
         };
         check_plan_cap(caller_caps, &plan.agent_id, false)?;
         Ok(plan)
@@ -197,8 +196,7 @@ impl DeepThinkingEngine {
         }
         if let Some(brief) = req.brief.as_ref().filter(|b| !b.trim().is_empty()) {
             if let Some(step) = find_step_mut(&mut plan.steps, &req.step_id) {
-                step.logs
-                    .push(format!("delegated: {}", brief.trim()));
+                step.logs.push(format!("delegated: {}", brief.trim()));
             }
         }
         bump_version(&mut plan);
@@ -279,7 +277,7 @@ fn apply_patch(steps: &mut [PlanStep], step_id: &str, patch: &DeepPlanStepPatch)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aos_proto::{PlanStepStatus, PlanGetRequest};
+    use aos_proto::{PlanGetRequest, PlanStepStatus};
     use std::fs;
 
     fn caps(agent: &str) -> Vec<String> {
@@ -373,13 +371,7 @@ mod tests {
         let err = eng.get(Some(&plan.id), None, &[]);
         assert!(matches!(err, Err(EngineError::CapDenied(_))));
 
-        let got = eng
-            .get(
-                None,
-                Some("agent-x"),
-                &c,
-            )
-            .unwrap();
+        let got = eng.get(None, Some("agent-x"), &c).unwrap();
         assert_eq!(got.id, plan.id);
         assert_eq!(eng.store.version_count("agent-x", &plan.id).unwrap(), 3);
 

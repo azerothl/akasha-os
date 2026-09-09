@@ -187,12 +187,13 @@ pub struct Preferences {
     pub auto_download_updates: bool,
     #[serde(default)]
     pub default_agent_model: Option<String>,
-        /// S2 : plafond cloud mensuel en cents USD (0 = illimité).
+    /// S2 : plafond cloud mensuel en cents USD (0 = illimité).
     #[serde(default)]
     pub cloud_cap_cents: u32,
     /// S7.4 : profil de placement (`latency`/`balanced`/`memory-saver`/`cpu-only`).
     #[serde(default = "default_placement_profile")]
-    pub placement_profile: String,    /// S2 : seuil d'alerte en % du plafond.
+    pub placement_profile: String,
+    /// S2 : seuil d'alerte en % du plafond.
     #[serde(default = "default_cloud_alert_pct")]
     pub cloud_alert_pct: u8,
     /// S2 : au plafond, basculer `local_only` (fail-closed).
@@ -334,8 +335,7 @@ fn default_cloud_alert_pct() -> u8 {
 }
 
 /// Profils de placement F-PLC-10 (le backend replie intelligemment).
-pub const PLACEMENT_PROFILES: [&str; 4] =
-    ["latency", "balanced", "memory-saver", "cpu-only"];
+pub const PLACEMENT_PROFILES: [&str; 4] = ["latency", "balanced", "memory-saver", "cpu-only"];
 
 /// Normalise un profil persisté/saisi (inconnu → `balanced`).
 pub fn normalize_placement_profile(raw: &str) -> String {
@@ -564,7 +564,10 @@ mod tests {
     #[test]
     fn placement_profile_normalizes_and_migrates() {
         assert_eq!(normalize_placement_profile("latency"), "latency");
-        assert_eq!(normalize_placement_profile("  MEMORY-SAVER "), "memory-saver");
+        assert_eq!(
+            normalize_placement_profile("  MEMORY-SAVER "),
+            "memory-saver"
+        );
         assert_eq!(normalize_placement_profile(""), "balanced");
         assert_eq!(normalize_placement_profile("n'importe quoi"), "balanced");
         let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
@@ -573,7 +576,8 @@ mod tests {
     }
 
     #[test]
-    fn new_layout_fields_migrate_from_legacy_json() {        let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
+    fn new_layout_fields_migrate_from_legacy_json() {
+        let raw = r#"{"language":"en","theme":"dark","ui_scale_percent":100}"#;
         let prefs: Preferences = serde_json::from_str(raw).expect("legacy preferences");
         assert!(!prefs.lan_allow_sensitive_data);
         assert_eq!(prefs.ui_density, UiDensity::Comfortable);

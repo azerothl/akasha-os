@@ -2,8 +2,8 @@
 
 use crate::models_page::ModelCatalogTab;
 use aos_proto::{
-    LanClusterLayerPipelineStatusResponse, LanClusterNodesResponse, ModelInfo,
-    ModelPlanDiagnostic, ProviderRecord,
+    LanClusterLayerPipelineStatusResponse, LanClusterNodesResponse, ModelInfo, ModelPlanDiagnostic,
+    ProviderRecord,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -146,11 +146,9 @@ impl ModelsUiState {
         self.lan_layer_pipeline = Some(response);
     }
 
-    pub(crate) fn set_adapter_status(
-        &mut self,
-        response: aos_proto::ModelAdapterStatusResponse,
-    ) {
-        self.adapter_statuses.insert(response.backend.clone(), response);
+    pub(crate) fn set_adapter_status(&mut self, response: aos_proto::ModelAdapterStatusResponse) {
+        self.adapter_statuses
+            .insert(response.backend.clone(), response);
     }
 
     pub(crate) fn set_providers(&mut self, list: Vec<ProviderRecord>) {
@@ -426,7 +424,10 @@ mod tests {
             supported_quantizations: vec!["q8".into()],
             reason: "ok".into(),
         });
-        assert_eq!(state.adapter_statuses["npu"].device.as_deref(), Some("fake-npu"));
+        assert_eq!(
+            state.adapter_statuses["npu"].device.as_deref(),
+            Some("fake-npu")
+        );
         assert!(state.adapter_statuses["npu"].reachable);
     }
 }

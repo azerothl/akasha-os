@@ -104,19 +104,13 @@ impl PolicyEngine {
             },
             PolicyRule {
                 name: "confirm_device_usb".into(),
-                matches: vec![(
-                    "action.kind".into(),
-                    serde_json::json!(["device.usb.io"]),
-                )],
+                matches: vec![("action.kind".into(), serde_json::json!(["device.usb.io"]))],
                 effect: PolicyEffect::RequireConfirmation,
                 timeout_sec: Some(confirm_timeout_sec),
             },
             PolicyRule {
                 name: "confirm_host_folder_access".into(),
-                matches: vec![(
-                    "action.kind".into(),
-                    serde_json::json!(["fs.host.access"]),
-                )],
+                matches: vec![("action.kind".into(), serde_json::json!(["fs.host.access"]))],
                 effect: PolicyEffect::RequireConfirmation,
                 timeout_sec: Some(confirm_timeout_sec),
             },

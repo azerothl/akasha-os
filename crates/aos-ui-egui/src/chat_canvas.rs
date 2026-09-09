@@ -510,8 +510,8 @@ pub(crate) fn paint_canvas_text(
             color,
         );
         let off = eframe::egui::Vec2::new(0.0, i as f32 * px * 1.2);
-        let pos = anchor
-            + eframe::egui::Vec2::new(off.x * cos - off.y * sin, off.x * sin + off.y * cos);
+        let pos =
+            anchor + eframe::egui::Vec2::new(off.x * cos - off.y * sin, off.x * sin + off.y * cos);
         painter.add(Shape::Text(eframe::egui::epaint::TextShape {
             pos,
             galley,
@@ -527,7 +527,8 @@ pub(crate) fn paint_canvas_text(
 fn paint_op(
     painter: &eframe::egui::Painter,
     rect: eframe::egui::Rect,
-    op: &CanvasOp,    layers: &[CanvasLayer],
+    op: &CanvasOp,
+    layers: &[CanvasLayer],
     dark: bool,
     progress: f32,
 ) {
@@ -965,11 +966,7 @@ pub fn ui_canvas_toolbar(
                 CanvasToolIcon::Ellipse,
                 t.canvas_tool_ellipse,
             ),
-            (
-                CanvasTool::Text,
-                CanvasToolIcon::Text,
-                t.canvas_tool_text,
-            ),
+            (CanvasTool::Text, CanvasToolIcon::Text, t.canvas_tool_text),
         ] {
             if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
                 // Valide les ancres en attente avec l'ANCIEN outil plutôt que
@@ -1020,7 +1017,12 @@ pub fn ui_canvas_toolbar(
             CanvasTool::Rect | CanvasTool::Ellipse | CanvasTool::Path
         ) {
             let fill_on = state.shape_fill;
-            if icons::toolbar_action_selectable(ui, fill_on, icons::ToolbarActionIcon::Fill, t.canvas_fill_toggle) {
+            if icons::toolbar_action_selectable(
+                ui,
+                fill_on,
+                icons::ToolbarActionIcon::Fill,
+                t.canvas_fill_toggle,
+            ) {
                 state.shape_fill = !fill_on;
             }
         }
@@ -1056,7 +1058,12 @@ pub fn ui_canvas_toolbar(
         ) && state.shape_fill
         {
             let grad_on = state.use_gradient;
-            if icons::toolbar_action_selectable(ui, grad_on, icons::ToolbarActionIcon::Gradient, t.canvas_gradient) {
+            if icons::toolbar_action_selectable(
+                ui,
+                grad_on,
+                icons::ToolbarActionIcon::Gradient,
+                t.canvas_gradient,
+            ) {
                 state.use_gradient = !grad_on;
             }
             if state.use_gradient {
@@ -1084,10 +1091,18 @@ pub fn ui_canvas_toolbar(
         if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ExportPng, t.canvas_export) {
             action = Some(CanvasUiAction::ExportPng);
         }
-        if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ExportSvg, t.canvas_export_svg) {
+        if icons::toolbar_action_button(
+            ui,
+            icons::ToolbarActionIcon::ExportSvg,
+            t.canvas_export_svg,
+        ) {
             action = Some(CanvasUiAction::ExportSvg);
         }
-        if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ExportJson, t.canvas_export_json) {
+        if icons::toolbar_action_button(
+            ui,
+            icons::ToolbarActionIcon::ExportJson,
+            t.canvas_export_json,
+        ) {
             action = Some(CanvasUiAction::ExportJson);
         }
         if icons::toolbar_action_button(ui, icons::ToolbarActionIcon::ImportJson, t.canvas_import) {
@@ -1140,30 +1155,12 @@ pub fn ui_canvas_toolbar(
             ui.horizontal(|ui| {
                 ui.set_min_width(ui.available_width());
                 for (icon, edge) in [
-                    (
-                        icons::ToolbarActionIcon::AlignLeft,
-                        "left",
-                    ),
-                    (
-                        icons::ToolbarActionIcon::AlignRight,
-                        "right",
-                    ),
-                    (
-                        icons::ToolbarActionIcon::AlignTop,
-                        "top",
-                    ),
-                    (
-                        icons::ToolbarActionIcon::AlignBottom,
-                        "bottom",
-                    ),
-                    (
-                        icons::ToolbarActionIcon::AlignCX,
-                        "center_x",
-                    ),
-                    (
-                        icons::ToolbarActionIcon::AlignCY,
-                        "center_y",
-                    ),
+                    (icons::ToolbarActionIcon::AlignLeft, "left"),
+                    (icons::ToolbarActionIcon::AlignRight, "right"),
+                    (icons::ToolbarActionIcon::AlignTop, "top"),
+                    (icons::ToolbarActionIcon::AlignBottom, "bottom"),
+                    (icons::ToolbarActionIcon::AlignCX, "center_x"),
+                    (icons::ToolbarActionIcon::AlignCY, "center_y"),
                 ] {
                     if icons::toolbar_action_button(ui, icon, t.canvas_align_to_margin) {
                         action = Some(CanvasUiAction::Edit(CanvasEdit::Align {
@@ -1705,8 +1702,7 @@ pub fn ui_canvas_surface(
     }
 
     // Élastique + ancres du mode pointé : segment live vers le curseur.
-    if matches!(state.tool, CanvasTool::Spline | CanvasTool::Path)
-        && !state.draft_points.is_empty()
+    if matches!(state.tool, CanvasTool::Spline | CanvasTool::Path) && !state.draft_points.is_empty()
     {
         if let Some(cur) = response.hover_pos() {
             if rect.contains(cur) {
@@ -1807,10 +1803,7 @@ pub fn ui_canvas_surface(
                     state.drag_origin = None;
                     state.drag_current = None;
                 }
-                CanvasTool::Pen
-                | CanvasTool::Eraser
-                | CanvasTool::Spline
-                | CanvasTool::Path => {
+                CanvasTool::Pen | CanvasTool::Eraser | CanvasTool::Spline | CanvasTool::Path => {
                     action = commit_freehand_draft(state);
                 }
                 CanvasTool::Line => {
@@ -2214,8 +2207,12 @@ mod routing_tests {
         // Icônes 28px, couleur, sliders et DragValue sur la même hauteur :
         // la rangée ne doit plus avoir de dents de scie.
         assert_eq!(TOOLBAR_CTRL_H, crate::icons::TOOLBAR_ICON_SZ);
-        const { assert!(TOOLBAR_ROW_H >= TOOLBAR_CTRL_H + 2.0); };
-        const { assert!(TOOLBAR_SLIDER_W >= 96.0); };
+        const {
+            assert!(TOOLBAR_ROW_H >= TOOLBAR_CTRL_H + 2.0);
+        };
+        const {
+            assert!(TOOLBAR_SLIDER_W >= 96.0);
+        };
     }
 
     #[test]

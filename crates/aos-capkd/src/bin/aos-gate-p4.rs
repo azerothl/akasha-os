@@ -41,7 +41,9 @@ fn kill_auditd() {
 /// servir (`auditd.verify`). `audit.query` est servi par platformd (journal
 /// local) et ne reflète donc pas l'état d'auditd.
 async fn audit_reachable(bus: &BusClient) -> bool {
-    bus.call::<(), bool>("auditd.verify", &(), vec![]).await.is_ok()
+    bus.call::<(), bool>("auditd.verify", &(), vec![])
+        .await
+        .is_ok()
 }
 
 async fn wait_intent(bus: &BusClient, intent: &str) -> bool {
@@ -80,7 +82,10 @@ async fn infer_ok(bus: &BusClient, prompt: &str, max_tokens: u32) -> bool {
         return false;
     };
     while let Some(ev) = rx.recv().await {
-        if matches!(ev, Ok(TokenEvent::Delta { .. }) | Ok(TokenEvent::Done { .. })) {
+        if matches!(
+            ev,
+            Ok(TokenEvent::Delta { .. }) | Ok(TokenEvent::Done { .. })
+        ) {
             return true;
         }
     }

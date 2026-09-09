@@ -87,9 +87,10 @@ pub(crate) fn on_ui_invoke_done(
     let refresh_binds;
     let clear_form_keys;
     {
-        let panel = app.decl_panels.entry(module.clone()).or_insert_with(|| {
-            decl_ui::DeclUiPanelState::new(&module)
-        });
+        let panel = app
+            .decl_panels
+            .entry(module.clone())
+            .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
         refresh_binds = std::mem::take(&mut panel.pending_refresh_binds);
         clear_form_keys = std::mem::take(&mut panel.pending_clear_form_keys);
         panel.set_pending_invoke(false);
@@ -100,8 +101,7 @@ pub(crate) fn on_ui_invoke_done(
             }
             panel.status.clear();
         } else {
-            panel.status = error
-                .unwrap_or_else(|| "Action failed".into());
+            panel.status = error.unwrap_or_else(|| "Action failed".into());
         }
     }
     if ok {

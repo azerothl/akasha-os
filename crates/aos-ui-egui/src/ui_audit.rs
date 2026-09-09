@@ -74,8 +74,16 @@ pub(crate) fn parse_restart_line(line: &str) -> Option<DaemonRestart> {
     let ms: u64 = parts.next()?.parse().ok()?;
     let daemon = parts.next()?.to_string();
     match parts.next()? {
-        "restarted" => Some(DaemonRestart { ms, daemon, ok: true }),
-        "restart-failed" => Some(DaemonRestart { ms, daemon, ok: false }),
+        "restarted" => Some(DaemonRestart {
+            ms,
+            daemon,
+            ok: true,
+        }),
+        "restart-failed" => Some(DaemonRestart {
+            ms,
+            daemon,
+            ok: false,
+        }),
         _ => None,
     }
 }
@@ -88,8 +96,8 @@ fn read_restarts(home: &std::path::Path) -> Vec<DaemonRestart> {
 }
 
 fn read_stderr_tail(home: &std::path::Path, daemon: &str, max_lines: usize) -> Vec<String> {
-    let raw =
-        std::fs::read_to_string(home.join(format!("var/run/{daemon}.stderr.log"))).unwrap_or_default();
+    let raw = std::fs::read_to_string(home.join(format!("var/run/{daemon}.stderr.log")))
+        .unwrap_or_default();
     raw.lines()
         .map(str::to_string)
         .collect::<Vec<_>>()
@@ -119,12 +127,7 @@ impl UiApp {
         restarts.truncate(200);
         self.security_ui.audit_restarts = restarts;
         let mut logs = Vec::new();
-        for daemon in [
-            "aos-platformd",
-            "aos-modeld",
-            "aos-agentd",
-            "aos-auditd",
-        ] {
+        for daemon in ["aos-platformd", "aos-modeld", "aos-agentd", "aos-auditd"] {
             let tail = read_stderr_tail(&home, daemon, 8);
             if !tail.is_empty() {
                 logs.push((daemon.to_string(), tail));
@@ -204,7 +207,11 @@ impl UiApp {
             Some(true) => {
                 ui.colored_label(
                     crate::theme::button_colors(ui).success,
-                    if fr { "✓ Chaîne intègre (audit.verify)" } else { "✓ Chain intact (audit.verify)" },
+                    if fr {
+                        "✓ Chaîne intègre (audit.verify)"
+                    } else {
+                        "✓ Chain intact (audit.verify)"
+                    },
                 );
             }
             Some(false) => {
@@ -268,7 +275,11 @@ impl UiApp {
             crate::ui_primitives::search_field(
                 ui,
                 &mut self.security_ui.audit_search,
-                if fr { "Acteur, action, cible, trace…" } else { "Actor, action, target, trace…" },
+                if fr {
+                    "Acteur, action, cible, trace…"
+                } else {
+                    "Actor, action, target, trace…"
+                },
             );
         });
         ui.horizontal_wrapped(|ui| {
@@ -276,7 +287,11 @@ impl UiApp {
             if ui
                 .checkbox(
                     &mut problems,
-                    if fr { "Problèmes uniquement" } else { "Problems only" },
+                    if fr {
+                        "Problèmes uniquement"
+                    } else {
+                        "Problems only"
+                    },
                 )
                 .changed()
             {
@@ -297,21 +312,32 @@ impl UiApp {
                                 .map(|s| s.title.clone())
                         })
                         .unwrap_or_else(|| {
-                            if fr { "Toutes sessions".into() } else { "All sessions".into() }
+                            if fr {
+                                "Toutes sessions".into()
+                            } else {
+                                "All sessions".into()
+                            }
                         }),
                 )
                 .show_ui(ui, |ui| {
                     if ui
                         .selectable_label(
                             current.is_none(),
-                            if fr { "Toutes sessions" } else { "All sessions" },
+                            if fr {
+                                "Toutes sessions"
+                            } else {
+                                "All sessions"
+                            },
                         )
                         .clicked()
                     {
                         picked = Some(None);
                     }
                     for s in self.chat_state.sessions.clone() {
-                        if ui.selectable_label(current.as_deref() == Some(s.id.as_str()), &s.title).clicked() {
+                        if ui
+                            .selectable_label(current.as_deref() == Some(s.id.as_str()), &s.title)
+                            .clicked()
+                        {
                             picked = Some(Some(s.id.clone()));
                         }
                     }
@@ -345,25 +371,30 @@ impl UiApp {
                     "No watchdog restarts recorded."
                 });
             } else {
-                for r in self.security_ui.audit_restarts.clone().into_iter().rev().take(20) {
+                for r in self
+                    .security_ui
+                    .audit_restarts
+                    .clone()
+                    .into_iter()
+                    .rev()
+                    .take(20)
+                {
                     ui.horizontal(|ui| {
                         if r.ok {
-                            ui.colored_label(
-                                crate::theme::button_colors(ui).success,
-                                "↻",
-                            );
+                            ui.colored_label(crate::theme::button_colors(ui).success, "↻");
                         } else {
-                            ui.colored_label(
-                                crate::theme::button_colors(ui).danger,
-                                "!",
-                            );
+                            ui.colored_label(crate::theme::button_colors(ui).danger, "!");
                         }
                         ui.monospace(format_local_datetime(r.ms, tz));
                         ui.label(format!(
                             "{} — {}",
                             r.daemon,
                             if r.ok {
-                                if fr { "redémarré" } else { "restarted" }
+                                if fr {
+                                    "redémarré"
+                                } else {
+                                    "restarted"
+                                }
                             } else if fr {
                                 "redémarrage ÉCHOUÉ"
                             } else {
@@ -377,11 +408,13 @@ impl UiApp {
                 ui.separator();
             }
             for (daemon, lines) in self.security_ui.audit_logs.clone() {
-                egui::CollapsingHeader::new(daemon).default_open(false).show(ui, |ui| {
-                    for line in lines {
-                        ui.monospace(&line);
-                    }
-                });
+                egui::CollapsingHeader::new(daemon)
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        for line in lines {
+                            ui.monospace(&line);
+                        }
+                    });
             }
         });
         ui.separator();
@@ -404,22 +437,10 @@ impl UiApp {
             let row = ui.horizontal(|ui| {
                 ui.weak(format_local_datetime(e.ts_ms, tz));
                 let (label, color) = match actor_family(&e.actor) {
-                    ActorFamily::Agent => (
-                        "agent",
-                        crate::theme::button_colors(ui).accent,
-                    ),
-                    ActorFamily::Human => (
-                        "humain",
-                        crate::theme::button_colors(ui).success,
-                    ),
-                    ActorFamily::Module => (
-                        "module",
-                        crate::theme::button_colors(ui).warning,
-                    ),
-                    ActorFamily::Service => (
-                        "service",
-                        ui.visuals().weak_text_color(),
-                    ),
+                    ActorFamily::Agent => ("agent", crate::theme::button_colors(ui).accent),
+                    ActorFamily::Human => ("humain", crate::theme::button_colors(ui).success),
+                    ActorFamily::Module => ("module", crate::theme::button_colors(ui).warning),
+                    ActorFamily::Service => ("service", ui.visuals().weak_text_color()),
                     ActorFamily::Other => ("?", ui.visuals().weak_text_color()),
                 };
                 ui.colored_label(color, label);
@@ -431,8 +452,7 @@ impl UiApp {
                 }
             });
             if row.response.clicked() {
-                self.security_ui.audit_selected =
-                    if selected { None } else { Some(e.seq) };
+                self.security_ui.audit_selected = if selected { None } else { Some(e.seq) };
             }
             if selected {
                 ui.group(|ui| {
@@ -446,7 +466,10 @@ impl UiApp {
                         ui.horizontal_wrapped(|ui| {
                             ui.weak("trace:");
                             ui.monospace(&e.trace_id);
-                            if ui.small_button(if fr { "Chaîne" } else { "Chain" }).clicked() {
+                            if ui
+                                .small_button(if fr { "Chaîne" } else { "Chain" })
+                                .clicked()
+                            {
                                 self.security_ui.audit_trace = Some(e.trace_id.clone());
                                 self.refresh_audit();
                             }
@@ -500,15 +523,24 @@ mod tests {
 
     #[test]
     fn gap_formats_hours_and_minutes() {
-        assert_eq!(format_gap_ms(12 * 60_000, true), "trou de 12 min — arrêt possible ?");
-        assert_eq!(format_gap_ms(125 * 60_000, true), "trou de 2h05 — arrêt possible ?");
+        assert_eq!(
+            format_gap_ms(12 * 60_000, true),
+            "trou de 12 min — arrêt possible ?"
+        );
+        assert_eq!(
+            format_gap_ms(125 * 60_000, true),
+            "trou de 2h05 — arrêt possible ?"
+        );
         assert_eq!(format_gap_ms(7 * 60_000, false), "7 min gap — stopped?");
     }
 
     #[test]
     fn restarts_parse_ok_and_failed() {
         let ok = parse_restart_line("1725000000000 aos-modeld restarted").unwrap();
-        assert_eq!((ok.ms, ok.daemon.as_str(), ok.ok), (1725000000000, "aos-modeld", true));
+        assert_eq!(
+            (ok.ms, ok.daemon.as_str(), ok.ok),
+            (1725000000000, "aos-modeld", true)
+        );
         let ko = parse_restart_line("1725000000001 aos-modeld restart-failed").unwrap();
         assert!(!ko.ok);
         assert!(parse_restart_line("garbage").is_none());

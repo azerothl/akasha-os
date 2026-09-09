@@ -102,12 +102,7 @@ pub extern "C" fn aos_cap_mint(holder: u64, object: *const c_char, rights: u32) 
 
 /// Check. 0 = OK, 1 = DENIED (aligné sur `AOS_OK` / `AOS_DENIED`).
 #[no_mangle]
-pub extern "C" fn aos_cap_check(
-    holder: u64,
-    cap: u64,
-    rights: u32,
-    object: *const c_char,
-) -> i32 {
+pub extern "C" fn aos_cap_check(holder: u64, cap: u64, rights: u32, object: *const c_char) -> i32 {
     let Some(obj) = cstr(object) else {
         return aos_sel4_abi::DENIED as i32;
     };
@@ -133,9 +128,7 @@ mod tests {
     use core::ffi::CStr;
 
     fn obj(s: &str) -> *const c_char {
-        CStr::from_bytes_with_nul(s.as_bytes())
-            .unwrap()
-            .as_ptr()
+        CStr::from_bytes_with_nul(s.as_bytes()).unwrap().as_ptr()
     }
 
     static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

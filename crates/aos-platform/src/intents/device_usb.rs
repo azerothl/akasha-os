@@ -101,11 +101,7 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
             async move {
                 match ctx.payload::<UsbPermissionRevokeRequest>() {
                     Ok(req) => {
-                        let result = s
-                            .usb
-                            .lock()
-                            .unwrap()
-                            .revoke(&req.agent_id, &req.device_id);
+                        let result = s.usb.lock().unwrap().revoke(&req.agent_id, &req.device_id);
                         match result {
                             Ok(stopped) => {
                                 s.audit(AuditAppendRequest {
@@ -245,12 +241,7 @@ fn register_open(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
     });
 }
 
-fn register_io(
-    svc: &mut BusService,
-    sub: Arc<PlatformSubsystem>,
-    intent: &'static str,
-    op: IoOp,
-) {
+fn register_io(svc: &mut BusService, sub: Arc<PlatformSubsystem>, intent: &'static str, op: IoOp) {
     svc.on(intent, move |ctx| {
         let s = sub.clone();
         async move {
@@ -351,9 +342,9 @@ async fn respond_error(ctx: aos_ipc::IntentCtx, error: UsbIoError) {
         UsbIoError::DeviceBusy | UsbIoError::QuotaExceeded(_) | UsbIoError::IoTimeout => {
             aos_ipc::msg::Status::PermissionDenied
         }
-        UsbIoError::HandleNotFound(_)
-        | UsbIoError::InvalidRequest(_)
-        | UsbIoError::Backend(_) => aos_ipc::msg::Status::InternalError,
+        UsbIoError::HandleNotFound(_) | UsbIoError::InvalidRequest(_) | UsbIoError::Backend(_) => {
+            aos_ipc::msg::Status::InternalError
+        }
     };
     let message = error.to_string();
     let _ = ctx.respond_error(status, &message).await;

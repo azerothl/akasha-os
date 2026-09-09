@@ -167,7 +167,10 @@ pub fn merge_skill_tools_for_modules(
 }
 
 /// Install hints for active skills whose module dependency is missing.
-pub fn missing_module_hints(skills: &[SkillDoc], installed_modules: &HashSet<String>) -> Vec<String> {
+pub fn missing_module_hints(
+    skills: &[SkillDoc],
+    installed_modules: &HashSet<String>,
+) -> Vec<String> {
     let mut hints = Vec::new();
     for s in skills {
         if let Some(module) = skill_required_module(&s.name) {
@@ -240,10 +243,9 @@ mod tests {
 
     #[test]
     fn discovers_tasks_tools_from_module_list() {
-        let tools = discover_module_tools_from_list(
-            &[sample_tasks_module()],
-            |_| Some(sample_tasks_describe()),
-        );
+        let tools = discover_module_tools_from_list(&[sample_tasks_module()], |_| {
+            Some(sample_tasks_describe())
+        });
         for id in TOOL_IDS {
             let tool = tools
                 .iter()
@@ -296,10 +298,9 @@ mod tests {
 
     #[test]
     fn module_fallback_allowed_only_for_discovered_prefix() {
-        let tools = discover_module_tools_from_list(
-            &[sample_tasks_module()],
-            |_| Some(sample_tasks_describe()),
-        );
+        let tools = discover_module_tools_from_list(&[sample_tasks_module()], |_| {
+            Some(sample_tasks_describe())
+        });
         assert!(module_fallback_allowed("tasks.create", &tools));
         assert!(!module_fallback_allowed("notes.create", &tools));
     }

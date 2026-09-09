@@ -281,9 +281,8 @@ async fn main() {
 
     // --- 5. Runtime agentic : skill.list + agent multi-steps ---
     {
-        let skills: Result<Vec<aos_proto::SkillInfo>, _> = bus
-            .call(agent_intents::SKILL_LIST, &(), vec![])
-            .await;
+        let skills: Result<Vec<aos_proto::SkillInfo>, _> =
+            bus.call(agent_intents::SKILL_LIST, &(), vec![]).await;
         let skill_ok = skills
             .as_ref()
             .map(|s| s.iter().any(|x| x.name == "notes-writer"))
@@ -361,9 +360,8 @@ async fn main() {
 
     // --- Deep Thinking plan.create / plan.get smoke ---
     {
-        let mut req = AgentCreateRequest::simple(
-            "Deep Thinking smoke — plan hiérarchique uniquement",
-        );
+        let mut req =
+            AgentCreateRequest::simple("Deep Thinking smoke — plan hiérarchique uniquement");
         req.cognitive_mode = CognitiveMode::DeepThinking;
         req.skills = vec!["deep-thinking".into()];
         req.tools = vec!["goal.complete".into()];
@@ -407,8 +405,8 @@ async fn main() {
                     )
                     .await;
                 let got = match &created {
-                    Ok(resp) => {
-                        bus.call::<PlanGetRequest, PlanResponse>(
+                    Ok(resp) => bus
+                        .call::<PlanGetRequest, PlanResponse>(
                             agent_intents::PLAN_GET,
                             &PlanGetRequest {
                                 plan_id: Some(resp.plan.id.clone()),
@@ -417,8 +415,7 @@ async fn main() {
                             vec![],
                         )
                         .await
-                        .ok()
-                    }
+                        .ok(),
                     Err(_) => None,
                 };
                 let _ = bus

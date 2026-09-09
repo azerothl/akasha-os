@@ -133,7 +133,11 @@ impl DiskScan {
         let dir = share_models_dir();
         let (files, bytes) = dir_size_recursive(&dir);
         let partials = find_partials(&dir);
-        Self { files, bytes, partials }
+        Self {
+            files,
+            bytes,
+            partials,
+        }
     }
 
     pub fn partial_bytes(&self) -> u64 {
@@ -168,7 +172,8 @@ mod tests {
         assert_eq!(bytes, 100 + 10 + 5 + 4);
         let partials = find_partials(&dir);
         assert_eq!(partials.len(), 2);
-        let (n, freed) = purge_partials(&partials.iter().map(|(p, _)| p.clone()).collect::<Vec<_>>());
+        let (n, freed) =
+            purge_partials(&partials.iter().map(|(p, _)| p.clone()).collect::<Vec<_>>());
         assert_eq!((n, freed), (2, 15));
         assert!(dir.join("model.gguf").is_file());
         assert!(dir.join("notes.txt").is_file());

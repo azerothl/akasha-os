@@ -343,16 +343,14 @@ mod tests {
 
     #[test]
     fn usb_devices_for_agent_omits_path_hint() {
-        let devices = vec![
-            UsbDeviceDescriptor {
-                id: "linux:Serial:/dev/ttyUSB0".into(),
-                name: "CP2102".into(),
-                class: UsbDeviceClass::Serial,
-                vendor_id: Some(0x10c4),
-                product_id: Some(0xea60),
-                path_hint: Some("/dev/ttyUSB0".into()),
-            },
-        ];
+        let devices = vec![UsbDeviceDescriptor {
+            id: "linux:Serial:/dev/ttyUSB0".into(),
+            name: "CP2102".into(),
+            class: UsbDeviceClass::Serial,
+            vendor_id: Some(0x10c4),
+            product_id: Some(0xea60),
+            path_hint: Some("/dev/ttyUSB0".into()),
+        }];
         let json = usb_devices_for_agent(&devices);
         assert!(!json.contains("path_hint"));
         assert!(json.contains(r#""name":"CP2102"#));
@@ -369,18 +367,12 @@ PNG webcam capturé."#;
             Some(r"C:\var\s\devices\c1.png")
         );
         assert!(capture_png_path_from_tool_result("err: busy").is_none());
-        assert!(capture_png_path_from_tool_result(
-            r#"{"artifact":{"path":"clip.pcm"}}"#
-        )
-        .is_none());
+        assert!(capture_png_path_from_tool_result(r#"{"artifact":{"path":"clip.pcm"}}"#).is_none());
     }
 
     #[test]
     fn canonicalize_keeps_existing_absolute_png() {
-        let p = std::env::temp_dir().join(format!(
-            "aos-cap-abs-{}.png",
-            std::process::id()
-        ));
+        let p = std::env::temp_dir().join(format!("aos-cap-abs-{}.png", std::process::id()));
         std::fs::write(&p, b"x").unwrap();
         let got = canonicalize_capture_image_path(p.to_str().unwrap());
         let _ = std::fs::remove_file(&p);

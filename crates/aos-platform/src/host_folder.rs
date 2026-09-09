@@ -41,8 +41,7 @@ pub struct HostFolderGrantManager {
 impl HostFolderGrantManager {
     pub fn open(sessions_root: impl Into<PathBuf>) -> Result<Self, HostFolderError> {
         let sessions_root = sessions_root.into();
-        fs::create_dir_all(&sessions_root)
-            .map_err(|e| HostFolderError::Io(e.to_string()))?;
+        fs::create_dir_all(&sessions_root).map_err(|e| HostFolderError::Io(e.to_string()))?;
         let permissions_path = sessions_root.join("host-folder-permissions.json");
         let permissions = match fs::read_to_string(&permissions_path) {
             Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
@@ -63,7 +62,8 @@ impl HostFolderGrantManager {
     }
 
     pub fn consume_once_grant(&mut self, agent_id: &str, folder_key: &str) -> bool {
-        self.once_grants.remove(&(agent_id.to_string(), folder_key.to_string()))
+        self.once_grants
+            .remove(&(agent_id.to_string(), folder_key.to_string()))
     }
 
     pub fn grant_once(&mut self, agent_id: &str, folder_key: &str) {
@@ -109,14 +109,12 @@ impl HostFolderGrantManager {
             .collect()
     }
 
-    pub fn is_authorized(
-        &self,
-        agent_id: &str,
-        folder_key: &str,
-        include_once: bool,
-    ) -> bool {
+    pub fn is_authorized(&self, agent_id: &str, folder_key: &str, include_once: bool) -> bool {
         self.has_persistent_grant(agent_id, folder_key)
-            || (include_once && self.once_grants.contains(&(agent_id.to_string(), folder_key.to_string())))
+            || (include_once
+                && self
+                    .once_grants
+                    .contains(&(agent_id.to_string(), folder_key.to_string())))
     }
 
     pub fn execute(
@@ -172,11 +170,9 @@ impl HostFolderGrantManager {
             HostFolderOperation::Write => {
                 let content = content.unwrap_or("");
                 if let Some(parent) = host_path.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| HostFolderError::Io(e.to_string()))?;
+                    fs::create_dir_all(parent).map_err(|e| HostFolderError::Io(e.to_string()))?;
                 }
-                fs::write(&host_path, content)
-                    .map_err(|e| HostFolderError::Io(e.to_string()))?;
+                fs::write(&host_path, content).map_err(|e| HostFolderError::Io(e.to_string()))?;
                 Ok(format!("écrit {}", folder_display_name(path)))
             }
             HostFolderOperation::Generate => {
@@ -189,11 +185,9 @@ impl HostFolderGrantManager {
                 };
                 ensure_within_folder(&target, &folder_path)?;
                 if let Some(parent) = target.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| HostFolderError::Io(e.to_string()))?;
+                    fs::create_dir_all(parent).map_err(|e| HostFolderError::Io(e.to_string()))?;
                 }
-                fs::write(&target, content)
-                    .map_err(|e| HostFolderError::Io(e.to_string()))?;
+                fs::write(&target, content).map_err(|e| HostFolderError::Io(e.to_string()))?;
                 Ok(target.to_string_lossy().into_owned())
             }
             HostFolderOperation::List => {
@@ -224,8 +218,7 @@ impl HostFolderGrantManager {
             .map_err(|e| HostFolderError::Io(e.to_string()))?;
         let tmp = self.permissions_path.with_extension("json.tmp");
         fs::write(&tmp, raw).map_err(|e| HostFolderError::Io(e.to_string()))?;
-        fs::rename(&tmp, &self.permissions_path)
-            .map_err(|e| HostFolderError::Io(e.to_string()))
+        fs::rename(&tmp, &self.permissions_path).map_err(|e| HostFolderError::Io(e.to_string()))
     }
 }
 
@@ -323,7 +316,7 @@ mod tests {
     #[test]
     fn allow_once_scoped_to_folder_not_disk() {
         let root = temp_root();
-        let mut mgr = HostFolderGrantManager::open(&root).unwrap();
+        let mgr = HostFolderGrantManager::open(&root).unwrap();
         let granted = root.join("granted");
         let other = root.join("other");
         fs::create_dir_all(&granted).unwrap();
@@ -362,7 +355,14 @@ mod tests {
             HostFolderError::PermissionDenied
         );
         assert!(mgr
-            .execute("agent:a1", &o_key, &f2.to_string_lossy(), HostFolderOperation::Read, None, None)
+            .execute(
+                "agent:a1",
+                &o_key,
+                &f2.to_string_lossy(),
+                HostFolderOperation::Read,
+                None,
+                None
+            )
             .is_err());
         let _ = fs::remove_dir_all(&root);
     }
@@ -417,7 +417,10 @@ mod tests {
         let file = nested.join("x.txt");
         assert!(path_within_granted_folder(&file.to_string_lossy(), &key));
         let outside = root.join("outside.txt");
-        assert!(!path_within_granted_folder(&outside.to_string_lossy(), &key));
+        assert!(!path_within_granted_folder(
+            &outside.to_string_lossy(),
+            &key
+        ));
         let _ = fs::remove_dir_all(&root);
     }
 }

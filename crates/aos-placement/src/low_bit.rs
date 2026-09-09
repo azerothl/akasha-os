@@ -84,7 +84,9 @@ impl LowBitKernelRegistry {
             kernel.backend == backend
                 && kernel.layout == layout
                 && kernel.phase == phase
-                && kernel.measured_gain().is_some_and(|gain| gain >= Self::MIN_GAIN_VS_INT4)
+                && kernel
+                    .measured_gain()
+                    .is_some_and(|gain| gain >= Self::MIN_GAIN_VS_INT4)
                 && kernel_isa_matches(kernel.isa.as_deref(), hw)
         })
     }

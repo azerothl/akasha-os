@@ -3,12 +3,12 @@
 use crate::host_folder::{folder_key_for_request, HostFolderError};
 use crate::subsystem::PlatformSubsystem;
 use aos_ipc::BusService;
+use aos_proto::folder_display_name;
 use aos_proto::host_folder::intents;
 use aos_proto::{
-    AuditAppendRequest,     HostFolderAccessRequest, HostFolderAccessResponse, HostFolderOperation,
+    AuditAppendRequest, HostFolderAccessRequest, HostFolderAccessResponse, HostFolderOperation,
     HostFolderPermissionRevokeRequest, HOST_FOLDER_ACCESS_ACTION,
 };
-use aos_proto::folder_display_name;
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -4,7 +4,7 @@
 //! outil + parse JSON du modèle. La persistance passe par
 //! [`crate::memory::MemoryStore::episodic_write_auto_link`].
 
-use aos_proto::{MemExtractedFact, MemExtractOutcome, MemExtractOutcomeKind};
+use aos_proto::{MemExtractOutcome, MemExtractOutcomeKind, MemExtractedFact};
 
 pub use aos_proto::mem_extract::{
     is_draw_or_canvas_request, is_human_memory_fact, looks_like_ephemeral_fact,
@@ -19,8 +19,8 @@ pub const DEDUP_THRESHOLD: f32 = 0.92;
 pub fn parse_extract_json(raw: &str) -> Result<Vec<MemExtractedFact>, String> {
     let stripped = strip_think_tags(raw);
     let trimmed = strip_json_fence(stripped.trim());
-    let value: serde_json::Value = serde_json::from_str(trimmed)
-        .map_err(|e| format!("JSON extract invalide: {e}"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(trimmed).map_err(|e| format!("JSON extract invalide: {e}"))?;
     let items: Vec<serde_json::Value> = match value {
         serde_json::Value::Object(map) => {
             if let Some(facts) = map.get("facts").and_then(|v| v.as_array()) {
@@ -101,16 +101,10 @@ fn strip_think_tags(s: &str) -> String {
 fn strip_json_fence(s: &str) -> &str {
     let s = s.trim();
     if let Some(rest) = s.strip_prefix("```json") {
-        return rest
-            .strip_suffix("```")
-            .unwrap_or(rest)
-            .trim();
+        return rest.strip_suffix("```").unwrap_or(rest).trim();
     }
     if let Some(rest) = s.strip_prefix("```") {
-        return rest
-            .strip_suffix("```")
-            .unwrap_or(rest)
-            .trim();
+        return rest.strip_suffix("```").unwrap_or(rest).trim();
     }
     // Cherche le premier `{` / `[` si prose autour.
     if let Some(i) = s.find('{') {
@@ -225,7 +219,10 @@ fn iban_like(text: &str) -> bool {
             && slice[1].is_ascii_alphabetic()
             && slice[2].is_ascii_digit()
             && slice[3].is_ascii_digit()
-            && slice[4..].iter().take(11).all(|c| c.is_ascii_alphanumeric())
+            && slice[4..]
+                .iter()
+                .take(11)
+                .all(|c| c.is_ascii_alphanumeric())
         {
             // Exige au moins 15 caractères de type IBAN (évite les faux positifs courts).
             return true;
@@ -292,9 +289,15 @@ mod tests {
     #[test]
     fn parse_string_facts_and_single_object() {
         let raw = r#"{"facts":["User prefers German"]}"#;
-        assert_eq!(parse_extract_json(raw).unwrap()[0].text, "User prefers German");
+        assert_eq!(
+            parse_extract_json(raw).unwrap()[0].text,
+            "User prefers German"
+        );
         let raw2 = r#"{"text":"User lives in Berlin"}"#;
-        assert_eq!(parse_extract_json(raw2).unwrap()[0].text, "User lives in Berlin");
+        assert_eq!(
+            parse_extract_json(raw2).unwrap()[0].text,
+            "User lives in Berlin"
+        );
     }
 
     #[test]
@@ -383,7 +386,9 @@ mod tests {
     fn human_memory_fact_gate() {
         assert!(is_human_memory_fact("L'utilisateur s'appelle Alice"));
         assert!(is_human_memory_fact("L'utilisateur préfère le français"));
-        assert!(!is_human_memory_fact("L'utilisateur veut dessiner une maison"));
+        assert!(!is_human_memory_fact(
+            "L'utilisateur veut dessiner une maison"
+        ));
         assert!(!is_human_memory_fact("✓ `notes.create` → `todo.md`"));
     }
 }

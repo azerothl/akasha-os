@@ -240,7 +240,12 @@ mod tests {
             format_agent_act_phrase(&t_fr, "tasks.complete", &json!({})),
             "Terminer une tâche"
         );
-        for action in ["tasks.create", "tasks.list", "tasks.update", "tasks.complete"] {
+        for action in [
+            "tasks.create",
+            "tasks.list",
+            "tasks.update",
+            "tasks.complete",
+        ] {
             let en = format_agent_act_phrase(&t_en, action, &json!({}));
             let fr = format_agent_act_phrase(&t_fr, action, &json!({}));
             assert!(!en.contains(action));

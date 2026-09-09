@@ -90,10 +90,7 @@ pub fn endpoint_is_loopback(endpoint: &str) -> bool {
     matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
 }
 
-pub async fn fetch_provider_secret(
-    bus: &aos_ipc::BusClient,
-    name: Option<&str>,
-) -> Option<String> {
+pub async fn fetch_provider_secret(bus: &aos_ipc::BusClient, name: Option<&str>) -> Option<String> {
     let name = name.filter(|s| !s.is_empty())?;
     bus.call::<aos_proto::SecretGetRequest, String>(
         "secrets.get",

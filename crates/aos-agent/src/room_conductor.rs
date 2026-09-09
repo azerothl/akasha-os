@@ -105,8 +105,7 @@ pub fn resolve_mention_token(token: &str, members: &[ChatRoomMember]) -> Option<
         .find(|m| {
             m.agent_id == needle
                 || m.display_name.eq_ignore_ascii_case(needle)
-                || m
-                    .persona_id
+                || m.persona_id
                     .as_deref()
                     .is_some_and(|p| p.eq_ignore_ascii_case(needle))
         })
@@ -170,7 +169,10 @@ fn mention_labels_longest_first(members: &[ChatRoomMember]) -> Vec<(String, Stri
 /// True when the character immediately after a matched prefix is a mention
 /// boundary (end of string, whitespace, punctuation, …).
 fn mention_boundary_ok(tail: &str, matched_bytes: usize) -> bool {
-    match tail.get(matched_bytes..).and_then(|rest| rest.chars().next()) {
+    match tail
+        .get(matched_bytes..)
+        .and_then(|rest| rest.chars().next())
+    {
         None => true,
         Some(c) => !c.is_ascii_alphanumeric() && c != '-' && c != '_',
     }
@@ -353,12 +355,16 @@ pub fn detect_peer_address(
     members: &[ChatRoomMember],
     exclude_agent_id: &str,
 ) -> Option<String> {
-    detect_peer_addresses(reply, members, exclude_agent_id).into_iter().next()
+    detect_peer_addresses(reply, members, exclude_agent_id)
+        .into_iter()
+        .next()
 }
 
 /// Nombre effectif de tours agent autorisés (politique + plafond dur).
 pub fn effective_max_turns(policy: &ChatRoomConductorPolicy) -> u32 {
-    policy.max_agent_turns_per_user.clamp(1, HARD_MAX_AGENT_TURNS)
+    policy
+        .max_agent_turns_per_user
+        .clamp(1, HARD_MAX_AGENT_TURNS)
 }
 
 #[cfg(test)]
@@ -395,10 +401,7 @@ mod tests {
         let ids = parse_mentions("Hey @Alpha and @agent-gamma please weigh in", &m);
         assert_eq!(
             ids,
-            vec![
-                String::from("agent-alpha"),
-                String::from("agent-gamma"),
-            ]
+            vec![String::from("agent-alpha"), String::from("agent-gamma"),]
         );
     }
 
@@ -522,10 +525,7 @@ mod tests {
                 joined_ms: 2,
             },
         ];
-        let ids = parse_mentions(
-            "(Critic) @supervisor @devil's advocate @Researcher",
-            &m,
-        );
+        let ids = parse_mentions("(Critic) @supervisor @devil's advocate @Researcher", &m);
         assert_eq!(
             ids,
             vec![
@@ -604,14 +604,12 @@ mod tests {
         assert!(ghost_only.is_empty());
         let ghost_with_text = build_initial_queue("@agent_id_123 update the drawing", &m);
         assert!(ghost_with_text.is_empty());
-        assert!(
-            detect_peer_address(
-                "@agent_id_456 (Dessinateur) please render",
-                &m,
-                "persona-critic"
-            )
-            .is_none()
-        );
+        assert!(detect_peer_address(
+            "@agent_id_456 (Dessinateur) please render",
+            &m,
+            "persona-critic"
+        )
+        .is_none());
     }
 
     #[test]
@@ -823,12 +821,7 @@ mod tests {
         }
         assert_eq!(
             spoken,
-            vec![
-                "agent-alpha",
-                "agent-beta",
-                "agent-alpha",
-                "agent-gamma",
-            ]
+            vec!["agent-alpha", "agent-beta", "agent-alpha", "agent-gamma",]
         );
         assert_eq!(peer_followups_run, 1);
     }
@@ -881,7 +874,9 @@ mod tests {
     fn reply_invites_peer_response_for_questions_and_requests() {
         assert!(reply_invites_peer_response("@Beta, peux-tu détailler ?"));
         assert!(reply_invites_peer_response("@Beta, please share sources."));
-        assert!(!reply_invites_peer_response("Merci @Beta pour la synthèse."));
+        assert!(!reply_invites_peer_response(
+            "Merci @Beta pour la synthèse."
+        ));
         assert!(!reply_invites_peer_response("I agree with the direction."));
     }
 

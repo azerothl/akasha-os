@@ -202,9 +202,10 @@ impl PlatformSubsystem {
         if extra.enabled {
             rt.set_extra_catalogue(extra.loaded.clone());
         }
-        let skills = crate::skill::SkillStore::open(&config.skills_dir).map_err(|e| e.to_string())?;
-        let author =
-            crate::module_compile::ModuleAuthor::open(&config.modules_dir).map_err(|e| e.to_string())?;
+        let skills =
+            crate::skill::SkillStore::open(&config.skills_dir).map_err(|e| e.to_string())?;
+        let author = crate::module_compile::ModuleAuthor::open(&config.modules_dir)
+            .map_err(|e| e.to_string())?;
         let policy = PolicyEngine::open(
             config.policies_file.as_deref().map(Path::new),
             config.confirm_timeout_sec,
@@ -280,10 +281,7 @@ impl PlatformSubsystem {
 
     pub fn sync_extra_into_runtime(&self) {
         let loaded = self.extra_catalogue.lock().unwrap().loaded.clone();
-        self.modules
-            .lock()
-            .unwrap()
-            .set_extra_catalogue(loaded);
+        self.modules.lock().unwrap().set_extra_catalogue(loaded);
     }
 
     /// Verrou d'application canvas par session (sérialise les écritures concurrentes).
@@ -654,11 +652,7 @@ impl HostServices for PlatformSubsystem {
                 let mut mem = self.mem.lock().unwrap();
                 let (deleted, count) = if let Some(id) = args["id"].as_u64() {
                     // Vérifie que l'entrée appartient au namespace autorisé.
-                    let ok = mem
-                        .export(ns)
-                        .iter()
-                        .any(|e| e.id == id)
-                        && mem.episodic_delete(id);
+                    let ok = mem.export(ns).iter().any(|e| e.id == id) && mem.episodic_delete(id);
                     (ok, if ok { 1 } else { 0 })
                 } else {
                     let key = args["meta_key"].as_str().unwrap_or("path");
@@ -667,9 +661,7 @@ impl HostServices for PlatformSubsystem {
                         .or_else(|| args["path"].as_str())
                         .unwrap_or("");
                     if value.is_empty() {
-                        return Err(
-                            "mem.episodic_delete: id ou path/meta_value requis".into(),
-                        );
+                        return Err("mem.episodic_delete: id ou path/meta_value requis".into());
                     }
                     let n = mem.episodic_delete_by_meta(ns, key, value);
                     (n > 0, n)
@@ -710,7 +702,9 @@ impl HostServices for PlatformSubsystem {
                 let id = self.mem.lock().unwrap().episodic_write(
                     "user:default",
                     text,
-                    args.get("metadata").cloned().unwrap_or(serde_json::json!({})),
+                    args.get("metadata")
+                        .cloned()
+                        .unwrap_or(serde_json::json!({})),
                     emb,
                     args["pinned"].as_bool().unwrap_or(false),
                 );
@@ -762,7 +756,10 @@ impl HostServices for PlatformSubsystem {
             }
             "web.search" => {
                 // Cap réseau requise
-                let has_net = ctx.granted_caps.iter().any(|c| c.starts_with("net.connect:"));
+                let has_net = ctx
+                    .granted_caps
+                    .iter()
+                    .any(|c| c.starts_with("net.connect:"));
                 if !has_net {
                     return Err("permission refusée: net.connect requis pour web.search".into());
                 }
@@ -796,7 +793,10 @@ impl HostServices for PlatformSubsystem {
                 Ok(serde_json::to_value(resp).unwrap_or_default())
             }
             "web.browse" => {
-                let has_net = ctx.granted_caps.iter().any(|c| c.starts_with("net.connect:"));
+                let has_net = ctx
+                    .granted_caps
+                    .iter()
+                    .any(|c| c.starts_with("net.connect:"));
                 if !has_net {
                     return Err("permission refusée: net.connect requis pour web.browse".into());
                 }
@@ -821,7 +821,10 @@ impl HostServices for PlatformSubsystem {
                 Ok(serde_json::to_value(resp).unwrap_or_default())
             }
             "net.fetch" => {
-                let has_net = ctx.granted_caps.iter().any(|c| c.starts_with("net.connect:"));
+                let has_net = ctx
+                    .granted_caps
+                    .iter()
+                    .any(|c| c.starts_with("net.connect:"));
                 if !has_net {
                     return Err("permission refusée: net.connect requis pour net.fetch".into());
                 }
@@ -859,12 +862,8 @@ impl HostServices for PlatformSubsystem {
                 let format = args["format"].as_str().unwrap_or("md");
                 let content = args["content"].as_str().unwrap_or("");
                 Self::require_cap(ctx, "fs.write", path)?;
-                let bytes = crate::files_gen::generate(
-                    format,
-                    content,
-                    args["title"].as_str(),
-                )
-                .map_err(|e| e.to_string())?;
+                let bytes = crate::files_gen::generate(format, content, args["title"].as_str())
+                    .map_err(|e| e.to_string())?;
                 let text = if format == "png" || format == "pdf" {
                     // Write via write_bytes if available; fallback base64 note
                     String::from_utf8_lossy(&bytes).to_string()
@@ -1066,7 +1065,8 @@ impl HostServices for PlatformSubsystem {
                         .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.svg"));
                     (bytes, path, true)
                 } else if format == "json" {
-                    let bytes = crate::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)?;
+                    let bytes =
+                        crate::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)?;
                     let path = args["path"]
                         .as_str()
                         .filter(|s| !s.is_empty())
@@ -1118,16 +1118,10 @@ impl HostServices for PlatformSubsystem {
                 }))
             }
             // Escalade interdite depuis WASM
-            "module.install"
-            | "module.compile"
-            | "module.scaffold"
-            | "module.package"
-            | "secrets.get"
-            | "trust.set"
-            | "agent.create"
-            | "agent.grant" => Err(format!(
-                "service interdit depuis host_call WASM: {service}"
-            )),
+            "module.install" | "module.compile" | "module.scaffold" | "module.package"
+            | "secrets.get" | "trust.set" | "agent.create" | "agent.grant" => {
+                Err(format!("service interdit depuis host_call WASM: {service}"))
+            }
             other => Err(format!("service inconnu: {other}")),
         }
     }
@@ -1141,10 +1135,7 @@ mod canvas_seeing_tests {
 
     fn temp_path(label: &str) -> String {
         let mut p = std::env::temp_dir();
-        p.push(format!(
-            "aos-canvas-seeing-{label}-{}",
-            std::process::id()
-        ));
+        p.push(format!("aos-canvas-seeing-{label}-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&p);
         p.display().to_string()
     }

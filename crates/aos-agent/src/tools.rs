@@ -1109,7 +1109,10 @@ pub fn default_agent_tools() -> Vec<String> {
 
 /// Merge static builtin catalog with discovered module tools.
 /// On name collision, discovered manifest tools win over static platform entries.
-pub fn merge_catalog_with_discovered(static_catalog: &[ToolDesc], discovered: &[ToolDesc]) -> Vec<ToolDesc> {
+pub fn merge_catalog_with_discovered(
+    static_catalog: &[ToolDesc],
+    discovered: &[ToolDesc],
+) -> Vec<ToolDesc> {
     let mut out = discovered.to_vec();
     let discovered_names: std::collections::HashSet<&str> =
         discovered.iter().map(|t| t.name.as_str()).collect();
@@ -1194,7 +1197,9 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
             // Mode restreint : always + ids / préfixes explicitement demandés
             let device_selected = selected.iter().any(|s| s.starts_with("device."));
             always.contains(&t.name.as_str())
-                || selected.iter().any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")))
+                || selected
+                    .iter()
+                    .any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")))
                 || (device_selected && t.name.starts_with("device."))
         };
         if keep && !out.iter().any(|x| x.name == t.name) {
@@ -1295,7 +1300,10 @@ pub const USB_IO_CAP_TOOL_ERROR: &str =
      Interdit : shell.run, device.enumerate (caméras).";
 
 /// `device.usb.io` est une capacité (grant), pas un outil — redirige ou rejette clairement.
-pub fn resolve_usb_io_cap_tool(name: &str, args: &serde_json::Value) -> Result<(String, serde_json::Value), String> {
+pub fn resolve_usb_io_cap_tool(
+    name: &str,
+    args: &serde_json::Value,
+) -> Result<(String, serde_json::Value), String> {
     if name != "device.usb.io" {
         return Ok((name.to_string(), args.clone()));
     }
@@ -1679,8 +1687,8 @@ mod tests {
 
     #[test]
     fn discovered_tasks_catalog_matches_frozen_contract() {
-        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
         use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
         use aos_proto::ModuleInfo;
 
         let module = ModuleInfo {
@@ -1743,8 +1751,8 @@ mod tests {
 
     #[test]
     fn default_agent_tools_include_tasks_when_module_discovered() {
-        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
         use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
         use aos_proto::ModuleInfo;
 
         let module = ModuleInfo {
@@ -1766,8 +1774,8 @@ mod tests {
 
     #[test]
     fn default_agent_tools_grant_notes_tasks_fs_web() {
-        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
         use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::tasks_contract::{INVOKE_CAP, TOOL_IDS};
         use aos_proto::ModuleInfo;
 
         let module = ModuleInfo {
@@ -1838,7 +1846,10 @@ mod tests {
             canonicalize_tool_name("webcam.capture"),
             "device.camera.capture"
         );
-        assert_eq!(canonicalize_tool_name("camera.snap"), "device.camera.capture");
+        assert_eq!(
+            canonicalize_tool_name("camera.snap"),
+            "device.camera.capture"
+        );
         assert_eq!(canonicalize_tool_name("mic.capture"), "device.mic.capture");
         assert!(!is_module_fallback_candidate("device.camera.capture"));
         let tools = select_tools(&["device.camera.capture".into()], &[]);
@@ -1853,8 +1864,8 @@ mod tests {
 
     #[test]
     fn resolve_usb_io_cap_tool_rejects_bare_cap_name() {
-        let err = resolve_usb_io_cap_tool("device.usb.io", &serde_json::json!({}))
-            .expect_err("bare cap");
+        let err =
+            resolve_usb_io_cap_tool("device.usb.io", &serde_json::json!({})).expect_err("bare cap");
         assert!(err.contains("device.usb.enumerate"));
         assert!(err.contains("device.usb.open"));
     }
@@ -1876,7 +1887,10 @@ mod tests {
             canonicalize_tool_name("tool.invoke:usb.list"),
             "device.usb.enumerate"
         );
-        assert_eq!(canonicalize_tool_name("usb.enumerate"), "device.usb.enumerate");
+        assert_eq!(
+            canonicalize_tool_name("usb.enumerate"),
+            "device.usb.enumerate"
+        );
         assert_eq!(canonicalize_tool_name("list.usb"), "device.usb.enumerate");
         assert_eq!(canonicalize_tool_name("usb"), "device.usb.enumerate");
         assert_eq!(canonicalize_tool_name("usb.open"), "device.usb.open");

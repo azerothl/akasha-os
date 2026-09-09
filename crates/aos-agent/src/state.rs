@@ -101,9 +101,7 @@ impl CognitiveState {
     /// Actions autorisées sous le gate : `plan.update` et `goal.fail` uniquement.
     pub fn blocks_action(&self, action: &str) -> bool {
         if self.deep_plan_gate_active() {
-            return action != "plan.create"
-                && action != "goal.fail"
-                && action != "user.ask";
+            return action != "plan.create" && action != "goal.fail" && action != "user.ask";
         }
         self.plan_gate_active()
             && action != "plan.update"
@@ -122,12 +120,7 @@ impl CognitiveState {
     }
 
     /// Injecte la fin d'un sous-agent dans le contexte parent. Idempotent par `child_id`.
-    pub fn inject_child_done_memory(
-        &mut self,
-        child_id: &str,
-        result: &str,
-        ok: bool,
-    ) -> bool {
+    pub fn inject_child_done_memory(&mut self, child_id: &str, result: &str, ok: bool) -> bool {
         let marker = format!("[child-done] {child_id}");
         if self
             .working_memory
@@ -227,11 +220,12 @@ impl CognitiveState {
         if !canvas_tool_completes_plan_node(tool) {
             return false;
         }
-        self.canvas_draw_ops_on_current_task = self
-            .canvas_draw_ops_on_current_task
-            .saturating_add(1);
+        self.canvas_draw_ops_on_current_task =
+            self.canvas_draw_ops_on_current_task.saturating_add(1);
         if self.canvas_draw_ops_on_current_task
-            >= self.current_canvas_task_required_draw_ops().min(CANVAS_DRAW_TASK_OP_CAP)
+            >= self
+                .current_canvas_task_required_draw_ops()
+                .min(CANVAS_DRAW_TASK_OP_CAP)
         {
             return self.complete_current_plan_node();
         }
@@ -255,9 +249,17 @@ impl CognitiveState {
             return false;
         };
         let title = title.to_ascii_lowercase();
-        ["analyse", "analysis", "palette", "style", "prépar", "prepar", "planification"]
-            .iter()
-            .any(|word| title.contains(word))
+        [
+            "analyse",
+            "analysis",
+            "palette",
+            "style",
+            "prépar",
+            "prepar",
+            "planification",
+        ]
+        .iter()
+        .any(|word| title.contains(word))
     }
 
     /// A plan's analysis stage is a hard runtime boundary, not merely prompt
@@ -289,14 +291,30 @@ impl CognitiveState {
             return 1;
         };
         let title = title.to_ascii_lowercase();
-        if ["détail", "detail", "roue", "vitre", "aileron", "volume", "masse", "structure"]
-            .iter()
-            .any(|word| title.contains(word))
+        if [
+            "détail",
+            "detail",
+            "roue",
+            "vitre",
+            "aileron",
+            "volume",
+            "masse",
+            "structure",
+        ]
+        .iter()
+        .any(|word| title.contains(word))
         {
             3
-        } else if ["composition", "ancrage", "ombre", "shadow", "finition", "finish"]
-            .iter()
-            .any(|word| title.contains(word))
+        } else if [
+            "composition",
+            "ancrage",
+            "ombre",
+            "shadow",
+            "finition",
+            "finish",
+        ]
+        .iter()
+        .any(|word| title.contains(word))
         {
             2
         } else {
@@ -324,10 +342,7 @@ impl CognitiveState {
 
 fn clip_working_memory_outcome(outcome: &str) -> String {
     if outcome.chars().count() > 1200 {
-        format!(
-            "{}…",
-            outcome.chars().take(1200).collect::<String>()
-        )
+        format!("{}…", outcome.chars().take(1200).collect::<String>())
     } else {
         outcome.to_string()
     }
@@ -508,10 +523,23 @@ mod tests {
     fn canvas_draw_does_not_skip_an_analysis_task() {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(vec![
-            TaskNode { id: "1".into(), title: "Analyse de la composition".into(), status: TaskNodeStatus::Pending, notes: String::new() },
-            TaskNode { id: "2".into(), title: "Dessiner la silhouette".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+            TaskNode {
+                id: "1".into(),
+                title: "Analyse de la composition".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
+            TaskNode {
+                id: "2".into(),
+                title: "Dessiner la silhouette".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
         ]);
-        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=1 path bbox=(0.1,0.1)-(0.8,0.8)"));
+        assert!(!st.maybe_advance_plan_after_canvas_draw(
+            "canvas.path",
+            "ok seq=1 path bbox=(0.1,0.1)-(0.8,0.8)"
+        ));
         assert_eq!(st.task_graph[0].status, TaskNodeStatus::Pending);
         assert_eq!(st.canvas_draw_ops_on_current_task, 0);
     }
@@ -520,56 +548,112 @@ mod tests {
     fn canvas_get_completes_an_analysis_task_before_drawing() {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(vec![
-            TaskNode { id: "1".into(), title: "Analyse de la composition".into(), status: TaskNodeStatus::Pending, notes: String::new() },
-            TaskNode { id: "2".into(), title: "Dessiner la silhouette".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+            TaskNode {
+                id: "1".into(),
+                title: "Analyse de la composition".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
+            TaskNode {
+                id: "2".into(),
+                title: "Dessiner la silhouette".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
         ]);
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
-        assert_eq!(st.current_task_title().as_deref(), Some("Dessiner la silhouette"));
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner la silhouette")
+        );
     }
 
     #[test]
     fn structured_canvas_get_completes_an_analysis_task_before_drawing() {
         let mut st = CognitiveState::new("agent-121", vec![]);
         st.set_plan(vec![
-            TaskNode { id: "1".into(), title: "Analyse (canvas.get)".into(), status: TaskNodeStatus::Pending, notes: String::new() },
-            TaskNode { id: "2".into(), title: "Dessiner la voiture".into(), status: TaskNodeStatus::Pending, notes: String::new() },
+            TaskNode {
+                id: "1".into(),
+                title: "Analyse (canvas.get)".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
+            TaskNode {
+                id: "2".into(),
+                title: "Dessiner la voiture".into(),
+                status: TaskNodeStatus::Pending,
+                notes: String::new(),
+            },
         ]);
         let outcome = r##"{"active_layer_id":"lyr-1","canvas_aspect":"square","canvas_open":true,"canvas_seeing":false,"layers":[],"next_seq":1,"ops":[],"pen":{"color":"#000000","dash":[],"opacity":1.0,"width":2.0},"session_id":"sess-agent-121"}"##;
 
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", outcome));
-        assert_eq!(st.current_task_title().as_deref(), Some("Dessiner la voiture"));
-        assert!(st.canvas_preparation_action_block_reason("canvas.path").is_none());
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Dessiner la voiture")
+        );
+        assert!(st
+            .canvas_preparation_action_block_reason("canvas.path")
+            .is_none());
     }
 
     #[test]
     fn invalid_canvas_get_json_does_not_complete_analysis() {
         let mut st = CognitiveState::new("agent-121", vec![]);
-        st.set_plan(vec![TaskNode { id: "1".into(), title: "Analyse (canvas.get)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
+        st.set_plan(vec![TaskNode {
+            id: "1".into(),
+            title: "Analyse (canvas.get)".into(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        }]);
 
-        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.get", r#"{"error":"session missing"}"#));
-        assert!(st.canvas_preparation_action_block_reason("canvas.path").is_some());
+        assert!(!st
+            .maybe_advance_plan_after_canvas_draw("canvas.get", r#"{"error":"session missing"}"#));
+        assert!(st
+            .canvas_preparation_action_block_reason("canvas.path")
+            .is_some());
     }
 
     #[test]
     fn analysis_hard_blocks_drawing_until_canvas_get() {
         let mut st = CognitiveState::new("agent-98", vec![]);
-        st.set_plan(vec![TaskNode { id: "1".into(), title: "Analyse (canvas.get)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
-        assert!(st.canvas_preparation_action_block_reason("canvas.path").is_some());
-        assert!(st.canvas_preparation_action_block_reason("canvas.get").is_none());
+        st.set_plan(vec![TaskNode {
+            id: "1".into(),
+            title: "Analyse (canvas.get)".into(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        }]);
+        assert!(st
+            .canvas_preparation_action_block_reason("canvas.path")
+            .is_some());
+        assert!(st
+            .canvas_preparation_action_block_reason("canvas.get")
+            .is_none());
     }
 
     #[test]
     fn canvas_export_completes_an_export_stage() {
         let mut st = CognitiveState::new("agent-98", vec![]);
-        st.set_plan(vec![TaskNode { id: "1".into(), title: "Export (canvas.export)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
-        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.export", "ok path=/downloads/final.png"));
+        st.set_plan(vec![TaskNode {
+            id: "1".into(),
+            title: "Export (canvas.export)".into(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        }]);
+        assert!(st
+            .maybe_advance_plan_after_canvas_draw("canvas.export", "ok path=/downloads/final.png"));
         assert!(st.canvas_plan_is_complete());
     }
 
     #[test]
     fn canvas_detail_stage_needs_three_distinct_draws() {
         let mut st = CognitiveState::new("agent-98", vec![]);
-        st.set_plan(vec![TaskNode { id: "1".into(), title: "Ajout des détails (roues, vitres)".into(), status: TaskNodeStatus::Pending, notes: String::new() }]);
+        st.set_plan(vec![TaskNode {
+            id: "1".into(),
+            title: "Ajout des détails (roues, vitres)".into(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        }]);
         assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.ellipse", "ok seq=1"));
         assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=2"));
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.path", "ok seq=3"));
@@ -581,7 +665,10 @@ mod tests {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(CognitiveState::canonical_canvas_composition_plan());
         assert_eq!(st.task_graph.len(), 6);
-        assert_eq!(st.current_task_title().as_deref(), Some("Analyse (canvas.get)"));
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Analyse (canvas.get)")
+        );
         assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok seq=0"));
         assert_eq!(st.current_canvas_task_required_draw_ops(), 2);
         st.complete_current_plan_node();
@@ -607,10 +694,7 @@ mod tests {
     fn failed_canvas_draw_does_not_advance_plan() {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(hill_mill_plan());
-        assert!(!st.maybe_advance_plan_after_canvas_draw(
-            "canvas.spline",
-            "ERREUR outil: session"
-        ));
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.spline", "ERREUR outil: session"));
         assert_eq!(st.task_graph[0].status, TaskNodeStatus::Pending);
     }
 

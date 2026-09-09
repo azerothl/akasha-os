@@ -67,7 +67,11 @@ pub fn host_profile() -> HardwareProfile {
         cpu_flops: 2.5e12,
         gpus: vec![],
         cpu_isa: Default::default(),
-        cpu_topology: aos_placement::CpuTopology { logical_cores: 16, performance_cores: 8, efficiency_cores: 0 },
+        cpu_topology: aos_placement::CpuTopology {
+            logical_cores: 16,
+            performance_cores: 8,
+            efficiency_cores: 0,
+        },
         gpu_backend: Default::default(),
         npu: None,
         webgpu: None,

@@ -26,9 +26,7 @@
 
 use aos_ipc::BusClient;
 use aos_llama::{GenParams, LlamaBackend, LlamaContext, LlamaError, LlamaModel, LoadOptions};
-use aos_proto::{
-    ChatMessage, InferParams, InferRequest, LoadRequest, LoadResponse, TokenEvent,
-};
+use aos_proto::{ChatMessage, InferParams, InferRequest, LoadRequest, LoadResponse, TokenEvent};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -161,7 +159,10 @@ fn gate_direct(weights: &Path, mmproj: &Path, image: &Path) -> Vec<Gate> {
         top_p: 0.9,
         seed: 1,
     };
-    let messages = vec![("user".to_string(), "Réponds en un mot : couleur du ciel.".to_string())];
+    let messages = vec![(
+        "user".to_string(),
+        "Réponds en un mot : couleur du ciel.".to_string(),
+    )];
 
     let text_res = {
         let mut out = String::new();
@@ -211,8 +212,7 @@ fn gate_direct(weights: &Path, mmproj: &Path, image: &Path) -> Vec<Gate> {
         return gates;
     }
 
-    let vision_messages =
-        vec![("user".to_string(), "Décris l'image en un mot.".to_string())];
+    let vision_messages = vec![("user".to_string(), "Décris l'image en un mot.".to_string())];
     let vision_res = {
         let mut out = String::new();
         ctx.generate_with_images(&vision_messages, &params, &[image], |piece| {
@@ -354,7 +354,13 @@ async fn gate_bus(bus_addr: &str, image: &Path) -> Vec<Gate> {
         }
     }
 
-    let text = infer_bus(&bus, Some("local:gemma-4-e4b".into()), "Un mot : ok", vec![]).await;
+    let text = infer_bus(
+        &bus,
+        Some("local:gemma-4-e4b".into()),
+        "Un mot : ok",
+        vec![],
+    )
+    .await;
     match text {
         Ok((prompt, gen, ttft)) if gen > 0 => {
             gates.push(Gate {
@@ -444,7 +450,14 @@ async fn main() {
     let image = default_image();
 
     println!("=== Gate Gemma 4 E4B — texte + vision ===");
-    println!("  mode: {}", if direct { "direct (aos-llama)" } else { "bus (model.infer)" });
+    println!(
+        "  mode: {}",
+        if direct {
+            "direct (aos-llama)"
+        } else {
+            "bus (model.infer)"
+        }
+    );
     println!("  weights: {}", weights.display());
     println!("  mmproj:  {}", mmproj.display());
     println!("  image:   {}", image.display());

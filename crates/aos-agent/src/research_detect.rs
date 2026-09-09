@@ -296,7 +296,9 @@ mod tests {
         assert!(!user_requested_document("écris une note rapide"));
         assert!(user_requested_note("écris une note rapide"));
         assert!(user_implies_room_tool_action("écris une note rapide"));
-        assert!(user_implies_room_tool_action("prepare a document about rust"));
+        assert!(user_implies_room_tool_action(
+            "prepare a document about rust"
+        ));
     }
 
     #[test]
@@ -305,13 +307,7 @@ mod tests {
         let mut tools = vec!["notes.create".into()];
         ensure_document_file_tools(&mut skills, &mut tools);
         ensure_document_file_tools(&mut skills, &mut tools);
-        assert_eq!(
-            skills.iter().filter(|s| *s == "file-author").count(),
-            1
-        );
-        assert_eq!(
-            tools.iter().filter(|t| *t == "files.generate").count(),
-            1
-        );
+        assert_eq!(skills.iter().filter(|s| *s == "file-author").count(), 1);
+        assert_eq!(tools.iter().filter(|t| *t == "files.generate").count(), 1);
     }
 }

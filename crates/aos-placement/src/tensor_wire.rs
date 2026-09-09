@@ -80,10 +80,7 @@ impl F32Tensor {
         if !remainder.is_empty() {
             return Err("payload de tenseur Akasha invalide".into());
         }
-        let values = chunks
-            .iter()
-            .map(|b| f32::from_le_bytes(*b))
-            .collect();
+        let values = chunks.iter().map(|b| f32::from_le_bytes(*b)).collect();
         Self::new(shape, values)
     }
 }
@@ -123,8 +120,14 @@ impl CpuKvCache {
             return Err("paramètres cache KV invalides".into());
         }
         Ok(Self {
-            keys: F32Tensor::new(vec![(n_kv_heads * head_dim) as u32, 1], vec![0.0; n_kv_heads * head_dim])?,
-            values: F32Tensor::new(vec![(n_kv_heads * head_dim) as u32, 1], vec![0.0; n_kv_heads * head_dim])?,
+            keys: F32Tensor::new(
+                vec![(n_kv_heads * head_dim) as u32, 1],
+                vec![0.0; n_kv_heads * head_dim],
+            )?,
+            values: F32Tensor::new(
+                vec![(n_kv_heads * head_dim) as u32, 1],
+                vec![0.0; n_kv_heads * head_dim],
+            )?,
             max_tokens,
             token_count: 0,
         })
@@ -260,9 +263,7 @@ impl CpuTransformerBlock {
         if hidden == 0 || tokens == 0 || self.n_heads == 0 || self.n_kv_heads == 0 {
             return Err("dimensions Transformer invalides".into());
         }
-        if !hidden.is_multiple_of(self.n_heads)
-            || !self.n_heads.is_multiple_of(self.n_kv_heads)
-        {
+        if !hidden.is_multiple_of(self.n_heads) || !self.n_heads.is_multiple_of(self.n_kv_heads) {
             return Err("têtes Transformer incompatibles".into());
         }
         let head_dim = hidden / self.n_heads;
@@ -308,7 +309,11 @@ impl CpuTransformerBlock {
         cache: &mut CpuKvCache,
         rope_theta: Option<f32>,
     ) -> Result<F32Tensor, String> {
-        let hidden = input.shape.first().copied().ok_or("entrée Transformer vide")? as usize;
+        let hidden = input
+            .shape
+            .first()
+            .copied()
+            .ok_or("entrée Transformer vide")? as usize;
         if input.shape != vec![hidden as u32, 1]
             || self.n_heads == 0
             || self.n_kv_heads == 0
@@ -336,7 +341,14 @@ impl CpuTransformerBlock {
             return Err("cache KV associé à une autre couche".into());
         }
         cache.append(&k, &v)?;
-        let attended = decode_attention(&q, &cache.keys, &cache.values, self.n_heads, self.n_kv_heads, head_dim)?;
+        let attended = decode_attention(
+            &q,
+            &cache.keys,
+            &cache.values,
+            self.n_heads,
+            self.n_kv_heads,
+            head_dim,
+        )?;
         let projected = linear(&self.o_proj, &attended)?;
         let first_residual = add(input, &projected)?;
         let normed = rms_norm_weighted(&first_residual, &self.norm_ffn, self.eps)?;
@@ -344,7 +356,11 @@ impl CpuTransformerBlock {
         let up = linear(&self.up_proj, &normed)?;
         let activated = F32Tensor::new(
             gate.shape.clone(),
-            gate.values.iter().zip(up.values.iter()).map(|(gate, up)| silu(*gate) * up).collect(),
+            gate.values
+                .iter()
+                .zip(up.values.iter())
+                .map(|(gate, up)| silu(*gate) * up)
+                .collect(),
         )?;
         let feed_forward = linear(&self.down_proj, &activated)?;
         add(&first_residual, &feed_forward)
@@ -359,8 +375,16 @@ impl CpuTransformerBlock {
         cache: &mut CpuKvCache,
         rope_theta: Option<f32>,
     ) -> Result<F32Tensor, String> {
-        let hidden = input.shape.first().copied().ok_or("entrée Transformer vide")? as usize;
-        let tokens = input.shape.get(1).copied().ok_or("entrée non matricielle")? as usize;
+        let hidden = input
+            .shape
+            .first()
+            .copied()
+            .ok_or("entrée Transformer vide")? as usize;
+        let tokens = input
+            .shape
+            .get(1)
+            .copied()
+            .ok_or("entrée non matricielle")? as usize;
         if hidden == 0 || tokens == 0 || input.values.len() != hidden * tokens {
             return Err("entrée de prefill Transformer invalide".into());
         }
@@ -722,11 +746,7 @@ mod tests {
 
     #[test]
     fn decode_reutilise_le_cache_kv_entre_tokens() {
-        let identity = F32Tensor::new(
-            vec![2, 2],
-            vec![1.0, 0.0, 0.0, 1.0],
-        )
-        .unwrap();
+        let identity = F32Tensor::new(vec![2, 2], vec![1.0, 0.0, 0.0, 1.0]).unwrap();
         let block = CpuTransformerBlock {
             norm_attn: F32Tensor::new(vec![2], vec![1.0, 1.0]).unwrap(),
             q_proj: identity.clone(),
@@ -743,8 +763,12 @@ mod tests {
         };
         let mut cache = CpuKvCache::new(1, 2, 8).unwrap();
         let token = F32Tensor::new(vec![2, 1], vec![1.0, 2.0]).unwrap();
-        assert!(block.decode_with_cache(&token, 0, &mut cache, Some(100.0)).is_ok());
-        assert!(block.decode_with_cache(&token, 1, &mut cache, Some(100.0)).is_ok());
+        assert!(block
+            .decode_with_cache(&token, 0, &mut cache, Some(100.0))
+            .is_ok());
+        assert!(block
+            .decode_with_cache(&token, 1, &mut cache, Some(100.0))
+            .is_ok());
         assert_eq!(cache.len(), 2);
 
         let prompt = F32Tensor::new(vec![2, 2], vec![1.0, 2.0, 2.0, 1.0]).unwrap();

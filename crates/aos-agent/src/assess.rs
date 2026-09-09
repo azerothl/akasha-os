@@ -153,9 +153,7 @@ mod tests {
 
     #[test]
     fn parse_needs_plan_overrides_simple_label() {
-        let r = parse_assess_response(
-            r#"{"complexity":"simple","reason":"x","needs_plan":true}"#,
-        );
+        let r = parse_assess_response(r#"{"complexity":"simple","reason":"x","needs_plan":true}"#);
         assert!(r.needs_plan);
         assert_eq!(r.complexity, "complex");
     }

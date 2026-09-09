@@ -74,10 +74,7 @@ impl EgressControl {
     }
 
     fn is_loopback(host: &str) -> bool {
-        matches!(
-            host,
-            "127.0.0.1" | "localhost" | "::1" | "[::1]"
-        )
+        matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
     }
 
     /// Vérifie (et journalise) une demande de connexion sortante.

@@ -352,8 +352,15 @@ fn tpm_seal(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
         use windows::Win32::Security::Cryptography::{NCryptEncrypt, NCRYPT_PAD_PKCS1_FLAG};
         let mut needed = 0u32;
         unsafe {
-            NCryptEncrypt(key, Some(plain), None, None, &mut needed, NCRYPT_PAD_PKCS1_FLAG)
-                .map_err(|e| SecretError::Crypto(format!("NCryptEncrypt size: {e}")))?;
+            NCryptEncrypt(
+                key,
+                Some(plain),
+                None,
+                None,
+                &mut needed,
+                NCRYPT_PAD_PKCS1_FLAG,
+            )
+            .map_err(|e| SecretError::Crypto(format!("NCryptEncrypt size: {e}")))?;
         }
         let mut out = vec![0u8; needed as usize];
         let mut written = 0u32;
@@ -379,8 +386,15 @@ fn tpm_unseal(cipher: &[u8]) -> Result<Vec<u8>, SecretError> {
         use windows::Win32::Security::Cryptography::{NCryptDecrypt, NCRYPT_PAD_PKCS1_FLAG};
         let mut needed = 0u32;
         unsafe {
-            NCryptDecrypt(key, Some(cipher), None, None, &mut needed, NCRYPT_PAD_PKCS1_FLAG)
-                .map_err(|e| SecretError::Crypto(format!("NCryptDecrypt size: {e}")))?;
+            NCryptDecrypt(
+                key,
+                Some(cipher),
+                None,
+                None,
+                &mut needed,
+                NCRYPT_PAD_PKCS1_FLAG,
+            )
+            .map_err(|e| SecretError::Crypto(format!("NCryptDecrypt size: {e}")))?;
         }
         let mut out = vec![0u8; needed as usize];
         let mut written = 0u32;
@@ -411,9 +425,8 @@ fn tpm_with_seal_key_windows<T>(
     };
     unsafe {
         let mut prov = NCRYPT_PROV_HANDLE::default();
-        NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0).map_err(|e| {
-            SecretError::Crypto(format!("NCryptOpenStorageProvider: {e}"))
-        })?;
+        NCryptOpenStorageProvider(&mut prov, MS_PLATFORM_CRYPTO_PROVIDER, 0)
+            .map_err(|e| SecretError::Crypto(format!("NCryptOpenStorageProvider: {e}")))?;
         let mut key = NCRYPT_KEY_HANDLE::default();
         let open = NCryptOpenKey(
             prov,
@@ -614,9 +627,7 @@ fn encrypt_vault(
     master: &[u8; 32],
     keys: &HashMap<String, String>,
 ) -> Result<(), SecretError> {
-    let plaintext = serde_json::to_vec(&VaultFile {
-        keys: keys.clone(),
-    })?;
+    let plaintext = serde_json::to_vec(&VaultFile { keys: keys.clone() })?;
     std::fs::write(path, seal_with_master(master, &plaintext))?;
     #[cfg(unix)]
     {
@@ -675,7 +686,7 @@ fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{
-        CryptProtectData, CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN,
+        CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
     };
 
     let in_blob = CRYPT_INTEGER_BLOB {
@@ -700,8 +711,7 @@ fn protect_master(plain: &[u8]) -> Result<Vec<u8>, SecretError> {
     if ok.is_err() {
         return Err(SecretError::Crypto(format!("DPAPI protect: {ok:?}")));
     }
-    let slice =
-        unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize) };
+    let slice = unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize) };
     let out = slice.to_vec();
     unsafe {
         let _ = LocalFree(HLOCAL(out_blob.pbData as *mut _));
@@ -718,7 +728,7 @@ fn unprotect_master(raw: &[u8]) -> Result<Vec<u8>, SecretError> {
     use std::ptr;
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{
-        CryptUnprotectData, CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN,
+        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
     };
 
     if let Some(rest) = raw.strip_prefix(b"DPA1") {
@@ -926,7 +936,10 @@ mod tests {
         // Nonces frais : deux scellements diffèrent.
         let blob2 = store.seal_bytes("ui-egui", b"backup payload").unwrap();
         assert_ne!(blob, blob2);
-        assert_eq!(store.unseal_bytes("ui-egui", &blob).unwrap(), b"backup payload");
+        assert_eq!(
+            store.unseal_bytes("ui-egui", &blob).unwrap(),
+            b"backup payload"
+        );
         // Acteur non autorisé.
         assert!(matches!(
             store.seal_bytes("agent:1", b"x"),

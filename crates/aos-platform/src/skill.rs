@@ -57,16 +57,13 @@ impl SkillStore {
     pub fn validate_name(name: &str) -> Result<(), SkillError> {
         let ok = name.len() >= 2
             && name.len() <= 33
-            && name
-                .chars()
-                .enumerate()
-                .all(|(i, c)| {
-                    if i == 0 {
-                        c.is_ascii_lowercase()
-                    } else {
-                        c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'
-                    }
-                });
+            && name.chars().enumerate().all(|(i, c)| {
+                if i == 0 {
+                    c.is_ascii_lowercase()
+                } else {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'
+                }
+            });
         if ok {
             Ok(())
         } else {
@@ -91,8 +88,7 @@ impl SkillStore {
             tools: req.tools.clone(),
             required_caps: req.required_caps.clone(),
         };
-        let yaml_s =
-            serde_yaml::to_string(&yaml).map_err(|e| SkillError::Io(e.to_string()))?;
+        let yaml_s = serde_yaml::to_string(&yaml).map_err(|e| SkillError::Io(e.to_string()))?;
         std::fs::write(dest.join("skill.yaml"), yaml_s)
             .map_err(|e| SkillError::Io(e.to_string()))?;
         let md = format!(
@@ -143,7 +139,8 @@ impl SkillStore {
         let body = std::fs::read_to_string(&md_path).unwrap_or_default();
         let body_only = strip_frontmatter(&body);
         if yaml_path.exists() {
-            let raw = std::fs::read_to_string(&yaml_path).map_err(|e| SkillError::Io(e.to_string()))?;
+            let raw =
+                std::fs::read_to_string(&yaml_path).map_err(|e| SkillError::Io(e.to_string()))?;
             let y: SkillYaml =
                 serde_yaml::from_str(&raw).map_err(|e| SkillError::Io(e.to_string()))?;
             return Ok(SkillInfo {
@@ -180,8 +177,7 @@ impl SkillStore {
         if md_bytes.len() > MAX_BODY_BYTES {
             return Err(SkillError::BodyTooLarge);
         }
-        let raw = std::str::from_utf8(md_bytes)
-            .map_err(|e| SkillError::Io(e.to_string()))?;
+        let raw = std::str::from_utf8(md_bytes).map_err(|e| SkillError::Io(e.to_string()))?;
         let required = required_caps_from_skill_md(raw);
         let granted = match approved_caps {
             Some(caps) => caps,
@@ -296,16 +292,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let store = SkillStore::open(&dir).unwrap();
         let md = b"---\nname: gated\ndescription: x\nrequired_caps:\n  - fs.read:/documents/**\n---\n\nDo the thing.\n";
-        let err = store
-            .install_from_markdown("gated", md, None)
-            .unwrap_err();
+        let err = store.install_from_markdown("gated", md, None).unwrap_err();
         assert!(matches!(err, SkillError::CapReviewRequired(_)));
         store
-            .install_from_markdown(
-                "gated",
-                md,
-                Some(vec!["fs.read:/documents/**".into()]),
-            )
+            .install_from_markdown("gated", md, Some(vec!["fs.read:/documents/**".into()]))
             .unwrap();
         assert_eq!(store.list().len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
@@ -320,7 +310,10 @@ mod tests {
         store
             .install_from_markdown("morning-brief", md, None)
             .unwrap();
-        assert_eq!(store.describe("morning-brief").unwrap().name, "morning-brief");
+        assert_eq!(
+            store.describe("morning-brief").unwrap().name,
+            "morning-brief"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

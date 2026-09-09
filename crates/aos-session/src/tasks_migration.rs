@@ -78,8 +78,7 @@ fn manage_tasks_module_inner(home: &Path) -> Result<bool, String> {
         write_migration_marker(home)?;
     }
 
-    let package_changed =
-        sync_tasks_package_if_needed(home, &share, &installed_dir, &registry)?;
+    let package_changed = sync_tasks_package_if_needed(home, &share, &installed_dir, &registry)?;
     ensure_managed_registry_entry(&installed_dir, &mut registry);
     if package_changed && registry.granted_caps(MODULE_NAME).is_empty() && !had_historical {
         let caps: Vec<String> = MANIFEST_FS_CAPS.iter().map(|c| c.to_string()).collect();
@@ -181,10 +180,7 @@ fn is_historical_tasks_install(home: &Path, registry: &ModuleRegistry) -> bool {
     if registry.installed_entry(MODULE_NAME).is_some() {
         return true;
     }
-    registry
-        .removed
-        .iter()
-        .any(|e| e.name == MODULE_NAME)
+    registry.removed.iter().any(|e| e.name == MODULE_NAME)
 }
 
 fn migration_marker_exists(home: &Path) -> bool {
@@ -278,7 +274,11 @@ fn sync_tasks_package_if_needed(
     if synced {
         eprintln!(
             "[aos-session] Tasks {} depuis {}",
-            if need_install { "préinstallé" } else { "mis à jour" },
+            if need_install {
+                "préinstallé"
+            } else {
+                "mis à jour"
+            },
             share.display()
         );
     }
@@ -291,7 +291,11 @@ fn ensure_managed_registry_entry(installed_dir: &Path, registry: &mut ModuleRegi
     }
     let caps = registry.granted_caps(MODULE_NAME);
     if registry.installed_entry(MODULE_NAME).is_some() {
-        if let Some(entry) = registry.installed.iter_mut().find(|e| e.name == MODULE_NAME) {
+        if let Some(entry) = registry
+            .installed
+            .iter_mut()
+            .find(|e| e.name == MODULE_NAME)
+        {
             entry.preinstalled = true;
         }
         return;
@@ -487,7 +491,11 @@ mod tests {
         let share = home.join("modules/tasks.aospkg");
         fs::create_dir_all(&share).unwrap();
         fs::write(share.join("module.wasm"), b"x").unwrap();
-        fs::write(share.join("manifest.yaml"), "name: tasks\nversion: 1\nhash: ab\npermissions:\n  required_caps: []\nmin_os_api: 1\n").unwrap();
+        fs::write(
+            share.join("manifest.yaml"),
+            "name: tasks\nversion: 1\nhash: ab\npermissions:\n  required_caps: []\nmin_os_api: 1\n",
+        )
+        .unwrap();
         let resolved = resolve_tasks_share_pkg(&home).unwrap();
         assert_eq!(resolved, share);
         let _ = fs::remove_dir_all(&home);

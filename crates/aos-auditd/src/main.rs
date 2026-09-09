@@ -14,7 +14,9 @@ async fn main() {
     let bus_addr = std::env::args()
         .nth(1)
         .unwrap_or_else(|| format!("127.0.0.1:{}", aos_ipc::DEFAULT_BUS_PORT));
-    let audit_dir = std::env::args().nth(2).unwrap_or_else(|| "var/audit".into());
+    let audit_dir = std::env::args()
+        .nth(2)
+        .unwrap_or_else(|| "var/audit".into());
 
     let journal = Arc::new(Mutex::new(
         AuditJournal::open(&audit_dir).expect("ouverture du journal d'audit"),

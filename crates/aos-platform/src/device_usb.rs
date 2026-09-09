@@ -5,8 +5,8 @@
 
 use aos_proto::device_usb::{
     usb_io_capability, UsbActiveHandle, UsbCloseRequest, UsbCloseResponse, UsbDeviceClass,
-    UsbDeviceDescriptor, UsbOpenRequest, UsbOpenResponse, UsbPermission,
-    UsbPermissionInfo, UsbReadRequest, UsbReadResponse, UsbWriteRequest, UsbWriteResponse,
+    UsbDeviceDescriptor, UsbOpenRequest, UsbOpenResponse, UsbPermission, UsbPermissionInfo,
+    UsbReadRequest, UsbReadResponse, UsbWriteRequest, UsbWriteResponse,
 };
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use std::collections::HashMap;
@@ -161,11 +161,7 @@ impl UsbIoManager {
             .collect()
     }
 
-    pub fn grant_persistent(
-        &mut self,
-        agent_id: &str,
-        device_id: &str,
-    ) -> Result<(), UsbIoError> {
+    pub fn grant_persistent(&mut self, agent_id: &str, device_id: &str) -> Result<(), UsbIoError> {
         let cap = usb_io_capability();
         if !self.has_persistent_cap(agent_id, device_id) {
             self.permissions.push(PersistentUsbPermission {
@@ -178,11 +174,7 @@ impl UsbIoManager {
         Ok(())
     }
 
-    pub fn revoke(
-        &mut self,
-        agent_id: &str,
-        device_id: &str,
-    ) -> Result<Vec<String>, UsbIoError> {
+    pub fn revoke(&mut self, agent_id: &str, device_id: &str) -> Result<Vec<String>, UsbIoError> {
         let cap = usb_io_capability();
         self.permissions
             .retain(|p| !(p.agent_id == agent_id && p.device_id == device_id && p.cap == cap));
@@ -350,8 +342,7 @@ impl UsbIoManager {
             .map_err(|e| UsbIoError::Backend(e.to_string()))?;
         let tmp = self.permissions_path.with_extension("json.tmp");
         fs::write(&tmp, raw).map_err(|e| UsbIoError::Backend(e.to_string()))?;
-        fs::rename(tmp, &self.permissions_path)
-            .map_err(|e| UsbIoError::Backend(e.to_string()))
+        fs::rename(tmp, &self.permissions_path).map_err(|e| UsbIoError::Backend(e.to_string()))
     }
 }
 
@@ -416,17 +407,17 @@ mod windows_backend {
     use windows::Win32::Devices::DeviceAndDriverInstallation::{
         SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
         SetupDiGetDeviceInstanceIdW, SetupDiGetDeviceRegistryPropertyW, DIGCF_ALLCLASSES,
-        DIGCF_PRESENT, SP_DEVINFO_DATA, SPDRP_FRIENDLYNAME,
+        DIGCF_PRESENT, SPDRP_FRIENDLYNAME, SP_DEVINFO_DATA,
     };
     use windows::Win32::Foundation::{
         CloseHandle, ERROR_SUCCESS, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
     };
     use windows::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-        ReadFile, WriteFile,
+        CreateFileW, ReadFile, WriteFile, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        OPEN_EXISTING,
     };
     use windows::Win32::System::Registry::{
-        HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegCloseKey, RegEnumValueW, RegOpenKeyExW,
+        RegCloseKey, RegEnumValueW, RegOpenKeyExW, HKEY, HKEY_LOCAL_MACHINE, KEY_READ,
     };
 
     fn win_error(msg: impl std::fmt::Display) -> UsbIoError {
@@ -692,7 +683,10 @@ mod windows_backend {
             Ok(devices)
         }
 
-        fn open(&self, device: &UsbDeviceDescriptor) -> Result<Box<dyn UsbDeviceHandle>, UsbIoError> {
+        fn open(
+            &self,
+            device: &UsbDeviceDescriptor,
+        ) -> Result<Box<dyn UsbDeviceHandle>, UsbIoError> {
             match device.class {
                 UsbDeviceClass::Serial => {
                     let port = device
@@ -806,7 +800,9 @@ mod tests {
         let mut m = manager();
         let devices = m.enumerate().unwrap();
         assert_eq!(devices.len(), 1);
-        let opened = m.open_device(&open_req(UsbPermission::AllowOnce), true).unwrap();
+        let opened = m
+            .open_device(&open_req(UsbPermission::AllowOnce), true)
+            .unwrap();
         let read = m
             .read(&UsbReadRequest {
                 agent_id: "agent:a".into(),
@@ -850,21 +846,20 @@ mod tests {
             },
         ]);
         let mut m = UsbIoManager::with_backend(root.clone(), Arc::new(backend)).unwrap();
-        m.open_device(&open_req(UsbPermission::Always), true).unwrap();
+        m.open_device(&open_req(UsbPermission::Always), true)
+            .unwrap();
         assert!(m.has_persistent_cap("agent:a", "fake:Serial:COM1"));
         assert!(!m.has_persistent_cap("agent:a", "fake:Serial:COM2"));
-        let m2 = UsbIoManager::with_backend(
-            root,
-            Arc::new(UnsupportedPlatformUsbBackend),
-        )
-        .unwrap();
+        let m2 = UsbIoManager::with_backend(root, Arc::new(UnsupportedPlatformUsbBackend)).unwrap();
         assert!(m2.has_persistent_cap("agent:a", "fake:Serial:COM1"));
     }
 
     #[test]
     fn revoke_closes_handles() {
         let mut m = manager();
-        let opened = m.open_device(&open_req(UsbPermission::Always), true).unwrap();
+        let opened = m
+            .open_device(&open_req(UsbPermission::Always), true)
+            .unwrap();
         let stopped = m.revoke("agent:a", "fake:Serial:COM1").unwrap();
         assert_eq!(stopped, vec![opened.handle_id]);
         assert!(!m.has_persistent_cap("agent:a", "fake:Serial:COM1"));
@@ -883,7 +878,9 @@ mod tests {
     #[test]
     fn audit_never_needs_raw_payload() {
         let mut m = manager();
-        let opened = m.open_device(&open_req(UsbPermission::AllowOnce), true).unwrap();
+        let opened = m
+            .open_device(&open_req(UsbPermission::AllowOnce), true)
+            .unwrap();
         let read = m
             .read(&UsbReadRequest {
                 agent_id: "agent:a".into(),

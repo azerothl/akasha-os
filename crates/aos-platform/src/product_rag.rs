@@ -47,12 +47,7 @@ pub fn ensure_indexed(sub: &PlatformSubsystem, version: &str) -> Result<usize, S
     if let Ok(raw) = std::fs::read_to_string(&meta_path) {
         if let Ok(prev) = serde_json::from_str::<IndexMeta>(&raw) {
             if prev.version == version && prev.fingerprint == fingerprint && prev.chunks > 0 {
-                let n = sub
-                    .mem
-                    .lock()
-                    .unwrap()
-                    .list(PRODUCT_NS, false)
-                    .len();
+                let n = sub.mem.lock().unwrap().list(PRODUCT_NS, false).len();
                 if n > 0 {
                     return Ok(n);
                 }
@@ -153,11 +148,7 @@ fn commit_index(
 }
 
 /// Semantic recall over product docs (no similar-hop expansion).
-pub fn recall(
-    mem: &MemoryStore,
-    query_vector: &[f32],
-    k: usize,
-) -> Vec<aos_proto::MemHit> {
+pub fn recall(mem: &MemoryStore, query_vector: &[f32], k: usize) -> Vec<aos_proto::MemHit> {
     if query_vector.is_empty() {
         return Vec::new();
     }
@@ -360,7 +351,7 @@ fn split_oversized(body: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::chunk_markdown;
-    use super::{commit_index, prepare_index, IndexedChunk, IndexMeta, META_FILE, PRODUCT_NS};
+    use super::{commit_index, prepare_index, IndexMeta, IndexedChunk, META_FILE, PRODUCT_NS};
     use crate::subsystem::{PlatformConfig, PlatformSubsystem};
     use std::path::PathBuf;
 
@@ -419,7 +410,9 @@ mod tests {
         let md = "# Title\n\nintro para that is long enough to keep as a chunk abcdefghijklmnop\n\n## 1. Chat\n\nchat details go here with enough characters for the filter threshold xyz\n\n### What's new in 0.10.0\n\n- TPM vault\n- bridge aos-bridged\n- multi-GPU path and more text for length\n";
         let chunks = chunk_markdown("FEATURES.md", md);
         assert!(chunks.len() >= 2);
-        assert!(chunks.iter().any(|c| c.heading.contains("0.10.0") || c.text.contains("TPM")));
+        assert!(chunks
+            .iter()
+            .any(|c| c.heading.contains("0.10.0") || c.text.contains("TPM")));
     }
 
     #[tokio::test]
@@ -443,11 +436,7 @@ mod tests {
             fingerprint: "old".into(),
             chunks: 1,
         };
-        std::fs::write(
-            &meta_path,
-            serde_json::to_string_pretty(&meta).unwrap(),
-        )
-        .unwrap();
+        std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
 
         let before = sub.mem.lock().unwrap().list(PRODUCT_NS, false).len();
         assert_eq!(before, 1);

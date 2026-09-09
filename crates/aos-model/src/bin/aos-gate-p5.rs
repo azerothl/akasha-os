@@ -18,11 +18,7 @@ struct Gate {
     detail: String,
 }
 
-async fn infer(
-    bus: &BusClient,
-    prompt: &str,
-    max_tokens: u32,
-) -> Result<(f64, f64, u32), String> {
+async fn infer(bus: &BusClient, prompt: &str, max_tokens: u32) -> Result<(f64, f64, u32), String> {
     let mut rx = bus
         .call_stream::<InferRequest, TokenEvent>(
             "model.infer",

@@ -51,7 +51,10 @@ pub fn requires_act_gate(action: &str) -> bool {
         return false;
     }
     if name.starts_with("notes.") {
-        return !matches!(name, "notes.list" | "notes.read" | "notes.search" | "notes.related" | "notes.links");
+        return !matches!(
+            name,
+            "notes.list" | "notes.read" | "notes.search" | "notes.related" | "notes.links"
+        );
     }
     if name.starts_with("tasks.") {
         return !matches!(name, "tasks.list");
@@ -96,7 +99,10 @@ mod tests {
     #[test]
     fn gate_mode_parse() {
         assert_eq!(AgentGateMode::parse("ask"), AgentGateMode::Ask);
-        assert_eq!(AgentGateMode::parse("autonomous"), AgentGateMode::Autonomous);
+        assert_eq!(
+            AgentGateMode::parse("autonomous"),
+            AgentGateMode::Autonomous
+        );
     }
 
     #[test]

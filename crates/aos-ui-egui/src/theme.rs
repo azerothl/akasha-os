@@ -361,10 +361,18 @@ mod tests {
 
     #[test]
     fn hit_targets_meet_wcag_minimum() {
-        const { assert!(PRIMARY_MIN_H >= 44.0); };
-        const { assert!(ICON_HIT >= 24.0); };
-        const { assert!(TOOLBAR_HIT >= 24.0); };
-        const { assert!(CONTROL_MIN_H_COMFORTABLE >= 32.0); };
+        const {
+            assert!(PRIMARY_MIN_H >= 44.0);
+        };
+        const {
+            assert!(ICON_HIT >= 24.0);
+        };
+        const {
+            assert!(TOOLBAR_HIT >= 24.0);
+        };
+        const {
+            assert!(CONTROL_MIN_H_COMFORTABLE >= 32.0);
+        };
     }
 
     #[test]

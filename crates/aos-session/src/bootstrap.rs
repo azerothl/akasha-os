@@ -647,10 +647,7 @@ pub fn ensure_notes_registry_entry(registry_path: &Path) {
         let _ = fs::write(registry_path, updated);
         return;
     }
-    let _ = fs::write(
-        registry_path,
-        format!("installed:{NOTES_REGISTRY_ENTRY}"),
-    );
+    let _ = fs::write(registry_path, format!("installed:{NOTES_REGISTRY_ENTRY}"));
 }
 
 /// Copie `share/.../*.aospkg` → `var/modules/<name>` si absent ou obsolète.

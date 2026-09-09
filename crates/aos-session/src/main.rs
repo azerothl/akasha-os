@@ -912,40 +912,40 @@ fn ensure_layout(home: &Path) -> Vec<String> {
     let canvas_share = home.join("share/modules/canvas.aospkg");
     let canvas_installed = home.join("var/modules/canvas");
     if canvas_share.exists() && bootstrap::sync_packaged_module(&canvas_share, &canvas_installed) {
-            synced.push("canvas".into());
-            let reg = home.join("var/modules/registry.yaml");
-            if let Ok(mut raw) = fs::read_to_string(&reg) {
-                if !raw.contains("name: canvas") {
-                    // Match existing list indent (`- name:` vs `  - name:`).
-                    let entry = if raw.lines().any(|l| l.starts_with("- name:")) {
-                        r#"
+        synced.push("canvas".into());
+        let reg = home.join("var/modules/registry.yaml");
+        if let Ok(mut raw) = fs::read_to_string(&reg) {
+            if !raw.contains("name: canvas") {
+                // Match existing list indent (`- name:` vs `  - name:`).
+                let entry = if raw.lines().any(|l| l.starts_with("- name:")) {
+                    r#"
 - name: canvas
   granted_caps:
   - fs.write:/downloads/**
   quarantined: false
 "#
-                    } else {
-                        r#"
+                } else {
+                    r#"
   - name: canvas
     granted_caps:
       - fs.write:/downloads/**
     quarantined: false
 "#
-                    };
-                    raw.push_str(entry);
-                    let _ = fs::write(&reg, raw);
-                }
-            } else {
-                let _ = fs::write(
-                    &reg,
-                    r#"installed:
+                };
+                raw.push_str(entry);
+                let _ = fs::write(&reg, raw);
+            }
+        } else {
+            let _ = fs::write(
+                &reg,
+                r#"installed:
   - name: canvas
     granted_caps:
       - fs.write:/downloads/**
     quarantined: false
 "#,
-                );
-            }
+            );
+        }
     }
 
     // Runtime scripté ext-rt (template pour modules agent) — package partagé.
@@ -1559,18 +1559,13 @@ fn ctrlc_guard(session: Arc<Session>) {
 
 #[cfg(test)]
 mod bootstrap_i18n_tests {
-    use super::{
-        bootstrap_failed_body, bootstrap_retry_label, session_language, OnboardingState,
-    };
+    use super::{bootstrap_failed_body, bootstrap_retry_label, session_language, OnboardingState};
     use std::fs;
     use std::path::PathBuf;
 
     fn temp_home(label: &str) -> PathBuf {
         let mut p = std::env::temp_dir();
-        p.push(format!(
-            "aos-session-i18n-{label}-{}",
-            std::process::id()
-        ));
+        p.push(format!("aos-session-i18n-{label}-{}", std::process::id()));
         let _ = fs::create_dir_all(p.join("var/run"));
         p
     }
@@ -1581,14 +1576,8 @@ mod bootstrap_i18n_tests {
             bootstrap_failed_body("fr"),
             "Impossible de terminer le démarrage."
         );
-        assert_eq!(
-            bootstrap_failed_body("en"),
-            "Couldn't finish starting."
-        );
-        assert_eq!(
-            bootstrap_failed_body("EN"),
-            "Couldn't finish starting."
-        );
+        assert_eq!(bootstrap_failed_body("en"), "Couldn't finish starting.");
+        assert_eq!(bootstrap_failed_body("EN"), "Couldn't finish starting.");
         assert!(!bootstrap_failed_body("fr").contains("RAG"));
         assert!(!bootstrap_failed_body("en").to_lowercase().contains("index"));
         assert!(!bootstrap_failed_body("fr").contains("Réessayer"));

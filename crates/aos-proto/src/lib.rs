@@ -12,14 +12,14 @@ mod canvas_layers;
 mod canvas_style;
 pub mod chat_document;
 pub mod decl_ui;
-pub mod tasks_contract;
 pub mod device_capture;
 pub mod device_usb;
 pub mod host_folder;
 pub mod mem_extract;
+pub mod tasks_contract;
 
 pub use tasks_contract::{
-    FULL_ACTOR_CAPS, FS_READ_CAP, FS_WRITE_CAP, INVOKE_CAP, LOAD_BEHAVIOUR_FOLLOWUP,
+    FS_READ_CAP, FS_WRITE_CAP, FULL_ACTOR_CAPS, INVOKE_CAP, LOAD_BEHAVIOUR_FOLLOWUP,
     MANIFEST_FS_CAPS, MODULE_NAME as TASKS_MODULE_NAME, STORE_PATH as TASKS_STORE_PATH,
     TOOL_IDS as TASKS_TOOL_IDS,
 };

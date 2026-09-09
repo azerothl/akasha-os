@@ -136,7 +136,10 @@ impl PlanStore {
             if !agent_entry.file_type()?.is_dir() {
                 continue;
             }
-            let path = agent_entry.path().join("plans").join(format!("{plan_id}.json"));
+            let path = agent_entry
+                .path()
+                .join("plans")
+                .join(format!("{plan_id}.json"));
             if path.is_file() {
                 let raw = fs::read_to_string(&path)?;
                 let plan: DeepPlan = serde_json::from_str(&raw)?;

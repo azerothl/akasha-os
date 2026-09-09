@@ -62,7 +62,11 @@ pub fn rate_for_model(model: &str) -> ProviderRate {
         }
     }
     // Repli conservateur (sur-estime) : le plafond protège même l'inconnu.
-    ProviderRate { in_cents_per_1m: 500.0, out_cents_per_1m: 2000.0, known: false }
+    ProviderRate {
+        in_cents_per_1m: 500.0,
+        out_cents_per_1m: 2000.0,
+        known: false,
+    }
 }
 
 /// `provider:<provider_id>:<model>` → (provider_id, model).
@@ -302,9 +306,7 @@ impl UiApp {
         };
         if cap > 0 && cents >= cap as u64 {
             ui.colored_label(theme_c.danger, &label).on_hover_text(tip);
-        } else if cap > 0
-            && cents * 100 >= cap as u64 * self.prefs.cloud_alert_pct.max(1) as u64
-        {
+        } else if cap > 0 && cents * 100 >= cap as u64 * self.prefs.cloud_alert_pct.max(1) as u64 {
             ui.colored_label(theme_c.warning, &label).on_hover_text(tip);
         } else {
             ui.weak(&label).on_hover_text(tip);
@@ -346,7 +348,7 @@ mod tests {
     #[test]
     fn turn_cost_rounds_up() {
         let rate = rate_for_model("gpt-4o-mini"); // 15/60 per 1M
-        // 4000 prompt chars ≈ 1000 tok → 0.015¢ → 1¢.
+                                                  // 4000 prompt chars ≈ 1000 tok → 0.015¢ → 1¢.
         assert_eq!(cents_for_turn(4000, 0, &rate), 1);
         assert_eq!(cents_for_turn(0, 0, &rate), 0);
     }

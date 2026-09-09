@@ -11,21 +11,21 @@ pub mod canvas_scene;
 pub mod context_budget;
 pub mod deep_thinking;
 pub mod device_tools;
-pub mod host_folder;
 pub mod document_index;
 pub mod document_prep;
 pub mod health;
+pub mod host_folder;
 pub mod mcp;
 pub mod module_discovery;
 pub mod persist;
 pub mod policy;
 pub mod prompt;
+pub mod research_detect;
 pub mod room_ask;
 pub mod room_conductor;
 pub mod room_personas;
 pub mod room_reply;
 pub mod room_runtime;
-pub mod research_detect;
 pub mod schedule;
 pub mod schedule_parse;
 pub mod skills;
@@ -88,14 +88,23 @@ pub mod intents {
 pub enum ControlCmd {
     Pause,
     Resume,
-    Steer { directive: String },
+    Steer {
+        directive: String,
+    },
     Snapshot,
     /// Hot-grant d'une capacité (mise à jour caps du worker).
-    GrantCap { cap: String },
+    GrantCap {
+        cap: String,
+    },
     /// Politique par agent S6 phase 2 (mise à jour live, persistée par agentd).
-    SetPolicy { policy: aos_proto::AgentPolicy },
+    SetPolicy {
+        policy: aos_proto::AgentPolicy,
+    },
     /// Réponse inline Allow Once / Refuser pour une action agent (slice 1).
-    ActDecision { act_id: String, approved: bool },
+    ActDecision {
+        act_id: String,
+        approved: bool,
+    },
     /// Un sous-agent a atteint un état terminal ; le parent doit intégrer le résultat.
     ChildFinished {
         child_id: String,

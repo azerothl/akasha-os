@@ -16,8 +16,7 @@ pub const ROOM_PERSONAS: &[RoomPersona] = &[
         id: "researcher",
         display_name: "Researcher",
         directive: "Gather facts and cite sources before recommending action.",
-        system_prompt:
-            "You are a careful researcher. Prefer evidence, nuance, and clear unknowns.",
+        system_prompt: "You are a careful researcher. Prefer evidence, nuance, and clear unknowns.",
     },
     RoomPersona {
         id: "critic",
@@ -62,7 +61,10 @@ pub fn persona_agent_id(persona_id: &str) -> String {
     format!("persona-{persona_id}")
 }
 
-pub fn persona_create_request(persona: &RoomPersona, model_id: Option<String>) -> AgentCreateRequest {
+pub fn persona_create_request(
+    persona: &RoomPersona,
+    model_id: Option<String>,
+) -> AgentCreateRequest {
     let mut req = AgentCreateRequest::simple(String::new());
     req.kind = AgentKind::Roster;
     req.display_name = Some(persona.display_name.to_string());

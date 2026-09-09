@@ -43,7 +43,10 @@ fn looks_like_host_path(path: &str) -> bool {
 pub fn text_contains_disallowed_storage_path(text: &str) -> bool {
     for token in text.split_whitespace() {
         let token = token.trim_matches(|c: char| {
-            matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | ')' | '(' | '"' | '\'' | '`')
+            matches!(
+                c,
+                ',' | '.' | ';' | ':' | '!' | '?' | ')' | '(' | '"' | '\'' | '`'
+            )
         });
         if token.is_empty() {
             continue;
@@ -101,7 +104,11 @@ mod tests {
 
     #[test]
     fn text_scan_finds_host_path() {
-        assert!(text_contains_disallowed_storage_path("écris dans e:/test/test"));
-        assert!(!text_contains_disallowed_storage_path("sauve sous /downloads/rapport.md"));
+        assert!(text_contains_disallowed_storage_path(
+            "écris dans e:/test/test"
+        ));
+        assert!(!text_contains_disallowed_storage_path(
+            "sauve sous /downloads/rapport.md"
+        ));
     }
 }

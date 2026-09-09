@@ -25,7 +25,9 @@ pub fn generate(format: &str, content: &str, title: Option<&str>) -> Result<Vec<
             if serde_json::from_str::<serde_json::Value>(content).is_ok() {
                 Ok(content.as_bytes().to_vec())
             } else {
-                Ok(serde_json::json!({ "text": content }).to_string().into_bytes())
+                Ok(serde_json::json!({ "text": content })
+                    .to_string()
+                    .into_bytes())
             }
         }
         "png" => generate_png(content, title),
@@ -50,7 +52,14 @@ fn generate_png(content: &str, title: Option<&str>) -> Result<Vec<u8>, GenError>
     // « Texte » simulé : lignes proportionnelles au contenu (pas de font raster
     // complète — motif déterministe pour artefact visible).
     let label = title.unwrap_or("Akasha OS");
-    draw_bars(&mut img, 20, 60, label.len() as u32 * 8 + 40, 16, Rgb([220, 220, 230]));
+    draw_bars(
+        &mut img,
+        20,
+        60,
+        label.len() as u32 * 8 + 40,
+        16,
+        Rgb([220, 220, 230]),
+    );
     let lines: Vec<&str> = content.lines().take(12).collect();
     for (i, line) in lines.iter().enumerate() {
         let y = 100 + (i as u32) * 18;
@@ -75,8 +84,12 @@ fn draw_bars(img: &mut RgbImage, x: u32, y: u32, w: u32, h: u32, color: Rgb<u8>)
 
 fn generate_pdf(content: &str, title: Option<&str>) -> Result<Vec<u8>, GenError> {
     use printpdf::*;
-    let (doc, page1, layer1) =
-        PdfDocument::new(title.unwrap_or("Akasha OS"), Mm(210.0), Mm(297.0), "Layer 1");
+    let (doc, page1, layer1) = PdfDocument::new(
+        title.unwrap_or("Akasha OS"),
+        Mm(210.0),
+        Mm(297.0),
+        "Layer 1",
+    );
     let layer = doc.get_page(page1).get_layer(layer1);
     let font = doc
         .add_builtin_font(BuiltinFont::Helvetica)

@@ -62,7 +62,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .route("/v1/health", get(health))
-        .route("/v1/mem/stats", post(|s, h, b| dispatch(s, h, b, "mem.stats")))
+        .route(
+            "/v1/mem/stats",
+            post(|s, h, b| dispatch(s, h, b, "mem.stats")),
+        )
         .route(
             "/v1/mem/working_set",
             post(|s, h, b| dispatch(s, h, b, "mem.working_set")),

@@ -69,7 +69,9 @@ impl UiApp {
                 }
             }
             if ui.small_button(t.caps_refresh).clicked() {
-                let _ = self.cmd_tx.send(Cmd::FilesList { prefix: String::new() });
+                let _ = self.cmd_tx.send(Cmd::FilesList {
+                    prefix: String::new(),
+                });
             }
         });
         ui.separator();
@@ -126,10 +128,8 @@ impl UiApp {
         let mut act: Option<RowAct> = None;
         for (path, class, version, size) in &rows {
             let selected = self.files_ui.open_path.as_deref() == Some(path.as_str());
-            let short = agent_panel::truncate(
-                path.strip_prefix(&self.files_ui.prefix).unwrap_or(path),
-                30,
-            );
+            let short =
+                agent_panel::truncate(path.strip_prefix(&self.files_ui.prefix).unwrap_or(path), 30);
             let row = ui.horizontal(|ui| {
                 ui.colored_label(
                     class_color(ui, *class),
@@ -196,7 +196,10 @@ impl UiApp {
                 class_color(ui, self.files_ui.open_class),
                 format!("[{}]", class_label(t, self.files_ui.open_class)),
             );
-            ui.weak(t.files_version.replace("{version}", &self.files_ui.open_version.to_string()));
+            ui.weak(
+                t.files_version
+                    .replace("{version}", &self.files_ui.open_version.to_string()),
+            );
         });
         ui.horizontal_wrapped(|ui| {
             // Cycle Public → Privé → Secret (cap `fs.reclassify` côté serveur).
@@ -219,9 +222,7 @@ impl UiApp {
                     class: next,
                 });
             }
-            if self.files_ui.open_dirty
-                && ui.button(t.files_save).clicked()
-            {
+            if self.files_ui.open_dirty && ui.button(t.files_save).clicked() {
                 let _ = self.cmd_tx.send(Cmd::FilesWrite {
                     path: path.clone(),
                     content: self.files_ui.open_content.clone(),

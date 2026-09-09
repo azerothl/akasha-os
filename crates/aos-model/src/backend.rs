@@ -133,7 +133,10 @@ impl RemoteOpenAiBackend {
         if !resp.status().is_success() {
             return Err(RemoteError::Http(format!("statut {}", resp.status())));
         }
-        let v: serde_json::Value = resp.json().await.map_err(|e| RemoteError::Http(e.to_string()))?;
+        let v: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| RemoteError::Http(e.to_string()))?;
         let ids = v
             .get("data")
             .and_then(|d| d.as_array())

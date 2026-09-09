@@ -63,9 +63,7 @@ pub(crate) fn open_ask_target(chat: &[ChatLine]) -> Option<(String, String)> {
             if origin == "ask" {
                 open = Some((agent_id.to_string(), title.to_string()));
             } else if ask_origin_closes(origin)
-                && open
-                    .as_ref()
-                    .is_some_and(|(id, _)| id == agent_id)
+                && open.as_ref().is_some_and(|(id, _)| id == agent_id)
             {
                 open = None;
             }

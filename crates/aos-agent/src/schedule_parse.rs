@@ -42,7 +42,12 @@ pub fn next_daily_fire_ms(now_ms: u64, tz_offset_min: i32, hour: u64, minute: u6
     if now_ms < target {
         target
     } else {
-        local_hm_ms(day_start.saturating_add(86_400_000), hour, minute, tz_offset_min)
+        local_hm_ms(
+            day_start.saturating_add(86_400_000),
+            hour,
+            minute,
+            tz_offset_min,
+        )
     }
 }
 
@@ -99,7 +104,11 @@ pub fn try_parse_phrase(phrase: &str, now_ms: u64, tz_offset_min: i32) -> Option
         ("every hour", "every hour", "every hour"),
         ("each hour", "each hour", "each hour"),
         ("hourly", "hourly", "hourly"),
-        ("toutes les heures", "toutes les heures", "toutes les heures"),
+        (
+            "toutes les heures",
+            "toutes les heures",
+            "toutes les heures",
+        ),
         ("chaque heure", "chaque heure", "chaque heure"),
     ];
     for (prefix, when_en, when_fr) in HOURLY_PREFIXES {
@@ -145,8 +154,7 @@ mod tests {
     #[test]
     fn fr_morning_phrase() {
         let now = 1_705_315_200_000u64;
-        let parsed =
-            try_parse_phrase("chaque matin, résume mes notes", now, 60).unwrap();
+        let parsed = try_parse_phrase("chaque matin, résume mes notes", now, 60).unwrap();
         assert_eq!(parsed.goal, "résume mes notes");
         assert_eq!(parsed.when_label, "chaque matin");
         assert_eq!(parsed.interval_secs, 86_400);

@@ -97,12 +97,7 @@ impl CapKernel {
     }
 
     /// `cap.derive` — atténuation.
-    pub fn derive(
-        &mut self,
-        holder: &str,
-        parent: u64,
-        rights: &[String],
-    ) -> Result<u64, String> {
+    pub fn derive(&mut self, holder: &str, parent: u64, rights: &[String]) -> Result<u64, String> {
         let h = self
             .holder_of(holder)
             .ok_or_else(|| "détenteur inconnu".to_string())?;
@@ -263,11 +258,23 @@ mod tests {
     fn check_object_exact_et_glob() {
         let mut k = CapKernel::new();
         let cap = k.mint("agent:1", "fs:/p4/gate.md", &rd());
-        assert!(k.check_object("agent:1", cap, &rd(), Some("fs:/p4/gate.md")).0);
-        assert!(!k.check_object("agent:1", cap, &rd(), Some("fs:/other.md")).0);
+        assert!(
+            k.check_object("agent:1", cap, &rd(), Some("fs:/p4/gate.md"))
+                .0
+        );
+        assert!(
+            !k.check_object("agent:1", cap, &rd(), Some("fs:/other.md"))
+                .0
+        );
         let glob = k.mint("agent:1", "fs:/p4/**", &rd());
-        assert!(k.check_object("agent:1", glob, &rd(), Some("fs:/p4/gate.md")).0);
-        assert!(!k.check_object("agent:1", glob, &rd(), Some("fs:/other.md")).0);
+        assert!(
+            k.check_object("agent:1", glob, &rd(), Some("fs:/p4/gate.md"))
+                .0
+        );
+        assert!(
+            !k.check_object("agent:1", glob, &rd(), Some("fs:/other.md"))
+                .0
+        );
     }
 
     #[test]

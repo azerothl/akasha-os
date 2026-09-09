@@ -231,9 +231,7 @@ impl ModuleRuntime {
 
     /// True when the user explicitly uninstalled this module (registry survives file wipe).
     pub fn user_removed(&self, name: &str) -> bool {
-        self.removed
-            .get(name)
-            .is_some_and(|e| e.user_removed)
+        self.removed.get(name).is_some_and(|e| e.user_removed)
     }
 
     /// Whether an automatic preinstall/sync may install this module.
@@ -338,10 +336,7 @@ impl ModuleRuntime {
         installed.sort_by(|a, b| a.name.cmp(b.name));
         let mut removed: Vec<_> = self.removed.values().collect();
         removed.sort_by(|a, b| a.name.cmp(&b.name));
-        let reg = Reg {
-            installed,
-            removed,
-        };
+        let reg = Reg { installed, removed };
         let path = self.registry_path();
         let tmp = path.with_extension("yaml.tmp");
         std::fs::write(&tmp, serde_yaml::to_string(&reg).unwrap())?;
@@ -371,7 +366,8 @@ impl ModuleRuntime {
                 if active.is_dir() {
                     let _ = std::fs::remove_dir_all(&active);
                 }
-                std::fs::rename(entry.path(), &active).map_err(|e| ModuleError::Io(e.to_string()))?;
+                std::fs::rename(entry.path(), &active)
+                    .map_err(|e| ModuleError::Io(e.to_string()))?;
             }
         }
         let _ = std::fs::remove_dir_all(self.previous_root());
@@ -412,13 +408,8 @@ impl ModuleRuntime {
         copy_dir(source_dir, &staging)?;
         self.validate_package(&staging)?;
         let compiled = self.compile(&staging.join("module.wasm"))?;
-        let verified_tools = self.verify_manifest_tools(
-            &manifest,
-            &manifest.name,
-            &staging,
-            &granted,
-            &compiled,
-        );
+        let verified_tools =
+            self.verify_manifest_tools(&manifest, &manifest.name, &staging, &granted, &compiled);
         if dest.exists() {
             std::fs::create_dir_all(self.previous_root())?;
             std::fs::rename(&dest, &backup).map_err(|e| ModuleError::Io(e.to_string()))?;
@@ -469,9 +460,9 @@ impl ModuleRuntime {
             .unwrap_or_default();
         match (existing, approved_caps) {
             (_, Some(caps)) => Ok(caps),
-            (Some(existing), None) if !increased.is_empty() => Err(ModuleError::CapReviewRequired(
-                increased.join(", "),
-            )),
+            (Some(_existing), None) if !increased.is_empty() => {
+                Err(ModuleError::CapReviewRequired(increased.join(", ")))
+            }
             (Some(existing), None) => Ok(existing.granted_caps.clone()),
             (None, None) if manifest.permissions.required_caps.is_empty() => Ok(Vec::new()),
             (None, None) => Err(ModuleError::CapReviewRequired(
@@ -503,9 +494,7 @@ impl ModuleRuntime {
             &hash,
         )
         .map_err(|e| match e {
-            crate::catalogue::CatalogueError::HashMismatch(n) => {
-                ModuleError::CatalogueMismatch(n)
-            }
+            crate::catalogue::CatalogueError::HashMismatch(n) => ModuleError::CatalogueMismatch(n),
             crate::catalogue::CatalogueError::BadSignature => ModuleError::CatalogueSignature,
             other => ModuleError::BadManifest(other.to_string()),
         })?;
@@ -519,10 +508,7 @@ impl ModuleRuntime {
         let manifest: ModuleManifest =
             serde_yaml::from_str(&std::fs::read_to_string(source_dir.join("manifest.yaml"))?)
                 .map_err(|e| ModuleError::BadManifest(e.to_string()))?;
-        Ok((
-            manifest.name,
-            manifest.permissions.required_caps,
-        ))
+        Ok((manifest.name, manifest.permissions.required_caps))
     }
 
     pub fn uninstall(&mut self, name: &str) -> Result<(), ModuleError> {
@@ -581,13 +567,8 @@ impl ModuleRuntime {
             return Err(ModuleError::HashMismatch);
         }
         let compiled = self.compile(&mdir.join("module.wasm"))?;
-        let verified_tools = self.verify_manifest_tools(
-            &manifest,
-            name,
-            &mdir,
-            &granted_caps,
-            &compiled,
-        );
+        let verified_tools =
+            self.verify_manifest_tools(&manifest, name, &mdir, &granted_caps, &compiled);
         let info = module_info_from_installed(
             &manifest,
             &verified_tools,
@@ -1020,8 +1001,8 @@ fn validate_package_descriptors(
         }
         let raw = std::fs::read(&ui_path).map_err(|e| ModuleError::Io(e.to_string()))?;
         if ui.mode == "declarative_ui" {
-            let doc: serde_json::Value =
-                serde_json::from_slice(&raw).map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+            let doc: serde_json::Value = serde_json::from_slice(&raw)
+                .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
             if doc.get("type").and_then(|t| t.as_str()) != Some("declarative_ui") {
                 return Err(ModuleError::DeclUiInvalid(
                     "type must be declarative_ui".into(),
@@ -1320,9 +1301,7 @@ min_os_api: 1
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
         rt.install(&pkg, Some(vec![])).unwrap();
         rt.uninstall("echo-test").unwrap();
-        let out = rt
-            .install_preinstalled(&pkg, Some(vec![]))
-            .unwrap();
+        let out = rt.install_preinstalled(&pkg, Some(vec![])).unwrap();
         assert!(out.is_none());
         assert!(rt.list().is_empty());
         let _ = std::fs::remove_dir_all(&base);
@@ -1388,8 +1367,8 @@ min_os_api: 1
             }
         }
 
-        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../share/modules/tasks.aospkg");
+        let share_pkg =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/tasks.aospkg");
         if !share_pkg.join("module.wasm").is_file() {
             eprintln!("skip probe write test: tasks wasm missing");
             return;
@@ -1614,8 +1593,8 @@ min_os_api: 1
             }
         }
 
-        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../share/modules/canvas.aospkg");
+        let share_pkg =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/canvas.aospkg");
         assert!(
             share_pkg.join("module.wasm").is_file(),
             "share/modules/canvas.aospkg/module.wasm missing"
@@ -1699,8 +1678,8 @@ min_os_api: 1
             }
         }
 
-        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../share/modules/canvas.aospkg");
+        let share_pkg =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/canvas.aospkg");
         assert!(
             share_pkg.join("module.wasm").is_file(),
             "share/modules/canvas.aospkg/module.wasm missing"
@@ -1714,10 +1693,7 @@ min_os_api: 1
         let base = tmpbase("canvas-packaged-path");
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
         let info = rt
-            .install(
-                &share_pkg,
-                Some(vec!["fs.write:/downloads/**".into()]),
-            )
+            .install(&share_pkg, Some(vec!["fs.write:/downloads/**".into()]))
             .expect("install packaged canvas");
         assert!(
             info.tools.iter().any(|t| t == "canvas.path"),
@@ -1767,10 +1743,7 @@ min_os_api: 1
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let output = std::process::Command::new("git")
-            .args([
-                "show",
-                "28e44cc:share/modules/canvas.aospkg/module.wasm",
-            ])
+            .args(["show", "28e44cc:share/modules/canvas.aospkg/module.wasm"])
             .current_dir(&repo)
             .output()
             .expect("git show legacy canvas.wasm");
@@ -1846,10 +1819,7 @@ min_os_api: 1
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let output = std::process::Command::new("git")
-            .args([
-                "show",
-                "28e44cc:share/modules/canvas.aospkg/module.wasm",
-            ])
+            .args(["show", "28e44cc:share/modules/canvas.aospkg/module.wasm"])
             .current_dir(&repo)
             .output()
             .expect("git show legacy canvas.wasm");
@@ -1926,8 +1896,8 @@ min_os_api: 1
             }
         }
 
-        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../share/modules/canvas.aospkg");
+        let share_pkg =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/canvas.aospkg");
         if !share_pkg.join("module.wasm").is_file() {
             eprintln!("skip reload test: packaged canvas missing");
             return;
@@ -1936,10 +1906,7 @@ min_os_api: 1
         let base = tmpbase("canvas-reload-path");
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(CanvasHost)).unwrap();
         let info = rt
-            .install(
-                &share_pkg,
-                Some(vec!["fs.write:/downloads/**".into()]),
-            )
+            .install(&share_pkg, Some(vec!["fs.write:/downloads/**".into()]))
             .expect("install packaged canvas");
         assert!(
             info.tools.iter().any(|t| t == "canvas.path"),
@@ -1949,10 +1916,7 @@ min_os_api: 1
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let output = std::process::Command::new("git")
-            .args([
-                "show",
-                "28e44cc:share/modules/canvas.aospkg/module.wasm",
-            ])
+            .args(["show", "28e44cc:share/modules/canvas.aospkg/module.wasm"])
             .current_dir(&repo)
             .output()
             .expect("git show legacy canvas.wasm");
@@ -2025,8 +1989,8 @@ min_os_api: 1
             }
         }
 
-        let share_pkg = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../share/modules/notes.aospkg");
+        let share_pkg =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/notes.aospkg");
         if !share_pkg.join("module.wasm").is_file() {
             eprintln!("skip packaged notes test: wasm missing");
             return;
@@ -2080,7 +2044,10 @@ fn module_info_from_installed(
     }
 }
 
-fn ui_meta_from_manifest(manifest: &ModuleManifest, dir: Option<&Path>) -> (Option<String>, Option<String>) {
+fn ui_meta_from_manifest(
+    manifest: &ModuleManifest,
+    dir: Option<&Path>,
+) -> (Option<String>, Option<String>) {
     let Some(ui) = manifest.ui.as_ref() else {
         return (None, None);
     };

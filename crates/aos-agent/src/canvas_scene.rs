@@ -382,7 +382,9 @@ pub fn canvas_visual_fingerprint(path: &str) -> Option<CanvasVisualFingerprint> 
     // canvas.export returns a sandboxed virtual path (`/downloads/...`),
     // whereas the worker needs the physical Preview storage path to inspect
     // pixels locally.
-    let image = image::open(resolve_canvas_export_path(path)).ok()?.to_luma8();
+    let image = image::open(resolve_canvas_export_path(path))
+        .ok()?
+        .to_luma8();
     let (width, height) = image.dimensions();
     if width == 0 || height == 0 {
         return None;
@@ -397,10 +399,16 @@ pub fn canvas_visual_fingerprint(path: &str) -> Option<CanvasVisualFingerprint> 
     let coverage_per_mille = ((covered * 1000) / (width as usize * height as usize)) as u16;
     let thumb = image::imageops::resize(&image, 8, 8, image::imageops::FilterType::Triangle);
     let average = thumb.pixels().map(|pixel| pixel[0] as u32).sum::<u32>() / 64;
-    let perceptual_hash = thumb.pixels().enumerate().fold(0u64, |hash, (index, pixel)| {
-        hash | (u64::from((pixel[0] as u32 >= average) as u8) << index)
-    });
-    Some(CanvasVisualFingerprint { perceptual_hash, coverage_per_mille })
+    let perceptual_hash = thumb
+        .pixels()
+        .enumerate()
+        .fold(0u64, |hash, (index, pixel)| {
+            hash | (u64::from((pixel[0] as u32 >= average) as u8) << index)
+        });
+    Some(CanvasVisualFingerprint {
+        perceptual_hash,
+        coverage_per_mille,
+    })
 }
 
 fn resolve_canvas_export_path(path: &str) -> PathBuf {
@@ -424,7 +432,8 @@ pub fn canvas_visual_progress(
     current: CanvasVisualFingerprint,
 ) -> CanvasVisualProgress {
     let hash_distance = (previous.perceptual_hash ^ current.perceptual_hash).count_ones();
-    let coverage_delta_per_mille = current.coverage_per_mille as i32 - previous.coverage_per_mille as i32;
+    let coverage_delta_per_mille =
+        current.coverage_per_mille as i32 - previous.coverage_per_mille as i32;
     CanvasVisualProgress {
         hash_distance,
         coverage_delta_per_mille,
@@ -433,7 +442,11 @@ pub fn canvas_visual_progress(
 }
 
 pub fn canvas_visual_progress_note(progress: CanvasVisualProgress) -> String {
-    let state = if progress.meaningful_change { "changement visible" } else { "changement visuel faible" };
+    let state = if progress.meaningful_change {
+        "changement visible"
+    } else {
+        "changement visuel faible"
+    };
     format!(
         "[canvas visual verifier] {state}; distance image={} couverture Δ={}‰. \
          Ne répète pas la forme si elle n'apporte pas une pièce distincte.",
@@ -850,10 +863,7 @@ pub fn strip_vision_image_paths(refs: &[String]) -> Vec<String> {
 }
 
 fn model_is_resident(m: &ModelInfo) -> bool {
-    matches!(
-        m.state,
-        ModelState::Loaded | ModelState::PartiallyOffloaded
-    )
+    matches!(m.state, ModelState::Loaded | ModelState::PartiallyOffloaded)
 }
 
 /// Prefer `preferred` when it has a loaded mmproj; otherwise any resident vision model.
@@ -938,7 +948,15 @@ pub fn canvas_repeat_stroke_verdict(
     trace: &[AgentStepRecord],
     action: &str,
 ) -> Option<CanvasRepeatVerdict> {
-    if !matches!(action, "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse") {
+    if !matches!(
+        action,
+        "canvas.stroke"
+            | "canvas.line"
+            | "canvas.spline"
+            | "canvas.path"
+            | "canvas.rect"
+            | "canvas.ellipse"
+    ) {
         return None;
     }
     let bboxes: Vec<[f32; 4]> = trace
@@ -947,7 +965,12 @@ pub fn canvas_repeat_stroke_verdict(
         .filter(|r| {
             matches!(
                 r.action.as_str(),
-                "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse"
+                "canvas.stroke"
+                    | "canvas.line"
+                    | "canvas.spline"
+                    | "canvas.path"
+                    | "canvas.rect"
+                    | "canvas.ellipse"
             ) && canvas_op_succeeded(&r.tool_result)
         })
         .filter_map(|r| parse_outcome_bbox(&r.tool_result))
@@ -1011,7 +1034,12 @@ pub fn canvas_action_near_duplicate_reason(
 ) -> Option<String> {
     if !matches!(
         action,
-        "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" | "canvas.rect" | "canvas.ellipse"
+        "canvas.stroke"
+            | "canvas.line"
+            | "canvas.spline"
+            | "canvas.path"
+            | "canvas.rect"
+            | "canvas.ellipse"
     ) {
         return None;
     }
@@ -1020,7 +1048,9 @@ pub fn canvas_action_near_duplicate_reason(
         .iter()
         .rev()
         .filter(|record| record.action == action && canvas_op_succeeded(&record.tool_result))
-        .filter_map(|record| parse_outcome_bbox(&record.tool_result).map(|bbox| (record.step, bbox)))
+        .filter_map(|record| {
+            parse_outcome_bbox(&record.tool_result).map(|bbox| (record.step, bbox))
+        })
         .take(8)
         .find(|(_, bbox)| bbox_near_duplicate(&candidate, bbox));
     duplicated.map(|(step, _)| format!(
@@ -1215,7 +1245,8 @@ mod tests {
     }
 
     #[test]
-    fn complete_cube_passes_global_validation() {        let doc = CanvasDoc {
+    fn complete_cube_passes_global_validation() {
+        let doc = CanvasDoc {
             ops: vec![
                 rect_op(1, 0.20, 0.30, 0.30, 0.30),
                 rect_op(2, 0.35, 0.20, 0.30, 0.30),
@@ -1272,7 +1303,11 @@ mod tests {
         let before = image::GrayImage::from_pixel(32, 32, image::Luma([8]));
         before.save(&before_path).unwrap();
         let mut after = before.clone();
-        for y in 8..24 { for x in 8..24 { after.put_pixel(x, y, image::Luma([240])); } }
+        for y in 8..24 {
+            for x in 8..24 {
+                after.put_pixel(x, y, image::Luma([240]));
+            }
+        }
         after.save(&after_path).unwrap();
         let before = canvas_visual_fingerprint(&before_path.to_string_lossy()).unwrap();
         let after = canvas_visual_fingerprint(&after_path.to_string_lossy()).unwrap();

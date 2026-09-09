@@ -12,12 +12,12 @@
 
 pub mod backend;
 pub mod config;
-pub mod load_retry;
-pub mod variants;
 pub mod host_hardware;
+pub mod load_retry;
 pub mod media;
 pub mod providers;
 pub mod subsystem;
+pub mod variants;
 
 pub use backend::RemoteOpenAiBackend;
 pub use config::ModeldConfig;

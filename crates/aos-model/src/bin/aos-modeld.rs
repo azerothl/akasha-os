@@ -6,10 +6,9 @@ use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     AdapterExecutionPhase, BackendKind, DistributedWork, InferencePlanDiagnostic,
-    LanActivationAssembly, LanChatMessage,
-    LanCluster,
-    LanDiscoveryAdvertisement, LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey,
-    LanShardManifest, LanTcpListener, LanTcpTransport, LanWeightRange, LanWorkMessage, LanWorkPlan,
+    LanActivationAssembly, LanChatMessage, LanCluster, LanDiscoveryAdvertisement,
+    LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey, LanShardManifest,
+    LanTcpListener, LanTcpTransport, LanWeightRange, LanWorkMessage, LanWorkPlan,
     LanWorkerRegistry, LayerPipelinePlan, LayerStage, NodeTrust, PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
@@ -17,13 +16,13 @@ use aos_proto::{
     LanClusterDispatchRequest, LanClusterDispatchResponse, LanClusterInferChatRequest,
     LanClusterInferChatResponse, LanClusterInferTokensRequest, LanClusterInferTokensResponse,
     LanClusterJobRequest, LanClusterKvTransferRequest, LanClusterKvTransferResponse,
-    LanClusterLayerInferRequest, LanClusterLayerInferResponse, LanClusterLayerStage,
-    LanClusterLayerPipelineRequest, LanClusterLayerPipelineResponse,
-    LanClusterLayerPipelineStatusResponse, LanClusterNode, LanClusterNodeRequest,
-    LanClusterNodesResponse, LanClusterPairRequest, LanClusterPlanRequest, LanClusterPlanResponse,
-    LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse,
-    LanClusterWeightTransferRequest, LanClusterWeightTransferResponse, LoadRequest,
-    MediaAudioGenerateRequest, MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest,
+    LanClusterLayerInferRequest, LanClusterLayerInferResponse, LanClusterLayerPipelineRequest,
+    LanClusterLayerPipelineResponse, LanClusterLayerPipelineStatusResponse, LanClusterLayerStage,
+    LanClusterNode, LanClusterNodeRequest, LanClusterNodesResponse, LanClusterPairRequest,
+    LanClusterPlanRequest, LanClusterPlanResponse, LanClusterStageLocalModelRequest,
+    LanClusterStageLocalModelResponse, LanClusterWeightTransferRequest,
+    LanClusterWeightTransferResponse, LoadRequest, MediaAudioGenerateRequest,
+    MediaImageGenerateRequest, MediaImageUpscaleRequest, MigrateRequest,
     ModelAdapterExecuteRequest, ModelAdapterExecuteResponse, ModelAdapterStatusRequest,
     ModelAdapterStatusResponse, ModelIdRequest, ModelPlanDiagnostic, ModelPlanRequest, TokenEvent,
     UnloadRequest,
@@ -777,7 +776,6 @@ fn materialize_staged_lan_model(
     Ok(Some(output))
 }
 
-
 #[allow(clippy::too_many_arguments)]
 async fn send_lan_kv_transfer(
     local_node_id: &str,
@@ -1088,7 +1086,9 @@ async fn resolve_stage_weight_ranges(
     }
     let (total, ranges) = match (first_layer, last_layer) {
         (Some(first), Some(last)) => {
-            subsystem.worker_layer_weight_ranges(model_id, first, last).await?
+            subsystem
+                .worker_layer_weight_ranges(model_id, first, last)
+                .await?
         }
         (None, None) => return Ok(Vec::new()),
         _ => return Err("bornes de couches GGUF incomplètes".into()),
@@ -1099,9 +1099,7 @@ async fn resolve_stage_weight_ranges(
     let mut bounded = Vec::new();
     for (offset, length) in ranges {
         let mut cursor = offset;
-        let end = offset
-            .checked_add(length)
-            .ok_or("plage GGUF débordante")?;
+        let end = offset.checked_add(length).ok_or("plage GGUF débordante")?;
         while cursor < end {
             let chunk = (end - cursor).min(LAN_KV_MAX_BYTES as u64);
             bounded.push(LanWeightRange {
@@ -1439,24 +1437,28 @@ async fn handle_lan_worker_connection(
                 allow_sensitive_data,
             }
             .validate_for(&work, &local_node_id)?;
-            let staged_model = match materialize_staged_lan_model(&staging_root, &work_id, &model_id) {
-                Ok(staged_model) => staged_model,
-                Err(error) => {
-                    let _ = transport
-                        .send_message(
-                            &LanWorkMessage::Nack {
-                                work_id: work_id.clone(),
-                                operation: "assign".into(),
-                                reason: format!("reconstruction GGUF staging impossible: {error}"),
-                            },
-                            &work,
-                        )
-                        .await;
-                    return Err(error);
-                }
-            };
+            let staged_model =
+                match materialize_staged_lan_model(&staging_root, &work_id, &model_id) {
+                    Ok(staged_model) => staged_model,
+                    Err(error) => {
+                        let _ = transport
+                            .send_message(
+                                &LanWorkMessage::Nack {
+                                    work_id: work_id.clone(),
+                                    operation: "assign".into(),
+                                    reason: format!(
+                                        "reconstruction GGUF staging impossible: {error}"
+                                    ),
+                                },
+                                &work,
+                            )
+                            .await;
+                        return Err(error);
+                    }
+                };
             if let Some(path) = &staged_model {
-                if let Err(error) = subsystem.worker_register_staged_model(&model_id, path.clone()) {
+                if let Err(error) = subsystem.worker_register_staged_model(&model_id, path.clone())
+                {
                     let _ = transport
                         .send_message(
                             &LanWorkMessage::Nack {
@@ -1632,7 +1634,11 @@ async fn handle_lan_worker_connection(
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
                         if let Err(error) = subsystem
-                            .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                            .ensure_loaded(
+                                &model_id,
+                                PlacementProfile::Balanced,
+                                assigned_kv_tokens,
+                            )
                             .await
                         {
                             transport
@@ -1800,7 +1806,11 @@ async fn handle_lan_worker_connection(
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
                         if let Err(error) = subsystem
-                            .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                            .ensure_loaded(
+                                &model_id,
+                                PlacementProfile::Balanced,
+                                assigned_kv_tokens,
+                            )
                             .await
                         {
                             transport
@@ -1895,7 +1905,11 @@ async fn handle_lan_worker_connection(
                             .map_err(|_| "état worker LAN verrouillé".to_string())?
                             .reset_abort(&work_id)?;
                         if let Err(error) = subsystem
-                            .ensure_loaded(&model_id, PlacementProfile::Balanced, assigned_kv_tokens)
+                            .ensure_loaded(
+                                &model_id,
+                                PlacementProfile::Balanced,
+                                assigned_kv_tokens,
+                            )
                             .await
                         {
                             transport
@@ -2792,9 +2806,11 @@ async fn main() {
                 )
                 .await
                 {
-                    Ok(mut client) => client
-                        .execute_phase(phase, &req.operation, quantization, req.tensor)
-                        .await,
+                    Ok(mut client) => {
+                        client
+                            .execute_phase(phase, &req.operation, quantization, req.tensor)
+                            .await
+                    }
                     Err(error) => Err(error),
                 };
                 match result {
@@ -3991,7 +4007,11 @@ async fn main() {
                         allow_sensitive_data: req.allow_sensitive_data,
                         encrypted_transport: req.encrypted_transport,
                     };
-                    let generation_steps = if req.max_tokens == 0 { 1 } else { req.max_tokens };
+                    let generation_steps = if req.max_tokens == 0 {
+                        1
+                    } else {
+                        req.max_tokens
+                    };
                     let prompt_tokens = req.input_tokens.len() as u32;
                     let generation_started = std::time::Instant::now();
                     let mut sampling_state = u64::from(req.params.seed.unwrap_or(42));
@@ -4069,16 +4089,14 @@ async fn main() {
                                 {
                                     break;
                                 }
-                                current_activation = match sub
-                                    .worker_embed_tokens(&model_id, vec![token])
-                                    .await
-                                {
-                                    Ok(activation) => activation,
-                                    Err(error) => {
-                                        pipeline_error = Some(error);
-                                        break;
-                                    }
-                                };
+                                current_activation =
+                                    match sub.worker_embed_tokens(&model_id, vec![token]).await {
+                                        Ok(activation) => activation,
+                                        Err(error) => {
+                                            pipeline_error = Some(error);
+                                            break;
+                                        }
+                                    };
                             }
                         }
                     }
@@ -5341,8 +5359,8 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        greedy_token, lan_artifact_component, last_token_activation, parse_lan_session_key,
-        materialize_staged_lan_model, sample_token, stage_lan_weight_shard,
+        greedy_token, lan_artifact_component, last_token_activation, materialize_staged_lan_model,
+        parse_lan_session_key, sample_token, stage_lan_weight_shard,
     };
 
     #[test]
@@ -5354,16 +5372,16 @@ mod tests {
 
     #[test]
     fn generation_reutilise_le_dernier_token_et_choisit_le_maximum() {
-        let tensor = aos_placement::F32Tensor::new(
-            vec![2, 2],
-            vec![1.0, 2.0, 3.0, 4.0],
-        )
-        .unwrap();
-        let last = aos_placement::F32Tensor::decode(&last_token_activation(&tensor.encode()).unwrap())
-            .unwrap();
+        let tensor = aos_placement::F32Tensor::new(vec![2, 2], vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let last =
+            aos_placement::F32Tensor::decode(&last_token_activation(&tensor.encode()).unwrap())
+                .unwrap();
         assert_eq!(last.shape, vec![2, 1]);
         assert_eq!(last.values, vec![2.0, 4.0]);
-        assert_eq!(greedy_token(&[f32::NEG_INFINITY, 1.0, 3.0, 2.0]).unwrap(), 2);
+        assert_eq!(
+            greedy_token(&[f32::NEG_INFINITY, 1.0, 3.0, 2.0]).unwrap(),
+            2
+        );
         assert!(greedy_token(&[f32::NAN, f32::INFINITY]).is_err());
         let mut seed_a = 7;
         let mut seed_b = 7;
@@ -5375,14 +5393,23 @@ mod tests {
 
     #[test]
     fn staging_poids_lan_est_atomique_et_sanitise() {
-        let root = std::env::temp_dir()
-            .join(format!("akasha-weight-stage-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("akasha-weight-stage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(
             lan_artifact_component("work/with spaces"),
             "work_with_spaces"
         );
-        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, Vec::new(), b"abc").unwrap();
+        stage_lan_weight_shard(
+            &root,
+            "work/with spaces",
+            "model:test",
+            7,
+            4,
+            10,
+            Vec::new(),
+            b"abc",
+        )
+        .unwrap();
         let directory = root.join("lan-shards").join("work_with_spaces");
         assert_eq!(
             std::fs::read(directory.join("shard-00007-offset-4.bin")).unwrap(),
@@ -5396,23 +5423,58 @@ mod tests {
         assert_eq!(manifest["length"], 3);
         assert!(!directory.join("shard-00007-offset-4.part").exists());
         // Retrying identical bytes succeeds; different bytes preserve the shard.
-        stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, Vec::new(), b"abc").unwrap();
-        assert!(
-            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 7, 4, 10, Vec::new(), b"xyz")
-                .is_err()
-        );
+        stage_lan_weight_shard(
+            &root,
+            "work/with spaces",
+            "model:test",
+            7,
+            4,
+            10,
+            Vec::new(),
+            b"abc",
+        )
+        .unwrap();
+        assert!(stage_lan_weight_shard(
+            &root,
+            "work/with spaces",
+            "model:test",
+            7,
+            4,
+            10,
+            Vec::new(),
+            b"xyz"
+        )
+        .is_err());
         assert_eq!(
             std::fs::read(directory.join("shard-00007-offset-4.bin")).unwrap(),
             b"abc"
         );
         std::thread::scope(|scope| {
             scope.spawn(|| {
-            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 0, 0, 10, Vec::new(), b"0123")
-                    .unwrap()
+                stage_lan_weight_shard(
+                    &root,
+                    "work/with spaces",
+                    "model:test",
+                    0,
+                    0,
+                    10,
+                    Vec::new(),
+                    b"0123",
+                )
+                .unwrap()
             });
             scope.spawn(|| {
-            stage_lan_weight_shard(&root, "work/with spaces", "model:test", 8, 7, 10, Vec::new(), b"789")
-                    .unwrap()
+                stage_lan_weight_shard(
+                    &root,
+                    "work/with spaces",
+                    "model:test",
+                    8,
+                    7,
+                    10,
+                    Vec::new(),
+                    b"789",
+                )
+                .unwrap()
             });
         });
         let coverage: aos_placement::LanShardManifest =
@@ -5429,12 +5491,19 @@ mod tests {
 
     #[test]
     fn staging_sparse_materialise_apres_couverture_requise() {
-        let root = std::env::temp_dir()
-            .join(format!("akasha-sparse-stage-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("akasha-sparse-stage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let required = vec![
-            aos_placement::LanWeightRange { shard_id: 3, offset: 0, length: 3 },
-            aos_placement::LanWeightRange { shard_id: 3, offset: 7, length: 3 },
+            aos_placement::LanWeightRange {
+                shard_id: 3,
+                offset: 0,
+                length: 3,
+            },
+            aos_placement::LanWeightRange {
+                shard_id: 3,
+                offset: 7,
+                length: 3,
+            },
         ];
         stage_lan_weight_shard(
             &root,
@@ -5447,9 +5516,11 @@ mod tests {
             b"abc",
         )
         .unwrap();
-        assert!(materialize_staged_lan_model(&root, "sparse-work", "model:sparse")
-            .unwrap()
-            .is_none());
+        assert!(
+            materialize_staged_lan_model(&root, "sparse-work", "model:sparse")
+                .unwrap()
+                .is_none()
+        );
         stage_lan_weight_shard(
             &root,
             "sparse-work",

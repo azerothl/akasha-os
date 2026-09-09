@@ -763,8 +763,7 @@ impl UiApp {
                 })
                 .clicked()
         {
-            self.prefs.ui_layout.activity_panel_open =
-                !self.prefs.ui_layout.activity_panel_open;
+            self.prefs.ui_layout.activity_panel_open = !self.prefs.ui_layout.activity_panel_open;
             crate::prefs::save_preferences(&self.prefs);
         }
         if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas).clicked() {

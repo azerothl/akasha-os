@@ -2,8 +2,8 @@
 //!
 //! Search : Brave API (clé) / SearXNG JSON / DuckDuckGo HTML / Bing HTML, chaîne `auto`.
 
-use aos_proto::{WebBrowseResponse, WebSearchHit, WebSearchResponse};
 use crate::net::EgressControl;
+use aos_proto::{WebBrowseResponse, WebSearchHit, WebSearchResponse};
 use base64::Engine as _;
 use std::collections::HashSet;
 use std::io::Read;
@@ -82,9 +82,7 @@ pub fn web_search(
     match engine {
         "brave" => {
             let key = brave_key.filter(|k| !k.is_empty()).ok_or_else(|| {
-                NetSvcError::Unsupported(
-                    "clé Brave absente (secret brave_search_api_key)".into(),
-                )
+                NetSvcError::Unsupported("clé Brave absente (secret brave_search_api_key)".into())
             })?;
             brave_search(net, actor, caps, query, max_results, key)
         }
@@ -136,10 +134,8 @@ pub fn web_search(
 
 fn searxng_url_from_prefs() -> Option<String> {
     let home = std::env::var("AOS_HOME").unwrap_or_else(|_| ".".into());
-    let raw = std::fs::read_to_string(
-        std::path::Path::new(&home).join("var/run/preferences.json"),
-    )
-    .ok()?;
+    let raw = std::fs::read_to_string(std::path::Path::new(&home).join("var/run/preferences.json"))
+        .ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let s = v.get("searxng_url")?.as_str()?.trim();
     if s.starts_with("http://") || s.starts_with("https://") {
@@ -256,10 +252,7 @@ fn ddg_search(
     max_results: usize,
 ) -> Result<WebSearchResponse, NetSvcError> {
     ensure_egress(net, actor, "html.duckduckgo.com", 443, caps)?;
-    let url = format!(
-        "https://html.duckduckgo.com/html/?q={}",
-        urlencoding(query)
-    );
+    let url = format!("https://html.duckduckgo.com/html/?q={}", urlencoding(query));
     let html = http_get_text(net, actor, caps, &url, None)?;
     if ddg_html_blocked(&html) {
         return Err(NetSvcError::Http("duckduckgo: challenge anti-bot".into()));
@@ -289,7 +282,9 @@ fn bing_search(
     let html = http_get_text(net, actor, caps, &url, None)?;
     let results = parse_bing_html(&html, max_results);
     if results.is_empty() {
-        return Err(NetSvcError::Http("bing: 0 résultat (HTML inattendu)".into()));
+        return Err(NetSvcError::Http(
+            "bing: 0 résultat (HTML inattendu)".into(),
+        ));
     }
     Ok(WebSearchResponse { results })
 }
@@ -319,8 +314,7 @@ fn http_get_text(
     if !resp.status().is_success() {
         return Err(NetSvcError::Http(format!("status {}", resp.status())));
     }
-    resp.text()
-        .map_err(|e| NetSvcError::Http(e.to_string()))
+    resp.text().map_err(|e| NetSvcError::Http(e.to_string()))
 }
 
 fn parse_ddg_html(html: &str, max_results: usize) -> Vec<WebSearchHit> {
@@ -471,10 +465,7 @@ pub fn web_browse(
     let max_bytes = 2_000_000u64;
     let (bytes, ctype) = http_fetch_bytes(net, actor, caps, url, max_bytes)?;
     let raw = String::from_utf8_lossy(&bytes);
-    if !ctype.contains("html")
-        && !ctype.contains("text/")
-        && !raw.trim_start().starts_with('<')
-    {
+    if !ctype.contains("html") && !ctype.contains("text/") && !raw.trim_start().starts_with('<') {
         // Texte brut non-HTML
         let text: String = raw.chars().take(max_chars.max(1)).collect();
         return Ok(WebBrowseResponse {
@@ -550,7 +541,10 @@ fn strip_tag_blocks(html: &str, tag: &str) -> String {
     for (o, c) in [(&open[..], &close[..]), (&open_l[..], &close_l[..])] {
         while let Some(start) = s.to_ascii_lowercase().find(&o.to_ascii_lowercase()) {
             let after = start + o.len();
-            if let Some(rel) = s[after..].to_ascii_lowercase().find(&c.to_ascii_lowercase()) {
+            if let Some(rel) = s[after..]
+                .to_ascii_lowercase()
+                .find(&c.to_ascii_lowercase())
+            {
                 let end = after + rel + c.len();
                 s = format!("{}{}", &s[..start], &s[end..]);
             } else {
@@ -704,7 +698,10 @@ mod tests {
     #[test]
     fn bing_ck_decodes_a1_base64() {
         let href = "https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1aHR0cHM6Ly9lbi53aWtpcGVkaWEub3JnL3dpa2kvRGV2aW5fQUk&amp;ntb=1";
-        assert_eq!(decode_bing_href(href), "https://en.wikipedia.org/wiki/Devin_AI");
+        assert_eq!(
+            decode_bing_href(href),
+            "https://en.wikipedia.org/wiki/Devin_AI"
+        );
     }
 
     #[test]

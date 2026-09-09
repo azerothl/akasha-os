@@ -694,14 +694,19 @@ impl ChatSessionStore {
             })
             .map(|(i, _)| i)
             .or_else(|| {
-                messages.iter().enumerate().rev().find(|(_, msg)| {
-                    msg.attachments.iter().any(|a| {
-                        matches!(
-                            a,
-                            ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
-                        )
+                messages
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, msg)| {
+                        msg.attachments.iter().any(|a| {
+                            matches!(
+                                a,
+                                ChatAttachment::DeepPlan { agent_id: aid, .. } if aid == agent_id
+                            )
+                        })
                     })
-                }).map(|(i, _)| i)
+                    .map(|(i, _)| i)
             });
 
         let mut keep = Vec::with_capacity(messages.len());
@@ -939,9 +944,7 @@ impl ChatSessionStore {
                         origin,
                     } => {
                         if origin == "completion" && !m.content.trim().is_empty() {
-                            out.push_str(&format!(
-                                "_agent completion: {agent_id} — {title}_\n\n"
-                            ));
+                            out.push_str(&format!("_agent completion: {agent_id} — {title}_\n\n"));
                         } else {
                             out.push_str(&format!("_agent: {agent_id} ({origin}) — {title}_\n\n"));
                         }

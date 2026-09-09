@@ -147,23 +147,157 @@ fn should_skip_user_message(text: &str) -> bool {
 }
 
 const STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "to", "for", "of", "in", "on", "at", "is", "are", "was",
-    "were", "be", "been", "it", "this", "that", "with", "from", "as", "by", "i", "me", "my",
-    "you", "your", "we", "our", "they", "their", "he", "she", "his", "her", "do", "does", "did",
-    "can", "could", "would", "should", "will", "just", "please", "thanks", "thank", "hi",
-    "hello", "hey", "ok", "okay", "yes", "no", "le", "la", "les", "un", "une", "des", "de",
-    "du", "et", "ou", "pour", "dans", "sur", "avec", "est", "sont", "je", "tu", "il", "elle",
-    "nous", "vous", "ils", "elles", "mon", "ma", "mes", "ton", "ta", "tes", "ce", "cette",
-    "ces", "qui", "que", "quoi", "comment", "peux", "peut", "faire", "fait", "merci", "bonjour",
-    "salut", "svp", "stp", "create", "creates", "creating", "make", "build", "generate",
-    "write", "draft", "crée", "créer", "cree", "creer", "fais", "génère", "générer",
-    "genere", "generer", "rédige", "rédiger", "redige", "rediger", "dessine", "dessiner",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "to",
+    "for",
+    "of",
+    "in",
+    "on",
+    "at",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "it",
+    "this",
+    "that",
+    "with",
+    "from",
+    "as",
+    "by",
+    "i",
+    "me",
+    "my",
+    "you",
+    "your",
+    "we",
+    "our",
+    "they",
+    "their",
+    "he",
+    "she",
+    "his",
+    "her",
+    "do",
+    "does",
+    "did",
+    "can",
+    "could",
+    "would",
+    "should",
+    "will",
+    "just",
+    "please",
+    "thanks",
+    "thank",
+    "hi",
+    "hello",
+    "hey",
+    "ok",
+    "okay",
+    "yes",
+    "no",
+    "le",
+    "la",
+    "les",
+    "un",
+    "une",
+    "des",
+    "de",
+    "du",
+    "et",
+    "ou",
+    "pour",
+    "dans",
+    "sur",
+    "avec",
+    "est",
+    "sont",
+    "je",
+    "tu",
+    "il",
+    "elle",
+    "nous",
+    "vous",
+    "ils",
+    "elles",
+    "mon",
+    "ma",
+    "mes",
+    "ton",
+    "ta",
+    "tes",
+    "ce",
+    "cette",
+    "ces",
+    "qui",
+    "que",
+    "quoi",
+    "comment",
+    "peux",
+    "peut",
+    "faire",
+    "fait",
+    "merci",
+    "bonjour",
+    "salut",
+    "svp",
+    "stp",
+    "create",
+    "creates",
+    "creating",
+    "make",
+    "build",
+    "generate",
+    "write",
+    "draft",
+    "crée",
+    "créer",
+    "cree",
+    "creer",
+    "fais",
+    "génère",
+    "générer",
+    "genere",
+    "generer",
+    "rédige",
+    "rédiger",
+    "redige",
+    "rediger",
+    "dessine",
+    "dessiner",
 ];
 
 const GENERIC_ACTION_LABELS: &[&str] = &[
-    "create", "creates", "creating", "make", "build", "generate", "write", "draft", "crée",
-    "créer", "cree", "creer", "fais", "génère", "générer", "genere", "generer", "rédige",
-    "rédiger", "redige", "rediger", "dessine", "dessiner",
+    "create",
+    "creates",
+    "creating",
+    "make",
+    "build",
+    "generate",
+    "write",
+    "draft",
+    "crée",
+    "créer",
+    "cree",
+    "creer",
+    "fais",
+    "génère",
+    "générer",
+    "genere",
+    "generer",
+    "rédige",
+    "rédiger",
+    "redige",
+    "rediger",
+    "dessine",
+    "dessiner",
 ];
 
 fn tokenize(text: &str) -> HashSet<String> {
@@ -270,8 +404,23 @@ fn cluster_messages(messages: &[String], min_hits: usize) -> Vec<MessageCluster>
 
 fn looks_french(texts: &[String]) -> bool {
     let fr_markers = [
-        " météo", " calcul", " bonjour", " merci", " pourquoi", " comment", " quelle", " quels",
-        " une ", " des ", " dans ", " avec ", " peux", " puis", " créer", " génère", " météo",
+        " météo",
+        " calcul",
+        " bonjour",
+        " merci",
+        " pourquoi",
+        " comment",
+        " quelle",
+        " quels",
+        " une ",
+        " des ",
+        " dans ",
+        " avec ",
+        " peux",
+        " puis",
+        " créer",
+        " génère",
+        " météo",
     ];
     let mut fr = 0usize;
     for t in texts {
@@ -308,13 +457,24 @@ fn infer_labels(messages: &[String]) -> (String, String) {
     }
     if joined.contains("module") {
         let development = [
-            "create", "build", "develop", "code", "crée", "créer", "cree", "creer",
-            "développ", "developp",
+            "create",
+            "build",
+            "develop",
+            "code",
+            "crée",
+            "créer",
+            "cree",
+            "creer",
+            "développ",
+            "developp",
         ]
         .iter()
         .any(|marker| joined.contains(marker));
         return if development {
-            ("module development".into(), "développement de modules".into())
+            (
+                "module development".into(),
+                "développement de modules".into(),
+            )
         } else {
             ("modules".into(), "modules".into())
         };
@@ -385,8 +545,16 @@ fn infer_tools(messages: &[String]) -> Vec<String> {
         tools.push("module.list".into());
         tools.push("module.describe".into());
         if [
-            "create", "build", "develop", "code", "crée", "créer", "cree", "creer",
-            "développ", "developp",
+            "create",
+            "build",
+            "develop",
+            "code",
+            "crée",
+            "créer",
+            "cree",
+            "creer",
+            "développ",
+            "developp",
         ]
         .iter()
         .any(|marker| joined.contains(marker))
@@ -447,10 +615,7 @@ Handle recurring {label_en} requests consistently.\n\n\
 }
 
 fn stable_pattern_id(messages: &[String]) -> String {
-    let mut sorted: Vec<_> = messages
-        .iter()
-        .map(|m| normalize_signature(m))
-        .collect();
+    let mut sorted: Vec<_> = messages.iter().map(|m| normalize_signature(m)).collect();
     sorted.sort();
     sorted.dedup();
     let joined = sorted.join("|");
@@ -574,7 +739,10 @@ pub fn mark_created(state: &mut SkillPassState, pattern_id: &str) {
     }
 }
 
-pub fn candidate_to_create_request(candidate: &SkillPassCandidate, actor: &str) -> SkillCreateRequest {
+pub fn candidate_to_create_request(
+    candidate: &SkillPassCandidate,
+    actor: &str,
+) -> SkillCreateRequest {
     SkillCreateRequest {
         name: candidate.skill_name.clone(),
         description: candidate.description.clone(),
@@ -671,18 +839,13 @@ mod tests {
         };
         assert!(pending_surface_offer(&state, now, 0).is_none());
 
-        let dir = std::env::temp_dir().join(format!(
-            "aos-skill-pass-generic-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("aos-skill-pass-generic-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = SkillStore::open(&dir).unwrap();
-        let error = create_skill_from_candidate(
-            &store,
-            state.pending.as_ref().unwrap(),
-            "human:ui",
-        )
-        .unwrap_err();
+        let error =
+            create_skill_from_candidate(&store, state.pending.as_ref().unwrap(), "human:ui")
+                .unwrap_err();
         assert!(matches!(error, SkillError::CandidateTooGeneric(_)));
         assert!(store.list().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
@@ -730,12 +893,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let store = SkillStore::open(&dir).unwrap();
         let candidates = find_pattern_candidates(&msgs_weather_fr(), MIN_PATTERN_HITS);
-        let best = pick_best_candidate(
-            &candidates,
-            &existing_skill_names(&store),
-            &HashSet::new(),
-        )
-        .unwrap();
+        let best = pick_best_candidate(&candidates, &existing_skill_names(&store), &HashSet::new())
+            .unwrap();
         let first = create_skill_from_candidate(&store, &best, "human:ui").unwrap();
         assert_eq!(first.name, best.skill_name);
         let again = create_skill_from_candidate(&store, &best, "human:ui").unwrap();
@@ -750,12 +909,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let store = SkillStore::open(&dir).unwrap();
         let candidates = find_pattern_candidates(&msgs_weather_fr(), MIN_PATTERN_HITS);
-        let best = pick_best_candidate(
-            &candidates,
-            &existing_skill_names(&store),
-            &HashSet::new(),
-        )
-        .unwrap();
+        let best = pick_best_candidate(&candidates, &existing_skill_names(&store), &HashSet::new())
+            .unwrap();
         assert_eq!(store.list().len(), 0);
         let req = candidate_to_create_request(&best, "human:ui");
         let info = store.create(&req).unwrap();

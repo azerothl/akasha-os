@@ -77,9 +77,8 @@ pub struct GgufModel {
 impl GgufModel {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
         let file = File::open(path).map_err(|e| format!("lecture GGUF impossible: {e}"))?;
-        let backing = unsafe {
-            Mmap::map(&file).map_err(|e| format!("mapping GGUF impossible: {e}"))?
-        };
+        let backing =
+            unsafe { Mmap::map(&file).map_err(|e| format!("mapping GGUF impossible: {e}"))? };
         Self::from_backing(GgufBacking::Mapped(backing))
     }
 
@@ -90,10 +89,7 @@ impl GgufModel {
     fn from_backing(backing: GgufBacking) -> Result<Self, String> {
         let backing = Arc::new(backing);
         let bytes = backing.as_slice();
-        let mut reader = Reader {
-            bytes,
-            pos: 0,
-        };
+        let mut reader = Reader { bytes, pos: 0 };
         if reader.read_bytes(4)? != MAGIC {
             return Err("magic GGUF invalide".into());
         }
@@ -250,7 +246,11 @@ impl GgufModel {
         let mut ranges = vec![(0, self.data_start)];
         for layer in first_layer..=last_layer {
             let prefix = format!("blk.{layer}.");
-            for tensor in self.tensors.iter().filter(|tensor| tensor.name.starts_with(&prefix)) {
+            for tensor in self
+                .tensors
+                .iter()
+                .filter(|tensor| tensor.name.starts_with(&prefix))
+            {
                 ranges.push(self.tensor_data_range(&tensor.name)?);
             }
         }
@@ -322,7 +322,11 @@ impl GgufModel {
     /// l'ordre de calcul [sortie, entrée]. Cette variante évite de décoder
     /// toute la matrice de sortie (souvent plusieurs centaines de MiB) pour
     /// calculer les logits d'un seul token.
-    pub fn tensor_f32_weight_row(&self, name: &str, output_index: usize) -> Result<Vec<f32>, String> {
+    pub fn tensor_f32_weight_row(
+        &self,
+        name: &str,
+        output_index: usize,
+    ) -> Result<Vec<f32>, String> {
         let info = self
             .tensors
             .iter()
@@ -929,8 +933,14 @@ mod tests {
         let model = GgufModel::from_bytes(bytes).unwrap();
         assert_eq!(model.tensor_f32("x").unwrap(), vec![1.5, 2.5]);
         assert!(model.data_start() >= 32);
-        assert_eq!(model.tensor_data_range("x").unwrap(), (model.data_start(), 8));
-        assert_eq!(model.layer_data_ranges(0, 0).unwrap(), vec![(0, model.data_start())]);
+        assert_eq!(
+            model.tensor_data_range("x").unwrap(),
+            (model.data_start(), 8)
+        );
+        assert_eq!(
+            model.layer_data_ranges(0, 0).unwrap(),
+            vec![(0, model.data_start())]
+        );
     }
 
     #[test]

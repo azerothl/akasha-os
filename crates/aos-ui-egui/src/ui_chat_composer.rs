@@ -239,12 +239,10 @@ impl UiApp {
                     if focused && popup_open && enter && !shift_enter {
                         let sel = self.chat_state.composer.popup_sel;
                         if !mention_hits.is_empty() {
-                            keyboard_picked =
-                                mention_hits.get(sel).map(|(text, _)| text.clone());
+                            keyboard_picked = mention_hits.get(sel).map(|(text, _)| text.clone());
                         } else if !completions.is_empty() {
-                            keyboard_picked = completions
-                                .get(sel)
-                                .map(|(cmd, _)| slash_insert_text(cmd));
+                            keyboard_picked =
+                                completions.get(sel).map(|(cmd, _)| slash_insert_text(cmd));
                         }
                     }
                     let send = send_clicked
@@ -370,10 +368,8 @@ impl UiApp {
                                 .show(ui, |ui| {
                                     for (idx, (cmd, desc)) in completions.iter().enumerate() {
                                         let selected = idx == sel;
-                                        let resp = ui.selectable_label(
-                                            selected,
-                                            format!("{cmd} — {desc}"),
-                                        );
+                                        let resp = ui
+                                            .selectable_label(selected, format!("{cmd} — {desc}"));
                                         if selected && sel_changed {
                                             resp.scroll_to_me(None);
                                         }

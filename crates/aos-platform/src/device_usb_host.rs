@@ -36,7 +36,10 @@ fn map_host_error(error: impl std::fmt::Display) -> UsbIoError {
         UsbIoError::DeviceBusy
     } else if msg.contains("timed out") || msg.contains("timeout") {
         UsbIoError::IoTimeout
-    } else if msg.contains("not found") || msg.contains("no such device") || msg.contains("no such file") {
+    } else if msg.contains("not found")
+        || msg.contains("no such device")
+        || msg.contains("no such file")
+    {
         UsbIoError::DeviceAbsent("périphérique".into())
     } else {
         UsbIoError::Backend(error.to_string())
@@ -56,9 +59,7 @@ impl UsbDeviceHandle for SerialHandle {
                 buf.truncate(n);
                 Ok(buf)
             }
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                Ok(Vec::new())
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(Vec::new()),
             Err(e) => Err(map_host_error(e)),
         }
     }

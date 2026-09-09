@@ -1,8 +1,8 @@
 //! `audit.query` / `audit.verify` (local journal).
 
+use crate::subsystem::PlatformSubsystem;
 use aos_ipc::BusService;
 use aos_proto::*;
-use crate::subsystem::PlatformSubsystem;
 use std::sync::Arc;
 
 pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {

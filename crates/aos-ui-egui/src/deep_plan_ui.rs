@@ -249,7 +249,11 @@ pub(crate) fn deep_plan_toggle(
     open: &mut std::collections::HashSet<usize>,
 ) {
     let expanded = open.contains(&line_index);
-    let header = format!("📋 Plan Deep Thinking (v{version}) — {title}", version = plan.version, title = plan.title);
+    let header = format!(
+        "📋 Plan Deep Thinking (v{version}) — {title}",
+        version = plan.version,
+        title = plan.title
+    );
     let response = ui.add(
         egui::Label::new(
             egui::RichText::new(header)
@@ -268,7 +272,14 @@ pub(crate) fn deep_plan_toggle(
     if expanded || !plan.expand_step_ids.is_empty() {
         ui.add_space(2.0);
         for step in plan.steps {
-            draw_step(ui, step, 0, plan.expand_step_ids, plan.show_logs_step_id, expanded);
+            draw_step(
+                ui,
+                step,
+                0,
+                plan.expand_step_ids,
+                plan.show_logs_step_id,
+                expanded,
+            );
         }
     }
 }

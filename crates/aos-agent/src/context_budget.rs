@@ -92,8 +92,7 @@ pub fn is_overflow_fail_reason(reason: &str) -> bool {
 pub fn is_technical_max_steps_fail_reason(reason: &str) -> bool {
     let lower = reason.to_ascii_lowercase();
     lower.contains("max_steps")
-        || (lower.contains("max steps")
-            && (lower.contains("atteint") || lower.contains("reached")))
+        || (lower.contains("max steps") && (lower.contains("atteint") || lower.contains("reached")))
 }
 
 /// Compacte silencieusement après PromptTooLong (journal interne via `log_line`).
@@ -187,10 +186,7 @@ pub fn looks_like_truncated_action_json(text: &str) -> bool {
     }
     let open = t.chars().filter(|c| *c == '{').count();
     let close = t.chars().filter(|c| *c == '}').count();
-    open > close
-        || t.contains("\"action\"")
-        || t.contains("\"thought\"")
-        || t.contains("\"args\"")
+    open > close || t.contains("\"action\"") || t.contains("\"thought\"") || t.contains("\"args\"")
 }
 
 /// Texte à stocker en working_memory (évite d'empiler des JSON géants tronqués / DSML).
@@ -452,10 +448,7 @@ mod tests {
                 "user".into(),
                 format!("user long {}{}", "y".repeat(2000), i),
             ));
-            mem.push((
-                "tool".into(),
-                format!("[web.search] {}", "z".repeat(3000)),
-            ));
+            mem.push(("tool".into(), format!("[web.search] {}", "z".repeat(3000))));
             mem.push(("assistant".into(), format!("a{i}")));
         }
         let budget = prompt_budget(DEFAULT_N_CTX_HINT, AGENT_GEN_TOKENS);
@@ -503,9 +496,18 @@ mod tests {
     #[test]
     fn loop_guard_trips_on_noop_streak() {
         let mut g = LoopGuard::default();
-        assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Ok));
-        assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Warn(_)));
-        assert!(matches!(g.observe("noop", "aucune action JSON"), LoopVerdict::Abort(_)));
+        assert!(matches!(
+            g.observe("noop", "aucune action JSON"),
+            LoopVerdict::Ok
+        ));
+        assert!(matches!(
+            g.observe("noop", "aucune action JSON"),
+            LoopVerdict::Warn(_)
+        ));
+        assert!(matches!(
+            g.observe("noop", "aucune action JSON"),
+            LoopVerdict::Abort(_)
+        ));
     }
 
     #[test]
@@ -542,8 +544,14 @@ mod tests {
         let err = "ERREUR outil: args invalides: missing field `title`";
         assert!(looks_like_tool_failure(err));
         assert!(matches!(g.observe("notes.create", err), LoopVerdict::Ok));
-        assert!(matches!(g.observe("notes.create", err), LoopVerdict::Warn(_)));
-        assert!(matches!(g.observe("notes.create", err), LoopVerdict::Abort(_)));
+        assert!(matches!(
+            g.observe("notes.create", err),
+            LoopVerdict::Warn(_)
+        ));
+        assert!(matches!(
+            g.observe("notes.create", err),
+            LoopVerdict::Abort(_)
+        ));
     }
 
     #[test]
@@ -612,7 +620,9 @@ mod tests {
         let raw = "max_steps (64) atteint";
         assert!(is_technical_max_steps_fail_reason(raw));
         assert!(is_technical_max_steps_fail_reason("max steps (32) reached"));
-        assert!(!is_technical_max_steps_fail_reason("Impossible de continuer."));
+        assert!(!is_technical_max_steps_fail_reason(
+            "Impossible de continuer."
+        ));
         assert!(!is_technical_max_steps_fail_reason("timeout goal atteint"));
     }
 

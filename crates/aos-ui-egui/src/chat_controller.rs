@@ -1,7 +1,7 @@
 //! Chat submission controller and composer-to-runtime transitions.
 
-use crate::cmd::{ChatLine, ChatRetryTurn, Cmd};
 use crate::chat_error_copy;
+use crate::cmd::{ChatLine, ChatRetryTurn, Cmd};
 use crate::research_ui_state::ResearchPendingChat;
 use crate::{
     chat_agent_max_steps, chat_ask, chat_canvas, chat_room, chrono_like_stamp, i18n,
@@ -71,7 +71,8 @@ impl UiApp {
             if chat_room::session_is_room(chat_room::active_session_meta(
                 &self.chat_state.sessions,
                 self.chat_state.active_session.as_deref(),
-            )) && self.chat_state.session_chat.is_pending(&session_id) {
+            )) && self.chat_state.session_chat.is_pending(&session_id)
+            {
                 if let Some((agent_id, title)) = chat_ask::open_ask_target(&self.chat) {
                     self.send_room_ask_reply(session_id, agent_id, title, text);
                     return;
@@ -208,8 +209,7 @@ impl UiApp {
             .unwrap_or_default();
         if pending_images.is_empty() && pending_documents.is_empty() {
             let wants_document = aos_agent::research_detect::user_requested_document(&text);
-            let research_shaped =
-                aos_agent::research_detect::is_research_shaped_ask(&text);
+            let research_shaped = aos_agent::research_detect::is_research_shaped_ask(&text);
             if wants_document || research_shaped {
                 let history: Vec<(String, String)> = self
                     .chat

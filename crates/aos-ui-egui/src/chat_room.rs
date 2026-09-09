@@ -1,8 +1,8 @@
 //! In-app chat room helpers (slice 3): personas, roster labels, speaker colors, @ mentions.
 
 use crate::i18n::{self, UiStrings};
-use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
 use aos_agent::room_conductor::resolve_mention_token;
+use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
 use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
 use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 use aos_proto::{
@@ -661,10 +661,7 @@ fn is_prose_list_boundary_before(text: &str, at: usize) -> bool {
         return true;
     }
     if let Some(line_start) = before.rfind('\n') {
-        if before[line_start + 1..]
-            .chars()
-            .all(|c| c.is_whitespace())
-        {
+        if before[line_start + 1..].chars().all(|c| c.is_whitespace()) {
             return true;
         }
     } else if before.chars().all(|c| c.is_whitespace()) {
@@ -684,10 +681,7 @@ fn is_prose_bullet_label_start(text: &str, at: usize) -> bool {
     let Some(rest) = text.get(at..) else {
         return false;
     };
-    let Some(colon) = rest
-        .find(" :")
-        .or_else(|| rest.find(':'))
-    else {
+    let Some(colon) = rest.find(" :").or_else(|| rest.find(':')) else {
         return false;
     };
     let label = rest[..colon].trim();
@@ -780,8 +774,7 @@ fn mention_match_labels_longest_first(
 }
 
 fn is_json_block_paragraph(para: &str) -> bool {
-    para.contains('\n')
-        && (para.trim_start().starts_with('{') || para.contains("\": "))
+    para.contains('\n') && (para.trim_start().starts_with('{') || para.contains("\": "))
 }
 
 fn split_prose_prefix_from_json_block(para: &str) -> (&str, &str) {
@@ -858,8 +851,7 @@ fn split_prose_paint_units(text: &str) -> Vec<ProsePaintUnit> {
 fn find_inline_bullet_body_end(text: &str, body_start: usize) -> usize {
     let mut i = body_start;
     while i < text.len() {
-        if i > body_start
-            && (is_prose_list_marker(text, i) || is_prose_bullet_label_start(text, i))
+        if i > body_start && (is_prose_list_marker(text, i) || is_prose_bullet_label_start(text, i))
         {
             return i;
         }
@@ -1104,15 +1096,7 @@ pub fn paint_room_bubble_body(
         if para.is_empty() {
             continue;
         }
-        paint_bubble_paragraph(
-            ui,
-            para,
-            body_w,
-            &labels,
-            chip_fill,
-            chip_text,
-            chip_stroke,
-        );
+        paint_bubble_paragraph(ui, para, body_w, &labels, chip_fill, chip_text, chip_stroke);
         ui.add_space(4.0);
     }
 }
@@ -1171,7 +1155,10 @@ fn trim_prose_after_leading_mention_run(segments: Vec<BubbleSegment>) -> Vec<Bub
             BubbleSegment::Text(_) => break,
         }
     }
-    if !out.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))) {
+    if !out
+        .iter()
+        .any(|seg| matches!(seg, BubbleSegment::Mention(_)))
+    {
         return segments;
     }
     let mut first_text = true;
@@ -1234,8 +1221,7 @@ fn paint_line_with_mention_chips(
     chip_stroke: egui::Stroke,
 ) {
     let line_w = ui.available_width().max(1.0);
-    let segments =
-        normalize_mention_chip_segments(split_mention_segments(line, labels));
+    let segments = normalize_mention_chip_segments(split_mention_segments(line, labels));
     ui.set_max_width(line_w);
     ui.spacing_mut().item_spacing = egui::vec2(2.0, 1.0);
     ui.horizontal_wrapped(|ui| {
@@ -1388,6 +1374,7 @@ fn mention_alias_claimed_by_other_member(
 }
 
 /// Back-compat alias — prefer [`format_room_mention_destinations`].
+#[allow(dead_code)]
 pub fn strip_roster_agent_id_mentions(
     t: &UiStrings,
     text: &str,
@@ -1714,7 +1701,10 @@ mod tests {
             en.room_action_unavailable,
             "That action isn't available in the room."
         );
-        assert_eq!(fr.room_action_unavailable, "Action indisponible dans le salon.");
+        assert_eq!(
+            fr.room_action_unavailable,
+            "Action indisponible dans le salon."
+        );
         assert_eq!(en.room_policy_one_agent, "One agent");
         assert_eq!(fr.room_policy_one_agent, "Un agent");
         assert_eq!(en.room_policy_open_floor, "Open floor");
@@ -2262,7 +2252,9 @@ mod tests {
             "Merci @ pour cette mise en garde.",
             &labels,
         ));
-        assert!(!segs.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))));
+        assert!(!segs
+            .iter()
+            .any(|seg| matches!(seg, BubbleSegment::Mention(_))));
         assert_eq!(
             segs,
             vec![BubbleSegment::Text(
@@ -2275,10 +2267,14 @@ mod tests {
     fn split_mention_segments_drops_unresolvable_at_token() {
         let labels = match_labels(&["Chercheur"]);
         let segs = split_mention_segments("Merci @Inconnu pour l'alerte.", &labels);
-        assert!(!segs.iter().any(|seg| matches!(seg, BubbleSegment::Mention(_))));
+        assert!(!segs
+            .iter()
+            .any(|seg| matches!(seg, BubbleSegment::Mention(_))));
         assert_eq!(
             segs,
-            vec![BubbleSegment::Text("Merci Inconnu pour l'alerte.".to_string())]
+            vec![BubbleSegment::Text(
+                "Merci Inconnu pour l'alerte.".to_string()
+            )]
         );
     }
 
@@ -2327,12 +2323,8 @@ mod tests {
         let mut researcher = member("persona-researcher", "Researcher");
         researcher.persona_id = Some("researcher".into());
         let members = vec![planner, researcher];
-        let prepared = prepare_room_bubble_text(
-            &t,
-            salon_still_bullet_excerpt_newlines(),
-            &members,
-            true,
-        );
+        let prepared =
+            prepare_room_bubble_text(&t, salon_still_bullet_excerpt_newlines(), &members, true);
         let units = bubble_paint_units_from_prepared(&prepared);
         assert_salon_bullet_excerpt_paints_without_raw_asterisks(&units);
     }
@@ -2345,12 +2337,8 @@ mod tests {
         let mut researcher = member("persona-researcher", "Researcher");
         researcher.persona_id = Some("researcher".into());
         let members = vec![planner, researcher];
-        let prepared = prepare_room_bubble_text(
-            &t,
-            salon_still_bullet_excerpt_inline(),
-            &members,
-            true,
-        );
+        let prepared =
+            prepare_room_bubble_text(&t, salon_still_bullet_excerpt_inline(), &members, true);
         let units = bubble_paint_units_from_prepared(&prepared);
         assert_salon_bullet_excerpt_paints_without_raw_asterisks(&units);
     }

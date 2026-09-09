@@ -27,15 +27,60 @@ pub struct BackupScope {
 }
 
 pub const BACKUP_SCOPES: &[BackupScope] = &[
-    BackupScope { id: "sessions", dir: "sessions", label_fr: "Sessions + canvas", label_en: "Sessions + canvas" },
-    BackupScope { id: "memory", dir: "memory", label_fr: "Mémoire", label_en: "Memory" },
-    BackupScope { id: "storage", dir: "storage", label_fr: "Documents", label_en: "Documents" },
-    BackupScope { id: "modules", dir: "modules", label_fr: "Données modules (notes/tâches)", label_en: "Module data (notes/tasks)" },
-    BackupScope { id: "schedules", dir: "schedules", label_fr: "Planifications", label_en: "Schedules" },
-    BackupScope { id: "feedback", dir: "feedback", label_fr: "Retours", label_en: "Feedback" },
-    BackupScope { id: "mcp", dir: "mcp", label_fr: "Config MCP", label_en: "MCP config" },
-    BackupScope { id: "skills", dir: "skills", label_fr: "Skills perso", label_en: "Custom skills" },
-    BackupScope { id: "audit", dir: "audit", label_fr: "Journal d'audit", label_en: "Audit journal" },
+    BackupScope {
+        id: "sessions",
+        dir: "sessions",
+        label_fr: "Sessions + canvas",
+        label_en: "Sessions + canvas",
+    },
+    BackupScope {
+        id: "memory",
+        dir: "memory",
+        label_fr: "Mémoire",
+        label_en: "Memory",
+    },
+    BackupScope {
+        id: "storage",
+        dir: "storage",
+        label_fr: "Documents",
+        label_en: "Documents",
+    },
+    BackupScope {
+        id: "modules",
+        dir: "modules",
+        label_fr: "Données modules (notes/tâches)",
+        label_en: "Module data (notes/tasks)",
+    },
+    BackupScope {
+        id: "schedules",
+        dir: "schedules",
+        label_fr: "Planifications",
+        label_en: "Schedules",
+    },
+    BackupScope {
+        id: "feedback",
+        dir: "feedback",
+        label_fr: "Retours",
+        label_en: "Feedback",
+    },
+    BackupScope {
+        id: "mcp",
+        dir: "mcp",
+        label_fr: "Config MCP",
+        label_en: "MCP config",
+    },
+    BackupScope {
+        id: "skills",
+        dir: "skills",
+        label_fr: "Skills perso",
+        label_en: "Custom skills",
+    },
+    BackupScope {
+        id: "audit",
+        dir: "audit",
+        label_fr: "Journal d'audit",
+        label_en: "Audit journal",
+    },
 ];
 
 /// Fichiers de config toujours inclus (petits, hors scopes).
@@ -48,7 +93,10 @@ pub const BACKUP_CONFIG_FILES: &[&str] = &[
 /// Explicite et honnête : ce qui n'est PAS sauvegardé, et pourquoi.
 pub const BACKUP_SKIPPED: &[(&str, &str)] = &[
     ("models/", "poids lourds — retéléchargeables depuis Modèles"),
-    ("secrets/", "clés chiffrées — à ressaisir après restore (non exportées par sécurité)"),
+    (
+        "secrets/",
+        "clés chiffrées — à ressaisir après restore (non exportées par sécurité)",
+    ),
     ("downloads/", "cache généré — reconstructible"),
     ("updates/", "paquets d'update — retéléchargeables"),
     ("agents/", "état éphémère — relance requise de toute façon"),
@@ -95,8 +143,7 @@ fn copy_dir_recursive(
     seal: Option<&SecretStore>,
 ) -> Result<(), String> {
     std::fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
-    let entries =
-        std::fs::read_dir(src).map_err(|e| format!("list {}: {e}", src.display()))?;
+    let entries = std::fs::read_dir(src).map_err(|e| format!("list {}: {e}", src.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("entrée {}: {e}", src.display()))?;
         let file_type = entry
@@ -256,12 +303,14 @@ pub fn do_backup(
             .map(|d| d.as_millis())
             .unwrap_or(0),
         scopes,
-        skipped: BACKUP_SKIPPED.iter().map(|(d, why)| format!("{d} — {why}")).collect(),
+        skipped: BACKUP_SKIPPED
+            .iter()
+            .map(|(d, why)| format!("{d} — {why}"))
+            .collect(),
         files,
         encrypted: store.is_some(),
     };
-    let raw =
-        serde_json::to_string_pretty(&manifest).map_err(|e| format!("manifest: {e}"))?;
+    let raw = serde_json::to_string_pretty(&manifest).map_err(|e| format!("manifest: {e}"))?;
     std::fs::write(dir.join("manifest.json"), raw)
         .map_err(|e| format!("écriture manifest: {e}"))?;
     let total: u64 = manifest.files.iter().map(|f| f.len).sum();
@@ -288,10 +337,14 @@ pub fn verify_backup(dir: &Path) -> Result<BackupManifest, String> {
             return Err(format!("chemin suspect dans le manifest : {}", f.rel));
         }
         let path = dir.join(f.rel.replace('/', std::path::MAIN_SEPARATOR_STR));
-        let meta =
-            std::fs::metadata(&path).map_err(|_| format!("fichier manquant : {}", f.rel))?;
+        let meta = std::fs::metadata(&path).map_err(|_| format!("fichier manquant : {}", f.rel))?;
         if meta.len() != f.len {
-            return Err(format!("taille différente : {} ({} ≠ {})", f.rel, meta.len(), f.len));
+            return Err(format!(
+                "taille différente : {} ({} ≠ {})",
+                f.rel,
+                meta.len(),
+                f.len
+            ));
         }
         if !manifest.encrypted && sha256_file(&path)? != f.sha256 {
             return Err(format!("sha256 différent : {}", f.rel));
@@ -326,8 +379,7 @@ pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
     // Lit un fichier du backup (déchiffre si besoin) + vérifie son sha256 clair.
     let read_entry = |rel: &str| -> Result<Vec<u8>, String> {
         let path = dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
-        let blob =
-            std::fs::read(&path).map_err(|e| format!("lecture {}: {e}", path.display()))?;
+        let blob = std::fs::read(&path).map_err(|e| format!("lecture {}: {e}", path.display()))?;
         let plain = match &store {
             Some(st) => st
                 .unseal_bytes("ui-egui", &blob)
@@ -347,7 +399,11 @@ pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
         }
     }
     // Remplace chaque scope d'un bloc (évite le mélange ancien/nouveau).
-    for scope in BACKUP_SCOPES.iter().map(|s| s.dir).chain(std::iter::once("run")) {
+    for scope in BACKUP_SCOPES
+        .iter()
+        .map(|s| s.dir)
+        .chain(std::iter::once("run"))
+    {
         if scope == "run" {
             // run/ : uniquement les 3 fichiers de config, jamais tout le dossier.
             for rel in BACKUP_CONFIG_FILES {
@@ -361,7 +417,11 @@ pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
                     continue;
                 }
                 let plain = read_entry(&src_rel)?;
-                let entry = manifest.files.iter().find(|f| f.rel == src_rel).expect("found");
+                let entry = manifest
+                    .files
+                    .iter()
+                    .find(|f| f.rel == src_rel)
+                    .expect("found");
                 if sha256_bytes(&plain) != entry.sha256 {
                     return Err(format!("sha256 différent après déchiffrement : {src_rel}"));
                 }
@@ -387,20 +447,23 @@ pub fn do_restore(home: &Path, dir: &Path) -> Result<usize, String> {
             std::fs::remove_dir_all(&dst)
                 .map_err(|e| format!("nettoyage {}: {e}", dst.display()))?;
         }
-        std::fs::create_dir_all(&dst)
-            .map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
-        for f in manifest.files.iter().filter(|f| {
-            f.rel.starts_with(&format!("{scope}/")) || f.rel == scope
-        }) {
+        std::fs::create_dir_all(&dst).map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
+        for f in manifest
+            .files
+            .iter()
+            .filter(|f| f.rel.starts_with(&format!("{scope}/")) || f.rel == scope)
+        {
             let plain = read_entry(&f.rel)?;
             if sha256_bytes(&plain) != f.sha256 {
                 return Err(format!("sha256 différent après déchiffrement : {}", f.rel));
             }
             let dest_rel = f.rel.strip_suffix(".enc").unwrap_or(&f.rel);
-            let out = dst.join(dest_rel
-                .strip_prefix(&format!("{scope}/"))
-                .unwrap_or(dest_rel)
-                .replace('/', std::path::MAIN_SEPARATOR_STR));
+            let out = dst.join(
+                dest_rel
+                    .strip_prefix(&format!("{scope}/"))
+                    .unwrap_or(dest_rel)
+                    .replace('/', std::path::MAIN_SEPARATOR_STR),
+            );
             if let Some(parent) = out.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
@@ -434,10 +497,13 @@ impl UiApp {
         });
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label(if fr { "Dossier parent" } else { "Parent folder" });
+            ui.label(if fr {
+                "Dossier parent"
+            } else {
+                "Parent folder"
+            });
             ui.add(
-                egui::TextEdit::singleline(&mut self.backup_ui.dest_parent)
-                    .desired_width(280.0),
+                egui::TextEdit::singleline(&mut self.backup_ui.dest_parent).desired_width(280.0),
             );
             if ui.small_button("…").clicked() {
                 if let Some(dir) = rfd::FileDialog::new().pick_folder() {
@@ -468,16 +534,35 @@ impl UiApp {
             );
         });
         ui.horizontal_wrapped(|ui| {
-            if ui.button(if fr { "Sauvegarder" } else { "Back up" }).clicked() {
+            if ui
+                .button(if fr { "Sauvegarder" } else { "Back up" })
+                .clicked()
+            {
                 let home = crate::os_open::aos_home();
                 let dest = PathBuf::from(self.backup_ui.dest_parent.clone());
                 let seal = self.backup_ui.encrypted;
-                match do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &self.backup_ui.scopes.clone(), seal) {
+                match do_backup(
+                    &home,
+                    &dest,
+                    BACKUP_DIR_PREFIX,
+                    "backup",
+                    &self.backup_ui.scopes.clone(),
+                    seal,
+                ) {
                     Ok((dir, n, total)) => {
                         let msg = if fr {
-                            format!("Sauvegardé : {} ({} fichiers, {})", dir.display(), n, human_bytes(total))
+                            format!(
+                                "Sauvegardé : {} ({} fichiers, {})",
+                                dir.display(),
+                                n,
+                                human_bytes(total)
+                            )
                         } else {
-                            format!("Backed up: {} ({n} files, {})", dir.display(), human_bytes(total))
+                            format!(
+                                "Backed up: {} ({n} files, {})",
+                                dir.display(),
+                                human_bytes(total)
+                            )
                         };
                         self.backup_ui.last_result = msg.clone();
                         self.push_status(msg.clone());
@@ -489,7 +574,10 @@ impl UiApp {
                     }
                 }
             }
-            if ui.button(if fr { "Exporter JSON" } else { "Export JSON" }).clicked() {
+            if ui
+                .button(if fr { "Exporter JSON" } else { "Export JSON" })
+                .clicked()
+            {
                 // Export lisible : conversations + mémoire + documents.
                 let mut mask = vec![false; BACKUP_SCOPES.len()];
                 for (i, s) in BACKUP_SCOPES.iter().enumerate() {
@@ -502,9 +590,18 @@ impl UiApp {
                 match do_backup(&home, &dest, BACKUP_EXPORT_PREFIX, "export", &mask, false) {
                     Ok((dir, n, total)) => {
                         let msg = if fr {
-                            format!("Exporté : {} ({} fichiers, {})", dir.display(), n, human_bytes(total))
+                            format!(
+                                "Exporté : {} ({} fichiers, {})",
+                                dir.display(),
+                                n,
+                                human_bytes(total)
+                            )
                         } else {
-                            format!("Exported: {} ({n} files, {})", dir.display(), human_bytes(total))
+                            format!(
+                                "Exported: {} ({n} files, {})",
+                                dir.display(),
+                                human_bytes(total)
+                            )
                         };
                         self.backup_ui.last_result = msg.clone();
                         self.push_status(msg.clone());
@@ -519,7 +616,11 @@ impl UiApp {
         });
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label(if fr { "Restaurer depuis" } else { "Restore from" });
+            ui.label(if fr {
+                "Restaurer depuis"
+            } else {
+                "Restore from"
+            });
             ui.add(
                 egui::TextEdit::singleline(&mut self.backup_ui.restore_dir)
                     .desired_width(280.0)
@@ -532,7 +633,11 @@ impl UiApp {
             }
         });
         // Double-confirm : écrasement + relance requise.
-        let armed_label = if fr { "Confirmer l'écrasement ?" } else { "Confirm overwrite?" };
+        let armed_label = if fr {
+            "Confirmer l'écrasement ?"
+        } else {
+            "Confirm overwrite?"
+        };
         if crate::ui_primitives::danger_confirm_button(
             ui,
             "backup-restore",
@@ -590,8 +695,8 @@ mod tests {
         let home = tmp_home("roundtrip");
         let dest = home.join("out");
         let mask = vec![true; BACKUP_SCOPES.len()];
-        let (dir, n, total) = do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, false)
-            .expect("backup");
+        let (dir, n, total) =
+            do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, false).expect("backup");
         assert!(n >= 2 && total > 0);
         let manifest = verify_backup(&dir).expect("verify");
         assert_eq!(manifest.version, BACKUP_MANIFEST_VERSION);
@@ -614,8 +719,8 @@ mod tests {
         let home = tmp_home("tamper");
         let dest = home.join("out");
         let mask = vec![true; BACKUP_SCOPES.len()];
-        let (dir, _, _) = do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, false)
-            .expect("backup");
+        let (dir, _, _) =
+            do_backup(&home, &dest, BACKUP_DIR_PREFIX, "backup", &mask, false).expect("backup");
         std::fs::write(home.join("var/memory/facts.json"), "[tampered]").expect("write");
         // Le live est corrompu mais pas le backup : verify du backup OK.
         verify_backup(&dir).expect("backup intact");
@@ -667,7 +772,10 @@ mod tests {
         std::fs::remove_file(home.join("var/secrets/master.key")).expect("rm key");
         std::fs::write(home.join("var/secrets/master.key"), vec![7u8; 32]).expect("write");
         let err = do_restore(&home, &dir).expect_err("mauvaise clé");
-        assert!(err.contains("déchiffrement"), "attendu déchiffrement, got: {err}");
+        assert!(
+            err.contains("déchiffrement"),
+            "attendu déchiffrement, got: {err}"
+        );
         std::env::remove_var("AOS_SECRETS_FILE_KEY");
         let _ = std::fs::remove_dir_all(&home);
     }

@@ -1,7 +1,7 @@
 //! Mutable state owned by the audit and capabilities panels.
 
-use aos_proto::{AuditEvent, CapInfo};
 use crate::ui_audit::DaemonRestart;
+use aos_proto::{AuditEvent, CapInfo};
 
 #[derive(Default)]
 pub(crate) struct SecurityUiState {

@@ -2,8 +2,8 @@
 
 use aos_proto::{
     decl_ui::{default_document, document_to_json, DeclUiDocument},
-    ModuleCompileResponse, ModuleManifest, ModulePackageResponse, ModulePermissions, ModuleScaffoldRequest,
-    ModuleScaffoldResponse, ModuleTool, ModuleUi,
+    ModuleCompileResponse, ModuleManifest, ModulePackageResponse, ModulePermissions,
+    ModuleScaffoldRequest, ModuleScaffoldResponse, ModuleTool, ModuleUi,
 };
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -73,16 +73,13 @@ impl ModuleAuthor {
     pub fn validate_name(name: &str) -> Result<(), CompileError> {
         let ok = name.len() >= 2
             && name.len() <= 32
-            && name
-                .chars()
-                .enumerate()
-                .all(|(i, c)| {
-                    if i == 0 {
-                        c.is_ascii_lowercase()
-                    } else {
-                        c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'
-                    }
-                });
+            && name.chars().enumerate().all(|(i, c)| {
+                if i == 0 {
+                    c.is_ascii_lowercase()
+                } else {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'
+                }
+            });
         if ok {
             Ok(())
         } else {
@@ -90,7 +87,10 @@ impl ModuleAuthor {
         }
     }
 
-    pub fn scaffold(&self, req: &ModuleScaffoldRequest) -> Result<ModuleScaffoldResponse, CompileError> {
+    pub fn scaffold(
+        &self,
+        req: &ModuleScaffoldRequest,
+    ) -> Result<ModuleScaffoldResponse, CompileError> {
         Self::validate_name(&req.name)?;
         let kind = if req.kind == "rust" { "rust" } else { "script" };
         let dest = if kind == "rust" {
@@ -142,7 +142,8 @@ impl ModuleAuthor {
                 }),
                 min_os_api: 1,
             };
-            let yaml = serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
+            let yaml =
+                serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
             std::fs::write(dest.join("manifest.yaml"), yaml)
                 .map_err(|e| CompileError::Io(e.to_string()))?;
         } else {
@@ -152,7 +153,8 @@ impl ModuleAuthor {
                 req.source.clone()
             };
             static_check_rust(&lib_rs)?;
-            std::fs::create_dir_all(dest.join("src")).map_err(|e| CompileError::Io(e.to_string()))?;
+            std::fs::create_dir_all(dest.join("src"))
+                .map_err(|e| CompileError::Io(e.to_string()))?;
             std::fs::write(dest.join("src/lib.rs"), lib_rs)
                 .map_err(|e| CompileError::Io(e.to_string()))?;
             let cargo = format!(
@@ -191,7 +193,8 @@ serde_json = "1"
                 }),
                 min_os_api: 1,
             };
-            let yaml = serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
+            let yaml =
+                serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
             std::fs::write(dest.join("manifest.yaml"), yaml)
                 .map_err(|e| CompileError::Io(e.to_string()))?;
         }
@@ -244,7 +247,8 @@ serde_json = "1"
         std::fs::copy(src.join("handlers.yaml"), pkg.join("assets/handlers.yaml"))
             .map_err(|e| CompileError::Io(e.to_string()))?;
 
-        let wasm = std::fs::read(pkg.join("module.wasm")).map_err(|e| CompileError::Io(e.to_string()))?;
+        let wasm =
+            std::fs::read(pkg.join("module.wasm")).map_err(|e| CompileError::Io(e.to_string()))?;
         let hash = sha256_hex(&wasm);
 
         let mut manifest: ModuleManifest = if src.join("manifest.yaml").exists() {
@@ -272,7 +276,8 @@ serde_json = "1"
         manifest.name = name.into();
         manifest.hash = hash.clone();
         let yaml = serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
-        std::fs::write(pkg.join("manifest.yaml"), yaml).map_err(|e| CompileError::Io(e.to_string()))?;
+        std::fs::write(pkg.join("manifest.yaml"), yaml)
+            .map_err(|e| CompileError::Io(e.to_string()))?;
         let ui_doc = load_ui_for_package(&src, &manifest)?;
         std::fs::write(pkg.join("ui/index.html"), document_to_json(&ui_doc))
             .map_err(|e| CompileError::Io(e.to_string()))?;
@@ -346,8 +351,9 @@ serde_json = "1"
             crate_dir
                 .join("target/wasm32-unknown-unknown/release")
                 .join(format!("module-{name}.wasm")),
-            crate_dir
-                .join(format!("target/wasm32-unknown-unknown/release/module_{name}.wasm")),
+            crate_dir.join(format!(
+                "target/wasm32-unknown-unknown/release/module_{name}.wasm"
+            )),
         ];
         let wasm_src = wasm_candidates
             .iter()
@@ -367,8 +373,10 @@ serde_json = "1"
             std::fs::remove_dir_all(&pkg).map_err(|e| CompileError::Io(e.to_string()))?;
         }
         std::fs::create_dir_all(pkg.join("ui")).map_err(|e| CompileError::Io(e.to_string()))?;
-        std::fs::copy(&wasm_src, pkg.join("module.wasm")).map_err(|e| CompileError::Io(e.to_string()))?;
-        let wasm = std::fs::read(pkg.join("module.wasm")).map_err(|e| CompileError::Io(e.to_string()))?;
+        std::fs::copy(&wasm_src, pkg.join("module.wasm"))
+            .map_err(|e| CompileError::Io(e.to_string()))?;
+        let wasm =
+            std::fs::read(pkg.join("module.wasm")).map_err(|e| CompileError::Io(e.to_string()))?;
         let hash = sha256_hex(&wasm);
 
         let mut manifest: ModuleManifest = {
@@ -378,12 +386,12 @@ serde_json = "1"
         };
         manifest.hash = hash.clone();
         let yaml = serde_yaml::to_string(&manifest).map_err(|e| CompileError::Io(e.to_string()))?;
-        std::fs::write(pkg.join("manifest.yaml"), yaml).map_err(|e| CompileError::Io(e.to_string()))?;
+        std::fs::write(pkg.join("manifest.yaml"), yaml)
+            .map_err(|e| CompileError::Io(e.to_string()))?;
         let ui_doc = if crate_dir.join("ui/index.html").exists() {
             let raw = std::fs::read(crate_dir.join("ui/index.html"))
                 .map_err(|e| CompileError::Io(e.to_string()))?;
-            DeclUiDocument::parse_json(&raw)
-                .map_err(|e| CompileError::Other(format!("ui: {e}")))?
+            DeclUiDocument::parse_json(&raw).map_err(|e| CompileError::Other(format!("ui: {e}")))?
         } else {
             ui_document_for_manifest(&manifest)
         };
@@ -410,9 +418,7 @@ fn static_check_rust(src: &str) -> Result<(), CompileError> {
     for line in src.lines() {
         let t = line.trim();
         if t.starts_with("extern crate") {
-            return Err(CompileError::StaticCheck(
-                "extern crate interdit".into(),
-            ));
+            return Err(CompileError::StaticCheck("extern crate interdit".into()));
         }
         if let Some(rest) = t.strip_prefix("use ") {
             let crate_name = rest.split("::").next().unwrap_or("").trim();
@@ -490,7 +496,10 @@ fn write_scaffold_ui(
         .map_err(|e| CompileError::Io(e.to_string()))
 }
 
-fn load_ui_for_package(src: &Path, manifest: &ModuleManifest) -> Result<DeclUiDocument, CompileError> {
+fn load_ui_for_package(
+    src: &Path,
+    manifest: &ModuleManifest,
+) -> Result<DeclUiDocument, CompileError> {
     let ui_path = src.join("ui/index.html");
     if ui_path.exists() {
         let raw = std::fs::read(&ui_path).map_err(|e| CompileError::Io(e.to_string()))?;
@@ -506,13 +515,15 @@ fn ui_document_for_manifest(manifest: &ModuleManifest) -> DeclUiDocument {
 
 fn ui_document_for_tools(name: &str, description: &str, tools: &[ModuleTool]) -> DeclUiDocument {
     let primary = tools.first();
-    let tool_name = primary
-        .map(|t| t.name.as_str())
-        .unwrap_or(name);
+    let tool_name = primary.map(|t| t.name.as_str()).unwrap_or(name);
     let schema = primary
         .map(|t| t.input_schema.clone())
         .unwrap_or_else(|| serde_json::json!({"type":"object"}));
-    let title = if description.is_empty() { name } else { description };
+    let title = if description.is_empty() {
+        name
+    } else {
+        description
+    };
     default_document(title, tool_name, &schema)
 }
 

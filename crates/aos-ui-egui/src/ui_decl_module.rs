@@ -16,7 +16,12 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         let mut actions = decl_ui::DeclUiActions::default();
         if let Some(panel) = self.decl_panels.get_mut(module) {
-            actions = panel.ui(ui, &mut self.decl_md_cache, t.decl_ui_refresh, &self.prefs.language);
+            actions = panel.ui(
+                ui,
+                &mut self.decl_md_cache,
+                t.decl_ui_refresh,
+                &self.prefs.language,
+            );
         }
         if actions.refresh {
             let _ = self.cmd_tx.send(Cmd::ModuleUiRefresh {

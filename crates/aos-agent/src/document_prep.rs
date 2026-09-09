@@ -12,7 +12,11 @@ pub struct BrowsePage {
 }
 
 /// Build markdown for `/downloads` via files.generate — footnotes only from supplied sources.
-pub fn compose_document(question: &str, search_hits: &[WebSearchHit], pages: &[BrowsePage]) -> String {
+pub fn compose_document(
+    question: &str,
+    search_hits: &[WebSearchHit],
+    pages: &[BrowsePage],
+) -> String {
     let title = question.trim();
     let mut out = String::new();
     out.push_str(&format!("# {title}\n\n"));
@@ -97,10 +101,7 @@ pub fn compose_document(question: &str, search_hits: &[WebSearchHit], pages: &[B
                 page.url.trim()
             ));
         } else {
-            out.push_str(&format!(
-                "[^{footnote_n}]: {label} — {}\n",
-                page.url.trim()
-            ));
+            out.push_str(&format!("[^{footnote_n}]: {label} — {}\n", page.url.trim()));
         }
         footnote_n += 1;
     }
@@ -116,17 +117,15 @@ pub fn default_download_path(question: &str) -> String {
         .trim()
         .to_lowercase()
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c
-            } else {
-                '-'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
     let slug = slug.trim_matches('-');
     let slug: String = slug.chars().take(48).collect();
-    let slug = if slug.is_empty() { "research" } else { slug.as_str() };
+    let slug = if slug.is_empty() {
+        "research"
+    } else {
+        slug.as_str()
+    };
     format!("/downloads/research-{slug}.md")
 }
 
@@ -155,19 +154,20 @@ fn extract_downloads_path(s: &str) -> Option<String> {
         if token.starts_with("/downloads/") {
             return Some(
                 token
-                    .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '/' && c != '.' && c != '_' && c != '-')
+                    .trim_matches(|c: char| {
+                        !c.is_ascii_alphanumeric() && c != '/' && c != '.' && c != '_' && c != '-'
+                    })
                     .to_string(),
             );
         }
     }
-    s.find("/downloads/")
-        .map(|i| {
-            let rest = &s[i..];
-            let end = rest
-                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',')
-                .unwrap_or(rest.len());
-            rest[..end].to_string()
-        })
+    s.find("/downloads/").map(|i| {
+        let rest = &s[i..];
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',')
+            .unwrap_or(rest.len());
+        rest[..end].to_string()
+    })
 }
 
 #[cfg(test)]

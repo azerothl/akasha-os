@@ -303,9 +303,7 @@ fn export_step_args(args: &serde_json::Value) -> Vec<String> {
             serde_json::Value::Number(n) => n.to_string(),
             serde_json::Value::Bool(b) => b.to_string(),
             serde_json::Value::Null => continue,
-            other if other.is_array() || other.is_object() => {
-                other.to_string()
-            }
+            other if other.is_array() || other.is_object() => other.to_string(),
             other => other.to_string(),
         };
         if rendered.chars().count() > 240 {
@@ -346,7 +344,11 @@ fn format_unix_stamp(ts_ms: u64) -> Option<String> {
 
 fn civil_from_unix_days(days: i64) -> (i32, u32, u32) {
     let z = days + 719468;
-    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
+    let era = if z >= 0 {
+        z / 146097
+    } else {
+        (z - 146096) / 146097
+    };
     let doe = z - era * 146097;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
     let y = (yoe + era * 400) as i32;
@@ -548,12 +550,7 @@ pub fn compact_working_memory(
     );
     let mut new_mem = system;
     new_mem.push(("system".into(), summary.clone()));
-    new_mem.extend(
-        memory
-            .iter()
-            .skip(memory.len() - keep_recent)
-            .cloned(),
-    );
+    new_mem.extend(memory.iter().skip(memory.len() - keep_recent).cloned());
     *memory = new_mem;
     Some(summary)
 }

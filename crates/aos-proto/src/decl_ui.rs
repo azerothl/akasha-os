@@ -329,7 +329,10 @@ impl DeclUiRowWhen {
 }
 
 /// Substitute `$field` / `$row.field` placeholders in action args from a table row.
-pub fn resolve_row_args(template: &serde_json::Value, row: &serde_json::Value) -> serde_json::Value {
+pub fn resolve_row_args(
+    template: &serde_json::Value,
+    row: &serde_json::Value,
+) -> serde_json::Value {
     match template {
         serde_json::Value::String(s) => {
             if let Some(field) = s.strip_prefix('$') {
@@ -341,11 +344,9 @@ pub fn resolve_row_args(template: &serde_json::Value, row: &serde_json::Value) -
             }
             serde_json::Value::String(s.clone())
         }
-        serde_json::Value::Array(arr) => serde_json::Value::Array(
-            arr.iter()
-                .map(|v| resolve_row_args(v, row))
-                .collect(),
-        ),
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(|v| resolve_row_args(v, row)).collect())
+        }
         serde_json::Value::Object(map) => {
             let out: serde_json::Map<String, serde_json::Value> = map
                 .iter()
@@ -676,10 +677,7 @@ mod tests {
     #[test]
     fn resolve_row_args_substitutes_fields() {
         let row = serde_json::json!({"id":"task-1","done":false});
-        let args = resolve_row_args(
-            &serde_json::json!({"id":"$id","done":true}),
-            &row,
-        );
+        let args = resolve_row_args(&serde_json::json!({"id":"$id","done":true}), &row);
         assert_eq!(args["id"], "task-1");
         assert_eq!(args["done"], true);
     }

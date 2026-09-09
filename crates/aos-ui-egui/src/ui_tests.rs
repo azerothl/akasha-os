@@ -321,8 +321,12 @@ mod delegate_tests {
         assert!(chat_device_usb_intent("connect to COM3 serial port"));
         assert!(chat_device_usb_connect_intent("se connecter au COM3"));
         assert!(chat_device_usb_connect_intent("ouvrir le port COM4"));
-        assert!(chat_device_usb_connect_intent("connect to COM3 serial port"));
-        assert!(!chat_device_usb_connect_intent("liste les périphériques usb"));
+        assert!(chat_device_usb_connect_intent(
+            "connect to COM3 serial port"
+        ));
+        assert!(!chat_device_usb_connect_intent(
+            "liste les périphériques usb"
+        ));
         assert!(!chat_device_usb_connect_intent("ports série connectés"));
         assert!(chat_device_usb_intent("usb"));
         assert!(!chat_device_usb_intent(
@@ -498,9 +502,9 @@ mod delegate_tests {
 
 #[cfg(test)]
 mod research_document_tests {
+    use crate::chat_delegate::chat_agent_kit;
     use aos_agent::document_prep::{compose_document, BrowsePage};
     use aos_proto::WebSearchHit;
-    use crate::chat_delegate::chat_agent_kit;
 
     #[test]
     fn user_requested_document_skips_choice_card() {
@@ -514,9 +518,8 @@ mod research_document_tests {
 
     #[test]
     fn document_ask_kit_includes_files_generate() {
-        let (skills, tools) = chat_agent_kit(
-            "fais moi un document de présentation de ce dont on a parlé",
-        );
+        let (skills, tools) =
+            chat_agent_kit("fais moi un document de présentation de ce dont on a parlé");
         assert!(skills.iter().any(|s| s == "file-author"));
         assert!(tools.iter().any(|t| t == "files.generate"));
     }

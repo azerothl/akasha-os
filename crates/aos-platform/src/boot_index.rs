@@ -9,18 +9,12 @@ use std::sync::Arc;
 /// Intended to run after bus handlers are registered and before or alongside
 /// `BusService::serve`, so session healthcheck can reach `module.list` while
 /// embeddings run.
-pub fn spawn_background_indexing(
-    sub: Arc<PlatformSubsystem>,
-    memory_dir: String,
-    version: String,
-) {
+pub fn spawn_background_indexing(sub: Arc<PlatformSubsystem>, memory_dir: String, version: String) {
     tokio::spawn(async move {
         let s = sub.clone();
         let version = version.clone();
-        match tokio::task::spawn_blocking(move || {
-            crate::product_rag::ensure_indexed(&s, &version)
-        })
-        .await
+        match tokio::task::spawn_blocking(move || crate::product_rag::ensure_indexed(&s, &version))
+            .await
         {
             Ok(Ok(n)) => eprintln!("[aos-platformd] product RAG : {n} chunks indexés"),
             Ok(Err(e)) => eprintln!("[aos-platformd] product RAG skip : {e}"),
@@ -48,10 +42,7 @@ mod tests {
 
     fn temp_path(label: &str) -> String {
         let mut p = std::env::temp_dir();
-        p.push(format!(
-            "aos-boot-index-{label}-{}",
-            std::process::id()
-        ));
+        p.push(format!("aos-boot-index-{label}-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&p);
         p.display().to_string()
     }

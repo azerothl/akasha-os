@@ -508,7 +508,9 @@ impl LanWorkMessage {
             } => {
                 validate_request_id(request_id)?;
                 if !work.allow_sensitive_data {
-                    return Err("résultat d'activation LAN refusé sans politique sensible explicite".into());
+                    return Err(
+                        "résultat d'activation LAN refusé sans politique sensible explicite".into(),
+                    );
                 }
                 if !work.shard_ids.contains(shard_id)
                     || *shard_id > 65_535
@@ -738,9 +740,10 @@ impl LanShardManifest {
         }
         let mut sorted = ranges.clone();
         sorted.sort_by_key(|range| range.offset);
-        if sorted.windows(2).any(|pair| {
-            pair[0].offset.saturating_add(pair[0].length) > pair[1].offset
-        }) {
+        if sorted
+            .windows(2)
+            .any(|pair| pair[0].offset.saturating_add(pair[0].length) > pair[1].offset)
+        {
             return Err("plages requises de poids LAN recouvrantes".into());
         }
         self.required_ranges = sorted;
@@ -862,9 +865,10 @@ impl LanShardManifest {
                 return Err("plage requise de poids LAN invalide".into());
             }
         }
-        if required.windows(2).any(|pair| {
-            pair[0].offset.saturating_add(pair[0].length) > pair[1].offset
-        }) {
+        if required
+            .windows(2)
+            .any(|pair| pair[0].offset.saturating_add(pair[0].length) > pair[1].offset)
+        {
             return Err("plages requises de poids LAN recouvrantes".into());
         }
         let mut ranges = self.ranges.iter().collect::<Vec<_>>();
@@ -1979,20 +1983,40 @@ mod tests {
         let mut manifest = LanShardManifest::new("model-1", 1_000).unwrap();
         manifest
             .set_required_ranges(vec![
-                LanWeightRange { shard_id: 3, offset: 0, length: 100 },
-                LanWeightRange { shard_id: 3, offset: 700, length: 100 },
+                LanWeightRange {
+                    shard_id: 3,
+                    offset: 0,
+                    length: 100,
+                },
+                LanWeightRange {
+                    shard_id: 3,
+                    offset: 700,
+                    length: 100,
+                },
             ])
             .unwrap();
         manifest
-            .record_range(LanWeightRange { shard_id: 3, offset: 0, length: 100 })
+            .record_range(LanWeightRange {
+                shard_id: 3,
+                offset: 0,
+                length: 100,
+            })
             .unwrap();
         assert!(!manifest.is_complete());
         manifest
-            .record_range(LanWeightRange { shard_id: 3, offset: 700, length: 100 })
+            .record_range(LanWeightRange {
+                shard_id: 3,
+                offset: 700,
+                length: 100,
+            })
             .unwrap();
         assert!(manifest.is_complete());
         assert!(manifest
-            .record_range(LanWeightRange { shard_id: 4, offset: 100, length: 100 })
+            .record_range(LanWeightRange {
+                shard_id: 4,
+                offset: 100,
+                length: 100
+            })
             .is_ok());
     }
 

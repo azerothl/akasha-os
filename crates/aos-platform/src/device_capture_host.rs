@@ -146,8 +146,8 @@ fn open_camera(device: &DeviceDescriptor) -> Result<Camera, DeviceCaptureError> 
     let index = device_index(device)?;
     let requested =
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-    let mut camera = Camera::new(CameraIndex::Index(index as u32), requested)
-        .map_err(map_host_error)?;
+    let mut camera =
+        Camera::new(CameraIndex::Index(index as u32), requested).map_err(map_host_error)?;
     camera.open_stream().map_err(map_host_error)?;
     Ok(camera)
 }
@@ -167,11 +167,8 @@ fn capture_camera_png(
         .ok_or_else(|| DeviceCaptureError::Backend("frame RGB invalide".into()))?;
     let rgba = scale_for_vision(rgba, width, height);
     let mut png = Vec::new();
-    rgba.write_to(
-        &mut std::io::Cursor::new(&mut png),
-        image::ImageFormat::Png,
-    )
-    .map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
+    rgba.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .map_err(|e| DeviceCaptureError::Backend(e.to_string()))?;
     if (png.len() as u64) > max_bytes {
         return Err(DeviceCaptureError::QuotaExceeded("taille".into()));
     }
@@ -211,9 +208,7 @@ fn capture_mic_once(
 ) -> Result<Vec<u8>, DeviceCaptureError> {
     let index = device_index(device)?;
     let input = cpal_input_device(index)?;
-    let config = input
-        .default_input_config()
-        .map_err(map_host_error)?;
+    let config = input.default_input_config().map_err(map_host_error)?;
     let sample_format = config.sample_format();
     let stream_config: StreamConfig = config.into();
     let samples: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
@@ -315,14 +310,16 @@ fn start_mic_stream(
     let finished_thread = finished.clone();
     let device = device.clone();
     let output = output.to_path_buf();
-    let join = std::thread::spawn(move || run_mic_stream(
-        &device,
-        &output,
-        max_duration_ms,
-        max_bytes,
-        stop_thread,
-        finished_thread,
-    ));
+    let join = std::thread::spawn(move || {
+        run_mic_stream(
+            &device,
+            &output,
+            max_duration_ms,
+            max_bytes,
+            stop_thread,
+            finished_thread,
+        )
+    });
     Ok(BackendStream {
         stop,
         finished,
@@ -543,7 +540,10 @@ mod tests {
     fn default_backend_is_not_unsupported_on_host() {
         let backend = crate::device_capture::default_backend();
         let result = backend.enumerate();
-        assert!(!matches!(result, Err(DeviceCaptureError::UnsupportedPlatform)));
+        assert!(!matches!(
+            result,
+            Err(DeviceCaptureError::UnsupportedPlatform)
+        ));
     }
 
     #[test]

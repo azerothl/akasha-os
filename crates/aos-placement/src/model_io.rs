@@ -32,8 +32,8 @@ impl CpuGgufModelIo {
             .map_err(|_| "dimension hidden GGUF trop grande".to_string())?;
         let vocab = usize::try_from(embedding.dimensions[1])
             .map_err(|_| "vocabulaire GGUF trop grand".to_string())?;
-        let output_name = find_tensor(&model, &["output.weight"])
-            .unwrap_or_else(|_| embedding_name.clone());
+        let output_name =
+            find_tensor(&model, &["output.weight"]).unwrap_or_else(|_| embedding_name.clone());
         let output = model
             .tensors
             .iter()
@@ -85,13 +85,15 @@ impl CpuGgufModelIo {
     }
 
     pub fn embedding(&self, token_id: u32) -> Result<F32Tensor, String> {
-        let token = usize::try_from(token_id).map_err(|_| "identifiant de token invalide".to_string())?;
+        let token =
+            usize::try_from(token_id).map_err(|_| "identifiant de token invalide".to_string())?;
         if token >= self.vocab {
             return Err("identifiant de token hors vocabulaire".into());
         }
         F32Tensor::new(
             vec![self.hidden as u32, 1],
-            self.model.tensor_f32_weight_row(&self.embedding_name, token)?,
+            self.model
+                .tensor_f32_weight_row(&self.embedding_name, token)?,
         )
     }
 

@@ -1,5 +1,6 @@
 //! Clickable artifact cards in chat bubbles (note / document / image).
 
+#[cfg(test)]
 use aos_proto::ChatAttachment;
 use eframe::egui;
 
@@ -90,12 +91,9 @@ pub fn render_artifact_card(
     action
 }
 
+#[allow(dead_code)]
 pub fn card_display_text(t: &UiStrings, target: &ArtifactTarget) -> String {
-    format!(
-        "{} — {}",
-        target.title,
-        type_label(t, target.kind)
-    )
+    format!("{} — {}", target.title, type_label(t, target.kind))
 }
 
 /// Open the dedicated surface when possible; returns false when folder fallback is needed.

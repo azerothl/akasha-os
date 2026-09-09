@@ -121,7 +121,9 @@ pub fn probe(kind: BackendKind, hw: &HardwareProfile, allow_experimental: bool) 
         BackendKind::Cuda if hw.has_gpu && hw.gpu_backend == crate::hardware::GpuBackend::Cuda => {
             AdapterStatus::available(BackendKind::Cuda, "runtime CUDA disponible")
         }
-        BackendKind::Metal if hw.has_gpu && hw.gpu_backend == crate::hardware::GpuBackend::Metal => {
+        BackendKind::Metal
+            if hw.has_gpu && hw.gpu_backend == crate::hardware::GpuBackend::Metal =>
+        {
             AdapterStatus::available(BackendKind::Metal, "runtime Metal disponible")
         }
         BackendKind::Cuda | BackendKind::Metal => AdapterStatus::unavailable(
@@ -163,7 +165,8 @@ pub fn probe(kind: BackendKind, hw: &HardwareProfile, allow_experimental: bool) 
                     npu.supported_quantizations.len()
                 )
             } else {
-                "NPU détecté, mais sa description runtime est incomplète (opérations/formats)".into()
+                "NPU détecté, mais sa description runtime est incomplète (opérations/formats)"
+                    .into()
             };
             AdapterStatus::unavailable(
                 BackendKind::Npu,
@@ -195,7 +198,8 @@ pub fn probe(kind: BackendKind, hw: &HardwareProfile, allow_experimental: bool) 
                     webgpu.supported_quantizations.len()
                 )
             } else {
-                "WebGPU détecté, mais sa description runtime est incomplète (opérations/formats)".into()
+                "WebGPU détecté, mais sa description runtime est incomplète (opérations/formats)"
+                    .into()
             };
             AdapterStatus::unavailable(
                 BackendKind::WebGpu,
@@ -255,7 +259,10 @@ mod tests {
     fn paired_lan_is_available_only_when_the_gate_is_enabled() {
         let mut hw = HardwareProfile::cpu_only_laptop();
         hw.remote_nodes = 1;
-        assert_eq!(probe(BackendKind::Lan, &hw, false).state, AdapterState::Disabled);
+        assert_eq!(
+            probe(BackendKind::Lan, &hw, false).state,
+            AdapterState::Disabled
+        );
         assert!(probe(BackendKind::Lan, &hw, true).executable());
     }
 

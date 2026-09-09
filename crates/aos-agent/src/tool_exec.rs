@@ -1,19 +1,19 @@
 //! Tool invocation for lightweight runtimes (room turns).
 
-use aos_ipc::BusClient;
-use aos_proto::{
-    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
-    ModuleInvokeRequest, ModuleInvokeResponse, WebBrowseRequest, WebBrowseResponse, WebSearchRequest,
-    WebSearchResponse,
-};
 use crate::device_tools::invoke_device_tool;
 use crate::host_folder::try_host_folder_tool;
 use crate::mcp::McpSession;
 use crate::module_discovery::{module_fallback_allowed, tool_in_catalog, tool_unavailable_message};
 use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
 use crate::tools::{
-    canonicalize_tool_name, canvas_tool_denied_by_allowlist, normalize_tool_args, resolve_tool_backend,
-    ToolBackend, ToolDesc,
+    canonicalize_tool_name, canvas_tool_denied_by_allowlist, normalize_tool_args,
+    resolve_tool_backend, ToolBackend, ToolDesc,
+};
+use aos_ipc::BusClient;
+use aos_proto::{
+    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
+    ModuleInvokeRequest, ModuleInvokeResponse, WebBrowseRequest, WebBrowseResponse,
+    WebSearchRequest, WebSearchResponse,
 };
 use std::collections::HashMap;
 
@@ -104,8 +104,7 @@ pub async fn invoke_native_tool(
         "fs.read" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
             if is_disallowed_storage_path(path) {
-                if let Some(out) =
-                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                if let Some(out) = try_host_folder_tool(bus, agent_id, tool, args, session_id).await
                 {
                     return out;
                 }
@@ -114,10 +113,13 @@ pub async fn invoke_native_tool(
             read_fs(bus, path, agent_id, caps).await
         }
         "fs.write" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if is_disallowed_storage_path(&path) {
-                if let Some(out) =
-                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                if let Some(out) = try_host_folder_tool(bus, agent_id, tool, args, session_id).await
                 {
                     return out;
                 }
@@ -154,8 +156,7 @@ pub async fn invoke_native_tool(
                 .unwrap_or("")
                 .to_string();
             if !prefix.is_empty() && is_disallowed_storage_path(&prefix) {
-                if let Some(out) =
-                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                if let Some(out) = try_host_folder_tool(bus, agent_id, tool, args, session_id).await
                 {
                     return out;
                 }
@@ -177,7 +178,11 @@ pub async fn invoke_native_tool(
             }
         }
         "web.search" => {
-            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let query = args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let engine = args
                 .get("engine")
                 .and_then(|v| v.as_str())
@@ -205,7 +210,11 @@ pub async fn invoke_native_tool(
             }
         }
         "web.browse" => {
-            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             match bus
                 .call::<WebBrowseRequest, WebBrowseResponse>(
                     "web.browse",
@@ -233,8 +242,7 @@ pub async fn invoke_native_tool(
                 .unwrap_or("")
                 .to_string();
             if is_disallowed_storage_path(&path) {
-                if let Some(out) =
-                    try_host_folder_tool(bus, agent_id, tool, args, session_id).await
+                if let Some(out) = try_host_folder_tool(bus, agent_id, tool, args, session_id).await
                 {
                     return out;
                 }
@@ -269,11 +277,15 @@ pub async fn invoke_native_tool(
                 Err(e) => format!("files.generate err: {e}"),
             }
         }
-        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop"
-        | "device.usb.enumerate" | "device.usb.open" | "device.usb.read" | "device.usb.write"
-        | "device.usb.close" => {
-            invoke_device_tool(bus, agent_id, tool, args, session_id).await
-        }
+        "device.enumerate"
+        | "device.camera.capture"
+        | "device.mic.capture"
+        | "device.capture.stop"
+        | "device.usb.enumerate"
+        | "device.usb.open"
+        | "device.usb.read"
+        | "device.usb.write"
+        | "device.usb.close" => invoke_device_tool(bus, agent_id, tool, args, session_id).await,
         other => format!("outil natif non supporté en salon: {other}"),
     }
 }
@@ -298,17 +310,17 @@ pub async fn execute_room_tool(
 
     if let Some(path) = storage_path_arg(name, args) {
         if is_disallowed_storage_path(path) {
-            if let Some(out) =
-                try_host_folder_tool(bus, agent_id, name, args, session_id).await
-            {
+            if let Some(out) = try_host_folder_tool(bus, agent_id, name, args, session_id).await {
                 return out;
             }
             return ROOM_HOST_PATH_DISALLOWED.to_string();
         }
     }
 
-    if matches!(name, "agent.spawn" | "agent.await" | "user.ask" | "goal.complete" | "goal.fail")
-    {
+    if matches!(
+        name,
+        "agent.spawn" | "agent.await" | "user.ask" | "goal.complete" | "goal.fail"
+    ) {
         return format!("action {name} indisponible en tour de salon — réponds en texte");
     }
 
@@ -367,7 +379,9 @@ fn storage_path_arg<'a>(tool: &str, args: &'a serde_json::Value) -> Option<&'a s
         "fs.list" => "prefix",
         _ => return None,
     };
-    args.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
+    args.get(key)
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

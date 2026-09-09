@@ -672,7 +672,10 @@ fn paint_canvas_tool(ui: &mut Ui, rect: Rect, icon: CanvasToolIcon, color: Color
         CanvasToolIcon::Text => {
             // Chasse « T » : barre haute + fût + ligne de base.
             painter.line_segment(
-                [c + Vec2::new(-s * 0.75, -s * 0.85), c + Vec2::new(s * 0.75, -s * 0.85)],
+                [
+                    c + Vec2::new(-s * 0.75, -s * 0.85),
+                    c + Vec2::new(s * 0.75, -s * 0.85),
+                ],
                 stroke,
             );
             painter.line_segment(
@@ -680,7 +683,10 @@ fn paint_canvas_tool(ui: &mut Ui, rect: Rect, icon: CanvasToolIcon, color: Color
                 stroke,
             );
             painter.line_segment(
-                [c + Vec2::new(-s * 0.65, s * 0.85), c + Vec2::new(s * 0.65, s * 0.85)],
+                [
+                    c + Vec2::new(-s * 0.65, s * 0.85),
+                    c + Vec2::new(s * 0.65, s * 0.85),
+                ],
                 stroke,
             );
         }
@@ -842,7 +848,10 @@ fn paint_toolbar_action(ui: &mut Ui, rect: Rect, icon: ToolbarActionIcon, color:
                 stroke,
             );
             painter.line_segment(
-                [Pos2::new(c.x, c.y + s * 0.45), Pos2::new(c.x, c.y - s * 0.7)],
+                [
+                    Pos2::new(c.x, c.y + s * 0.45),
+                    Pos2::new(c.x, c.y - s * 0.7),
+                ],
                 stroke,
             );
             painter.line_segment(
@@ -896,7 +905,10 @@ fn paint_align(ui: &mut Ui, rect: Rect, color: Color32, edge: AlignEdge) {
             for (i, len) in lens.iter().enumerate() {
                 let y = c.y - s * 0.55 + (i as f32) * s * 0.55;
                 painter.line_segment(
-                    [Pos2::new(bar + s * 0.25, y), Pos2::new(bar + s * 0.25 + s * len, y)],
+                    [
+                        Pos2::new(bar + s * 0.25, y),
+                        Pos2::new(bar + s * 0.25 + s * len, y),
+                    ],
                     stroke,
                 );
             }
@@ -910,7 +922,10 @@ fn paint_align(ui: &mut Ui, rect: Rect, color: Color32, edge: AlignEdge) {
             for (i, len) in lens.iter().enumerate() {
                 let y = c.y - s * 0.55 + (i as f32) * s * 0.55;
                 painter.line_segment(
-                    [Pos2::new(bar - s * 0.25 - s * len, y), Pos2::new(bar - s * 0.25, y)],
+                    [
+                        Pos2::new(bar - s * 0.25 - s * len, y),
+                        Pos2::new(bar - s * 0.25, y),
+                    ],
                     stroke,
                 );
             }
@@ -924,7 +939,10 @@ fn paint_align(ui: &mut Ui, rect: Rect, color: Color32, edge: AlignEdge) {
             for (i, len) in lens.iter().enumerate() {
                 let x = c.x - s * 0.55 + (i as f32) * s * 0.55;
                 painter.line_segment(
-                    [Pos2::new(x, bar + s * 0.25), Pos2::new(x, bar + s * 0.25 + s * len)],
+                    [
+                        Pos2::new(x, bar + s * 0.25),
+                        Pos2::new(x, bar + s * 0.25 + s * len),
+                    ],
                     stroke,
                 );
             }
@@ -938,7 +956,10 @@ fn paint_align(ui: &mut Ui, rect: Rect, color: Color32, edge: AlignEdge) {
             for (i, len) in lens.iter().enumerate() {
                 let x = c.x - s * 0.55 + (i as f32) * s * 0.55;
                 painter.line_segment(
-                    [Pos2::new(x, bar - s * 0.25 - s * len), Pos2::new(x, bar - s * 0.25)],
+                    [
+                        Pos2::new(x, bar - s * 0.25 - s * len),
+                        Pos2::new(x, bar - s * 0.25),
+                    ],
                     stroke,
                 );
             }

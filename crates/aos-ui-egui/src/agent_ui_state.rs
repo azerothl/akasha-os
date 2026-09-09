@@ -51,10 +51,7 @@ pub(crate) struct PolicyEditDraft {
 impl PolicyEditDraft {
     pub(crate) fn from_policy(policy: &AgentPolicy) -> Self {
         Self {
-            net_deny: !matches!(
-                policy.net,
-                aos_proto::AgentNetPolicy::Allow
-            ),
+            net_deny: !matches!(policy.net, aos_proto::AgentNetPolicy::Allow),
             fs_write: policy.fs_write,
             restrict_tools: policy.tool_allowlist.is_some(),
             tools: policy.tool_allowlist.clone().unwrap_or_default(),

@@ -157,8 +157,7 @@ mod tests {
             sequence: u32,
             mut activation: Vec<u8>,
         ) -> Result<Vec<u8>, String> {
-            self.0
-                .push((node_id.to_string(), layer_index, sequence));
+            self.0.push((node_id.to_string(), layer_index, sequence));
             activation.push(layer_index as u8);
             Ok(activation)
         }
@@ -184,21 +183,46 @@ mod tests {
         .unwrap();
         let mut trace = Trace(Vec::new());
         let (activation, metrics) = plan.run(&mut trace, vec![1], 10, || false).unwrap();
-        assert_eq!(trace.0, vec![("node-a".into(), 0, 10), ("node-a".into(), 1, 11),
-            ("node-b".into(), 2, 12), ("node-b".into(), 3, 13)]);
+        assert_eq!(
+            trace.0,
+            vec![
+                ("node-a".into(), 0, 10),
+                ("node-a".into(), 1, 11),
+                ("node-b".into(), 2, 12),
+                ("node-b".into(), 3, 13)
+            ]
+        );
         assert_eq!(activation, vec![1, 0, 1, 2, 3]);
-        assert_eq!(metrics, LayerPipelineMetrics { layers_executed: 4, transfers: 1, cancelled: false });
+        assert_eq!(
+            metrics,
+            LayerPipelineMetrics {
+                layers_executed: 4,
+                transfers: 1,
+                cancelled: false
+            }
+        );
     }
 
     #[test]
     fn pipeline_refuse_un_trou_et_s_arrete_sur_annulation() {
         assert!(LayerPipelinePlan::new(
             3,
-            vec![LayerStage { node_id: "node".into(), first_layer: 0, last_layer: 1 }],
-        ).is_err());
-        let plan = LayerPipelinePlan::new(2, vec![LayerStage {
-            node_id: "node".into(), first_layer: 0, last_layer: 1,
-        }]).unwrap();
+            vec![LayerStage {
+                node_id: "node".into(),
+                first_layer: 0,
+                last_layer: 1
+            }],
+        )
+        .is_err());
+        let plan = LayerPipelinePlan::new(
+            2,
+            vec![LayerStage {
+                node_id: "node".into(),
+                first_layer: 0,
+                last_layer: 1,
+            }],
+        )
+        .unwrap();
         let mut trace = Trace(Vec::new());
         let (_, metrics) = plan.run(&mut trace, vec![1], 0, || true).unwrap();
         assert_eq!(metrics.layers_executed, 0);
@@ -209,13 +233,29 @@ mod tests {
     fn partition_evenly_preserves_order_and_covers_every_layer() {
         let nodes = vec!["a".into(), "b".into(), "c".into()];
         let stages = partition_layer_stages(8, &nodes).unwrap();
-        assert_eq!(stages, vec![
-            LayerStage { node_id: "a".into(), first_layer: 0, last_layer: 2 },
-            LayerStage { node_id: "b".into(), first_layer: 3, last_layer: 5 },
-            LayerStage { node_id: "c".into(), first_layer: 6, last_layer: 7 },
-        ]);
-        assert!(partition_layer_stages(2, &nodes).unwrap().iter().all(|stage| {
-            stage.first_layer == stage.last_layer
-        }));
+        assert_eq!(
+            stages,
+            vec![
+                LayerStage {
+                    node_id: "a".into(),
+                    first_layer: 0,
+                    last_layer: 2
+                },
+                LayerStage {
+                    node_id: "b".into(),
+                    first_layer: 3,
+                    last_layer: 5
+                },
+                LayerStage {
+                    node_id: "c".into(),
+                    first_layer: 6,
+                    last_layer: 7
+                },
+            ]
+        );
+        assert!(partition_layer_stages(2, &nodes)
+            .unwrap()
+            .iter()
+            .all(|stage| { stage.first_layer == stage.last_layer }));
     }
 }

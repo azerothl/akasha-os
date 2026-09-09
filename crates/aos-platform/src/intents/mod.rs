@@ -7,8 +7,8 @@ pub mod fs;
 pub mod helpers;
 pub mod host_folder;
 
-use aos_ipc::BusService;
 use crate::subsystem::PlatformSubsystem;
+use aos_ipc::BusService;
 use std::sync::Arc;
 
 pub fn register_audit_and_fs(svc: &mut BusService, sub: &Arc<PlatformSubsystem>) {

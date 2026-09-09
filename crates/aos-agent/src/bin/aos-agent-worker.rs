@@ -4,62 +4,59 @@
 //!          [--restore]`
 
 use aos_agent::actions::{
-    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
-    AgentAction, THREAD_FAIL_COULD_NOT_ACT, THREAD_FAIL_COULD_NOT_CONTINUE,
+    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup, AgentAction,
+    THREAD_FAIL_COULD_NOT_ACT, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
-use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
+use aos_agent::canvas_scene::{
+    agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason,
+    canvas_critic_system_prompt, canvas_op_succeeded, canvas_reflect_user_content,
+    canvas_repeat_stroke_verdict, canvas_scene_prompt_block, canvas_text_only_critic_system_prompt,
+    canvas_tool_mutates_scene, canvas_visual_fingerprint, canvas_visual_progress,
+    canvas_visual_progress_note, end_canvas_vision, fetch_canvas_aspect,
+    fetch_canvas_global_validation, fetch_canvas_scene_digest, global_canvas_validation_due,
+    merge_canvas_vision_refs, refresh_canvas_scene_after_op, resolve_resident_vision_model,
+    session_model_has_vision, should_run_canvas_critic, strip_vision_image_paths,
+    CanvasRepeatVerdict,
+};
 use aos_agent::context_budget::{
     choose_agent_max_tokens, clamp_spawn_brief, compact_after_prompt_overflow,
     enforce_prompt_budget, is_infer_stall_error, is_prompt_too_long_error,
     is_technical_vision_infer_error, prompt_budget, sanitize_assistant_for_memory, LoopGuard,
     LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
 };
-use aos_agent::persist;
-use aos_agent::device_tools::{
-    capture_png_path_from_tool_result, invoke_device_tool,
-};
-use aos_agent::canvas_scene::{
-    agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason, canvas_critic_system_prompt,
-    canvas_op_succeeded,
-    canvas_visual_fingerprint, canvas_visual_progress, canvas_visual_progress_note,
-    canvas_reflect_user_content, canvas_repeat_stroke_verdict, canvas_scene_prompt_block,
-    canvas_tool_mutates_scene, end_canvas_vision, fetch_canvas_aspect,
-    fetch_canvas_global_validation, fetch_canvas_scene_digest, global_canvas_validation_due,
-    merge_canvas_vision_refs, refresh_canvas_scene_after_op, resolve_resident_vision_model,
-    session_model_has_vision, strip_vision_image_paths, should_run_canvas_critic,
-    canvas_text_only_critic_system_prompt,
-    CanvasRepeatVerdict,
-};
-use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
+use aos_agent::device_tools::{capture_png_path_from_tool_result, invoke_device_tool};
+use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
 use aos_agent::module_discovery::{
     active_module_names, discover_module_tools, merge_skill_tools_for_modules,
     missing_module_hints, module_fallback_allowed, tool_in_catalog, tool_unavailable_message,
 };
-use aos_agent::skills::{load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc};
+use aos_agent::persist;
+use aos_agent::prompt::{compile_system_prompt, optimize_prompt_request, PromptCompileInput};
+use aos_agent::skills::{
+    load_skills, match_skill_by_action, merge_skill_tools, skill_misuse_hint, SkillDoc,
+};
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
-    canonicalize_tool_name, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list, caps_for_tools, caps_subset,
-    classify_action, canvas_draw_strategy_hint,
-    normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool, restrict_canvas_tools, select_tools,
-    select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend,
-    ToolDesc,
+    canonicalize_tool_name, canvas_draw_strategy_hint, canvas_tool_denied_by_allowlist,
+    canvas_tools_from_module_list, caps_for_tools, caps_subset, classify_action,
+    normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool, restrict_canvas_tools,
+    select_tools, select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
 use aos_proto::{
-    AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSpec,
-    AgentSource, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
+    AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSource,
+    AgentSpec, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
     ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DeepPlanStepPatch,
-    DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
-    InferParams, InferRequest, MemContextRequest, MemContextResponse, MemEpisodicQueryRequest,
-    ModelInfo,
-    MemEpisodicWriteRequest, MemHit, MemRememberResponse, MemSharedReadRequest,
-    MemSharedWriteRequest, ModuleInfo, ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest,
-    PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest, PlanGetRequest,
-    PlanReplaceTreeRequest, PlanResponse, PlanStep, PlanStepStatus, PlanUpdateStepRequest, TaskNode,
-    TaskNodeStatus, TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
-    WebSearchResponse,
+    DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse,
+    FsWriteRequest, InferParams, InferRequest, MemContextRequest, MemContextResponse,
+    MemEpisodicQueryRequest, MemEpisodicWriteRequest, MemHit, MemRememberResponse,
+    MemSharedReadRequest, MemSharedWriteRequest, ModelInfo, ModuleInfo, ModuleInvokeRequest,
+    ModuleInvokeResponse, NetFetchRequest, PlanAppendLogRequest, PlanCreateRequest,
+    PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse, PlanStep,
+    PlanStepStatus, PlanUpdateStepRequest, TaskNode, TaskNodeStatus, TokenEvent, WebBrowseRequest,
+    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -71,7 +68,10 @@ use tokio::sync::{mpsc, Mutex};
 enum WorkerCmd {
     Resume,
     Steer(String),
-    ActDecision { act_id: String, approved: bool },
+    ActDecision {
+        act_id: String,
+        approved: bool,
+    },
     ChildFinished {
         child_id: String,
         result: String,
@@ -204,10 +204,9 @@ async fn inherit_device_vision_model(bus: &BusClient, spec: &mut AgentSpec) {
     else {
         return;
     };
-    let Some(vid) = aos_agent::canvas_scene::resident_vision_model_id(
-        spec.model_id.as_deref(),
-        &models,
-    ) else {
+    let Some(vid) =
+        aos_agent::canvas_scene::resident_vision_model_id(spec.model_id.as_deref(), &models)
+    else {
         return;
     };
     if spec.model_id.as_deref() != Some(vid.as_str()) {
@@ -281,10 +280,9 @@ fn agent_has_device_capture_tools(tools: &[String]) -> bool {
 #[tokio::main]
 async fn main() {
     let (agent_id, bus_addr, spec_path, restore) = parse_args();
-    let mut spec: AgentSpec = serde_json::from_str(
-        &std::fs::read_to_string(&spec_path).expect("lecture spec.json"),
-    )
-    .expect("parse spec.json");
+    let mut spec: AgentSpec =
+        serde_json::from_str(&std::fs::read_to_string(&spec_path).expect("lecture spec.json"))
+            .expect("parse spec.json");
     spec.agent_id = agent_id.clone();
 
     let bus = BusClient::connect(&bus_addr, format!("agent:{agent_id}"))
@@ -305,9 +303,8 @@ async fn main() {
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<WorkerCmd>(16);
 
     let mut state = if restore {
-        persist::read_state(&agent_id).unwrap_or_else(|| {
-            CognitiveState::new(agent_id.clone(), spec.caps.clone())
-        })
+        persist::read_state(&agent_id)
+            .unwrap_or_else(|| CognitiveState::new(agent_id.clone(), spec.caps.clone()))
     } else {
         CognitiveState::new(agent_id.clone(), spec.caps.clone())
     };
@@ -495,14 +492,10 @@ async fn main() {
             )
             .await;
         } else {
-            let assess = require_canvas_plan(run_task_assess(
-                &bus,
-                &shared,
+            let assess = require_canvas_plan(
+                run_task_assess(&bus, &shared, &spec, &spec.goal.statement, "démarrage").await,
                 &spec,
-                &spec.goal.statement,
-                "démarrage",
-            )
-            .await, &spec);
+            );
             apply_assess_to_runtime(
                 &bus,
                 &shared,
@@ -716,14 +709,7 @@ async fn main() {
                 },
             )
             .await;
-            report(
-                &bus,
-                &agent_id,
-                AgentOutputEvent::Log {
-                    line: reason,
-                },
-            )
-            .await;
+            report(&bus, &agent_id, AgentOutputEvent::Log { line: reason }).await;
             terminal = Some(AgentState::Failed);
             break;
         }
@@ -738,14 +724,7 @@ async fn main() {
                 },
             )
             .await;
-            report(
-                &bus,
-                &agent_id,
-                AgentOutputEvent::Log {
-                    line: reason,
-                },
-            )
-            .await;
+            report(&bus, &agent_id, AgentOutputEvent::Log { line: reason }).await;
             terminal = Some(AgentState::Failed);
             break;
         }
@@ -754,14 +733,7 @@ async fn main() {
             if used >= max_tok {
                 let reason = format!("budget tokens atteint ({used}/{max_tok})");
                 shared.state.lock().await.artifacts.push(reason.clone());
-                report(
-                    &bus,
-                    &agent_id,
-                    AgentOutputEvent::Error {
-                        message: reason,
-                    },
-                )
-                .await;
+                report(&bus, &agent_id, AgentOutputEvent::Error { message: reason }).await;
                 terminal = Some(AgentState::Failed);
                 break;
             }
@@ -844,13 +816,8 @@ async fn main() {
         } else if canvas_agent {
             if let Some(sid) = canvas_sid.as_deref() {
                 let aspect = fetch_canvas_aspect(&bus, sid).await;
-                if let Some(png) = begin_canvas_vision(
-                    &bus,
-                    sid,
-                    aspect,
-                    spec.model_id.as_deref(),
-                )
-                .await
+                if let Some(png) =
+                    begin_canvas_vision(&bus, sid, aspect, spec.model_id.as_deref()).await
                 {
                     step_refs = merge_canvas_vision_refs(&step_refs, &png);
                 }
@@ -901,7 +868,8 @@ async fn main() {
                 InferOutcome::Text(t) => break Ok(t),
                 InferOutcome::Aborted => break Err(InferControl::Continue),
                 InferOutcome::Fatal(e)
-                    if is_prompt_too_long_error(&e) && prompt_retries < MAX_OVERFLOW_INFER_RETRIES =>
+                    if is_prompt_too_long_error(&e)
+                        && prompt_retries < MAX_OVERFLOW_INFER_RETRIES =>
                 {
                     prompt_retries += 1;
                     eprintln!(
@@ -963,9 +931,7 @@ async fn main() {
                 }
                 InferOutcome::Fatal(e) => {
                     if is_prompt_too_long_error(&e) {
-                        eprintln!(
-                            "prompt overflow après {prompt_retries} retries : {e}"
-                        );
+                        eprintln!("prompt overflow après {prompt_retries} retries : {e}");
                         report(
                             &bus,
                             &agent_id,
@@ -975,12 +941,7 @@ async fn main() {
                         )
                         .await;
                     } else {
-                        report(
-                            &bus,
-                            &agent_id,
-                            AgentOutputEvent::Error { message: e },
-                        )
-                        .await;
+                        report(&bus, &agent_id, AgentOutputEvent::Error { message: e }).await;
                     }
                     terminal = Some(AgentState::Failed);
                     break Err(InferControl::Fail);
@@ -1124,7 +1085,14 @@ async fn main() {
                 ActResult::Continue(reason)
             } else if should_gate_action(&spec, &action.action) {
                 match gate_action(
-                    &bus, &shared, &mut cmd_rx, &spec, &action, &agent_id, timeout, started,
+                    &bus,
+                    &shared,
+                    &mut cmd_rx,
+                    &spec,
+                    &action,
+                    &agent_id,
+                    timeout,
+                    started,
                 )
                 .await
                 {
@@ -1175,18 +1143,16 @@ async fn main() {
                     append_usb_busy_hint(&mut outcome, &action.action);
                     if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                         if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
-                            let scene = refresh_canvas_scene_after_op(
-                                &bus,
-                                sid,
-                                &outcome,
-                            )
-                            .await;
+                            let scene = refresh_canvas_scene_after_op(&bus, sid, &outcome).await;
                             outcome = scene.text;
                             if let Some(png) = scene.png_path {
                                 if let Some(current) = canvas_visual_fingerprint(&png) {
                                     if let Some(previous) = last_canvas_visual {
                                         let progress = canvas_visual_progress(previous, current);
-                                        outcome.push_str(&format!("\n\n{}", canvas_visual_progress_note(progress)));
+                                        outcome.push_str(&format!(
+                                            "\n\n{}",
+                                            canvas_visual_progress_note(progress)
+                                        ));
                                         if !progress.meaningful_change {
                                             shared.state.lock().await.push_user(
                                                 "[runtime] Le vérificateur visuel ne voit presque aucun changement. Ne répète pas cette forme : choisis une pièce distincte ou modifie une séquence existante.",
@@ -1210,9 +1176,7 @@ async fn main() {
                         }
                     }
                     let mut one_tool_result = outcome.clone();
-                    if let Some(child) =
-                        extract_child_id(&action.action, &outcome, &action.args)
-                    {
+                    if let Some(child) = extract_child_id(&action.action, &outcome, &action.args) {
                         step_child_id = Some(child);
                     }
                     let sources = collect_sources(&action.action, &action.args, &outcome);
@@ -1352,18 +1316,16 @@ async fn main() {
                 append_usb_busy_hint(&mut outcome, &action.action);
                 if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
                     if let Some(sid) = spec.session_id.as_deref().filter(|s| !s.is_empty()) {
-                        let scene = refresh_canvas_scene_after_op(
-                            &bus,
-                            sid,
-                            &outcome,
-                        )
-                        .await;
+                        let scene = refresh_canvas_scene_after_op(&bus, sid, &outcome).await;
                         outcome = scene.text;
                         if let Some(png) = scene.png_path {
                             if let Some(current) = canvas_visual_fingerprint(&png) {
                                 if let Some(previous) = last_canvas_visual {
                                     let progress = canvas_visual_progress(previous, current);
-                                    outcome.push_str(&format!("\n\n{}", canvas_visual_progress_note(progress)));
+                                    outcome.push_str(&format!(
+                                        "\n\n{}",
+                                        canvas_visual_progress_note(progress)
+                                    ));
                                     if !progress.meaningful_change {
                                         shared.state.lock().await.push_user(
                                             "[runtime] Le vérificateur visuel ne voit presque aucun changement. Ne répète pas cette forme : choisis une pièce distincte ou modifie une séquence existante.",
@@ -1424,12 +1386,7 @@ async fn main() {
                 // Verifier pass
                 let ok = verify_goal(&bus, &shared, &spec, &summary).await;
                 if ok {
-                    shared
-                        .state
-                        .lock()
-                        .await
-                        .artifacts
-                        .push(summary.clone());
+                    shared.state.lock().await.artifacts.push(summary.clone());
                     report(
                         &bus,
                         &agent_id,
@@ -1471,14 +1428,7 @@ async fn main() {
         match loop_guard.observe(&action.action, &tool_result) {
             LoopVerdict::Ok => {}
             LoopVerdict::Warn(msg) => {
-                report(
-                    &bus,
-                    &agent_id,
-                    AgentOutputEvent::Log {
-                        line: msg.clone(),
-                    },
-                )
-                .await;
+                report(&bus, &agent_id, AgentOutputEvent::Log { line: msg.clone() }).await;
                 shared
                     .state
                     .lock()
@@ -1553,8 +1503,7 @@ async fn main() {
         // Critic: after every canvas stroke (scene PNG). Skip the periodic
         // generic critic on device-capture agents — it prefixes canvas advice
         // and loops webcam goals after a successful snap.
-        let skip_device_critic =
-            !canvas_agent && agent_has_device_capture_tools(&spec.tools);
+        let skip_device_critic = !canvas_agent && agent_has_device_capture_tools(&spec.tools);
         let model_reflection = if terminal.is_none()
             && !skip_device_critic
             && should_run_canvas_critic(canvas_agent, canvas_scene_changed, step)
@@ -1573,8 +1522,7 @@ async fn main() {
             .iter()
             .map(|s| (s.name.clone(), s.tools.clone()))
             .collect();
-        let (tool_kind, mcp_server, skill) =
-            classify_action(&action.action, &tools, &skill_pairs);
+        let (tool_kind, mcp_server, skill) = classify_action(&action.action, &tools, &skill_pairs);
         let record = AgentStepRecord {
             step,
             thought: action.thought.clone(),
@@ -1639,19 +1587,12 @@ async fn main() {
         {
             let plan_complete = shared.state.lock().await.canvas_plan_is_complete();
             if plan_complete {
-                let final_validation = if let Some(sid) =
-                    spec.session_id.as_deref().filter(|sid| !sid.is_empty())
-                {
-                    fetch_canvas_global_validation(
-                        &bus,
-                        sid,
-                        &spec.goal.statement,
-                        true,
-                    )
-                    .await
-                } else {
-                    None
-                };
+                let final_validation =
+                    if let Some(sid) = spec.session_id.as_deref().filter(|sid| !sid.is_empty()) {
+                        fetch_canvas_global_validation(&bus, sid, &spec.goal.statement, true).await
+                    } else {
+                        None
+                    };
                 if let Some(validation) =
                     final_validation.filter(|report| report.requires_modification())
                 {
@@ -1798,7 +1739,8 @@ async fn infer_turn(
                 || lower.ends_with(".jpeg")
                 || lower.ends_with(".webp")
         })
-        .take(4).cloned()
+        .take(4)
+        .cloned()
         .collect();
     let req = InferRequest {
         model_id: spec.model_id.clone(),
@@ -1870,9 +1812,7 @@ async fn infer_turn(
                     match cmd_rx.recv().await {
                         Some(WorkerCmd::Resume) => return InferOutcome::Aborted,
                         Some(WorkerCmd::Steer(d)) => return InferOutcome::Steer(d),
-                        Some(WorkerCmd::ActDecision { .. }) => {
-                            return InferOutcome::Aborted
-                        }
+                        Some(WorkerCmd::ActDecision { .. }) => return InferOutcome::Aborted,
                         Some(WorkerCmd::ChildFinished {
                             child_id,
                             result,
@@ -1993,10 +1933,11 @@ async fn execute_action(
     action: &AgentAction,
 ) -> ActResult {
     let canonical = canonicalize_tool_name(&action.action);
-    let (resolved_name, resolved_args) = match resolve_usb_io_cap_tool(canonical.as_str(), &action.args) {
-        Ok(pair) => pair,
-        Err(msg) => return ActResult::Continue(msg),
-    };
+    let (resolved_name, resolved_args) =
+        match resolve_usb_io_cap_tool(canonical.as_str(), &action.args) {
+            Ok(pair) => pair,
+            Err(msg) => return ActResult::Continue(msg),
+        };
     let name = resolved_name.as_str();
     let args_owned = normalize_tool_args(name, &resolved_args);
     let args = &args_owned;
@@ -2064,11 +2005,8 @@ async fn execute_action(
                     .map(|s| s.tool_result.clone())
                     .unwrap_or_default()
             };
-            let summary = aos_agent::actions::resolve_goal_complete_summary(
-                args,
-                &action.thought,
-                &prior,
-            );
+            let summary =
+                aos_agent::actions::resolve_goal_complete_summary(args, &action.thought, &prior);
             ActResult::Complete(summary)
         }
         "goal.fail" => {
@@ -2147,7 +2085,9 @@ async fn execute_action(
             if need_mem {
                 let query = nodes
                     .iter()
-                    .find(|n| n.status == TaskNodeStatus::Pending || n.status == TaskNodeStatus::Running)
+                    .find(|n| {
+                        n.status == TaskNodeStatus::Pending || n.status == TaskNodeStatus::Running
+                    })
                     .map(|n| n.title.clone())
                     .or_else(|| nodes.first().map(|n| n.title.clone()))
                     .unwrap_or_else(|| spec.goal.statement.clone());
@@ -2155,22 +2095,12 @@ async fn execute_action(
             }
             ActResult::Continue(format!("plan mis à jour ({} nœuds)", nodes.len()))
         }
-        "plan.create" => {
-            handle_deep_plan_create(bus, shared, spec, args).await
-        }
-        "plan.update_step" => {
-            handle_deep_plan_update_step(bus, shared, spec, args).await
-        }
-        "plan.replace_tree" => {
-            handle_deep_plan_replace_tree(bus, shared, spec, args).await
-        }
-        "plan.delegate_step" => {
-            handle_deep_plan_delegate(bus, shared, spec, args).await
-        }
+        "plan.create" => handle_deep_plan_create(bus, shared, spec, args).await,
+        "plan.update_step" => handle_deep_plan_update_step(bus, shared, spec, args).await,
+        "plan.replace_tree" => handle_deep_plan_replace_tree(bus, shared, spec, args).await,
+        "plan.delegate_step" => handle_deep_plan_delegate(bus, shared, spec, args).await,
         "plan.get" => handle_deep_plan_get(bus, shared, spec, args).await,
-        "plan.append_log" => {
-            handle_deep_plan_append_log(bus, shared, spec, args).await
-        }
+        "plan.append_log" => handle_deep_plan_append_log(bus, shared, spec, args).await,
         "docs.read" => {
             let path = args
                 .get("path")
@@ -2178,9 +2108,7 @@ async fn execute_action(
                 .unwrap_or("")
                 .to_string();
             if !spec.documents.iter().any(|d| d.path == path) {
-                return ActResult::Continue(format!(
-                    "document non attaché: {path}"
-                ));
+                return ActResult::Continue(format!("document non attaché: {path}"));
             }
             let content = read_fs(bus, &path, &agent_id, &caps).await;
             ActResult::Continue(truncate(&content, 4000))
@@ -2238,9 +2166,7 @@ async fn execute_action(
             if children_count >= spec.goal.max_subagents {
                 return ActResult::Continue("max_subagents atteint".into());
             }
-            let brief = clamp_spawn_brief(
-                args.get("brief").and_then(|v| v.as_str()).unwrap_or(""),
-            );
+            let brief = clamp_spawn_brief(args.get("brief").and_then(|v| v.as_str()).unwrap_or(""));
             if brief.is_empty() {
                 return ActResult::Continue("brief sous-agent vide".into());
             }
@@ -2309,8 +2235,7 @@ async fn execute_action(
                     .await
                 {
                     return ActResult::Continue(
-                        finish_agent_await(bus, shared, &agent_id, child_id, val.to_string())
-                            .await,
+                        finish_agent_await(bus, shared, &agent_id, child_id, val.to_string()).await,
                     );
                 }
                 if let Ok(list) = bus
@@ -2492,9 +2417,7 @@ async fn post_ask_timeout(bus: &BusClient, spec: &AgentSpec, mins: u64) {
     let Some(session_id) = spec.session_id.clone() else {
         return;
     };
-    let content = format!(
-        "**Question expirée** ({mins} min) — l'agent continue sans réponse."
-    );
+    let content = format!("**Question expirée** ({mins} min) — l'agent continue sans réponse.");
     let _ = bus
         .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
             "chat.session.append",
@@ -2767,9 +2690,7 @@ async fn spawn_child(
         policy: parent.policy.clone(),
         goal: Some(AgentGoal {
             statement: child_goal_statement,
-            success_criteria: vec![
-                "Résultat clair et concis (≤ ~800 caractères utiles)".into(),
-            ],
+            success_criteria: vec!["Résultat clair et concis (≤ ~800 caractères utiles)".into()],
             max_steps: (parent.goal.max_steps / 2).clamp(24, 64),
             max_subagents: 0,
             timeout_secs: parent.goal.timeout_secs.min(1800),
@@ -2789,14 +2710,19 @@ async fn spawn_child(
         optimize_prompt: false,
         gate_mode: parent.gate_mode.clone(),
         origin: None,
-    cognitive_mode: aos_proto::CognitiveMode::Normal,
+        cognitive_mode: aos_proto::CognitiveMode::Normal,
     };
     match bus
         .call::<AgentCreateRequest, AgentCreateResponse>("agent.create", &req, vec![])
         .await
     {
         Ok(resp) => {
-            shared.state.lock().await.children.push(resp.agent_id.clone());
+            shared
+                .state
+                .lock()
+                .await
+                .children
+                .push(resp.agent_id.clone());
             report(
                 bus,
                 &parent.agent_id,
@@ -2830,12 +2756,7 @@ async fn maybe_report_plan_advance_after_canvas_draw(
         return;
     }
     let nodes = st.task_graph.clone();
-    report(
-        bus,
-        agent_id,
-        AgentOutputEvent::PlanUpdated { nodes },
-    )
-    .await;
+    report(bus, agent_id, AgentOutputEvent::PlanUpdated { nodes }).await;
 }
 
 fn parse_plan_nodes(args: &serde_json::Value) -> Vec<TaskNode> {
@@ -2854,7 +2775,11 @@ fn parse_plan_nodes(args: &serde_json::Value) -> Vec<TaskNode> {
                     .and_then(|v| v.as_str())
                     .unwrap_or("tâche")
                     .to_string(),
-                status: match n.get("status").and_then(|v| v.as_str()).unwrap_or("Pending") {
+                status: match n
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Pending")
+                {
                     "Running" => TaskNodeStatus::Running,
                     "Blocked" => TaskNodeStatus::Blocked,
                     "Done" => TaskNodeStatus::Done,
@@ -2943,18 +2868,11 @@ fn parse_deep_step(n: &serde_json::Value, fallback_id: &str) -> PlanStep {
     }
 }
 
-async fn report_deep_plan(
-    bus: &BusClient,
-    agent_id: &str,
-    plan: aos_proto::DeepPlan,
-    trace: &str,
-) {
+async fn report_deep_plan(bus: &BusClient, agent_id: &str, plan: aos_proto::DeepPlan, trace: &str) {
     report(
         bus,
         agent_id,
-        AgentOutputEvent::DeepPlanUpdated {
-            plan: plan.clone(),
-        },
+        AgentOutputEvent::DeepPlanUpdated { plan: plan.clone() },
     )
     .await;
     if !trace.trim().is_empty() {
@@ -2970,7 +2888,11 @@ async fn report_deep_plan(
 }
 
 async fn resolve_plan_id(shared: &Shared, args: &serde_json::Value) -> Option<String> {
-    if let Some(pid) = args.get("plan_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+    if let Some(pid) = args
+        .get("plan_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
         return Some(pid.to_string());
     }
     let st = shared.state.lock().await;
@@ -3044,7 +2966,9 @@ async fn handle_deep_plan_update_step(
     args: &serde_json::Value,
 ) -> ActResult {
     let Some(plan_id) = resolve_plan_id(shared, args).await else {
-        return ActResult::Continue("plan.update_step : plan_id manquant (appelle plan.create d'abord)".into());
+        return ActResult::Continue(
+            "plan.update_step : plan_id manquant (appelle plan.create d'abord)".into(),
+        );
     };
     let step_id = args
         .get("step_id")
@@ -3088,10 +3012,7 @@ async fn handle_deep_plan_update_step(
         .await
     {
         Ok(resp) => {
-            let trace = format!(
-                "Deep Thinking : plan mis à jour (v{}).",
-                resp.plan.version
-            );
+            let trace = format!("Deep Thinking : plan mis à jour (v{}).", resp.plan.version);
             report_deep_plan(bus, &spec.agent_id, resp.plan, &trace).await;
             ActResult::Continue(trace)
         }
@@ -3187,7 +3108,10 @@ async fn handle_deep_plan_delegate(
     let ActResult::Continue(msg) = &spawn else {
         return spawn;
     };
-    let Some(child_id) = msg.strip_prefix("sous-agent créé: ").map(|s| s.trim().to_string()) else {
+    let Some(child_id) = msg
+        .strip_prefix("sous-agent créé: ")
+        .map(|s| s.trim().to_string())
+    else {
         return ActResult::Continue(format!("délégation : spawn a échoué ({msg})"));
     };
     let req = PlanDelegateStepRequest {
@@ -3341,7 +3265,11 @@ async fn invoke_native(
             read_fs(bus, path, agent_id, caps).await
         }
         "fs.write" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let content = args
                 .get("content")
                 .and_then(|v| v.as_str())
@@ -3388,7 +3316,11 @@ async fn invoke_native(
             }
         }
         "mem.episodic_write" => {
-            let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let text = args
+                .get("text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let ns = args
                 .get("namespace")
                 .and_then(|v| v.as_str())
@@ -3414,7 +3346,11 @@ async fn invoke_native(
             }
         }
         "mem.episodic_query" => {
-            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let query = args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             match bus
                 .call::<MemEpisodicQueryRequest, Vec<MemHit>>(
                     "mem.episodic_query",
@@ -3432,7 +3368,11 @@ async fn invoke_native(
             }
         }
         "mem.context" => {
-            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let query = args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             match bus
                 .call::<MemContextRequest, MemContextResponse>(
                     "mem.context",
@@ -3452,7 +3392,11 @@ async fn invoke_native(
             }
         }
         "web.search" => {
-            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let query = args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let engine = args
                 .get("engine")
                 .and_then(|v| v.as_str())
@@ -3491,7 +3435,11 @@ async fn invoke_native(
             }
         }
         "web.browse" => {
-            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let max_chars = args
                 .get("max_chars")
                 .and_then(|v| v.as_u64())
@@ -3514,7 +3462,11 @@ async fn invoke_native(
             }
         }
         "net.fetch" => {
-            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             match bus
                 .call::<NetFetchRequest, serde_json::Value>(
                     "net.fetch",
@@ -3538,7 +3490,11 @@ async fn invoke_native(
             }
         }
         "files.generate" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let format = args
                 .get("format")
                 .and_then(|v| v.as_str())
@@ -3584,13 +3540,14 @@ async fn invoke_native(
                 .map(|s| s.to_string());
             let options = match args.get("options") {
                 None => aos_proto::MediaImageOptions::default(),
-                Some(v) => match serde_json::from_value::<aos_proto::MediaImageOptions>(v.clone())
-                {
-                    Ok(o) => o,
-                    Err(e) => {
-                        return format!("media.image.generate err: options refused ({e})");
+                Some(v) => {
+                    match serde_json::from_value::<aos_proto::MediaImageOptions>(v.clone()) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            return format!("media.image.generate err: options refused ({e})");
+                        }
                     }
-                },
+                }
             };
             match bus
                 .call::<aos_proto::MediaImageGenerateRequest, aos_proto::MediaGenerateResponse>(
@@ -3628,13 +3585,14 @@ async fn invoke_native(
                 .map(|s| s.to_string());
             let options = match args.get("options") {
                 None => aos_proto::MediaAudioOptions::default(),
-                Some(v) => match serde_json::from_value::<aos_proto::MediaAudioOptions>(v.clone())
-                {
-                    Ok(o) => o,
-                    Err(e) => {
-                        return format!("media.audio.generate err: options refused ({e})");
+                Some(v) => {
+                    match serde_json::from_value::<aos_proto::MediaAudioOptions>(v.clone()) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            return format!("media.audio.generate err: options refused ({e})");
+                        }
                     }
-                },
+                }
             };
             match bus
                 .call::<aos_proto::MediaAudioGenerateRequest, aos_proto::MediaGenerateResponse>(
@@ -3768,9 +3726,7 @@ async fn invoke_native(
             Ok(list) => serde_json::to_string(
                 &list
                     .iter()
-                    .map(|s| {
-                        serde_json::json!({"name": s.name, "description": s.description})
-                    })
+                    .map(|s| serde_json::json!({"name": s.name, "description": s.description}))
                     .collect::<Vec<_>>(),
             )
             .unwrap_or_default(),
@@ -3947,11 +3903,15 @@ async fn invoke_native(
                 Err(e) => format!("module.describe err: {e}"),
             }
         }
-        "device.enumerate" | "device.camera.capture" | "device.mic.capture" | "device.capture.stop"
-        | "device.usb.enumerate" | "device.usb.open" | "device.usb.read" | "device.usb.write"
-        | "device.usb.close" => {
-            invoke_device_tool(bus, agent_id, tool, args, session_id).await
-        }
+        "device.enumerate"
+        | "device.camera.capture"
+        | "device.mic.capture"
+        | "device.capture.stop"
+        | "device.usb.enumerate"
+        | "device.usb.open"
+        | "device.usb.read"
+        | "device.usb.write"
+        | "device.usb.close" => invoke_device_tool(bus, agent_id, tool, args, session_id).await,
         other => format!("natif non implémenté: {other}"),
     }
 }
@@ -3974,12 +3934,7 @@ async fn read_fs(bus: &BusClient, path: &str, agent_id: &str, caps: &[String]) -
     }
 }
 
-async fn index_documents(
-    bus: &BusClient,
-    agent_id: &str,
-    caps: &[String],
-    docs: &[DocumentRef],
-) {
+async fn index_documents(bus: &BusClient, agent_id: &str, caps: &[String], docs: &[DocumentRef]) {
     for d in docs {
         let content = read_fs(bus, &d.path, agent_id, caps).await;
         let excerpt = truncate(&content, 500);
@@ -4113,7 +4068,12 @@ async fn apply_assess_to_runtime(
         }
     }
 
-    if assess.is_complex() && !spec.skills.iter().any(|s| s == "planner" || s == "deep-thinking") {
+    if assess.is_complex()
+        && !spec
+            .skills
+            .iter()
+            .any(|s| s == "planner" || s == "deep-thinking")
+    {
         if agent_has_canvas_tools(&spec.tools) {
             install_system_prompt(bus, shared, spec, skill_docs, tools).await;
             return;
@@ -4278,12 +4238,7 @@ fn require_canvas_plan(assess: AssessResult, spec: &AgentSpec) -> AssessResult {
     )
 }
 
-async fn recall_memory_bundle(
-    bus: &BusClient,
-    agent_id: &str,
-    query: &str,
-    k: usize,
-) -> String {
+async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: usize) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     for (label, ns) in [
@@ -4363,10 +4318,12 @@ async fn inject_mem_context(bus: &BusClient, shared: &Shared, agent_id: &str, qu
     if block.starts_with("(aucune information") {
         return;
     }
-    shared.state.lock().await.working_memory.push((
-        "system".into(),
-        format!("[mem.context]\n{block}"),
-    ));
+    shared
+        .state
+        .lock()
+        .await
+        .working_memory
+        .push(("system".into(), format!("[mem.context]\n{block}")));
 }
 
 /// Consulte la mémoire dès le début (ou après un steer) et l'enregistre dans la timeline.
@@ -4449,10 +4406,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         } else {
             format!(
                 "step {}/{} goal={} tasks={:?}",
-                st.step,
-                spec.goal.max_steps,
-                spec.goal.statement,
-                st.plan_stack
+                st.step, spec.goal.max_steps, spec.goal.statement, st.plan_stack
             )
         };
         let canvas_sid = if canvas_draw {
@@ -4466,14 +4420,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
     let mut data_refs: Vec<String> = Vec::new();
     let canvas_active = if let Some(sid) = canvas_sid.as_deref().filter(|s| !s.is_empty()) {
         let aspect = fetch_canvas_aspect(bus, sid).await;
-        if let Some(png) = begin_canvas_vision(
-            bus,
-            sid,
-            aspect,
-            spec.model_id.as_deref(),
-        )
-        .await
-        {
+        if let Some(png) = begin_canvas_vision(bus, sid, aspect, spec.model_id.as_deref()).await {
             data_refs = merge_canvas_vision_refs(&[], &png);
             images = data_refs.clone();
             true
@@ -4535,19 +4482,14 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
                 AgentOutputEvent::Reflection { text: text.clone() },
             )
             .await;
-            shared
-                .state
-                .lock()
-                .await
-                .working_memory
-                .push((
-                    "system".into(),
-                    if canvas_draw {
-                        format!("[canvas critic — consigne prioritaire au prochain tour]\n{text}")
-                    } else {
-                        format!("[critic — consigne prioritaire au prochain tour]\n{text}")
-                    },
-                ));
+            shared.state.lock().await.working_memory.push((
+                "system".into(),
+                if canvas_draw {
+                    format!("[canvas critic — consigne prioritaire au prochain tour]\n{text}")
+                } else {
+                    format!("[critic — consigne prioritaire au prochain tour]\n{text}")
+                },
+            ));
             Some(text)
         } else {
             None
@@ -4564,12 +4506,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
     result
 }
 
-async fn verify_goal(
-    bus: &BusClient,
-    shared: &Shared,
-    spec: &AgentSpec,
-    summary: &str,
-) -> bool {
+async fn verify_goal(bus: &BusClient, shared: &Shared, spec: &AgentSpec, summary: &str) -> bool {
     if spec.goal.success_criteria.is_empty() {
         return true;
     }
@@ -4579,7 +4516,8 @@ async fn verify_goal(
         messages: vec![
             ChatMessage {
                 role: "system".into(),
-                content: "Réponds uniquement YES ou NO. Les critères de succès sont-ils remplis ?".into(),
+                content: "Réponds uniquement YES ou NO. Les critères de succès sont-ils remplis ?"
+                    .into(),
             },
             ChatMessage {
                 role: "user".into(),
@@ -4709,11 +4647,7 @@ fn child_terminal_result(st: &CognitiveState, state: &AgentState) -> String {
     if let Some(artifact) = st.artifacts.last().filter(|s| !s.trim().is_empty()) {
         return artifact.clone();
     }
-    if let Some(rec) = st
-        .trace
-        .last()
-        .filter(|r| !r.tool_result.trim().is_empty())
-    {
+    if let Some(rec) = st.trace.last().filter(|r| !r.tool_result.trim().is_empty()) {
         return rec.tool_result.clone();
     }
     format!("{state:?}")
@@ -4789,9 +4723,7 @@ fn consume_child_result(consumed: &mut HashSet<String>, child_id: &str) -> bool 
 /// Refuse d'attendre un id vide ou un agent que ce parent n'a pas spawn.
 fn await_child_reject_reason(child_id: &str, my_children: &[String]) -> Option<String> {
     if child_id.is_empty() {
-        return Some(
-            "agent.await: child_id manquant — spawn d'abord un sous-agent".into(),
-        );
+        return Some("agent.await: child_id manquant — spawn d'abord un sous-agent".into());
     }
     if !my_children.iter().any(|c| c == child_id) {
         return Some(format!(
@@ -4817,11 +4749,7 @@ fn extract_child_id(action: &str, outcome: &str, args: &serde_json::Value) -> Op
     None
 }
 
-fn collect_sources(
-    action: &str,
-    args: &serde_json::Value,
-    outcome: &str,
-) -> Vec<AgentSource> {
+fn collect_sources(action: &str, args: &serde_json::Value, outcome: &str) -> Vec<AgentSource> {
     match action {
         "web.search" => {
             if let Ok(hits) = serde_json::from_str::<Vec<WebSearchHit>>(outcome) {
@@ -4950,10 +4878,13 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "autonomous".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         assert!(require_canvas_plan(AssessResult::simple("short goal"), &spec).is_complex());
-        let non_canvas = AgentSpec { tools: vec![], ..spec };
+        let non_canvas = AgentSpec {
+            tools: vec![],
+            ..spec
+        };
         assert!(!require_canvas_plan(AssessResult::simple("short goal"), &non_canvas).is_complex());
     }
 
@@ -5019,12 +4950,10 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
-        let child_goal = canvas_child_goal_statement(
-            &parent,
-            "Une maison = toit + murs + porte + fenêtre",
-        );
+        let child_goal =
+            canvas_child_goal_statement(&parent, "Une maison = toit + murs + porte + fenêtre");
         assert_eq!(child_goal, "dessine une canette Coca-Cola");
     }
 
@@ -5053,7 +4982,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
         assert_eq!(child_goal, "résumer les sources A et B");
@@ -5085,9 +5014,6 @@ mod tests {
 
     #[test]
     fn missing_cap_hint_for_usb_uses_device_usb_io() {
-        assert_eq!(
-            super::missing_cap_hint("device.usb.open"),
-            "device.usb.io"
-        );
+        assert_eq!(super::missing_cap_hint("device.usb.open"), "device.usb.io");
     }
 }

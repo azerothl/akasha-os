@@ -187,18 +187,14 @@ pub fn merge_skill_tools(selected_tools: &[String], skills: &[SkillDoc]) -> Vec<
 }
 
 fn normalize_skill_key(name: &str) -> String {
-    name.trim()
-        .to_ascii_lowercase()
-        .replace(['.', '_'], "-")
+    name.trim().to_ascii_lowercase().replace(['.', '_'], "-")
 }
 
 /// Si `action` est un nom de skill (ou variante `file.author` / `file_author`),
 /// renvoie la skill correspondante.
 pub fn match_skill_by_action<'a>(action: &str, skills: &'a [SkillDoc]) -> Option<&'a SkillDoc> {
     let key = normalize_skill_key(action);
-    skills
-        .iter()
-        .find(|s| normalize_skill_key(&s.name) == key)
+    skills.iter().find(|s| normalize_skill_key(&s.name) == key)
 }
 
 /// Message de correction quand le modèle appelle une skill comme outil.

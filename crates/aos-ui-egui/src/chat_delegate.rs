@@ -236,8 +236,22 @@ fn usb_with_action_context(text: &str) -> bool {
         .map(str::to_string)
         .collect();
     const ACTION: &[&str] = &[
-        "list", "lister", "liste", "enumerate", "enumerer", "enumere", "port", "ports",
-        "device", "devices", "serial", "com", "connect", "connecter", "brancher", "branch",
+        "list",
+        "lister",
+        "liste",
+        "enumerate",
+        "enumerer",
+        "enumere",
+        "port",
+        "ports",
+        "device",
+        "devices",
+        "serial",
+        "com",
+        "connect",
+        "connecter",
+        "brancher",
+        "branch",
     ];
     for (i, w) in words.iter().enumerate() {
         if w != "usb" {
@@ -261,11 +275,7 @@ fn text_has_com_port_ref(text: &str) -> bool {
     text.to_ascii_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
-        .any(|w| {
-            w.len() >= 4
-                && w.starts_with("com")
-                && w[3..].chars().all(|c| c.is_ascii_digit())
-        })
+        .any(|w| w.len() >= 4 && w.starts_with("com") && w[3..].chars().all(|c| c.is_ascii_digit()))
 }
 
 fn usb_has_connect_verb(text: &str) -> bool {

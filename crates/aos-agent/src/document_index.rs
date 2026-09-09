@@ -35,7 +35,9 @@ pub fn load_research_documents(home: &Path) -> Vec<ResearchDocumentEntry> {
         Err(_) => return Vec::new(),
     };
     let mut index: ResearchDocumentIndex = serde_json::from_str(&raw).unwrap_or_default();
-    index.entries.sort_by_key(|a| std::cmp::Reverse(a.created_ms));
+    index
+        .entries
+        .sort_by_key(|a| std::cmp::Reverse(a.created_ms));
     index.entries
 }
 
@@ -76,10 +78,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_home() -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "aos-research-index-{}",
-            std::process::id()
-        ));
+        let base = std::env::temp_dir().join(format!("aos-research-index-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         base
     }

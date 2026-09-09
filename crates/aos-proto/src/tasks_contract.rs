@@ -48,8 +48,7 @@ mod tests {
 
     fn read_manifest_yaml() -> String {
         let path = workspace_root().join("share/modules/tasks.aospkg/manifest.yaml");
-        std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
     }
 
     fn parse_manifest_tools_and_caps(raw: &str) -> (Vec<String>, Vec<String>) {
@@ -97,8 +96,7 @@ mod tests {
         let (manifest_tools, _) = parse_manifest_tools_and_caps(&raw);
         let expected: Vec<&str> = TOOL_IDS.to_vec();
         assert_eq!(
-            manifest_tools,
-            expected,
+            manifest_tools, expected,
             "share/modules/tasks.aospkg/manifest.yaml tools must match tasks_contract::TOOL_IDS"
         );
     }
@@ -109,8 +107,7 @@ mod tests {
         let (_, manifest_caps) = parse_manifest_tools_and_caps(&raw);
         let expected: Vec<&str> = MANIFEST_FS_CAPS.to_vec();
         assert_eq!(
-            manifest_caps,
-            expected,
+            manifest_caps, expected,
             "manifest required_caps must match tasks_contract::MANIFEST_FS_CAPS"
         );
     }

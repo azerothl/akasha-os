@@ -1,6 +1,9 @@
 //! Compilation du prompt système agentic (couches empilées).
 
-use aos_proto::{AgentGoal, AgentSpec, DocumentRef, format_preview_surface_brief, format_system_assistant_prompt, preview_version};
+use aos_proto::{
+    format_preview_surface_brief, format_system_assistant_prompt, preview_version, AgentGoal,
+    AgentSpec, DocumentRef,
+};
 
 use crate::skills::SkillDoc;
 use crate::tools::ToolDesc;
@@ -24,28 +27,17 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     parts.push(format_preview_surface_brief(&version));
 
     // 2. Identité
-    let mut identity = format!(
-        "Tu es l'agent `{}` d'Akasha OS.",
-        input.spec.agent_id
-    );
+    let mut identity = format!("Tu es l'agent `{}` d'Akasha OS.", input.spec.agent_id);
     if let Some(parent) = &input.spec.parent_id {
         identity.push_str(&format!(" Tu es un sous-agent de `{parent}`."));
     }
     if !input.spec.caps.is_empty() {
-        identity.push_str(&format!(
-            " Caps actives : {}.",
-            input.spec.caps.join(", ")
-        ));
+        identity.push_str(&format!(" Caps actives : {}.", input.spec.caps.join(", ")));
     }
     parts.push(identity);
 
     let has_canvas_tools = input.tools.iter().any(|t| t.name.starts_with("canvas."));
-    if let Some(sid) = input
-        .spec
-        .session_id
-        .as_deref()
-        .filter(|s| !s.is_empty())
-    {
+    if let Some(sid) = input.spec.session_id.as_deref().filter(|s| !s.is_empty()) {
         if has_canvas_tools {
             parts.push(format!(
                 "## Canvas de session\n\
@@ -78,7 +70,10 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     // 3. Prompt utilisateur
     if let Some(user_prompt) = &input.spec.system_prompt {
         if !user_prompt.trim().is_empty() {
-            parts.push(format!("## Instructions utilisateur\n{}", user_prompt.trim()));
+            parts.push(format!(
+                "## Instructions utilisateur\n{}",
+                user_prompt.trim()
+            ));
         }
     }
 
@@ -116,9 +111,7 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
         for t in input.tools {
             tools_block.push_str(&format!(
                 "- `{}` : {} | schema: {}\n",
-                t.name,
-                t.description,
-                t.input_schema
+                t.name, t.description, t.input_schema
             ));
         }
         parts.push(tools_block);
@@ -133,7 +126,10 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
             } else {
                 d.label.as_str()
             };
-            docs.push_str(&format!("- `{label}` → path `{}` (utiliser `docs.read`)\n", d.path));
+            docs.push_str(&format!(
+                "- `{label}` → path `{}` (utiliser `docs.read`)\n",
+                d.path
+            ));
         }
         parts.push(docs);
     }
@@ -283,7 +279,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let tools = vec![ToolDesc {
             name: "notes.create".into(),
@@ -332,7 +328,7 @@ mod tests {
             optimize_prompt: false,
             gate_mode: "ask".into(),
             origin: None,
-        cognitive_mode: aos_proto::CognitiveMode::Normal,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
         };
         let tools = vec![ToolDesc {
             name: "canvas.stroke".into(),

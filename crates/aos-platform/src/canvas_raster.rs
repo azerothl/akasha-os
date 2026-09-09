@@ -55,9 +55,7 @@ pub fn export_sidecar_json(doc: &CanvasDoc, aspect: CanvasAspect) -> Result<Vec<
 /// `canvas-sess-123.png` or `.svg` → `canvas-sess-123.json`.
 pub fn sidecar_path_for_export(export_path: &str) -> String {
     match export_path.rsplit_once('.') {
-        Some((stem, ext))
-            if ext.eq_ignore_ascii_case("png") || ext.eq_ignore_ascii_case("svg") =>
-        {
+        Some((stem, ext)) if ext.eq_ignore_ascii_case("png") || ext.eq_ignore_ascii_case("svg") => {
             format!("{stem}.json")
         }
         _ => format!("{export_path}.json"),
@@ -243,7 +241,13 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
                 ));
             }
         }
-        CanvasOpBody::Line { p0, p1, color, width, .. } => {
+        CanvasOpBody::Line {
+            p0,
+            p1,
+            color,
+            width,
+            ..
+        } => {
             out.push_str(&format!(
                 "<line x1=\"{:.2}\" y1=\"{:.2}\" x2=\"{:.2}\" y2=\"{:.2}\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linecap=\"round\"{op_attr}{dash_attr}/>",
                 svg_px(p0.x, w),
@@ -254,8 +258,18 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
                 (*width * w.min(h) as f32 * 0.5).max(1.0)
             ));
         }
-        CanvasOpBody::Stroke { points, color, width, .. }
-        | CanvasOpBody::Spline { points, color, width, .. } => {
+        CanvasOpBody::Stroke {
+            points,
+            color,
+            width,
+            ..
+        }
+        | CanvasOpBody::Spline {
+            points,
+            color,
+            width,
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
@@ -294,7 +308,10 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
             }
             let sampled = sample_spline(points, 24);
             let d = svg_poly_d(&sampled, w, h, *closed);
-            let center = sampled.first().copied().unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
+            let center = sampled
+                .first()
+                .copied()
+                .unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
             let fill_attr = if *fill {
                 svg_fill_color(body, color, center.x, center.y)
             } else {
@@ -311,9 +328,7 @@ fn append_svg_op(out: &mut String, body: &CanvasOpBody, w: u32, h: u32) {
                     svg_color(color)
                 ));
             } else {
-                out.push_str(&format!(
-                    "<path d=\"{d}\" fill=\"{fill_attr}\"{op_attr}/>"
-                ));
+                out.push_str(&format!("<path d=\"{d}\" fill=\"{fill_attr}\"{op_attr}/>"));
             }
         }
         CanvasOpBody::Fill { .. } | CanvasOpBody::Clear | CanvasOpBody::Undo => {}
@@ -354,7 +369,11 @@ fn svg_poly_d(points: &[CanvasPoint], w: u32, h: u32, closed: bool) -> String {
     let mut d = String::new();
     for (i, p) in points.iter().enumerate() {
         let cmd = if i == 0 { "M" } else { "L" };
-        d.push_str(&format!("{cmd}{:.2},{:.2} ", svg_px(p.x, w), svg_px(p.y, h)));
+        d.push_str(&format!(
+            "{cmd}{:.2},{:.2} ",
+            svg_px(p.x, w),
+            svg_px(p.y, h)
+        ));
     }
     if closed {
         d.push('Z');
@@ -391,10 +410,7 @@ fn stroke_polyline_styled(
         stroke_polyline(img, points, c, rad);
         return;
     }
-    let pts: Vec<(i32, i32)> = points
-        .iter()
-        .map(|p| to_px(img, p.x, p.y))
-        .collect();
+    let pts: Vec<(i32, i32)> = points.iter().map(|p| to_px(img, p.x, p.y)).collect();
     let mut pat_i = 0usize;
     let mut draw = true;
     let mut remain = pattern[0];
@@ -536,12 +552,23 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
                 }
             }
         }
-        CanvasOpBody::Line { p0, p1, color, width, .. } => {
+        CanvasOpBody::Line {
+            p0,
+            p1,
+            color,
+            width,
+            ..
+        } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
             stroke_polyline_styled(img, &[*p0, *p1], c, rad, dash);
         }
-        CanvasOpBody::Spline { points, color, width, .. } => {
+        CanvasOpBody::Spline {
+            points,
+            color,
+            width,
+            ..
+        } => {
             if points.len() < 2 {
                 return;
             }
@@ -561,7 +588,10 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
             if points.len() < 2 {
                 return;
             }
-            let center = points.first().copied().unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
+            let center = points
+                .first()
+                .copied()
+                .unwrap_or(CanvasPoint { x: 0.5, y: 0.5 });
             let c = png_rgb(body, color, center.x, center.y);
             let sampled = sample_spline(points, 24);
             let mut pts: Vec<(i32, i32)> = sampled.iter().map(|p| to_px(img, p.x, p.y)).collect();
@@ -760,10 +790,7 @@ fn stroke_polyline(img: &mut RgbImage, points: &[CanvasPoint], c: Rgb<u8>, rad: 
     if points.is_empty() {
         return;
     }
-    let pts: Vec<(i32, i32)> = points
-        .iter()
-        .map(|p| to_px(img, p.x, p.y))
-        .collect();
+    let pts: Vec<(i32, i32)> = points.iter().map(|p| to_px(img, p.x, p.y)).collect();
     disc(img, pts[0].0, pts[0].1, rad, c);
     for win in pts.windows(2) {
         line(img, win[0].0, win[0].1, win[1].0, win[1].1, rad, c);
@@ -838,7 +865,11 @@ fn sample_spline(points: &[CanvasPoint], segments_per_span: usize) -> Vec<Canvas
         let p0 = if i == 0 { points[0] } else { points[i - 1] };
         let p1 = points[i];
         let p2 = points[i + 1];
-        let p3 = if i + 2 < n { points[i + 2] } else { points[i + 1] };
+        let p3 = if i + 2 < n {
+            points[i + 2]
+        } else {
+            points[i + 1]
+        };
         let steps = segments_per_span.max(4);
         let start_j = if i == 0 { 0 } else { 1 };
         for j in start_j..=steps {
@@ -849,7 +880,13 @@ fn sample_spline(points: &[CanvasPoint], segments_per_span: usize) -> Vec<Canvas
     out
 }
 
-fn catmull_rom(p0: CanvasPoint, p1: CanvasPoint, p2: CanvasPoint, p3: CanvasPoint, t: f32) -> CanvasPoint {
+fn catmull_rom(
+    p0: CanvasPoint,
+    p1: CanvasPoint,
+    p2: CanvasPoint,
+    p3: CanvasPoint,
+    t: f32,
+) -> CanvasPoint {
     let t2 = t * t;
     let t3 = t2 * t;
     CanvasPoint {
@@ -1123,13 +1160,19 @@ mod tests {
         let png = export_png(&doc, 200, 200).unwrap();
         let img = image::load_from_memory(&png).unwrap().to_rgb8();
         let fg = [255u8, 255u8, 255u8];
-        let marked = img.pixels().filter(|p| {
-            let d = (p[0] as i32 - fg[0] as i32).abs()
-                + (p[1] as i32 - fg[1] as i32).abs()
-                + (p[2] as i32 - fg[2] as i32).abs();
-            d < 120
-        }).count();
-        assert!(marked > 20, "le texte devrait marquer des pixels, got {marked}");
+        let marked = img
+            .pixels()
+            .filter(|p| {
+                let d = (p[0] as i32 - fg[0] as i32).abs()
+                    + (p[1] as i32 - fg[1] as i32).abs()
+                    + (p[2] as i32 - fg[2] as i32).abs();
+                d < 120
+            })
+            .count();
+        assert!(
+            marked > 20,
+            "le texte devrait marquer des pixels, got {marked}"
+        );
         // Rotation + vide : pas de crash, pas de pixels.
         let mut doc2 = doc.clone();
         if let CanvasOpBody::Text { rotation, text, .. } = &mut doc2.ops[0].body {
@@ -1138,12 +1181,17 @@ mod tests {
         }
         let png2 = export_png(&doc2, 200, 200).unwrap();
         let img2 = image::load_from_memory(&png2).unwrap().to_rgb8();
-        assert!(img2.pixels().filter(|p| {
-            let d = (p[0] as i32 - fg[0] as i32).abs()
-                + (p[1] as i32 - fg[1] as i32).abs()
-                + (p[2] as i32 - fg[2] as i32).abs();
-            d < 120
-        }).count() == 0);
+        assert!(
+            img2.pixels()
+                .filter(|p| {
+                    let d = (p[0] as i32 - fg[0] as i32).abs()
+                        + (p[1] as i32 - fg[1] as i32).abs()
+                        + (p[2] as i32 - fg[2] as i32).abs();
+                    d < 120
+                })
+                .count()
+                == 0
+        );
     }
 
     #[test]

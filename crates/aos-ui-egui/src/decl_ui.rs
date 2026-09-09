@@ -1,6 +1,6 @@
 //! Host-rendered declarative module UI (E15 / Preview 0.7).
 
-use aos_proto::decl_ui::{DeclUiDocument, DeclUiRowAction, DeclUiWidget, resolve_row_args};
+use aos_proto::decl_ui::{resolve_row_args, DeclUiDocument, DeclUiRowAction, DeclUiWidget};
 use aos_proto::ModuleTool;
 use eframe::egui::{self, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
@@ -24,6 +24,7 @@ pub struct DeclUiInvokeAction {
 
 #[derive(Debug, Default)]
 pub struct DeclUiPanelState {
+    #[allow(dead_code)]
     pub module: String,
     pub document: Option<DeclUiDocument>,
     pub error: String,
@@ -325,10 +326,7 @@ impl DeclUiPanelState {
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "Run".into());
                 let enabled = !pending_invoke && actions.invoke.is_none();
-                if ui
-                    .add_enabled(enabled, egui::Button::new(label))
-                    .clicked()
-                {
+                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
                     if let Some(tool) = &w.tool {
                         queue_invoke(
                             actions,
@@ -355,9 +353,11 @@ impl DeclUiPanelState {
                     ui.group(|ui| {
                         if inline {
                             ui.horizontal(|ui| {
-                                if let Some(prefix) =
-                                    widget_text_from_key(w.prefix_label_key.as_deref(), doc, language)
-                                {
+                                if let Some(prefix) = widget_text_from_key(
+                                    w.prefix_label_key.as_deref(),
+                                    doc,
+                                    language,
+                                ) {
                                     ui.label(prefix);
                                 }
                                 render_form_fields(ui, &fields, form_fields, inline);
@@ -365,10 +365,7 @@ impl DeclUiPanelState {
                                     .or_else(|| w.label.clone())
                                     .unwrap_or_else(|| "Submit".into());
                                 let enabled = !pending_invoke && actions.invoke.is_none();
-                                if ui
-                                    .add_enabled(enabled, egui::Button::new(submit))
-                                    .clicked()
-                                {
+                                if ui.add_enabled(enabled, egui::Button::new(submit)).clicked() {
                                     submit_decl_form(
                                         actions,
                                         tool,
@@ -385,10 +382,7 @@ impl DeclUiPanelState {
                                 .or_else(|| w.label.clone())
                                 .unwrap_or_else(|| "Submit".into());
                             let enabled = !pending_invoke && actions.invoke.is_none();
-                            if ui
-                                .add_enabled(enabled, egui::Button::new(submit))
-                                .clicked()
-                            {
+                            if ui.add_enabled(enabled, egui::Button::new(submit)).clicked() {
                                 submit_decl_form(
                                     actions,
                                     tool,
@@ -419,16 +413,11 @@ pub fn ingest_tool_schemas(manifest_tools: &[ModuleTool], out: &mut HashMap<Stri
 }
 
 fn widget_text(w: &DeclUiWidget, doc: &DeclUiDocument, language: &str) -> Option<String> {
-    widget_text_from_key(w.label_key.as_deref(), doc, language).or_else(|| {
-        w.text.clone().filter(|t| !t.is_empty())
-    })
+    widget_text_from_key(w.label_key.as_deref(), doc, language)
+        .or_else(|| w.text.clone().filter(|t| !t.is_empty()))
 }
 
-fn widget_text_from_key(
-    key: Option<&str>,
-    doc: &DeclUiDocument,
-    language: &str,
-) -> Option<String> {
+fn widget_text_from_key(key: Option<&str>, doc: &DeclUiDocument, language: &str) -> Option<String> {
     let key = key.filter(|k| !k.is_empty())?;
     doc.labels.as_ref()?.resolve(language, key)
 }
@@ -828,15 +817,12 @@ fn render_table(
                                     if !row_action_visible(action, row) {
                                         continue;
                                     }
-                                    let Some(label) = row_action_label(action, doc, language) else {
+                                    let Some(label) = row_action_label(action, doc, language)
+                                    else {
                                         continue;
                                     };
-                                    let enabled =
-                                        !pending_invoke && actions.invoke.is_none();
-                                    if ui
-                                        .add_enabled(enabled, egui::Button::new(label))
-                                        .clicked()
-                                    {
+                                    let enabled = !pending_invoke && actions.invoke.is_none();
+                                    if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
                                         let args = resolve_row_args(&action.args, row);
                                         queue_invoke(
                                             actions,

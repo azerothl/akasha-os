@@ -839,7 +839,6 @@ impl UiApp {
                                 }
                             });
                             ui.end_row();
-
                         });
                 });
         }

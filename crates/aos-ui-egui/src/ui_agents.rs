@@ -297,7 +297,8 @@ impl UiApp {
             }
             // S6 phase 2 : modèle effectif (hérité à la création).
             if let Some(model) = a.model_id.as_deref().filter(|m| !m.is_empty()) {
-                ui.weak(agent_panel::truncate(model, 28)).on_hover_text(model);
+                ui.weak(agent_panel::truncate(model, 28))
+                    .on_hover_text(model);
             }
             if let Some(task) = &a.current_task {
                 ui.small(task);

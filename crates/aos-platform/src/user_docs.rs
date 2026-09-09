@@ -149,11 +149,7 @@ pub fn add_document(
 }
 
 /// Remove a document from the library and wipe its indexed chunks.
-pub fn remove_document(
-    sub: &PlatformSubsystem,
-    memory_dir: &Path,
-    id: &str,
-) -> Result<(), String> {
+pub fn remove_document(sub: &PlatformSubsystem, memory_dir: &Path, id: &str) -> Result<(), String> {
     let mut manifest = load_manifest(memory_dir);
     let Some(pos) = manifest.docs.iter().position(|d| d.id == id) else {
         return Err("document not found".into());
@@ -451,7 +447,13 @@ mod tests {
             size_bytes: 42,
             added_date: "2026-08-29".into(),
         };
-        save_manifest(&dir, &Manifest { docs: vec![doc.clone()] }).unwrap();
+        save_manifest(
+            &dir,
+            &Manifest {
+                docs: vec![doc.clone()],
+            },
+        )
+        .unwrap();
         let listed = list_docs(&dir);
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0], doc);
@@ -496,7 +498,9 @@ mod tests {
         let dir = temp_memory_dir();
         let mut mem = MemoryStore::open(&dir).unwrap();
         let phrase = "USER_LIBRARY_UNIQUE_PHRASE_FOR_RETRIEVAL_TEST";
-        let text = format!("{phrase} and enough padding text to pass the minimum chunk size threshold easily.");
+        let text = format!(
+            "{phrase} and enough padding text to pass the minimum chunk size threshold easily."
+        );
         mem.episodic_write(
             USER_DOCS_NS,
             &format!("[test.txt]\n{text}"),

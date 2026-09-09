@@ -661,12 +661,7 @@ impl MemoryStore {
     }
 
     /// Supprime les entrées d'un namespace dont `metadata[key] == value`.
-    pub fn episodic_delete_by_meta(
-        &mut self,
-        namespace: &str,
-        key: &str,
-        value: &str,
-    ) -> usize {
+    pub fn episodic_delete_by_meta(&mut self, namespace: &str, key: &str, value: &str) -> usize {
         let ids: Vec<u64> = self
             .episodic
             .values()
@@ -904,7 +899,8 @@ mod tests {
                 v(0.81),
                 true,
             );
-            s.relate(new_id, MemRelationKind::Supersedes, old_id).unwrap();
+            s.relate(new_id, MemRelationKind::Supersedes, old_id)
+                .unwrap();
             let hits = s.episodic_query(&v(0.8), 5, Some("user:default"));
             assert!(hits.iter().all(|h| h.id != old_id));
             assert!(hits.iter().any(|h| h.id == new_id));

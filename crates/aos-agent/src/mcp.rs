@@ -154,7 +154,9 @@ impl McpSession {
     }
 
     pub async fn list_tools(&mut self) -> Result<Vec<ToolDesc>, String> {
-        let result = self.request("tools/list", Some(serde_json::json!({}))).await?;
+        let result = self
+            .request("tools/list", Some(serde_json::json!({})))
+            .await?;
         let tools = result
             .get("tools")
             .and_then(|t| t.as_array())
@@ -258,9 +260,7 @@ pub fn list_mcp_servers() -> Vec<McpServerInfo> {
 
 /// Ouvre les sessions MCP demandées et retourne leurs outils.
 /// `secrets` : carte name→valeur pour interpoler `${secret:…}` (fournie par agentd).
-pub async fn open_mcp_tools(
-    names: &[String],
-) -> (HashMap<String, McpSession>, Vec<ToolDesc>) {
+pub async fn open_mcp_tools(names: &[String]) -> (HashMap<String, McpSession>, Vec<ToolDesc>) {
     open_mcp_tools_with_secrets(names, &HashMap::new()).await
 }
 

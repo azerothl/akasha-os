@@ -115,10 +115,7 @@ pub fn parse_embedded_action_question(text: &str) -> Option<AgentAction> {
             .unwrap_or("")
             .to_string(),
         action: action.to_string(),
-        args: value
-            .get("args")
-            .cloned()
-            .unwrap_or(serde_json::json!({})),
+        args: value.get("args").cloned().unwrap_or(serde_json::json!({})),
     })
 }
 
@@ -634,11 +631,7 @@ Thinking Process:
     fn resolve_goal_complete_summary_falls_back_to_thought() {
         let args = serde_json::json!({});
         assert_eq!(
-            resolve_goal_complete_summary(
-                &args,
-                "COM3 : Arduino Uno",
-                "raw enumerate output"
-            ),
+            resolve_goal_complete_summary(&args, "COM3 : Arduino Uno", "raw enumerate output"),
             "COM3 : Arduino Uno"
         );
     }

@@ -235,7 +235,10 @@ impl BackendRegistry {
                 let quantizations = hw
                     .npu
                     .as_ref()
-                    .and_then(|caps| (!caps.supported_quantizations.is_empty()).then(|| caps.supported_quantizations.clone()))
+                    .and_then(|caps| {
+                        (!caps.supported_quantizations.is_empty())
+                            .then(|| caps.supported_quantizations.clone())
+                    })
                     .unwrap_or_else(|| vec![Quantization::Q8, Quantization::Q4]);
                 backends.push(BackendDescriptor {
                     kind: BackendKind::Npu,
@@ -256,7 +259,10 @@ impl BackendRegistry {
                 let quantizations = hw
                     .webgpu
                     .as_ref()
-                    .and_then(|caps| (!caps.supported_quantizations.is_empty()).then(|| caps.supported_quantizations.clone()))
+                    .and_then(|caps| {
+                        (!caps.supported_quantizations.is_empty())
+                            .then(|| caps.supported_quantizations.clone())
+                    })
                     .unwrap_or_else(|| vec![Quantization::F16, Quantization::Q4]);
                 backends.push(BackendDescriptor {
                     kind: BackendKind::WebGpu,
