@@ -37,12 +37,12 @@ pub fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static st
 pub fn state_color(state: &AgentState) -> Color32 {
     match state {
         AgentState::Failed | AgentState::Killed => theme::HYDROGEN,
-        AgentState::Blocked => Color32::from_rgb(230, 160, 60),
-        AgentState::Done => Color32::from_rgb(100, 190, 120),
-        AgentState::Paused => Color32::from_rgb(160, 160, 180),
-        AgentState::Running => Color32::from_rgb(120, 180, 230),
+        AgentState::Blocked => theme::WARNING,
+        AgentState::Done => theme::SUCCESS,
+        AgentState::Paused => theme::PAPER.gamma_multiply(0.7),
+        AgentState::Running => theme::ICE_TRACK,
         AgentState::Created => Color32::GRAY,
-        AgentState::Roster => Color32::from_rgb(140, 180, 160),
+        AgentState::Roster => theme::SIGNAL,
     }
 }
 
@@ -653,6 +653,7 @@ pub fn format_chat_assistant_display(raw: &str, t: &crate::i18n::UiStrings) -> S
 }
 
 /// Back-compat wrapper when locale is unavailable (strips ids, no human labels).
+#[allow(dead_code)]
 pub fn format_chat_assistant_display_localeless(raw: &str) -> String {
     sanitize_chat_visible_bubble(&format_assistant_display(raw))
 }
