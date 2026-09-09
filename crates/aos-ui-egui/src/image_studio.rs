@@ -2705,6 +2705,21 @@ fn ui_video_result_row(
                 });
             }
         }
+        if ui.button("Variante").clicked() {
+            if let Some((prompt, model_id, mut options)) = studio.last_generation.clone() {
+                options.seed = None;
+                let _ = cmd.send(Cmd::MediaImage {
+                    prompt,
+                    model_id,
+                    options,
+                    output_path: Some(default_video_download_path()),
+                    enrich_prompt: false,
+                    enhance_prompt_chat: false,
+                    generation_prompt: None,
+                    composition_blocks: Vec::new(),
+                });
+            }
+        }
     });
 }
 
