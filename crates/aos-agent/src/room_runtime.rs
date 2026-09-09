@@ -746,7 +746,7 @@ async fn run_room_tool_loop(
 
             messages.push(ChatMessage {
                 role: "user".into(),
-                content: format!("[outil {}] {outcome}", action.action),
+                content: format!("[outil] {outcome}"),
             });
         }
     }

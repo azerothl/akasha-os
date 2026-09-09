@@ -180,9 +180,10 @@ pub fn missing_module_hints(skills: &[SkillDoc], installed_modules: &HashSet<Str
 }
 
 /// Refusal when a tool was requested but is no longer in the active catalog.
-pub fn tool_unavailable_message(tool: &str, reason: &str) -> String {
+/// Never embeds the technical tool id — model-facing only, may surface in salon bubbles.
+pub fn tool_unavailable_message(_tool: &str, reason: &str) -> String {
     format!(
-        "ERREUR outil: `{tool}` indisponible ({reason}). \
+        "ERREUR outil: indisponible ({reason}). \
          Le catalogue modules a peut-être changé — ne simule pas un succès."
     )
 }
@@ -228,6 +229,13 @@ mod tests {
                 ]
             }
         })
+    }
+
+    #[test]
+    fn tool_unavailable_message_omits_tool_id() {
+        let msg = tool_unavailable_message("tasks.list", "absent du catalogue modules actif");
+        assert!(!msg.contains("tasks.list"), "{msg}");
+        assert!(msg.contains("indisponible"), "{msg}");
     }
 
     #[test]

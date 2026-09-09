@@ -182,7 +182,7 @@ impl UiApp {
                             kind == ChatBubbleKind::RoomSpeaker,
                         )
                     } else if role == "assistant" && !is_completion && speaker_id.is_none() {
-                        agent_panel::format_chat_assistant_display(&text)
+                        agent_panel::format_chat_assistant_display(&text, t)
                     } else {
                         text
                     };
@@ -643,6 +643,7 @@ impl UiApp {
                         });
                         let streaming = agent_panel::format_chat_streaming_preview(
                             &self.chat_state.runtime.streaming,
+                            t,
                         );
                         ui.push_id("chat_md_stream", |ui| {
                             chat_markdown_viewer(ui).show(ui, &mut self.chat_md_cache, &streaming);

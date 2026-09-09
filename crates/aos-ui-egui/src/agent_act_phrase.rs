@@ -45,16 +45,18 @@ pub fn format_agent_act_phrase(t: &UiStrings, action: &str, args: &Value) -> Str
             if let Some(title) = arg_str(args, "title") {
                 subst(t.agent_act_tasks_create_title, "title", &title)
             } else {
-                t.agent_act_tasks_create.into()
+                t.agents_tool_tasks_create.into()
             }
         }
-        "tasks.update" | "tasks.complete" => {
+        "tasks.list" => t.agents_tool_tasks_list.into(),
+        "tasks.update" => {
             if let Some(id) = arg_str(args, "id").or_else(|| arg_str(args, "task_id")) {
                 subst(t.agent_act_tasks_update_id, "id", &id)
             } else {
-                t.agent_act_tasks_update.into()
+                t.agents_tool_tasks_update.into()
             }
         }
+        "tasks.complete" => t.agents_tool_tasks_complete.into(),
         "canvas.set_style" => t.agent_act_canvas_set_style.into(),
         "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" => {
             t.agent_act_canvas_stroke.into()
@@ -119,7 +121,13 @@ pub fn format_agent_act_phrase(t: &UiStrings, action: &str, args: &Value) -> Str
             }
         }
         "mem.episodic_write" => t.agent_act_mem_episodic_write.into(),
-        _ => t.agent_act_generic.into(),
+        _ => {
+            if let Some(label) = crate::i18n::tool_human_label(t, name) {
+                label.to_string()
+            } else {
+                String::new()
+            }
+        }
     }
 }
 
@@ -199,19 +207,44 @@ mod tests {
     }
 
     #[test]
-    fn unknown_action_uses_generic_without_tool_leak() {
+    fn unknown_action_shows_nothing_without_tool_leak() {
         let t_en = crate::i18n::strings("en");
         let t_fr = crate::i18n::strings("fr");
         for action in ["notes.archive", "canvas.rotate", "module.invoke", "noop"] {
             let en = format_agent_act_phrase(&t_en, action, &json!({}));
             let fr = format_agent_act_phrase(&t_fr, action, &json!({}));
-            assert_eq!(en, t_en.agent_act_generic);
-            assert_eq!(fr, t_fr.agent_act_generic);
+            assert!(en.is_empty());
+            assert!(fr.is_empty());
             assert!(!en.contains(action));
             assert!(!fr.contains(action));
-            assert!(!en.contains("archive"));
-            assert!(!en.contains("rotate"));
-            assert!(!en.contains("invoke"));
+        }
+    }
+
+    #[test]
+    fn tasks_tools_use_locked_human_labels() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        assert_eq!(
+            format_agent_act_phrase(&t_en, "tasks.list", &json!({})),
+            "List tasks"
+        );
+        assert_eq!(
+            format_agent_act_phrase(&t_fr, "tasks.list", &json!({})),
+            "Lister les tâches"
+        );
+        assert_eq!(
+            format_agent_act_phrase(&t_en, "tasks.complete", &json!({})),
+            "Complete task"
+        );
+        assert_eq!(
+            format_agent_act_phrase(&t_fr, "tasks.complete", &json!({})),
+            "Terminer une tâche"
+        );
+        for action in ["tasks.create", "tasks.list", "tasks.update", "tasks.complete"] {
+            let en = format_agent_act_phrase(&t_en, action, &json!({}));
+            let fr = format_agent_act_phrase(&t_fr, action, &json!({}));
+            assert!(!en.contains(action));
+            assert!(!fr.contains(action));
         }
     }
 }

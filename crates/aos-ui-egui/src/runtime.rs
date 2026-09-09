@@ -675,7 +675,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             return;
                         }
 
-                        let display = agent_panel::format_chat_assistant_display(&full);
+                        let display = agent_panel::format_chat_assistant_display(&full, &t);
                         let _ = bus
                             .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
                                 "chat.session.append",

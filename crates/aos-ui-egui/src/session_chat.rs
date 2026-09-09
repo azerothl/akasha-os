@@ -188,7 +188,8 @@ pub(crate) fn on_chat_cancelled(
         *chat_pending = false;
         *chat_inference_id = None;
         if !partial.is_empty() {
-            let display = agent_panel::format_chat_assistant_display(&partial);
+            let t = crate::i18n::strings(&crate::prefs::load_preferences().language);
+            let display = agent_panel::format_chat_assistant_display(&partial, &t);
             if !display.is_empty() {
                 chat.push(ChatLine::plain("assistant", display));
             }

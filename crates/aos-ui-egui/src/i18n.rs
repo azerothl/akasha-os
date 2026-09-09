@@ -1293,7 +1293,7 @@ const EN: UiStrings = UiStrings {
     scen_module_agent_launched: "Agent launched — accept module.install confirmation, then open the new Modules tab.",
     tab_hint_feedback: "Send local feedback or open a GitHub issue.",
     tab_hint_settings: "Language, theme, inference, schedules, agent defaults.",
-    tasks_blurb: "Tasks are a shared checklist (create / complete). Agents are autonomous workers that can use tools — including tasks.* — to pursue a goal.",
+    tasks_blurb: "Tasks are a shared checklist (create / complete). Agents are autonomous workers that can use tools to pursue a goal.",
     agents_blurb: "Agent library: name + optional role. Create adds a reusable roster entry — it does not start a background run. Use /agent in chat to launch a task worker.",
     agents_tab_active: "Library",
     agents_tab_history: "History",
@@ -1685,7 +1685,7 @@ const EN: UiStrings = UiStrings {
     feedback_sev_high: "high",
     tasks_new: "New",
     tasks_create: "Create",
-    tasks_empty: "No tasks — create one or ask an agent `tasks.create`.",
+    tasks_empty: "No tasks — create one or ask an agent to create a task.",
     tasks_reopen: "Reopen",
     tasks_complete: "Complete",
     tasks_title_hint: "title",
@@ -2248,7 +2248,7 @@ const FR: UiStrings = UiStrings {
     scen_module_agent_launched: "Agent lancé — acceptez la confirmation module.install, puis ouvrez le nouvel onglet Modules.",
     tab_hint_feedback: "Retour local ou issue GitHub.",
     tab_hint_settings: "Langue, thème, inférence, schedules, défauts agents.",
-    tasks_blurb: "Les Tâches sont une checklist partagée (créer / terminer). Les Agents sont des workers autonomes qui peuvent utiliser des outils — dont tasks.* — pour un objectif.",
+    tasks_blurb: "Les Tâches sont une checklist partagée (créer / terminer). Les Agents sont des workers autonomes qui peuvent utiliser des outils pour un objectif.",
     agents_blurb: "Bibliothèque d'agents : nom + rôle optionnel. Créer ajoute une entrée roster réutilisable — aucun run en fond. Utilisez /agent dans le chat pour lancer un worker de tâche.",
     agents_tab_active: "Bibliothèque",
     agents_tab_history: "Historique",
@@ -2640,7 +2640,7 @@ const FR: UiStrings = UiStrings {
     feedback_sev_high: "high",
     tasks_new: "Nouvelle",
     tasks_create: "Créer",
-    tasks_empty: "Aucune tâche — créez-en une ou demandez à un agent `tasks.create`.",
+    tasks_empty: "Aucune tâche — créez-en une ou demandez à un agent d'en créer une.",
     tasks_reopen: "Réouvrir",
     tasks_complete: "Terminer",
     tasks_title_hint: "titre",
@@ -2914,63 +2914,74 @@ pub fn agent_could_not_act_message(t: &UiStrings) -> String {
     t.agent_could_not_act.to_string()
 }
 
+/// Human label for a tool id when one is defined (never the technical id).
+/// Returns `None` for unknown discovered module tools — paint nothing, not the id.
+pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> {
+    let mapped = match tool_id {
+        "device.usb.io" => "device.usb.open",
+        other => other,
+    };
+    match mapped {
+        "notes.create" => Some(t.agents_tool_notes_create),
+        "notes.list" => Some(t.agents_tool_notes_list),
+        "notes.read" => Some(t.agents_tool_notes_read),
+        "notes.search" => Some(t.agents_tool_notes_search),
+        "notes.update" => Some(t.agents_tool_notes_update),
+        "notes.links" => Some(t.agents_tool_notes_links),
+        "notes.related" => Some(t.agents_tool_notes_related),
+        "tasks.create" => Some(t.agents_tool_tasks_create),
+        "tasks.list" => Some(t.agents_tool_tasks_list),
+        "tasks.update" => Some(t.agents_tool_tasks_update),
+        "tasks.complete" => Some(t.agents_tool_tasks_complete),
+        "fs.read" => Some(t.agents_tool_fs_read),
+        "fs.write" => Some(t.agents_tool_fs_write),
+        "fs.list" => Some(t.agents_tool_fs_list),
+        "files.generate" => Some(t.agents_tool_files_generate),
+        "web.search" => Some(t.agents_tool_web_search),
+        "web.browse" => Some(t.agents_tool_web_browse),
+        "net.fetch" => Some(t.agents_tool_net_fetch),
+        "canvas.stroke" | "canvas.line" | "canvas.spline" | "canvas.path" => {
+            Some(t.agents_tool_canvas_stroke)
+        }
+        "canvas.rect" => Some(t.agents_tool_canvas_rect),
+        "canvas.ellipse" => Some(t.agents_tool_canvas_ellipse),
+        "canvas.erase" => Some(t.agents_tool_canvas_erase),
+        "canvas.clear" => Some(t.agents_tool_canvas_clear),
+        "canvas.undo" => Some(t.agents_tool_canvas_undo),
+        "canvas.get" => Some(t.agents_tool_canvas_get),
+        "canvas.export" => Some(t.agents_tool_canvas_export),
+        "canvas.set_style" => Some(t.agents_tool_canvas_stroke),
+        "agent.spawn" => Some(t.agents_tool_agent_spawn),
+        "agent.await" => Some(t.agents_tool_agent_await),
+        "plan.update" => Some(t.agents_tool_plan_update),
+        "device.enumerate" => Some(t.agents_tool_device_enumerate),
+        "device.camera.capture" => Some(t.agents_tool_device_camera_capture),
+        "device.mic.capture" => Some(t.agents_tool_device_mic_capture),
+        "device.capture.stop" => Some(t.agents_tool_device_capture_stop),
+        "device.usb.enumerate" => Some(t.agents_tool_device_usb_enumerate),
+        "device.usb.open" => Some(t.agents_tool_device_usb_open),
+        "device.usb.read" => Some(t.agents_tool_device_usb_read),
+        "device.usb.write" => Some(t.agents_tool_device_usb_write),
+        "device.usb.close" => Some(t.agents_tool_device_usb_close),
+        _ => None,
+    }
+}
+
 /// Human-readable roster tool label (technical id in tooltip).
 pub fn roster_tool_label<'a>(t: &'a UiStrings, tool_id: &str) -> &'a str {
-    match tool_id {
-        "notes.create" => t.agents_tool_notes_create,
-        "notes.list" => t.agents_tool_notes_list,
-        "notes.read" => t.agents_tool_notes_read,
-        "notes.search" => t.agents_tool_notes_search,
-        "notes.update" => t.agents_tool_notes_update,
-        "notes.links" => t.agents_tool_notes_links,
-        "notes.related" => t.agents_tool_notes_related,
-        "tasks.create" => t.agents_tool_tasks_create,
-        "tasks.list" => t.agents_tool_tasks_list,
-        "tasks.update" => t.agents_tool_tasks_update,
-        "tasks.complete" => t.agents_tool_tasks_complete,
-        "fs.read" => t.agents_tool_fs_read,
-        "fs.write" => t.agents_tool_fs_write,
-        "fs.list" => t.agents_tool_fs_list,
-        "files.generate" => t.agents_tool_files_generate,
-        "web.search" => t.agents_tool_web_search,
-        "web.browse" => t.agents_tool_web_browse,
-        "net.fetch" => t.agents_tool_net_fetch,
-        "canvas.stroke" => t.agents_tool_canvas_stroke,
-        "canvas.rect" => t.agents_tool_canvas_rect,
-        "canvas.ellipse" => t.agents_tool_canvas_ellipse,
-        "canvas.erase" => t.agents_tool_canvas_erase,
-        "canvas.clear" => t.agents_tool_canvas_clear,
-        "canvas.undo" => t.agents_tool_canvas_undo,
-        "canvas.get" => t.agents_tool_canvas_get,
-        "canvas.export" => t.agents_tool_canvas_export,
-        "agent.spawn" => t.agents_tool_agent_spawn,
-        "agent.await" => t.agents_tool_agent_await,
-        "plan.update" => t.agents_tool_plan_update,
-        "device.enumerate" => t.agents_tool_device_enumerate,
-        "device.camera.capture" => t.agents_tool_device_camera_capture,
-        "device.mic.capture" => t.agents_tool_device_mic_capture,
-        "device.capture.stop" => t.agents_tool_device_capture_stop,
-        "device.usb.enumerate" => t.agents_tool_device_usb_enumerate,
-        "device.usb.open" => t.agents_tool_device_usb_open,
-        "device.usb.read" => t.agents_tool_device_usb_read,
-        "device.usb.write" => t.agents_tool_device_usb_write,
-        "device.usb.close" => t.agents_tool_device_usb_close,
-        _ => "?",
-    }
+    tool_human_label(t, tool_id).unwrap_or("?")
 }
 
 /// Human-readable label for pending confirmation banners (never raw cap ids).
 pub fn confirm_action_label(t: &UiStrings, action: &str) -> String {
-    let mapped = match action {
-        "device.usb.io" => "device.usb.open",
-        other => other,
-    };
-    let label = roster_tool_label(t, mapped);
-    if label == "?" {
-        action.to_string()
-    } else {
-        label.to_string()
-    }
+    tool_human_label(t, action)
+        .map(|s| s.to_string())
+        .unwrap_or_default()
+}
+
+/// Status line after a module tool succeeds (no technical id).
+pub fn module_tool_ok_status(t: &UiStrings, tool_id: &str) -> Option<String> {
+    tool_human_label(t, tool_id).map(|label| format!("{label} OK"))
 }
 
 /// Human-readable routing label for Settings and onboarding (technical id in tooltip).
@@ -3173,6 +3184,34 @@ mod tests {
             assert!(!s.to_ascii_lowercase().contains("ultimate trust"));
             assert!(!s.to_ascii_lowercase().contains("confiance ultime"));
         }
+    }
+
+    #[test]
+    fn locked_tasks_tool_labels_en_fr() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(tool_human_label(&en, "tasks.create"), Some("Create task"));
+        assert_eq!(tool_human_label(&en, "tasks.list"), Some("List tasks"));
+        assert_eq!(tool_human_label(&en, "tasks.update"), Some("Update task"));
+        assert_eq!(tool_human_label(&en, "tasks.complete"), Some("Complete task"));
+        assert_eq!(
+            tool_human_label(&fr, "tasks.create"),
+            Some("Créer une tâche")
+        );
+        assert_eq!(
+            tool_human_label(&fr, "tasks.list"),
+            Some("Lister les tâches")
+        );
+        assert_eq!(
+            tool_human_label(&fr, "tasks.update"),
+            Some("Mettre à jour une tâche")
+        );
+        assert_eq!(
+            tool_human_label(&fr, "tasks.complete"),
+            Some("Terminer une tâche")
+        );
+        assert_eq!(module_tool_ok_status(&en, "tasks.list"), Some("List tasks OK".into()));
+        assert_eq!(tool_human_label(&en, "windmill.run"), None);
     }
 
     #[test]

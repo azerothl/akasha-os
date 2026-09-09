@@ -301,7 +301,10 @@ pub(crate) async fn invoke_tasks(
                 let _ = evt_tx.send(Evt::TasksListed(tasks));
             }
             "tasks.create" | "tasks.update" | "tasks.complete" => {
-                let _ = evt_tx.send(Evt::Status(format!("{tool} OK")));
+                let t = crate::i18n::strings(&crate::prefs::load_preferences().language);
+                if let Some(status) = crate::i18n::module_tool_ok_status(&t, tool) {
+                    let _ = evt_tx.send(Evt::Status(status));
+                }
                 let list_req = ModuleInvokeRequest {
                     module: "tasks".into(),
                     tool: "tasks.list".into(),
