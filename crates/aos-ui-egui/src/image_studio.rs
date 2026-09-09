@@ -3286,6 +3286,23 @@ fn apply_camera_preset(studio: &mut ImageStudioState) {
 }
 
 fn render_warning(studio: &ImageStudioState) -> Option<String> {
+    if studio.create_mode == CreateMode::Video {
+        if let Some(v) = catalog_video_defaults(&studio.model_id) {
+            let width_ok = v.min_width.map_or(true, |min| studio.width >= min)
+                && v.max_width.map_or(true, |max| studio.width <= max);
+            let height_ok = v.min_height.map_or(true, |min| studio.height >= min)
+                && v.max_height.map_or(true, |max| studio.height <= max);
+            let duration_ok = v
+                .max_duration_secs
+                .map_or(true, |max| studio.video_duration_secs <= max);
+            if !width_ok || !height_ok || !duration_ok {
+                return Some(
+                    "Paramètres hors limites du modèle : ils seront bornés automatiquement au lancement."
+                        .into(),
+                );
+            }
+        }
+    }
     let frames = if studio.create_mode == CreateMode::Video {
         video_frames_for_duration_model(studio.video_duration_secs, &studio.model_id)
     } else {
