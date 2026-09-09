@@ -1,6 +1,88 @@
 {
   "type": "declarative_ui",
   "title": "Tasks",
-  "description": "Human + agent shared task list.",
-  "commands": ["tasks.create", "tasks.list", "tasks.update", "tasks.complete"]
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "heading": "Tasks",
+      "blurb": "Shared checklist for humans and agents.",
+      "title": "Title",
+      "notes": "Notes",
+      "create": "Create",
+      "empty": "No tasks — create one or ask an agent `tasks.create`.",
+      "complete": "Complete",
+      "reopen": "Reopen",
+      "col_title": "Title",
+      "col_notes": "Notes",
+      "col_done": "Done"
+    },
+    "fr": {
+      "heading": "Tâches",
+      "blurb": "Checklist partagée pour humains et agents.",
+      "title": "Titre",
+      "notes": "Notes",
+      "create": "Créer",
+      "empty": "Aucune tâche — créez-en une ou demandez à un agent `tasks.create`.",
+      "complete": "Terminer",
+      "reopen": "Réouvrir",
+      "col_title": "Titre",
+      "col_notes": "Notes",
+      "col_done": "Fait"
+    }
+  },
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "heading",
+        "label_key": "heading"
+      },
+      {
+        "kind": "text",
+        "label_key": "blurb"
+      },
+      {
+        "kind": "form",
+        "tool": "tasks.create",
+        "label_key": "create",
+        "refresh_binds": ["tasks.list"],
+        "args": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "notes": { "type": "string" }
+          },
+          "required": ["title"]
+        }
+      },
+      {
+        "kind": "empty_state",
+        "bind": "tasks.list",
+        "source": "tasks",
+        "label_key": "empty"
+      },
+      {
+        "kind": "table",
+        "bind": "tasks.list",
+        "source": "tasks",
+        "columns": ["title", "notes", "done"],
+        "row_actions": [
+          {
+            "tool": "tasks.complete",
+            "label_key": "complete",
+            "args": { "id": "$id", "done": true },
+            "when": { "field": "done", "eq": false },
+            "refresh_binds": ["tasks.list"]
+          },
+          {
+            "tool": "tasks.complete",
+            "label_key": "reopen",
+            "args": { "id": "$id", "done": false },
+            "when": { "field": "done", "eq": true },
+            "refresh_binds": ["tasks.list"]
+          }
+        ]
+      }
+    ]
+  }
 }

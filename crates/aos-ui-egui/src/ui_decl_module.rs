@@ -16,18 +16,23 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         let mut actions = decl_ui::DeclUiActions::default();
         if let Some(panel) = self.decl_panels.get_mut(module) {
-            actions = panel.ui(ui, &mut self.decl_md_cache, t.decl_ui_refresh);
+            actions = panel.ui(ui, &mut self.decl_md_cache, t.decl_ui_refresh, &self.prefs.language);
         }
         if actions.refresh {
             let _ = self.cmd_tx.send(Cmd::ModuleUiRefresh {
                 module: module.to_string(),
             });
         }
-        if let Some((tool, args)) = actions.invoke {
+        if let Some(inv) = actions.invoke {
+            if let Some(panel) = self.decl_panels.get_mut(module) {
+                panel.set_pending_invoke(true);
+                panel.pending_refresh_binds = inv.refresh_binds;
+                panel.pending_clear_form_keys = inv.clear_form_keys;
+            }
             let _ = self.cmd_tx.send(Cmd::ModuleUiInvoke {
                 module: module.to_string(),
-                tool,
-                args,
+                tool: inv.tool,
+                args: inv.args,
             });
         }
     }

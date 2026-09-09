@@ -1,6 +1,6 @@
 //! Host-rendered declarative module UI (E15 / Preview 0.7).
 
-use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
+use aos_proto::decl_ui::{DeclUiDocument, DeclUiRowAction, DeclUiWidget, resolve_row_args};
 use aos_proto::ModuleTool;
 use eframe::egui::{self, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
@@ -11,7 +11,15 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct DeclUiActions {
     pub refresh: bool,
-    pub invoke: Option<(String, Value)>,
+    pub invoke: Option<DeclUiInvokeAction>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeclUiInvokeAction {
+    pub tool: String,
+    pub args: Value,
+    pub refresh_binds: Vec<String>,
+    pub clear_form_keys: Vec<String>,
 }
 
 #[derive(Debug, Default)]
@@ -23,6 +31,9 @@ pub struct DeclUiPanelState {
     pub form_fields: HashMap<String, String>,
     pub status: String,
     pub tool_schemas: HashMap<String, Value>,
+    pub pending_invoke: bool,
+    pub pending_refresh_binds: Vec<String>,
+    pub pending_clear_form_keys: Vec<String>,
 }
 
 impl DeclUiPanelState {
@@ -47,6 +58,16 @@ impl DeclUiPanelState {
         self.bind_cache.insert(tool.to_string(), result);
     }
 
+    pub fn set_pending_invoke(&mut self, pending: bool) {
+        self.pending_invoke = pending;
+    }
+
+    pub fn clear_form_keys(&mut self, keys: &[String]) {
+        for key in keys {
+            self.form_fields.remove(key);
+        }
+    }
+
     pub fn tools_to_bind(&self) -> Vec<String> {
         self.document
             .as_ref()
@@ -59,6 +80,7 @@ impl DeclUiPanelState {
         ui: &mut Ui,
         md_cache: &mut CommonMarkCache,
         refresh_label: &str,
+        language: &str,
     ) -> DeclUiActions {
         let mut actions = DeclUiActions::default();
         if !self.error.is_empty() {
@@ -82,7 +104,7 @@ impl DeclUiPanelState {
             }
         });
         if !self.status.is_empty() {
-            ui.weak(&self.status);
+            ui.colored_label(egui::Color32::from_rgb(180, 120, 60), &self.status);
         }
         ui.separator();
         if let Some(root) = doc.root.children.clone() {
@@ -91,9 +113,12 @@ impl DeclUiPanelState {
                     ui,
                     md_cache,
                     &child,
+                    &doc,
+                    language,
                     &self.bind_cache,
                     &mut self.form_fields,
                     &self.tool_schemas,
+                    self.pending_invoke,
                     &mut actions,
                 );
             }
@@ -102,9 +127,12 @@ impl DeclUiPanelState {
                 ui,
                 md_cache,
                 &doc.root,
+                &doc,
+                language,
                 &self.bind_cache,
                 &mut self.form_fields,
                 &self.tool_schemas,
+                self.pending_invoke,
                 &mut actions,
             );
         }
@@ -115,9 +143,12 @@ impl DeclUiPanelState {
         ui: &mut Ui,
         md_cache: &mut CommonMarkCache,
         w: &DeclUiWidget,
+        doc: &DeclUiDocument,
+        language: &str,
         cache: &HashMap<String, Value>,
         form_fields: &mut HashMap<String, String>,
         tool_schemas: &HashMap<String, Value>,
+        pending_invoke: bool,
         actions: &mut DeclUiActions,
     ) {
         match w.kind.as_str() {
@@ -135,9 +166,12 @@ impl DeclUiPanelState {
                                         ui,
                                         md_cache,
                                         c,
+                                        doc,
+                                        language,
                                         cache,
                                         form_fields,
                                         tool_schemas,
+                                        pending_invoke,
                                         actions,
                                     );
                                 }
@@ -153,9 +187,12 @@ impl DeclUiPanelState {
                                 ui,
                                 md_cache,
                                 c,
+                                doc,
+                                language,
                                 cache,
                                 form_fields,
                                 tool_schemas,
+                                pending_invoke,
                                 actions,
                             );
                         }
@@ -163,18 +200,28 @@ impl DeclUiPanelState {
                 });
             }
             "heading" => {
-                if let Some(t) = &w.text {
+                if let Some(t) = widget_text(w, doc, language) {
                     ui.heading(t);
                 }
             }
             "text" => {
-                if let Some(t) = &w.text {
+                if let Some(t) = widget_text(w, doc, language) {
                     ui.label(t);
                 }
             }
             "markdown" => {
-                if let Some(t) = &w.text {
-                    CommonMarkViewer::new().show(ui, md_cache, t);
+                if let Some(t) = widget_text(w, doc, language) {
+                    CommonMarkViewer::new().show(ui, md_cache, &t);
+                }
+            }
+            "empty_state" => {
+                if let Some(bind) = &w.bind {
+                    let val = resolve_bind(cache, bind, w.source.as_deref());
+                    if bind_rows(&val).is_empty() {
+                        if let Some(t) = widget_text(w, doc, language) {
+                            ui.weak(t);
+                        }
+                    }
                 }
             }
             "stat_row" => {
@@ -188,7 +235,17 @@ impl DeclUiPanelState {
             "table" => {
                 if let Some(bind) = &w.bind {
                     let val = resolve_bind(cache, bind, w.source.as_deref());
-                    render_table(ui, &val, w.columns.as_deref());
+                    render_table(
+                        ui,
+                        &val,
+                        w.columns.as_deref(),
+                        w.row_actions.as_deref(),
+                        doc,
+                        language,
+                        tool_schemas,
+                        pending_invoke,
+                        actions,
+                    );
                 }
             }
             "line_chart" => {
@@ -255,14 +312,26 @@ impl DeclUiPanelState {
                 });
             }
             "button" => {
-                let label = w.label.as_deref().or(w.text.as_deref()).unwrap_or("Run");
-                if ui.button(label).clicked() {
+                let label = widget_text(w, doc, language)
+                    .or_else(|| w.label.clone())
+                    .or_else(|| w.text.clone())
+                    .unwrap_or_else(|| "Run".into());
+                let enabled = !pending_invoke && actions.invoke.is_none();
+                if ui
+                    .add_enabled(enabled, egui::Button::new(label))
+                    .clicked()
+                {
                     if let Some(tool) = &w.tool {
-                        let args = w
-                            .args
-                            .clone()
-                            .unwrap_or_else(|| Value::Object(Default::default()));
-                        actions.invoke = Some((tool.clone(), args));
+                        queue_invoke(
+                            actions,
+                            tool,
+                            w.args
+                                .clone()
+                                .unwrap_or_else(|| Value::Object(Default::default())),
+                            w.refresh_binds.clone().unwrap_or_default(),
+                            Vec::new(),
+                            tool_schemas,
+                        );
                     }
                 }
             }
@@ -273,7 +342,7 @@ impl DeclUiPanelState {
                         .cloned()
                         .or_else(|| w.args.clone())
                         .unwrap_or_else(|| serde_json::json!({"type":"object","properties":{}}));
-                    let fields = schema_fields(&schema);
+                    let fields = schema_fields(&schema, doc, language);
                     ui.group(|ui| {
                         for field in &fields {
                             form_fields
@@ -324,15 +393,30 @@ impl DeclUiPanelState {
                                 }
                             });
                         }
-                        let submit = w.label.as_deref().unwrap_or("Submit");
-                        if ui.button(submit).clicked() {
+                        let submit = widget_text(w, doc, language)
+                            .or_else(|| w.label.clone())
+                            .unwrap_or_else(|| "Submit".into());
+                        let enabled = !pending_invoke && actions.invoke.is_none();
+                        if ui
+                            .add_enabled(enabled, egui::Button::new(submit))
+                            .clicked()
+                        {
                             let mut args = serde_json::Map::new();
+                            let mut clear_keys = Vec::new();
                             for field in &fields {
                                 if let Some(v) = form_fields.get(&field.key) {
                                     args.insert(field.key.clone(), field.parse_value(v));
                                 }
+                                clear_keys.push(field.key.clone());
                             }
-                            actions.invoke = Some((tool.clone(), Value::Object(args)));
+                            queue_invoke(
+                                actions,
+                                tool,
+                                Value::Object(args),
+                                w.refresh_binds.clone().unwrap_or_default(),
+                                clear_keys,
+                                tool_schemas,
+                            );
                         }
                     });
                 }
@@ -350,6 +434,80 @@ impl DeclUiPanelState {
 pub fn ingest_tool_schemas(manifest_tools: &[ModuleTool], out: &mut HashMap<String, Value>) {
     for t in manifest_tools {
         out.insert(t.name.clone(), t.input_schema.clone());
+    }
+}
+
+fn widget_text(w: &DeclUiWidget, doc: &DeclUiDocument, language: &str) -> Option<String> {
+    if let Some(key) = w.label_key.as_deref().filter(|k| !k.is_empty()) {
+        if let Some(labels) = &doc.labels {
+            if let Some(text) = labels.resolve(language, key) {
+                return Some(text);
+            }
+            return Some(key.to_string());
+        }
+    }
+    w.text.clone().filter(|t| !t.is_empty())
+}
+
+fn queue_invoke(
+    actions: &mut DeclUiActions,
+    tool: &str,
+    args: Value,
+    refresh_binds: Vec<String>,
+    clear_form_keys: Vec<String>,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    if !tool_schemas.contains_key(tool) {
+        return;
+    }
+    actions.invoke = Some(DeclUiInvokeAction {
+        tool: tool.to_string(),
+        args,
+        refresh_binds,
+        clear_form_keys,
+    });
+}
+
+fn bind_rows(val: &Value) -> Vec<Value> {
+    match val {
+        Value::Array(a) => a.clone(),
+        Value::Object(o) => o
+            .get("items")
+            .or_else(|| o.get("rows"))
+            .or_else(|| o.get("tasks"))
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+fn row_action_label(
+    action: &DeclUiRowAction,
+    doc: &DeclUiDocument,
+    language: &str,
+) -> String {
+    if let Some(label) = action.label.as_deref().filter(|l| !l.is_empty()) {
+        return label.to_string();
+    }
+    if let Some(key) = action.label_key.as_deref().filter(|k| !k.is_empty()) {
+        if let Some(labels) = &doc.labels {
+            if let Some(text) = labels.resolve(language, key) {
+                return text;
+            }
+        }
+        return key.to_string();
+    }
+    action.tool.clone()
+}
+
+fn row_action_visible(action: &DeclUiRowAction, row: &Value) -> bool {
+    let Some(when) = &action.when else {
+        return true;
+    };
+    match row {
+        Value::Object(map) => when.matches(map),
+        _ => false,
     }
 }
 
@@ -377,16 +535,21 @@ fn json_pointer_get(val: &Value, pointer: &str) -> Option<Value> {
     Some(cur.clone())
 }
 
-fn schema_fields(schema: &Value) -> Vec<SchemaField> {
+fn schema_fields(schema: &Value, doc: &DeclUiDocument, language: &str) -> Vec<SchemaField> {
     let mut out = Vec::new();
     if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
         for (k, v) in props {
-            let label = v
-                .get("title")
-                .or_else(|| v.get("description"))
-                .and_then(|x| x.as_str())
-                .unwrap_or(k.as_str())
-                .to_string();
+            let label = doc
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.resolve(language, k))
+                .or_else(|| {
+                    v.get("title")
+                        .or_else(|| v.get("description"))
+                        .and_then(|x| x.as_str())
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| k.clone());
             out.push(SchemaField {
                 key: k.clone(),
                 label,
@@ -508,21 +671,22 @@ fn render_stats(ui: &mut Ui, val: &Value, items: Option<&[String]>) {
     }
 }
 
-fn render_table(ui: &mut Ui, val: &Value, columns: Option<&[String]>) {
-    let rows: Vec<Value> = match val {
-        Value::Array(a) => a.clone(),
-        Value::Object(o) => o
-            .get("items")
-            .or_else(|| o.get("rows"))
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default(),
-        _ => Vec::new(),
-    };
+fn render_table(
+    ui: &mut Ui,
+    val: &Value,
+    columns: Option<&[String]>,
+    row_actions: Option<&[DeclUiRowAction]>,
+    doc: &DeclUiDocument,
+    language: &str,
+    tool_schemas: &HashMap<String, Value>,
+    pending_invoke: bool,
+    actions: &mut DeclUiActions,
+) {
+    let rows = bind_rows(val);
     if rows.is_empty() {
-        ui.weak("—");
         return;
     }
+    let show_actions = row_actions.is_some_and(|a| !a.is_empty());
     let cols: Vec<String> = if let Some(c) = columns {
         c.to_vec()
     } else if let Value::Object(first) = rows.first().unwrap_or(&Value::Null) {
@@ -538,12 +702,41 @@ fn render_table(ui: &mut Ui, val: &Value, columns: Option<&[String]>) {
             for c in &cols {
                 ui.strong(c);
             }
+            if show_actions {
+                ui.strong("");
+            }
             ui.end_row();
             for row in &rows {
                 match row {
                     Value::Object(map) => {
                         for c in &cols {
                             ui.label(map.get(c).map(value_display).unwrap_or_else(|| "—".into()));
+                        }
+                        if let Some(actions_def) = row_actions {
+                            ui.horizontal(|ui| {
+                                for action in actions_def {
+                                    if !row_action_visible(action, row) {
+                                        continue;
+                                    }
+                                    let label = row_action_label(action, doc, language);
+                                    let enabled =
+                                        !pending_invoke && actions.invoke.is_none();
+                                    if ui
+                                        .add_enabled(enabled, egui::Button::new(label))
+                                        .clicked()
+                                    {
+                                        let args = resolve_row_args(&action.args, row);
+                                        queue_invoke(
+                                            actions,
+                                            &action.tool,
+                                            args,
+                                            action.refresh_binds.clone().unwrap_or_default(),
+                                            Vec::new(),
+                                            tool_schemas,
+                                        );
+                                    }
+                                }
+                            });
                         }
                     }
                     Value::Array(cells) => {
@@ -554,10 +747,16 @@ fn render_table(ui: &mut Ui, val: &Value, columns: Option<&[String]>) {
                                 .unwrap_or_else(|| "—".into());
                             ui.label(cell);
                         }
+                        if show_actions {
+                            ui.label("");
+                        }
                     }
                     other => {
                         ui.label(value_display(other));
                         for _ in 1..cols.len() {
+                            ui.label("");
+                        }
+                        if show_actions {
                             ui.label("");
                         }
                     }
