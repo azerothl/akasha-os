@@ -8,7 +8,7 @@ use schemars::{schema_for, JsonSchema};
 use serde_json::{json, Map, Value};
 
 use crate::{
-    decl_ui::{DeclUiDocument, DeclUiWidget, ModuleUiResponse},
+    decl_ui::{DeclUiDocument, DeclUiLabels, DeclUiRowAction, DeclUiWidget, ModuleUiResponse},
     MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest, MemEpisodicQueryRequest,
     MemEpisodicWriteRequest, MemExtractOutcome, MemExtractOutcomeKind, MemExtractRequest,
     MemExtractResponse, MemExtractedFact, MemHit, MemListRequest, MemNeighborsRequest,
@@ -127,6 +127,8 @@ pub fn decl_ui_schema_document() -> Value {
         "version": "0.8.0",
         "$defs": defs(&[
             ("DeclUiDocument", schema_of::<DeclUiDocument>()),
+            ("DeclUiLabels", schema_of::<DeclUiLabels>()),
+            ("DeclUiRowAction", schema_of::<DeclUiRowAction>()),
             ("DeclUiWidget", schema_of::<DeclUiWidget>()),
             ("ModuleUiResponse", schema_of::<ModuleUiResponse>()),
         ]),

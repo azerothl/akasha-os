@@ -1,6 +1,85 @@
 {
   "type": "declarative_ui",
   "title": "Tasks",
-  "description": "Human + agent shared task list.",
-  "commands": ["tasks.create", "tasks.list", "tasks.update", "tasks.complete"]
+  "title_key": "tab_tasks",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "tab_tasks": "Tasks",
+      "tasks_new": "New",
+      "tasks_create": "Create",
+      "tasks_complete": "Complete",
+      "tasks_reopen": "Reopen",
+      "tasks_title_hint": "title",
+      "tasks_notes_hint": "notes",
+      "tasks_empty": "No tasks — create one or ask an agent `tasks.create`.",
+      "tasks_count": "{n} task(s)"
+    },
+    "fr": {
+      "tab_tasks": "Tâches",
+      "tasks_new": "Nouvelle",
+      "tasks_create": "Créer",
+      "tasks_complete": "Terminer",
+      "tasks_reopen": "Réouvrir",
+      "tasks_title_hint": "titre",
+      "tasks_notes_hint": "notes",
+      "tasks_empty": "Aucune tâche — créez-en une ou demandez à un agent `tasks.create`.",
+      "tasks_count": "{n} tâche(s)"
+    }
+  },
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "form",
+        "tool": "tasks.create",
+        "label_key": "tasks_create",
+        "prefix_label_key": "tasks_new",
+        "refresh_binds": ["tasks.list"],
+        "args": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "x-hint-key": "tasks_title_hint" },
+            "notes": { "type": "string", "x-hint-key": "tasks_notes_hint" }
+          },
+          "required": ["title"]
+        }
+      },
+      {
+        "kind": "empty_state",
+        "bind": "tasks.list",
+        "source": "tasks",
+        "label_key": "tasks_empty"
+      },
+      {
+        "kind": "table",
+        "bind": "tasks.list",
+        "source": "tasks",
+        "hide_headers": true,
+        "columns": ["title", "notes"],
+        "row_actions": [
+          {
+            "tool": "tasks.complete",
+            "label_key": "tasks_complete",
+            "args": { "id": "$id", "done": true },
+            "when": { "field": "done", "eq": false },
+            "refresh_binds": ["tasks.list"]
+          },
+          {
+            "tool": "tasks.complete",
+            "label_key": "tasks_reopen",
+            "args": { "id": "$id", "done": false },
+            "when": { "field": "done", "eq": true },
+            "refresh_binds": ["tasks.list"]
+          }
+        ]
+      },
+      {
+        "kind": "count_label",
+        "bind": "tasks.list",
+        "source": "tasks",
+        "label_key": "tasks_count"
+      }
+    ]
+  }
 }

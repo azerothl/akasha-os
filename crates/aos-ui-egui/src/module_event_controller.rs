@@ -35,7 +35,6 @@ pub(crate) fn on_uninstalled(app: &mut UiApp, name: String) {
 
 pub(crate) fn on_ui_loaded(app: &mut UiApp, response: ModuleUiResponse) {
     let module = response.module.clone();
-    let title = response.document.title.clone();
     let binds = {
         let panel = app
             .decl_panels
@@ -43,7 +42,7 @@ pub(crate) fn on_ui_loaded(app: &mut UiApp, response: ModuleUiResponse) {
             .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
         panel.set_document(response.document);
         decl_ui::ingest_tool_schemas(&response.tools, &mut panel.tool_schemas);
-        panel.status = format!("loaded {title}");
+        panel.status.clear();
         panel.tools_to_bind()
     };
     for tool in binds {
@@ -72,7 +71,7 @@ pub(crate) fn on_ui_bind(
     if let Some(panel) = app.decl_panels.get_mut(&module) {
         panel.set_bind_result(&tool, result);
         if let Some(error) = error {
-            panel.status = format!("{tool}: {error}");
+            panel.status = error;
         }
     }
 }
@@ -85,16 +84,32 @@ pub(crate) fn on_ui_invoke_done(
     result: Value,
     error: Option<String>,
 ) {
-    if let Some(panel) = app.decl_panels.get_mut(&module) {
+    let refresh_binds;
+    let clear_form_keys;
+    {
+        let panel = app.decl_panels.entry(module.clone()).or_insert_with(|| {
+            decl_ui::DeclUiPanelState::new(&module)
+        });
+        refresh_binds = std::mem::take(&mut panel.pending_refresh_binds);
+        clear_form_keys = std::mem::take(&mut panel.pending_clear_form_keys);
+        panel.set_pending_invoke(false);
         if ok {
-            // Keep invoke results in the bind cache so widgets bound to this
-            // tool can update immediately without a full reload.
             panel.set_bind_result(&tool, result);
-        }
-        panel.status = if ok {
-            format!("{tool} ok")
+            if !clear_form_keys.is_empty() {
+                panel.clear_form_keys(&clear_form_keys);
+            }
+            panel.status.clear();
         } else {
-            error.unwrap_or_else(|| format!("{tool} failed"))
-        };
+            panel.status = error
+                .unwrap_or_else(|| "Action failed".into());
+        }
+    }
+    if ok {
+        for bind in refresh_binds {
+            let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
+                module: module.clone(),
+                tool: bind,
+            });
+        }
     }
 }

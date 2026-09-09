@@ -3,6 +3,91 @@
     "DeclUiDocument": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "definitions": {
+        "DeclUiLabels": {
+          "description": "Package-local copy keyed by locale (`en`, `fr`, …) with an explicit fallback.",
+          "properties": {
+            "en": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "fallback": {
+              "description": "Locale code used when the requested language has no entry (e.g. `\"en\"`).",
+              "type": "string"
+            },
+            "fr": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "fallback"
+          ],
+          "type": "object"
+        },
+        "DeclUiRowAction": {
+          "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
+          "properties": {
+            "args": true,
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh_binds": {
+              "description": "Bind tools to re-fetch after a successful invoke (e.g. list after create).",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": "string"
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiRowWhen"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "args",
+            "tool"
+          ],
+          "type": "object"
+        },
+        "DeclUiRowWhen": {
+          "description": "Optional row filter for a [`DeclUiRowAction`].",
+          "properties": {
+            "eq": true,
+            "field": {
+              "type": "string"
+            },
+            "ne": true
+          },
+          "required": [
+            "field"
+          ],
+          "type": "object"
+        },
         "DeclUiWidget": {
           "description": "One node in the widget tree.",
           "properties": {
@@ -32,6 +117,13 @@
                 "null"
               ]
             },
+            "hide_headers": {
+              "description": "When true, table renders rows without a header band.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "items": {
               "items": {
                 "type": "string"
@@ -47,6 +139,40 @@
             "label": {
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "description": "Key into [`DeclUiDocument::labels`] for localized copy.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prefix_label_key": {
+              "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh_binds": {
+              "description": "Bind tools to re-fetch after a successful invoke from this widget.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "row_actions": {
+              "description": "Per-row actions rendered beside each table row.",
+              "items": {
+                "$ref": "#/definitions/DeclUiRowAction"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
@@ -85,6 +211,16 @@
       },
       "description": "Root document stored in `ui/index.html`.",
       "properties": {
+        "labels": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DeclUiLabels"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "poll_ms": {
           "format": "uint64",
           "minimum": 0.0,
@@ -99,6 +235,13 @@
         "title": {
           "type": "string"
         },
+        "title_key": {
+          "description": "Key into [`DeclUiLabels`] for the panel chrome heading (instead of raw [`Self::title`]).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "type": {
           "type": "string"
         }
@@ -111,9 +254,160 @@
       "title": "DeclUiDocument",
       "type": "object"
     },
+    "DeclUiLabels": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Package-local copy keyed by locale (`en`, `fr`, …) with an explicit fallback.",
+      "properties": {
+        "en": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "fallback": {
+          "description": "Locale code used when the requested language has no entry (e.g. `\"en\"`).",
+          "type": "string"
+        },
+        "fr": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "fallback"
+      ],
+      "title": "DeclUiLabels",
+      "type": "object"
+    },
+    "DeclUiRowAction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "DeclUiRowWhen": {
+          "description": "Optional row filter for a [`DeclUiRowAction`].",
+          "properties": {
+            "eq": true,
+            "field": {
+              "type": "string"
+            },
+            "ne": true
+          },
+          "required": [
+            "field"
+          ],
+          "type": "object"
+        }
+      },
+      "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
+      "properties": {
+        "args": true,
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refresh_binds": {
+          "description": "Bind tools to re-fetch after a successful invoke (e.g. list after create).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "tool": {
+          "type": "string"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DeclUiRowWhen"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "args",
+        "tool"
+      ],
+      "title": "DeclUiRowAction",
+      "type": "object"
+    },
     "DeclUiWidget": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "definitions": {
+        "DeclUiRowAction": {
+          "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
+          "properties": {
+            "args": true,
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh_binds": {
+              "description": "Bind tools to re-fetch after a successful invoke (e.g. list after create).",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": "string"
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiRowWhen"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "args",
+            "tool"
+          ],
+          "type": "object"
+        },
+        "DeclUiRowWhen": {
+          "description": "Optional row filter for a [`DeclUiRowAction`].",
+          "properties": {
+            "eq": true,
+            "field": {
+              "type": "string"
+            },
+            "ne": true
+          },
+          "required": [
+            "field"
+          ],
+          "type": "object"
+        },
         "DeclUiWidget": {
           "description": "One node in the widget tree.",
           "properties": {
@@ -143,6 +437,13 @@
                 "null"
               ]
             },
+            "hide_headers": {
+              "description": "When true, table renders rows without a header band.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "items": {
               "items": {
                 "type": "string"
@@ -158,6 +459,40 @@
             "label": {
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "description": "Key into [`DeclUiDocument::labels`] for localized copy.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prefix_label_key": {
+              "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh_binds": {
+              "description": "Bind tools to re-fetch after a successful invoke from this widget.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "row_actions": {
+              "description": "Per-row actions rendered beside each table row.",
+              "items": {
+                "$ref": "#/definitions/DeclUiRowAction"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
@@ -222,6 +557,13 @@
             "null"
           ]
         },
+        "hide_headers": {
+          "description": "When true, table renders rows without a header band.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "items": {
           "items": {
             "type": "string"
@@ -237,6 +579,40 @@
         "label": {
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "label_key": {
+          "description": "Key into [`DeclUiDocument::labels`] for localized copy.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prefix_label_key": {
+          "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refresh_binds": {
+          "description": "Bind tools to re-fetch after a successful invoke from this widget.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "row_actions": {
+          "description": "Per-row actions rendered beside each table row.",
+          "items": {
+            "$ref": "#/definitions/DeclUiRowAction"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -279,6 +655,16 @@
         "DeclUiDocument": {
           "description": "Root document stored in `ui/index.html`.",
           "properties": {
+            "labels": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiLabels"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "poll_ms": {
               "format": "uint64",
               "minimum": 0.0,
@@ -293,6 +679,13 @@
             "title": {
               "type": "string"
             },
+            "title_key": {
+              "description": "Key into [`DeclUiLabels`] for the panel chrome heading (instead of raw [`Self::title`]).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "type": {
               "type": "string"
             }
@@ -301,6 +694,91 @@
             "root",
             "title",
             "type"
+          ],
+          "type": "object"
+        },
+        "DeclUiLabels": {
+          "description": "Package-local copy keyed by locale (`en`, `fr`, …) with an explicit fallback.",
+          "properties": {
+            "en": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "fallback": {
+              "description": "Locale code used when the requested language has no entry (e.g. `\"en\"`).",
+              "type": "string"
+            },
+            "fr": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "fallback"
+          ],
+          "type": "object"
+        },
+        "DeclUiRowAction": {
+          "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
+          "properties": {
+            "args": true,
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh_binds": {
+              "description": "Bind tools to re-fetch after a successful invoke (e.g. list after create).",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": "string"
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/DeclUiRowWhen"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "args",
+            "tool"
+          ],
+          "type": "object"
+        },
+        "DeclUiRowWhen": {
+          "description": "Optional row filter for a [`DeclUiRowAction`].",
+          "properties": {
+            "eq": true,
+            "field": {
+              "type": "string"
+            },
+            "ne": true
+          },
+          "required": [
+            "field"
           ],
           "type": "object"
         },
@@ -333,6 +811,13 @@
                 "null"
               ]
             },
+            "hide_headers": {
+              "description": "When true, table renders rows without a header band.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "items": {
               "items": {
                 "type": "string"
@@ -348,6 +833,40 @@
             "label": {
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "label_key": {
+              "description": "Key into [`DeclUiDocument::labels`] for localized copy.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prefix_label_key": {
+              "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refresh_binds": {
+              "description": "Bind tools to re-fetch after a successful invoke from this widget.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "row_actions": {
+              "description": "Per-row actions rendered beside each table row.",
+              "items": {
+                "$ref": "#/definitions/DeclUiRowAction"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
