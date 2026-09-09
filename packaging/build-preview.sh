@@ -15,6 +15,7 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MODELS="${SKIP_MODELS:-0}"
 REQUIRE_CUDA="${REQUIRE_CUDA:-0}"
+PREVIEW_PROFILE="${AOS_PREVIEW_PROFILE:-standard}"
 
 sha256_file() {
   local path="$1"
@@ -109,42 +110,19 @@ EOF
   fi
   sync_module_wasm "notes" "${ROOT}/modules/notes.aospkg/module.wasm"
   echo "== tasks module =="
-  if command -v pwsh >/dev/null 2>&1; then
-    pwsh -NoProfile -File "${ROOT}/modules/build-tasks.ps1"
-  else
-    env -u RUSTFLAGS -u CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS \
-      cargo build --manifest-path "${ROOT}/modules/tasks/Cargo.toml" \
-      --target wasm32-unknown-unknown --release
-    mkdir -p "${ROOT}/modules/tasks.aospkg/ui" "${ROOT}/modules/tasks.aospkg/schemas"
-    WASM_TASK=""
-    for cand in \
-      "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_tasks.wasm" \
-      "${ROOT}/target/wasm32-unknown-unknown/release/module_tasks.wasm" \
-      "${ROOT}/modules/tasks/target/wasm32-unknown-unknown/release/module_tasks.wasm"
-    do
-      if [ -f "${cand}" ]; then WASM_TASK="${cand}"; break; fi
-    done
-    if [ -z "${WASM_TASK}" ]; then
-      echo "ERROR: module_tasks.wasm introuvable" >&2
+  if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
+    if command -v pwsh >/dev/null 2>&1; then
+      pwsh -NoProfile -File "${ROOT}/modules/build-tasks.ps1"
+    elif [ -f "${ROOT}/modules/build-tasks.sh" ]; then
+      "${ROOT}/modules/build-tasks.sh"
+    else
+      echo "ERROR: modules/build-tasks.ps1 or build-tasks.sh required" >&2
       exit 1
     fi
-    cp -f "${WASM_TASK}" "${ROOT}/modules/tasks.aospkg/module.wasm"
-    cat > "${ROOT}/modules/tasks.aospkg/manifest.yaml" <<'EOF'
-name: tasks
-version: 1.0.0
-hash: "ci"
-permissions:
-  required_caps: []
-tools: []
-ui:
-  entry: ui/index.html
-  mode: declarative_ui
-min_os_api: 1
-EOF
-    echo '{"type":"declarative_ui","title":"Tasks","commands":["tasks.create","tasks.list","tasks.update","tasks.complete"]}' \
-      > "${ROOT}/modules/tasks.aospkg/ui/index.html"
+    sync_module_wasm "tasks" "${ROOT}/modules/tasks.aospkg/module.wasm"
+  else
+    echo "  skip tasks (minimal profile)"
   fi
-  sync_module_wasm "tasks" "${ROOT}/modules/tasks.aospkg/module.wasm"
   if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
     echo "== canvas module =="
   "${ROOT}/modules/build-canvas.sh"
@@ -340,12 +318,14 @@ elif [ -d "${ROOT}/modules/notes.aospkg" ]; then
   rm -rf "${OUT}/share/modules/notes.aospkg"
   cp -a "${ROOT}/modules/notes.aospkg" "${OUT}/share/modules/notes.aospkg"
 fi
-if [ -d "${ROOT}/share/modules/tasks.aospkg" ]; then
-  rm -rf "${OUT}/share/modules/tasks.aospkg"
-  cp -a "${ROOT}/share/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
-elif [ -d "${ROOT}/modules/tasks.aospkg" ]; then
-  rm -rf "${OUT}/share/modules/tasks.aospkg"
-  cp -a "${ROOT}/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
+if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
+  if [ -d "${ROOT}/share/modules/tasks.aospkg" ]; then
+    rm -rf "${OUT}/share/modules/tasks.aospkg"
+    cp -a "${ROOT}/share/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
+  elif [ -d "${ROOT}/modules/tasks.aospkg" ]; then
+    rm -rf "${OUT}/share/modules/tasks.aospkg"
+    cp -a "${ROOT}/modules/tasks.aospkg" "${OUT}/share/modules/tasks.aospkg"
+  fi
 fi
 if [ -d "${ROOT}/share/modules/ext-rt.aospkg" ]; then
   rm -rf "${OUT}/share/modules/ext-rt.aospkg"
@@ -370,6 +350,9 @@ for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   fi
   cp -f "${src}" "${OUT}/share/modules/${cat}"
 done
+
+mkdir -p "${OUT}/share"
+echo "profile: ${PREVIEW_PROFILE}" > "${OUT}/share/preview-profile.yaml"
 
 if [ -d "${ROOT}/skills" ]; then
   cp -a "${ROOT}/skills/." "${OUT}/share/skills/"

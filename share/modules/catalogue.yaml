@@ -16,7 +16,7 @@ entries:
     version: "1.0.0"
     kind: module
     path: share/modules/tasks.aospkg
-    hash: sha256:6f26a8e7edf7f589ad37b7d16f7db7dc268969c522df5c2f277ec652ca4a3364
+    hash: sha256:530c32342d2cc16efc8e3eafb27a0498f9a1f2bdef468fa79662736d989bb7af
     attested_caps:
       - fs.read:/documents/tasks/**
       - fs.write:/documents/tasks/**

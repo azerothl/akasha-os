@@ -65,9 +65,22 @@ foreach ($binary in $binaries) {
     $requiredFiles += "bin\$binary"
 }
 
-foreach ($module in @("notes", "tasks", "ext-rt", "canvas")) {
+foreach ($module in @("notes", "ext-rt", "canvas")) {
     $requiredFiles += "share\modules\$module.aospkg\manifest.yaml"
     $requiredFiles += "share\modules\$module.aospkg\module.wasm"
+}
+
+$profilePath = Join-Path $resolvedOut "share\preview-profile.yaml"
+$previewProfile = "standard"
+if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
+    $profileRaw = Get-Content -LiteralPath $profilePath -Raw
+    if ($profileRaw -match '(?m)^profile:\s*(\S+)') {
+        $previewProfile = $Matches[1].Trim().ToLowerInvariant()
+    }
+}
+if ($previewProfile -ne "minimal") {
+    $requiredFiles += "share\modules\tasks.aospkg\manifest.yaml"
+    $requiredFiles += "share\modules\tasks.aospkg\module.wasm"
 }
 
 foreach ($relativePath in $requiredFiles) {
@@ -76,7 +89,11 @@ foreach ($relativePath in $requiredFiles) {
 
 $catalogueText = Get-Content -LiteralPath `
     (Join-Path $resolvedOut "share\modules\catalogue.yaml") -Raw
-foreach ($module in @("notes", "tasks", "ext-rt", "canvas")) {
+$modulesToVerify = @("notes", "ext-rt", "canvas")
+if ($previewProfile -ne "minimal") {
+    $modulesToVerify += "tasks"
+}
+foreach ($module in $modulesToVerify) {
     $moduleBase = Join-Path $resolvedOut "share\modules\$module.aospkg"
     $wasmHash = (Get-FileHash -Algorithm SHA256 `
         -LiteralPath (Join-Path $moduleBase "module.wasm")).Hash.ToLowerInvariant()

@@ -34,14 +34,28 @@ pub const WIDGET_KINDS: &[&str] = &[
     "count_label",
 ];
 
+/// Preview install profile — standard ships Tasks; minimal omits it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PreviewProfile {
+    #[default]
+    Standard,
+    Minimal,
+}
+
 /// Modules shipped with the standard Preview profile (user may uninstall; choice persists).
-pub const PREINSTALLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
+pub const STANDARD_PREINSTALLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
+
+/// Modules shipped with the minimal Preview profile (Tasks omitted).
+pub const MINIMAL_PREINSTALLED_MODULES: &[&str] = &["notes", "ext-rt", "canvas"];
+
+/// Default preinstall list (standard profile).
+pub const PREINSTALLED_MODULES: &[&str] = STANDARD_PREINSTALLED_MODULES;
 
 /// Host policy: modules the host refuses to uninstall (never granted by the package manifest).
 pub const PROTECTED_BY_HOST_MODULES: &[&str] = &[];
 
 /// Modules that keep dedicated hardcoded egui tabs in Preview (distinct from declarative sidebar).
-pub const NATIVE_UI_MODULES: &[&str] = PREINSTALLED_MODULES;
+pub const NATIVE_UI_MODULES: &[&str] = &["notes", "ext-rt", "canvas"];
 
 /// Sidebar hides native-tab modules without a declarative surface yet.
 /// Tasks uses generic navigation from lot 2 (#149).
@@ -50,8 +64,45 @@ pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = &["notes", "ext-rt", "canvas"];
 /// Deprecated alias — prefer [`is_preinstalled_module`] / [`is_protected_by_host`].
 pub const BUNDLED_MODULES: &[&str] = PREINSTALLED_MODULES;
 
+pub fn preinstalled_modules_for(profile: PreviewProfile) -> &'static [&'static str] {
+    match profile {
+        PreviewProfile::Standard => STANDARD_PREINSTALLED_MODULES,
+        PreviewProfile::Minimal => MINIMAL_PREINSTALLED_MODULES,
+    }
+}
+
+pub fn parse_preview_profile(value: &str) -> PreviewProfile {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "minimal" => PreviewProfile::Minimal,
+        _ => PreviewProfile::Standard,
+    }
+}
+
+/// Resolve from `AOS_PREVIEW_PROFILE` or `share/preview-profile.yaml` under `home`.
+pub fn resolve_preview_profile(home: &std::path::Path) -> PreviewProfile {
+    if let Ok(v) = std::env::var("AOS_PREVIEW_PROFILE") {
+        return parse_preview_profile(&v);
+    }
+    let marker = home.join("share/preview-profile.yaml");
+    if marker.is_file() {
+        if let Ok(raw) = std::fs::read_to_string(&marker) {
+            for line in raw.lines() {
+                let trimmed = line.trim();
+                if let Some(v) = trimmed.strip_prefix("profile:") {
+                    return parse_preview_profile(v);
+                }
+            }
+        }
+    }
+    PreviewProfile::Standard
+}
+
 pub fn is_preinstalled_module(name: &str) -> bool {
-    PREINSTALLED_MODULES.contains(&name)
+    is_preinstalled_for_profile(name, PreviewProfile::Standard)
+}
+
+pub fn is_preinstalled_for_profile(name: &str, profile: PreviewProfile) -> bool {
+    preinstalled_modules_for(profile).contains(&name)
 }
 
 pub fn is_protected_by_host(name: &str) -> bool {
@@ -588,8 +639,9 @@ mod tests {
     #[test]
     fn preinstalled_is_not_protected_by_default() {
         assert!(is_preinstalled_module("tasks"));
+        assert!(!is_preinstalled_for_profile("tasks", PreviewProfile::Minimal));
         assert!(!is_protected_by_host("tasks"));
-        assert!(has_native_ui("tasks"));
+        assert!(!has_native_ui("tasks"));
     }
 
     #[test]
@@ -686,7 +738,7 @@ mod tests {
 
     #[test]
     fn accepts_tasks_declarative_document() {
-        let raw = include_bytes!("../../../share/modules/tasks.aospkg/ui/index.html");
+        let raw = include_bytes!("../../../modules/tasks/ui/index.html");
         let doc = DeclUiDocument::parse_json(raw).expect("tasks ui valid");
         let labels = doc.labels.as_ref().expect("tasks labels");
         assert_eq!(

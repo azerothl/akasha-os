@@ -80,9 +80,10 @@ Expected banner: Preview on the host OS — this is not the bootable OS yet.
 
 ### 2b. Tasks (dual-surface)
 
-- **Tasks** tab → create a task.
+- When **Tasks** is installed: **Modules → Tâches / Tasks** → create a task.
 - Start an agent with tools including `tasks.list` — it should see the same task.
-- Optionally ask the agent to `tasks.create`; refresh the Tasks tab.
+- Optionally ask the agent to `tasks.create`; refresh the module panel.
+- Minimal Preview profile (`share/preview-profile.yaml` → `minimal`): no Tasks preinstall; chat and agents still boot.
 
 ### 3. Note via agent
 
@@ -267,9 +268,7 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 ### 16. Uninstall a module (0.8.0 / P08.7)
 
 - Scaffold + install a non-bundled module (step 14 or 15).
-- **Settings → Installed modules**: Uninstall (not `notes` / `tasks` / `ext-rt`).
-- Confirm the banner. Tab gone, `tool.invoke:<name>` gone from Caps, audit line present.
-- Re-install still works.
+- **Settings → Installed modules**: Uninstall preinstalled apps (`tasks`, `notes`, …) or agent-installed modules; confirm the banner. Tab gone when declarative, `tool.invoke:<name>` gone from Caps, audit line present. Re-install still works; `/documents/tasks/` survives Tasks uninstall.
 
 ### 17. E15 widgets (0.8.0 / P08.11)
 

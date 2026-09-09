@@ -82,7 +82,6 @@ mod settings_controller;
 mod settings_ui_state;
 mod skill_offer;
 mod slash;
-mod tasks_panel;
 mod theme;
 mod troubleshoot;
 mod ui_agents;
@@ -131,7 +130,7 @@ use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 use eframe::egui;
 use egui_commonmark::CommonMarkCache;
 use module_actions::{
-    agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes, invoke_tasks,
+    agent_id_cmd, invoke_module_bind, invoke_module_tool, invoke_notes,
     load_module_ui,
 };
 use onboarding::{load_onboarding, save_onboarding, OnboardingState};
@@ -178,7 +177,6 @@ enum Tab {
     Chat,
     Memory,
     Notes,
-    Tasks,
     Library,
     Agents,
     Models,
@@ -618,7 +616,6 @@ impl UiApp {
             Tab::Chat => t.tab_chat,
             Tab::Memory => t.tab_memory,
             Tab::Notes => t.tab_notes,
-            Tab::Tasks => t.tab_tasks,
             Tab::Library => t.tab_library,
             Tab::Agents => t.tab_agents,
             Tab::Models => t.tab_models,
@@ -1725,8 +1722,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.send_mem_list();
                 let _ = self.cmd_tx.send(Cmd::MemSweepStatus);
             }
-            Tab::Tasks => {
-                let _ = self.cmd_tx.send(Cmd::TasksList);
+            Tab::Module(name) => {
+                let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
             }
             Tab::Files => {
                 let _ = self.cmd_tx.send(Cmd::FilesList { prefix: String::new() });
@@ -1816,7 +1813,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 for (tab, label, hint) in [
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
                     (Tab::Library, t.tab_library, t.tab_hint_library),
-                    (Tab::Tasks, t.tab_tasks, t.tab_hint_tasks),
                     (Tab::Files, t.tab_files, t.tab_hint_files),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
                 ] {
@@ -2253,14 +2249,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 ui.separator();
                 let query = self.spotlight_query.trim().to_lowercase();
-                let destinations: [(&str, Tab); 15] = [
+                let destinations: [(&str, Tab); 14] = [
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
                     (t.tab_memory, Tab::Memory),
                     (t.tab_notes, Tab::Notes),
                     (t.tab_library, Tab::Library),
-                    (t.tab_tasks, Tab::Tasks),
                     (t.tab_files, Tab::Files),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
@@ -2602,7 +2597,6 @@ impl eframe::App for UiApp {
                 Evt::ScheduleUpdated(entry) => {
                     schedule_event_controller::on_schedule_updated(self, entry);
                 }
-                Evt::TasksListed(tasks) => self.on_tasks_listed(tasks),
                 Evt::Confirms(c) => self.confirmations_ui.replace(c),
                 Evt::FeedbackOk(r) => {
                     feedback_event_controller::on_feedback_ok(self, r);
@@ -3330,7 +3324,6 @@ impl eframe::App for UiApp {
             Tab::Memory => overflow_scroll(ui, "memory", |ui| self.ui_memory(ui)),
             Tab::Notes => overflow_scroll(ui, "notes", |ui| self.ui_notes(ui)),
             Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
-            Tab::Tasks => overflow_scroll(ui, "tasks", |ui| self.ui_tasks(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
             Tab::Image => overflow_scroll(ui, "image", |ui| {

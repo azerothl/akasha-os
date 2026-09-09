@@ -10,6 +10,7 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MODELS="${SKIP_MODELS:-0}"
+PREVIEW_PROFILE="${AOS_PREVIEW_PROFILE:-standard}"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "ERROR: build-preview-macos.sh must run on macOS" >&2
@@ -107,37 +108,17 @@ EOF
   sync_module_wasm "notes" "${WASM_SRC}"
 
   echo "== tasks module =="
-  env -u RUSTFLAGS \
-    cargo build --manifest-path "${ROOT}/modules/tasks/Cargo.toml" \
-    --target wasm32-unknown-unknown --release
-  mkdir -p "${ROOT}/modules/tasks.aospkg/ui"
-  WASM_TASK=""
-  for cand in \
-    "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_tasks.wasm" \
-    "${ROOT}/target/wasm32-unknown-unknown/release/module_tasks.wasm"
-  do
-    if [ -f "${cand}" ]; then WASM_TASK="${cand}"; break; fi
-  done
-  if [ -z "${WASM_TASK}" ]; then
-    echo "ERROR: module_tasks.wasm introuvable" >&2
-    exit 1
+  if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
+    if [ -f "${ROOT}/modules/build-tasks.sh" ]; then
+      "${ROOT}/modules/build-tasks.sh"
+    else
+      echo "ERROR: modules/build-tasks.sh required" >&2
+      exit 1
+    fi
+    sync_module_wasm "tasks" "${ROOT}/modules/tasks.aospkg/module.wasm"
+  else
+    echo "  skip tasks (minimal profile)"
   fi
-  cp -f "${WASM_TASK}" "${ROOT}/modules/tasks.aospkg/module.wasm"
-  cat > "${ROOT}/modules/tasks.aospkg/manifest.yaml" <<'EOF'
-name: tasks
-version: 1.0.0
-hash: "ci"
-permissions:
-  required_caps: []
-tools: []
-ui:
-  entry: ui/index.html
-  mode: declarative_ui
-min_os_api: 1
-EOF
-  echo '{"type":"declarative_ui","title":"Tasks","commands":["tasks.create","tasks.list","tasks.update","tasks.complete"]}' \
-    > "${ROOT}/modules/tasks.aospkg/ui/index.html"
-  sync_module_wasm "tasks" "${WASM_TASK}"
 
   if [ -f "${ROOT}/modules/ext-rt/Cargo.toml" ]; then
     echo "== ext-rt wasm =="
@@ -204,7 +185,7 @@ if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
   cp -f "${ROOT}/share/models/catalog-offerings.json" "${OUT}/share/models/catalog-offerings.json"
 fi
 
-for pkg in notes tasks ext-rt canvas; do
+for pkg in notes ext-rt canvas; do
   for base in "${ROOT}/share/modules/${pkg}.aospkg" "${ROOT}/modules/${pkg}.aospkg"; do
     if [ -d "${base}" ]; then
       rm -rf "${OUT}/share/modules/${pkg}.aospkg"
@@ -213,6 +194,15 @@ for pkg in notes tasks ext-rt canvas; do
     fi
   done
 done
+if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
+  for base in "${ROOT}/share/modules/tasks.aospkg" "${ROOT}/modules/tasks.aospkg"; do
+    if [ -d "${base}" ]; then
+      rm -rf "${OUT}/share/modules/tasks.aospkg"
+      copy_tree "${base}" "${OUT}/share/modules/tasks.aospkg"
+      break
+    fi
+  done
+fi
 
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   src="${ROOT}/share/modules/${cat}"
@@ -222,6 +212,9 @@ for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   fi
   cp -f "${src}" "${OUT}/share/modules/${cat}"
 done
+
+mkdir -p "${OUT}/share"
+echo "profile: ${PREVIEW_PROFILE}" > "${OUT}/share/preview-profile.yaml"
 
 if [ -d "${ROOT}/skills" ]; then
   copy_tree "${ROOT}/skills/." "${OUT}/share/skills/"

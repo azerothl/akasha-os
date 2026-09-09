@@ -1,7 +1,7 @@
 //! Bus actions for declarative modules and bundled Notes/Tasks modules.
 
 use crate::cmd::Evt;
-use crate::{notes_panel, tasks_panel};
+use crate::notes_panel;
 use aos_ipc::BusClient;
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::{AgentIdRequest, ModuleIdRequest, ModuleInvokeRequest, ModuleInvokeResponse};
@@ -271,74 +271,6 @@ fn notes_save_payload_from_args(args: &serde_json::Value) -> (String, String, Op
         .and_then(|p| p.as_str())
         .map(|s| s.to_string());
     (title, content, path)
-}
-
-pub(crate) async fn invoke_tasks(
-    bus: &Arc<BusClient>,
-    evt_tx: &Sender<Evt>,
-    tool: &str,
-    args: serde_json::Value,
-) {
-    let req = ModuleInvokeRequest {
-        module: "tasks".into(),
-        tool: tool.into(),
-        args,
-        actor: "human:ui".into(),
-        actor_caps: vec![
-            "fs.read:/documents/tasks/**".into(),
-            "fs.write:/documents/tasks/**".into(),
-            "tool.invoke:tasks".into(),
-        ],
-        trace_id: format!("ui-tasks-{tool}"),
-    };
-    match bus
-        .call::<ModuleInvokeRequest, ModuleInvokeResponse>("module.invoke", &req, vec![])
-        .await
-    {
-        Ok(r) if r.ok => match tool {
-            "tasks.list" => {
-                let tasks = tasks_panel::parse_list_result(&r.result);
-                let _ = evt_tx.send(Evt::TasksListed(tasks));
-            }
-            "tasks.create" | "tasks.update" | "tasks.complete" => {
-                let t = crate::i18n::strings(&crate::prefs::load_preferences().language);
-                if let Some(status) = crate::i18n::module_tool_ok_status(&t, tool) {
-                    let _ = evt_tx.send(Evt::Status(status));
-                }
-                let list_req = ModuleInvokeRequest {
-                    module: "tasks".into(),
-                    tool: "tasks.list".into(),
-                    args: serde_json::json!({}),
-                    actor: "human:ui".into(),
-                    actor_caps: vec![
-                        "fs.read:/documents/tasks/**".into(),
-                        "tool.invoke:tasks".into(),
-                    ],
-                    trace_id: "ui-tasks-list-after".into(),
-                };
-                if let Ok(lr) = bus
-                    .call::<ModuleInvokeRequest, ModuleInvokeResponse>(
-                        "module.invoke",
-                        &list_req,
-                        vec![],
-                    )
-                    .await
-                {
-                    if lr.ok {
-                        let tasks = tasks_panel::parse_list_result(&lr.result);
-                        let _ = evt_tx.send(Evt::TasksListed(tasks));
-                    }
-                }
-            }
-            _ => {}
-        },
-        Ok(r) => {
-            let _ = evt_tx.send(Evt::Error(r.error.unwrap_or_else(|| "tasks: échec".into())));
-        }
-        Err(e) => {
-            let _ = evt_tx.send(Evt::Error(e.to_string()));
-        }
-    }
 }
 
 pub(crate) async fn agent_id_cmd(
