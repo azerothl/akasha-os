@@ -1362,6 +1362,18 @@
         "large"
       ],
       "description": "MiniMax-H3 joint video+stereo-audio via sd.cpp vid_gen (T2VA). Distilled: cfg-scale must stay 1.0. Needs pruned DiT, Qwen3-VL-32B MiniMax text encoder, video VAE and audio VAE. Ref2VA/FL2VA UI not wired yet.",
+      "video_defaults": {
+        "width": 1344,
+        "height": 768,
+        "fps": 24,
+        "frames": 73,
+        "min_width": 32,
+        "max_width": 1344,
+        "min_height": 32,
+        "max_height": 1344,
+        "duration_secs": 4,
+        "max_duration_secs": 15
+      },
       "extra_files": [
         {
           "filename": "minimax_h3_video_vae_fp16.safetensors",
