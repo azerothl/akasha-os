@@ -1381,9 +1381,17 @@ impl ImageStudioState {
             egui::ComboBox::from_id_salt("studio_video_duration")
                 .selected_text(format!("{}s", self.video_duration_secs))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.video_duration_secs, 2, "2s");
-                    ui.selectable_value(&mut self.video_duration_secs, 3, "3s");
-                    ui.selectable_value(&mut self.video_duration_secs, 4, "4s");
+                    let max_duration = catalog_video_defaults(&self.model_id)
+                        .and_then(|v| v.max_duration_secs)
+                        .unwrap_or(4)
+                        .clamp(2, 15);
+                    for seconds in 2..=max_duration {
+                        ui.selectable_value(
+                            &mut self.video_duration_secs,
+                            seconds,
+                            format!("{seconds}s"),
+                        );
+                    }
                 });
             ui.weak(
                 t.studio_video_frames_estimate.replace(
