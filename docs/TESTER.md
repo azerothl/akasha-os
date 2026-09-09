@@ -80,7 +80,7 @@ Expected banner: Preview on the host OS — this is not the bootable OS yet.
 
 ### 2b. Tasks (dual-surface)
 
-- When **Tasks** is installed: **Modules → Tâches / Tasks** → create a task.
+- When **Tasks** is installed: open **Tâches / Tasks** from the Daily section (same place as before) → create a task.
 - Start an agent with tools including `tasks.list` — it should see the same task.
 - Optionally ask the agent to `tasks.create`; refresh the module panel.
 - Minimal Preview profile (`share/preview-profile.yaml` → `minimal`): no Tasks preinstall; chat and agents still boot.

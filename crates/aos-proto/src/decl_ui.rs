@@ -58,8 +58,8 @@ pub const PROTECTED_BY_HOST_MODULES: &[&str] = &[];
 pub const NATIVE_UI_MODULES: &[&str] = &["notes", "ext-rt", "canvas"];
 
 /// Sidebar hides native-tab modules without a declarative surface yet.
-/// Tasks uses generic navigation from lot 2 (#149).
-pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = &["notes", "ext-rt", "canvas"];
+/// Tasks keeps its historical Daily slot (#149 lot 5); other preinstalled apps stay here until cutover.
+pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
 
 /// Deprecated alias — prefer [`is_preinstalled_module`] / [`is_protected_by_host`].
 pub const BUNDLED_MODULES: &[&str] = PREINSTALLED_MODULES;
@@ -709,8 +709,8 @@ mod tests {
     }
 
     #[test]
-    fn tasks_uses_generic_sidebar_when_declarative() {
-        assert!(sidebar_decl_ui_module("tasks", Some("declarative_ui")));
+    fn tasks_keeps_daily_slot_not_generic_sidebar() {
+        assert!(!sidebar_decl_ui_module("tasks", Some("declarative_ui")));
         assert!(!sidebar_decl_ui_module("notes", Some("declarative_ui")));
     }
 
@@ -747,7 +747,7 @@ mod tests {
         );
         assert_eq!(
             labels.resolve("en", "tasks_empty").as_deref(),
-            Some("No tasks — create one or ask an agent `tasks.create`.")
+            Some("No tasks — create one or ask an agent to create a task.")
         );
         assert_eq!(doc.chrome_title("fr"), "Tâches");
     }

@@ -627,8 +627,31 @@ impl UiApp {
             Tab::Feedback => t.tab_feedback,
             Tab::Settings => t.tab_settings,
             Tab::Files => t.tab_files,
+            Tab::Module(name) if name == "tasks" => t.tab_tasks,
             Tab::Module(_) => t.nav_modules,
         }
+    }
+
+    fn tasks_module_installed(&self) -> bool {
+        self.settings_ui
+            .installed_modules
+            .iter()
+            .any(|m| m.name == "tasks")
+    }
+
+    fn tasks_tab(&self) -> Tab {
+        Tab::Module("tasks".into())
+    }
+
+    fn tab_is_selected(&self, tab: &Tab) -> bool {
+        match (&self.tab, tab) {
+            (Tab::Module(a), Tab::Module(b)) => a == b,
+            (left, right) => left == right,
+        }
+    }
+
+    fn open_module_tab(&mut self, name: String) {
+        self.on_tab_open(Tab::Module(name));
     }
 
     fn minimal_chrome_button(&mut self, ctx: &egui::Context, t: &i18n::UiStrings) {
@@ -1810,18 +1833,27 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 // Chat/Agents/Create/Memory, More ne duplique jamais le rail.
                 let lang = self.prefs.language.clone();
                 ui.weak(nav::NavGroup::Daily.label(&lang));
-                for (tab, label, hint) in [
+                let mut daily: Vec<(Tab, &str, &str)> = vec![
                     (Tab::Notes, t.tab_notes, t.tab_hint_notes),
                     (Tab::Library, t.tab_library, t.tab_hint_library),
+                ];
+                if self.tasks_module_installed() {
+                    daily.push((self.tasks_tab(), t.tab_tasks, t.tab_hint_tasks));
+                }
+                daily.extend([
                     (Tab::Files, t.tab_files, t.tab_hint_files),
                     (Tab::Models, t.tab_models, t.tab_hint_models),
-                ] {
+                ]);
+                for (tab, label, hint) in daily {
                     if ui
-                        .selectable_label(self.tab == tab, label)
+                        .selectable_label(self.tab_is_selected(&tab), label)
                         .on_hover_text(hint)
                         .clicked()
                     {
-                        self.on_tab_open(tab);
+                        match &tab {
+                            Tab::Module(name) => self.open_module_tab(name.clone()),
+                            other => self.on_tab_open(other.clone()),
+                        }
                     }
                 }
                 // Documents reste un overlay (research_ui), pas un Tab :
@@ -1894,9 +1926,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     ui.weak(t.nav_modules);
                     for (name, label) in decl_mods {
                         let tab = Tab::Module(name.clone());
-                        if ui.selectable_label(self.tab == tab, &label).clicked() {
-                            self.on_tab_open(tab);
-                            let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
+                        if ui.selectable_label(self.tab_is_selected(&tab), &label).clicked() {
+                            self.open_module_tab(name);
                         }
                     }
                 }
@@ -2249,13 +2280,18 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 ui.separator();
                 let query = self.spotlight_query.trim().to_lowercase();
-                let destinations: [(&str, Tab); 14] = [
+                let mut destinations: Vec<(&str, Tab)> = vec![
                     (t.tab_chat, Tab::Chat),
                     (t.tab_agents, Tab::Agents),
                     (t.tab_create, Tab::Image),
                     (t.tab_memory, Tab::Memory),
                     (t.tab_notes, Tab::Notes),
                     (t.tab_library, Tab::Library),
+                ];
+                if self.tasks_module_installed() {
+                    destinations.push((t.tab_tasks, self.tasks_tab()));
+                }
+                destinations.extend([
                     (t.tab_files, Tab::Files),
                     (t.tab_models, Tab::Models),
                     (t.tab_settings, Tab::Settings),
@@ -2264,7 +2300,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     (t.tab_providers, Tab::Providers),
                     (t.tab_scenarios, Tab::Scenarios),
                     (t.tab_feedback, Tab::Feedback),
-                ];
+                ]);
                 let labels: Vec<&str> = destinations.iter().map(|(l, _)| *l).collect();
                 let tab_hits = ui_primitives::filter_labels(&self.spotlight_query, &labels);
                 // S7.2 : recherche globale — sessions, notes, mémoire en plus
@@ -2409,7 +2445,10 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 }
                 match pick {
                     Some(Pick::Tab(tab)) => {
-                        self.on_tab_open(tab);
+                        match &tab {
+                            Tab::Module(name) => self.open_module_tab(name.clone()),
+                            other => self.on_tab_open(other.clone()),
+                        }
                         self.show_go_to_palette = false;
                         self.spotlight_query.clear();
                     }

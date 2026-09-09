@@ -119,7 +119,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **`module.ui`** intent: platformd validates the document (fail-closed); host binds tool results and routes button/form submits through the same cap review as `module.invoke`
 - **`module.scaffold`** optional `ui` JSON; package/compile copy a real widget tree (default: heading + form + table on the primary tool)
 - JSON Schema export: [`docs/bridge/aos-proto-decl-ui.json`](bridge/aos-proto-decl-ui.json)
-- Notes tab stays hardcoded; `notes` and `ext-rt` are excluded from dynamic module tabs. **Tasks** opens via **Modules** when the `tasks` package is installed (declarative UI parity; no native tab)
+- Notes tab stays hardcoded; `notes` and `ext-rt` are excluded from dynamic module tabs. **Tasks** keeps its historical Daily slot when installed (declarative surface; entry absent when uninstalled)
 - Chat **« crée un module »** launches an agent (host fallback if the model dumps UI JSON instead of `agent.spawn`)
 - Scenarios: launch an agent to scaffold / package / install a script module
 
@@ -263,7 +263,7 @@ Slash commands:
 ## 4b. Tasks (P03.5 / E3)
 
 - Dual-surface WASM module (`tasks.aospkg`) — build with `modules/build-tasks.ps1` or `modules/build-tasks.sh` without rebuilding the host
-- Human UI: **Modules → Tâches / Tasks** when installed (declarative UI; create / list / complete / reopen)
+- Human UI: **Tâches / Tasks** in the Daily overflow (same slot as the former native tab) when installed — create / list / complete / reopen via declarative widgets
 - Agent tools: `tasks.create`, `tasks.list`, `tasks.update`, `tasks.complete` (discovered when the module is installed and allowed)
 - Same JSON store for humans and agents (`/documents/tasks/tasks.json`)
 - Standard Preview profile preinstalls the verified local package; minimal profile omits it. User uninstall persists; core update does not reinstall after uninstall

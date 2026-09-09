@@ -319,8 +319,8 @@
           <h2 data-lang="fr">Tasks</h2>
           <p class="hist" data-lang="en">
             Dual-surface WASM module (<code>tasks.aospkg</code>). Human UI:
-            <strong>Modules → Tasks</strong> when installed — create / list /
-            complete / reopen via declarative widgets. Agent tools:
+            <strong>Tâches / Tasks</strong> in the Daily overflow when installed —
+            create / list / complete / reopen via declarative widgets. Agent tools:
             <code>tasks.create</code>, <code>tasks.list</code>,
             <code>tasks.update</code>, <code>tasks.complete</code>. Same JSON
             store under <code>/documents/tasks/tasks.json</code>. Preinstalled
@@ -330,8 +330,8 @@
           </p>
           <p class="hist" data-lang="fr">
             Module WASM dual-surface (<code>tasks.aospkg</code>). UI humaine :
-            <strong>Modules → Tâches</strong> lorsque installé — créer / lister /
-            terminer / réouvrir via widgets déclaratifs. Outils agent :
+            <strong>Tâches</strong> dans le volet Quotidien lorsque installé —
+            créer / lister / terminer / réouvrir via widgets déclaratifs. Outils agent :
             <code>tasks.create</code>, <code>tasks.list</code>,
             <code>tasks.update</code>, <code>tasks.complete</code>. Même store
             JSON sous <code>/documents/tasks/tasks.json</code>. Application
@@ -346,10 +346,9 @@
           <h2 data-lang="fr">Modules (declarative_ui)</h2>
           <p class="hist" data-lang="en">
             Installed packages with <code>ui.mode=declarative_ui</code> get a
-            dynamic sidebar tab under <strong>Modules</strong>. Notes and
-            <code>ext-rt</code> stay on hardcoded tabs; <strong>Tasks</strong>
-            uses the same declarative path when its package is installed. The
-            host paints a closed widget tree from
+            dynamic sidebar tab under <strong>Modules</strong>. Notes,
+            <strong>Tâches</strong> (Daily slot when installed), and
+            <code>ext-rt</code> stay off the generic Modules list. The host paints
             <code>ui/index.html</code> — no webview, no free HTML/JS UI. Widgets
             include column / row, heading, text, markdown, stat_row, table,
             line_chart, form (JSON Schema), button, select / radio / checkbox /
@@ -357,10 +356,9 @@
           </p>
           <p class="hist" data-lang="fr">
             Les paquets installés avec <code>ui.mode=declarative_ui</code>
-            obtiennent un onglet dynamique sous <strong>Modules</strong>. Notes et
-            <code>ext-rt</code> restent sur des onglets codés en dur ;
-            <strong>Tâches</strong> utilise le même chemin déclaratif lorsque
-            le paquet est installé. L’hôte peint un arbre de widgets fermé depuis
+            obtiennent un onglet dynamique sous <strong>Modules</strong>. Notes,
+            <strong>Tâches</strong> (emplacement Quotidien si installé) et
+            <code>ext-rt</code> restent hors de la liste Modules générique. L’hôte peint
             <code>ui/index.html</code> — pas de webview, pas d’UI HTML/JS libre.
             Widgets : column / row, heading, text, markdown, stat_row, table,
             line_chart, form (JSON Schema), button, select / radio / checkbox /
