@@ -304,4 +304,30 @@ mod tests {
         assert!(module_fallback_allowed("tasks.create", &tools));
         assert!(!module_fallback_allowed("notes.create", &tools));
     }
+
+    #[test]
+    fn discovers_create_tools_from_module_list() {
+        use aos_proto::create_contract::{INVOKE_CAP, TOOL_IDS};
+        use aos_proto::ModuleInfo;
+
+        let module = ModuleInfo {
+            name: "create".into(),
+            version: "1.0.0".into(),
+            granted_caps: vec![INVOKE_CAP.into()],
+            tools: TOOL_IDS.iter().map(|s| s.to_string()).collect(),
+            quarantined: false,
+            ui_mode: Some("declarative_ui".into()),
+            ui_title: Some("Create".into()),
+        };
+        let tools = discover_module_tools_from_list(&[module], |_| None);
+        for id in TOOL_IDS {
+            let tool = tools
+                .iter()
+                .find(|t| t.name == *id)
+                .unwrap_or_else(|| panic!("missing {id}"));
+            assert_eq!(tool.required_caps, vec![INVOKE_CAP.to_string()]);
+        }
+        let msg = tool_unavailable_message("create.history.list", "absent du catalogue modules actif");
+        assert!(!msg.contains("create.history.list"), "{msg}");
+    }
 }

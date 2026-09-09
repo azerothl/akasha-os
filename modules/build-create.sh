@@ -97,3 +97,14 @@ EOF
 rm -rf "$SHARE"
 cp -a "${STAGING}" "$SHARE"
 echo "== package ready: ${STAGING} / ${SHARE} (hash ${HASH}) =="
+
+CATALOGUE="${ROOT}/share/modules/catalogue.yaml"
+if [[ -f "$CATALOGUE" ]] && grep -q "name: create" "$CATALOGUE"; then
+  echo "== update catalogue.yaml create hash =="
+  perl -i -0pe "s/(  - name: create\n(?:    .*\n)*?    hash: )sha256:[a-f0-9]+/\${1}sha256:${HASH}/" "$CATALOGUE"
+  if command -v cargo >/dev/null 2>&1; then
+    (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
+      catalogue::tests::committed_catalogue_signature_matches -- --nocapture) \
+      || echo "WARN: catalogue signature refresh failed"
+  fi
+fi

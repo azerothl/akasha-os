@@ -18,6 +18,7 @@ pub mod host_folder;
 pub mod mem_extract;
 pub mod rich_app_contract;
 pub mod rich_decl_ui;
+pub mod create_contract;
 pub mod tasks_contract;
 
 pub use rich_app_contract::{
@@ -33,6 +34,12 @@ pub use rich_app_contract::{
     UI_V2_ADDITIONAL_WIDGET_KINDS,
 };
 
+pub use create_contract::{
+    FULL_ACTOR_CAPS as CREATE_FULL_ACTOR_CAPS, HISTORY_PATH as CREATE_HISTORY_PATH,
+    INVOKE_CAP as CREATE_INVOKE_CAP, MANIFEST_FS_CAPS as CREATE_MANIFEST_FS_CAPS,
+    MODULE_NAME as CREATE_MODULE_NAME, PLATFORM_IMAGE_TOOL, STATE_PATH as CREATE_STATE_PATH,
+    TOOL_IDS as CREATE_TOOL_IDS, UI_CONTRACT as CREATE_UI_CONTRACT,
+};
 pub use tasks_contract::{
     FS_READ_CAP, FS_WRITE_CAP, FULL_ACTOR_CAPS, INVOKE_CAP, LOAD_BEHAVIOUR_FOLLOWUP,
     MANIFEST_FS_CAPS, MODULE_NAME as TASKS_MODULE_NAME, STORE_PATH as TASKS_STORE_PATH,

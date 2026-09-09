@@ -1740,6 +1740,53 @@ mod tests {
     }
 
     #[test]
+    fn static_builtin_catalog_has_no_create_tools() {
+        let catalog = builtin_catalog();
+        assert!(!catalog.iter().any(|t| t.name.starts_with("create.")));
+    }
+
+    #[test]
+    fn discovered_create_catalog_matches_frozen_contract() {
+        use crate::module_discovery::discover_module_tools_from_list;
+        use aos_proto::create_contract::{INVOKE_CAP, TOOL_IDS};
+        use aos_proto::ModuleInfo;
+
+        let module = ModuleInfo {
+            name: "create".into(),
+            version: "1.0.0".into(),
+            granted_caps: vec![INVOKE_CAP.into()],
+            tools: TOOL_IDS.iter().map(|s| s.to_string()).collect(),
+            quarantined: false,
+            ui_mode: None,
+            ui_title: None,
+        };
+        let discovered = discover_module_tools_from_list(&[module], |_| None);
+        let selected: Vec<String> = TOOL_IDS.iter().map(|s| s.to_string()).collect();
+        let tools = select_tools(&selected, &discovered);
+        for id in TOOL_IDS {
+            let tool = tools
+                .iter()
+                .find(|t| t.name == *id)
+                .unwrap_or_else(|| panic!("discovered catalog missing {id}"));
+            assert_eq!(tool.required_caps, vec![INVOKE_CAP.to_string()]);
+        }
+    }
+
+    #[test]
+    fn media_image_generate_available_without_create_module() {
+        let catalog = builtin_catalog();
+        assert!(
+            catalog.iter().any(|t| t.name == "media.image.generate"),
+            "platform image generation must stay in builtin catalog without Create installed"
+        );
+        assert!(!catalog.iter().any(|t| t.name.starts_with("create.")));
+        let tools = select_tools(&["media.image.generate".into()], &[]);
+        assert!(tools.iter().any(|t| t.name == "media.image.generate"));
+        let caps = caps_for_tools(&tools, &[]);
+        assert!(caps.iter().any(|c| c == "media.generate"));
+    }
+
+    #[test]
     fn default_agent_tools_grant_notes_fs_web_without_static_tasks() {
         let ids = default_agent_tools();
         let tools = select_tools(&ids, &[]);

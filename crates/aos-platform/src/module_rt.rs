@@ -1160,6 +1160,15 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
         "tasks.list" => serde_json::json!({}),
         "tasks.create" => serde_json::json!({"title": ""}),
         "tasks.update" | "tasks.complete" => serde_json::json!({"id": "__probe_nonexistent__"}),
+        "create.history.list" | "create.document.load" | "create.result.get" => {
+            serde_json::json!({})
+        }
+        "create.history.get" => serde_json::json!({"id": "__probe_nonexistent__"}),
+        "create.history.record" => serde_json::json!({
+            "path": "",
+            "prompt": ""
+        }),
+        "create.document.save" => serde_json::json!("__probe_invalid__"),
         _ => serde_json::json!({"session_id": "__probe__"}),
     }
 }
@@ -2108,14 +2117,7 @@ min_os_api: 1
             return;
         }
         let base = tmpbase("create");
-        let caps = vec![
-            "fs.read:/documents/create/**".into(),
-            "fs.write:/documents/create/**".into(),
-            "fs.read:/downloads/**".into(),
-            "fs.write:/downloads/**".into(),
-            "media.generate".into(),
-            "tool.invoke:create".into(),
-        ];
+        let caps = create_test_caps();
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
         let info = rt.install(&share, Some(caps)).expect("create install");
         assert_eq!(info.name, "create");
@@ -2132,6 +2134,139 @@ min_os_api: 1
         assert!(
             docs.join("history.json").is_file(),
             "uninstall must keep /documents/create/**"
+        );
+        assert!(rt.user_removed("create"));
+        assert!(rt.install_preinstalled(&share, Some(create_test_caps())).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    fn create_test_caps() -> Vec<String> {
+        vec![
+            "fs.read:/documents/create/**".into(),
+            "fs.write:/documents/create/**".into(),
+            "fs.read:/downloads/**".into(),
+            "fs.write:/downloads/**".into(),
+            "media.generate".into(),
+            "tool.invoke:create".into(),
+        ]
+    }
+
+    #[test]
+    fn create_invalid_upgrade_keeps_last_good_version() {
+        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip create rollback test: run modules/build-create.sh first");
+            return;
+        }
+        let base = tmpbase("create-rollback");
+        let caps = create_test_caps();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.install(&share, Some(caps.clone())).expect("create install");
+        let good_wasm = std::fs::read(base.join("modules/create/module.wasm")).unwrap();
+        let bad_pkg = base.join("bad-create");
+        copy_dir(&share, &bad_pkg).unwrap();
+        let manifest = std::fs::read_to_string(bad_pkg.join("manifest.yaml")).unwrap();
+        std::fs::write(
+            bad_pkg.join("manifest.yaml"),
+            manifest.replace("version: 1.0.0", "version: 9.9.9"),
+        )
+        .unwrap();
+        std::fs::write(bad_pkg.join("module.wasm"), b"not valid wasm").unwrap();
+        let err = rt.install(&bad_pkg, Some(caps)).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ModuleError::Trap(_)
+                    | ModuleError::BadManifest(_)
+                    | ModuleError::HashMismatch
+                    | ModuleError::PackageIntegrity(_)
+            ),
+            "unexpected err: {err}"
+        );
+        let kept = std::fs::read(base.join("modules/create/module.wasm")).unwrap();
+        assert_eq!(kept, good_wasm);
+        assert!(rt.load_ui("create").is_ok());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_rejects_unsupported_ui_contract_before_replace() {
+        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip create contract test: run modules/build-create.sh first");
+            return;
+        }
+        let base = tmpbase("create-contract");
+        let caps = create_test_caps();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.install(&share, Some(caps.clone())).expect("create install");
+        let good_wasm = std::fs::read(base.join("modules/create/module.wasm")).unwrap();
+        let bad_pkg = base.join("bad-contract");
+        copy_dir(&share, &bad_pkg).unwrap();
+        let manifest = std::fs::read_to_string(bad_pkg.join("manifest.yaml")).unwrap();
+        let manifest = manifest
+            .replace("contract: 2", "contract: 9")
+            .replace("version: 1.0.0", "version: 2.0.0");
+        std::fs::write(bad_pkg.join("manifest.yaml"), manifest).unwrap();
+        std::fs::write(
+            bad_pkg.join("ui/index.json"),
+            br#"{"type":"declarative_ui","contract":9,"title":"Create","root":{"kind":"column","children":[]}}"#,
+        )
+        .unwrap();
+        let err = rt.install(&bad_pkg, Some(caps)).unwrap_err();
+        assert!(matches!(err, ModuleError::UiContractUnsupported { .. }));
+        let kept = std::fs::read(base.join("modules/create/module.wasm")).unwrap();
+        assert_eq!(kept, good_wasm);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_probe_verification_does_not_write_user_documents() {
+        struct TrackingHost {
+            writes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        }
+        impl HostServices for TrackingHost {
+            fn call(
+                &self,
+                _ctx: &HostCallCtx,
+                service: &str,
+                args: serde_json::Value,
+            ) -> Result<serde_json::Value, String> {
+                if service == "fs.write" {
+                    if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+                        self.writes.lock().unwrap().push(path.to_string());
+                    }
+                    return Ok(serde_json::json!({"version": 1u64}));
+                }
+                if service == "fs.read" {
+                    return Ok(serde_json::json!({"content": "{\"items\":[]}"}));
+                }
+                Err(format!("unexpected service: {service}"))
+            }
+        }
+
+        let share_pkg =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        if !share_pkg.join("module.wasm").is_file() {
+            eprintln!("skip create probe test: create wasm missing");
+            return;
+        }
+
+        let writes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let base = tmpbase("create-probe");
+        let mut rt = ModuleRuntime::open(
+            base.join("modules"),
+            Arc::new(TrackingHost {
+                writes: writes.clone(),
+            }),
+        )
+        .unwrap();
+        rt.install(&share_pkg, Some(create_test_caps()))
+            .expect("install create");
+        assert!(
+            writes.lock().unwrap().is_empty(),
+            "create tool probes must not fs.write user documents: {:?}",
+            writes.lock().unwrap()
         );
         let _ = std::fs::remove_dir_all(&base);
     }

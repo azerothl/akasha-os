@@ -33,9 +33,21 @@ entries:
     hash: sha256:957f12bbe0b021d9e0b18bc54e2a471b7b0220a306c9afcc21a697e6944dbd46
     attested_caps:
       - fs.write:/downloads/**
+  - name: create
+    version: "1.0.0"
+    kind: module
+    path: share/modules/create.aospkg
+    hash: sha256:44956ac15830a6c9610e0d67abe2ba2d9bbff95ce3aa3cec232af02146c3c49e
+    attested_caps:
+      - fs.read:/documents/create/**
+      - fs.write:/documents/create/**
+      - fs.read:/downloads/**
+      - fs.write:/downloads/**
+      - media.generate
+      - tool.invoke:create
   - name: mcp-example
     version: "1.0.0"
     kind: mcp
     path: share/mcp/servers.yaml.example
-    hash: sha256:3710ffb87c5eef725d86c1b1c01c5f098a12e8223b08e6f2e5b0db16c69f9e22
+    hash: sha256:29c7b173327bb1f91e70cb6a1e4434aa01ee6b3b36fbf037cd5b88ef58bb5dcb
     attested_caps: []
