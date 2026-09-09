@@ -1467,6 +1467,23 @@ impl ImageStudioState {
                                                 });
                                             }
                                         },
+                                        || {
+                                            if let Some((prompt, model_id, mut options)) =
+                                                self.last_generation.clone()
+                                            {
+                                                options.seed = None;
+                                                let _ = cmd.send(Cmd::MediaImage {
+                                                    prompt,
+                                                    model_id,
+                                                    options,
+                                                    output_path: None,
+                                                    enrich_prompt: false,
+                                                    enhance_prompt_chat: false,
+                                                    generation_prompt: None,
+                                                    composition_blocks: Vec::new(),
+                                                });
+                                            }
+                                        },
                                     );
                                 }
                                 ui_image_history(ui, t, self);
@@ -2730,6 +2747,7 @@ fn ui_image_preview_actions(
     can_upscale: bool,
     on_upscale: impl FnOnce(),
     on_regenerate: impl FnOnce(),
+    on_variant: impl FnOnce(),
 ) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
@@ -2752,6 +2770,9 @@ fn ui_image_preview_actions(
         }
         if ui.button("Régénérer").clicked() {
             on_regenerate();
+        }
+        if ui.button("Variante").clicked() {
+            on_variant();
         }
     });
 }
