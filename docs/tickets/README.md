@@ -23,5 +23,8 @@ Recette du 9 septembre 2026. Les tickets sont locaux au checkout et liés au rap
 | AK-018 lecteur multimédia intégré | P1 | Planifié : décodage/progression à choisir |
 | AK-019 nettoyage terminal salon sous charge | P2 | Planifié : benchmark multi-agent requis |
 | AK-020 révocation permission end-to-end | P2 | Planifié : grant réel requis pour la recette |
+| AK-021 pack vidéo proposé en mode Image | P1 | Corrigé, déployé et vérifié avec Stable Diffusion |
+| AK-022 erreur de génération vidéo ambiguë | P1 | Corrigé dans l’UI, déployé et vérifié sur interruption |
+| AK-023 coût/annulation create vidéo | P1 | Créé : préflight, ETA et annulation moteur à implémenter |
 
 Les améliorations non bloquantes restantes sont listées dans la section « Axes d’amélioration » du rapport ; elles ne sont pas masquées comme des tickets clos.

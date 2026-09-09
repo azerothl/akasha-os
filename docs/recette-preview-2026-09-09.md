@@ -27,6 +27,7 @@ Accepte INTENT, JSON, puis délai maximal en secondes. Attention : le délai cli
 - Récupération modèle : un `model.load` volontairement inconnu renvoie une erreur explicite (`modèle inconnu`) puis un chargement Qwen 3.5 9B réussit immédiatement en profil effectif `memorysaver` (placement 0,02 Gio VRAM / 1,57 Gio RAM / 3,72 Gio disque). Le chemin erreur → reprise est sain.
 - Vision : le modèle Qwen3-VL 4B et son mmproj sont chargés (`has_vision=true`). Une inférence mtmd sur `/downloads/recette-20260909-image.png` renvoie « Chaleur. » en 3,37 s ; le défaut de résolution des chemins logiques a été corrigé dans AK-015.
 - Paramètres/UI : les onglets Chat, Agents, Créer, Mémoire, Modèles, Providers et Settings sont couverts par les tests de layout/état et le smoke-test `AOS_UI_SELF_TEST`; la densité confortable/compacte, les thèmes fr/en/custom et le sélecteur de modèle sont rendus dans la capture native. Les matrices DPI/lecteur d’écran doivent encore être automatisées.
+- Créer (passe dédiée) : le mode Image démarre désormais sur Stable Diffusion 1.5 et le mode Vidéo sur LTX 2.3 Dev ; une génération image UI 512×512 a produit une théière rouge cohérente. Une génération vidéo UI 3 s/49 frames a bien lancé le pipeline et affiché sa progression ; l’indicateur de frames est maintenant visible à côté de la durée. Le preset reste très coûteux (~13 min avant interruption de recette) : l’annulation explicite et une estimation de durée restent à traiter dans AK-023.
 
 ## Audit technique et visuel de l’UI native (source egui)
 
@@ -53,7 +54,7 @@ Ces constats alimentent AK-002 à AK-004 et AK-009. AK-005 est corrigé par alia
 - Logs : aucun `ERROR`, `panic`, `failed` ou `invalide` dans les six journaux daemon contrôlés après redémarrage ; le catalogue signé est validé cryptographiquement.
 - Espace disque : l’installation Preview est sur C: (**74,67 Gio libres**) ; le checkout E: dispose de **18,69 Gio libres** après les builds (~35,9 Gio d’artefacts `target/`). Le risque concerne surtout les prochaines compilations locales ; aucun nettoyage automatique n’a été effectué pour ne pas supprimer des artefacts utilisateur.
 - Smoke-test UI installé : `AOS_UI_SELF_TEST OK min_inner=702x600 locale=fr/en theme=custom`.
-- Tests checkout : 376 tests UI, 261 agent + 11 worker + 1 daemon, 29 modèle et 172 platform réussis (850 au total ; platform/modèle sans CUDA) ; `cargo check --workspace` réussi.
+- Tests checkout : 380 tests UI, 261 agent + 11 worker + 1 daemon, 29 modèle et 172 platform réussis (854 au total ; platform/modèle sans CUDA) ; `cargo check --workspace` réussi.
 - Gate conversationnel historique : 7/8 critères passent ; le seul échec est le scénario 32B qui référence `local:llama-q6-32b`, absent du pack Preview installé. Ce n’est pas un échec du chemin utilisé par l’UI (Qwen 3.5 9B) mais le gate doit être paramétré sur les offres réellement installées avant d’être utilisé comme feu vert release.
 
 ## Tickets et prise en charge
@@ -73,6 +74,9 @@ Ces constats alimentent AK-002 à AK-004 et AK-009. AK-005 est corrigé par alia
 - AK-014 : corrigé, déployé et vérifié à `702×600` — la barre de statut passe en mode compact sans débordement.
 - AK-015 : corrigé, déployé et vérifié — les chemins logiques `/downloads/...` sont résolus vers le stockage hôte avant vision mtmd.
 - AK-016 : corrigé, déployé et vérifié visuellement — cartes audio/vidéo typées, métadonnées, lecture audio et ouverture système ; la vidéo n’est plus décodée comme PNG.
+- AK-021 : corrigé, déployé et vérifié — le catalogue ne mélange plus les packs vidéo dans le mode Image ; Stable Diffusion est proposé par défaut côté image.
+- AK-022 : corrigé, déployé et vérifié — une interruption/erreur de génération média n’est plus présentée comme un échec de chargement de modèle.
+- AK-023 : créé — préflight de coût, estimation de durée et annulation explicite pour les clips vidéo lourds.
 - AK-017 à AK-020 : pris en charge comme tickets d’évolution planifiés — recette native accessibilité/DPI, lecteur multimédia intégré, benchmark de nettoyage salon et révocation end-to-end nécessitent respectivement un runner ou des ressources absentes de cette installation.
 
 ## Défaut prioritaire : faux succès vidéo
@@ -108,7 +112,7 @@ Le client de recette, les garde-fous vidéo, les cartes média audio/vidéo, le 
 
 ## Axes d’amélioration priorisés
 
-1. **P1 — Vidéo** : conserver WebM comme format natif du binaire livré, compléter le lecteur intégré et le contrôle durée/codecs ; le garde-fou anti-faux-succès et la carte typée sont en place.
+1. **P1 — Vidéo** : conserver WebM comme format natif du binaire livré, compléter le lecteur intégré et le contrôle durée/codecs ; le garde-fou anti-faux-succès, l’indicateur de frames et la carte typée sont en place. Ajouter une estimation de durée et une annulation réellement propagée au moteur (AK-023).
 2. **P1 — Recette native** : exécuter les clics, focus clavier, redimensionnement, DPI élevé et lecture multimédia sur un runner Windows instrumenté ; conserver `AOS_UI_SELF_TEST` comme smoke-test rapide.
 3. **P1 — Stockage** : conserver le contrôle de seuil au démarrage (C: conforme, E: checkout à 18,69 Gio) et proposer une rétention transparente des artefacts de build/cache.
 4. **P2 — Audio** : compléter la lecture/pause/progression dans le fil ; la lecture native et la durée WAV sont déjà exposées, avec ouverture système en action secondaire.

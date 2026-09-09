@@ -562,12 +562,28 @@ fn video_frames_for_duration(seconds: u32) -> u32 {
     }
 }
 
+/// Resolve the user-facing modality from the catalogue.  `modality` is the
+/// authoritative engine contract; some legacy entries keep a broad `profiles`
+/// list for compatibility (for example LTX advertises both image/video), but
+/// exposing a video-only engine in the Image picker makes the Generate action
+/// fail or produce an invalid request.
+fn offering_supports_modality(model: &serde_json::Value, wanted: &str) -> bool {
+    if let Some(modality) = model.get("modality").and_then(|x| x.as_str()) {
+        return modality == wanted;
+    }
+    model
+        .get("profiles")
+        .and_then(|p| p.as_array())
+        .map(|a| a.iter().any(|x| x.as_str() == Some(wanted)))
+        .unwrap_or(false)
+}
+
 pub fn default_video_download_path() -> String {
     format!(
         "/downloads/video-{}.webm",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
+            .map(|d| d.as_millis())
             .unwrap_or(0)
     )
 }
@@ -684,18 +700,8 @@ impl ImageStudioState {
         for m in models {
             let id = m.get("id").and_then(|x| x.as_str()).unwrap_or("");
             let name = m.get("name").and_then(|x| x.as_str()).unwrap_or(id);
-            let image = m
-                .get("profiles")
-                .and_then(|p| p.as_array())
-                .map(|a| a.iter().any(|x| x.as_str() == Some("image")))
-                .unwrap_or(false)
-                || m.get("modality").and_then(|x| x.as_str()) == Some("image");
-            let video = m
-                .get("profiles")
-                .and_then(|p| p.as_array())
-                .map(|a| a.iter().any(|x| x.as_str() == Some("video")))
-                .unwrap_or(false)
-                || m.get("modality").and_then(|x| x.as_str()) == Some("video");
+            let image = offering_supports_modality(m, "image");
+            let video = offering_supports_modality(m, "video");
             if image && !id.is_empty() {
                 self.catalog_packs.push((id.to_string(), name.to_string()));
                 if models_page::is_model_installed(id) {
@@ -1311,6 +1317,10 @@ impl ImageStudioState {
                     ui.selectable_value(&mut self.video_duration_secs, 3, "3s");
                     ui.selectable_value(&mut self.video_duration_secs, 4, "4s");
                 });
+            ui.weak(t.studio_video_frames_estimate.replace(
+                "{frames}",
+                &video_frames_for_duration(self.video_duration_secs).to_string(),
+            ));
         });
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
@@ -2616,5 +2626,31 @@ mod tests {
         let opts = studio.to_options();
         assert!(opts.sd_mode.is_none());
         assert!(opts.video_frames.is_none());
+    }
+
+    #[test]
+    fn catalogue_modality_wins_over_broad_legacy_profiles() {
+        let ltx = serde_json::json!({
+            "modality": "video",
+            "profiles": ["image", "video"]
+        });
+        assert!(!offering_supports_modality(&ltx, "image"));
+        assert!(offering_supports_modality(&ltx, "video"));
+    }
+
+    #[test]
+    fn catalogue_profiles_are_used_when_modality_is_absent() {
+        let legacy = serde_json::json!({"profiles": ["image"]});
+        assert!(offering_supports_modality(&legacy, "image"));
+        assert!(!offering_supports_modality(&legacy, "video"));
+    }
+
+    #[test]
+    fn video_download_path_has_millisecond_uniqueness() {
+        let a = default_video_download_path();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let b = default_video_download_path();
+        assert_ne!(a, b);
+        assert!(a.ends_with(".webm"));
     }
 }

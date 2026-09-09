@@ -71,6 +71,9 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
     {
         return t.room_action_unavailable.to_string();
     }
+    if raw.starts_with("media.image.generate:") {
+        return t.studio_generation_failed.to_string();
+    }
     if is_model_load_fail_error(raw) {
         return t.chat_load_fail_message.to_string();
     }
@@ -123,6 +126,16 @@ mod tests {
         let t = crate::i18n::strings("en");
         let out = user_visible_chat_error(&t, "open failed: /var/run/aos-modeld.stderr.log");
         assert_eq!(out, t.chat_error_generic);
+    }
+
+    #[test]
+    fn media_generation_error_does_not_look_like_model_load_failure() {
+        let t = crate::i18n::strings("fr");
+        let out = user_visible_chat_error(
+            &t,
+            "media.image.generate: failed to load C:\\share\\models\\ltx.gguf",
+        );
+        assert_eq!(out, t.studio_generation_failed);
     }
 
     #[test]
