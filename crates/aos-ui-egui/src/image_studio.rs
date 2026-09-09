@@ -37,6 +37,8 @@ pub struct ImageStudioState {
     pub format_preset: String,
     /// High-level recipe applied to safe generation controls.
     pub intent_preset: String,
+    /// Single primary camera vector suggested for video prompts.
+    pub camera_preset: String,
     pub steps: u32,
     pub cfg: f32,
     pub seed: String,
@@ -127,6 +129,7 @@ impl Default for ImageStudioState {
             height: 512,
             format_preset: "custom".into(),
             intent_preset: "custom".into(),
+            camera_preset: "custom".into(),
             steps: 20,
             cfg: 7.0,
             seed: String::new(),
@@ -1458,6 +1461,32 @@ impl ImageStudioState {
                 });
             ui.weak("Configure les réglages sûrs sans modifier le prompt");
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Caméra");
+            for (id, label) in [
+                ("static", "Fixe"),
+                ("push", "Push-in lent"),
+                ("track", "Travelling latéral"),
+                ("follow", "Suivi du sujet"),
+            ] {
+                if ui
+                    .selectable_label(self.camera_preset == id, label)
+                    .clicked()
+                {
+                    self.camera_preset = id.into();
+                    apply_camera_preset(self);
+                }
+            }
+            if ui.small_button("Effacer").clicked() {
+                self.camera_preset = "custom".into();
+                self.prompt = self
+                    .prompt
+                    .replace(" Camera: static shot.", "")
+                    .replace(" Camera: slow push-in.", "")
+                    .replace(" Camera: smooth lateral tracking.", "")
+                    .replace(" Camera: steady follow shot.", "");
+            }
+        });
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
@@ -2765,6 +2794,28 @@ fn apply_intent_preset(studio: &mut ImageStudioState) {
             studio.sampler = "heun".into();
         }
         _ => {}
+    }
+}
+
+fn apply_camera_preset(studio: &mut ImageStudioState) {
+    let phrases = [
+        " Camera: static shot.",
+        " Camera: slow push-in.",
+        " Camera: smooth lateral tracking.",
+        " Camera: steady follow shot.",
+    ];
+    for phrase in phrases {
+        studio.prompt = studio.prompt.replace(phrase, "");
+    }
+    let phrase = match studio.camera_preset.as_str() {
+        "static" => phrases[0],
+        "push" => phrases[1],
+        "track" => phrases[2],
+        "follow" => phrases[3],
+        _ => return,
+    };
+    if !studio.prompt.trim().is_empty() {
+        studio.prompt.push_str(phrase);
     }
 }
 
