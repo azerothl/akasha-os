@@ -2998,17 +2998,28 @@ fn ui_model_guidance(ui: &mut egui::Ui, model_id: &str, mode: CreateMode) {
             }
         }
     }
+    let mut full_description = None;
     if let Some(description) = model.get("description").and_then(|v| v.as_str()) {
         let desc = description.trim();
         if !desc.is_empty() {
-            facts.push(desc.to_string());
+            full_description = Some(desc.to_string());
+            let short = if desc.chars().count() > 180 {
+                let clipped: String = desc.chars().take(177).collect();
+                format!("{clipped}…")
+            } else {
+                desc.to_string()
+            };
+            facts.push(short);
         }
     }
     if !facts.is_empty() {
-        ui.add(
+        let response = ui.add(
             egui::Label::new(egui::RichText::new(format!("ⓘ {}", facts.join(" · "))).weak())
                 .wrap(),
         );
+        if let Some(description) = full_description {
+            response.on_hover_text(description);
+        }
     }
 }
 
