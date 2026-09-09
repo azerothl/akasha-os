@@ -806,6 +806,9 @@ impl ImageStudioState {
                 if let Some(fps) = v.fps {
                     self.video_fps = fps.clamp(1, 120);
                 }
+                if let Some(duration) = v.duration_secs {
+                    self.video_duration_secs = duration.clamp(2, 15);
+                }
                 if let Some(frames) = v.frames {
                     self.video_duration_secs =
                         ((frames as f32 / self.video_fps.max(1) as f32).ceil() as u32).clamp(2, 10);
