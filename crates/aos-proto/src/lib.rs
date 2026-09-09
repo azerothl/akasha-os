@@ -5251,6 +5251,8 @@ pub struct MediaImageOptions {
     pub upscale_tile_size: Option<u32>,
     /// Logical path of an init image for img2img (`/downloads/...`).
     pub init_image: Option<String>,
+    /// Logical path of a final-frame image for engines supporting FL2V.
+    pub end_image: Option<String>,
     /// img2img denoise strength 0..=1 (sd.cpp `--strength`; default ~0.75 when init set).
     pub strength: Option<f32>,
     /// Logical path of an inpaint mask PNG (`/downloads/...`; white = regenerate region).

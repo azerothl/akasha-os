@@ -221,6 +221,8 @@ pub struct ImageGenOpts {
     pub audio_vae_path: Option<PathBuf>,
     /// Host path for sd.cpp `--init-img` (img2img).
     pub init_image_path: Option<PathBuf>,
+    /// sd.cpp `--end-img` final frame (FL2V-capable video models).
+    pub end_image_path: Option<PathBuf>,
     /// sd.cpp `--strength` (0..=1) when `init_image_path` is set.
     pub strength: Option<f32>,
     /// Host path for sd.cpp `--mask` (inpaint; white = regenerate region).
@@ -266,6 +268,7 @@ impl Default for ImageGenOpts {
             embeddings_connectors: None,
             audio_vae_path: None,
             init_image_path: None,
+            end_image_path: None,
             strength: None,
             mask_image_path: None,
         }
@@ -551,6 +554,12 @@ fn collect_image_args(
             };
             a.push("--strength".into());
             a.push(format!("{strength:.4}"));
+        }
+    }
+    if let Some(p) = &opts.end_image_path {
+        if p.exists() {
+            a.push("--end-img".into());
+            a.push(p.to_string_lossy().into_owned());
         }
     }
     if let Some(p) = &opts.mask_image_path {

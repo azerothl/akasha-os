@@ -776,6 +776,17 @@ fn apply_user_image_opts(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIm
         // Strength without init image is ignored (txt2img).
         let _ = s;
     }
+    if let Some(raw) = o
+        .end_image
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let host = logical_media_path(raw);
+        if host.is_file() {
+            opts.end_image_path = Some(host);
+        }
+    }
 }
 
 fn apply_heavy_image_defaults(opts: &mut aos_sd::ImageGenOpts, model_id: &str) {

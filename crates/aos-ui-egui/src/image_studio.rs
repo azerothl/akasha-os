@@ -84,6 +84,8 @@ pub struct ImageStudioState {
     pub upscalers: Vec<String>,
     /// Reference image queued from the prompt paperclip (slice 1 img2img).
     pub pending_reference: Vec<String>,
+    /// Optional final-frame reference for FL2V-capable video models.
+    pub pending_end_reference: Vec<String>,
     /// Denoise strength when `pending_reference` is set (sd.cpp `--strength`).
     pub reference_strength: f32,
     /// img2img: use current preview (or path) as `--init-img`.
@@ -166,6 +168,7 @@ impl Default for ImageStudioState {
             upscale_tile_size: 128,
             upscalers: Vec::new(),
             pending_reference: Vec::new(),
+            pending_end_reference: Vec::new(),
             reference_strength: 0.75,
             img2img_enabled: false,
             img2img_strength: 0.75,
@@ -1050,6 +1053,13 @@ impl ImageStudioState {
         self.pending_reference.push(path);
     }
 
+    fn queue_end_reference_image(&mut self, path: String) {
+        if !path.is_empty() {
+            self.pending_end_reference.clear();
+            self.pending_end_reference.push(path);
+        }
+    }
+
     fn reference_init_image_path(&self) -> Option<String> {
         if let Some(path) = self
             .pending_reference
@@ -1128,6 +1138,11 @@ impl ImageStudioState {
                     None,
                 )
             };
+        let end_image = if self.create_mode == CreateMode::Video {
+            self.pending_end_reference.first().cloned()
+        } else {
+            None
+        };
         MediaImageOptions {
             width: Some(self.width),
             height: Some(self.height),
@@ -1213,6 +1228,7 @@ impl ImageStudioState {
                 None
             },
             init_image,
+            end_image,
             strength,
             mask_image,
         }
@@ -1534,6 +1550,26 @@ impl ImageStudioState {
                 ui.add(egui::Slider::new(&mut self.reference_strength, 0.05..=1.0).text("Force"));
             }
         });
+        if self.model_id.contains("minimax") {
+            ui.horizontal(|ui| {
+                ui.label("Image de fin (FL2V)");
+                if ui.button("Choisir…").clicked() {
+                    if let Some(path) = pick_os_file(
+                        "Image de fin vidéo",
+                        &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                        user_downloads_dir().as_deref(),
+                    ) {
+                        self.queue_end_reference_image(path.to_string_lossy().into_owned());
+                    }
+                }
+                if let Some(path) = self.pending_end_reference.first() {
+                    ui.weak(path);
+                    if ui.small_button("×").clicked() {
+                        self.pending_end_reference.clear();
+                    }
+                }
+            });
+        }
         let video_prompt_model = crate::image_prompt::is_video_prompt_model(Some(&self.model_id));
         egui::CollapsingHeader::new(t.studio_section_enrichment)
             .default_open(false)
