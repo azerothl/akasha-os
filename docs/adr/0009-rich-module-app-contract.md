@@ -1,47 +1,67 @@
 # ADR 0009: Rich module application contract
 
-**Language:** English · **Date:** 09/09/2026 · **Status:** accepted (lot 0)
-Tracking: [issue #150](https://github.com/azerothl/akasha-os/issues/150)
+**Language:** English | Français (follow-up)
+
+> Date: 09/09/2026 · Status: **accepted** (lot 0 — contract and map only)  
+> Tracking: [issue #150](https://github.com/azerothl/akasha-os/issues/150)
 
 ## Context
 
-The current module runtime already provides signed `.aospkg` packages, a WASM
-guest, capability review, `min_os_api`, transactional activation, package-local
-`declarative_ui`, and module tool discovery.  Its declarative vocabulary is
-intentionally small and is sufficient for Notes and Tasks, but not for the
-current native Image Studio.  Image Studio owns a large form, model catalogue
-state, composition, local preview/history state and asynchronous media events
-inside `aos-ui-egui`.
+The module runtime already ships signed `.aospkg` packages, a WASM guest, capability
+review, `min_os_api`, transactional activation, package-local `declarative_ui`, and
+module tool discovery.  Issue #149 (Tasks, lots 0–5 on `main`) proved that lifecycle
+and declarative parity can move into an optional official app without a second SDK or
+webview.
 
-The objective is not to move that native page behind a `create_studio` widget.
-It is to make the generic host contract sufficient for an independently
-updatable Create package, while `media.image.generate` remains a platform
-service usable by agents even when Create is absent.
+The declarative vocabulary today is intentionally small — sufficient for Notes and
+Tasks, not for the native **Create / Image Studio** page.  Image Studio (~3.9k LOC in
+`image_studio.rs`) owns a large parameter form, model catalogue coupling, composition
+blocks, local preview/history, prompt enrichment, and asynchronous `media.image.*`
+events entirely inside `aos-ui-egui`.
 
-This ADR is the lot-0 boundary.  It freezes responsibilities and API direction;
-it deliberately does not claim that Create has been extracted.
+**External** means a **package** on the existing module runtime — not a cloud service,
+not a process outside Akasha.
+
+**Do not confuse** Create with platform services that stay in the host:
+
+| Namespace | Role | Stays platform |
+|-----------|------|----------------|
+| `media.image.generate` / `cancel` / `upscale` | Image inference and job execution | Yes |
+| `share/models/catalog-offerings.json` | Model catalogue and install registry | Yes |
+| Agent `media.image.generate` tool | Agent image generation | Yes — works when Create uninstalled |
+| `create.*` (proposed) | Create package business logic and documents | Becomes optional official app |
+
+Lot 0 (this ADR) maps Create couplings and freezes the rich-app contract.  It does
+**not** extract Image Studio, add `create_studio` to the host renderer, or implement
+Lots 1–5.
 
 ## Decision
 
-### Ownership boundary
+### 1. Ownership boundary
 
 | Create package | Akasha platform / native host |
-|---|---|
-| Declarative screen descriptions, locale resources, presets, prompt/parameter editing, history presentation and document migrations | Closed widget renderer, focus/a11y/theming, pointer gestures, layout calculation and event dispatch |
-| Create document schema and package-private data under `/documents/create/**` | Permission enforcement, audited file picker/save/clipboard/notification services |
-| Mapping user intent to the declared `media.image.generate` request schema | Model catalogue, compatibility, GPU/CPU allocation, image generation, durable job state and cancellation |
-| Subscribing to declared job/resource events and turning them into package state | Bounded subscriptions, event fan-out, cleanup when an app closes/uninstalls |
+|----------------|-------------------------------|
+| Declarative screen descriptions, locale resources (FR/EN), presets, prompt/parameter editing, history presentation, document migrations | Closed widget renderer, focus/a11y/theming, pointer gestures, layout, event dispatch |
+| Create document schema and data under `/documents/create/**` | Permission enforcement, audited file picker/save/clipboard/notification services |
+| Mapping user intent to `media.image.generate` request schema | Model catalogue, compatibility, GPU/CPU allocation, generation, durable job state, cancellation |
+| Subscribing to job/resource events and reducing them into package state | Bounded subscriptions, event fan-out, cleanup on app close/uninstall |
 
-An installed package never receives a capability merely because a widget names a
-tool or a service.  The host validates every referenced tool and capability at
-activation, and enforces the granted capability again on every invocation.
+An installed package never receives a capability because a widget names a tool or
+service.  The host validates every reference at activation and enforces granted caps
+on every invocation.
 
-### Versioned contracts
+**No `create_studio` mega-widget.**  The host does not embed Create business logic in
+the renderer.  Create ships as an `.aospkg` using generic primitives.
 
-`manifest.min_os_api` remains the compatibility gate for host APIs.  Rich UI
-adds two explicit, independently versioned declarations to the manifest:
+### 2. Versioned contracts
+
+`manifest.min_os_api` remains the compatibility gate for host module APIs.
+Rich apps add independently versioned manifest fields (frozen in
+`crates/aos-proto/src/rich_app_contract.rs`, mirror:
+[rich-app-contract.md](../rich-app-contract.md)):
 
 ```yaml
+min_os_api: 1
 ui:
   contract: 2
   document: ui/index.json
@@ -50,121 +70,229 @@ services:
   media_image: 1
 ```
 
-`ui.contract` is a closed, monotonic vocabulary version.  The host rejects a
-document whose major version it does not support *before replacing* the active
-package.  A host may render a lower compatible version; a package must not use
-an unknown widget/property as a feature probe.  `services.*` lists the minimum
-major versions consumed by the package and is validated alongside
-`min_os_api`.  The existing `ui/index.html` JSON location stays readable during
-the migration; new packages use `ui/index.json` to make its data-only nature
-unambiguous.
+| Version | Meaning |
+|---------|---------|
+| `min_os_api` | Host module runtime + bus API level (`OS_API_VERSION = 1`) |
+| `ui.contract` | Closed declarative vocabulary major version (`1` = Tasks/Notes; `2` = rich app) |
+| `services.jobs` | Generic job subscription facade |
+| `services.media_image` | `media.image.*` action schema and event shape |
 
-The runtime validates all of the following before activation:
+The host rejects a package whose major versions it does not support **before**
+replacing the active install.  Staging is discarded on failure; the previous pointer
+is retained (`module_rt::install`).
 
-1. manifest, archive fingerprint, WASM hash and the declared UI document;
-2. UI vocabulary/version, tree limits, bindings and action schemas;
-3. each referenced module tool against the package's declared tools;
-4. each system-service action against an explicit declared capability; and
-5. `min_os_api`, `ui.contract` and service-version compatibility.
+Legacy `ui.entry: ui/index.html` stays readable for v1 packages during migration.
 
-The staging directory is discarded on failure and the previous active package
-pointer is retained.
+### 3. State, events, actions, and resources
 
-### State, bindings and actions
+The host owns renderer state; the package owns local and document state via WASM.
+The UI document declares bounded **state**, **bindings**, and **actions** — not an
+arbitrary script engine.
 
-The host owns renderer state; a package owns its local and document state.  The
-UI document may declare bounded bindings, state slots and actions, but cannot
-evaluate arbitrary code or expressions.
+**State** — typed slots with max counts and string lengths (see document limits below).
+
+**Bindings** — module tool fetches into renderer state; invalidated by named changes
+or successful actions, never by unbounded polling.
+
+**Actions** — module tools (`"tool": "create.history.list"`) or platform services
+(`"service": "media.image.generate"`) with explicit capability declarations.
+Substitutions: `$local.*`, `$document.*`, `$row.*` only.  Visibility/enablement use
+a typed predicate AST (max depth 8, 64 nodes).
+
+**Events** — semantic interaction phases for native components:
 
 ```json
-{
-  "state": {
-    "local": {"prompt": {"type": "string", "max_length": 8000}},
-    "document": {"selected_history_id": {"type": "string", "nullable": true}}
-  },
-  "bindings": [{"id": "history", "tool": "create.history.list", "target": "/items"}],
-  "actions": [{"id": "generate", "tool": "media.image.generate", "input": {"prompt": "$local.prompt"}}]
-}
+{"phase": "start|update|commit|cancel", "interaction_id": "…", "value": {}}
 ```
 
-This is a contract shape, not an executable expression language.  `$local.*`,
-`$document.*` and a row field are the only substitutions; they must resolve to
-a schema-validated value.  Visibility, enablement and computed values use a
-small typed predicate AST with a maximum depth and node count.  Bindings are
-invalidated by named state/resource changes or a successful action, never by
-polling an unbounded tree.
+Pan/zoom/resize/drag stay local in native code; at most start/update/commit/cancel
+reach the module.  No per-pointer-move WASM or bus round trip.
 
-An action emits `{phase: start|update|commit|cancel, interaction_id, value}`.
-The native component handles continuous pointer movement, zoom, panning and
-resizing locally; it sends at most start/update/commit/cancel semantic events
-to the module.  The module cannot make a pointer move wait on WASM or the bus.
-
-### Jobs and resources
-
-Long platform operations use a generic job handle rather than a Create-specific
-widget:
+**Jobs** — generic handle:
 
 ```json
 {"job_id":"…","kind":"media.image.generate","state":"queued|running|succeeded|failed|cancelled",
  "progress":{"completed":12,"total":30,"unit":"step"},"result":{},"error":null}
 ```
 
-`job.cancel` is capability-gated and idempotent.  A job event subscription is
-scoped to its owning application instance and is removed on app close,
-uninstall, successful completion or explicit unsubscribe.  The durable job
-service decides whether a job survives app close; Create's first slice uses
-"continues in service, UI may reconnect", and uninstall never deletes the
-result or user documents.
+**Resources** — `image_view` owns texture cache, fit/zoom/pan, a11y, virtualized
+galleries.  Packages supply authorized handles only.
 
-Media preview is generic: an `image_view` primitive owns decoded-texture cache,
-fit/zoom/pan, keyboard access and virtualized thumbnail galleries.  A package
-provides resource handles/paths only after host authorization; it does not read
-arbitrary host paths from the renderer.
+**Uninstall** — must not delete `/documents/create/**`, shared models, or agents'
+ability to generate images.
 
-## Current coupling map
+## Coupling map — Create / Image Studio
 
-| Area | Current location | Extraction destination |
-|---|---|---|
-| Create state, form, preview, history and generation controls | `crates/aos-ui-egui/src/image_studio.rs` | Create package state/UI; generic layout, image view and forms in host |
-| Composition blocks, selection and inpaint mask | `crates/aos-ui-egui/src/image_composition.rs` | generic canvas/layer primitives (lot 5) |
-| Prompt enrichment and model-specific shaping | `crates/aos-ui-egui/src/image_prompt.rs` | Create package logic; model execution stays platform |
-| Progress/result routing into Image Studio and chat | `crates/aos-ui-egui/src/media_event_controller.rs` | generic job subscription + package action reducer |
-| Generation/cancel bus calls | `crates/aos-ui-egui/src/runtime.rs` | `media.image.*` service adapter exposed to permitted packages |
-| Native navigation and Image Studio singleton | `crates/aos-ui-egui/src/main.rs` | `Tab::Module("create")` after parity |
-| Image generation request/response protocol | `crates/aos-proto/src/lib.rs` | stays platform, gets a versioned job facade |
-| Package UI validation/runtime | `crates/aos-proto/src/decl_ui.rs`, `crates/aos-platform/src/module_rt.rs` | extend generically; no Create-named branch |
+Each row is a **special coupling on `main` at lot 0**.  Destination names refer to
+issue #150 lots unless marked **keep**.
+
+### UI and navigation
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/main.rs` | `Tab::Image`, `image_studio: ImageStudioState`, `image_generating`, render `image_studio.ui()` | **Lot 2** — `Tab::Module("create")` via declarative UI |
+| `crates/aos-ui-egui/src/nav.rs` | `TabKind::Create` → `Tab::Image`, primary rail `Ctrl+3` | **Lot 2** — module tab from package manifest |
+| `crates/aos-ui-egui/src/i18n.rs` | ~64 `studio_*` keys, `tab_create`, status strings | **Lot 2** — `DeclUiLabels` in package (FR/EN only) |
+| `crates/aos-ui-egui/src/guide.rs` | `GuideTopic::Create` ↔ `Tab::Image` | **Lot 2** — package help or generic guide hook |
+| `crates/aos-ui-egui/src/image_studio.rs` | Full Create UI: form, presets, preview, history, generate/cancel | **Lot 2** — declarative UI + WASM reducer; **Lot 5** — delete native panel |
+| `crates/aos-proto/src/decl_ui.rs` | Create **not** in `PREINSTALLED_MODULES` / `NATIVE_UI_MODULES` | **Lot 2** — optional official app entry |
+
+### Composition
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/image_composition.rs` | `CompositionBlock`, `ui_composition_canvas`, `InpaintMask`, `finalize_prompt_with_layout` | **Lot 5** — generic canvas/layer primitives; not first slice |
+| `crates/aos-ui-egui/src/image_studio.rs` | Owns `composition_blocks`, inpaint mode, overlay opacity | **Lot 5** — package state + generic canvas |
+| `crates/aos-ui-egui/src/runtime.rs` | Calls `finalize_prompt_with_layout` before `media.image.generate` | **Lot 2** — package action reducer; **keep** bus call in host |
+
+### History
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/image_history.rs` | `ImageGenMeta`, `write_image_meta`, `list_image_history`, sidecar `*.meta.json` | **Lot 2** — `/documents/create/**` + `create.history.*` tools |
+| `crates/aos-ui-egui/src/image_studio.rs` | `ui_image_history`, `apply_history`, `apply_history_for_path` | **Lot 2** — `image_view` gallery + binding restore |
+| Storage today | `/downloads/*.meta.json` (40-entry cap) | **Migrate** — user docs under `/documents/create/` survive uninstall |
+
+### Generation
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/runtime.rs` | `Cmd::MediaImage`, enrichment phases, `media.image.generate/cancel/upscale` bus | **Keep** platform service; **Lot 1** — generic job action adapter for packages |
+| `crates/aos-ui-egui/src/cmd.rs` | `MediaImage`, `MediaImageCancel`, `Evt::MediaImageProgress`, `Evt::MediaOk` | **Lot 1** — generic job events |
+| `crates/aos-ui-egui/src/media_event_controller.rs` | Routes progress/result into `image_studio` and chat | **Lot 1** — job subscription + package reducer |
+| `crates/aos-model/src/media.rs` | Executes generation, writes `image-gen-progress.json` | **Keep** — platform inference |
+| `crates/aos-model/src/bin/aos-modeld.rs` | `media.image.generate/cancel/upscale` handlers | **Keep** |
+| `crates/aos-proto/src/lib.rs` | `MediaImageOptions`, `MediaImageGenerateRequest` | **Keep** — versioned via `services.media_image` |
+
+### Models
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/models_page.rs` | `load_catalog_models`, `is_model_installed`, catalog tabs | **Keep** — platform catalogue |
+| `crates/aos-ui-egui/src/image_studio.rs` | `refresh_catalog`, pack combos, inline install prompt | **Lot 2** — bind to catalogue via declared host service; install UX may stay platform |
+| `crates/aos-ui-egui/src/models_controller.rs` | `on_model_download_finished` → `image_studio.on_download_finished` | **Lot 2** — generic catalog refresh event |
+| `share/models/catalog-offerings.json` | Offering definitions | **Keep** |
+
+### Chat
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/image_prompt.rs` | Enrichment kinds, system prompts, model gating | **Lot 2+** — Create package logic |
+| `crates/aos-ui-egui/src/runtime.rs` | `enrich_image_prompt`, `enhance_image_prompt_chat` | **Lot 2** — declared LLM cap + package action |
+| `crates/aos-ui-egui/src/main.rs` | `/image` slash → `Cmd::MediaImage` | **Keep** — chat integration independent of Create tab |
+| `crates/aos-ui-egui/src/ui_chat_transcript.rs` | "Open in studio" → `Tab::Image` | **Lot 2** — deep link to installed Create module |
+| `crates/aos-ui-egui/src/chat_media.rs` | Image render in transcript | **Keep** |
+| `crates/aos-agent/src/tools.rs` | Static `media.image.generate` agent tool | **Keep** — agents unaffected by Create uninstall |
+
+### Storage
+
+| Location | What it does | Destination / reason |
+|----------|--------------|------------------------|
+| `crates/aos-ui-egui/src/decl_ui.rs` | `host_file_from_logical`, `try_load_png` | **Lot 1** — `image_view` resource loader |
+| `var/run/create-presets.json` | Named presets (native) | **Lot 2** — `/documents/create/presets.json` |
+| `/downloads/image-*.png` | Generation output | **Keep** — platform service output path |
+| `crates/aos-ui-egui/src/os_open.rs` | OS folder picker, `user_downloads_dir` | **Keep** — audited picker service for packages |
+
+## Declarative UI primitive inventory
+
+### Shipped today (`ui.contract: 1`)
+
+`column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`,
+`bar_chart`, `pie`, `scatter`, `form`, `button`, `select`, `radio`, `checkbox`,
+`textarea`, `image`, `audio`, `empty_state`, `count_label`.
+
+Plus #149 additions: `row_actions`, `refresh_binds`, `DeclUiLabels` (FR/EN).
+
+### First-slice gaps (`params → generate → progress → result → preview → history → save`)
+
+| Step | Native Create today | v1 decl_ui | Gap (lot 1+) |
+|------|---------------------|------------|--------------|
+| Params | 50+ fields in `ImageStudioState` | `form`, `textarea`, `select`, `checkbox` | `slider`, `number`, multi-select, model combo with install state |
+| Generate | `Cmd::MediaImage` | `button` + module `tool` only | **service action** for `media.image.generate` |
+| Progress | `ImageGenUiState` + file poll | none | `job` widget + subscription |
+| Cancel | `MediaImageCancel` | none | `job.cancel` action |
+| Result | `Evt::MediaOk` → preview path | static `image` bind | job result reducer |
+| Preview | egui texture + zoom/pan/inpaint | static `image` | **`image_view`** (fit/zoom/pan, a11y) |
+| History | `ui_image_history` + sidecar scan | `table` could list | thumbnail gallery, row restore action |
+| Save | implicit `/downloads` | none | audited save/picker **host service** action |
+
+### Frozen v2 additions (not implemented)
+
+`slider`, `number`, `progress`, `job`, `image_view`, `split`, `scroll`, `tabs`,
+`spacer`, plus `state`, `bindings`, `actions`, predicate AST, interaction events.
+
+## Frozen public contract
+
+Canonical constants: `crates/aos-proto/src/rich_app_contract.rs`  
+Generic rules: [docs/rich-app-contract.md](../rich-app-contract.md)  
+Create package direction: [docs/create-contract.md](../create-contract.md)  
+Tests: `rich_app_contract` unit tests + `ui_v1_widget_kinds_match_decl_ui`.
+
+| Field | Frozen value |
+|-------|----------------|
+| UI contract v1 (shipped) | `1` |
+| UI contract v2 (Create target) | `2` |
+| Host renders up to | `1` (today) |
+| `services.jobs` | `1` |
+| `services.media_image` | `1` |
+| Max nodes / depth / state / bindings / subscriptions | 2000 / 32 / 128 / 64 / 32 |
+| Platform image methods | `media.image.generate`, `media.image.cancel`, `media.image.upscale` |
+| Create documents (target) | `/documents/create/**` |
+| Uninstall preserves | user documents, shared models, agent `media.image.generate` |
+
+## What #149 already validated vs still open
+
+| #149 capability | Status on `main` | Reuse for rich apps |
+|-----------------|------------------|---------------------|
+| Transactional install + rollback | **Landed** `module_rt::install` | Same path for Create `.aospkg` |
+| `min_os_api` enforced at install | **Landed** | Extended with `ui.contract` / `services.*` (lot 1) |
+| `user_removed` + preinstall respect | **Landed** | Create optional preinstall |
+| Protected vs preinstalled split | **Landed** | Host policy only |
+| Declarative UI validate at install | **Landed** (v1) | Extend for v2 schema (lot 1) |
+| Row actions + `refresh_binds` | **Landed** | History restore, preset refresh |
+| Module tool discovery (worker/salon) | **Landed** | `create.*` tools when installed |
+| `ui.contract` / `services.*` manifest | **Frozen** (lot 0) | Enforced lot 1 |
+| State / actions / job subscriptions | **Frozen** (lot 0) | Implemented lot 1 |
+| `image_view` / `job` widgets | **Frozen** (lot 0) | Implemented lot 1 |
 
 ## Measurable budgets and gates
 
-These targets are measured on the reference Preview machine, documented with
-hardware, resolution and release build in the PR that implements each lot.
-They are gates, not current performance claims.
+**Reference machine** (assumptions documented; not a performance claim today):
+8-core x86_64, 16 GiB RAM, 1080p display, release Preview build.
 
 | Scenario | Target |
-|---|---|
-| local pan/zoom/resize while a job runs | p95 frame time ≤ 16.7 ms; no synchronous module/bus round trip per pointer move |
-| action validation and local state commit | p95 ≤ 8 ms for a document at the published node/state limits |
-| targeted binding invalidation | p95 first paint ≤ 100 ms after a successful local/module action, excluding service latency |
-| job progress UI | first visible update ≤ 250 ms after service event; no more than 10 rendered updates/s per job |
-| resource cleanup | zero live subscriptions and image textures owned by a closed/uninstalled app after one event-loop turn |
-| declarative document limits | maximum 2,000 nodes, depth 32, 128 state slots, 64 bindings and 32 subscriptions per app instance |
+|----------|--------|
+| Local pan/zoom/resize while a job runs | p95 frame ≤ 16.7 ms; no sync module/bus round trip per pointer move |
+| Action validation + local state commit | p95 ≤ 8 ms at published document limits |
+| Targeted binding invalidation | p95 first paint ≤ 100 ms after local/module action (excl. service latency) |
+| Job progress UI | first visible update ≤ 250 ms after service event; ≤ 10 updates/s per job |
+| Resource cleanup | zero live subscriptions/textures after one event-loop turn on close/uninstall |
+| Document limits | 2000 nodes, depth 32, 128 state slots, 64 bindings, 32 subscriptions |
 
-The lot-1 test harness must include synthetic 2,000-node validation, repeated
-open/close subscription cleanup, and a controllable generation job emitting
-progress/cancel/error/success.  The lot-2 acceptance test must use a real
-available image engine, not the Preview stub.
+Lot 1 harness: synthetic 2000-node validation, open/close subscription cleanup,
+controllable job emitting progress/cancel/error/success.  Lot 2 acceptance: real
+available image engine (not Preview stub).
 
-## Consequences and sequencing
+## Generic platform extensions (later PRs — not lot 0)
 
-1. **Lot 1:** add generic layout/image/job/state primitives, schema validation,
-   compatibility checks and the benchmark harness; ship an unrelated sample
-   application.
-2. **Lot 2:** ship Create's parameters → real generation → progress/cancel →
-   preview/history/save path as an `.aospkg`; errors retain entered parameters.
-3. **Lot 3:** reuse the transaction, compatibility and cleanup rules for Tasks;
-   preserve `/documents/tasks/**` and dynamic agent discovery.
-4. **Lot 4–5:** migrate remaining Create capabilities and composition, then
-   remove native Create branches only after functional/parity evidence.
+1. **`ui.contract: 2` schema validation** — state, bindings, actions, predicates at install.
+2. **Service actions** — `media.image.generate` from declarative UI with cap enforcement.
+3. **`job` widget + subscription** — progress/cancel without Create-specific events.
+4. **`image_view`** — fit/zoom/pan, gallery, semantic interaction events.
+5. **Audited save/picker service** — packages cannot embed raw host paths.
+6. **Create `.aospkg`** — WASM + declarative UI (lot 2).
+7. **Composition primitives** — canvas/layers (lot 5).
 
-Out of scope remains a webview, arbitrary scripting in the UI document, a new
-package format, marketplace work, and changing the image inference engines.
+## Consequences
+
+- Lot 0 PR is documentation + contract constants/tests only; runtime behaviour unchanged.
+- Reviewers can trace every Create special case to a future lot or an explicit **keep**.
+- Lot 1 handoff: implement v2 primitives + validation + benchmark harness + unrelated
+  sample app demonstrating layout, `image_view`, job subscription, and state bindings.
+- No host Create extraction, no `create_studio` widget, no inference rewrite.
+
+## Out of scope (issue #150)
+
+Marketplace, second SDK, webview HTML/JS, inference engine rewrite, extracting all
+apps, full A/V support, composition/inpaint (first slice), measured startup/binary
+claims in lot 0.
