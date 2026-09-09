@@ -1,0 +1,132 @@
+{
+  "type": "declarative_ui",
+  "contract": 2,
+  "title": "Gallery Demo",
+  "title_key": "app_title",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "app_title": "Gallery Demo",
+      "tab_preview": "Preview",
+      "tab_controls": "Controls",
+      "steps_label": "Demo steps",
+      "run_label": "Run demo job",
+      "job_label": "Background job",
+      "preview_empty": "No preview yet"
+    },
+    "fr": {
+      "app_title": "Démo galerie",
+      "tab_preview": "Aperçu",
+      "tab_controls": "Contrôles",
+      "steps_label": "Étapes démo",
+      "run_label": "Lancer la tâche démo",
+      "job_label": "Tâche en arrière-plan",
+      "preview_empty": "Pas encore d'aperçu"
+    }
+  },
+  "state": {
+    "local": {
+      "steps": { "type": "number", "default": 8 }
+    }
+  },
+  "bindings": [
+    {
+      "id": "preview",
+      "tool": "gallery-demo.preview.get",
+      "target": "/path",
+      "invalidate_on": ["local.steps"]
+    }
+  ],
+  "actions": [
+    {
+      "id": "run_demo",
+      "service": "jobs.demo.start",
+      "input": { "steps": "$local.steps" },
+      "refresh_binds": ["gallery-demo.preview.get"]
+    }
+  ],
+  "subscriptions": [
+    { "id": "demo_job", "action": "run_demo", "kind": "jobs.demo" }
+  ],
+  "root": {
+    "kind": "split",
+    "split_ratio": 0.55,
+    "children": [
+      {
+        "kind": "scroll",
+        "children": [
+          {
+            "kind": "tabs",
+            "tabs": [
+              {
+                "label_key": "tab_preview",
+                "content": {
+                  "kind": "column",
+                  "children": [
+                    {
+                      "kind": "image_view",
+                      "binding": "preview",
+                      "label_key": "tab_preview"
+                    }
+                  ]
+                }
+              },
+              {
+                "label_key": "tab_controls",
+                "content": {
+                  "kind": "column",
+                  "children": [
+                    {
+                      "kind": "slider",
+                      "state_key": "steps",
+                      "min": 3,
+                      "max": 20,
+                      "step": 1,
+                      "label_key": "steps_label"
+                    },
+                    {
+                      "kind": "number",
+                      "state_key": "steps",
+                      "min": 1,
+                      "max": 30,
+                      "label_key": "steps_label"
+                    },
+                    {
+                      "kind": "button",
+                      "action": "run_demo",
+                      "label_key": "run_label"
+                    },
+                    {
+                      "kind": "job",
+                      "subscription": "demo_job",
+                      "label_key": "job_label"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "column",
+        "children": [
+          {
+            "kind": "heading",
+            "label_key": "app_title"
+          },
+          {
+            "kind": "markdown",
+            "text": "Independent rich UI sample (not Create). Exercises layout, `image_view`, bindings, and job subscriptions."
+          },
+          {
+            "kind": "progress",
+            "state_key": "steps",
+            "label_key": "steps_label"
+          },
+          { "kind": "spacer", "size": 12 }
+        ]
+      }
+    ]
+  }
+}
