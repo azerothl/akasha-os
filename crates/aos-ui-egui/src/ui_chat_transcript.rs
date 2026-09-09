@@ -10,7 +10,7 @@ use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_ind
 use crate::{
     agent_act_phrase, agent_canvas_session_ops, agent_panel, artifact_card, chat_ask, chat_media,
     chat_room, i18n, local_tz_offset_minutes, now_ms, research_choice, research_document,
-    schedule_card, skill_offer, Tab, UiApp,
+    schedule_card, skill_offer, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
@@ -620,9 +620,11 @@ impl UiApp {
                     self.open_agent_tab(&id);
                 }
                 if let Some((prompt, path)) = open_studio {
-                    self.image_studio.open_from_chat(&prompt, &path, None);
-                    self.image_studio.apply_history_for_path(&path);
-                    self.tab = Tab::Image;
+                    crate::create_nav::open_create_module_if_installed(
+                        self,
+                        Some(&prompt),
+                        Some(&path),
+                    );
                 }
                 if let Some(id) = target_reply {
                     self.agent_ui.set_ask_reply_target(id);

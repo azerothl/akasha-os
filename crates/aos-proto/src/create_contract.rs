@@ -296,6 +296,25 @@ mod tests {
     }
 
     #[test]
+    fn lot4_primary_navigation_targets_module_not_native_image_tab() {
+        let main_rs = workspace_root().join("crates/aos-ui-egui/src/main.rs");
+        let raw = std::fs::read_to_string(&main_rs)
+            .unwrap_or_else(|e| panic!("read {}: {e}", main_rs.display()));
+        assert!(
+            !raw.contains("Tab::Image"),
+            "lot 4 cutover must not reference native Tab::Image in main.rs"
+        );
+        assert!(
+            raw.contains("create_module_installed"),
+            "main.rs must gate Create rail on installed package"
+        );
+        assert!(
+            raw.contains("nav::create_module_tab"),
+            "main.rs must route primary Create rail through module tab"
+        );
+    }
+
+    #[test]
     fn fr_surface_labels_avoid_wire_tokens_in_chrome() {
         let doc = read_ui_document();
         let fr = &doc.labels.as_ref().unwrap().fr;

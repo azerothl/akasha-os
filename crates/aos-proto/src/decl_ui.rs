@@ -44,7 +44,8 @@ pub enum PreviewProfile {
 }
 
 /// Modules shipped with the standard Preview profile (user may uninstall; choice persists).
-pub const STANDARD_PREINSTALLED_MODULES: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
+pub const STANDARD_PREINSTALLED_MODULES: &[&str] =
+    &["notes", "tasks", "ext-rt", "canvas", "create"];
 
 /// Modules shipped with the minimal Preview profile (Tasks omitted).
 pub const MINIMAL_PREINSTALLED_MODULES: &[&str] = &["notes", "ext-rt", "canvas"];
@@ -60,7 +61,7 @@ pub const NATIVE_UI_MODULES: &[&str] = &["notes", "ext-rt", "canvas"];
 
 /// Sidebar hides native-tab modules without a declarative surface yet.
 /// Tasks keeps its historical Daily slot (#149 lot 5); other preinstalled apps stay here until cutover.
-pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = &["notes", "tasks", "ext-rt", "canvas"];
+pub const DECL_UI_SIDEBAR_EXCLUDE: &[&str] = &["notes", "tasks", "ext-rt", "canvas", "create"];
 
 /// Deprecated alias — prefer [`is_preinstalled_module`] / [`is_protected_by_host`].
 pub const BUNDLED_MODULES: &[&str] = PREINSTALLED_MODULES;
@@ -848,12 +849,19 @@ mod tests {
     #[test]
     fn preinstalled_is_not_protected_by_default() {
         assert!(is_preinstalled_module("tasks"));
+        assert!(is_preinstalled_module("create"));
         assert!(!is_preinstalled_for_profile(
             "tasks",
             PreviewProfile::Minimal
         ));
+        assert!(!is_preinstalled_for_profile(
+            "create",
+            PreviewProfile::Minimal
+        ));
         assert!(!is_protected_by_host("tasks"));
+        assert!(!is_protected_by_host("create"));
         assert!(!has_native_ui("tasks"));
+        assert!(!has_native_ui("create"));
     }
 
     #[test]
@@ -923,6 +931,7 @@ mod tests {
     #[test]
     fn tasks_keeps_daily_slot_not_generic_sidebar() {
         assert!(!sidebar_decl_ui_module("tasks", Some("declarative_ui")));
+        assert!(!sidebar_decl_ui_module("create", Some("declarative_ui")));
         assert!(!sidebar_decl_ui_module("notes", Some("declarative_ui")));
     }
 

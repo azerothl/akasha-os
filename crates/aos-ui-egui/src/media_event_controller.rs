@@ -70,8 +70,8 @@ pub(crate) fn on_media_ok(app: &mut UiApp, event: MediaOkEvent) {
         bytes,
         engine,
         prompt,
-        generation_prompt,
-        composition_blocks,
+        generation_prompt: _,
+        composition_blocks: _,
     } = event;
     app.image_generating = None;
     app.status = format!("{kind} → {path} ({bytes} bytes, {engine})");
@@ -86,25 +86,17 @@ pub(crate) fn on_media_ok(app: &mut UiApp, event: MediaOkEvent) {
             prompt: prompt.clone(),
         },
     };
-    if kind == "image" || kind == "video" {
-        if kind == "image" {
-            app.chat_state.composer.last_session_image = Some(path.clone());
+    if kind == "image" {
+        app.chat_state.composer.last_session_image = Some(path.clone());
+        crate::create_nav::open_create_module_if_installed(
+            app,
             if prompt.is_empty() {
-                app.image_studio.preview = Some(path.clone());
-                app.image_studio.apply_history_for_path(&path);
+                None
             } else {
-                app.image_studio
-                    .open_from_chat(&prompt, &path, generation_prompt.as_deref());
-                if !composition_blocks.is_empty() {
-                    app.image_studio.set_composition_blocks(composition_blocks);
-                } else {
-                    app.image_studio.apply_history_for_path(&path);
-                }
-            }
-        } else {
-            app.image_studio.on_video_generated(path.clone());
-        }
-        app.tab = crate::Tab::Image;
+                Some(&prompt)
+            },
+            Some(&path),
+        );
     }
     let note = if engine == "stub" {
         format!("{kind}: {path}\n(stub — pack média ou moteur sd.cpp/piper absent)")

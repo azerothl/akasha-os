@@ -47,7 +47,9 @@ impl GuideState {
 pub fn topic_for_tab(tab: &Tab) -> Option<GuideTopic> {
     match tab {
         Tab::Chat => Some(GuideTopic::Chat),
-        Tab::Image => Some(GuideTopic::Create),
+        Tab::Module(name) if name == aos_proto::create_contract::MODULE_NAME => {
+            Some(GuideTopic::Create)
+        }
         Tab::Agents => Some(GuideTopic::Agents),
         Tab::Memory => Some(GuideTopic::Memory),
         Tab::Library => Some(GuideTopic::Library),
@@ -1241,7 +1243,10 @@ mod tests {
     #[test]
     fn guide_topics_cover_primary_surfaces() {
         assert_eq!(GuideTopic::ALL.len(), 8);
-        assert_eq!(topic_for_tab(&Tab::Image), Some(GuideTopic::Create));
+        assert_eq!(
+            topic_for_tab(&Tab::Module(aos_proto::create_contract::MODULE_NAME.into())),
+            Some(GuideTopic::Create)
+        );
         assert_eq!(topic_for_tab(&Tab::Chat), Some(GuideTopic::Chat));
         assert_eq!(topic_for_tab(&Tab::Library), Some(GuideTopic::Library));
         assert!(topic_for_tab(&Tab::Settings).is_none());
