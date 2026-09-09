@@ -669,6 +669,10 @@ pub fn image_options_for_model(model_id: Option<&str>, profile: Option<&str>) ->
 }
 
 impl ImageStudioState {
+    fn advanced_controls_visible(&self) -> bool {
+        self.advanced_mode || self.expert_mode
+    }
+
     fn presets_path() -> PathBuf {
         aos_home().join("var/run/create-presets.json")
     }
@@ -1434,8 +1438,10 @@ impl ImageStudioState {
                 });
             return;
         }
-        let left_w = (avail * 0.48).clamp(280.0, 620.0);
-        let right_w = (avail - left_w - 12.0).max(260.0);
+        // Give the form a readable width on wide/fullscreen windows while
+        // preserving a generous preview/canvas area.
+        let left_w = (avail * 0.42).clamp(360.0, 760.0);
+        let right_w = (avail - left_w - 12.0).max(320.0);
         // horizontal_top inherits LTR into children — force top-down inside each column.
         ui.horizontal_top(|ui| {
             ui.allocate_ui_with_layout(
@@ -1635,15 +1641,17 @@ impl ImageStudioState {
                 });
             ui.weak(render_estimate(self));
         });
-        ui.horizontal(|ui| {
-            ui.label("Images/s");
-            help_icon(ui, "Cadence de sortie passée à sd.cpp (--fps), indépendante de la durée et du nombre d'images.");
-            ui.add(egui::DragValue::new(&mut self.video_fps)
-                .range(1..=120)
-                .speed(1)
-                .suffix(" fps"));
-            ui.weak("24 recommandé");
-        });
+        if self.advanced_controls_visible() {
+            ui.horizontal(|ui| {
+                ui.label("Images/s");
+                help_icon(ui, "Cadence de sortie passée à sd.cpp (--fps), indépendante de la durée et du nombre d’images.");
+                ui.add(egui::DragValue::new(&mut self.video_fps)
+                    .range(1..=120)
+                    .speed(1)
+                    .suffix(" fps"));
+                ui.weak("24 recommandé");
+            });
+        }
         ui.horizontal(|ui| {
             ui.label("Intention");
             egui::ComboBox::from_id_salt("studio_video_intent")
@@ -1665,6 +1673,7 @@ impl ImageStudioState {
                 });
             ui.weak("Configure les réglages sûrs sans modifier le prompt");
         });
+        if self.advanced_controls_visible() {
         ui.horizontal_wrapped(|ui| {
             ui.label("Caméra");
             for (id, label) in [
@@ -1691,6 +1700,7 @@ impl ImageStudioState {
                     .replace(" Camera: steady follow shot.", "");
             }
         });
+        }
         self.apply_preset_for_current_model();
         ui.horizontal(|ui| {
             ui.label(t.studio_prompt);
@@ -1764,6 +1774,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_section_enrichment)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.enhance_prompt_chat, t.studio_enhance_prompt_chat);
                     help_icon(ui, t.studio_enhance_prompt_chat_help);
@@ -1815,6 +1829,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new("Video rendering")
             .default_open(self.advanced_mode || self.expert_mode)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Activez le niveau Avancé pour modifier le rendu.");
+                    return;
+                }
                 ui.horizontal(|ui| {
                     ui.label(t.studio_width);
                     help_icon(ui, t.studio_width_help);
@@ -1876,6 +1894,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_section_styles)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 multi_select_assets(
                     ui,
                     "video_style",
@@ -2099,23 +2121,25 @@ impl ImageStudioState {
         } else if !models_page::is_model_installed(&self.model_id) {
             ui.colored_label(egui::Color32::YELLOW, t.studio_model_not_installed);
         }
-        ui.horizontal(|ui| {
-            ui.label(t.studio_width);
-            help_icon(ui, t.studio_width_help);
-            ui.add(egui::DragValue::new(&mut self.width).range(64..=2048));
-            ui.label(t.studio_height);
-            help_icon(ui, t.studio_height_help);
-            ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
-            ui.label(t.studio_profile);
-            help_icon(ui, t.studio_profile_help);
-            egui::ComboBox::from_id_salt("studio_profile")
-                .selected_text(self.profile.as_str())
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.profile, "fast".to_string(), "fast");
-                    ui.selectable_value(&mut self.profile, "balanced".to_string(), "balanced");
-                    ui.selectable_value(&mut self.profile, "quality".to_string(), "quality");
-                });
-        });
+        if self.advanced_controls_visible() {
+            ui.horizontal(|ui| {
+                ui.label(t.studio_width);
+                help_icon(ui, t.studio_width_help);
+                ui.add(egui::DragValue::new(&mut self.width).range(64..=2048));
+                ui.label(t.studio_height);
+                help_icon(ui, t.studio_height_help);
+                ui.add(egui::DragValue::new(&mut self.height).range(64..=2048));
+                ui.label(t.studio_profile);
+                help_icon(ui, t.studio_profile_help);
+                egui::ComboBox::from_id_salt("studio_profile")
+                    .selected_text(self.profile.as_str())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.profile, "fast".to_string(), "fast");
+                        ui.selectable_value(&mut self.profile, "balanced".to_string(), "balanced");
+                        ui.selectable_value(&mut self.profile, "quality".to_string(), "quality");
+                    });
+            });
+        }
         ui.horizontal(|ui| {
             ui.label("Format");
             egui::ComboBox::from_id_salt("studio_image_format")
@@ -2213,12 +2237,20 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_negative)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.add(egui::TextEdit::singleline(&mut self.negative).desired_width(f32::INFINITY));
             });
 
         egui::CollapsingHeader::new(t.studio_section_enrichment)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.enhance_prompt_chat, t.studio_enhance_prompt_chat);
                     help_icon(ui, t.studio_enhance_prompt_chat_help);
@@ -2274,6 +2306,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_section_sampling)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.horizontal(|ui| {
                     ui.label("steps");
                     help_icon(
@@ -2315,6 +2351,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_section_styles)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 multi_select_assets(
                     ui,
                     "style",
@@ -2344,6 +2384,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_img2img_heading)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.img2img_enabled, t.studio_img2img_enable);
                     help_icon(ui, t.studio_img2img_enable_help);
@@ -2407,6 +2451,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_upscale_heading)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.upscale_enabled, t.studio_upscale_enable);
                     help_icon(ui, t.studio_upscale_enable_help);
@@ -2445,6 +2493,10 @@ impl ImageStudioState {
         egui::CollapsingHeader::new(t.studio_section_import)
             .default_open(false)
             .show(ui, |ui| {
+                if !self.advanced_controls_visible() {
+                    ui.weak("Disponible en mode Avancé.");
+                    return;
+                }
                 ui.weak("Place files in share/models/lora/, vae/, or styles/ — or import below.");
                 ui.horizontal(|ui| {
                     if ui.button("Open lora/").clicked() {
