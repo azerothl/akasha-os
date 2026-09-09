@@ -212,7 +212,13 @@ pub fn is_model_installed(model_id: &str) -> bool {
 }
 
 pub fn category_of(m: &CatalogModel) -> ModelCatalogTab {
-    if m.profiles.iter().any(|p| p == "image") || m.modality.as_deref() == Some("image") {
+    // Media generation packs belong with Image/Video even when their legacy
+    // profile is `video` or `upscale` (otherwise they fall through to LLM).
+    if m.profiles
+        .iter()
+        .any(|p| matches!(p.as_str(), "image" | "video" | "upscale"))
+        || matches!(m.modality.as_deref(), Some("image" | "video" | "upscale"))
+    {
         return ModelCatalogTab::Image;
     }
     if m.profiles.iter().any(|p| p == "tts") || m.modality.as_deref() == Some("audio") {
