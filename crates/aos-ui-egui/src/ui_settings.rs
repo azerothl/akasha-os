@@ -1,6 +1,7 @@
 //! Application settings panel.
 
 use crate::cmd::Cmd;
+use crate::models_page;
 use crate::onboarding::save_onboarding;
 use crate::os_open::aos_home;
 use crate::prefs::{save_preferences, UiDensity, UiPresentationMode, UI_SCALE_PRESETS};
@@ -39,6 +40,38 @@ fn edit_theme_color(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool 
     changed
 }
 
+const SETTINGS_ADVANCED_IDS: [&str; 4] = ["secrets", "catalogue", "schedule", "backup"];
+
+fn settings_pill_label<'a>(id: &'a str, t: &'a i18n::UiStrings) -> &'a str {
+    match id {
+        "all" => t.settings_pill_all,
+        "me" => t.settings_pill_me,
+        "models" => t.settings_pill_models,
+        "image" => t.settings_pill_image,
+        "trust" => t.settings_pill_trust,
+        "agent" => t.settings_pill_agent,
+        "web" => t.settings_pill_web,
+        "secrets" => t.settings_pill_secrets,
+        "catalogue" => t.settings_pill_catalogue,
+        "schedule" => t.settings_pill_schedule,
+        "backup" => t.settings_pill_backup,
+        _ => id,
+    }
+}
+
+/// Section body without redundant CollapsingHeader when pills already navigate (#193).
+fn show_settings_section(
+    ui: &mut egui::Ui,
+    show_heading: bool,
+    heading: &str,
+    add_body: impl FnOnce(&mut egui::Ui),
+) {
+    if show_heading {
+        ui.heading(heading);
+    }
+    add_body(ui);
+}
+
 impl UiApp {
     pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
@@ -52,7 +85,8 @@ impl UiApp {
         );
         // P1 pagination lite : 850 lignes en un scroll -> pills de sections.
         // Recherche non vide = filtre global historique ; sinon une seule section.
-        let sections: [(&str, &str); 11] = [
+        // Primary pills + menu Avancé (Secrets / Catalogue / Planif / Sauvegarde) — #183.
+        let main_sections: [(&str, &str); 7] = [
             ("all", t.settings_pill_all),
             ("me", t.settings_pill_me),
             ("models", t.settings_pill_models),
@@ -60,26 +94,50 @@ impl UiApp {
             ("trust", t.settings_pill_trust),
             ("agent", t.settings_pill_agent),
             ("web", t.settings_pill_web),
-            ("secrets", t.settings_pill_secrets),
-            ("catalogue", t.settings_pill_catalogue),
-            ("schedule", t.settings_pill_schedule),
-            ("backup", t.settings_pill_backup),
         ];
-        ui.horizontal_wrapped(|ui| {
-            for (id, label) in sections {
-                if ui
-                    .selectable_label(self.settings_ui.section == id, label)
-                    .clicked()
-                {
-                    self.settings_ui.section = id.into();
-                }
-            }
-        });
+        let selected = self.settings_ui.section.clone();
+        let advanced_active = SETTINGS_ADVANCED_IDS.contains(&selected.as_str());
+        egui::ScrollArea::horizontal()
+            .id_salt("settings_pills")
+            .drag_to_scroll(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    for (id, label) in main_sections {
+                        if ui
+                            .selectable_label(self.settings_ui.section == id, label)
+                            .clicked()
+                        {
+                            self.settings_ui.section = id.into();
+                        }
+                    }
+                    let adv_menu_label = if advanced_active {
+                        settings_pill_label(&selected, &t)
+                    } else {
+                        t.settings_pill_advanced
+                    };
+                    let adv_btn = ui.menu_button(adv_menu_label, |ui| {
+                        for id in SETTINGS_ADVANCED_IDS {
+                            let label = settings_pill_label(id, &t);
+                            if ui
+                                .selectable_label(self.settings_ui.section == id, label)
+                                .clicked()
+                            {
+                                self.settings_ui.section = id.into();
+                                ui.close_menu();
+                            }
+                        }
+                    });
+                    if advanced_active {
+                        adv_btn.response.highlight();
+                    }
+                });
+            });
         ui.separator();
 
         let label_w = 160.0_f32;
         let query = self.settings_ui.search.trim().to_lowercase();
-        let selected = self.settings_ui.section.clone();
+        let show_section_heading = selected == "all";
         let section_visible = |id: &str, terms: &[&str]| {
             if !query.is_empty() {
                 return terms.iter().any(|term| term.contains(query.as_str()));
@@ -748,19 +806,23 @@ impl UiApp {
                     ui.end_row();
 
                     ui.label(t.settings_default_model);
+                    let default_agent_label = models_page::model_human_label(
+                        self.prefs
+                            .default_agent_model
+                            .as_deref()
+                            .unwrap_or("default"),
+                        &self.models_ui.model_infos,
+                        t.status_model_default,
+                    );
                     egui::ComboBox::from_id_salt("prefs_agent_model")
-                        .selected_text(
-                            self.prefs
-                                .default_agent_model
-                                .clone()
-                                .unwrap_or_else(|| "default".into()),
-                        )
+                        .selected_text(default_agent_label)
                         .show_ui(ui, |ui| {
                             if ui
                                 .selectable_label(
                                     self.prefs.default_agent_model.is_none(),
-                                    "default",
+                                    t.status_model_default,
                                 )
+                                .on_hover_text("default")
                                 .clicked()
                             {
                                 self.prefs.default_agent_model = None;
@@ -770,7 +832,16 @@ impl UiApp {
                             for m in self.models_ui.model_infos.clone() {
                                 let selected = self.prefs.default_agent_model.as_deref()
                                     == Some(m.id.as_str());
-                                if ui.selectable_label(selected, &m.id).clicked() {
+                                let label = models_page::model_human_label(
+                                    &m.id,
+                                    &self.models_ui.model_infos,
+                                    t.status_model_default,
+                                );
+                                if ui
+                                    .selectable_label(selected, label)
+                                    .on_hover_text(&m.id)
+                                    .clicked()
+                                {
                                     self.prefs.default_agent_model = Some(m.id.clone());
                                     self.agent_ui.model_id = m.id;
                                     save_preferences(&self.prefs);
@@ -780,19 +851,23 @@ impl UiApp {
                     ui.end_row();
 
                     ui.label(t.settings_image_pack);
+                    let default_image_label = models_page::model_human_label(
+                        self.prefs
+                            .default_image_model
+                            .as_deref()
+                            .unwrap_or("default"),
+                        &self.models_ui.model_infos,
+                        t.status_model_default,
+                    );
                     egui::ComboBox::from_id_salt("prefs_image_pack")
-                        .selected_text(
-                            self.prefs
-                                .default_image_model
-                                .clone()
-                                .unwrap_or_else(|| "default".into()),
-                        )
+                        .selected_text(default_image_label)
                         .show_ui(ui, |ui| {
                             if ui
                                 .selectable_label(
                                     self.prefs.default_image_model.is_none(),
-                                    "default",
+                                    t.status_model_default,
                                 )
+                                .on_hover_text("default")
                                 .clicked()
                             {
                                 self.prefs.default_image_model = None;
@@ -808,7 +883,16 @@ impl UiApp {
                                 }
                                 let selected = self.prefs.default_image_model.as_deref()
                                     == Some(m.id.as_str());
-                                if ui.selectable_label(selected, &m.id).clicked() {
+                                let label = models_page::model_human_label(
+                                    &m.id,
+                                    &self.models_ui.model_infos,
+                                    t.status_model_default,
+                                );
+                                if ui
+                                    .selectable_label(selected, label)
+                                    .on_hover_text(&m.id)
+                                    .clicked()
+                                {
                                     self.prefs.default_image_model = Some(m.id.clone());
                                     save_preferences(&self.prefs);
                                 }
@@ -817,19 +901,23 @@ impl UiApp {
                     ui.end_row();
 
                     ui.label(t.settings_piper_voice);
+                    let default_audio_label = models_page::model_human_label(
+                        self.prefs
+                            .default_audio_model
+                            .as_deref()
+                            .unwrap_or("default"),
+                        &self.models_ui.model_infos,
+                        t.status_model_default,
+                    );
                     egui::ComboBox::from_id_salt("prefs_piper")
-                        .selected_text(
-                            self.prefs
-                                .default_audio_model
-                                .clone()
-                                .unwrap_or_else(|| "default".into()),
-                        )
+                        .selected_text(default_audio_label)
                         .show_ui(ui, |ui| {
                             if ui
                                 .selectable_label(
                                     self.prefs.default_audio_model.is_none(),
-                                    "default",
+                                    t.status_model_default,
                                 )
+                                .on_hover_text("default")
                                 .clicked()
                             {
                                 self.prefs.default_audio_model = None;
@@ -841,7 +929,16 @@ impl UiApp {
                                 }
                                 let selected = self.prefs.default_audio_model.as_deref()
                                     == Some(m.id.as_str());
-                                if ui.selectable_label(selected, &m.id).clicked() {
+                                let label = models_page::model_human_label(
+                                    &m.id,
+                                    &self.models_ui.model_infos,
+                                    t.status_model_default,
+                                );
+                                if ui
+                                    .selectable_label(selected, label)
+                                    .on_hover_text(&m.id)
+                                    .clicked()
+                                {
                                     self.prefs.default_audio_model = Some(m.id.clone());
                                     save_preferences(&self.prefs);
                                 }
@@ -866,9 +963,11 @@ impl UiApp {
         }
 
         if section_visible("image", &["image", "expert", "steps", "taille", "size"]) {
-            egui::CollapsingHeader::new(t.settings_expert_image_defaults)
-                .default_open(false)
-                .show(ui, |ui| {
+            show_settings_section(
+                ui,
+                show_section_heading,
+                t.settings_expert_image_defaults,
+                |ui| {
                     egui::Grid::new("settings_image_defaults")
                         .num_columns(2)
                         .spacing([12.0, 8.0])
@@ -899,7 +998,8 @@ impl UiApp {
                             });
                             ui.end_row();
                         });
-                });
+                },
+            );
         }
 
         ui.add_space(12.0);
@@ -916,174 +1016,166 @@ impl UiApp {
                 "remember",
             ],
         ) {
-            egui::CollapsingHeader::new(t.settings_trust)
-                .default_open(false)
-                .show(ui, |ui| {
-                    egui::Grid::new("settings_trust")
-                        .num_columns(2)
-                        .spacing([12.0, 8.0])
-                        .min_col_width(label_w)
-                        .show(ui, |ui| {
-                            ui.label(t.trust_default);
-                            ui.horizontal(|ui| {
-                                for (code, label) in
-                                    [("low", t.trust_low), ("medium", t.trust_medium)]
-                                {
-                                    if ui
-                                        .selectable_label(self.prefs.trust_default == code, label)
-                                        .clicked()
-                                    {
-                                        self.prefs.trust_default = code.into();
-                                        self.onboarding.trust_default = code.into();
-                                        save_preferences(&self.prefs);
-                                        save_onboarding(&self.onboarding);
-                                    }
-                                }
-                            });
-                            ui.end_row();
-
-                            ui.label(t.network_heading);
-                            let mut online = self.prefs.network_online;
-                            if ui.checkbox(&mut online, t.allow_network).changed() {
-                                self.prefs.network_online = online;
-                                self.network_online = online;
-                                save_preferences(&self.prefs);
-                                let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
-                            }
-                            ui.end_row();
-
-                            ui.label(t.settings_auto_remember);
-                            let mut auto = self.prefs.auto_remember_chat;
-                            if ui
-                                .checkbox(&mut auto, t.settings_auto_remember)
-                                .on_hover_text(t.settings_auto_remember_hint)
-                                .changed()
+            show_settings_section(ui, show_section_heading, t.settings_trust, |ui| {
+                egui::Grid::new("settings_trust")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.trust_default);
+                        ui.horizontal(|ui| {
+                            for (code, label) in
+                                [("low", t.trust_low), ("medium", t.trust_medium)]
                             {
-                                self.prefs.auto_remember_chat = auto;
-                                save_preferences(&self.prefs);
-                                self.status = t.settings_saved.into();
+                                if ui
+                                    .selectable_label(self.prefs.trust_default == code, label)
+                                    .clicked()
+                                {
+                                    self.prefs.trust_default = code.into();
+                                    self.onboarding.trust_default = code.into();
+                                    save_preferences(&self.prefs);
+                                    save_onboarding(&self.onboarding);
+                                }
                             }
-                            ui.end_row();
                         });
-                });
+                        ui.end_row();
+
+                        ui.label(t.network_heading);
+                        let mut online = self.prefs.network_online;
+                        if ui.checkbox(&mut online, t.allow_network).changed() {
+                            self.prefs.network_online = online;
+                            self.network_online = online;
+                            save_preferences(&self.prefs);
+                            let _ = self.cmd_tx.send(Cmd::NetSetMode { online });
+                        }
+                        ui.end_row();
+
+                        ui.label(t.settings_auto_remember);
+                        let mut auto = self.prefs.auto_remember_chat;
+                        if ui
+                            .checkbox(&mut auto, t.settings_auto_remember)
+                            .on_hover_text(t.settings_auto_remember_hint)
+                            .changed()
+                        {
+                            self.prefs.auto_remember_chat = auto;
+                            save_preferences(&self.prefs);
+                            self.status = t.settings_saved.into();
+                        }
+                        ui.end_row();
+                    });
+            });
         }
 
         if section_visible("agent", &["agent", "expert", "étapes", "steps", "timeout"]) {
-            egui::CollapsingHeader::new(t.settings_expert_agent)
-                .default_open(false)
-                .show(ui, |ui| {
-                    egui::Grid::new("settings_agents")
-                        .num_columns(2)
-                        .spacing([12.0, 8.0])
-                        .min_col_width(label_w)
-                        .show(ui, |ui| {
-                            ui.label(t.settings_max_steps);
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut self.prefs.default_max_steps)
-                                        .range(1..=128),
-                                )
-                                .changed()
-                            {
-                                self.agent_ui.max_steps = self.prefs.default_max_steps;
-                                save_preferences(&self.prefs);
-                            }
-                            ui.end_row();
+            show_settings_section(ui, show_section_heading, t.settings_expert_agent, |ui| {
+                egui::Grid::new("settings_agents")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.settings_max_steps);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.default_max_steps)
+                                    .range(1..=128),
+                            )
+                            .changed()
+                        {
+                            self.agent_ui.max_steps = self.prefs.default_max_steps;
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
 
-                            ui.label(t.settings_timeout);
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut self.prefs.default_timeout_secs)
-                                        .range(60..=86_400),
-                                )
-                                .changed()
-                            {
-                                self.agent_ui.timeout_secs = self.prefs.default_timeout_secs;
-                                save_preferences(&self.prefs);
-                            }
-                            ui.end_row();
-                        });
-                });
+                        ui.label(t.settings_timeout);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.default_timeout_secs)
+                                    .range(60..=86_400),
+                            )
+                            .changed()
+                        {
+                            self.agent_ui.timeout_secs = self.prefs.default_timeout_secs;
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
+                    });
+            });
         }
 
         if section_visible(
             "web",
             &["web", "recherche", "search", "navigation", "browse"],
         ) {
-            egui::CollapsingHeader::new(t.settings_expert_web)
-                .default_open(false)
-                .show(ui, |ui| {
-                    egui::Grid::new("settings_web")
-                        .num_columns(2)
-                        .spacing([12.0, 8.0])
-                        .min_col_width(label_w)
-                        .show(ui, |ui| {
-                            ui.label(t.settings_search_engine);
-                            egui::ComboBox::from_id_salt("prefs_search_engine")
-                                .selected_text(&self.prefs.web_search_engine)
-                                .show_ui(ui, |ui| {
-                                    for eng in ["auto", "brave", "searxng", "duckduckgo", "bing"] {
-                                        if ui
-                                            .selectable_label(
-                                                self.prefs.web_search_engine == eng,
-                                                eng,
-                                            )
-                                            .clicked()
-                                        {
-                                            self.prefs.web_search_engine = eng.into();
-                                            save_preferences(&self.prefs);
-                                        }
+            show_settings_section(ui, show_section_heading, t.settings_expert_web, |ui| {
+                egui::Grid::new("settings_web")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.settings_search_engine);
+                        egui::ComboBox::from_id_salt("prefs_search_engine")
+                            .selected_text(&self.prefs.web_search_engine)
+                            .show_ui(ui, |ui| {
+                                for eng in ["auto", "brave", "searxng", "duckduckgo", "bing"] {
+                                    if ui
+                                        .selectable_label(
+                                            self.prefs.web_search_engine == eng,
+                                            eng,
+                                        )
+                                        .clicked()
+                                    {
+                                        self.prefs.web_search_engine = eng.into();
+                                        save_preferences(&self.prefs);
                                     }
-                                });
-                            ui.end_row();
+                                }
+                            });
+                        ui.end_row();
 
-                            ui.label(t.settings_searxng_url);
-                            if ui
-                                .add(
-                                    egui::TextEdit::singleline(&mut self.prefs.searxng_url)
-                                        .desired_width(220.0)
-                                        .hint_text("https://searx.example"),
-                                )
-                                .changed()
-                            {
-                                save_preferences(&self.prefs);
-                            }
-                            ui.end_row();
-                            ui.label("");
-                            ui.weak(t.settings_searxng_hint);
-                            ui.end_row();
+                        ui.label(t.settings_searxng_url);
+                        if ui
+                            .add(
+                                egui::TextEdit::singleline(&mut self.prefs.searxng_url)
+                                    .desired_width(220.0)
+                                    .hint_text("https://searx.example"),
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
+                        ui.label("");
+                        ui.weak(t.settings_searxng_hint);
+                        ui.end_row();
 
-                            ui.label(t.settings_browse_chars);
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
-                                        .range(1000..=100_000),
-                                )
-                                .changed()
-                            {
-                                save_preferences(&self.prefs);
-                            }
-                            ui.end_row();
+                        ui.label(t.settings_browse_chars);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.web_browse_max_chars)
+                                    .range(1000..=100_000),
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
 
-                            ui.label(t.settings_fetch_max);
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
-                                        .range(1024..=200_000_000),
-                                )
-                                .changed()
-                            {
-                                save_preferences(&self.prefs);
-                            }
-                            ui.end_row();
-                        });
-                });
+                        ui.label(t.settings_fetch_max);
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.prefs.web_fetch_max_bytes)
+                                    .range(1024..=200_000_000),
+                            )
+                            .changed()
+                        {
+                            save_preferences(&self.prefs);
+                        }
+                        ui.end_row();
+                    });
+            });
         }
 
         if section_visible("secrets", &["secret", "clé", "token", "api"]) {
-            egui::CollapsingHeader::new(t.settings_secrets)
-                .default_open(false)
-                .show(ui, |ui| {
+            show_settings_section(ui, show_section_heading, t.settings_secrets, |ui| {
                     ui.weak(t.settings_secrets_blurb);
                     egui::Grid::new("settings_secrets")
                         .num_columns(2)
@@ -1181,16 +1273,14 @@ impl UiApp {
                         }
                     });
                     ui.weak(t.settings_brave_hint);
-                });
+            });
         }
 
         if section_visible(
             "catalogue",
             &["catalogue", "catalog", "module", "community", "communauté"],
         ) {
-            egui::CollapsingHeader::new(t.settings_catalogue)
-                .default_open(false)
-                .show(ui, |ui| {
+            show_settings_section(ui, show_section_heading, t.settings_catalogue, |ui| {
                     ui.weak(t.settings_catalogue_blurb);
                     if ui.button(t.settings_secret_list).clicked() {
                         let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
@@ -1368,13 +1458,11 @@ impl UiApp {
                             }
                         });
                     }
-                });
+            });
         }
 
         if section_visible("schedule", &["planification", "schedule", "tâche", "task"]) {
-            egui::CollapsingHeader::new(t.schedule_heading)
-                .default_open(false)
-                .show(ui, |ui| {
+            show_settings_section(ui, show_section_heading, t.schedule_heading, |ui| {
                     egui::Grid::new("settings_schedules")
                         .num_columns(2)
                         .spacing([12.0, 8.0])

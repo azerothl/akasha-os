@@ -1913,6 +1913,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         let more_open = nav::is_overflow_tab(&self.tab);
         egui::CollapsingHeader::new(t.nav_more)
             .default_open(more_open)
+            .open(if more_open { Some(true) } else { None })
             .show(ui, |ui| {
                 // P1: 3 niveaux — Quotidien / Système / Admin. Le rail garde
                 // Chat/Agents/Create/Memory, More ne duplique jamais le rail.
@@ -2226,14 +2227,20 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 
             ui.separator();
 
-            let model_name = self.status_model_name();
+            let model_id = self.status_model_name();
+            let model_human = crate::models_page::model_human_label(
+                &model_id,
+                &self.models_ui.model_infos,
+                t.status_model_default,
+            );
             let model_display = if compact {
-                agent_panel::truncate(&model_name, 18)
+                agent_panel::truncate(&model_human, 18)
             } else {
-                model_name
+                model_human
             };
             if ui
                 .small_button(format!("{} · {}", t.status_model_label, model_display))
+                .on_hover_text(model_id)
                 .clicked()
             {
                 self.on_tab_open(Tab::Models);
@@ -3206,17 +3213,24 @@ impl eframe::App for UiApp {
                 });
                 ui.weak(format!("Preview {} — {}", self.version, t.preview_tagline));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(t.report).clicked() {
-                        self.on_tab_open(Tab::Feedback);
-                    }
-                    if ui.small_button(t.tutorial).clicked() {
-                        self.guide.open_topic(guide::GuideTopic::Overview);
-                    }
-                    if ui.small_button(t.troubleshooting).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::Troubleshoot);
-                        self.on_tab_open(Tab::Feedback);
-                        self.status = t.troubleshooting_status.into();
-                    }
+                    ui.menu_button("?", |ui| {
+                        if ui.button(t.troubleshooting).clicked() {
+                            let _ = self.cmd_tx.send(Cmd::Troubleshoot);
+                            self.on_tab_open(Tab::Feedback);
+                            self.status = t.troubleshooting_status.into();
+                            ui.close_menu();
+                        }
+                        if ui.button(t.tutorial).clicked() {
+                            self.guide.open_topic(guide::GuideTopic::Overview);
+                            ui.close_menu();
+                        }
+                        if ui.button(t.report).clicked() {
+                            self.on_tab_open(Tab::Feedback);
+                            ui.close_menu();
+                        }
+                    })
+                    .response
+                    .on_hover_text(t.preview_help_menu);
                 });
             });
             if self.prefs.ui_layout.notifications_open && !self.agent_ui.notices.is_empty() {
@@ -3418,13 +3432,13 @@ impl eframe::App for UiApp {
                         );
                         self.ui_nav_rail(ui, &t);
                         if !rail_mode {
-                            ui.separator();
-                            ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
-                                "RAM / CPU"
-                            } else {
-                                t.resources_heading
-                            });
                             if let Some(m) = &self.metrics {
+                                ui.separator();
+                                ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
+                                    "RAM / CPU"
+                                } else {
+                                    t.resources_heading
+                                });
                                 if self.prefs.ui_density != prefs::UiDensity::Compact {
                                     let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
                                     ui.add(egui::ProgressBar::new(ratio).text(format!(
@@ -3457,8 +3471,6 @@ impl eframe::App for UiApp {
                                 {
                                     self.on_tab_open(Tab::Models);
                                 }
-                            } else {
-                                ui.label("…");
                             }
                         }
                     });
