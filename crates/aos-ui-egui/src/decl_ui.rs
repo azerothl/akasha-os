@@ -453,6 +453,45 @@ impl DeclUiPanelState {
                     true,
                 );
             }
+            "multiselect" => {
+                let Some(state_key) = &w.state_key else { return };
+                let label = widget_text(w, doc, language)
+                    .unwrap_or_else(|| state_key.clone());
+                let mut selected: Vec<String> = local_state
+                    .get(state_key)
+                    .and_then(Value::as_array)
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(ToOwned::to_owned)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                ui.label(label);
+                for (index, item) in w.items.clone().unwrap_or_default().iter().enumerate() {
+                    let item_label = w
+                        .item_label_keys
+                        .as_ref()
+                        .and_then(|keys| keys.get(index))
+                        .and_then(|key| widget_text_from_key(Some(key), doc, language))
+                        .unwrap_or_else(|| item.clone());
+                    let mut checked = selected.iter().any(|value| value == item);
+                    if ui.add_enabled(enabled, egui::Checkbox::new(&mut checked, item_label)).changed() {
+                        if checked {
+                            if !selected.iter().any(|value| value == item) {
+                                selected.push(item.clone());
+                            }
+                        } else {
+                            selected.retain(|value| value != item);
+                        }
+                        actions.local_patch.insert(
+                            state_key.clone(),
+                            Value::Array(selected.iter().cloned().map(Value::String).collect()),
+                        );
+                    }
+                }
+            }
             "checkbox" => {
                 if let Some(state_key) = &w.state_key {
                     let label = widget_text(w, doc, language)

@@ -85,6 +85,7 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "section",
     "text_input",
     "file_picker",
+    "multiselect",
 ];
 
 /// Maximum widget nodes in a single UI document tree.
