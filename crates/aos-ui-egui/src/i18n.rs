@@ -7,6 +7,10 @@ pub struct UiStrings {
     pub preview_tagline: &'static str,
     /// First Chat thread system line — version only (chrome `VERSION`).
     pub chat_thread_intro: &'static str,
+    /// Chat welcome system bubble — sessions / memory / network opt-in.
+    pub chat_thread_capabilities: &'static str,
+    /// Chat welcome system bubble — slash commands + side tabs.
+    pub chat_thread_commands: &'static str,
     pub status_network_off: &'static str,
     pub status_network_on: &'static str,
     pub status_model_label: &'static str,
@@ -322,6 +326,20 @@ pub struct UiStrings {
     pub settings_colors_applied: &'static str,
     pub settings_search_hint: &'static str,
     pub settings_search_empty: &'static str,
+    /// Settings filter field label (shared `search_field` chrome).
+    pub settings_search_label: &'static str,
+    pub search_field_clear: &'static str,
+    pub settings_pill_all: &'static str,
+    pub settings_pill_me: &'static str,
+    pub settings_pill_models: &'static str,
+    pub settings_pill_image: &'static str,
+    pub settings_pill_trust: &'static str,
+    pub settings_pill_agent: &'static str,
+    pub settings_pill_web: &'static str,
+    pub settings_pill_secrets: &'static str,
+    pub settings_pill_catalogue: &'static str,
+    pub settings_pill_schedule: &'static str,
+    pub settings_pill_backup: &'static str,
     pub nav_tester: &'static str,
     pub nav_modules: &'static str,
     pub tab_hint_chat: &'static str,
@@ -1006,6 +1024,8 @@ const EN: UiStrings = UiStrings {
     preview_banner: "Akasha OS Preview {} — running on Windows/Linux (scaffold). This is not the bootable seL4 OS yet.",
     preview_tagline: "Host app — not a bootable OS",
     chat_thread_intro: "Akasha OS Preview {}.",
+    chat_thread_capabilities: "Sessions / Memory / Network opt-in.",
+    chat_thread_commands: "Type /commands — use the side tabs.",
     status_network_off: "Offline",
     status_network_on: "Online",
     status_model_label: "Model",
@@ -1321,6 +1341,19 @@ const EN: UiStrings = UiStrings {
     settings_colors_applied: "Colors apply immediately and remain compatible with older settings.",
     settings_search_hint: "Search settings…",
     settings_search_empty: "No settings match this search.",
+    settings_search_label: "Search",
+    search_field_clear: "Clear",
+    settings_pill_all: "All",
+    settings_pill_me: "Me",
+    settings_pill_models: "Models",
+    settings_pill_image: "Image",
+    settings_pill_trust: "Trust",
+    settings_pill_agent: "Agent",
+    settings_pill_web: "Web",
+    settings_pill_secrets: "Secrets",
+    settings_pill_catalogue: "Catalogue",
+    settings_pill_schedule: "Schedule",
+    settings_pill_backup: "Backup",
     nav_tester: "— tester —",
     nav_modules: "Modules",
     tab_hint_chat: "Conversations with the local model. Type / for slash commands.",
@@ -1999,6 +2032,8 @@ const FR: UiStrings = UiStrings {
     preview_banner: "Akasha OS Preview {} — exécuté sur Windows/Linux (échafaudage). Ce n'est pas encore l'OS bootable seL4.",
     preview_tagline: "App hôte — pas un OS bootable",
     chat_thread_intro: "Akasha OS Preview {}.",
+    chat_thread_capabilities: "Sessions / Mémoire / Réseau (opt-in).",
+    chat_thread_commands: "Tapez /commandes — utilisez les onglets latéraux.",
     status_network_off: "Hors ligne",
     status_network_on: "En ligne",
     status_model_label: "Modèle",
@@ -2314,6 +2349,19 @@ const FR: UiStrings = UiStrings {
     settings_colors_applied: "Les couleurs sont appliquées immédiatement et restent compatibles avec les anciens réglages.",
     settings_search_hint: "Rechercher dans les réglages…",
     settings_search_empty: "Aucun réglage ne correspond à cette recherche.",
+    settings_search_label: "Rechercher",
+    search_field_clear: "Effacer",
+    settings_pill_all: "Tout",
+    settings_pill_me: "Moi",
+    settings_pill_models: "Modèles",
+    settings_pill_image: "Image",
+    settings_pill_trust: "Confiance",
+    settings_pill_agent: "Agents",
+    settings_pill_web: "Web",
+    settings_pill_secrets: "Secrets",
+    settings_pill_catalogue: "Catalogue",
+    settings_pill_schedule: "Planif",
+    settings_pill_backup: "Sauvegarde",
     nav_tester: "— testeur —",
     nav_modules: "Modules",
     tab_hint_chat: "Conversations avec le modèle local. Tapez / pour les commandes.",
@@ -3188,6 +3236,30 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn settings_pills_and_search_label_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.settings_search_label, "Search");
+        assert_eq!(fr.settings_search_label, "Rechercher");
+        assert_eq!(en.settings_pill_models, "Models");
+        assert_eq!(fr.settings_pill_models, "Modèles");
+        assert_eq!(en.settings_pill_agent, "Agent");
+        assert_eq!(fr.settings_pill_agent, "Agents");
+        assert_eq!(en.settings_pill_all, "All");
+        assert_eq!(fr.settings_pill_all, "Tout");
+    }
+
+    #[test]
+    fn chat_thread_welcome_body_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert!(en.chat_thread_capabilities.contains("Memory"));
+        assert!(fr.chat_thread_capabilities.contains("Mémoire"));
+        assert!(en.chat_thread_commands.contains("/commands"));
+        assert!(fr.chat_thread_commands.contains("/commandes"));
     }
 
     #[test]

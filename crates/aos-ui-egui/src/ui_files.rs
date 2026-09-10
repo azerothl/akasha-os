@@ -47,7 +47,13 @@ impl UiApp {
             }
         });
         ui.horizontal(|ui| {
-            crate::ui_primitives::search_field(ui, &mut self.files_ui.filter, t.files_search);
+            crate::ui_primitives::search_field(
+                ui,
+                &mut self.files_ui.filter,
+                t.settings_search_label,
+                t.files_search,
+                t.search_field_clear,
+            );
         });
         ui.horizontal(|ui| {
             ui.add(

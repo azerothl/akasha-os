@@ -794,10 +794,10 @@ impl UiApp {
         models_ui.model_usage = models_disk::load_usage();
         let t = i18n::strings(&prefs.language);
         let intro = format!(
-            "{}\n\
-             Sessions / Memory / Network opt-in.\n\
-             Type /commands — use the side tabs.",
-            t.chat_thread_intro.replace("{}", &version)
+            "{}\n{}\n{}",
+            t.chat_thread_intro.replace("{}", &version),
+            t.chat_thread_capabilities,
+            t.chat_thread_commands,
         );
         Self {
             cmd_tx,
@@ -2368,7 +2368,17 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             }
             ui.weak(t.go_to_hint);
             ui.add_space(4.0);
-            let search = ui_primitives::search_field(ui, &mut self.spotlight_query, "Filter…");
+            let search = ui_primitives::search_field(
+                ui,
+                &mut self.spotlight_query,
+                t.settings_search_label,
+                if self.prefs.language == "fr" {
+                    "Filtrer…"
+                } else {
+                    "Filter…"
+                },
+                t.search_field_clear,
+            );
             // Focus le champ à l'ouverture (opensourceui `spotlight-bar`).
             if self.spotlight_query.is_empty() && !search.has_focus() {
                 ui.memory_mut(|m| m.request_focus(search.id));
