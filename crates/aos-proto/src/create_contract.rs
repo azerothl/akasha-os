@@ -26,6 +26,8 @@ pub const TOOL_IDS: &[&str] = &[
     "create.document.save",
     "create.result.get",
     "create.models.list",
+    "create.preset.save",
+    "create.preset.load",
 ];
 
 /// Filesystem caps declared on the package manifest (invoke + media caps are separate).

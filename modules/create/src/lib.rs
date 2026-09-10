@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 
 const HISTORY_PATH: &str = "/documents/create/history.json";
 const STATE_PATH: &str = "/documents/create/state.json";
@@ -107,6 +108,8 @@ struct DocumentState {
     last_result_path: Option<String>,
     #[serde(default)]
     last_prompt: Option<String>,
+    #[serde(default)]
+    presets: HashMap<String, serde_json::Value>,
 }
 
 fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -118,6 +121,8 @@ fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, Str
         "create.document.save" => document_save(args),
         "create.result.get" => result_get(),
         "create.models.list" => models_list(),
+        "create.preset.save" => preset_save(args),
+        "create.preset.load" => preset_load(args),
         _ => Err(format!("outil inconnu: {tool}")),
     }
 }
@@ -321,6 +326,36 @@ fn result_get() -> Result<serde_json::Value, String> {
     let state = load_state()?;
     let path = state.last_result_path.unwrap_or_default();
     aos_module_sdk::json_ok(&json!({ "path": path }))
+}
+
+#[derive(Deserialize)]
+struct PresetSaveArgs {
+    name: String,
+    #[serde(default)]
+    params: serde_json::Value,
+}
+
+fn preset_save(args: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let a: PresetSaveArgs = aos_module_sdk::parse_args(args)?;
+    let name = a.name.trim();
+    if name.is_empty() {
+        return Err("preset name required".into());
+    }
+    let mut state = load_state()?;
+    state.presets.insert(name.to_string(), a.params);
+    save_state(&state)?;
+    aos_module_sdk::json_ok(&json!({ "name": name }))
+}
+
+fn preset_load(args: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let a: PresetSaveArgs = aos_module_sdk::parse_args(args)?;
+    let state = load_state()?;
+    let params = state
+        .presets
+        .get(a.name.trim())
+        .cloned()
+        .ok_or_else(|| "preset not found".to_string())?;
+    aos_module_sdk::json_ok(&json!({ "name": a.name.trim(), "params": params }))
 }
 
 #[cfg(test)]

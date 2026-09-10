@@ -124,8 +124,9 @@ pub(crate) fn on_ui_invoke_done(
         panel.set_pending_invoke(false);
         if ok {
             panel.set_bind_result(&tool, result.clone());
-            if module == "create" && tool == "create.history.get" {
-                if let Some(params) = result.get("params").and_then(|p| p.as_object()) {
+            if module == "create" && (tool == "create.history.get" || tool == "create.preset.load") {
+                let params_value = result.get("params").unwrap_or(&result);
+                if let Some(params) = params_value.as_object() {
                     for (key, value) in params {
                         panel.local_state.insert(key.clone(), value.clone());
                     }

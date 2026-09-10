@@ -987,6 +987,8 @@ mod tests {
             "create.document.save",
             "create.result.get",
             "create.models.list",
+            "create.preset.save",
+            "create.preset.load",
         ];
         let caps = vec![
             "media.generate".into(),

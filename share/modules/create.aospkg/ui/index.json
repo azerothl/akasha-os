@@ -57,6 +57,9 @@
       "preset_label": "Preset",
       "regenerate_label": "Regenerate",
       "variant_label": "New variant",
+      "preset_name_label": "Preset name",
+      "save_preset_label": "Save preset",
+      "load_preset_label": "Load preset",
       "cfg_label": "CFG scale",
       "seed_label": "Seed (-1 = random)",
       "sampler_label": "Sampler",
@@ -136,6 +139,9 @@
       "preset_label": "Préréglage",
       "regenerate_label": "Régénérer",
       "variant_label": "Nouvelle variante",
+      "preset_name_label": "Nom du préréglage",
+      "save_preset_label": "Enregistrer le préréglage",
+      "load_preset_label": "Charger le préréglage",
       "cfg_label": "Échelle CFG",
       "seed_label": "Graine (-1 = aléatoire)",
       "sampler_label": "Échantillonneur",
@@ -199,6 +205,7 @@
       "sd_mode": { "type": "string", "default": "img_gen" },
       "composition_layers": { "type": "array", "default": [] },
       "composition_selected": { "type": "number", "default": 0 },
+      "saved_preset_name": { "type": "string", "default": "" },
       "init_image": { "type": "string", "default": "" },
       "end_image": { "type": "string", "default": "" },
       "strength": { "type": "number", "default": 0.75 },
@@ -445,6 +452,27 @@
       "refresh_binds": ["create.result.get", "create.history.list"]
     },
     {
+      "id": "save_preset",
+      "tool": "create.preset.save",
+      "input": {
+        "name": "$local.saved_preset_name",
+        "params": {
+          "prompt": "$local.prompt", "negative_prompt": "$local.negative_prompt", "media_mode": "$local.media_mode", "model_id": "$local.model_id",
+          "format": "$local.format", "intent": "$local.intent", "profile": "$local.profile", "camera_preset": "$local.camera_preset",
+          "width": "$local.width", "height": "$local.height", "steps": "$local.steps", "video_frames": "$local.video_frames", "fps": "$local.fps",
+          "cfg_scale": "$local.cfg_scale", "seed": "$local.seed", "sampling_method": "$local.sampling_method", "flow_shift": "$local.flow_shift",
+          "styles": "$local.styles", "loras": "$local.loras", "vae": "$local.vae", "init_image": "$local.init_image", "end_image": "$local.end_image", "strength": "$local.strength", "mask_image": "$local.mask_image",
+          "enrich_prompt": "$local.enrich_prompt", "enhance_prompt_chat": "$local.enhance_prompt_chat", "enriched_prompt": "$local.enriched_prompt",
+          "composition_layers": "$local.composition_layers"
+        }
+      }
+    },
+    {
+      "id": "load_preset",
+      "tool": "create.preset.load",
+      "input": { "name": "$local.saved_preset_name" }
+    },
+    {
       "id": "save_result",
       "service": "files.save_as",
       "input": { "source_path": "$local.result_path" }
@@ -495,6 +523,11 @@
                       "kind": "section",
                       "label_key": "advanced_section",
                       "children": [
+                        { "kind": "text_input", "state_key": "saved_preset_name", "label_key": "preset_name_label" },
+                        { "kind": "row", "children": [
+                          { "kind": "button", "action": "save_preset", "label_key": "save_preset_label", "enabled": { "ne": ["$local.saved_preset_name", ""] } },
+                          { "kind": "button", "action": "load_preset", "label_key": "load_preset_label", "enabled": { "ne": ["$local.saved_preset_name", ""] } }
+                        ] },
                         { "kind": "select", "state_key": "format", "items": ["1:1", "16:9", "9:16"], "label_key": "format_label" },
                         { "kind": "select", "state_key": "intent", "items": ["custom", "portrait", "product", "illustration", "cinematic"], "label_key": "intent_label" },
                         { "kind": "select", "state_key": "profile", "items": ["fast", "balanced", "quality"], "label_key": "quality_label" },

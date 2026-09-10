@@ -1,6 +1,6 @@
 name: create
 version: 1.0.0
-hash: a615686cea242a9eadeaada47d30aec4d3b24c76cd244adda4b2ac5ac7cf70f2
+hash: 59b39d59d842e1c9e05bd1d203f028e9bef30a8cd82994da0e350eb162a7b0aa
 permissions:
   required_caps:
     - fs.read:/documents/create/**
@@ -43,6 +43,14 @@ tools:
       type: object
   - name: create.models.list
     description: List image and video model packs for the picker
+    input_schema:
+      type: object
+  - name: create.preset.save
+    description: Save a named Create parameter preset
+    input_schema:
+      type: object
+  - name: create.preset.load
+    description: Restore a named Create parameter preset
     input_schema:
       type: object
 ui:
