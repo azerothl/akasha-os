@@ -175,6 +175,83 @@ pub fn pin_indicator(ui: &mut Ui) {
     ui.painter().add(Shape::closed_line(points, stroke));
 }
 
+/// Lucide-style checkbox (replaces `☐` / `☑` font glyphs).
+pub fn checkbox_button(ui: &mut Ui, checked: bool) -> Response {
+    let size = Vec2::splat(16.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let color = if response.hovered() || checked {
+            ui.visuals().strong_text_color()
+        } else {
+            hover_color(ui, &response)
+        };
+        paint_checkbox(ui, rect, color, checked);
+    }
+    response
+}
+
+/// Selectable row: painted checkbox + label (no Unicode control glyphs).
+pub fn labeled_checkbox_selectable(ui: &mut Ui, selected: bool, label: &str) -> Response {
+    let text_w = ui.fonts(|f| {
+        f.layout_no_wrap(
+            label.to_owned(),
+            egui::FontId::proportional(13.0),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    let gap = 6.0;
+    let size = Vec2::new(16.0 + gap + text_w, 20.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        if selected {
+            ui.painter()
+                .rect_filled(rect, 2.0, ui.visuals().selection.bg_fill);
+        } else if response.hovered() {
+            ui.painter()
+                .rect_filled(rect, 2.0, ui.visuals().widgets.hovered.bg_fill);
+        }
+        let color = if selected {
+            ui.visuals().strong_text_color()
+        } else {
+            hover_color(ui, &response)
+        };
+        let box_rect = Rect::from_min_size(rect.min + Vec2::new(2.0, 2.0), Vec2::splat(16.0));
+        paint_checkbox(ui, box_rect, color, selected);
+        ui.painter().text(
+            Pos2::new(box_rect.right() + gap, rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(13.0),
+            color,
+        );
+    }
+    response
+}
+
+fn paint_checkbox(ui: &mut Ui, rect: Rect, color: Color32, checked: bool) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let inner = rect.shrink(rect.width() * 0.10);
+    if checked {
+        painter.rect_filled(inner, 3.0, color.gamma_multiply(0.22));
+    }
+    painter.rect_stroke(inner, 3.0, stroke, StrokeKind::Outside);
+    if checked {
+        let c = inner.center();
+        let s = inner.width() * 0.22;
+        painter.line_segment(
+            [c + Vec2::new(-s * 1.1, s * 0.05), c + Vec2::new(-s * 0.2, s * 0.85)],
+            Stroke::new(1.6_f32, color),
+        );
+        painter.line_segment(
+            [c + Vec2::new(-s * 0.2, s * 0.85), c + Vec2::new(s * 1.1, -s * 0.75)],
+            Stroke::new(1.6_f32, color),
+        );
+    }
+}
+
 /// Expand/collapse caret (replaces `▸` / `▾`).
 pub fn caret(ui: &mut Ui, expanded: bool) -> Response {
     let size = Vec2::new(12.0, 12.0);
@@ -1220,12 +1297,7 @@ pub fn bell_button(ui: &mut Ui) -> Response {
 
 /// Layer visibility toggle (replaces `👁` / em dash).
 pub fn visibility_toggle_button(ui: &mut Ui, visible: bool) -> Response {
-    let size = Vec2::splat(BTN);
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    if ui.is_rect_visible(rect) {
-        paint_eye(ui, glyph_rect(rect), hover_color(ui, &response), visible);
-    }
-    response
+    layer_action_icon_button(ui, |ui, rect, color| paint_eye(ui, rect, color, visible))
 }
 
 /// Small chevron-up control (layer z-order).
@@ -1239,34 +1311,34 @@ pub fn chevron_down_button(ui: &mut Ui) -> Response {
 }
 
 fn chevron_button(ui: &mut Ui, up: bool) -> Response {
-    let size = Vec2::splat(BTN);
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    if ui.is_rect_visible(rect) {
-        paint_chevron_arrow(ui, glyph_rect(rect), hover_color(ui, &response), up);
-    }
-    response
+    layer_action_icon_button(ui, |ui, rect, color| {
+        paint_chevron_arrow(ui, rect, color, up);
+    })
 }
 
 /// Move / reorder hint (replaces `⇅`).
 pub fn move_vertical_button(ui: &mut Ui) -> Response {
+    layer_action_icon_button(ui, paint_grip_vertical)
+}
+
+/// Remove layer control (Lucide trash-2 style).
+pub fn layer_delete_button(ui: &mut Ui) -> Response {
+    layer_action_icon_button(ui, paint_trash)
+}
+
+/// Compact painted icon control for Create layer-list rows.
+fn layer_action_icon_button(
+    ui: &mut Ui,
+    paint: impl FnOnce(&mut Ui, Rect, Color32),
+) -> Response {
     let size = Vec2::splat(BTN);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
-        let inner = glyph_rect(rect);
-        let color = hover_color(ui, &response);
-        let half_h = inner.height() * 0.18;
-        paint_chevron_arrow(
-            ui,
-            Rect::from_center_size(inner.center() + Vec2::new(0.0, -half_h), inner.size()),
-            color,
-            true,
-        );
-        paint_chevron_arrow(
-            ui,
-            Rect::from_center_size(inner.center() + Vec2::new(0.0, half_h), inner.size()),
-            color,
-            false,
-        );
+        if response.hovered() {
+            ui.painter()
+                .rect_filled(rect, 3.0, ui.visuals().widgets.hovered.bg_fill);
+        }
+        paint(ui, glyph_rect(rect), hover_color(ui, &response));
     }
     response
 }
@@ -1299,39 +1371,58 @@ fn paint_nav_tab(ui: &mut Ui, rect: Rect, icon: NavTabIcon, color: Color32) {
             );
         }
         NavTabIcon::Agents => {
-            for dx in [-s * 0.55, s * 0.55] {
-                let head_c = c + Vec2::new(dx, -s * 0.55);
-                painter.circle_stroke(head_c, s * 0.38, stroke);
+            // Bot cluster — square heads + bodies, not people / eyeglasses.
+            for dx in [-s * 0.62, s * 0.62] {
+                let bot = c + Vec2::new(dx, s * 0.12);
                 painter.line_segment(
-                    [
-                        head_c + Vec2::new(0.0, s * 0.38),
-                        head_c + Vec2::new(0.0, s * 1.05),
-                    ],
+                    [bot + Vec2::new(0.0, -s * 1.05), bot + Vec2::new(0.0, -s * 0.78)],
                     stroke,
                 );
+                painter.circle_filled(bot + Vec2::new(0.0, -s * 1.08), s * 0.08, color);
+                let head = Rect::from_center_size(
+                    bot + Vec2::new(0.0, -s * 0.52),
+                    Vec2::new(s * 0.42, s * 0.36),
+                );
+                painter.rect_stroke(head, 1.0, stroke, StrokeKind::Outside);
+                let body = Rect::from_center_size(bot + Vec2::new(0.0, s * 0.18), Vec2::new(s * 0.62, s * 0.72));
+                painter.rect_stroke(body, 1.5, stroke, StrokeKind::Outside);
             }
         }
         NavTabIcon::Create => {
-            let frame = Rect::from_center_size(c, Vec2::new(s * 2.4, s * 1.8));
-            painter.rect_stroke(frame, 2.0, stroke, StrokeKind::Outside);
-            let sun = c + Vec2::new(-s * 0.55, -s * 0.35);
-            painter.circle_stroke(sun, s * 0.22, stroke);
-            painter.line_segment(
-                [c + Vec2::new(-s * 0.35, s * 0.15), c + Vec2::new(s * 0.75, s * 0.55)],
-                stroke,
-            );
+            // Wand + sparkle tip — generate / invent (not chat+).
+            let tail = c + Vec2::new(-s * 0.82, s * 0.82);
+            let tip = c + Vec2::new(s * 0.58, -s * 0.58);
+            painter.line_segment([tail, tip], stroke);
+            let spark = s * 0.30;
+            painter.line_segment([tip + Vec2::new(-spark, 0.0), tip + Vec2::new(spark, 0.0)], stroke);
+            painter.line_segment([tip + Vec2::new(0.0, -spark), tip + Vec2::new(0.0, spark)], stroke);
+            for off in [Vec2::new(-s * 0.42, -s * 0.08), Vec2::new(s * 0.18, s * 0.32)] {
+                let p = tip + off;
+                let d = s * 0.11;
+                painter.line_segment([p + Vec2::new(-d, 0.0), p + Vec2::new(d, 0.0)], stroke);
+                painter.line_segment([p + Vec2::new(0.0, -d), p + Vec2::new(0.0, d)], stroke);
+            }
         }
         NavTabIcon::Memory => {
-            let w = s * 0.95;
-            for (dy, shrink) in [(s * 0.55, 0.0), (0.0, 0.12), (-s * 0.55, 0.24)] {
-                let y = c.y + dy;
-                painter.line_segment(
-                    [
-                        Pos2::new(c.x - w + shrink, y),
-                        Pos2::new(c.x + w - shrink, y),
-                    ],
-                    stroke,
-                );
+            // Open book — knowledge / memory (not hamburger bars).
+            let top = c.y - s * 0.78;
+            let bot = c.y + s * 0.78;
+            let spine = c.x;
+            painter.line_segment([Pos2::new(spine, top), Pos2::new(spine, bot)], stroke);
+            for sign in [-1.0_f32, 1.0] {
+                let outer = spine + sign * s * 0.82;
+                painter.line_segment([Pos2::new(outer, top + s * 0.12), Pos2::new(spine, top)], stroke);
+                painter.line_segment([Pos2::new(outer, bot - s * 0.12), Pos2::new(spine, bot)], stroke);
+                painter.line_segment([Pos2::new(outer, top + s * 0.12), Pos2::new(outer, bot - s * 0.12)], stroke);
+                for dy in [0.0, s * 0.38] {
+                    painter.line_segment(
+                        [
+                            Pos2::new(spine + sign * s * 0.18, c.y + dy - s * 0.12),
+                            Pos2::new(outer - sign * s * 0.12, c.y + dy - s * 0.12),
+                        ],
+                        stroke,
+                    );
+                }
             }
         }
     }
@@ -1414,24 +1505,64 @@ fn paint_eye(ui: &mut Ui, rect: Rect, color: Color32, open: bool) {
 fn paint_chevron_arrow(ui: &mut Ui, rect: Rect, color: Color32, up: bool) {
     let stroke = Stroke::new(1.4_f32, color);
     let c = rect.center();
-    let s = rect.width() * 0.22;
-    let (tip, left, right) = if up {
-        (
-            c + Vec2::new(0.0, -s * 0.85),
+    let s = rect.width() * 0.28;
+    let tri = if up {
+        vec![
             c + Vec2::new(-s, s * 0.35),
+            c + Vec2::new(0.0, -s * 0.85),
             c + Vec2::new(s, s * 0.35),
-        )
+        ]
     } else {
-        (
-            c + Vec2::new(0.0, s * 0.85),
+        vec![
             c + Vec2::new(-s, -s * 0.35),
+            c + Vec2::new(0.0, s * 0.85),
             c + Vec2::new(s, -s * 0.35),
-        )
+        ]
     };
-    ui.painter().add(Shape::closed_line(
-        vec![left, tip, right],
+    ui.painter()
+        .add(Shape::convex_polygon(tri, Color32::TRANSPARENT, stroke));
+}
+
+fn paint_grip_vertical(ui: &mut Ui, rect: Rect, color: Color32) {
+    let c = rect.center();
+    let r = rect.width() * 0.07;
+    let gap_x = rect.width() * 0.16;
+    let gap_y = rect.height() * 0.22;
+    for row in [-1.0_f32, 0.0, 1.0] {
+        for col in [-1.0_f32, 1.0] {
+            let p = c + Vec2::new(col * gap_x, row * gap_y);
+            ui.painter().circle_filled(p, r, color);
+        }
+    }
+}
+
+fn paint_trash(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width() * 0.26;
+    let lid_y = c.y - w * 0.55;
+    painter.line_segment([Pos2::new(c.x - w * 1.1, lid_y), Pos2::new(c.x + w * 1.1, lid_y)], stroke);
+    painter.line_segment(
+        [Pos2::new(c.x - w * 0.45, lid_y), Pos2::new(c.x - w * 0.45, lid_y - w * 0.55)],
         stroke,
-    ));
+    );
+    painter.line_segment(
+        [Pos2::new(c.x + w * 0.45, lid_y), Pos2::new(c.x + w * 0.45, lid_y - w * 0.55)],
+        stroke,
+    );
+    painter.rect_stroke(
+        Rect::from_center_size(c + Vec2::new(0.0, w * 0.35), Vec2::new(w * 1.7, w * 1.15)),
+        1.0,
+        stroke,
+        StrokeKind::Outside,
+    );
+    for dx in [-w * 0.35, 0.0, w * 0.35] {
+        painter.line_segment(
+            [Pos2::new(c.x + dx, lid_y + w * 0.15), Pos2::new(c.x + dx, c.y + w * 0.75)],
+            stroke,
+        );
+    }
 }
 
 fn paint_refresh(ui: &mut Ui, rect: Rect, color: Color32) {

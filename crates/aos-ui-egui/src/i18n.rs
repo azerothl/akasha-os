@@ -152,6 +152,12 @@ pub struct UiStrings {
     pub decl_layer_add: &'static str,
     pub decl_layer_remove: &'static str,
     pub decl_layer_visible: &'static str,
+    pub decl_layer_show: &'static str,
+    pub decl_layer_hide: &'static str,
+    pub decl_layer_move_up: &'static str,
+    pub decl_layer_move_down: &'static str,
+    pub decl_layer_delete: &'static str,
+    pub decl_layer_depth_hint: &'static str,
     pub decl_layer_drag_hint: &'static str,
     pub decl_undo: &'static str,
     pub decl_redo: &'static str,
@@ -1145,6 +1151,12 @@ const EN: UiStrings = UiStrings {
     decl_layer_add: "Add layer",
     decl_layer_remove: "Remove",
     decl_layer_visible: "Toggle visibility",
+    decl_layer_show: "Show",
+    decl_layer_hide: "Hide",
+    decl_layer_move_up: "Move up",
+    decl_layer_move_down: "Move down",
+    decl_layer_delete: "Delete",
+    decl_layer_depth_hint: "Layer depth",
     decl_layer_drag_hint: "Drag to reorder (click target row)",
     decl_undo: "Undo",
     decl_redo: "Redo",
@@ -2132,6 +2144,12 @@ const FR: UiStrings = UiStrings {
     decl_layer_add: "Ajouter un calque",
     decl_layer_remove: "Retirer",
     decl_layer_visible: "Basculer la visibilité",
+    decl_layer_show: "Afficher",
+    decl_layer_hide: "Masquer",
+    decl_layer_move_up: "Monter",
+    decl_layer_move_down: "Descendre",
+    decl_layer_delete: "Supprimer",
+    decl_layer_depth_hint: "Profondeur du calque",
     decl_layer_drag_hint: "Glisser pour réordonner (cliquer la ligne cible)",
     decl_undo: "Annuler",
     decl_redo: "Rétablir",
@@ -3283,6 +3301,38 @@ mod tests {
         assert_ne!(fr.tab_create, MODULE_NAME);
         assert_eq!(module_tab_label(&en, MODULE_NAME), Some(EN_APP_TITLE));
         assert_eq!(module_tab_label(&fr, MODULE_NAME), Some(FR_APP_TITLE));
+    }
+
+    #[test]
+    fn create_layer_list_controls_match_designer_cm_surface_lock() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.decl_layer_show, "Show");
+        assert_eq!(en.decl_layer_hide, "Hide");
+        assert_eq!(en.decl_layer_move_up, "Move up");
+        assert_eq!(en.decl_layer_move_down, "Move down");
+        assert_eq!(en.decl_layer_delete, "Delete");
+        assert_eq!(fr.decl_layer_show, "Afficher");
+        assert_eq!(fr.decl_layer_hide, "Masquer");
+        assert_eq!(fr.decl_layer_move_up, "Monter");
+        assert_eq!(fr.decl_layer_move_down, "Descendre");
+        assert_eq!(fr.decl_layer_delete, "Supprimer");
+        for label in [
+            en.decl_layer_show,
+            en.decl_layer_hide,
+            en.decl_layer_move_up,
+            en.decl_layer_move_down,
+            en.decl_layer_delete,
+            fr.decl_layer_show,
+            fr.decl_layer_hide,
+            fr.decl_layer_move_up,
+            fr.decl_layer_move_down,
+            fr.decl_layer_delete,
+        ] {
+            assert!(!label.contains("z0"), "{label}");
+            assert!(!label.contains("z4"), "{label}");
+            assert!(!label.contains("create."), "{label}");
+        }
     }
 
     #[test]

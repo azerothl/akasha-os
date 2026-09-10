@@ -577,11 +577,6 @@ pub fn ui_layer_list(
 
     for (idx, layer_id, name, visible) in row_meta.into_iter().rev() {
         ui.horizontal(|ui| {
-            // The stored vector is back-to-front, so the numeric z-index is
-            // also the value sent to the image model. Editing it directly is
-            // less ambiguous than relying only on drag-and-drop.
-            ui.label(format!("z{idx}"))
-                .on_hover_text("Index de profondeur : 0 = arrière-plan");
             let sel = selected == Some(layer_id);
             if ui.selectable_label(sel, &name).clicked() {
                 patch = Some(build_patch(
@@ -604,7 +599,7 @@ pub fn ui_layer_list(
                         .range(0..=max_z)
                         .speed(1),
                 )
-                .on_hover_text("Modifier le z-index")
+                .on_hover_text(t.decl_layer_depth_hint)
                 .changed()
             {
                 let target = target_z.clamp(0, max_z) as usize;
@@ -624,10 +619,13 @@ pub fn ui_layer_list(
                     ));
                 }
             }
-            let vis_label = widget_label_from_key(doc, language, "layer_visible")
-                .unwrap_or_else(|| t.decl_layer_visible.to_string());
+            let vis_tip = if visible {
+                t.decl_layer_hide
+            } else {
+                t.decl_layer_show
+            };
             if icons::visibility_toggle_button(ui, visible)
-                .on_hover_text(&vis_label)
+                .on_hover_text(vis_tip)
                 .clicked()
             {
                 push_undo(host, local_state, layers_key, selected_key, next_id_key);
@@ -648,7 +646,7 @@ pub fn ui_layer_list(
             }
             if idx + 1 < layers.len()
                 && icons::chevron_up_button(ui)
-                    .on_hover_text("Monter le calque (vers l’avant)")
+                    .on_hover_text(t.decl_layer_move_up)
                     .clicked()
             {
                 push_undo(host, local_state, layers_key, selected_key, next_id_key);
@@ -667,7 +665,7 @@ pub fn ui_layer_list(
             }
             if idx > 0
                 && icons::chevron_down_button(ui)
-                    .on_hover_text("Descendre le calque (vers l’arrière)")
+                    .on_hover_text(t.decl_layer_move_down)
                     .clicked()
             {
                 push_undo(host, local_state, layers_key, selected_key, next_id_key);
@@ -684,6 +682,29 @@ pub fn ui_layer_list(
                     "z_index",
                 ));
             }
+            if icons::layer_delete_button(ui)
+                .on_hover_text(t.decl_layer_delete)
+                .clicked()
+            {
+                push_undo(host, local_state, layers_key, selected_key, next_id_key);
+                layers.retain(|l| l.id != layer_id);
+                let new_selected = if selected == Some(layer_id) {
+                    layers.last().map(|l| l.id)
+                } else {
+                    selected
+                };
+                patch = Some(build_patch(
+                    layers_key,
+                    selected_key,
+                    next_id_key,
+                    &layers,
+                    new_selected,
+                    next_id,
+                    "",
+                    host,
+                    "remove",
+                ));
+            }
             if icons::move_vertical_button(ui)
                 .on_hover_text(t.decl_layer_drag_hint)
                 .clicked()
@@ -691,7 +712,11 @@ pub fn ui_layer_list(
                 reorder_from = Some(idx);
                 host.drag_layer_index = Some(idx);
             } else if let Some(from) = reorder_from {
-                if from != idx && icons::chevron_down_button(ui).clicked() {
+                if from != idx
+                    && icons::chevron_down_button(ui)
+                        .on_hover_text(t.decl_layer_move_down)
+                        .clicked()
+                {
                     push_undo(host, local_state, layers_key, selected_key, next_id_key);
                     reorder_layer(&mut layers, from, idx);
                     host.drag_layer_index = None;
