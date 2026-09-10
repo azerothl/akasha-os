@@ -4,10 +4,10 @@ use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
 
 /// English / French labels for each [`crate::prefs::UI_FONT_IDS`] entry.
 pub const UI_FONT_LABELS: [(&str, &str); 4] = [
-    ("System default", "Par défaut"),
+    ("Default", "Défaut"),
     ("Inter", "Inter"),
-    ("Source Sans 3", "Source Sans 3"),
-    ("Atkinson Hyperlegible", "Atkinson Hyperlegible"),
+    ("Source Sans", "Source Sans"),
+    ("Atkinson", "Atkinson"),
 ];
 
 pub fn ui_font_label(id: &str, fr: bool) -> &'static str {
@@ -78,8 +78,8 @@ mod tests {
 
     #[test]
     fn ui_font_label_respects_language() {
-        assert_eq!(ui_font_label("default", false), "System default");
-        assert_eq!(ui_font_label("default", true), "Par défaut");
+        assert_eq!(ui_font_label("default", false), "Default");
+        assert_eq!(ui_font_label("default", true), "Défaut");
         assert_eq!(ui_font_label("inter", true), "Inter");
     }
 }

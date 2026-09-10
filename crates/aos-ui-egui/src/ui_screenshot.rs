@@ -7,8 +7,26 @@
 
 use crate::prefs::save_preferences;
 use crate::{Tab, UiApp};
+use aos_proto::create_contract::MODULE_NAME;
+use aos_proto::ModuleInfo;
 use eframe::egui::{self, ColorImage, Event, UserData};
 use std::path::{Path, PathBuf};
+
+/// Ensure designer rail shots include primary tabs that depend on module list RPC.
+pub fn seed_screenshot_modules(app: &mut UiApp) {
+    if app.create_module_installed() {
+        return;
+    }
+    app.settings_ui.installed_modules.push(ModuleInfo {
+        name: MODULE_NAME.into(),
+        version: "0.1.0".into(),
+        granted_caps: Vec::new(),
+        tools: Vec::new(),
+        quarantined: false,
+        ui_mode: Some("declarative_ui".into()),
+        ui_title: None,
+    });
+}
 
 pub fn screenshot_dir_from_env() -> Option<PathBuf> {
     std::env::var("AOS_UI_SCREENSHOT_DIR")
@@ -74,6 +92,7 @@ impl UiScreenshotHarness {
 
         match self.step {
             0 => {
+                seed_screenshot_modules(app);
                 app.tab = Tab::Chat;
                 self.request(ctx, "01-rail-painted-icons-fr");
                 self.step = 1;
@@ -83,6 +102,8 @@ impl UiScreenshotHarness {
                 app.tab = Tab::Settings;
                 app.settings_ui.section = "me".into();
                 app.prefs.language = "fr".into();
+                app.prefs.ui_font = "default".into();
+                save_preferences(&app.prefs);
                 self.request(ctx, "02-settings-police-interface-default-fr");
                 self.step = 2;
                 self.settle_left = 3;

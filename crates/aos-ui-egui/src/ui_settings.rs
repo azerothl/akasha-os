@@ -160,7 +160,7 @@ impl UiApp {
             ui.heading(t.settings_me);
             egui::Grid::new("settings_me")
                 .num_columns(2)
-                .spacing([12.0, 8.0])
+                .spacing([12.0, 10.0])
                 .min_col_width(label_w)
                 .show(ui, |ui| {
                     ui.label(t.language);
@@ -323,7 +323,6 @@ impl UiApp {
                         ui.weak(t.settings_ui_font_preview_hint);
                     });
                     ui.end_row();
-                    ui.add_space(4.0);
 
                     ui.label(t.settings_density);
                     ui.horizontal(|ui| {
@@ -344,30 +343,38 @@ impl UiApp {
                     ui.end_row();
 
                     ui.label(t.settings_presentation);
-                    ui.horizontal_wrapped(|ui| {
-                        for (mode, label) in [
-                            (UiPresentationMode::Classic, t.settings_presentation_classic),
-                            (UiPresentationMode::Focus, t.settings_presentation_focus),
-                            (UiPresentationMode::Zen, t.settings_presentation_zen),
-                            (UiPresentationMode::Rail, t.settings_presentation_rail),
-                        ] {
-                            if ui
-                                .selectable_label(self.prefs.ui_presentation == mode, label)
-                                .on_hover_text(t.settings_presentation_hint)
-                                .clicked()
-                            {
-                                self.prefs.ui_presentation = mode;
-                                save_preferences(&self.prefs);
-                                self.status = t.settings_saved.into();
+                    let presentation_label = match self.prefs.ui_presentation {
+                        UiPresentationMode::Classic => t.settings_presentation_classic,
+                        UiPresentationMode::Focus => t.settings_presentation_focus,
+                        UiPresentationMode::Zen => t.settings_presentation_zen,
+                        UiPresentationMode::Rail => t.settings_presentation_rail,
+                    };
+                    egui::ComboBox::from_id_salt("prefs_presentation")
+                        .selected_text(presentation_label)
+                        .show_ui(ui, |ui| {
+                            for (mode, label) in [
+                                (UiPresentationMode::Classic, t.settings_presentation_classic),
+                                (UiPresentationMode::Focus, t.settings_presentation_focus),
+                                (UiPresentationMode::Zen, t.settings_presentation_zen),
+                                (UiPresentationMode::Rail, t.settings_presentation_rail),
+                            ] {
+                                if ui
+                                    .selectable_label(self.prefs.ui_presentation == mode, label)
+                                    .on_hover_text(t.settings_presentation_hint)
+                                    .clicked()
+                                {
+                                    self.prefs.ui_presentation = mode;
+                                    save_preferences(&self.prefs);
+                                    self.status = t.settings_saved.into();
+                                }
                             }
-                        }
-                    });
+                        });
                     ui.end_row();
 
                     ui.label(t.settings_auto_download_updates);
                     let mut auto_upd = self.prefs.auto_download_updates;
                     if ui
-                        .checkbox(&mut auto_upd, t.settings_auto_download_updates)
+                        .checkbox(&mut auto_upd, "")
                         .on_hover_text(t.settings_auto_download_updates_hint)
                         .changed()
                     {
