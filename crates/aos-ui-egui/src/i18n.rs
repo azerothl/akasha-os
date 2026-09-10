@@ -2356,7 +2356,7 @@ const FR: UiStrings = UiStrings {
     settings_pill_models: "Modèles",
     settings_pill_image: "Image",
     settings_pill_trust: "Confiance",
-    settings_pill_agent: "Agents",
+    settings_pill_agent: "Agent",
     settings_pill_web: "Web",
     settings_pill_secrets: "Secrets",
     settings_pill_catalogue: "Catalogue",
@@ -3244,10 +3244,23 @@ mod tests {
         let fr = strings("fr");
         assert_eq!(en.settings_search_label, "Search");
         assert_eq!(fr.settings_search_label, "Rechercher");
+        for (en_pill, fr_pill) in [
+            (en.settings_pill_models, fr.settings_pill_models),
+            (en.settings_pill_image, fr.settings_pill_image),
+            (en.settings_pill_agent, fr.settings_pill_agent),
+            (en.settings_pill_web, fr.settings_pill_web),
+        ] {
+            assert!(!en_pill.is_empty());
+            assert!(!fr_pill.is_empty());
+        }
         assert_eq!(en.settings_pill_models, "Models");
         assert_eq!(fr.settings_pill_models, "Modèles");
+        assert_eq!(en.settings_pill_image, "Image");
+        assert_eq!(fr.settings_pill_image, "Image");
         assert_eq!(en.settings_pill_agent, "Agent");
-        assert_eq!(fr.settings_pill_agent, "Agents");
+        assert_eq!(fr.settings_pill_agent, "Agent");
+        assert_eq!(en.settings_pill_web, "Web");
+        assert_eq!(fr.settings_pill_web, "Web");
         assert_eq!(en.settings_pill_all, "All");
         assert_eq!(fr.settings_pill_all, "Tout");
     }
