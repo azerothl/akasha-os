@@ -350,7 +350,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn lot5_native_image_studio_panel_removed() {
         let path = workspace_root().join("crates/aos-ui-egui/src/image_studio.rs");
         assert!(
@@ -371,6 +370,56 @@ mod tests {
                 "widget kind must not embed app name: {kind}"
             );
         }
+    }
+
+    #[test]
+    fn lot5_primary_rail_keeps_human_creer_label_not_module_id() {
+        let main_rs = workspace_root().join("crates/aos-ui-egui/src/main.rs");
+        let raw = std::fs::read_to_string(&main_rs)
+            .unwrap_or_else(|e| panic!("read {}: {e}", main_rs.display()));
+        assert!(
+            raw.contains("t.tab_create"),
+            "primary rail must paint human Créer/Create via tab_create, not module id"
+        );
+        assert!(
+            !raw.contains("Tab::Image"),
+            "lot 5 must not restore native Image Studio tab"
+        );
+    }
+
+    #[test]
+    fn lot5_host_renderer_has_no_app_name_branches() {
+        for rel in [
+            "crates/aos-ui-egui/src/decl_ui.rs",
+            "crates/aos-ui-egui/src/rich_composition_ui.rs",
+        ] {
+            let path = workspace_root().join(rel);
+            let raw = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            for forbidden in ["\"gallery-demo\"", "\"create\"", "create_studio"] {
+                assert!(
+                    !raw.contains(forbidden),
+                    "host renderer must not branch on {forbidden}: {}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn lot5_create_package_chrome_frozen() {
+        let doc = read_ui_document();
+        let fr = &doc.labels.as_ref().expect("create labels").fr;
+        assert_eq!(fr.get("app_title").map(String::as_str), Some(FR_APP_TITLE));
+        assert_eq!(fr.get("tab_params").map(String::as_str), Some(FR_TAB_PARAMS));
+        assert_eq!(fr.get("tab_preview").map(String::as_str), Some(FR_TAB_PREVIEW));
+        assert_eq!(fr.get("tab_history").map(String::as_str), Some(FR_TAB_HISTORY));
+        assert_eq!(fr.get("generate_label").map(String::as_str), Some(FR_GENERATE_LABEL));
+        assert_eq!(fr.get("save_label").map(String::as_str), Some(FR_SAVE_LABEL));
+        assert_eq!(
+            fr.get("history_restore").map(String::as_str),
+            Some(FR_RESTORE_LABEL)
+        );
     }
 
     #[test]
