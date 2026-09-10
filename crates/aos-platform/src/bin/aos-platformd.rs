@@ -697,8 +697,16 @@ async fn main() {
                         // desktop host may be closed overnight. Catch up on the first
                         // morning read so the feature does not depend on an external
                         // scheduler or a permanently running heartbeat.
-                        if aos_platform::skill_pass::should_run_morning_catch_up(
-                            &state, now, offset,
+                        let day_key = aos_platform::skill_pass::local_day_key(now, offset);
+                        if aos_platform::maintenance::daily_job_due(
+                            &state.last_pass_local_day_key,
+                            &day_key,
+                            now,
+                            offset,
+                            aos_platform::maintenance::DailyWindow {
+                                start_hour: aos_platform::skill_pass::MORNING_SURFACE_HOUR,
+                                end_hour_exclusive: None,
+                            },
                         ) {
                             let catch_up = SkillPassRequest {
                                 tz_offset_minutes: Some(offset),
@@ -4092,7 +4100,8 @@ async fn main() {
     }
 
     eprintln!("[aos-platformd] prêt");
-    // Daily memory sweep ticker (in-app scheduled pass).
+    // One maintenance heartbeat dispatches persistent, once-per-local-day jobs.
+    // Each job may be caught up on the next heartbeat after downtime.
     {
         let s = sub.clone();
         tokio::spawn(async move {
@@ -4105,57 +4114,53 @@ async fn main() {
                 let day_key = aos_platform::mem_sweep::local_day_key(now, offset);
                 let mem_dir = s.mem.lock().unwrap().dir().to_path_buf();
                 let state = aos_platform::mem_sweep::SweepState::load(&mem_dir);
-                if state.last_local_day_key == day_key {
-                    continue;
+                if aos_platform::maintenance::daily_job_due(
+                    &state.last_local_day_key,
+                    &day_key,
+                    now,
+                    offset,
+                    aos_platform::maintenance::ANY_TIME,
+                ) {
+                    eprintln!("[aos-platformd] mem sweep : démarrage jour {day_key}");
+                    let req = MemSweepRequest {
+                        tz_offset_minutes: Some(offset),
+                        model_id: None,
+                        persist: true,
+                        force: false,
+                    };
+                    match run_mem_sweep(&s, req).await {
+                        Ok(resp) => eprintln!(
+                            "[aos-platformd] mem sweep : {} sessions, {} stockés, {} relations",
+                            resp.sessions_scanned, resp.stored, resp.relations_created
+                        ),
+                        Err(e) => eprintln!("[aos-platformd] mem sweep erreur : {e}"),
+                    }
                 }
-                eprintln!("[aos-platformd] mem sweep : démarrage jour {day_key}");
-                let req = MemSweepRequest {
-                    tz_offset_minutes: Some(offset),
-                    model_id: None,
-                    persist: true,
-                    force: false,
-                };
-                match run_mem_sweep(&s, req).await {
-                    Ok(resp) => eprintln!(
-                        "[aos-platformd] mem sweep : {} sessions, {} stockés, {} relations",
-                        resp.sessions_scanned, resp.stored, resp.relations_created
-                    ),
-                    Err(e) => eprintln!("[aos-platformd] mem sweep erreur : {e}"),
-                }
-            }
-        });
-    }
-
-    // Nightly skill-pattern pass (Preview 0.15) — once per local night, no LLM spam.
-    {
-        let s = sub.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
-            interval.tick().await;
-            loop {
-                interval.tick().await;
-                let offset = aos_platform::mem_sweep::system_tz_offset_minutes();
-                let now = sweep_now_ms();
-                if !aos_platform::skill_pass::in_night_pass_window(now, offset) {
-                    continue;
-                }
-                let day_key = aos_platform::skill_pass::local_day_key(now, offset);
                 let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
                 let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
-                if state.last_pass_local_day_key == day_key {
-                    continue;
-                }
-                eprintln!("[aos-platformd] skill pass : démarrage nuit {day_key}");
-                let req = SkillPassRequest {
-                    tz_offset_minutes: Some(offset),
-                    force: false,
-                };
-                match run_skill_pass(&s, req).await {
-                    Ok(resp) => eprintln!(
-                        "[aos-platformd] skill pass : {} candidats, pending={:?}",
-                        resp.candidates_found, resp.pending_pattern_id
-                    ),
-                    Err(e) => eprintln!("[aos-platformd] skill pass erreur : {e}"),
+                let skill_day_key = aos_platform::skill_pass::local_day_key(now, offset);
+                if aos_platform::maintenance::daily_job_due(
+                    &state.last_pass_local_day_key,
+                    &skill_day_key,
+                    now,
+                    offset,
+                    aos_platform::maintenance::DailyWindow {
+                        start_hour: aos_platform::skill_pass::NIGHT_PASS_HOUR_START,
+                        end_hour_exclusive: Some(aos_platform::skill_pass::NIGHT_PASS_HOUR_END),
+                    },
+                ) {
+                    eprintln!("[aos-platformd] skill pass : démarrage nuit {skill_day_key}");
+                    let req = SkillPassRequest {
+                        tz_offset_minutes: Some(offset),
+                        force: false,
+                    };
+                    match run_skill_pass(&s, req).await {
+                        Ok(resp) => eprintln!(
+                            "[aos-platformd] skill pass : {} candidats, pending={:?}",
+                            resp.candidates_found, resp.pending_pattern_id
+                        ),
+                        Err(e) => eprintln!("[aos-platformd] skill pass erreur : {e}"),
+                    }
                 }
             }
         });

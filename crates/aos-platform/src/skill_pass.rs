@@ -103,18 +103,6 @@ pub fn past_morning_surface_hour(now_ms: u64, offset_minutes: i32) -> bool {
     local_hour(now_ms, offset_minutes) >= MORNING_SURFACE_HOUR
 }
 
-/// A morning brief must still be available when the host was closed during the
-/// overnight window. This makes the first morning read perform the missed,
-/// once-per-day analysis without duplicating a completed pass.
-pub fn should_run_morning_catch_up(
-    state: &SkillPassState,
-    now_ms: u64,
-    offset_minutes: i32,
-) -> bool {
-    past_morning_surface_hour(now_ms, offset_minutes)
-        && state.last_pass_local_day_key != local_day_key(now_ms, offset_minutes)
-}
-
 /// Collect user messages from sessions active within `[since_ms, now_ms)`.
 pub fn collect_user_messages(
     sessions: &[(ChatSessionMeta, Vec<ChatSessionMessage>)],
@@ -961,16 +949,6 @@ mod tests {
         assert!(in_night_pass_window(three_am, offset));
         let noon = midnight + 12 * 3_600_000;
         assert!(!in_night_pass_window(noon, offset));
-    }
-
-    #[test]
-    fn morning_read_catches_up_when_the_host_missed_the_night_window() {
-        let morning = 86_400_000u64 * 3 + 6 * 3_600_000;
-        let mut state = SkillPassState::default();
-        assert!(should_run_morning_catch_up(&state, morning, 0));
-
-        state.last_pass_local_day_key = local_day_key(morning, 0);
-        assert!(!should_run_morning_catch_up(&state, morning, 0));
     }
 
     #[test]
