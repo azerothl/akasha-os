@@ -3,6 +3,7 @@
 use aos_proto::decl_ui::{resolve_row_args, DeclUiDocument, DeclUiRowAction, DeclUiWidget};
 use aos_proto::rich_decl_ui::{eval_predicate, resolve_action_input, RichAction, RichJobHandle};
 use aos_proto::ModuleTool;
+use crate::rich_composition_ui::{patch_to_local_map, LayerCanvasHostState};
 use crate::rich_decl::{
     init_state_from_schema, ImageViewInteractionState, JobProgressThrottle, RichDeclSubscriptions,
 };
@@ -52,6 +53,7 @@ pub struct DeclUiPanelState {
     pub document_state: HashMap<String, Value>,
     pub subscriptions: RichDeclSubscriptions,
     pub image_views: HashMap<String, ImageViewInteractionState>,
+    pub layer_canvases: HashMap<String, LayerCanvasHostState>,
     pub job_throttle: JobProgressThrottle,
     pub form_fields: HashMap<String, String>,
     pub status: String,
@@ -88,6 +90,7 @@ impl DeclUiPanelState {
         self.subscriptions.clear();
         self.job_throttle.clear();
         self.image_views.clear();
+        self.layer_canvases.clear();
         self.binding_cache.clear();
     }
 
@@ -183,6 +186,7 @@ impl DeclUiPanelState {
                     &self.document_state,
                     &self.subscriptions,
                     &mut self.image_views,
+                    &mut self.layer_canvases,
                     &mut self.form_fields,
                     &self.tool_schemas,
                     self.pending_invoke,
@@ -202,6 +206,7 @@ impl DeclUiPanelState {
                 &self.document_state,
                 &self.subscriptions,
                 &mut self.image_views,
+                &mut self.layer_canvases,
                 &mut self.form_fields,
                 &self.tool_schemas,
                 self.pending_invoke,
@@ -223,6 +228,7 @@ impl DeclUiPanelState {
         document_state: &HashMap<String, Value>,
         subscriptions: &RichDeclSubscriptions,
         image_views: &mut HashMap<String, ImageViewInteractionState>,
+        layer_canvases: &mut HashMap<String, LayerCanvasHostState>,
         form_fields: &mut HashMap<String, String>,
         tool_schemas: &HashMap<String, Value>,
         pending_invoke: bool,
@@ -261,6 +267,7 @@ impl DeclUiPanelState {
                                         document_state,
                                         subscriptions,
                                         image_views,
+                                        layer_canvases,
                                         form_fields,
                                         tool_schemas,
                                         pending_invoke,
@@ -287,6 +294,7 @@ impl DeclUiPanelState {
                                 document_state,
                                 subscriptions,
                                 image_views,
+                                layer_canvases,
                                 form_fields,
                                 tool_schemas,
                                 pending_invoke,
@@ -541,6 +549,7 @@ impl DeclUiPanelState {
                                     document_state,
                                     subscriptions,
                                     image_views,
+                                    layer_canvases,
                                     form_fields,
                                     tool_schemas,
                                     pending_invoke,
@@ -572,6 +581,7 @@ impl DeclUiPanelState {
                                         document_state,
                                         subscriptions,
                                         image_views,
+                                        layer_canvases,
                                         form_fields,
                                         tool_schemas,
                                         pending_invoke,
@@ -591,6 +601,7 @@ impl DeclUiPanelState {
                                 document_state,
                                 subscriptions,
                                 image_views,
+                                layer_canvases,
                                 form_fields,
                                 tool_schemas,
                                 pending_invoke,
@@ -637,6 +648,7 @@ impl DeclUiPanelState {
                                 document_state,
                                 subscriptions,
                                 image_views,
+                                layer_canvases,
                                 form_fields,
                                 tool_schemas,
                                 pending_invoke,
@@ -774,6 +786,72 @@ impl DeclUiPanelState {
                         ui.weak(empty);
                     }
                 });
+            }
+            "layer_canvas" => {
+                let canvas_id = w
+                    .canvas_id
+                    .clone()
+                    .or_else(|| w.layers_key.clone())
+                    .unwrap_or_else(|| "layer_canvas".into());
+                let host = layer_canvases
+                    .entry(canvas_id.clone())
+                    .or_insert_with(LayerCanvasHostState::new);
+                if let Some(patch) = crate::rich_composition_ui::ui_layer_canvas(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                    host,
+                    &canvas_id,
+                ) {
+                    for (k, v) in patch_to_local_map(&patch) {
+                        actions.local_patch.insert(k, v);
+                    }
+                }
+            }
+            "layer_list" => {
+                let list_id = w
+                    .canvas_id
+                    .clone()
+                    .or_else(|| w.layers_key.clone())
+                    .unwrap_or_else(|| "layer_list".into());
+                let host = layer_canvases
+                    .entry(list_id)
+                    .or_insert_with(LayerCanvasHostState::new);
+                if let Some(patch) = crate::rich_composition_ui::ui_layer_list(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                    host,
+                ) {
+                    for (k, v) in patch_to_local_map(&patch) {
+                        actions.local_patch.insert(k, v);
+                    }
+                }
+            }
+            "undo_redo" => {
+                let canvas_id = w
+                    .canvas_id
+                    .clone()
+                    .unwrap_or_else(|| "layer_canvas".into());
+                let host = layer_canvases
+                    .entry(canvas_id)
+                    .or_insert_with(LayerCanvasHostState::new);
+                if let Some(patch) = crate::rich_composition_ui::ui_undo_redo(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                    host,
+                ) {
+                    for (k, v) in patch_to_local_map(&patch) {
+                        actions.local_patch.insert(k, v);
+                    }
+                }
             }
             _ => {
                 ui.colored_label(

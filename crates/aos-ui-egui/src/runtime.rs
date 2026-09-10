@@ -3688,7 +3688,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     total_steps: steps,
                 },
             );
-            let is_video = crate::image_studio::is_video_options(&options);
+            let is_video = crate::media_image_defaults::is_video_options(&options);
             let gen_bus = bus.clone();
             let gen_future = tokio::spawn(async move {
                 gen_bus

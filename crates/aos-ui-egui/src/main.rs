@@ -48,7 +48,8 @@ mod icons;
 mod image_composition;
 mod image_history;
 mod image_prompt;
-mod image_studio;
+mod media_image_defaults;
+mod rich_composition_ui;
 mod library_panel;
 mod media_event_controller;
 mod memory_controller;
@@ -538,8 +539,7 @@ struct UiApp {
     models_ui: models_ui_state::ModelsUiState,
     decl_panels: HashMap<String, decl_ui::DeclUiPanelState>,
     decl_md_cache: CommonMarkCache,
-    image_studio: image_studio::ImageStudioState,
-    image_generating: Option<image_studio::ImageGenUiState>,
+    image_generating: Option<media_image_defaults::ImageGenUiState>,
     show_go_to_palette: bool,
     spotlight_query: String,
     toasts: ui_primitives::Toasts,
@@ -830,7 +830,6 @@ impl UiApp {
             models_ui,
             decl_panels: HashMap::new(),
             decl_md_cache: CommonMarkCache::default(),
-            image_studio: image_studio::ImageStudioState::default(),
             image_generating: None,
             show_go_to_palette: false,
             spotlight_query: String::new(),
@@ -1302,7 +1301,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::MediaImage {
                     prompt: rest.to_string(),
                     model_id: self.prefs.default_image_model.clone(),
-                    options: image_studio::image_options_for_model(
+                    options: media_image_defaults::image_options_for_model(
                         self.prefs.default_image_model.as_deref(),
                         Some("balanced"),
                     ),

@@ -286,6 +286,24 @@ pub struct DeclUiWidget {
     /// Typed predicate AST for enablement (contract v2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<serde_json::Value>,
+    /// Layer array state key for `layer_canvas` / `layer_list` / `undo_redo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layers_key: Option<String>,
+    /// Selected layer id state key (number or null).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_key: Option<String>,
+    /// Next layer id counter for `layer_canvas` / `undo_redo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_id_key: Option<String>,
+    /// Host interaction id linking `undo_redo` to a `layer_canvas`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_id: Option<String>,
+    /// Frame aspect width for `layer_canvas` (default 16).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect_w: Option<u32>,
+    /// Frame aspect height for `layer_canvas` (default 9).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect_h: Option<u32>,
     /// When true, table renders rows without a header band.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_headers: Option<bool>,

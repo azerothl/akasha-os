@@ -54,6 +54,34 @@ interaction.  Not an expression language or script engine.
 
 `slider`, `number`, `progress`, `job`, `image_view`, `split`, `scroll`, `tabs`, `spacer`.
 
+### Composition widgets (lot 5+)
+
+`layer_canvas`, `layer_list`, `undo_redo` — generic layer stack editing without
+app-specific host branches.
+
+| Widget | Purpose |
+|--------|---------|
+| `layer_canvas` | Normalized frame (default 16:9) with selection, drag, resize; semantic `commit` events |
+| `layer_list` | Z-order list with visibility toggle and bounded reorder |
+| `undo_redo` | Toolbar bound to a `canvas_id`; host undo depth ≤ 32 |
+
+Local state keys (declared in the UI document):
+
+```json
+{
+  "layers": [{"id": 1, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.3, "label": "A", "visible": true, "locked": false}],
+  "selected_id": 1,
+  "next_id": 2
+}
+```
+
+Pointer moves stay host-local; at most `start` / `update` / `commit` / `cancel`
+interaction phases reach the module (same contract as `image_view` pan/zoom).
+Keyboard: **Ctrl+Z** undo, **Ctrl+Y** or **Ctrl+Shift+Z** redo when the canvas
+has focus. **macOS:** Cmd+Z/Cmd+Shift+Z are not mapped yet (documented gap).
+
+Sample: `gallery-demo` **Composition** tab exercises all three widgets.
+
 ### State slots
 
 ```json

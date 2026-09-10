@@ -79,6 +79,9 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "scroll",
     "tabs",
     "spacer",
+    "layer_canvas",
+    "layer_list",
+    "undo_redo",
 ];
 
 /// Maximum widget nodes in a single UI document tree.
