@@ -914,25 +914,28 @@ fn parse_composition_blocks(
 
 fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
     let options = &mut req.options;
+    // Native Create applies an aspect ratio to the current model dimensions;
+    // it does not replace them with a fixed 512/768 recipe. The declarative
+    // host synchronizes model/profile defaults, while this final guard keeps
+    // replayed actions faithful when a format is selected programmatically.
+    let base = options
+        .width
+        .unwrap_or(512)
+        .max(options.height.unwrap_or(512))
+        .clamp(256, 2048);
     match req.format_preset.as_deref() {
         Some("16:9") => {
-            options.width = Some(768);
-            options.height = Some(432);
+            options.width = Some(base);
+            options.height = Some((base * 9 / 16).max(64));
         }
         Some("9:16") => {
-            options.width = Some(432);
-            options.height = Some(768);
+            options.width = Some((base * 9 / 16).max(64));
+            options.height = Some(base);
         }
         Some("1:1") => {
-            options.width = Some(512);
-            options.height = Some(512);
+            options.width = Some(base);
+            options.height = Some(base);
         }
-        _ => {}
-    }
-    match req.quality_profile.as_deref() {
-        Some("fast") => options.steps = Some(12),
-        Some("balanced") => options.steps = Some(20),
-        Some("quality") => options.steps = Some(32),
         _ => {}
     }
     let camera = match req.camera_preset.as_deref() {
@@ -972,14 +975,19 @@ mod create_regression_tests {
     fn native_create_presets_keep_dimensions_and_steps() {
         for (format, expected) in [
             ("1:1", (512, 512)),
-            ("16:9", (768, 432)),
-            ("9:16", (432, 768)),
+            ("16:9", (512, 288)),
+            ("9:16", (288, 512)),
         ] {
             let mut req = MediaImageGenerateRequest {
                 prompt: "subject".into(),
                 path: None,
                 model_id: None,
-                options: Default::default(),
+                options: aos_proto::MediaImageOptions {
+                    width: Some(512),
+                    height: Some(512),
+                    steps: Some(24),
+                    ..Default::default()
+                },
                 generation_prompt: None,
                 enrich_prompt: false,
                 enhance_prompt_chat: false,
@@ -998,7 +1006,7 @@ mod create_regression_tests {
                 (req.options.width, req.options.height),
                 (Some(expected.0), Some(expected.1))
             );
-            assert_eq!(req.options.steps, Some(20));
+            assert_eq!(req.options.steps, Some(24));
         }
     }
 

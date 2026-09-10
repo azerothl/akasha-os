@@ -5258,12 +5258,77 @@ pub struct FilesGenerateResponse {
 // ---------------------------------------------------------------------------
 
 /// Closed sd.cpp option object (P09.3). Unknown keys are refused.
+fn deserialize_optional_f32<'de, D>(deserializer: D) -> Result<Option<f32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct OptionalF32Visitor;
+    impl<'de> serde::de::Visitor<'de> for OptionalF32Visitor {
+        type Value = Option<f32>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a number or null")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            struct NumberVisitor;
+            impl<'de> serde::de::Visitor<'de> for NumberVisitor {
+                type Value = f32;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    formatter.write_str("a numeric value")
+                }
+                fn visit_f32<E>(self, value: f32) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    Ok(value)
+                }
+                fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    Ok(value as f32)
+                }
+                fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    Ok(value as f32)
+                }
+                fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    Ok(value as f32)
+                }
+            }
+            deserializer.deserialize_any(NumberVisitor).map(Some)
+        }
+    }
+    // Declarative controls commonly serialize whole-number slider values
+    // (`7`) while the native panel emits floats (`7.0`). Accept both JSON and
+    // CBOR forms so a valid Create request is not rejected before modeld.
+    deserializer.deserialize_option(OptionalF32Visitor)
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct MediaImageOptions {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub steps: Option<u32>,
+    #[serde(deserialize_with = "deserialize_optional_f32")]
     pub cfg_scale: Option<f32>,
     pub seed: Option<i64>,
     pub sampling_method: Option<String>,
@@ -5276,6 +5341,7 @@ pub struct MediaImageOptions {
     #[serde(default)]
     pub loras: Vec<String>,
     /// Shared LoRA strength for all selected LoRAs (default 1.0).
+    #[serde(deserialize_with = "deserialize_optional_f32")]
     pub lora_scale: Option<f32>,
     /// Catalogue VAE id in `share/models/vae/` (single override).
     pub vae: Option<String>,
@@ -5294,6 +5360,7 @@ pub struct MediaImageOptions {
     /// sd.cpp `--stream-layers` (transformer blocks streamed; needs CPU params).
     pub stream_layers: Option<bool>,
     /// sd.cpp `--flow-shift` (flow-matching: Qwen Image, FLUX, Wan…).
+    #[serde(deserialize_with = "deserialize_optional_f32")]
     pub flow_shift: Option<f32>,
     /// sd.cpp `-M` mode (`img_gen`, `vid_gen`, …).
     pub sd_mode: Option<String>,
@@ -5312,6 +5379,7 @@ pub struct MediaImageOptions {
     /// Logical path of a final-frame image for engines supporting FL2V.
     pub end_image: Option<String>,
     /// img2img denoise strength 0..=1 (sd.cpp `--strength`; default ~0.75 when init set).
+    #[serde(deserialize_with = "deserialize_optional_f32")]
     pub strength: Option<f32>,
     /// Logical path of an inpaint mask PNG (`/downloads/...`; white = regenerate region).
     pub mask_image: Option<String>,
@@ -5461,6 +5529,17 @@ mod media_option_tests {
         )
         .unwrap();
         assert_eq!(o.mask_image.as_deref(), Some("/downloads/mask.png"));
+    }
+
+    #[test]
+    fn image_options_accept_integer_float_controls_from_declarative_ui() {
+        let o: MediaImageOptions =
+            serde_json::from_str(r#"{"cfg_scale":7,"lora_scale":1,"flow_shift":3,"strength":1}"#)
+                .unwrap();
+        assert_eq!(o.cfg_scale, Some(7.0));
+        assert_eq!(o.lora_scale, Some(1.0));
+        assert_eq!(o.flow_shift, Some(3.0));
+        assert_eq!(o.strength, Some(1.0));
     }
 }
 

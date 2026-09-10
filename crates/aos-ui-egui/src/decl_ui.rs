@@ -61,6 +61,10 @@ pub struct DeclUiPanelState {
     pub pending_invoke: bool,
     pub pending_refresh_binds: Vec<String>,
     pub pending_clear_form_keys: Vec<String>,
+    /// Last Create model/profile pair for which native generation defaults
+    /// were applied. Kept outside declarative state so manual edits are not
+    /// overwritten on every frame.
+    pub create_preset_key: String,
 }
 
 impl DeclUiPanelState {
@@ -73,6 +77,7 @@ impl DeclUiPanelState {
 
     pub fn set_document(&mut self, doc: DeclUiDocument) {
         self.error.clear();
+        self.create_preset_key.clear();
         self.contract = doc.contract.unwrap_or(1);
         if let Some(state) = &doc.state {
             let (local, document) = init_state_from_schema(state);
