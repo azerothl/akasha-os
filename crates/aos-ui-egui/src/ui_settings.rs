@@ -46,23 +46,24 @@ impl UiApp {
         crate::ui_primitives::search_field(
             ui,
             &mut self.settings_ui.search,
+            t.settings_search_label,
             t.settings_search_hint,
+            t.search_field_clear,
         );
         // P1 pagination lite : 850 lignes en un scroll -> pills de sections.
         // Recherche non vide = filtre global historique ; sinon une seule section.
-        let fr = self.prefs.language == "fr";
         let sections: [(&str, &str); 11] = [
-            ("all", if fr { "Tout" } else { "All" }),
-            ("me", if fr { "Moi" } else { "Me" }),
-            ("models", "Models"),
-            ("image", "Image"),
-            ("trust", if fr { "Confiance" } else { "Trust" }),
-            ("agent", "Agent"),
-            ("web", "Web"),
-            ("secrets", "Secrets"),
-            ("catalogue", "Catalogue"),
-            ("schedule", if fr { "Planif" } else { "Schedule" }),
-            ("backup", if fr { "Sauvegarde" } else { "Backup" }),
+            ("all", t.settings_pill_all),
+            ("me", t.settings_pill_me),
+            ("models", t.settings_pill_models),
+            ("image", t.settings_pill_image),
+            ("trust", t.settings_pill_trust),
+            ("agent", t.settings_pill_agent),
+            ("web", t.settings_pill_web),
+            ("secrets", t.settings_pill_secrets),
+            ("catalogue", t.settings_pill_catalogue),
+            ("schedule", t.settings_pill_schedule),
+            ("backup", t.settings_pill_backup),
         ];
         ui.horizontal_wrapped(|ui| {
             for (id, label) in sections {

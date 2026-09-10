@@ -51,11 +51,17 @@ pub fn danger_confirm_button(
     false
 }
 
-/// Champ recherche style `search-input` : icône loupe (texte), clear 28px,
+/// Champ recherche style `search-input` : label localisé, clear 28px,
 /// `Escape` vide sans fermer la palette parente (le parent gère Escape).
-pub fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str) -> egui::Response {
+pub fn search_field(
+    ui: &mut egui::Ui,
+    text: &mut String,
+    label: &str,
+    hint: &str,
+    clear_hover: &str,
+) -> egui::Response {
     ui.horizontal(|ui| {
-        ui.weak("Search");
+        ui.weak(label);
         let resp = ui.add_sized(
             egui::vec2(
                 (ui.available_width() - crate::theme::ICON_HIT - 8.0).max(120.0),
@@ -69,7 +75,7 @@ pub fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str) -> egui::R
         }
         if !text.is_empty() {
             if crate::icons::close_button(ui)
-                .on_hover_text("Clear")
+                .on_hover_text(clear_hover)
                 .clicked()
             {
                 text.clear();

@@ -278,11 +278,13 @@ impl UiApp {
             crate::ui_primitives::search_field(
                 ui,
                 &mut self.security_ui.audit_search,
+                t.settings_search_label,
                 if fr {
                     "Acteur, action, cible, trace…"
                 } else {
                     "Actor, action, target, trace…"
                 },
+                t.search_field_clear,
             );
         });
         ui.horizontal_wrapped(|ui| {
