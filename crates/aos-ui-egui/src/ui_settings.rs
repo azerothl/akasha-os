@@ -313,6 +313,18 @@ impl UiApp {
                         });
                     ui.end_row();
 
+                    ui.label(t.settings_ui_font_preview_label);
+                    ui.vertical(|ui| {
+                        ui.label(
+                            egui::RichText::new(t.settings_ui_font_preview)
+                                .size(15.0)
+                                .strong(),
+                        );
+                        ui.weak(t.settings_ui_font_preview_hint);
+                    });
+                    ui.end_row();
+                    ui.add_space(4.0);
+
                     ui.label(t.settings_density);
                     ui.horizontal(|ui| {
                         for (density, label) in [

@@ -107,6 +107,7 @@ mod ui_models;
 mod ui_primitives;
 mod ui_providers;
 mod ui_scenarios;
+mod ui_screenshot;
 mod ui_security;
 mod ui_settings;
 mod ui_workspace;
@@ -551,6 +552,7 @@ struct UiApp {
     drafts_last_flush: std::time::Instant,
     guide: guide::GuideState,
     research_ui: research_ui_state::ResearchUiState,
+    screenshot: Option<ui_screenshot::UiScreenshotHarness>,
 }
 
 const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
@@ -749,8 +751,13 @@ impl UiApp {
         if prefs.language.is_empty() {
             prefs.language = onboarding.language.clone();
         }
-        let show_onboarding = !onboarding.completed;
-        let t = i18n::strings(&prefs.language);
+        let show_onboarding = !onboarding.completed
+            && ui_screenshot::screenshot_dir_from_env().is_none();
+        let screenshot = ui_screenshot::screenshot_dir_from_env()
+            .map(ui_screenshot::UiScreenshotHarness::new);
+        if screenshot.is_some() {
+            prefs.language = "fr".into();
+        }
         let _ = cmd_tx.send(Cmd::SessionBootstrap);
         let _ = cmd_tx.send(Cmd::SkillPassPending);
         let _ = cmd_tx.send(Cmd::CatalogueRefresh);
@@ -785,6 +792,7 @@ impl UiApp {
         let mut models_ui = models_ui_state::ModelsUiState::with_updates_msg(model_updates_msg);
         // S7.3 : dernière activité modèles (persistée).
         models_ui.model_usage = models_disk::load_usage();
+        let t = i18n::strings(&prefs.language);
         let intro = format!(
             "{}\n\
              Sessions / Memory / Network opt-in.\n\
@@ -843,6 +851,7 @@ impl UiApp {
             drafts_last_flush: std::time::Instant::now(),
             guide: guide::GuideState::default(),
             research_ui: research_ui_state::ResearchUiState::default(),
+            screenshot,
         }
     }
 
@@ -3504,6 +3513,13 @@ impl eframe::App for UiApp {
             // no longer receive the full central-panel height.
             Tab::Module(name) => self.ui_decl_module(ui, &name),
         });
+
+        let mut shot = self.screenshot.take();
+        if let Some(h) = shot.as_mut() {
+            h.drain_events(ctx);
+            h.tick(self, ctx);
+        }
+        self.screenshot = shot;
     }
 }
 
