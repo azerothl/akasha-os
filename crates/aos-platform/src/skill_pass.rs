@@ -103,6 +103,18 @@ pub fn past_morning_surface_hour(now_ms: u64, offset_minutes: i32) -> bool {
     local_hour(now_ms, offset_minutes) >= MORNING_SURFACE_HOUR
 }
 
+/// A morning brief must still be available when the host was closed during the
+/// overnight window. This makes the first morning read perform the missed,
+/// once-per-day analysis without duplicating a completed pass.
+pub fn should_run_morning_catch_up(
+    state: &SkillPassState,
+    now_ms: u64,
+    offset_minutes: i32,
+) -> bool {
+    past_morning_surface_hour(now_ms, offset_minutes)
+        && state.last_pass_local_day_key != local_day_key(now_ms, offset_minutes)
+}
+
 /// Collect user messages from sessions active within `[since_ms, now_ms)`.
 pub fn collect_user_messages(
     sessions: &[(ChatSessionMeta, Vec<ChatSessionMessage>)],
@@ -450,10 +462,10 @@ fn infer_labels(messages: &[String]) -> (String, String) {
         return ("calculations".into(), "calculs".into());
     }
     if joined.contains("note") || joined.contains("notes") {
-        return ("notes".into(), "notes".into());
+        return ("note management".into(), "gestion des notes".into());
     }
     if joined.contains("task") || joined.contains("tâche") || joined.contains("tache") {
-        return ("tasks".into(), "tâches".into());
+        return ("task management".into(), "gestion des tâches".into());
     }
     if joined.contains("module") {
         let development = [
@@ -678,9 +690,11 @@ pub fn surface_card_title(label: &str) -> String {
 
 pub fn surface_card_mute_line(lang: &str) -> String {
     if lang.starts_with("fr") {
-        "Tu demandes souvent ça. Je peux en faire une skill.".to_string()
+        "Créer ajoute une recette réutilisable pour ce type de demande. Rien ne s’exécute automatiquement."
+            .to_string()
     } else {
-        "You ask for this often. I can turn it into a skill.".to_string()
+        "Creating adds a reusable recipe for this kind of request. Nothing runs automatically."
+            .to_string()
     }
 }
 
@@ -823,6 +837,20 @@ mod tests {
     }
 
     #[test]
+    fn note_offer_names_the_reusable_workflow_not_just_the_object() {
+        let messages = vec![
+            "Crée une note de réunion".into(),
+            "Ajoute une note avec mes idées".into(),
+            "Retrouve mes notes de projet".into(),
+        ];
+        let candidates = find_pattern_candidates(&messages, MIN_PATTERN_HITS);
+        let best = candidates.first().expect("note candidate");
+        assert_eq!(best.label_en, "note management");
+        assert_eq!(best.label_fr, "gestion des notes");
+        assert_eq!(best.hit_count, 3);
+    }
+
+    #[test]
     fn legacy_generic_action_offer_is_not_surfaced() {
         let now = 86_400_000u64 * 2 + 6 * 3_600_000;
         let mut candidate = build_candidate(&MessageCluster {
@@ -863,8 +891,14 @@ mod tests {
     fn card_copy_en_fr_no_json() {
         let en = surface_card_mute_line("en");
         let fr = surface_card_mute_line("fr");
-        assert_eq!(en, "You ask for this often. I can turn it into a skill.");
-        assert_eq!(fr, "Tu demandes souvent ça. Je peux en faire une skill.");
+        assert_eq!(
+            en,
+            "Creating adds a reusable recipe for this kind of request. Nothing runs automatically."
+        );
+        assert_eq!(
+            fr,
+            "Créer ajoute une recette réutilisable pour ce type de demande. Rien ne s’exécute automatiquement."
+        );
         assert!(!en.contains('{'));
         assert!(!fr.contains('{'));
         assert!(!en.contains("pat-"));
@@ -927,6 +961,16 @@ mod tests {
         assert!(in_night_pass_window(three_am, offset));
         let noon = midnight + 12 * 3_600_000;
         assert!(!in_night_pass_window(noon, offset));
+    }
+
+    #[test]
+    fn morning_read_catches_up_when_the_host_missed_the_night_window() {
+        let morning = 86_400_000u64 * 3 + 6 * 3_600_000;
+        let mut state = SkillPassState::default();
+        assert!(should_run_morning_catch_up(&state, morning, 0));
+
+        state.last_pass_local_day_key = local_day_key(morning, 0);
+        assert!(!should_run_morning_catch_up(&state, morning, 0));
     }
 
     #[test]

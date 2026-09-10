@@ -693,12 +693,32 @@ async fn main() {
                         let now = sweep_now_ms();
                         let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
                         let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+                        // The daemon's night ticker is deliberately best-effort: the
+                        // desktop host may be closed overnight. Catch up on the first
+                        // morning read so the feature does not depend on an external
+                        // scheduler or a permanently running heartbeat.
+                        if aos_platform::skill_pass::should_run_morning_catch_up(
+                            &state, now, offset,
+                        ) {
+                            let catch_up = SkillPassRequest {
+                                tz_offset_minutes: Some(offset),
+                                force: false,
+                            };
+                            if let Err(e) = run_skill_pass(&s, catch_up).await {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                                return;
+                            }
+                        }
+                        let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
                         let offer =
                             aos_platform::skill_pass::pending_surface_offer(&state, now, offset)
                                 .map(|c| SkillPassPendingOffer {
                                     pattern_id: c.pattern_id.clone(),
                                     label_en: c.label_en.clone(),
                                     label_fr: c.label_fr.clone(),
+                                    hit_count: c.hit_count,
                                 });
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &offer).await;
                     }

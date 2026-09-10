@@ -1933,7 +1933,7 @@ const EN: UiStrings = UiStrings {
     skill_offer_later: "Later",
     skill_offer_created: "Created",
     skill_offer_dismissed: "Later",
-    skill_offer_mute: "You ask for this often. I can turn it into a skill.",
+    skill_offer_mute: "Creating adds a reusable recipe for this kind of request. Nothing runs automatically.",
     skill_offer_create_failed: "The skill could not be created. You can try again.",
     research_choice_prompt: "I can answer here, or prepare a document.",
     research_choice_answer: "Reply",
@@ -2915,7 +2915,7 @@ const FR: UiStrings = UiStrings {
     skill_offer_later: "Plus tard",
     skill_offer_created: "Créée",
     skill_offer_dismissed: "Plus tard",
-    skill_offer_mute: "Tu demandes souvent ça. Je peux en faire une skill.",
+    skill_offer_mute: "Créer ajoute une recette réutilisable pour ce type de demande. Rien ne s’exécute automatiquement.",
     skill_offer_create_failed: "La skill n’a pas pu être créée. Vous pouvez réessayer.",
     research_choice_prompt: "Je peux répondre ici, ou préparer un document.",
     research_choice_answer: "Répondre",
@@ -3458,11 +3458,11 @@ mod tests {
         let fr = strings("fr");
         assert_eq!(
             en.skill_offer_mute,
-            "You ask for this often. I can turn it into a skill."
+            "Creating adds a reusable recipe for this kind of request. Nothing runs automatically."
         );
         assert_eq!(
             fr.skill_offer_mute,
-            "Tu demandes souvent ça. Je peux en faire une skill."
+            "Créer ajoute une recette réutilisable pour ce type de demande. Rien ne s’exécute automatiquement."
         );
         assert_ne!(en.skill_offer_mute, fr.skill_offer_mute);
         assert_ne!(en.skill_offer_create, fr.skill_offer_create);

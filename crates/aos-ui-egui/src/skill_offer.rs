@@ -46,6 +46,7 @@ pub fn render_skill_offer_card(
         pattern_id,
         label_en,
         label_fr,
+        hit_count,
         state,
     } = att
     else {
@@ -53,7 +54,11 @@ pub fn render_skill_offer_card(
     };
 
     let label = label_for_lang(label_en, label_fr, lang);
-    let title = label.trim().to_string();
+    let title = if lang.starts_with("fr") {
+        format!("Skill proposée : {}", label.trim())
+    } else {
+        format!("Suggested skill: {}", label.trim())
+    };
 
     egui::Frame::new()
         .fill(ui.visuals().widgets.inactive.bg_fill)
@@ -61,6 +66,22 @@ pub fn render_skill_offer_card(
         .show(ui, |ui| {
             ui.label(egui::RichText::new(title).strong());
             ui.add_space(4.0);
+            let evidence = if lang.starts_with("fr") {
+                format!(
+                    "Repérée dans {} demande{} récente{}.",
+                    hit_count,
+                    if *hit_count > 1 { "s" } else { "" },
+                    if *hit_count > 1 { "s" } else { "" },
+                )
+            } else {
+                format!(
+                    "Detected in {} recent request{}.",
+                    hit_count,
+                    if *hit_count == 1 { "" } else { "s" },
+                )
+            };
+            ui.label(egui::RichText::new(evidence).weak());
+            ui.add_space(2.0);
             let mute = match state.as_str() {
                 "pending" => t.skill_offer_mute,
                 "created" => t.skill_offer_created,
@@ -99,11 +120,11 @@ mod tests {
         let t_fr = i18n::strings("fr");
         assert_eq!(
             t_en.skill_offer_mute,
-            "You ask for this often. I can turn it into a skill."
+            "Creating adds a reusable recipe for this kind of request. Nothing runs automatically."
         );
         assert_eq!(
             t_fr.skill_offer_mute,
-            "Tu demandes souvent ça. Je peux en faire une skill."
+            "Créer ajoute une recette réutilisable pour ce type de demande. Rien ne s’exécute automatiquement."
         );
         assert!(!t_en.skill_offer_mute.contains('{'));
         assert!(!t_fr.skill_offer_mute.contains('{'));
@@ -152,6 +173,7 @@ mod tests {
                 pattern_id: "pat-old".into(),
                 label_en: "create".into(),
                 label_fr: "crée".into(),
+                hit_count: 3,
                 state: "pending".into(),
             }],
             speaker_id: None,
@@ -172,6 +194,7 @@ mod tests {
                 pattern_id: pattern_id.into(),
                 label_en: "weather".into(),
                 label_fr: "météo".into(),
+                hit_count: 3,
                 state: state.into(),
             }],
             speaker_id: None,

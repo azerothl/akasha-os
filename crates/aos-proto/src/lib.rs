@@ -4445,11 +4445,15 @@ pub enum ChatAttachment {
         #[serde(default = "default_agent_act_state")]
         state: String,
     },
-    /// Morning skill suggestion (Preview 0.15) — human label only in thread.
+    /// Morning skill suggestion (Preview 0.15), with enough context to decide
+    /// whether the recurring pattern merits a reusable skill.
     SkillOffer {
         pattern_id: String,
         label_en: String,
         label_fr: String,
+        /// Number of recent user requests grouped into this suggestion.
+        #[serde(default)]
+        hit_count: u32,
         /// `pending` | `created` | `dismissed`
         #[serde(default = "default_skill_offer_state")]
         state: String,
@@ -5051,12 +5055,14 @@ pub struct SkillPassResponse {
     pub last_pass_ms: u64,
 }
 
-/// `skill.pass.pending` — morning card offer (human labels only).
+/// `skill.pass.pending` — morning card offer with the evidence count used for it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct SkillPassPendingOffer {
     pub pattern_id: String,
     pub label_en: String,
     pub label_fr: String,
+    #[serde(default)]
+    pub hit_count: u32,
 }
 
 /// `skill.pass.dismiss` — Later on the morning card.
