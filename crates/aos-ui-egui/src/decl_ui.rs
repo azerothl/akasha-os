@@ -389,10 +389,30 @@ impl DeclUiPanelState {
                 }
             }
             "select" => {
-                render_choice(ui, w, form_fields, false);
+                render_choice(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    binding_cache,
+                    local_state,
+                    form_fields,
+                    false,
+                    actions,
+                );
             }
             "radio" => {
-                render_choice(ui, w, form_fields, true);
+                render_choice(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    binding_cache,
+                    local_state,
+                    form_fields,
+                    true,
+                    actions,
+                );
             }
             "checkbox" => {
                 let key = w
@@ -779,6 +799,17 @@ impl DeclUiPanelState {
                             if scroll.abs() > 0.0 {
                                 view.zoom = (view.zoom + scroll * 0.001).clamp(0.2, 8.0);
                             }
+                        }
+                    } else if !path.is_empty() && is_video_preview_path(&path) {
+                        if let Some(heading) = widget_text(w, doc, language) {
+                            ui.label(heading);
+                        }
+                        ui.weak(&path);
+                        if let Some(info) = crate::chat_media::inspect_media(&path) {
+                            ui.weak(info);
+                        }
+                        if ui.button(t.studio_open_file).clicked() {
+                            let _ = open_host_path(&path);
                         }
                     } else {
                         let empty = widget_text_from_key(w.empty_label_key.as_deref(), doc, language)
@@ -1615,33 +1646,159 @@ fn render_scatter(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
         });
 }
 
+fn is_video_preview_path(path: &str) -> bool {
+    path.rsplit('.')
+        .next()
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "webm" | "avi" | "mp4"))
+}
+
+fn resolve_items_from_key(
+    w: &DeclUiWidget,
+    doc: &DeclUiDocument,
+    language: &str,
+    binding_cache: &HashMap<String, Value>,
+    local_state: &HashMap<String, Value>,
+) -> Vec<(String, String)> {
+    if let Some(binding_id) = &w.binding {
+        let key = w
+            .items_from_key
+            .as_deref()
+            .and_then(|k| k.strip_prefix("$local."))
+            .and_then(|k| local_state.get(k).and_then(|v| v.as_str()));
+        let val = binding_cache.get(binding_id).cloned().unwrap_or(Value::Null);
+        let slice = if let Some(k) = key {
+            val.get(k).cloned().unwrap_or(Value::Null)
+        } else if let Some(source) = &w.source {
+            val.pointer(source).cloned().unwrap_or(val)
+        } else {
+            val
+        };
+        if let Some(arr) = slice.as_array() {
+            let mut out = Vec::new();
+            for row in arr {
+                if let Some(s) = row.as_str() {
+                    out.push((s.to_string(), s.to_string()));
+                    continue;
+                }
+                if let Some(id) = row.get("id").and_then(|v| v.as_str()) {
+                    let label = row
+                        .get("label")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(id)
+                        .to_string();
+                    out.push((id.to_string(), label));
+                }
+            }
+            return out;
+        }
+    }
+    let items = w.items.clone().unwrap_or_default();
+    let label_keys = w.item_label_keys.clone().unwrap_or_default();
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(i, value)| {
+            let label = label_keys
+                .get(i)
+                .and_then(|k| widget_text_from_key(Some(k.as_str()), doc, language))
+                .unwrap_or_else(|| value.clone());
+            (value, label)
+        })
+        .collect()
+}
+
 fn render_choice(
     ui: &mut Ui,
     w: &DeclUiWidget,
+    doc: &DeclUiDocument,
+    language: &str,
+    binding_cache: &HashMap<String, Value>,
+    local_state: &HashMap<String, Value>,
     form_fields: &mut HashMap<String, String>,
     radio: bool,
+    actions: &mut DeclUiActions,
 ) {
+    let items = resolve_items_from_key(w, doc, language, binding_cache, local_state);
+    if items.is_empty() {
+        return;
+    }
+    let heading = widget_text(w, doc, language);
+    if let Some(state_key) = &w.state_key {
+        let mut current = local_state
+            .get(state_key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if current.is_empty() {
+            current = items.first().map(|(v, _)| v.clone()).unwrap_or_default();
+        }
+        if radio {
+            if let Some(label) = heading {
+                ui.label(label);
+            }
+            ui.horizontal(|ui| {
+                ui.set_min_width(0.0);
+                for (value, label) in &items {
+                    let selected = current == *value;
+                    if ui.selectable_label(selected, label).clicked() && !selected {
+                        actions
+                            .local_patch
+                            .insert(state_key.clone(), Value::String(value.clone()));
+                    }
+                }
+            });
+        } else {
+            let display = items
+                .iter()
+                .find(|(v, _)| v == &current)
+                .map(|(_, l)| l.clone())
+                .unwrap_or_else(|| current.clone());
+            let id = format!("select-{}-{}", state_key, w.label_key.as_deref().unwrap_or(""));
+            egui::ComboBox::from_id_salt(id)
+                .selected_text(display)
+                .show_ui(ui, |ui| {
+                    if let Some(label) = heading.as_ref() {
+                        ui.label(label);
+                    }
+                    for (value, label) in &items {
+                        if ui
+                            .selectable_label(current == *value, label)
+                            .clicked()
+                        {
+                            actions
+                                .local_patch
+                                .insert(state_key.clone(), Value::String(value.clone()));
+                        }
+                    }
+                });
+        }
+        return;
+    }
     let key = w
         .label
         .clone()
         .or_else(|| w.text.clone())
         .unwrap_or_else(|| "choice".into());
-    let items = w.items.clone().unwrap_or_default();
     form_fields
         .entry(key.clone())
-        .or_insert_with(|| items.first().cloned().unwrap_or_default());
+        .or_insert_with(|| items.first().map(|(v, _)| v.clone()).unwrap_or_default());
     if radio {
         ui.label(&key);
-        for item in &items {
-            ui.radio_value(form_fields.get_mut(&key).unwrap(), item.clone(), item);
+        for (value, label) in &items {
+            ui.radio_value(form_fields.get_mut(&key).unwrap(), value.clone(), label);
         }
     } else {
         let cur = form_fields.get(&key).cloned().unwrap_or_default();
+        let display = items
+            .iter()
+            .find(|(v, _)| v == &cur)
+            .map(|(_, l)| l.clone())
+            .unwrap_or_else(|| cur.clone());
         egui::ComboBox::from_id_salt(format!("select-{key}"))
-            .selected_text(&cur)
+            .selected_text(display)
             .show_ui(ui, |ui| {
-                for item in &items {
-                    ui.selectable_value(form_fields.get_mut(&key).unwrap(), item.clone(), item);
+                for (value, label) in &items {
+                    ui.selectable_value(form_fields.get_mut(&key).unwrap(), value.clone(), label);
                 }
             });
     }

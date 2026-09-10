@@ -10,14 +10,25 @@
       "tab_params": "Parameters",
       "tab_preview": "Preview",
       "tab_history": "History",
+      "mode_image": "Image",
+      "mode_video": "Video",
+      "image_pack_label": "Default image pack",
+      "video_pack_label": "Video pack",
       "prompt_label": "Prompt",
+      "negative_label": "Negative prompt",
       "width_label": "Width",
       "height_label": "Height",
       "steps_label": "Steps",
+      "video_duration_label": "Duration",
+      "video_duration_2s": "2s",
+      "video_duration_3s": "3s",
+      "video_duration_4s": "4s",
+      "video_fps_label": "Frames/s",
       "generate_label": "Generate",
       "save_label": "Save image",
       "job_label": "Generation",
       "preview_empty": "No image yet — enter a prompt and generate.",
+      "preview_empty_video": "No clip yet — enter a prompt and generate.",
       "history_restore": "Restore",
       "history_prompt": "Prompt",
       "history_when": "When",
@@ -28,14 +39,25 @@
       "tab_params": "Paramètres",
       "tab_preview": "Aperçu",
       "tab_history": "Historique",
+      "mode_image": "Image",
+      "mode_video": "Vidéo",
+      "image_pack_label": "Pack image par défaut",
+      "video_pack_label": "Pack vidéo",
       "prompt_label": "Invite",
+      "negative_label": "Prompt négatif",
       "width_label": "Largeur",
       "height_label": "Hauteur",
       "steps_label": "Étapes",
+      "video_duration_label": "Durée",
+      "video_duration_2s": "2s",
+      "video_duration_3s": "3s",
+      "video_duration_4s": "4s",
+      "video_fps_label": "Images/s",
       "generate_label": "Générer",
       "save_label": "Enregistrer l'image",
       "job_label": "Génération",
       "preview_empty": "Pas encore d'image — saisissez une invite et générez.",
+      "preview_empty_video": "Pas encore de clip — saisissez une invite et générez.",
       "history_restore": "Restaurer",
       "history_prompt": "Invite",
       "history_when": "Date",
@@ -44,11 +66,16 @@
   },
   "state": {
     "local": {
+      "media_mode": { "type": "string", "default": "image" },
+      "model_id": { "type": "string", "default": "local:sd-v1-5" },
       "prompt": { "type": "string", "default": "" },
+      "negative_prompt": { "type": "string", "default": "" },
       "result_path": { "type": "string", "default": "" },
       "width": { "type": "number", "default": 512 },
       "height": { "type": "number", "default": 512 },
-      "steps": { "type": "number", "default": 20 }
+      "steps": { "type": "number", "default": 20 },
+      "video_frames": { "type": "number", "default": 49 },
+      "video_fps": { "type": "number", "default": 24 }
     }
   },
   "bindings": [
@@ -61,18 +88,42 @@
       "id": "history",
       "tool": "create.history.list",
       "target": "/items"
+    },
+    {
+      "id": "models",
+      "tool": "create.models.list"
     }
   ],
   "actions": [
     {
-      "id": "generate",
+      "id": "generate_image",
       "service": "media.image.generate",
       "input": {
         "prompt": "$local.prompt",
+        "model_id": "$local.model_id",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
-          "steps": "$local.steps"
+          "steps": "$local.steps",
+          "negative_prompt": "$local.negative_prompt"
+        }
+      },
+      "refresh_binds": ["create.result.get", "create.history.list"]
+    },
+    {
+      "id": "generate_video",
+      "service": "media.image.generate",
+      "input": {
+        "prompt": "$local.prompt",
+        "model_id": "$local.model_id",
+        "options": {
+          "width": "$local.width",
+          "height": "$local.height",
+          "steps": "$local.steps",
+          "negative_prompt": "$local.negative_prompt",
+          "sd_mode": "vid_gen",
+          "video_frames": "$local.video_frames",
+          "fps": "$local.video_fps"
         }
       },
       "refresh_binds": ["create.result.get", "create.history.list"]
@@ -86,7 +137,8 @@
     }
   ],
   "subscriptions": [
-    { "id": "generate_job", "action": "generate", "kind": "media.image.generate" }
+    { "id": "generate_job", "action": "generate_image", "kind": "media.image.generate" },
+    { "id": "generate_video_job", "action": "generate_video", "kind": "media.image.generate" }
   ],
   "root": {
     "kind": "split",
@@ -104,9 +156,36 @@
                   "kind": "column",
                   "children": [
                     {
+                      "kind": "radio",
+                      "state_key": "media_mode",
+                      "items": ["image", "video"],
+                      "item_label_keys": ["mode_image", "mode_video"]
+                    },
+                    {
+                      "kind": "select",
+                      "state_key": "model_id",
+                      "label_key": "image_pack_label",
+                      "binding": "models",
+                      "items_from_key": "$local.media_mode",
+                      "visible": { "eq": ["$local.media_mode", "image"] }
+                    },
+                    {
+                      "kind": "select",
+                      "state_key": "model_id",
+                      "label_key": "video_pack_label",
+                      "binding": "models",
+                      "items_from_key": "$local.media_mode",
+                      "visible": { "eq": ["$local.media_mode", "video"] }
+                    },
+                    {
                       "kind": "textarea",
                       "state_key": "prompt",
                       "label_key": "prompt_label"
+                    },
+                    {
+                      "kind": "textarea",
+                      "state_key": "negative_prompt",
+                      "label_key": "negative_label"
                     },
                     {
                       "kind": "slider",
@@ -154,14 +233,49 @@
                       "label_key": "steps_label"
                     },
                     {
+                      "kind": "select",
+                      "state_key": "video_frames",
+                      "label_key": "video_duration_label",
+                      "items": ["33", "49", "65"],
+                      "item_label_keys": [
+                        "video_duration_2s",
+                        "video_duration_3s",
+                        "video_duration_4s"
+                      ],
+                      "visible": { "eq": ["$local.media_mode", "video"] }
+                    },
+                    {
+                      "kind": "slider",
+                      "state_key": "video_fps",
+                      "min": 8,
+                      "max": 30,
+                      "step": 1,
+                      "label_key": "video_fps_label",
+                      "visible": { "eq": ["$local.media_mode", "video"] }
+                    },
+                    {
                       "kind": "button",
-                      "action": "generate",
-                      "label_key": "generate_label"
+                      "action": "generate_image",
+                      "label_key": "generate_label",
+                      "visible": { "eq": ["$local.media_mode", "image"] }
+                    },
+                    {
+                      "kind": "button",
+                      "action": "generate_video",
+                      "label_key": "generate_label",
+                      "visible": { "eq": ["$local.media_mode", "video"] }
                     },
                     {
                       "kind": "job",
                       "subscription": "generate_job",
-                      "label_key": "job_label"
+                      "label_key": "job_label",
+                      "visible": { "eq": ["$local.media_mode", "image"] }
+                    },
+                    {
+                      "kind": "job",
+                      "subscription": "generate_video_job",
+                      "label_key": "job_label",
+                      "visible": { "eq": ["$local.media_mode", "video"] }
                     }
                   ]
                 }

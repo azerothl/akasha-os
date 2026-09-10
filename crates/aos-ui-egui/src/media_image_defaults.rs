@@ -308,6 +308,23 @@ pub fn is_video_options(opts: &MediaImageOptions) -> bool {
     opts.sd_mode.as_deref() == Some("vid_gen") || opts.video_frames.unwrap_or(0) > 1
 }
 
+/// Frame counts for short clips. Wan/LTX use ~16 fps with 4n+1; MiniMax-H3
+/// runs at 24 fps on the 17k+5 grid (sd.cpp also aligns upward).
+pub fn video_frames_for_duration_model(seconds: u32, model_id: &str) -> u32 {
+    if model_id.contains("minimax") {
+        return match seconds {
+            2 => 56,
+            4 => 90,
+            _ => 73,
+        };
+    }
+    match seconds {
+        2 => 33,
+        4 => 65,
+        _ => 49,
+    }
+}
+
 pub fn image_options_for_model(model_id: Option<&str>, profile: Option<&str>) -> MediaImageOptions {
     let id = model_id.unwrap_or_default();
     let preset = pick_preset(id, profile.unwrap_or("balanced"));

@@ -1,6 +1,6 @@
 name: create
 version: 1.0.0
-hash: 44956ac15830a6c9610e0d67abe2ba2d9bbff95ce3aa3cec232af02146c3c49e
+hash: 8b3cd0cccdb883c0fbd4f770edfbcfb693f3f3c39fd2c2ded5e3c1ca4d8e3bda
 permissions:
   required_caps:
     - fs.read:/documents/create/**
@@ -39,6 +39,10 @@ tools:
       type: object
   - name: create.result.get
     description: Return last generated image path for preview
+    input_schema:
+      type: object
+  - name: create.models.list
+    description: List image and video model packs for the picker
     input_schema:
       type: object
 ui:
