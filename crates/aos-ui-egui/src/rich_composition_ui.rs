@@ -6,6 +6,7 @@ use aos_proto::rich_composition::{
     LayerCanvasSnapshot, RichLayer, MAX_LAYERS_PER_CANVAS, MAX_UNDO_DEPTH,
 };
 use aos_proto::rich_decl_ui::RichInteractionEvent;
+use crate::icons;
 use eframe::egui;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -625,8 +626,7 @@ pub fn ui_layer_list(
             }
             let vis_label = widget_label_from_key(doc, language, "layer_visible")
                 .unwrap_or_else(|| t.decl_layer_visible.to_string());
-            if ui
-                .small_button(if visible { "👁" } else { "—" })
+            if icons::visibility_toggle_button(ui, visible)
                 .on_hover_text(&vis_label)
                 .clicked()
             {
@@ -647,8 +647,7 @@ pub fn ui_layer_list(
                 ));
             }
             if idx + 1 < layers.len()
-                && ui
-                    .small_button("▲")
+                && icons::chevron_up_button(ui)
                     .on_hover_text("Monter le calque (vers l’avant)")
                     .clicked()
             {
@@ -667,8 +666,7 @@ pub fn ui_layer_list(
                 ));
             }
             if idx > 0
-                && ui
-                    .small_button("▼")
+                && icons::chevron_down_button(ui)
                     .on_hover_text("Descendre le calque (vers l’arrière)")
                     .clicked()
             {
@@ -686,15 +684,14 @@ pub fn ui_layer_list(
                     "z_index",
                 ));
             }
-            if ui
-                .small_button("⇅")
+            if icons::move_vertical_button(ui)
                 .on_hover_text(t.decl_layer_drag_hint)
                 .clicked()
             {
                 reorder_from = Some(idx);
                 host.drag_layer_index = Some(idx);
             } else if let Some(from) = reorder_from {
-                if from != idx && ui.small_button("↓").clicked() {
+                if from != idx && icons::chevron_down_button(ui).clicked() {
                     push_undo(host, local_state, layers_key, selected_key, next_id_key);
                     reorder_layer(&mut layers, from, idx);
                     host.drag_layer_index = None;

@@ -1111,6 +1111,340 @@ fn paint_running_dots(ui: &mut Ui, rect: Rect, color: Color32) {
     }
 }
 
+/// Primary rail tab icons (Lucide-style, no emoji).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavTabIcon {
+    Chat,
+    Agents,
+    Create,
+    Memory,
+}
+
+/// Map a primary-rail tab to its painted icon.
+#[allow(dead_code)]
+pub fn nav_tab_icon_for(tab: &crate::Tab, create_installed: bool) -> NavTabIcon {
+    use crate::Tab;
+    match tab {
+        Tab::Chat => NavTabIcon::Chat,
+        Tab::Agents => NavTabIcon::Agents,
+        Tab::Memory => NavTabIcon::Memory,
+        Tab::Module(name) if name == aos_proto::create_contract::MODULE_NAME => NavTabIcon::Create,
+        _ if create_installed => NavTabIcon::Create,
+        _ => NavTabIcon::Chat,
+    }
+}
+
+/// Primary rail control: painted icon with optional label (compact / rail = icon only).
+pub fn nav_rail_tab_button(
+    ui: &mut Ui,
+    selected: bool,
+    icon: NavTabIcon,
+    label: &str,
+    icon_only: bool,
+) -> Response {
+    let h = crate::theme::CONTROL_MIN_H_COMFORTABLE;
+    let w = ui.available_width().max(1.0);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
+    if ui.is_rect_visible(rect) {
+        if selected {
+            ui.painter()
+                .rect_filled(rect, 4.0, ui.visuals().selection.bg_fill);
+        } else if response.hovered() {
+            ui.painter()
+                .rect_filled(rect, 4.0, ui.visuals().widgets.hovered.bg_fill);
+        }
+        let color = if selected {
+            ui.visuals().strong_text_color()
+        } else {
+            hover_color(ui, &response)
+        };
+        if icon_only {
+            paint_nav_tab(ui, glyph_rect(rect), icon, color);
+        } else {
+            let icon_slot = Rect::from_min_size(
+                rect.min + Vec2::new(8.0, (h - BTN) * 0.5),
+                Vec2::splat(BTN),
+            );
+            paint_nav_tab(ui, glyph_rect(icon_slot), icon, color);
+            ui.painter().text(
+                Pos2::new(icon_slot.right() + 6.0, rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                label,
+                egui::FontId::proportional(13.0),
+                color,
+            );
+        }
+    }
+    response
+}
+
+/// Hamburger menu opener (replaces `☰`).
+pub fn menu_button(ui: &mut Ui) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        paint_menu(ui, glyph_rect(rect), hover_color(ui, &response));
+    }
+    response
+}
+
+/// Full-width rail slot wrapping [`menu_button`].
+pub struct MenuButton;
+
+impl Widget for MenuButton {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let h = crate::theme::CONTROL_MIN_H_COMFORTABLE;
+        let w = ui.available_width().max(1.0);
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
+        if ui.is_rect_visible(rect) {
+            if response.hovered() {
+                ui.painter()
+                    .rect_filled(rect, 4.0, ui.visuals().widgets.hovered.bg_fill);
+            }
+            let icon_rect = Rect::from_center_size(rect.center(), Vec2::splat(BTN));
+            paint_menu(ui, glyph_rect(icon_rect), hover_color(ui, &response));
+        }
+        response
+    }
+}
+
+/// Notification centre toggle (replaces `🔔`).
+pub fn bell_button(ui: &mut Ui) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        paint_bell(ui, glyph_rect(rect), hover_color(ui, &response));
+    }
+    response
+}
+
+/// Layer visibility toggle (replaces `👁` / em dash).
+pub fn visibility_toggle_button(ui: &mut Ui, visible: bool) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        paint_eye(ui, glyph_rect(rect), hover_color(ui, &response), visible);
+    }
+    response
+}
+
+/// Small chevron-up control (layer z-order).
+pub fn chevron_up_button(ui: &mut Ui) -> Response {
+    chevron_button(ui, true)
+}
+
+/// Small chevron-down control (layer z-order).
+pub fn chevron_down_button(ui: &mut Ui) -> Response {
+    chevron_button(ui, false)
+}
+
+fn chevron_button(ui: &mut Ui, up: bool) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        paint_chevron_arrow(ui, glyph_rect(rect), hover_color(ui, &response), up);
+    }
+    response
+}
+
+/// Move / reorder hint (replaces `⇅`).
+pub fn move_vertical_button(ui: &mut Ui) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let inner = glyph_rect(rect);
+        let color = hover_color(ui, &response);
+        let half_h = inner.height() * 0.18;
+        paint_chevron_arrow(
+            ui,
+            Rect::from_center_size(inner.center() + Vec2::new(0.0, -half_h), inner.size()),
+            color,
+            true,
+        );
+        paint_chevron_arrow(
+            ui,
+            Rect::from_center_size(inner.center() + Vec2::new(0.0, half_h), inner.size()),
+            color,
+            false,
+        );
+    }
+    response
+}
+
+/// Watchdog restart marker (replaces `↻`).
+pub fn refresh_mark(ui: &mut Ui, color: Color32) {
+    let size = Vec2::splat(14.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    paint_refresh(ui, rect, color);
+}
+
+fn paint_nav_tab(ui: &mut Ui, rect: Rect, icon: NavTabIcon, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let s = rect.width() * 0.28;
+    match icon {
+        NavTabIcon::Chat => {
+            let bubble = Rect::from_center_size(c + Vec2::new(0.0, -s * 0.08), Vec2::splat(s * 2.2));
+            painter.rect_stroke(bubble, 3.0, stroke, StrokeKind::Outside);
+            painter.line_segment(
+                [
+                    c + Vec2::new(-s * 0.35, bubble.bottom() - 1.0),
+                    c + Vec2::new(-s * 0.75, bubble.bottom() + s * 0.55),
+                ],
+                stroke,
+            );
+        }
+        NavTabIcon::Agents => {
+            for dx in [-s * 0.55, s * 0.55] {
+                let head_c = c + Vec2::new(dx, -s * 0.55);
+                painter.circle_stroke(head_c, s * 0.38, stroke);
+                painter.line_segment(
+                    [
+                        head_c + Vec2::new(0.0, s * 0.38),
+                        head_c + Vec2::new(0.0, s * 1.05),
+                    ],
+                    stroke,
+                );
+            }
+        }
+        NavTabIcon::Create => {
+            let frame = Rect::from_center_size(c, Vec2::new(s * 2.4, s * 1.8));
+            painter.rect_stroke(frame, 2.0, stroke, StrokeKind::Outside);
+            let sun = c + Vec2::new(-s * 0.55, -s * 0.35);
+            painter.circle_stroke(sun, s * 0.22, stroke);
+            painter.line_segment(
+                [c + Vec2::new(-s * 0.35, s * 0.15), c + Vec2::new(s * 0.75, s * 0.55)],
+                stroke,
+            );
+        }
+        NavTabIcon::Memory => {
+            let w = s * 0.95;
+            for (dy, shrink) in [(s * 0.55, 0.0), (0.0, 0.12), (-s * 0.55, 0.24)] {
+                let y = c.y + dy;
+                painter.line_segment(
+                    [
+                        Pos2::new(c.x - w + shrink, y),
+                        Pos2::new(c.x + w - shrink, y),
+                    ],
+                    stroke,
+                );
+            }
+        }
+    }
+}
+
+fn paint_menu(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let half = rect.width() * 0.30;
+    for dy in [-rect.height() * 0.22, 0.0, rect.height() * 0.22] {
+        painter.line_segment(
+            [
+                Pos2::new(c.x - half, c.y + dy),
+                Pos2::new(c.x + half, c.y + dy),
+            ],
+            stroke,
+        );
+    }
+}
+
+fn paint_bell(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width() * 0.28;
+    let top = c.y - rect.height() * 0.22;
+    painter.line_segment([Pos2::new(c.x, top), Pos2::new(c.x, top + rect.height() * 0.08)], stroke);
+    painter.add(Shape::closed_line(
+        vec![
+            Pos2::new(c.x - w * 0.35, top + rect.height() * 0.08),
+            Pos2::new(c.x - w, top + rect.height() * 0.42),
+            Pos2::new(c.x + w, top + rect.height() * 0.42),
+            Pos2::new(c.x + w * 0.35, top + rect.height() * 0.08),
+        ],
+        stroke,
+    ));
+    painter.line_segment(
+        [
+            Pos2::new(c.x - w * 0.55, top + rect.height() * 0.48),
+            Pos2::new(c.x + w * 0.55, top + rect.height() * 0.48),
+        ],
+        stroke,
+    );
+    painter.circle_stroke(
+        c + Vec2::new(0.0, rect.height() * 0.34),
+        w * 0.18,
+        stroke,
+    );
+}
+
+fn paint_eye(ui: &mut Ui, rect: Rect, color: Color32, open: bool) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width() * 0.38;
+    let h = rect.height() * 0.22;
+    let mut eye = Vec::new();
+    for i in 0..=12 {
+        let t = i as f32 / 12.0;
+        let ang = std::f32::consts::PI * t;
+        eye.push(c + Vec2::new(ang.cos() * w, -ang.sin() * h));
+    }
+    for i in (0..=12).rev() {
+        let t = i as f32 / 12.0;
+        let ang = std::f32::consts::PI * t;
+        eye.push(c + Vec2::new(ang.cos() * w, ang.sin() * h));
+    }
+    painter.add(Shape::closed_line(eye, stroke));
+    if open {
+        painter.circle_filled(c, rect.width() * 0.10, color);
+    } else {
+        painter.line_segment(
+            [c + Vec2::new(-w, -h), c + Vec2::new(w, h)],
+            Stroke::new(1.5_f32, color),
+        );
+    }
+}
+
+fn paint_chevron_arrow(ui: &mut Ui, rect: Rect, color: Color32, up: bool) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let c = rect.center();
+    let s = rect.width() * 0.22;
+    let (tip, left, right) = if up {
+        (
+            c + Vec2::new(0.0, -s * 0.85),
+            c + Vec2::new(-s, s * 0.35),
+            c + Vec2::new(s, s * 0.35),
+        )
+    } else {
+        (
+            c + Vec2::new(0.0, s * 0.85),
+            c + Vec2::new(-s, -s * 0.35),
+            c + Vec2::new(s, -s * 0.35),
+        )
+    };
+    ui.painter().add(Shape::closed_line(
+        vec![left, tip, right],
+        stroke,
+    ));
+}
+
+fn paint_refresh(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.3_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let r = rect.width() * 0.34;
+    painter.circle_stroke(c, r, stroke);
+    let tip = c + Vec2::new(r * 0.65, -r * 0.65);
+    painter.line_segment([tip, tip + Vec2::new(-r * 0.35, 0.0)], stroke);
+    painter.line_segment([tip, tip + Vec2::new(0.0, r * 0.35)], stroke);
+}
+
 fn paint_link_arrow(ui: &mut Ui, outgoing: bool) {
     let size = Vec2::new(12.0, 12.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());

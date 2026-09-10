@@ -29,6 +29,7 @@ mod chat_runtime_state;
 mod chat_sidebar_state;
 mod chat_state;
 mod chat_view_state;
+mod chrome_inventory;
 mod cmd;
 mod composer_drafts;
 mod composer_layout;
@@ -41,6 +42,7 @@ mod feedback_event_controller;
 mod feedback_ui_state;
 mod files_event_controller;
 mod files_state;
+mod fonts;
 mod guide;
 mod i18n;
 mod icons;
@@ -713,14 +715,16 @@ impl UiApp {
             })
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui
-                        .button(t.presentation_menu)
-                        .on_hover_text(t.presentation_menu_hint)
-                        .clicked()
-                    {
-                        self.show_go_to_palette = true;
-                        self.spotlight_query.clear();
-                    }
+                    ui.horizontal(|ui| {
+                        if icons::menu_button(ui)
+                            .on_hover_text(t.presentation_menu_hint)
+                            .clicked()
+                        {
+                            self.show_go_to_palette = true;
+                            self.spotlight_query.clear();
+                        }
+                        ui.label(t.presentation_menu);
+                    });
                     if mode != prefs::UiPresentationMode::Zen {
                         ui.separator();
                         ui.weak(self.current_tab_label(t));
@@ -1836,33 +1840,33 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn ui_nav_rail(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        let mut primary: Vec<(Tab, &str, &str)> = vec![
-            (Tab::Chat, t.tab_chat, t.tab_hint_chat),
-            (Tab::Agents, t.tab_agents, t.tab_hint_agents),
+        let mut primary: Vec<(Tab, icons::NavTabIcon, &str, &str)> = vec![
+            (Tab::Chat, icons::NavTabIcon::Chat, t.tab_chat, t.tab_hint_chat),
+            (
+                Tab::Agents,
+                icons::NavTabIcon::Agents,
+                t.tab_agents,
+                t.tab_hint_agents,
+            ),
         ];
         if self.create_module_installed() {
-            primary.push((self.create_tab(), t.tab_create, t.tab_hint_image));
+            primary.push((
+                self.create_tab(),
+                icons::NavTabIcon::Create,
+                t.tab_create,
+                t.tab_hint_image,
+            ));
         }
-        primary.push((Tab::Memory, t.tab_memory, t.tab_hint_memory));
-        for (idx, (tab, label, hint)) in primary.into_iter().enumerate() {
-            // These glyphs are covered by egui's bundled emoji font (monochrome
-            // in egui), unlike arbitrary geometric Unicode symbols.
-            let icon = ['🔘', '⛃', '🖼', '🗀'][idx];
-            let label_text = if self.prefs.ui_density == prefs::UiDensity::Compact
-                || self.prefs.ui_presentation == prefs::UiPresentationMode::Rail
-            {
-                icon.to_string()
-            } else {
-                format!("{icon} {label}")
-            };
-            if ui
-                .add_sized(
-                    egui::vec2(
-                        ui.available_width().max(1.0),
-                        theme::CONTROL_MIN_H_COMFORTABLE,
-                    ),
-                    egui::SelectableLabel::new(self.tab == tab, label_text),
-                )
+        primary.push((
+            Tab::Memory,
+            icons::NavTabIcon::Memory,
+            t.tab_memory,
+            t.tab_hint_memory,
+        ));
+        let icon_only = self.prefs.ui_density == prefs::UiDensity::Compact
+            || self.prefs.ui_presentation == prefs::UiPresentationMode::Rail;
+        for (tab, icon, label, hint) in primary {
+            if icons::nav_rail_tab_button(ui, self.tab == tab, icon, label, icon_only)
                 .on_hover_text(hint)
                 .clicked()
             {
@@ -1878,7 +1882,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         ui.available_width().max(1.0),
                         theme::CONTROL_MIN_H_COMFORTABLE,
                     ),
-                    egui::Button::new("☰"),
+                    icons::MenuButton,
                 )
                 .on_hover_text(t.presentation_menu_hint)
                 .clicked()
@@ -2347,7 +2351,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             if compact_menu {
                 ui.horizontal(|ui| {
                     ui.strong(t.presentation_menu);
-                    if ui.small_button("×").clicked() {
+                    if icons::close_button(ui).clicked() {
                         self.show_go_to_palette = false;
                         self.spotlight_query.clear();
                     }
@@ -2601,6 +2605,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
 impl eframe::App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::apply_theme(ctx, &self.prefs.theme, &self.prefs.custom_theme);
+        fonts::apply_ui_font(ctx, &self.prefs.ui_font);
         theme::apply_ui_scale(ctx, self.prefs.ui_scale_percent);
         theme::apply_ui_density(ctx, self.prefs.ui_density);
         self.handle_keyboard_shortcuts(ctx);
@@ -3131,15 +3136,17 @@ impl eframe::App for UiApp {
         egui::TopBottomPanel::top("banner").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let count = self.agent_ui.notices.len();
-                if ui
-                    .button(format!("🔔 {count}"))
-                    .on_hover_text("Centre de notifications")
-                    .clicked()
-                {
-                    self.prefs.ui_layout.notifications_open =
-                        !self.prefs.ui_layout.notifications_open;
-                    save_preferences(&self.prefs);
-                }
+                ui.horizontal(|ui| {
+                    if icons::bell_button(ui)
+                        .on_hover_text("Centre de notifications")
+                        .clicked()
+                    {
+                        self.prefs.ui_layout.notifications_open =
+                            !self.prefs.ui_layout.notifications_open;
+                        save_preferences(&self.prefs);
+                    }
+                    ui.label(format!("{count}"));
+                });
                 ui.weak(format!("Preview {} — {}", self.version, t.preview_tagline));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button(t.report).clicked() {

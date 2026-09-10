@@ -98,6 +98,8 @@ impl UiApp {
                     "density",
                     "échelle",
                     "scale",
+                    "police",
+                    "font",
                 ]
                 .as_slice(),
                 [
@@ -151,6 +153,8 @@ impl UiApp {
                 "density",
                 "échelle",
                 "scale",
+                "police",
+                "font",
             ],
         ) {
             ui.heading(t.settings_me);
@@ -277,6 +281,31 @@ impl UiApp {
                                     .clicked()
                                 {
                                     self.prefs.ui_scale_percent = percent;
+                                    save_preferences(&self.prefs);
+                                    self.status = t.settings_saved.into();
+                                }
+                            }
+                        });
+                    ui.end_row();
+
+                    ui.label(t.settings_ui_font);
+                    let fr = self.prefs.language == "fr";
+                    let font_label = crate::fonts::ui_font_label(&self.prefs.ui_font, fr);
+                    egui::ComboBox::from_id_salt("prefs_ui_font")
+                        .selected_text(font_label)
+                        .show_ui(ui, |ui| {
+                            for (idx, id) in crate::prefs::UI_FONT_IDS.iter().enumerate() {
+                                let label = if fr {
+                                    crate::fonts::UI_FONT_LABELS[idx].1
+                                } else {
+                                    crate::fonts::UI_FONT_LABELS[idx].0
+                                };
+                                if ui
+                                    .selectable_label(self.prefs.ui_font == *id, label)
+                                    .on_hover_text(t.settings_ui_font_hint)
+                                    .clicked()
+                                {
+                                    self.prefs.ui_font = (*id).into();
                                     save_preferences(&self.prefs);
                                     self.status = t.settings_saved.into();
                                 }

@@ -68,12 +68,7 @@ pub fn search_field(ui: &mut egui::Ui, text: &mut String, hint: &str) -> egui::R
             ui.memory_mut(|m| m.request_focus(resp.id));
         }
         if !text.is_empty() {
-            // Hit 28px, glyphe 18px via theme — même grille que icons.rs.
-            if ui
-                .add_sized(
-                    egui::Vec2::splat(crate::theme::ICON_HIT),
-                    egui::Button::new("x").corner_radius(crate::theme::RADIUS_SM),
-                )
+            if crate::icons::close_button(ui)
                 .on_hover_text("Clear")
                 .clicked()
             {
@@ -167,7 +162,7 @@ impl Toasts {
                                 ui.horizontal(|ui| {
                                     ui.colored_label(accent, label);
                                     ui.label(&toast.msg);
-                                    if ui.small_button("x").clicked() {
+                                    if crate::icons::close_button(ui).clicked() {
                                         dismiss.push(idx);
                                     }
                                 });

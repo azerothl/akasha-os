@@ -1,6 +1,15 @@
 fn main() {
-    let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icon.ico");
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let icon = manifest.join("assets/icon.ico");
     println!("cargo:rerun-if-changed={}", icon.display());
+    for name in [
+        "Inter-Regular.ttf",
+        "SourceSans3-Regular.otf",
+        "AtkinsonHyperlegible-Regular.ttf",
+    ] {
+        let font = manifest.join("assets/fonts").join(name);
+        println!("cargo:rerun-if-changed={}", font.display());
+    }
     // build.rs is compiled for the host; CARGO_CFG_TARGET_OS is the crate target.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let mut res = winres::WindowsResource::new();
