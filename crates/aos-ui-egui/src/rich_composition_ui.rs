@@ -172,6 +172,7 @@ pub fn ui_layer_canvas(
             layer.x = (0.35 + n * 0.03) % 0.55;
             layer.y = (0.35 + n * 0.03) % 0.55;
             layer.clamp_in_frame();
+            layer.label = layer_display_name(&layer, layers.len(), doc, language, &t);
             layers.push(layer);
             selected = Some(id);
             patch = Some(build_patch(
@@ -472,17 +473,23 @@ pub fn ui_layer_canvas(
         };
         painter.rect_filled(r, 3.0, fill);
         painter.rect_stroke(r, 3.0, stroke, egui::StrokeKind::Inside);
-        let label = if layer.label.trim().is_empty() {
-            format!("#{}", i + 1)
-        } else {
-            truncate(&layer.label, 28)
-        };
+        let label = layer_display_name(layer, i, doc, language, &t);
+        let text_pos = r.left_top() + egui::vec2(6.0, 4.0);
+        let font_id = egui::FontId::proportional(13.0);
+        let text_color = egui::Color32::from_white_alpha(alpha(255));
         painter.text(
-            r.left_top() + egui::vec2(6.0, 4.0),
+            text_pos + egui::vec2(1.0, 1.0),
+            egui::Align2::LEFT_TOP,
+            &label,
+            font_id.clone(),
+            egui::Color32::from_black_alpha(alpha(200)),
+        );
+        painter.text(
+            text_pos,
             egui::Align2::LEFT_TOP,
             label,
-            egui::FontId::proportional(12.0),
-            egui::Color32::from_white_alpha(alpha(255)),
+            font_id,
+            text_color,
         );
         if selected_here && !layer.locked {
             let handle = resize_handle_rect(r);
@@ -566,11 +573,7 @@ pub fn ui_layer_list(
         .iter()
         .enumerate()
         .map(|(idx, layer)| {
-            let name = if layer.label.trim().is_empty() {
-                format!("#{}", idx + 1)
-            } else {
-                layer.label.clone()
-            };
+            let name = layer_display_name(layer, idx, doc, language, &t);
             (idx, layer.id, name, layer.visible)
         })
         .collect();
@@ -590,34 +593,6 @@ pub fn ui_layer_list(
                     host,
                     "select",
                 ));
-            }
-            let max_z = layers.len().saturating_sub(1) as i32;
-            let mut target_z = idx as i32;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut target_z)
-                        .range(0..=max_z)
-                        .speed(1),
-                )
-                .on_hover_text(t.decl_layer_depth_hint)
-                .changed()
-            {
-                let target = target_z.clamp(0, max_z) as usize;
-                if target != idx {
-                    push_undo(host, local_state, layers_key, selected_key, next_id_key);
-                    reorder_layer(&mut layers, idx, target);
-                    patch = Some(build_patch(
-                        layers_key,
-                        selected_key,
-                        next_id_key,
-                        &layers,
-                        selected,
-                        next_id,
-                        "",
-                        host,
-                        "z_index",
-                    ));
-                }
             }
             let vis_tip = if visible {
                 t.decl_layer_hide
@@ -828,6 +803,21 @@ fn build_patch(
 
 fn widget_label_from_key(doc: &DeclUiDocument, language: &str, key: &str) -> Option<String> {
     doc.labels.as_ref()?.resolve(language, key)
+}
+
+fn layer_display_name(
+    layer: &RichLayer,
+    idx: usize,
+    doc: &DeclUiDocument,
+    language: &str,
+    t: &crate::i18n::UiStrings,
+) -> String {
+    if !layer.label.trim().is_empty() {
+        return truncate(&layer.label, 28);
+    }
+    let base = widget_label_from_key(doc, language, "layer_default_name")
+        .unwrap_or_else(|| t.decl_layer_add.to_string());
+    format!("{base} {}", idx + 1)
 }
 
 fn resize_handle_rect(r: egui::Rect) -> egui::Rect {

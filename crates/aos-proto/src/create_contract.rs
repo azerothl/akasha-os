@@ -575,4 +575,54 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn fr_surface_labels_are_valid_utf8_without_mojibake_markers() {
+        let doc = read_ui_document();
+        let labels = doc.labels.as_ref().expect("create labels");
+        for (key, value) in &labels.fr {
+            assert!(
+                !value.contains('Ã') && !value.contains('Â'),
+                "label {key} must not contain mojibake markers: {value}"
+            );
+        }
+        assert_eq!(
+            labels.resolve("fr", "app_title").as_deref(),
+            Some(FR_APP_TITLE)
+        );
+        assert_eq!(
+            labels.resolve("fr", "profile_balanced").as_deref(),
+            Some("Équilibré")
+        );
+        assert_eq!(
+            labels.resolve("fr", "camera_push").as_deref(),
+            Some("Travelling avant")
+        );
+    }
+
+    #[test]
+    fn create_params_expose_human_option_labels_not_wire_tokens() {
+        let ui_raw = std::fs::read_to_string(
+            workspace_root().join("modules/create/ui/index.json"),
+        )
+        .expect("create ui json");
+        assert!(
+            ui_raw.contains("profile_fast")
+                && ui_raw.contains("profile_balanced")
+                && ui_raw.contains("item_label_keys"),
+            "quality profile must use human item_label_keys"
+        );
+        assert!(
+            ui_raw.contains("\"camera_push\"") && ui_raw.contains("\"profile_balanced\""),
+            "camera and profile human label keys must be declared"
+        );
+        assert!(
+            ui_raw.contains("\"layer_default_name\""),
+            "composition layers must declare human default names"
+        );
+        let doc = read_ui_document();
+        let en = &doc.labels.as_ref().expect("labels").en;
+        assert_eq!(en.get("profile_balanced").map(String::as_str), Some("Balanced"));
+        assert_eq!(en.get("camera_push").map(String::as_str), Some("Push in"));
+    }
 }

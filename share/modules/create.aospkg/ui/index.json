@@ -100,7 +100,37 @@
       "history_restore": "Restore",
       "history_prompt": "Prompt",
       "history_when": "When",
-      "history_empty": "No generations yet"
+      "history_empty": "No generations yet",
+      "profile_fast": "Fast",
+      "profile_balanced": "Balanced",
+      "profile_quality": "Quality",
+      "intent_custom": "Custom",
+      "intent_portrait": "Portrait",
+      "intent_product": "Product",
+      "intent_illustration": "Illustration",
+      "intent_cinematic": "Cinematic",
+      "camera_custom": "Custom",
+      "camera_static": "Static",
+      "camera_push": "Push in",
+      "camera_track": "Tracking",
+      "camera_follow": "Follow",
+      "sampler_default": "Model default",
+      "sampler_euler": "Euler",
+      "sampler_euler_a": "Euler ancestral",
+      "sampler_heun": "Heun",
+      "sampler_dpm2": "DPM2",
+      "sampler_lcm": "LCM",
+      "sampler_ddim": "DDIM",
+      "backend_default": "Auto",
+      "backend_cpu": "CPU",
+      "backend_gpu": "GPU",
+      "backend_cuda0": "CUDA",
+      "backend_vulkan0": "Vulkan",
+      "params_backend_default": "Auto",
+      "params_backend_cpu": "CPU",
+      "params_backend_cuda0": "CUDA",
+      "params_backend_disk": "Disk",
+      "layer_default_name": "Layer"
     },
     "fr": {
       "app_title": "Créer",
@@ -197,73 +227,282 @@
       "history_restore": "Restaurer",
       "history_prompt": "Invite",
       "history_when": "Date",
-      "history_empty": "Aucune génération pour l'instant"
+      "history_empty": "Aucune génération pour l'instant",
+      "profile_fast": "Rapide",
+      "profile_balanced": "Équilibré",
+      "profile_quality": "Qualité",
+      "intent_custom": "Personnalisé",
+      "intent_portrait": "Portrait",
+      "intent_product": "Produit",
+      "intent_illustration": "Illustration",
+      "intent_cinematic": "Cinématique",
+      "camera_custom": "Personnalisé",
+      "camera_static": "Statique",
+      "camera_push": "Travelling avant",
+      "camera_track": "Travelling latéral",
+      "camera_follow": "Suivi",
+      "sampler_default": "Défaut du modèle",
+      "sampler_euler": "Euler",
+      "sampler_euler_a": "Euler ancestral",
+      "sampler_heun": "Heun",
+      "sampler_dpm2": "DPM2",
+      "sampler_lcm": "LCM",
+      "sampler_ddim": "DDIM",
+      "backend_default": "Auto",
+      "backend_cpu": "CPU",
+      "backend_gpu": "GPU",
+      "backend_cuda0": "CUDA",
+      "backend_vulkan0": "Vulkan",
+      "params_backend_default": "Auto",
+      "params_backend_cpu": "CPU",
+      "params_backend_cuda0": "CUDA",
+      "params_backend_disk": "Disque",
+      "layer_default_name": "Calque"
     }
   },
   "state": {
     "local": {
-      "prompt": { "type": "string", "default": "" },
-      "negative_prompt": { "type": "string", "default": "" },
-      "media_mode": { "type": "string", "default": "image" },
-      "model_ready": { "type": "boolean", "default": false },
-      "format": { "type": "string", "default": "1:1" },
-      "intent": { "type": "string", "default": "custom" },
-      "profile": { "type": "string", "default": "balanced" },
-      "model_id": { "type": "string", "default": "local:sd-v1-5" },
-      "cfg_scale": { "type": "number", "default": 7 },
-      "seed": { "type": "number", "default": -1 },
-      "sampling_method": { "type": "string", "default": "" },
-      "flow_shift": { "type": "number", "default": 3 },
-      "camera_preset": { "type": "string", "default": "custom" },
-      "styles": { "type": "array", "default": [] },
-      "loras": { "type": "array", "default": [] },
-      "vae": { "type": "string", "default": "" },
-      "lora_scale": { "type": "number", "default": 1 },
-      "enrich_prompt": { "type": "boolean", "default": false },
-      "enhance_prompt_chat": { "type": "boolean", "default": false },
-      "use_edited_enriched": { "type": "boolean", "default": false },
-      "enriched_prompt": { "type": "string", "default": "" },
-      "img2img_enabled": { "type": "boolean", "default": false },
-      "mask_image": { "type": "string", "default": "" },
-      "offload_to_cpu": { "type": "boolean", "default": false },
-      "diffusion_fa": { "type": "boolean", "default": false },
-      "auto_fit": { "type": "boolean", "default": false },
-      "stream_layers": { "type": "boolean", "default": false },
-      "max_vram": { "type": "string", "default": "" },
-      "threads": { "type": "number", "default": 0 },
-      "backend": { "type": "string", "default": "" },
-      "params_backend": { "type": "string", "default": "" },
-      "sd_mode": { "type": "string", "default": "img_gen" },
-      "composition_layers": { "type": "array", "default": [] },
-      "composition_selected": { "type": "number", "default": 0 },
-      "composition_next_id": { "type": "number", "default": 1 },
-      "layer_opacity": { "type": "number", "default": 0.72 },
-      "saved_preset_name": { "type": "string", "default": "" },
-      "init_image": { "type": "string", "default": "" },
-      "end_image": { "type": "string", "default": "" },
-      "strength": { "type": "number", "default": 0.75 },
-      "upscale_model": { "type": "string", "default": "" },
-      "upscale_repeats": { "type": "number", "default": 1 },
-      "upscale_tile_size": { "type": "number", "default": 128 },
-      "expert": { "type": "boolean", "default": false },
-      "result_path": { "type": "string", "default": "" },
-      "preview_cleared": { "type": "boolean", "default": false },
-      "width": { "type": "number", "default": 512 },
-      "height": { "type": "number", "default": 512 },
-      "steps": { "type": "number", "default": 20 },
-      "video_frames": { "type": "number", "default": 49 },
-      "fps": { "type": "number", "default": 24 }
-      ,"asset_binding_key": { "type": "string", "default": "assets" }
-      ,"asset_import_kind": { "type": "string", "default": "lora" }
-      ,"asset_import_path": { "type": "string", "default": "" }
-      ,"asset_import_status": { "type": "string", "default": "" }
-      ,"asset_custom_style": { "type": "string", "default": "" }
+      "prompt": {
+        "type": "string",
+        "default": ""
+      },
+      "negative_prompt": {
+        "type": "string",
+        "default": ""
+      },
+      "media_mode": {
+        "type": "string",
+        "default": "image"
+      },
+      "model_ready": {
+        "type": "boolean",
+        "default": false
+      },
+      "format": {
+        "type": "string",
+        "default": "1:1"
+      },
+      "intent": {
+        "type": "string",
+        "default": "custom"
+      },
+      "profile": {
+        "type": "string",
+        "default": "balanced"
+      },
+      "model_id": {
+        "type": "string",
+        "default": "local:sd-v1-5"
+      },
+      "cfg_scale": {
+        "type": "number",
+        "default": 7
+      },
+      "seed": {
+        "type": "number",
+        "default": -1
+      },
+      "sampling_method": {
+        "type": "string",
+        "default": ""
+      },
+      "flow_shift": {
+        "type": "number",
+        "default": 3
+      },
+      "camera_preset": {
+        "type": "string",
+        "default": "custom"
+      },
+      "styles": {
+        "type": "array",
+        "default": []
+      },
+      "loras": {
+        "type": "array",
+        "default": []
+      },
+      "vae": {
+        "type": "string",
+        "default": ""
+      },
+      "lora_scale": {
+        "type": "number",
+        "default": 1
+      },
+      "enrich_prompt": {
+        "type": "boolean",
+        "default": false
+      },
+      "enhance_prompt_chat": {
+        "type": "boolean",
+        "default": false
+      },
+      "use_edited_enriched": {
+        "type": "boolean",
+        "default": false
+      },
+      "enriched_prompt": {
+        "type": "string",
+        "default": ""
+      },
+      "img2img_enabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "mask_image": {
+        "type": "string",
+        "default": ""
+      },
+      "offload_to_cpu": {
+        "type": "boolean",
+        "default": false
+      },
+      "diffusion_fa": {
+        "type": "boolean",
+        "default": false
+      },
+      "auto_fit": {
+        "type": "boolean",
+        "default": false
+      },
+      "stream_layers": {
+        "type": "boolean",
+        "default": false
+      },
+      "max_vram": {
+        "type": "string",
+        "default": ""
+      },
+      "threads": {
+        "type": "number",
+        "default": 0
+      },
+      "backend": {
+        "type": "string",
+        "default": ""
+      },
+      "params_backend": {
+        "type": "string",
+        "default": ""
+      },
+      "sd_mode": {
+        "type": "string",
+        "default": "img_gen"
+      },
+      "composition_layers": {
+        "type": "array",
+        "default": []
+      },
+      "composition_selected": {
+        "type": "number",
+        "default": 0
+      },
+      "composition_next_id": {
+        "type": "number",
+        "default": 1
+      },
+      "layer_opacity": {
+        "type": "number",
+        "default": 0.72
+      },
+      "saved_preset_name": {
+        "type": "string",
+        "default": ""
+      },
+      "init_image": {
+        "type": "string",
+        "default": ""
+      },
+      "end_image": {
+        "type": "string",
+        "default": ""
+      },
+      "strength": {
+        "type": "number",
+        "default": 0.75
+      },
+      "upscale_model": {
+        "type": "string",
+        "default": ""
+      },
+      "upscale_repeats": {
+        "type": "number",
+        "default": 1
+      },
+      "upscale_tile_size": {
+        "type": "number",
+        "default": 128
+      },
+      "expert": {
+        "type": "boolean",
+        "default": false
+      },
+      "result_path": {
+        "type": "string",
+        "default": ""
+      },
+      "preview_cleared": {
+        "type": "boolean",
+        "default": false
+      },
+      "width": {
+        "type": "number",
+        "default": 512
+      },
+      "height": {
+        "type": "number",
+        "default": 512
+      },
+      "steps": {
+        "type": "number",
+        "default": 20
+      },
+      "video_frames": {
+        "type": "number",
+        "default": 49
+      },
+      "fps": {
+        "type": "number",
+        "default": 24
+      },
+      "asset_binding_key": {
+        "type": "string",
+        "default": "assets"
+      },
+      "asset_import_kind": {
+        "type": "string",
+        "default": "lora"
+      },
+      "asset_import_path": {
+        "type": "string",
+        "default": ""
+      },
+      "asset_import_status": {
+        "type": "string",
+        "default": ""
+      },
+      "asset_custom_style": {
+        "type": "string",
+        "default": ""
+      }
     }
   },
   "bindings": [
-    { "id": "preview", "tool": "create.result.get", "target": "/path" },
-    { "id": "history", "tool": "create.history.list", "target": "/items" },
-    { "id": "models", "tool": "create.models.list" }
+    {
+      "id": "preview",
+      "tool": "create.result.get",
+      "target": "/path"
+    },
+    {
+      "id": "history",
+      "tool": "create.history.list",
+      "target": "/items"
+    },
+    {
+      "id": "models",
+      "tool": "create.models.list"
+    }
   ],
   "actions": [
     {
@@ -308,7 +547,10 @@
           "video_frames": 1
         }
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "generate_video",
@@ -355,7 +597,10 @@
           "fps": "$local.fps"
         }
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "upscale",
@@ -366,7 +611,10 @@
         "upscale_repeats": "$local.upscale_repeats",
         "upscale_tile_size": "$local.upscale_tile_size"
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "regenerate",
@@ -413,7 +661,10 @@
           "fps": "$local.fps"
         }
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "variant",
@@ -456,7 +707,10 @@
           "fps": "$local.fps"
         }
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "regenerate_video",
@@ -502,7 +756,10 @@
           "flow_shift": "$local.flow_shift"
         }
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "variant_video",
@@ -548,7 +805,10 @@
           "flow_shift": "$local.flow_shift"
         }
       },
-      "refresh_binds": ["create.result.get", "create.history.list"]
+      "refresh_binds": [
+        "create.result.get",
+        "create.history.list"
+      ]
     },
     {
       "id": "save_preset",
@@ -556,12 +816,33 @@
       "input": {
         "name": "$local.saved_preset_name",
         "params": {
-          "prompt": "$local.prompt", "negative_prompt": "$local.negative_prompt", "media_mode": "$local.media_mode", "model_id": "$local.model_id",
-          "format": "$local.format", "intent": "$local.intent", "profile": "$local.profile", "camera_preset": "$local.camera_preset",
-          "width": "$local.width", "height": "$local.height", "steps": "$local.steps", "video_frames": "$local.video_frames", "fps": "$local.fps",
-          "cfg_scale": "$local.cfg_scale", "seed": "$local.seed", "sampling_method": "$local.sampling_method", "flow_shift": "$local.flow_shift",
-          "styles": "$local.styles", "loras": "$local.loras", "vae": "$local.vae", "init_image": "$local.init_image", "end_image": "$local.end_image", "strength": "$local.strength", "mask_image": "$local.mask_image",
-          "enrich_prompt": "$local.enrich_prompt", "enhance_prompt_chat": "$local.enhance_prompt_chat", "enriched_prompt": "$local.enriched_prompt",
+          "prompt": "$local.prompt",
+          "negative_prompt": "$local.negative_prompt",
+          "media_mode": "$local.media_mode",
+          "model_id": "$local.model_id",
+          "format": "$local.format",
+          "intent": "$local.intent",
+          "profile": "$local.profile",
+          "camera_preset": "$local.camera_preset",
+          "width": "$local.width",
+          "height": "$local.height",
+          "steps": "$local.steps",
+          "video_frames": "$local.video_frames",
+          "fps": "$local.fps",
+          "cfg_scale": "$local.cfg_scale",
+          "seed": "$local.seed",
+          "sampling_method": "$local.sampling_method",
+          "flow_shift": "$local.flow_shift",
+          "styles": "$local.styles",
+          "loras": "$local.loras",
+          "vae": "$local.vae",
+          "init_image": "$local.init_image",
+          "end_image": "$local.end_image",
+          "strength": "$local.strength",
+          "mask_image": "$local.mask_image",
+          "enrich_prompt": "$local.enrich_prompt",
+          "enhance_prompt_chat": "$local.enhance_prompt_chat",
+          "enriched_prompt": "$local.enriched_prompt",
           "composition_layers": "$local.composition_layers"
         }
       }
@@ -569,17 +850,29 @@
     {
       "id": "load_preset",
       "tool": "create.preset.load",
-      "input": { "name": "$local.saved_preset_name" }
+      "input": {
+        "name": "$local.saved_preset_name"
+      }
     },
     {
       "id": "save_result",
       "service": "files.save_as",
-      "input": { "source_path": "$local.result_path" }
+      "input": {
+        "source_path": "$local.result_path"
+      }
     }
   ],
   "subscriptions": [
-    { "id": "generate_job", "action": "generate_image", "kind": "media.image.generate" },
-    { "id": "generate_video_job", "action": "generate_video", "kind": "media.image.generate" }
+    {
+      "id": "generate_job",
+      "action": "generate_image",
+      "kind": "media.image.generate"
+    },
+    {
+      "id": "generate_video_job",
+      "action": "generate_video",
+      "kind": "media.image.generate"
+    }
   ],
   "root": {
     "kind": "split",
@@ -600,83 +893,599 @@
                     {
                       "kind": "row",
                       "children": [
-                        { "kind": "button", "action": "generate_image", "label_key": "generate_image_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } },
-                        { "kind": "button", "action": "generate_video", "label_key": "generate_video_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } }
+                        {
+                          "kind": "button",
+                          "action": "generate_image",
+                          "label_key": "generate_image_label",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "image"
+                            ]
+                          },
+                          "enabled": {
+                            "and": [
+                              {
+                                "eq": [
+                                  "$local.model_ready",
+                                  true
+                                ]
+                              },
+                              {
+                                "ne": [
+                                  "$local.prompt",
+                                  ""
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "button",
+                          "action": "generate_video",
+                          "label_key": "generate_video_label",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "video"
+                            ]
+                          },
+                          "enabled": {
+                            "and": [
+                              {
+                                "eq": [
+                                  "$local.model_ready",
+                                  true
+                                ]
+                              },
+                              {
+                                "ne": [
+                                  "$local.prompt",
+                                  ""
+                                ]
+                              }
+                            ]
+                          }
+                        }
                       ]
                     },
-                    { "kind": "job", "subscription": "generate_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "image"] } },
-                    { "kind": "job", "subscription": "generate_video_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "video"] } },
+                    {
+                      "kind": "job",
+                      "subscription": "generate_job",
+                      "label_key": "job_label",
+                      "visible": {
+                        "eq": [
+                          "$local.media_mode",
+                          "image"
+                        ]
+                      }
+                    },
+                    {
+                      "kind": "job",
+                      "subscription": "generate_video_job",
+                      "label_key": "job_label",
+                      "visible": {
+                        "eq": [
+                          "$local.media_mode",
+                          "video"
+                        ]
+                      }
+                    },
                     {
                       "kind": "section",
                       "label_key": "prompt_section",
                       "children": [
-                        { "kind": "radio", "state_key": "media_mode", "items": ["image", "video"], "item_label_keys": ["mode_image", "mode_video"], "inline": true },
-                        { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "image_pack_label", "tooltip_key": "tip_model", "visible": { "eq": ["$local.media_mode", "image"] } },
-                        { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "video_pack_label", "tooltip_key": "tip_model", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "textarea", "state_key": "prompt", "label_key": "prompt_label", "tooltip_key": "tip_prompt" },
-                        { "kind": "prompt_starters", "state_key": "prompt", "label_key": "starter_label", "items": ["A cinematic portrait with soft natural light", "A product photo on a clean studio background", "An atmospheric landscape at golden hour"] },
-                        { "kind": "file_picker", "state_key": "init_image", "label_key": "reference_label" },
-                        { "kind": "file_picker", "state_key": "end_image", "label_key": "end_reference_label", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "number", "state_key": "strength", "min": 0.05, "max": 1, "step": 0.05, "label_key": "reference_strength_label", "visible": { "ne": ["$local.init_image", ""] } },
-                        { "kind": "textarea", "state_key": "negative_prompt", "label_key": "negative_label" }
-                        ,{ "kind": "section", "label_key": "enrichment_section", "children": [
-                          { "kind": "checkbox", "state_key": "enrich_prompt", "label_key": "enrich_prompt_label", "tooltip_key": "tip_prompt" },
-                          { "kind": "checkbox", "state_key": "enhance_prompt_chat", "label_key": "enhance_prompt_label", "tooltip_key": "tip_prompt" },
-                          { "kind": "checkbox", "state_key": "use_edited_enriched", "label_key": "edited_prompt_label", "visible": { "ne": ["$local.enriched_prompt", ""] } },
-                          { "kind": "textarea", "state_key": "enriched_prompt", "label_key": "enriched_prompt_label", "visible": { "or": [{ "eq": ["$local.enrich_prompt", true] }, { "eq": ["$local.enhance_prompt_chat", true] }, { "eq": ["$local.use_edited_enriched", true] }] } }
-                        ] }
+                        {
+                          "kind": "radio",
+                          "state_key": "media_mode",
+                          "items": [
+                            "image",
+                            "video"
+                          ],
+                          "item_label_keys": [
+                            "mode_image",
+                            "mode_video"
+                          ],
+                          "inline": true
+                        },
+                        {
+                          "kind": "select",
+                          "state_key": "model_id",
+                          "binding": "models",
+                          "items_from_key": "$local.media_mode",
+                          "label_key": "image_pack_label",
+                          "tooltip_key": "tip_model",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "image"
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "select",
+                          "state_key": "model_id",
+                          "binding": "models",
+                          "items_from_key": "$local.media_mode",
+                          "label_key": "video_pack_label",
+                          "tooltip_key": "tip_model",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "video"
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "row",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "video"
+                            ]
+                          },
+                          "children": [
+                            {
+                              "kind": "number",
+                              "state_key": "video_frames",
+                              "min": 1,
+                              "max": 121,
+                              "label_key": "video_frames_label"
+                            },
+                            {
+                              "kind": "number",
+                              "state_key": "fps",
+                              "min": 1,
+                              "max": 120,
+                              "label_key": "fps_label"
+                            },
+                            {
+                              "kind": "select",
+                              "state_key": "camera_preset",
+                              "items": [
+                                "custom",
+                                "static",
+                                "push",
+                                "track",
+                                "follow"
+                              ],
+                              "item_label_keys": [
+                                "camera_custom",
+                                "camera_static",
+                                "camera_push",
+                                "camera_track",
+                                "camera_follow"
+                              ],
+                              "label_key": "camera_label"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "textarea",
+                          "state_key": "prompt",
+                          "label_key": "prompt_label",
+                          "tooltip_key": "tip_prompt"
+                        },
+                        {
+                          "kind": "prompt_starters",
+                          "state_key": "prompt",
+                          "label_key": "starter_label",
+                          "items": [
+                            "A cinematic portrait with soft natural light",
+                            "A product photo on a clean studio background",
+                            "An atmospheric landscape at golden hour"
+                          ]
+                        },
+                        {
+                          "kind": "file_picker",
+                          "state_key": "init_image",
+                          "label_key": "reference_label"
+                        },
+                        {
+                          "kind": "file_picker",
+                          "state_key": "end_image",
+                          "label_key": "end_reference_label",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "video"
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "number",
+                          "state_key": "strength",
+                          "min": 0.05,
+                          "max": 1,
+                          "step": 0.05,
+                          "label_key": "reference_strength_label",
+                          "visible": {
+                            "ne": [
+                              "$local.init_image",
+                              ""
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "textarea",
+                          "state_key": "negative_prompt",
+                          "label_key": "negative_label"
+                        },
+                        {
+                          "kind": "section",
+                          "label_key": "enrichment_section",
+                          "children": [
+                            {
+                              "kind": "checkbox",
+                              "state_key": "enrich_prompt",
+                              "label_key": "enrich_prompt_label",
+                              "tooltip_key": "tip_prompt"
+                            },
+                            {
+                              "kind": "checkbox",
+                              "state_key": "enhance_prompt_chat",
+                              "label_key": "enhance_prompt_label",
+                              "tooltip_key": "tip_prompt"
+                            },
+                            {
+                              "kind": "checkbox",
+                              "state_key": "use_edited_enriched",
+                              "label_key": "edited_prompt_label",
+                              "visible": {
+                                "ne": [
+                                  "$local.enriched_prompt",
+                                  ""
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "textarea",
+                              "state_key": "enriched_prompt",
+                              "label_key": "enriched_prompt_label",
+                              "visible": {
+                                "or": [
+                                  {
+                                    "eq": [
+                                      "$local.enrich_prompt",
+                                      true
+                                    ]
+                                  },
+                                  {
+                                    "eq": [
+                                      "$local.enhance_prompt_chat",
+                                      true
+                                    ]
+                                  },
+                                  {
+                                    "eq": [
+                                      "$local.use_edited_enriched",
+                                      true
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
                       ]
                     },
                     {
                       "kind": "section",
                       "label_key": "advanced_section",
                       "children": [
-                        { "kind": "text_input", "state_key": "saved_preset_name", "label_key": "preset_name_label" },
-                        { "kind": "row", "children": [
-                          { "kind": "button", "action": "save_preset", "label_key": "save_preset_label", "enabled": { "ne": ["$local.saved_preset_name", ""] } },
-                          { "kind": "button", "action": "load_preset", "label_key": "load_preset_label", "enabled": { "ne": ["$local.saved_preset_name", ""] } }
-                        ] },
-                        { "kind": "select", "state_key": "format", "items": ["1:1", "16:9", "9:16"], "label_key": "format_label" },
-                        { "kind": "select", "state_key": "intent", "items": ["custom", "portrait", "product", "illustration", "cinematic"], "label_key": "intent_label" },
-                        { "kind": "select", "state_key": "profile", "items": ["fast", "balanced", "quality"], "label_key": "quality_label" },
-                        { "kind": "slider", "state_key": "width", "min": 256, "max": 1024, "step": 64, "label_key": "width_label" },
-                        { "kind": "slider", "state_key": "height", "min": 256, "max": 1024, "step": 64, "label_key": "height_label" },
-                        { "kind": "slider", "state_key": "steps", "min": 4, "max": 40, "step": 1, "label_key": "steps_label" },
-                        { "kind": "number", "state_key": "video_frames", "min": 1, "max": 121, "label_key": "video_frames_label", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "number", "state_key": "fps", "min": 1, "max": 120, "label_key": "fps_label", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "select", "state_key": "camera_preset", "items": ["custom", "static", "push", "track", "follow"], "label_key": "camera_label", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "checkbox", "state_key": "img2img_enabled", "label_key": "img2img_label" },
-                        { "kind": "file_picker", "state_key": "mask_image", "label_key": "inpaint_label", "visible": { "eq": ["$local.img2img_enabled", true] } },
-                        { "kind": "section", "label_key": "styles_section", "children": [
-                        { "kind": "multiselect", "state_key": "styles", "binding": "models", "source": "/assets/styles", "items": [], "label_key": "styles_label", "tooltip_key": "tip_styles" },
-                          { "kind": "multiselect", "state_key": "loras", "binding": "models", "source": "/assets/loras", "items": [], "label_key": "loras_label", "tooltip_key": "tip_loras" },
-                          { "kind": "select", "state_key": "vae", "binding": "models", "items_from_key": "$local.asset_binding_key", "source": "/vaes", "items": [], "label_key": "vae_label", "tooltip_key": "tip_vae" }
-                          ,{ "kind": "asset_import", "state_key": "asset_import_kind", "source": "$local.asset_import_path", "binding": "$local.asset_import_status", "label_key": "import_assets_label" }
-                        ] },
-                        { "kind": "checkbox", "state_key": "expert", "label_key": "expert_label" }
+                        {
+                          "kind": "row",
+                          "children": [
+                            {
+                              "kind": "text_input",
+                              "state_key": "saved_preset_name",
+                              "label_key": "preset_name_label"
+                            },
+                            {
+                              "kind": "button",
+                              "action": "save_preset",
+                              "label_key": "save_preset_label",
+                              "enabled": {
+                                "ne": [
+                                  "$local.saved_preset_name",
+                                  ""
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "button",
+                              "action": "load_preset",
+                              "label_key": "load_preset_label",
+                              "enabled": {
+                                "ne": [
+                                  "$local.saved_preset_name",
+                                  ""
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "row",
+                          "children": [
+                            {
+                              "kind": "select",
+                              "state_key": "format",
+                              "items": [
+                                "1:1",
+                                "16:9",
+                                "9:16"
+                              ],
+                              "label_key": "format_label"
+                            },
+                            {
+                              "kind": "select",
+                              "state_key": "intent",
+                              "items": [
+                                "custom",
+                                "portrait",
+                                "product",
+                                "illustration",
+                                "cinematic"
+                              ],
+                              "item_label_keys": [
+                                "intent_custom",
+                                "intent_portrait",
+                                "intent_product",
+                                "intent_illustration",
+                                "intent_cinematic"
+                              ],
+                              "label_key": "intent_label"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "radio",
+                          "state_key": "profile",
+                          "items": [
+                            "fast",
+                            "balanced",
+                            "quality"
+                          ],
+                          "item_label_keys": [
+                            "profile_fast",
+                            "profile_balanced",
+                            "profile_quality"
+                          ],
+                          "label_key": "quality_label",
+                          "inline": true
+                        },
+                        {
+                          "kind": "row",
+                          "children": [
+                            {
+                              "kind": "slider",
+                              "state_key": "width",
+                              "min": 256,
+                              "max": 1024,
+                              "step": 64,
+                              "label_key": "width_label"
+                            },
+                            {
+                              "kind": "slider",
+                              "state_key": "height",
+                              "min": 256,
+                              "max": 1024,
+                              "step": 64,
+                              "label_key": "height_label"
+                            },
+                            {
+                              "kind": "slider",
+                              "state_key": "steps",
+                              "min": 4,
+                              "max": 40,
+                              "step": 1,
+                              "label_key": "steps_label"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "checkbox",
+                          "state_key": "img2img_enabled",
+                          "label_key": "img2img_label"
+                        },
+                        {
+                          "kind": "file_picker",
+                          "state_key": "mask_image",
+                          "label_key": "inpaint_label",
+                          "visible": {
+                            "eq": [
+                              "$local.img2img_enabled",
+                              true
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "section",
+                          "label_key": "styles_section",
+                          "children": [
+                            {
+                              "kind": "multiselect",
+                              "state_key": "styles",
+                              "binding": "models",
+                              "source": "/assets/styles",
+                              "items": [],
+                              "label_key": "styles_label",
+                              "tooltip_key": "tip_styles"
+                            },
+                            {
+                              "kind": "multiselect",
+                              "state_key": "loras",
+                              "binding": "models",
+                              "source": "/assets/loras",
+                              "items": [],
+                              "label_key": "loras_label",
+                              "tooltip_key": "tip_loras"
+                            },
+                            {
+                              "kind": "select",
+                              "state_key": "vae",
+                              "binding": "models",
+                              "items_from_key": "$local.asset_binding_key",
+                              "source": "/vaes",
+                              "items": [],
+                              "label_key": "vae_label",
+                              "tooltip_key": "tip_vae"
+                            },
+                            {
+                              "kind": "asset_import",
+                              "state_key": "asset_import_kind",
+                              "source": "$local.asset_import_path",
+                              "binding": "$local.asset_import_status",
+                              "label_key": "import_assets_label"
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "checkbox",
+                          "state_key": "expert",
+                          "label_key": "expert_label"
+                        }
                       ]
                     },
                     {
                       "kind": "section",
                       "label_key": "sampling_section",
-                      "visible": { "eq": ["$local.expert", true] },
+                      "visible": {
+                        "eq": [
+                          "$local.expert",
+                          true
+                        ]
+                      },
                       "children": [
-                        { "kind": "number", "state_key": "cfg_scale", "min": 1, "max": 30, "step": 0.5, "label_key": "cfg_label" },
-                        { "kind": "number", "state_key": "seed", "min": -1, "max": 2147483647, "label_key": "seed_label" },
-                        { "kind": "select", "state_key": "sampling_method", "items": ["", "euler", "euler_a", "heun", "dpm2", "lcm", "ddim"], "label_key": "sampler_label" },
-                        { "kind": "number", "state_key": "flow_shift", "min": 0, "max": 10, "step": 0.1, "label_key": "flow_shift_label", "visible": { "eq": ["$local.media_mode", "video"] } }
-                        ,{ "kind": "section", "label_key": "expert_section", "children": [
-                          { "kind": "checkbox", "state_key": "offload_to_cpu", "label_key": "offload_label" },
-                          { "kind": "checkbox", "state_key": "diffusion_fa", "label_key": "diffusion_fa_label" },
-                          { "kind": "checkbox", "state_key": "auto_fit", "label_key": "auto_fit_label" },
-                          { "kind": "checkbox", "state_key": "stream_layers", "label_key": "stream_layers_label" },
-                          { "kind": "text_input", "state_key": "max_vram", "label_key": "max_vram_label" },
-                          { "kind": "number", "state_key": "threads", "min": 0, "max": 64, "label_key": "threads_label" },
-                          { "kind": "select", "state_key": "backend", "items": ["", "cpu", "gpu", "cuda0", "vulkan0"], "label_key": "backend_label" },
-                          { "kind": "select", "state_key": "params_backend", "items": ["", "cpu", "cuda0", "disk"], "label_key": "params_backend_label" }
-                        ] }
+                        {
+                          "kind": "number",
+                          "state_key": "cfg_scale",
+                          "min": 1,
+                          "max": 30,
+                          "step": 0.5,
+                          "label_key": "cfg_label"
+                        },
+                        {
+                          "kind": "number",
+                          "state_key": "seed",
+                          "min": -1,
+                          "max": 2147483647,
+                          "label_key": "seed_label"
+                        },
+                        {
+                          "kind": "select",
+                          "state_key": "sampling_method",
+                          "items": [
+                            "",
+                            "euler",
+                            "euler_a",
+                            "heun",
+                            "dpm2",
+                            "lcm",
+                            "ddim"
+                          ],
+                          "label_key": "sampler_label",
+                          "item_label_keys": [
+                            "sampler_default",
+                            "sampler_euler",
+                            "sampler_euler_a",
+                            "sampler_heun",
+                            "sampler_dpm2",
+                            "sampler_lcm",
+                            "sampler_ddim"
+                          ]
+                        },
+                        {
+                          "kind": "number",
+                          "state_key": "flow_shift",
+                          "min": 0,
+                          "max": 10,
+                          "step": 0.1,
+                          "label_key": "flow_shift_label",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "video"
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "section",
+                          "label_key": "expert_section",
+                          "children": [
+                            {
+                              "kind": "checkbox",
+                              "state_key": "offload_to_cpu",
+                              "label_key": "offload_label"
+                            },
+                            {
+                              "kind": "checkbox",
+                              "state_key": "diffusion_fa",
+                              "label_key": "diffusion_fa_label"
+                            },
+                            {
+                              "kind": "checkbox",
+                              "state_key": "auto_fit",
+                              "label_key": "auto_fit_label"
+                            },
+                            {
+                              "kind": "checkbox",
+                              "state_key": "stream_layers",
+                              "label_key": "stream_layers_label"
+                            },
+                            {
+                              "kind": "text_input",
+                              "state_key": "max_vram",
+                              "label_key": "max_vram_label"
+                            },
+                            {
+                              "kind": "number",
+                              "state_key": "threads",
+                              "min": 0,
+                              "max": 64,
+                              "label_key": "threads_label"
+                            },
+                            {
+                              "kind": "select",
+                              "state_key": "backend",
+                              "items": [
+                                "",
+                                "cpu",
+                                "gpu",
+                                "cuda0",
+                                "vulkan0"
+                              ],
+                              "label_key": "backend_label",
+                              "item_label_keys": [
+                                "backend_default",
+                                "backend_cpu",
+                                "backend_gpu",
+                                "backend_cuda0",
+                                "backend_vulkan0"
+                              ]
+                            },
+                            {
+                              "kind": "select",
+                              "state_key": "params_backend",
+                              "items": [
+                                "",
+                                "cpu",
+                                "cuda0",
+                                "disk"
+                              ],
+                              "label_key": "params_backend_label",
+                              "item_label_keys": [
+                                "params_backend_default",
+                                "params_backend_cpu",
+                                "params_backend_cuda0",
+                                "params_backend_disk"
+                              ]
+                            }
+                          ]
+                        }
                       ]
-                    },
+                    }
                   ]
                 }
               },
@@ -685,8 +1494,37 @@
                 "content": {
                   "kind": "column",
                   "children": [
-                    { "kind": "empty_state", "bind": "create.history.list", "source": "items", "label_key": "history_empty" },
-                    { "kind": "table", "bind": "create.history.list", "source": "items", "columns": ["summary", "when"], "column_label_keys": ["history_prompt", "history_when"], "row_actions": [{ "tool": "create.history.get", "label_key": "history_restore", "args": { "id": "$row.id" }, "refresh_binds": ["create.result.get"] }] }
+                    {
+                      "kind": "empty_state",
+                      "bind": "create.history.list",
+                      "source": "items",
+                      "label_key": "history_empty"
+                    },
+                    {
+                      "kind": "table",
+                      "bind": "create.history.list",
+                      "source": "items",
+                      "columns": [
+                        "summary",
+                        "when"
+                      ],
+                      "column_label_keys": [
+                        "history_prompt",
+                        "history_when"
+                      ],
+                      "row_actions": [
+                        {
+                          "tool": "create.history.get",
+                          "label_key": "history_restore",
+                          "args": {
+                            "id": "$row.id"
+                          },
+                          "refresh_binds": [
+                            "create.result.get"
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               }
@@ -697,29 +1535,177 @@
       {
         "kind": "column",
         "children": [
-          { "kind": "layer_canvas", "binding": "preview", "state_key": "layer_opacity", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected", "aspect_w_key": "width", "aspect_h_key": "height", "aspect_w": 16, "aspect_h": 9, "tooltip_key": "tip_layers" },
-          { "kind": "layer_list", "layers_key": "composition_layers", "selected_key": "composition_selected", "next_id_key": "composition_next_id", "label_key": "layers_list_label" },
-          { "kind": "row", "children": [
-            { "kind": "button", "action": "clear_preview", "label_key": "clear_preview_label", "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "clear_layers", "label_key": "clear_layers_label" }
-          ] },
+          {
+            "kind": "layer_canvas",
+            "binding": "preview",
+            "state_key": "layer_opacity",
+            "canvas_id": "create-composition",
+            "layers_key": "composition_layers",
+            "selected_key": "composition_selected",
+            "aspect_w_key": "width",
+            "aspect_h_key": "height",
+            "aspect_w": 16,
+            "aspect_h": 9,
+            "tooltip_key": "tip_layers"
+          },
+          {
+            "kind": "layer_list",
+            "layers_key": "composition_layers",
+            "selected_key": "composition_selected",
+            "next_id_key": "composition_next_id",
+            "label_key": "layers_list_label"
+          },
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "action": "clear_preview",
+                "label_key": "clear_preview_label",
+                "enabled": {
+                  "ne": [
+                    "$local.result_path",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "button",
+                "action": "clear_layers",
+                "label_key": "clear_layers_label"
+              }
+            ]
+          },
           {
             "kind": "section",
             "label_key": "upscale_section",
             "children": [
-              { "kind": "text_input", "state_key": "upscale_model", "label_key": "upscale_model_label" },
-              { "kind": "number", "state_key": "upscale_repeats", "min": 1, "max": 4, "label_key": "upscale_repeats_label" },
-              { "kind": "number", "state_key": "upscale_tile_size", "min": 32, "max": 512, "label_key": "upscale_tile_label" },
-              { "kind": "button", "action": "upscale", "label_key": "upscale_label", "enabled": { "and": [{ "ne": ["$local.result_path", ""] }, { "ne": ["$local.upscale_model", ""] }] } }
+              {
+                "kind": "text_input",
+                "state_key": "upscale_model",
+                "label_key": "upscale_model_label"
+              },
+              {
+                "kind": "number",
+                "state_key": "upscale_repeats",
+                "min": 1,
+                "max": 4,
+                "label_key": "upscale_repeats_label"
+              },
+              {
+                "kind": "number",
+                "state_key": "upscale_tile_size",
+                "min": 32,
+                "max": 512,
+                "label_key": "upscale_tile_label"
+              },
+              {
+                "kind": "button",
+                "action": "upscale",
+                "label_key": "upscale_label",
+                "enabled": {
+                  "and": [
+                    {
+                      "ne": [
+                        "$local.result_path",
+                        ""
+                      ]
+                    },
+                    {
+                      "ne": [
+                        "$local.upscale_model",
+                        ""
+                      ]
+                    }
+                  ]
+                }
+              }
             ]
           },
-          { "kind": "row", "children": [
-            { "kind": "button", "action": "save_result", "label_key": "save_label", "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "regenerate", "label_key": "regenerate_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "variant", "label_key": "variant_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "regenerate_video", "label_key": "regenerate_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "variant_video", "label_key": "variant_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "ne": ["$local.result_path", ""] } }
-          ] }
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "action": "save_result",
+                "label_key": "save_label",
+                "enabled": {
+                  "ne": [
+                    "$local.result_path",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "button",
+                "action": "regenerate",
+                "label_key": "regenerate_label",
+                "visible": {
+                  "eq": [
+                    "$local.media_mode",
+                    "image"
+                  ]
+                },
+                "enabled": {
+                  "ne": [
+                    "$local.result_path",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "button",
+                "action": "variant",
+                "label_key": "variant_label",
+                "visible": {
+                  "eq": [
+                    "$local.media_mode",
+                    "image"
+                  ]
+                },
+                "enabled": {
+                  "ne": [
+                    "$local.result_path",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "button",
+                "action": "regenerate_video",
+                "label_key": "regenerate_label",
+                "visible": {
+                  "eq": [
+                    "$local.media_mode",
+                    "video"
+                  ]
+                },
+                "enabled": {
+                  "ne": [
+                    "$local.result_path",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "button",
+                "action": "variant_video",
+                "label_key": "variant_label",
+                "visible": {
+                  "eq": [
+                    "$local.media_mode",
+                    "video"
+                  ]
+                },
+                "enabled": {
+                  "ne": [
+                    "$local.result_path",
+                    ""
+                  ]
+                }
+              }
+            ]
+          }
         ]
       }
     ]

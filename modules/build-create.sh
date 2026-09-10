@@ -38,6 +38,16 @@ sha256_file() {
 }
 
 mkdir -p "${STAGING}/ui"
+python3 - <<'PY' "${MOD}/ui/index.json"
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+raw = path.read_text(encoding="utf-8")
+if "Ã" in raw or "Â" in raw:
+    print(f"ERROR: mojibake marker in {path}", file=sys.stderr)
+    sys.exit(1)
+json.loads(raw)
+print(f"== validated UTF-8 JSON: {path} ==")
+PY
 cp -f "$WASM_SRC" "${STAGING}/module.wasm"
 cp -f "${MOD}/ui/index.json" "${STAGING}/ui/index.json"
 HASH="$(sha256_file "${STAGING}/module.wasm")"
