@@ -316,7 +316,7 @@
           "cfg_scale": "$local.cfg_scale",
           "seed": "$local.seed",
           "sampling_method": "$local.sampling_method",
-          "sd_mode": "$local.sd_mode",
+          "sd_mode": "img_gen",
           "video_frames": "$local.video_frames",
           "fps": "$local.fps"
         }
@@ -337,9 +337,57 @@
           "cfg_scale": "$local.cfg_scale",
           "seed": -1,
           "sampling_method": "$local.sampling_method",
-          "sd_mode": "$local.sd_mode",
+          "sd_mode": "img_gen",
           "video_frames": "$local.video_frames",
           "fps": "$local.fps"
+        }
+      },
+      "refresh_binds": ["create.result.get", "create.history.list"]
+    },
+    {
+      "id": "regenerate_video",
+      "service": "media.image.generate",
+      "input": {
+        "prompt": "$local.prompt",
+        "model_id": "$local.model_id",
+        "options": {
+          "width": "$local.width",
+          "height": "$local.height",
+          "steps": "$local.steps",
+          "negative_prompt": "$local.negative_prompt",
+          "cfg_scale": "$local.cfg_scale",
+          "seed": "$local.seed",
+          "sampling_method": "$local.sampling_method",
+          "sd_mode": "vid_gen",
+          "video_frames": "$local.video_frames",
+          "fps": "$local.fps",
+          "init_image": "$local.init_image",
+          "end_image": "$local.end_image",
+          "flow_shift": "$local.flow_shift"
+        }
+      },
+      "refresh_binds": ["create.result.get", "create.history.list"]
+    },
+    {
+      "id": "variant_video",
+      "service": "media.image.generate",
+      "input": {
+        "prompt": "$local.prompt",
+        "model_id": "$local.model_id",
+        "options": {
+          "width": "$local.width",
+          "height": "$local.height",
+          "steps": "$local.steps",
+          "negative_prompt": "$local.negative_prompt",
+          "cfg_scale": "$local.cfg_scale",
+          "seed": -1,
+          "sampling_method": "$local.sampling_method",
+          "sd_mode": "vid_gen",
+          "video_frames": "$local.video_frames",
+          "fps": "$local.fps",
+          "init_image": "$local.init_image",
+          "end_image": "$local.end_image",
+          "flow_shift": "$local.flow_shift"
         }
       },
       "refresh_binds": ["create.result.get", "create.history.list"]
@@ -471,8 +519,10 @@
           },
           { "kind": "row", "children": [
             { "kind": "button", "action": "save_result", "label_key": "save_label", "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "regenerate", "label_key": "regenerate_label", "enabled": { "ne": ["$local.result_path", ""] } },
-            { "kind": "button", "action": "variant", "label_key": "variant_label", "enabled": { "ne": ["$local.result_path", ""] } }
+            { "kind": "button", "action": "regenerate", "label_key": "regenerate_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "ne": ["$local.result_path", ""] } },
+            { "kind": "button", "action": "variant", "label_key": "variant_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "ne": ["$local.result_path", ""] } },
+            { "kind": "button", "action": "regenerate_video", "label_key": "regenerate_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "ne": ["$local.result_path", ""] } },
+            { "kind": "button", "action": "variant_video", "label_key": "variant_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "ne": ["$local.result_path", ""] } }
           ] }
         ]
       }
