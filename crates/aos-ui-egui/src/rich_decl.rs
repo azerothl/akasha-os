@@ -87,10 +87,8 @@ impl ImageViewInteractionState {
                     }
                 }
             }
-            "commit" | "cancel" => {
-                if event.interaction_id == self.interaction_id {
-                    self.active = false;
-                }
+            "commit" | "cancel" if event.interaction_id == self.interaction_id => {
+                self.active = false;
             }
             _ => {}
         }
@@ -196,6 +194,7 @@ pub fn demo_job_tick(job_id: &str, completed: u32, total: u32, cancelled: bool) 
 }
 
 /// Rate-limit job progress UI updates (≤10 Hz per job).
+#[derive(Default)]
 pub struct JobProgressThrottle {
     last: HashMap<String, Instant>,
 }
@@ -205,14 +204,6 @@ impl std::fmt::Debug for JobProgressThrottle {
         f.debug_struct("JobProgressThrottle")
             .field("active_jobs", &self.last.len())
             .finish()
-    }
-}
-
-impl Default for JobProgressThrottle {
-    fn default() -> Self {
-        Self {
-            last: HashMap::new(),
-        }
     }
 }
 

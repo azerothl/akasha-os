@@ -353,7 +353,7 @@ pub fn humanize_tool_id_tokens(text: &str, t: &crate::i18n::UiStrings) -> String
             let inner = work[start + 1..start + 1 + end_rel].trim();
             if looks_like_tool_id(inner) {
                 let replacement = crate::i18n::tool_human_label(t, inner)
-                    .map(|label| format!("{label}"))
+                    .map(|label| label.to_string())
                     .unwrap_or_default();
                 let before = work[..start].trim_end();
                 let after = work[start + 1 + end_rel + 1..].trim_start();
@@ -637,9 +637,10 @@ pub fn strip_salon_markdown_markers(text: &str) -> String {
 }
 
 fn prose_list_marker_len(text: &str, at: usize) -> Option<usize> {
-    if text.get(at..).is_some_and(|tail| tail.starts_with("* ")) {
-        Some(2)
-    } else if text.get(at..).is_some_and(|tail| tail.starts_with("- ")) {
+    if text
+        .get(at..)
+        .is_some_and(|tail| tail.starts_with("* ") || tail.starts_with("- "))
+    {
         Some(2)
     } else {
         None
@@ -829,8 +830,8 @@ fn split_prose_paint_units(text: &str) -> Vec<ProsePaintUnit> {
     let mut i = 0usize;
     while i < text.len() {
         let marker_len = prose_list_marker_len(text, i);
-        let bullet = if marker_len.is_some() && is_prose_list_marker(text, i) {
-            Some((i, i + marker_len.unwrap()))
+        let bullet = if let Some(marker_len) = marker_len.filter(|_| is_prose_list_marker(text, i)) {
+            Some((i, i + marker_len))
         } else if is_prose_bullet_label_start(text, i) {
             Some((i, i))
         } else {
@@ -1031,9 +1032,7 @@ fn seal_json_intrablock_blank_lines(text: &str) -> String {
                 out.push(ch);
             }
             '}' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
+                depth = depth.saturating_sub(1);
                 out.push(ch);
             }
             '\n' if depth > 0 => {

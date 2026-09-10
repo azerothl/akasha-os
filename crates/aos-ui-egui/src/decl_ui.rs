@@ -1266,7 +1266,7 @@ impl DeclUiPanelState {
                     .unwrap_or_else(|| "layer_canvas".into());
                 let host = layer_canvases
                     .entry(canvas_id.clone())
-                    .or_insert_with(LayerCanvasHostState::new);
+                    .or_default();
                 let background_path = w
                     .binding
                     .as_ref()
@@ -1335,7 +1335,7 @@ impl DeclUiPanelState {
                     .unwrap_or_else(|| "layer_list".into());
                 let host = layer_canvases
                     .entry(list_id)
-                    .or_insert_with(LayerCanvasHostState::new);
+                    .or_default();
                 if let Some(patch) = crate::rich_composition_ui::ui_layer_list(
                     ui,
                     w,
@@ -1353,7 +1353,7 @@ impl DeclUiPanelState {
                 let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "layer_canvas".into());
                 let host = layer_canvases
                     .entry(canvas_id)
-                    .or_insert_with(LayerCanvasHostState::new);
+                    .or_default();
                 if let Some(patch) = crate::rich_composition_ui::ui_undo_redo(
                     ui,
                     w,

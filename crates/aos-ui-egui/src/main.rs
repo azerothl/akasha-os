@@ -3,6 +3,12 @@
 //! Surface testeur : chat, dashboard, onboarding, notes, confirm, agents,
 //! audit, scénarios guidés, retours (`feedback.submit`).
 
+#![allow(
+    dead_code, // Preview 0.17 ships staged media/composition surfaces incrementally.
+    clippy::too_many_arguments,
+    clippy::large_enum_variant,
+)]
+
 mod agent_act_phrase;
 mod agent_controller;
 mod agent_event_controller;
@@ -2511,8 +2517,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 } else {
                     "Primary sections"
                 });
-                for idx in 0..4 {
-                    let (label, tab) = &destinations[idx];
+                for (label, tab) in destinations.iter().take(4) {
                     if ui.button(*label).clicked() {
                         pick = Some(Pick::Tab(tab.clone()));
                     }
@@ -2520,8 +2525,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 egui::CollapsingHeader::new(t.nav_more)
                     .default_open(false)
                     .show(ui, |ui| {
-                        for idx in 4..destinations.len() {
-                            let (label, tab) = &destinations[idx];
+                        for (label, tab) in destinations.iter().skip(4) {
                             if ui
                                 .add_sized(
                                     egui::vec2(ui.available_width(), 30.0),

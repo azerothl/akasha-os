@@ -167,15 +167,16 @@ mod tests {
                 let cap = trimmed.strip_prefix("- ").unwrap().trim();
                 caps.push(cap.to_string());
             }
-            if !line.starts_with(' ') && !line.starts_with('\t') && !trimmed.is_empty() {
-                if !trimmed.starts_with("tools:")
-                    && !trimmed.starts_with("permissions:")
-                    && !trimmed.starts_with("required_caps:")
-                    && !trimmed.starts_with("- ")
-                {
-                    in_tools = false;
-                    in_required_caps = false;
-                }
+            if !line.starts_with(' ')
+                && !line.starts_with('\t')
+                && !trimmed.is_empty()
+                && !trimmed.starts_with("tools:")
+                && !trimmed.starts_with("permissions:")
+                && !trimmed.starts_with("required_caps:")
+                && !trimmed.starts_with("- ")
+            {
+                in_tools = false;
+                in_required_caps = false;
             }
         }
         (tools, caps)

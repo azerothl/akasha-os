@@ -485,7 +485,7 @@ pub fn import_legacy_history_if_needed(home: &Path) -> Result<usize, String> {
             }
         }
     }
-    metas.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
+    metas.sort_by_key(|meta| std::cmp::Reverse(meta.created_unix));
 
     let history_path = history_host_path(home);
     let mut store = load_history_store(&history_path);
@@ -521,7 +521,7 @@ pub fn import_legacy_history_if_needed(home: &Path) -> Result<usize, String> {
     }
     store
         .items
-        .sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
+        .sort_by_key(|entry| std::cmp::Reverse(entry.created_unix));
     if store.items.len() > 40 {
         store.items.truncate(40);
     }
