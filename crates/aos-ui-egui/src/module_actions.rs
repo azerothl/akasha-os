@@ -747,8 +747,39 @@ async fn run_media_image_generate(
                     Ok(_) => {}
                     Err(err) => {
                         let _ = evt_tx_bg.send(Evt::Status(format!(
-                            "Structured prompt unavailable; using the previous prompt ({err})"
+                            "Structured prompt unavailable; building a local Ideogram caption ({err})"
                         )));
+                        // A transient LLM failure must never downgrade an
+                        // Ideogram request back to chat prose. Build the
+                        // documented caption locally so the model still gets
+                        // `compositional_deconstruction` and the layer order.
+                        if matches!(
+                            req.model_id
+                                .as_deref()
+                                .and_then(crate::image_prompt::prompt_enrichment_kind),
+                            Some(crate::image_prompt::PromptEnrichmentKind::Ideogram4)
+                        ) {
+                            let fallback = parse_composition_blocks(&req.composition_blocks)
+                                .filter(|blocks| !blocks.is_empty())
+                                .map(|blocks| {
+                                    crate::image_composition::compose_prompt_with_layout(
+                                        &assistant_source,
+                                        &blocks,
+                                        req.model_id.as_deref(),
+                                    )
+                                })
+                                .unwrap_or_else(|| {
+                                    let raw = serde_json::json!({
+                                        "high_level_description": assistant_source
+                                    });
+                                    crate::image_prompt::normalize_ideogram_caption(
+                                        &raw.to_string(),
+                                        &original_prompt,
+                                    )
+                                    .unwrap_or_else(|_| original_prompt.clone())
+                                });
+                            generation_prompt = Some(fallback);
+                        }
                     }
                 }
             }
