@@ -645,18 +645,19 @@ impl UiApp {
         compact: bool,
     ) {
         let mut selected_model = model_id.clone().unwrap_or_default();
-        let model_label = if selected_model.is_empty() {
-            "default".to_string()
-        } else {
-            selected_model.clone()
-        };
+        let model_human = models_page::model_human_label(
+            selected_model.as_str(),
+            &self.models_ui.model_infos,
+            t.status_model_default,
+        );
         let model_w = if canvas_open || compact { 120.0 } else { 150.0 };
         egui::ComboBox::from_id_salt("chat_model_picker")
-            .selected_text(model_label)
+            .selected_text(model_human)
             .width(model_w)
             .show_ui(ui, |ui| {
                 if ui
-                    .selectable_value(&mut selected_model, String::new(), "default")
+                    .selectable_value(&mut selected_model, String::new(), t.status_model_default)
+                    .on_hover_text("default")
                     .changed()
                 {
                     let _ = self.cmd_tx.send(Cmd::SessionSetModel {

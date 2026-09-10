@@ -84,6 +84,26 @@ pub struct InstalledRow {
     pub runtime: Option<ModelInfo>,
 }
 
+/// Human label for a model id (status bar, chat picker, settings).
+/// Technical ids belong in tooltips only.
+pub fn model_human_label(model_id: &str, runtime: &[ModelInfo], default_label: &str) -> String {
+    if model_id.trim().is_empty() || model_id.eq_ignore_ascii_case("default") {
+        return default_label.to_string();
+    }
+    runtime
+        .iter()
+        .find(|m| m.id == model_id)
+        .map(|m| {
+            let name = m.name.trim();
+            if name.is_empty() {
+                m.id.clone()
+            } else {
+                name.to_string()
+            }
+        })
+        .unwrap_or_else(|| model_id.to_string())
+}
+
 /// User-facing residence state; never expose internal enum/debug names in UI.
 pub fn model_state_human(state: &aos_proto::ModelState, french: bool) -> &'static str {
     match (state, french) {
@@ -572,6 +592,47 @@ pub fn ui_installed_card(
 
 fn human_gib(bytes: u64) -> String {
     format!("{:.1} GiB", bytes as f64 / (1 << 30) as f64)
+}
+
+#[cfg(test)]
+mod model_human_label_tests {
+    use super::{model_human_label, ModelInfo};
+    use aos_proto::ModelState;
+
+    fn info(id: &str, name: &str) -> ModelInfo {
+        ModelInfo {
+            id: id.into(),
+            name: name.into(),
+            n_layers: 0,
+            privacy_class: String::new(),
+            state: ModelState::OnDisk,
+            placement: None,
+            profile: None,
+            has_vision: false,
+        }
+    }
+
+    #[test]
+    fn default_id_shows_human_default_label() {
+        let models = vec![info("local:llama", "Llama 3")];
+        assert_eq!(
+            model_human_label("default", &models, "Modèle par défaut"),
+            "Modèle par défaut"
+        );
+        assert_eq!(
+            model_human_label("", &models, "Default model"),
+            "Default model"
+        );
+    }
+
+    #[test]
+    fn known_model_uses_catalog_name() {
+        let models = vec![info("local:llama", "Llama 3 Instruct")];
+        assert_eq!(
+            model_human_label("local:llama", &models, "Default model"),
+            "Llama 3 Instruct"
+        );
+    }
 }
 
 #[cfg(test)]
