@@ -688,6 +688,11 @@ pub struct UiStrings {
     pub agents_tools: &'static str,
     pub agents_policies: &'static str,
     pub agents_skills: &'static str,
+    pub agents_skill_notes_writer: &'static str,
+    pub agents_skill_research: &'static str,
+    pub agents_skill_file_author: &'static str,
+    pub agents_skill_planner: &'static str,
+    pub agents_skill_tasks: &'static str,
     pub agents_tool_family_notes: &'static str,
     pub agents_tool_family_tasks: &'static str,
     pub agents_tool_family_files: &'static str,
@@ -1221,7 +1226,7 @@ const EN: UiStrings = UiStrings {
     settings_ui_scale_hint: "Scales text and controls across Preview, including the rail and status bar. Takes effect immediately.",
     settings_ui_font: "Interface font",
     settings_ui_font_hint: "Applies to Preview chrome (rail, panels, settings). Code blocks keep monospace. Takes effect immediately.",
-    settings_ui_font_preview: "Interface font",
+    settings_ui_font_preview: "The quick brown fox jumps over the lazy dog.",
     settings_ui_font_preview_label: "Preview",
     settings_ui_font_preview_hint: "The line above reflects the selected font.",
     memory_extracted_toast: "{} fact(s) remembered from chat",
@@ -1679,7 +1684,7 @@ const EN: UiStrings = UiStrings {
     model_setup_provider_test_ok: "Provider OK — {} model(s) found.",
     model_setup_provider_test_fail: "Provider test failed — {}",
     model_setup_api_key: "API key (vault)",
-    agents_refresh_catalogs: "Refresh catalogues (skills / MCP)",
+    agents_refresh_catalogs: "Update tool catalogues",
     agents_model: "Model",
     agents_label: "Name",
     agents_label_required: "Name is required",
@@ -1699,6 +1704,11 @@ const EN: UiStrings = UiStrings {
     agents_tools: "Tools",
     agents_policies: "Policies",
     agents_skills: "Skills",
+    agents_skill_notes_writer: "Notes writer",
+    agents_skill_research: "Research",
+    agents_skill_file_author: "File author",
+    agents_skill_planner: "Planner",
+    agents_skill_tasks: "Tasks",
     agents_tool_family_notes: "Notes",
     agents_tool_family_tasks: "Tasks",
     agents_tool_family_files: "Files",
@@ -2229,7 +2239,7 @@ const FR: UiStrings = UiStrings {
     settings_ui_scale_hint: "Ajuste texte et contrôles dans tout Preview, rail et barre d’état inclus. Effet immédiat.",
     settings_ui_font: "Police de l’interface",
     settings_ui_font_hint: "S’applique au chrome Preview (rail, panneaux, paramètres). Les blocs code restent en monospace. Effet immédiat.",
-    settings_ui_font_preview: "Police de l’interface",
+    settings_ui_font_preview: "Voici un texte d’exemple pour prévisualiser la police.",
     settings_ui_font_preview_label: "Aperçu",
     settings_ui_font_preview_hint: "Le texte ci-dessus reflète la police sélectionnée.",
     memory_extracted_toast: "{} fait(s) mémorisé(s) depuis le chat",
@@ -2687,7 +2697,7 @@ const FR: UiStrings = UiStrings {
     model_setup_provider_test_ok: "Provider OK — {} modèle(s) trouvé(s).",
     model_setup_provider_test_fail: "Échec du test provider — {}",
     model_setup_api_key: "Clé API (coffre)",
-    agents_refresh_catalogs: "Rafraîchir catalogues (skills / MCP)",
+    agents_refresh_catalogs: "Mettre à jour les catalogues d’outils",
     agents_model: "Modèle",
     agents_label: "Nom",
     agents_label_required: "Le nom est requis",
@@ -2707,6 +2717,11 @@ const FR: UiStrings = UiStrings {
     agents_tools: "Outils",
     agents_policies: "Politiques",
     agents_skills: "Compétences",
+    agents_skill_notes_writer: "Rédaction de notes",
+    agents_skill_research: "Recherche",
+    agents_skill_file_author: "Fichiers et artefacts",
+    agents_skill_planner: "Planification",
+    agents_skill_tasks: "Tâches",
     agents_tool_family_notes: "Notes",
     agents_tool_family_tasks: "Tâches",
     agents_tool_family_files: "Fichiers",
@@ -3170,6 +3185,28 @@ pub fn roster_tool_label<'a>(t: &'a UiStrings, tool_id: &str) -> &'a str {
     tool_human_label(t, tool_id).unwrap_or("?")
 }
 
+/// Human label for a skill id when one is defined (never the technical id).
+pub fn skill_human_label<'a>(t: &'a UiStrings, skill_id: &str) -> Option<&'a str> {
+    match skill_id {
+        "notes-writer" => Some(t.agents_skill_notes_writer),
+        "research" => Some(t.agents_skill_research),
+        "file-author" => Some(t.agents_skill_file_author),
+        "planner" => Some(t.agents_skill_planner),
+        "tasks" => Some(t.agents_skill_tasks),
+        _ => None,
+    }
+}
+
+/// Human-readable roster skill label (technical id in tooltip).
+pub fn roster_skill_label<'a>(t: &'a UiStrings, skill_id: &str) -> &'a str {
+    skill_human_label(t, skill_id).unwrap_or("?")
+}
+
+/// Human-facing MCP server name (wire id in tooltip).
+pub fn mcp_human_label(name: &str) -> String {
+    name.replace(['-', '_'], " ")
+}
+
 /// Human-readable label for pending confirmation banners (never raw cap ids).
 pub fn confirm_action_label(t: &UiStrings, action: &str) -> String {
     tool_human_label(t, action)
@@ -3280,11 +3317,35 @@ mod tests {
         let en = strings("en");
         let fr = strings("fr");
         assert_eq!(en.settings_ui_font, "Interface font");
-        assert_eq!(en.settings_ui_font_preview, en.settings_ui_font);
+        assert_ne!(en.settings_ui_font_preview, en.settings_ui_font);
         assert_eq!(en.settings_ui_font_preview_label, "Preview");
         assert_eq!(fr.settings_ui_font, "Police de l’interface");
-        assert_eq!(fr.settings_ui_font_preview, fr.settings_ui_font);
+        assert_ne!(fr.settings_ui_font_preview, fr.settings_ui_font);
         assert_eq!(fr.settings_ui_font_preview_label, "Aperçu");
+    }
+
+    #[test]
+    fn roster_skill_labels_avoid_raw_ids() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(roster_skill_label(&en, "notes-writer"), "Notes writer");
+        assert!(!roster_skill_label(&en, "notes-writer").contains('-'));
+        assert_eq!(roster_skill_label(&fr, "file-author"), "Fichiers et artefacts");
+        assert_eq!(roster_skill_label(&en, "planner"), "Planner");
+    }
+
+    #[test]
+    fn locked_agents_refresh_catalogs_copy_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.agents_refresh_catalogs, "Update tool catalogues");
+        assert_eq!(fr.agents_refresh_catalogs, "Mettre à jour les catalogues d’outils");
+        let en_lc = en.agents_refresh_catalogs.to_ascii_lowercase();
+        let fr_lc = fr.agents_refresh_catalogs.to_ascii_lowercase();
+        assert!(!en_lc.contains("skill"));
+        assert!(!en_lc.contains("mcp"));
+        assert!(!fr_lc.contains("skill"));
+        assert!(!fr_lc.contains("mcp"));
     }
 
     #[test]

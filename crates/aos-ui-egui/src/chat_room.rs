@@ -17,6 +17,11 @@ pub fn persona_label(t: &UiStrings, persona_id: &str) -> &'static str {
     i18n::persona_label(t, persona_id)
 }
 
+/// True when the wire agent id is a built-in salon persona (`persona-researcher`, …).
+pub fn is_persona_agent_id(agent_id: &str) -> bool {
+    agent_id.starts_with("persona-")
+}
+
 /// Roster name for UI: exact user label when set on Agents tab; else localized persona.
 pub fn member_display_label(t: &UiStrings, member: &ChatRoomMember) -> String {
     if member.persona_id.is_none() {

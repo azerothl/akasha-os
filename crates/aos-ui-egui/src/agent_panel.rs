@@ -811,7 +811,9 @@ pub fn chat_agent_card(
                 }
                 let shown = if title.is_empty() { agent_id } else { title };
                 ui.strong(truncate(shown, 64));
-                ui.weak(agent_id);
+                if !crate::chat_room::is_persona_agent_id(agent_id) {
+                    ui.weak(agent_id);
+                }
                 if max_steps > 0 && !canvas_fail && !canvas_muted {
                     ui.label(format!("step {step}/{max_steps}"));
                 }
