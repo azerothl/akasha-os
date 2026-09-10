@@ -1159,7 +1159,8 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
         "tasks.list" => serde_json::json!({}),
         "tasks.create" => serde_json::json!({"title": ""}),
         "tasks.update" | "tasks.complete" => serde_json::json!({"id": "__probe_nonexistent__"}),
-        "create.history.list" | "create.document.load" | "create.result.get" => {
+        "create.history.list" | "create.document.load" | "create.result.get"
+        | "create.models.list" => {
             serde_json::json!({})
         }
         "create.history.get" => serde_json::json!({"id": "__probe_nonexistent__"}),

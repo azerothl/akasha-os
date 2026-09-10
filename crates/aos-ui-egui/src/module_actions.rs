@@ -690,11 +690,17 @@ async fn run_media_image_generate(
                     job: job.clone(),
                 });
                 if module_bg == "create" {
+                    let media_mode = if crate::media_image_defaults::is_video_options(&req.options) {
+                        "video"
+                    } else {
+                        "image"
+                    };
                     let record_args = serde_json::json!({
                         "path": response.path,
                         "prompt": prompt,
                         "model_id": response.model_id,
                         "engine": response.engine,
+                        "media_mode": media_mode,
                         "width": req.options.width,
                         "height": req.options.height,
                         "steps": req.options.steps,

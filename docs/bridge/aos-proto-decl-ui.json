@@ -212,7 +212,7 @@
               ]
             },
             "item_label_keys": {
-              "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+              "description": "Parallel localized labels for `items` / binding rows (never wire ids in chrome).",
               "items": {
                 "type": "string"
               },
@@ -227,6 +227,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "items_from_key": {
+              "description": "When set with `binding`, pick `items` from `binding_cache[binding][resolved key]`. Key may be `$local.media_mode` to switch option lists (e.g. image vs video packs).",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -896,7 +903,7 @@
               ]
             },
             "item_label_keys": {
-              "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+              "description": "Parallel localized labels for `items` / binding rows (never wire ids in chrome).",
               "items": {
                 "type": "string"
               },
@@ -911,6 +918,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "items_from_key": {
+              "description": "When set with `binding`, pick `items` from `binding_cache[binding][resolved key]`. Key may be `$local.media_mode` to switch option lists (e.g. image vs video packs).",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -1174,7 +1188,7 @@
           ]
         },
         "item_label_keys": {
-          "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+          "description": "Parallel localized labels for `items` / binding rows (never wire ids in chrome).",
           "items": {
             "type": "string"
           },
@@ -1189,6 +1203,13 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "items_from_key": {
+          "description": "When set with `binding`, pick `items` from `binding_cache[binding][resolved key]`. Key may be `$local.media_mode` to switch option lists (e.g. image vs video packs).",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -1651,7 +1672,7 @@
               ]
             },
             "item_label_keys": {
-              "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+              "description": "Parallel localized labels for `items` / binding rows (never wire ids in chrome).",
               "items": {
                 "type": "string"
               },
@@ -1666,6 +1687,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "items_from_key": {
+              "description": "When set with `binding`, pick `items` from `binding_cache[binding][resolved key]`. Key may be `$local.media_mode` to switch option lists (e.g. image vs video packs).",
+              "type": [
+                "string",
                 "null"
               ]
             },

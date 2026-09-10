@@ -7,6 +7,67 @@ use serde_json::json;
 const HISTORY_PATH: &str = "/documents/create/history.json";
 const STATE_PATH: &str = "/documents/create/state.json";
 
+#[derive(Debug, Clone, Copy)]
+struct CatalogPack {
+    id: &'static str,
+    label: &'static str,
+    modality: &'static str,
+}
+
+/// Media packs mirrored from `share/models/catalog-offerings.json` (image + video).
+const MEDIA_PACKS: &[CatalogPack] = &[
+    CatalogPack {
+        id: "local:sd-v1-5",
+        label: "Stable Diffusion 1.5",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:flux2",
+        label: "Flux 2-class",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:ideogram4",
+        label: "Ideogram 4",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:sdxl-base",
+        label: "Stable Diffusion XL 1.0",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:z-image-turbo",
+        label: "Z-Image Turbo",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:qwen-image-2512",
+        label: "Qwen Image 2512",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:krea2-raw",
+        label: "Krea 2 Base",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:wan2.2-t2i",
+        label: "Wan 2.2 T2V (single frame)",
+        modality: "image",
+    },
+    CatalogPack {
+        id: "local:ltx2.3-dev",
+        label: "LTX 2.3 Dev",
+        modality: "video",
+    },
+    CatalogPack {
+        id: "local:minimax-h3",
+        label: "MiniMax H3",
+        modality: "video",
+    },
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct HistoryStore {
     #[serde(default)]
@@ -25,6 +86,8 @@ struct HistoryEntry {
     model_id: String,
     #[serde(default)]
     engine: String,
+    #[serde(default)]
+    media_mode: String,
     #[serde(default)]
     width: Option<u32>,
     #[serde(default)]
@@ -49,8 +112,28 @@ fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, Str
         "create.document.load" => document_load(),
         "create.document.save" => document_save(args),
         "create.result.get" => result_get(),
+        "create.models.list" => models_list(),
         _ => Err(format!("outil inconnu: {tool}")),
     }
+}
+
+fn models_list() -> Result<serde_json::Value, String> {
+    let image: Vec<serde_json::Value> = MEDIA_PACKS
+        .iter()
+        .filter(|p| p.modality == "image")
+        .map(|p| json!({ "id": p.id, "label": p.label }))
+        .collect();
+    let video: Vec<serde_json::Value> = MEDIA_PACKS
+        .iter()
+        .filter(|p| p.modality == "video")
+        .map(|p| json!({ "id": p.id, "label": p.label }))
+        .collect();
+    aos_module_sdk::json_ok(&json!({
+        "image": image,
+        "video": video,
+        "default_image": "local:sd-v1-5",
+        "default_video": "local:ltx2.3-dev",
+    }))
 }
 
 fn load_history() -> Result<HistoryStore, String> {
@@ -126,6 +209,7 @@ fn history_list() -> Result<serde_json::Value, String> {
                 "summary": e.prompt.chars().take(48).collect::<String>(),
                 "when": e.when,
                 "model_id": e.model_id,
+                "media_mode": e.media_mode,
             })
         })
         .collect();
@@ -148,9 +232,11 @@ fn history_get(args: &serde_json::Value) -> Result<serde_json::Value, String> {
     let params = json!({
         "prompt": entry.prompt,
         "model_id": entry.model_id,
+        "media_mode": entry.media_mode,
         "width": entry.width,
         "height": entry.height,
         "steps": entry.steps,
+        "result_path": entry.path,
     });
     aos_module_sdk::json_ok(&json!({
         "entry": entry,
@@ -166,6 +252,8 @@ struct HistoryRecordArgs {
     model_id: String,
     #[serde(default)]
     engine: String,
+    #[serde(default)]
+    media_mode: String,
     #[serde(default)]
     width: Option<u32>,
     #[serde(default)]
@@ -190,6 +278,7 @@ fn history_record(args: &serde_json::Value) -> Result<serde_json::Value, String>
         prompt: a.prompt,
         model_id: a.model_id,
         engine: a.engine,
+        media_mode: a.media_mode,
         width: a.width,
         height: a.height,
         steps: a.steps,
@@ -235,12 +324,30 @@ mod tests {
             prompt: "cat".into(),
             model_id: "local:sd".into(),
             engine: "sdcpp".into(),
+            media_mode: "image".into(),
             width: Some(512),
             height: Some(512),
             steps: Some(12),
         };
         let raw = serde_json::to_string(&e).unwrap();
         assert!(raw.contains("hist-1"));
+    }
+
+    #[test]
+    fn models_list_includes_image_and_video_modes() {
+        let out = models_list().expect("models");
+        let image = out.get("image").and_then(|v| v.as_array()).expect("image");
+        let video = out.get("video").and_then(|v| v.as_array()).expect("video");
+        assert!(!image.is_empty());
+        assert!(!video.is_empty());
+        assert!(
+            image.iter().any(|row| row.get("id").and_then(|v| v.as_str()) == Some("local:sd-v1-5"))
+        );
+        assert!(
+            video
+                .iter()
+                .any(|row| row.get("id").and_then(|v| v.as_str()) == Some("local:ltx2.3-dev"))
+        );
     }
 }
 

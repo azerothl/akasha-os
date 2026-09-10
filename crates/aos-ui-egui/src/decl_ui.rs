@@ -431,6 +431,7 @@ impl DeclUiPanelState {
                     w,
                     doc,
                     language,
+                    binding_cache,
                     local_state,
                     form_fields,
                     actions,
@@ -444,6 +445,7 @@ impl DeclUiPanelState {
                     w,
                     doc,
                     language,
+                    binding_cache,
                     local_state,
                     form_fields,
                     actions,
@@ -1806,6 +1808,7 @@ fn render_choice(
     w: &DeclUiWidget,
     doc: &DeclUiDocument,
     language: &str,
+    binding_cache: &HashMap<String, Value>,
     local_state: &HashMap<String, Value>,
     form_fields: &mut HashMap<String, String>,
     actions: &mut DeclUiActions,
@@ -1818,8 +1821,38 @@ fn render_choice(
         .or_else(|| w.label.clone())
         .or_else(|| w.text.clone())
         .unwrap_or_else(|| "choice".into());
-    let items = w.items.clone().unwrap_or_default();
-    let item_labels: Vec<String> = items
+    let dynamic_items = w.binding.as_ref().and_then(|binding_id| {
+        let key = w
+            .items_from_key
+            .as_deref()
+            .and_then(|key| key.strip_prefix("$local."))
+            .and_then(|key| local_state.get(key).and_then(Value::as_str));
+        let value = binding_cache.get(binding_id).cloned().unwrap_or(Value::Null);
+        let value = key
+            .and_then(|key| value.get(key).cloned())
+            .or_else(|| w.source.as_deref().and_then(|source| value.pointer(source).cloned()))
+            .unwrap_or(value);
+        value.as_array().map(|rows| {
+            rows.iter()
+                .filter_map(|row| {
+                    row.as_str().map(|s| (s.to_string(), s.to_string())).or_else(|| {
+                        row.get("id").and_then(Value::as_str).map(|id| {
+                            let label = row.get("label").and_then(Value::as_str).unwrap_or(id);
+                            (id.to_string(), label.to_string())
+                        })
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+    });
+    let items = dynamic_items
+        .as_ref()
+        .map(|rows| rows.iter().map(|(value, _)| value.clone()).collect())
+        .unwrap_or_else(|| w.items.clone().unwrap_or_default());
+    let item_labels: Vec<String> = dynamic_items
+        .as_ref()
+        .map(|rows| rows.iter().map(|(_, label)| label.clone()).collect())
+        .unwrap_or_else(|| items
         .iter()
         .enumerate()
         .map(|(index, item)| {
@@ -1829,7 +1862,7 @@ fn render_choice(
                 .and_then(|key| widget_text_from_key(Some(key), doc, language))
                 .unwrap_or_else(|| item.clone())
         })
-        .collect();
+        .collect());
     let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
     if let Some(state_key) = state_key {
         let mut current = local_state

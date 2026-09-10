@@ -246,7 +246,7 @@ fn play_audio(logical: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn inspect_media(logical: &str) -> Option<String> {
+pub(crate) fn inspect_media(logical: &str) -> Option<String> {
     let path = decl_ui::host_file_from_logical(logical);
     let bytes = std::fs::read(&path).ok()?;
     let size = bytes.len();

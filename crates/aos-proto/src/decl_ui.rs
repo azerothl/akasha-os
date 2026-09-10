@@ -260,9 +260,13 @@ pub struct DeclUiWidget {
     pub columns: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub items: Option<Vec<String>>,
-    /// Localized labels parallel to `items` for `select` / `radio` widgets.
+    /// Parallel localized labels for `items` / binding rows (never wire ids in chrome).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_label_keys: Option<Vec<String>>,
+    /// When set with `binding`, pick `items` from `binding_cache[binding][resolved key]`.
+    /// Key may be `$local.media_mode` to switch option lists (e.g. image vs video packs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub items_from_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub series: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -678,7 +682,12 @@ impl DeclUiWidget {
             "select" | "radio" => {
                 let has_items = self.items.as_ref().is_some_and(|i| !i.is_empty());
                 let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
-                if !has_items && !has_bind {
+                let has_binding = self.binding.as_ref().is_some_and(|b| !b.is_empty())
+                    && self
+                        .items_from_key
+                        .as_ref()
+                        .is_some_and(|k| !k.is_empty());
+                if !has_items && !has_bind && !has_binding {
                     return Err(err(DeclUiError::MissingField("items")));
                 }
             }
