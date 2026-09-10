@@ -2243,6 +2243,9 @@ fn render_choice(
                     actions
                         .local_patch
                         .insert(state_key.clone(), Value::String(current.clone()));
+                    if state_key == "format" {
+                        patch_format_dimensions(local_state, actions, &current);
+                    }
                 }
             };
             if w.inline.unwrap_or(false) {
@@ -2283,6 +2286,9 @@ fn render_choice(
                                 actions
                                     .local_patch
                                     .insert(state_key.clone(), Value::String(current.clone()));
+                                if state_key == "format" {
+                                    patch_format_dimensions(local_state, actions, &current);
+                                }
                             }
                         }
                     });
@@ -2354,6 +2360,39 @@ fn render_choice(
                 });
         });
     }
+}
+
+fn patch_format_dimensions(
+    local_state: &HashMap<String, Value>,
+    actions: &mut DeclUiActions,
+    format: &str,
+) {
+    if format == "custom" {
+        return;
+    }
+    let base = local_state
+        .get("width")
+        .and_then(Value::as_u64)
+        .unwrap_or(512)
+        .max(
+            local_state
+                .get("height")
+                .and_then(Value::as_u64)
+                .unwrap_or(512),
+        )
+        .clamp(256, 2048);
+    let (width, height) = match format {
+        "16:9" => (base, (base * 9 / 16).max(64)),
+        "9:16" => ((base * 9 / 16).max(64), base),
+        "1:1" => (base, base),
+        _ => return,
+    };
+    actions
+        .local_patch
+        .insert("width".into(), Value::from(width));
+    actions
+        .local_patch
+        .insert("height".into(), Value::from(height));
 }
 
 fn media_path(w: &DeclUiWidget, cache: &HashMap<String, Value>) -> String {
