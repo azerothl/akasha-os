@@ -1,8 +1,9 @@
 //! Primary rail vs overflow navigation (see docs/UI.md).
 
 use crate::Tab;
+use aos_proto::create_contract::MODULE_NAME;
 
-/// Primary rail order: Chat, Agents, Create (Image), Memory.
+/// Primary rail order: Chat, Agents, Create (optional module), Memory.
 pub const PRIMARY_RAIL: [TabKind; 4] = [
     TabKind::Chat,
     TabKind::Agents,
@@ -88,12 +89,29 @@ impl NavGroup {
     }
 }
 
+pub fn create_module_tab() -> Tab {
+    Tab::Module(MODULE_NAME.into())
+}
+
+pub fn is_create_tab(tab: &Tab) -> bool {
+    matches!(tab, Tab::Module(name) if name == MODULE_NAME)
+}
+
+/// Ordered primary-rail tabs; Create is omitted when the package is not installed.
+pub fn primary_rail_tabs(create_installed: bool) -> Vec<Tab> {
+    let mut tabs = vec![Tab::Chat, Tab::Agents];
+    if create_installed {
+        tabs.push(create_module_tab());
+    }
+    tabs.push(Tab::Memory);
+    tabs
+}
+
 #[cfg(test)]
 pub fn tab_kind(tab: &Tab) -> TabKind {
     match tab {
         Tab::Chat => TabKind::Chat,
         Tab::Agents => TabKind::Agents,
-        Tab::Image => TabKind::Create,
         Tab::Memory => TabKind::Memory,
         Tab::Notes => TabKind::Notes,
         Tab::Library => TabKind::Library,
@@ -105,12 +123,17 @@ pub fn tab_kind(tab: &Tab) -> TabKind {
         Tab::Providers => TabKind::Providers,
         Tab::Scenarios => TabKind::Scenarios,
         Tab::Feedback => TabKind::Feedback,
+        Tab::Module(name) if name == MODULE_NAME => TabKind::Create,
         Tab::Module(_) => TabKind::Module,
     }
 }
 
 pub fn is_primary_rail(tab: &Tab) -> bool {
-    matches!(tab, Tab::Chat | Tab::Agents | Tab::Image | Tab::Memory)
+    match tab {
+        Tab::Chat | Tab::Agents | Tab::Memory => true,
+        Tab::Module(name) => name == MODULE_NAME,
+        _ => false,
+    }
 }
 
 pub fn is_overflow_tab(tab: &Tab) -> bool {
@@ -123,15 +146,8 @@ pub fn primary_rail_index(tab: &Tab) -> Option<usize> {
     PRIMARY_RAIL.iter().position(|k| *k == kind)
 }
 
-pub fn tab_from_primary_index(index: usize) -> Option<Tab> {
-    let kind = PRIMARY_RAIL.get(index)?;
-    Some(match kind {
-        TabKind::Chat => Tab::Chat,
-        TabKind::Agents => Tab::Agents,
-        TabKind::Create => Tab::Image,
-        TabKind::Memory => Tab::Memory,
-        _ => return None,
-    })
+pub fn tab_from_primary_index(index: usize, create_installed: bool) -> Option<Tab> {
+    primary_rail_tabs(create_installed).get(index).cloned()
 }
 
 #[cfg(test)]
@@ -139,16 +155,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn primary_rail_has_four_items() {
+    fn primary_rail_has_four_kinds_when_create_installed() {
         assert_eq!(PRIMARY_RAIL.len(), 4);
         assert_eq!(PRIMARY_RAIL[0], TabKind::Chat);
         assert_eq!(PRIMARY_RAIL[2], TabKind::Create);
+        assert_eq!(primary_rail_tabs(true).len(), 4);
     }
 
     #[test]
-    fn image_maps_to_create_on_rail() {
-        assert!(is_primary_rail(&Tab::Image));
-        assert_eq!(primary_rail_index(&Tab::Image), Some(2));
+    fn create_maps_to_module_tab_on_rail() {
+        let tab = create_module_tab();
+        assert!(is_primary_rail(&tab));
+        assert!(is_create_tab(&tab));
+        assert_eq!(primary_rail_index(&tab), Some(2));
+        assert_eq!(tab_kind(&tab), TabKind::Create);
+    }
+
+    #[test]
+    fn rail_omits_create_when_uninstalled() {
+        let tabs = primary_rail_tabs(false);
+        assert_eq!(tabs.len(), 3);
+        assert!(!tabs.iter().any(is_create_tab));
+        assert_eq!(tab_from_primary_index(2, false), Some(Tab::Memory));
+    }
+
+    #[test]
+    fn lot4_create_keeps_primary_rail_slot_when_installed() {
+        let tabs = primary_rail_tabs(true);
+        assert_eq!(tabs.len(), 4);
+        assert_eq!(tabs[2], create_module_tab());
+        assert_eq!(primary_rail_index(&tabs[2]), Some(2));
     }
 
     #[test]
@@ -160,10 +196,14 @@ mod tests {
 
     #[test]
     fn ctrl_shortcuts_map_to_rail() {
-        assert_eq!(tab_from_primary_index(0), Some(Tab::Chat));
-        assert_eq!(tab_from_primary_index(3), Some(Tab::Memory));
-        assert_eq!(tab_from_primary_index(4), None);
+        assert_eq!(tab_from_primary_index(0, true), Some(Tab::Chat));
+        assert_eq!(tab_from_primary_index(3, true), Some(Tab::Memory));
+        assert_eq!(tab_from_primary_index(4, true), None);
         assert_eq!(TabKind::Agents.keyboard_shortcut(), Some("Ctrl+2"));
+        assert_eq!(
+            tab_from_primary_index(2, true),
+            Some(create_module_tab())
+        );
     }
 
     #[test]

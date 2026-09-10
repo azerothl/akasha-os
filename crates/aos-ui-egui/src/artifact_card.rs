@@ -136,11 +136,11 @@ fn open_document(target: &ArtifactTarget) -> bool {
 
 fn open_image(app: &mut UiApp, target: &ArtifactTarget) -> bool {
     if decl_ui::host_file_from_logical(&target.path).exists() {
-        app.image_studio
-            .open_from_chat(&target.title, &target.path, None);
-        app.image_studio.apply_history_for_path(&target.path);
-        app.tab = Tab::Image;
-        true
+        crate::create_nav::open_create_module_if_installed(
+            app,
+            Some(&target.title),
+            Some(&target.path),
+        )
     } else {
         false
     }

@@ -909,7 +909,7 @@ fn ensure_layout(home: &Path) -> Vec<String> {
         synced.push("tasks".into());
     }
 
-    // Module create (#150 lot 3) — optional app ; upgrade + user_removed ; pas de préinstall forcée.
+    // Module create (#150 lot 4) — migration + preinstall gérée ; pas de resync aveugle au boot.
     if create_migration::manage_create_module(home) {
         synced.push("create".into());
     }

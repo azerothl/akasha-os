@@ -18,6 +18,7 @@ mod chat_ask;
 mod chat_bubble;
 mod chat_canvas;
 mod chat_composer_state;
+mod create_nav;
 mod chat_controller;
 mod chat_delegate;
 mod chat_error_copy;
@@ -181,7 +182,6 @@ enum Tab {
     Library,
     Agents,
     Models,
-    Image,
     Providers,
     Audit,
     Caps,
@@ -651,7 +651,6 @@ impl UiApp {
             Tab::Library => t.tab_library,
             Tab::Agents => t.tab_agents,
             Tab::Models => t.tab_models,
-            Tab::Image => t.tab_create,
             Tab::Providers => t.tab_providers,
             Tab::Audit => t.tab_audit,
             Tab::Caps => t.tab_caps,
@@ -672,8 +671,19 @@ impl UiApp {
             .any(|m| m.name == "tasks")
     }
 
+    pub(crate) fn create_module_installed(&self) -> bool {
+        self.settings_ui
+            .installed_modules
+            .iter()
+            .any(|m| m.name == aos_proto::create_contract::MODULE_NAME)
+    }
+
     fn tasks_tab(&self) -> Tab {
         Tab::Module("tasks".into())
+    }
+
+    fn create_tab(&self) -> Tab {
+        nav::create_module_tab()
     }
 
     fn tab_is_selected(&self, tab: &Tab) -> bool {
@@ -1741,7 +1751,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         self.status = i18n::strings(&self.prefs.language).tts_card_blurb.into();
     }
 
-    fn on_tab_open(&mut self, tab: Tab) {
+    pub(crate) fn on_tab_open(&mut self, tab: Tab) {
         if tab == Tab::Feedback && self.tab != Tab::Feedback {
             self.feedback_ui.result.clear();
         }
@@ -1826,12 +1836,14 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn ui_nav_rail(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        let primary = [
+        let mut primary: Vec<(Tab, &str, &str)> = vec![
             (Tab::Chat, t.tab_chat, t.tab_hint_chat),
             (Tab::Agents, t.tab_agents, t.tab_hint_agents),
-            (Tab::Image, t.tab_create, t.tab_hint_image),
-            (Tab::Memory, t.tab_memory, t.tab_hint_memory),
         ];
+        if self.create_module_installed() {
+            primary.push((self.create_tab(), t.tab_create, t.tab_hint_image));
+        }
+        primary.push((Tab::Memory, t.tab_memory, t.tab_hint_memory));
         for (idx, (tab, label, hint)) in primary.into_iter().enumerate() {
             // These glyphs are covered by egui's bundled emoji font (monochrome
             // in egui), unlike arbitrary geometric Unicode symbols.
@@ -2289,7 +2301,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 .enumerate()
                 {
                     if i.key_pressed(*key) {
-                        if let Some(tab) = nav::tab_from_primary_index(idx) {
+                        if let Some(tab) =
+                            nav::tab_from_primary_index(idx, self.create_module_installed())
+                        {
                             self.on_tab_open(tab);
                         }
                     }
@@ -2351,11 +2365,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             let mut destinations: Vec<(&str, Tab)> = vec![
                 (t.tab_chat, Tab::Chat),
                 (t.tab_agents, Tab::Agents),
-                (t.tab_create, Tab::Image),
                 (t.tab_memory, Tab::Memory),
                 (t.tab_notes, Tab::Notes),
                 (t.tab_library, Tab::Library),
             ];
+            if self.create_module_installed() {
+                destinations.push((t.tab_create, self.create_tab()));
+            }
             if self.tasks_module_installed() {
                 destinations.push((t.tab_tasks, self.tasks_tab()));
             }
@@ -3467,27 +3483,6 @@ impl eframe::App for UiApp {
             Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
-            Tab::Image => overflow_scroll(ui, "image", |ui| {
-                let t = i18n::strings(&self.prefs.language);
-                let g = guide::strings(&self.prefs.language);
-                let mut open_create_guide = false;
-                let gen = self.image_generating.as_ref();
-                let dl_busy = self.models_ui.download_busy();
-                let last_session = &mut self.chat_state.composer.last_session_image;
-                self.image_studio.ui(
-                    ui,
-                    &t,
-                    &self.cmd_tx,
-                    gen,
-                    dl_busy,
-                    last_session,
-                    Some(g.help_tooltip),
-                    &mut open_create_guide,
-                );
-                if open_create_guide {
-                    self.guide.open_topic(guide::GuideTopic::Create);
-                }
-            }),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => overflow_scroll(ui, "audit", |ui| self.ui_audit(ui)),
             Tab::Caps => overflow_scroll(ui, "caps", |ui| self.ui_caps(ui)),

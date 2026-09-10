@@ -25,7 +25,11 @@ pub(crate) fn on_installed(app: &mut UiApp, message: String) {
 }
 
 pub(crate) fn on_uninstalled(app: &mut UiApp, name: String) {
-    app.status = format!("uninstalled {name}");
+    let t = crate::i18n::strings(&app.prefs.language);
+    app.status = crate::i18n::status_module_uninstalled(&t, &name);
+    app.settings_ui
+        .installed_modules
+        .retain(|module| module.name != name);
     if let Some(mut panel) = app.decl_panels.remove(&name) {
         panel.close();
     }

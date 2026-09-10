@@ -1,12 +1,12 @@
-//! Lot 3 (#150): manage optional Create installs without boot resync or forced reinstall.
+//! Lot 3–4 (#150): manage optional Create installs without boot resync or forced reinstall.
 //!
-//! Mirrors `tasks_migration` for upgrades and `user_removed`, but Create is **not**
-//! preinstalled — only already-installed packages are synced at boot.
+//! Mirrors `tasks_migration` for upgrades, `user_removed`, and standard-profile preinstall.
 //! Idempotently imports legacy `/downloads/*.meta.json` into `/documents/create/history.json`.
 
 use crate::bootstrap;
 use crate::update;
 use aos_proto::create_contract::{HISTORY_PATH, INVOKE_CAP, MANIFEST_FS_CAPS, MODULE_NAME};
+use aos_proto::decl_ui;
 use aos_proto::{MEDIA_GENERATE_CAP, ModuleManifest};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -100,6 +100,7 @@ pub fn manage_create_module(home: &Path) -> bool {
 }
 
 fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
+    let profile = decl_ui::resolve_preview_profile(home);
     let registry_path = modules_root(home).join("registry.yaml");
     let installed_dir = modules_root(home).join(MODULE_NAME);
     let mut registry = load_registry(&registry_path);
@@ -109,7 +110,8 @@ fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
     }
 
     let had_historical = is_historical_create_install(home, &registry);
-    if !had_historical && !installed_dir.is_dir() {
+    let preinstall = decl_ui::is_preinstalled_for_profile(MODULE_NAME, profile);
+    if !preinstall && !had_historical && !installed_dir.is_dir() {
         return Ok(false);
     }
 
@@ -125,6 +127,9 @@ fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
                 import_legacy_history_if_needed(home)?;
                 return Ok(false);
             }
+            if !preinstall {
+                return Ok(false);
+            }
             return Err(e);
         }
     };
@@ -138,7 +143,7 @@ fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
     ensure_managed_registry_entry(&installed_dir, &mut registry);
     if package_changed && registry.granted_caps(MODULE_NAME).is_empty() && !had_historical {
         let caps: Vec<String> = full_manifest_caps();
-        registry.ensure_installed(MODULE_NAME, caps, false);
+        registry.ensure_installed(MODULE_NAME, caps, preinstall);
     }
 
     if registry_dirty(&registry_path, &registry) {
@@ -384,9 +389,21 @@ fn ensure_managed_registry_entry(installed_dir: &Path, registry: &mut ModuleRegi
     }
     let caps = registry.granted_caps(MODULE_NAME);
     if registry.installed_entry(MODULE_NAME).is_some() {
+        if let Some(entry) = registry
+            .installed
+            .iter_mut()
+            .find(|e| e.name == MODULE_NAME)
+        {
+            entry.preinstalled = entry.preinstalled
+                || decl_ui::is_preinstalled_module(MODULE_NAME);
+        }
         return;
     }
-    registry.ensure_installed(MODULE_NAME, caps, false);
+    registry.ensure_installed(
+        MODULE_NAME,
+        caps,
+        decl_ui::is_preinstalled_module(MODULE_NAME),
+    );
 }
 
 fn registry_dirty(path: &Path, registry: &ModuleRegistry) -> bool {
@@ -597,11 +614,29 @@ mod tests {
     }
 
     #[test]
-    fn fresh_boot_does_not_preinstall_create() {
-        let home = temp_home("no-preinstall");
+    fn minimal_profile_skips_fresh_preinstall() {
+        let home = temp_home("minimal-profile");
         write_share_pkg(&home, "1.0.0", b"fresh wasm");
+        fs::write(
+            home.join("share/preview-profile.yaml"),
+            "profile: minimal\n",
+        )
+        .unwrap();
         assert!(!manage_create_module(&home));
         assert!(!modules_root(&home).join(MODULE_NAME).exists());
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn fresh_preinstall_grants_manifest_caps() {
+        let home = temp_home("fresh");
+        write_share_pkg(&home, "1.0.0", b"fresh wasm");
+        assert!(manage_create_module(&home));
+        let reg = fs::read_to_string(modules_root(&home).join("registry.yaml")).unwrap();
+        assert!(reg.contains("preinstalled: true"));
+        for cap in full_manifest_caps() {
+            assert!(reg.contains(&cap));
+        }
         let _ = fs::remove_dir_all(&home);
     }
 
