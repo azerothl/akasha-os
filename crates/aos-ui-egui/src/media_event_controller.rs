@@ -1,6 +1,6 @@
 //! Event handlers for image, video, and audio generation updates.
 
-use crate::{image_studio, ChatAttachment, ChatLine, UiApp};
+use crate::{media_image_defaults, ChatAttachment, ChatLine, UiApp};
 
 pub(crate) struct MediaOkEvent {
     pub(crate) kind: String,
@@ -13,8 +13,7 @@ pub(crate) struct MediaOkEvent {
 }
 
 pub(crate) fn on_image_enriched(app: &mut UiApp, enriched: String) {
-    app.image_studio.set_enriched_prompt(&enriched);
-    app.status = "Image: enhanced prompt ready, generating…".into();
+    app.status = format!("Image: enhanced prompt ready ({len} chars), generating…", len = enriched.len());
 }
 
 pub(crate) fn on_image_started(
@@ -23,7 +22,7 @@ pub(crate) fn on_image_started(
     upscaling: bool,
     total_steps: u32,
 ) {
-    app.image_generating = Some(image_studio::ImageGenUiState {
+    app.image_generating = Some(media_image_defaults::ImageGenUiState {
         enriching,
         upscaling,
         step: 0,
@@ -45,7 +44,7 @@ pub(crate) fn on_image_progress(
     total_steps: u32,
     elapsed_secs: u64,
 ) {
-    app.image_generating = Some(image_studio::ImageGenUiState {
+    app.image_generating = Some(media_image_defaults::ImageGenUiState {
         enriching,
         upscaling,
         step,

@@ -92,7 +92,6 @@ impl UiApp {
         // S7.3 : un download terminé compte comme activité + rescan disque.
         crate::models_disk::note_used(&mut self.models_ui.model_usage, &model_id, crate::now_ms());
         self.models_ui.disk_scan = Some(crate::models_disk::DiskScan::refresh());
-        self.image_studio.on_download_finished(&model_id);
     }
 
     pub(crate) fn on_model_download_failed(&mut self, model_id: String, error: String) {
