@@ -350,6 +350,30 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn lot5_native_image_studio_panel_removed() {
+        let path = workspace_root().join("crates/aos-ui-egui/src/image_studio.rs");
+        assert!(
+            !path.exists(),
+            "lot 5 must delete dead native image_studio.rs panel"
+        );
+    }
+
+    #[test]
+    fn lot5_composition_widgets_are_generic_not_create_named() {
+        let kinds = crate::rich_app_contract::UI_V2_ADDITIONAL_WIDGET_KINDS;
+        assert!(kinds.contains(&"layer_canvas"));
+        assert!(kinds.contains(&"layer_list"));
+        assert!(kinds.contains(&"undo_redo"));
+        for kind in kinds {
+            assert!(
+                !kind.contains("create"),
+                "widget kind must not embed app name: {kind}"
+            );
+        }
+    }
+
+    #[test]
     fn fr_surface_labels_avoid_wire_tokens_in_chrome() {
         let doc = read_ui_document();
         let fr = &doc.labels.as_ref().unwrap().fr;

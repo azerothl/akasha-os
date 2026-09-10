@@ -507,6 +507,30 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField("bind")));
             }
         }
+        "layer_canvas" => {
+            if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("layers_key")));
+            }
+            if w.selected_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("selected_key")));
+            }
+        }
+        "layer_list" => {
+            if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("layers_key")));
+            }
+            if w.selected_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("selected_key")));
+            }
+        }
+        "undo_redo" => {
+            if w.canvas_id.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("canvas_id")));
+            }
+            if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("layers_key")));
+            }
+        }
         "spacer" => {}
         other => {
             // Delegate v1 widget rules.
@@ -855,6 +879,9 @@ mod tests {
         assert!(kinds.contains(&"slider"));
         assert!(kinds.contains(&"image_view"));
         assert!(kinds.contains(&"job"));
+        assert!(kinds.contains(&"layer_canvas"));
+        assert!(kinds.contains(&"layer_list"));
+        assert!(kinds.contains(&"undo_redo"));
     }
 
     #[test]
@@ -923,6 +950,19 @@ mod tests {
             .expect("downloads read cap");
         let err = action.validate(&HashSet::new(), &[]).unwrap_err();
         assert!(matches!(err, RichDeclUiError::MissingCapability(_)));
+    }
+
+    #[test]
+    fn gallery_demo_ui_document_validates() {
+        let raw = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../modules/gallery-demo/ui/index.json"),
+        )
+        .expect("gallery-demo ui");
+        let doc = DeclUiDocument::parse_json_with_contract(raw.as_bytes(), UI_CONTRACT_V2)
+            .expect("parse");
+        let tools = ["gallery-demo.preview.ensure", "gallery-demo.preview.get"];
+        validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &[]).expect("gallery-demo ui valid");
     }
 
     #[test]
