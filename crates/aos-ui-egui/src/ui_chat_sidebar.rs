@@ -107,10 +107,6 @@ impl UiApp {
                             } else {
                                 "No sessions — create one."
                             });
-                            if ui.button(t.session_new).clicked() {
-                                let n = self.chat_state.sessions.len() + 1;
-                                self.request_session_create(Some(format!("Session {n}")));
-                            }
                         }
                         for group in crate::session_nav::GROUP_ORDER {
                             let mut group_sessions: Vec<_> = sessions

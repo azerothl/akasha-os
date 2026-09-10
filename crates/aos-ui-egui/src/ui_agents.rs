@@ -92,12 +92,17 @@ impl UiApp {
                     .desired_rows(2)
                     .desired_width(f32::INFINITY),
             );
-            ui.collapsing("Skills", |ui| {
+            ui.collapsing(t.agents_skills, |ui| {
                 if self.agent_ui.skill_catalog.is_empty() {
                     ui.weak(t.agents_catalog_empty);
                     for name in ["notes-writer", "research", "file-author", "planner"] {
                         let mut on = self.agent_ui.skill_selected.iter().any(|s| s == name);
-                        if ui.checkbox(&mut on, name).changed() {
+                        let label = i18n::roster_skill_label(&t, name);
+                        if ui
+                            .checkbox(&mut on, label)
+                            .on_hover_text(name)
+                            .changed()
+                        {
                             if on {
                                 self.agent_ui.skill_selected.push(name.into());
                             } else {
@@ -108,8 +113,15 @@ impl UiApp {
                 } else {
                     for s in self.agent_ui.skill_catalog.clone() {
                         let mut on = self.agent_ui.skill_selected.contains(&s.name);
+                        let label = i18n::roster_skill_label(&t, &s.name);
+                        let checkbox_label = if s.description.trim().is_empty() {
+                            label.to_string()
+                        } else {
+                            format!("{} — {}", label, s.description)
+                        };
                         if ui
-                            .checkbox(&mut on, format!("{} — {}", s.name, s.description))
+                            .checkbox(&mut on, checkbox_label)
+                            .on_hover_text(&s.name)
                             .changed()
                         {
                             if on {
@@ -137,8 +149,10 @@ impl UiApp {
                 }
                 for s in self.agent_ui.mcp_catalog.clone() {
                     let mut on = self.agent_ui.mcp_selected.contains(&s.name);
+                    let label = i18n::mcp_human_label(&s.name);
                     if ui
-                        .checkbox(&mut on, format!("{} ({})", s.name, s.command))
+                        .checkbox(&mut on, label)
+                        .on_hover_text(format!("{} — {}", s.name, s.command))
                         .changed()
                     {
                         if on {
@@ -267,14 +281,21 @@ impl UiApp {
             let selected = self.agent_ui.active_tab.as_deref() == Some(a.agent_id.as_str());
             let label = chat_room::roster_agent_label(&t, a);
             let label = agent_panel::truncate(&label, 48);
+            let hover = if chat_room::is_persona_agent_id(&a.agent_id) {
+                label.clone()
+            } else {
+                format!("{label} ({})", a.agent_id)
+            };
             if ui
                 .selectable_label(selected, &label)
-                .on_hover_text(&a.agent_id)
+                .on_hover_text(hover)
                 .clicked()
             {
                 self.open_agent_tab(&a.agent_id);
             }
-            ui.weak(&a.agent_id);
+            if !chat_room::is_persona_agent_id(&a.agent_id) {
+                ui.weak(&a.agent_id);
+            }
             ui.colored_label(
                 agent_panel::state_color(&a.state),
                 if a.is_roster() {
@@ -361,7 +382,12 @@ impl UiApp {
                 ui.weak(t.agents_catalog_empty);
                 for name in ["notes-writer", "research", "file-author", "planner"] {
                     let mut on = draft.skills.iter().any(|s| s == name);
-                    if ui.checkbox(&mut on, name).changed() {
+                    let label = i18n::roster_skill_label(&t, name);
+                    if ui
+                        .checkbox(&mut on, label)
+                        .on_hover_text(name)
+                        .changed()
+                    {
                         if on {
                             draft.skills.push(name.into());
                         } else {
@@ -372,8 +398,15 @@ impl UiApp {
             } else {
                 for s in self.agent_ui.skill_catalog.clone() {
                     let mut on = draft.skills.contains(&s.name);
+                    let label = i18n::roster_skill_label(&t, &s.name);
+                    let checkbox_label = if s.description.trim().is_empty() {
+                        label.to_string()
+                    } else {
+                        format!("{} — {}", label, s.description)
+                    };
                     if ui
-                        .checkbox(&mut on, format!("{} — {}", s.name, s.description))
+                        .checkbox(&mut on, checkbox_label)
+                        .on_hover_text(&s.name)
                         .changed()
                     {
                         if on {
@@ -396,9 +429,10 @@ impl UiApp {
             }
             for s in self.agent_ui.mcp_catalog.clone() {
                 let mut on = draft.mcp_servers.contains(&s.name);
+                let label = i18n::mcp_human_label(&s.name);
                 if ui
-                    .checkbox(&mut on, &s.name)
-                    .on_hover_text(&s.command)
+                    .checkbox(&mut on, label)
+                    .on_hover_text(format!("{} — {}", s.name, s.command))
                     .changed()
                 {
                     if on {
