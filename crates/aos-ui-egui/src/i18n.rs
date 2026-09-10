@@ -3173,6 +3173,18 @@ mod tests {
     }
 
     #[test]
+    fn locked_interface_font_preview_copy_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.settings_ui_font, "Interface font");
+        assert_eq!(en.settings_ui_font_preview, en.settings_ui_font);
+        assert_eq!(en.settings_ui_font_preview_label, "Preview");
+        assert_eq!(fr.settings_ui_font, "Police de l’interface");
+        assert_eq!(fr.settings_ui_font_preview, fr.settings_ui_font);
+        assert_eq!(fr.settings_ui_font_preview_label, "Aperçu");
+    }
+
+    #[test]
     fn routing_human_labels_avoid_raw_codes() {
         let t = strings("en");
         assert!(!routing_label(&t, "local_only").contains("local_only"));
