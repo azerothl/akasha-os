@@ -898,6 +898,37 @@ fn pen_dash_vec(dashed: bool) -> Vec<f32> {
     }
 }
 
+fn toolbar_group_sep(ui: &mut Ui) {
+    ui.add_space(TOOLBAR_GAP);
+    ui.separator();
+    ui.add_space(TOOLBAR_GAP);
+}
+
+fn toolbar_group_label(ui: &mut Ui, label: &str) {
+    ui.weak(label);
+    ui.add_space(2.0);
+}
+
+/// Compact layer picker for the toolbar Calques group.
+fn ui_canvas_layers_popup(
+    ui: &mut Ui,
+    t: &UiStrings,
+    state: &mut CanvasPanelState,
+) -> Option<CanvasUiAction> {
+    let active_name = state
+        .layers
+        .iter()
+        .find(|l| l.id == state.active_layer_id)
+        .map(|l| l.name.clone())
+        .unwrap_or_else(|| t.canvas_layer_add.to_string());
+    let mut action: Option<CanvasUiAction> = None;
+    let response = ui.menu_button(active_name, |ui| {
+        action = ui_canvas_layers(ui, t, state);
+    });
+    response.response.on_hover_text(t.canvas_toolbar_layers);
+    action
+}
+
 fn toolbar_color_button(ui: &mut Ui, rgba: &mut [f32; 4]) -> eframe::egui::Response {
     ui.scope(|ui| {
         ui.style_mut().spacing.interact_size = Vec2::splat(TOOLBAR_CTRL_H);
@@ -940,6 +971,7 @@ pub fn ui_canvas_toolbar(
         if canvas_agent_drawing {
             ui.weak(t.canvas_thinking);
         }
+        toolbar_group_label(ui, t.canvas_toolbar_tools);
         for (tool, icon, tip) in [
             (
                 CanvasTool::Select,
@@ -979,6 +1011,8 @@ pub fn ui_canvas_toolbar(
                 }
             }
         }
+        toolbar_group_sep(ui);
+        toolbar_group_label(ui, t.canvas_toolbar_style);
         let mut rgba = [
             state.color.r() as f32 / 255.0,
             state.color.g() as f32 / 255.0,
@@ -1085,6 +1119,13 @@ pub fn ui_canvas_toolbar(
                 }
             }
         }
+        toolbar_group_sep(ui);
+        toolbar_group_label(ui, t.canvas_toolbar_layers);
+        if let Some(layer_action) = ui_canvas_layers_popup(ui, t, state) {
+            action = Some(layer_action);
+        }
+        toolbar_group_sep(ui);
+        toolbar_group_label(ui, t.canvas_toolbar_export);
         if icons::toolbar_action_button(ui, ToolbarActionIcon::Undo, t.canvas_undo) {
             action = Some(CanvasUiAction::Apply(CanvasOpBody::Undo));
         }

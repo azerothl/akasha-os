@@ -1,7 +1,7 @@
 //! User memory management panel.
 
 use crate::cmd::Cmd;
-use crate::{guide, i18n, icons, memory_relation_lines, overflow_scroll_h, UiApp};
+use crate::{guide, i18n, icons, memory_relation_lines, overflow_scroll_h, theme, UiApp};
 use eframe::egui;
 use std::collections::HashMap;
 
@@ -25,9 +25,10 @@ impl UiApp {
         }
         ui.separator();
         ui.horizontal(|ui| {
-            ui.add(
+            theme::add_form_field(
+                ui,
+                400.0,
                 egui::TextEdit::singleline(&mut self.memory_ui.note)
-                    .desired_width(400.0)
                     .hint_text(t.memory_hint_remember),
             );
             if ui.button(t.memory_btn_remember).clicked() {
@@ -41,9 +42,10 @@ impl UiApp {
             }
         });
         ui.horizontal(|ui| {
-            ui.add(
+            theme::add_form_field(
+                ui,
+                400.0,
                 egui::TextEdit::singleline(&mut self.memory_ui.query)
-                    .desired_width(400.0)
                     .hint_text(t.memory_hint_recall),
             );
             if ui.button(t.memory_btn_recall).clicked() && !self.memory_ui.query.is_empty() {

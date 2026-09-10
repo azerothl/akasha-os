@@ -241,6 +241,30 @@ fn chamber_custom(custom: &crate::prefs::CustomThemePreferences) -> egui::Visual
 
 /// Apply the product-wide density without allowing compact mode to create
 /// touch targets smaller than 32 px.
+/// Raised single-line field for panels on void (Memory, etc.) — border/fill
+/// tuned for dark + high-contrast themes (WCAG AA field edges).
+pub fn add_form_field(ui: &mut egui::Ui, width: f32, edit: egui::TextEdit<'_>) -> egui::Response {
+    let visuals = ui.visuals();
+    let border = if visuals.widgets.inactive.fg_stroke.width >= 1.5 {
+        visuals.widgets.inactive.fg_stroke.color
+    } else {
+        mix(PAPER, VOID, 0.42)
+    };
+    let fill = mix(visuals.window_fill, PAPER, if visuals.dark_mode { 0.08 } else { 0.04 });
+    egui::Frame::new()
+        .fill(fill)
+        .stroke(egui::Stroke::new(1.0_f32, border))
+        .corner_radius(RADIUS_SM)
+        .inner_margin(egui::Margin::symmetric(8, 4))
+        .show(ui, |ui| {
+            ui.add_sized(
+                egui::vec2(width.max(80.0) - 16.0, CONTROL_MIN_H_COMFORTABLE - 8.0),
+                edit,
+            )
+        })
+        .inner
+}
+
 pub fn apply_ui_density(ctx: &egui::Context, density: crate::prefs::UiDensity) {
     let mut style = (*ctx.style()).clone();
     let h = density.control_height();
@@ -388,6 +412,24 @@ mod tests {
         assert_ne!(light.warning, WARNING);
         let hc = theme_colors("high_contrast", &custom);
         assert_eq!(hc.accent, SIGNAL);
+    }
+
+    #[test]
+    fn form_field_border_meets_aa_on_void() {
+        let border = mix(PAPER, VOID, 0.42);
+        let fill = mix(mix(VOID, PAPER, 0.04), PAPER, 0.08);
+        let ratio = contrast_ratio(border, fill);
+        assert!(
+            ratio >= 3.0,
+            "form field border on fill should meet UI component contrast, got {ratio:.2}"
+        );
+        let hc_border = PAPER;
+        let hc_fill = VOID;
+        let hc_ratio = contrast_ratio(hc_border, hc_fill);
+        assert!(
+            hc_ratio >= 3.0,
+            "HC form field border on void should meet UI contrast, got {hc_ratio:.2}"
+        );
     }
 
     #[test]

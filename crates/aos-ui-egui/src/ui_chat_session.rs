@@ -21,22 +21,29 @@ impl UiApp {
         mem: &ChatRoomMember,
     ) {
         let name = chat_room::member_display_label(t, mem);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            ui.strong(&name);
-            if icons::close_button(ui)
-                .on_hover_text(t.room_member_remove)
-                .clicked()
-            {
-                let _ = self.cmd_tx.send(Cmd::SessionMembersRemove {
-                    session_id: session_id.to_string(),
-                    agent_id: mem.agent_id.clone(),
+        let border = ui.visuals().widgets.inactive.fg_stroke.color;
+        egui::Frame::new()
+            .fill(ui.visuals().faint_bg_color)
+            .stroke(egui::Stroke::new(1.0_f32, border))
+            .inner_margin(egui::Margin::symmetric(6, 2))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.strong(&name);
+                    if icons::close_button(ui)
+                        .on_hover_text(t.room_member_remove)
+                        .clicked()
+                    {
+                        let _ = self.cmd_tx.send(Cmd::SessionMembersRemove {
+                            session_id: session_id.to_string(),
+                            agent_id: mem.agent_id.clone(),
+                        });
+                    }
                 });
-            }
-        });
+            });
     }
 
-    pub(crate) fn ui_room_add_library_chips(
+    pub(crate) fn ui_room_add_library_menu(
         &mut self,
         ui: &mut egui::Ui,
         t: &i18n::UiStrings,
@@ -47,11 +54,12 @@ impl UiApp {
         if candidates.is_empty() {
             return;
         }
-        ui.weak(t.room_add_from_library);
-        ui.horizontal_wrapped(|ui| {
+        let add_resp = ui.menu_button("+", |ui| {
+            ui.label(t.room_add_from_library);
+            ui.separator();
             for agent in candidates {
                 let label = chat_room::roster_agent_label(t, agent);
-                if ui.small_button(&label).clicked() {
+                if ui.button(&label).clicked() {
                     if let Some(persona_id) = agent.persona_id.clone() {
                         let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
                             session_id: session_id.to_string(),
@@ -63,7 +71,7 @@ impl UiApp {
                             .display_name
                             .clone()
                             .filter(|n| !n.trim().is_empty())
-                            .unwrap_or(label.clone());
+                            .unwrap_or_else(|| label.clone());
                         let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
                             session_id: session_id.to_string(),
                             member: ChatRoomMember {
@@ -74,9 +82,11 @@ impl UiApp {
                             },
                         });
                     }
+                    ui.close_menu();
                 }
             }
         });
+        add_resp.response.on_hover_text(t.room_add_from_library);
     }
 
     pub(crate) fn dispatch_canvas_ui_action(
@@ -496,7 +506,7 @@ impl UiApp {
         // le texte sur les voisins (superposition) ; ils sont en taille
         // naturelle et la barre bascule sur deux lignes sous 200px restants.
         let bar_w = ui.available_width();
-        let narrow = (bar_w - session_toggle_reserve_width(t, canvas_open)) < 200.0;
+        let narrow = (bar_w - session_toggle_reserve_width(t, canvas_open, true)) < 200.0;
         if narrow {
             self.ui_session_bar_left(
                 ui,
@@ -513,13 +523,14 @@ impl UiApp {
             );
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open);
+                    self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open, true);
                 });
             });
         } else {
+            let tuck_secondary = canvas_open && (bar_w - session_toggle_reserve_width(t, canvas_open, true)) < 280.0;
             ui.horizontal(|ui| {
                 let full_w = ui.available_width();
-                let toggle_w = session_toggle_reserve_width(t, canvas_open);
+                let toggle_w = session_toggle_reserve_width(t, canvas_open, tuck_secondary);
                 let left_w = (full_w - toggle_w).max(0.0);
                 ui.allocate_ui_with_layout(
                     egui::vec2(left_w, ui.available_height()),
@@ -545,7 +556,7 @@ impl UiApp {
                     egui::vec2(toggle_w.min(full_w), ui.available_height()),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open);
+                        self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open, tuck_secondary);
                     },
                 );
             });
@@ -593,32 +604,21 @@ impl UiApp {
             }
         }
 
-        if room && self.chat_state.view.room_members_open {
-            egui::Frame::group(ui.style())
-                .inner_margin(egui::Margin::symmetric(8, 6))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.strong(t.room_members_heading);
-                        if guide::tab_help_button(ui, g.help_tooltip) {
-                            self.guide.open_topic(guide::GuideTopic::Salon);
-                        }
-                    });
-                    if members.is_empty() {
-                        ui.weak(t.room_members_empty);
-                    } else {
-                        for mem in members {
-                            self.ui_room_member_chip(ui, t, &sid, mem);
-                        }
+        if room {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if members.is_empty() {
+                    ui.weak(t.room_members_empty);
+                } else {
+                    for mem in members {
+                        self.ui_room_member_chip(ui, t, &sid, mem);
                     }
-                    let candidates = chat_room::library_add_candidates(&self.agents, members, t);
-                    self.ui_room_add_library_chips(ui, t, &sid, model_id.clone(), &candidates);
-                });
-        }
-
-        if room && !members.is_empty() && !self.chat_state.view.room_members_open {
-            ui.horizontal_wrapped(|ui| {
-                for mem in members {
-                    self.ui_room_member_chip(ui, t, &sid, mem);
+                }
+                let candidates =
+                    chat_room::library_add_candidates(&self.agents, members, t);
+                self.ui_room_add_library_menu(ui, t, &sid, model_id.clone(), &candidates);
+                if guide::tab_help_button(ui, g.help_tooltip) {
+                    self.guide.open_topic(guide::GuideTopic::Salon);
                 }
             });
         }
@@ -696,31 +696,12 @@ impl UiApp {
         let title_max = if canvas_open || compact { 24 } else { 42 };
         let header =
             egui::RichText::new(crate::agent_panel::truncate(&session_title, title_max)).strong();
-        let title_resp = ui.add(egui::Label::new(header).sense(if room {
-            egui::Sense::click()
-        } else {
-            egui::Sense::hover()
-        }));
-        let title_clicked = title_resp.clicked();
-        let title_hover = match (room, session_title.len() > title_max) {
-            (true, true) => {
-                format!("{}\n{}", t.room_header_open_members, session_title)
-            }
-            (true, false) => t.room_header_open_members.to_string(),
-            (false, true) => session_title.clone(),
-            (false, false) => String::new(),
-        };
-        if !title_hover.is_empty() {
-            title_resp.on_hover_text(title_hover);
+        let title_resp = ui.add(egui::Label::new(header).sense(egui::Sense::hover()));
+        if session_title.len() > title_max {
+            title_resp.on_hover_text(&session_title);
         }
-        if room && title_clicked {
-            self.chat_state.view.room_members_open = !self.chat_state.view.room_members_open;
-        }
-        if room {
-            if has_members {
-                ui.weak(format!("· {count_line}"));
-            }
-            icons::caret(ui, self.chat_state.view.room_members_open);
+        if room && has_members {
+            ui.weak(format!("· {count_line}"));
         }
 
         if guide::tab_help_button(ui, g.help_tooltip) {
@@ -753,6 +734,7 @@ impl UiApp {
         sid: &str,
         room: bool,
         canvas_open: bool,
+        tuck_secondary: bool,
     ) {
         if canvas_open
             && icons::activity_toggle_button(ui, self.prefs.ui_layout.activity_panel_open)
@@ -774,32 +756,65 @@ impl UiApp {
                 open: new_open,
             });
         }
-        if canvas_open
-            && ui
-                .button(if self.prefs.ui_layout.canvas_focus {
-                    t.session_focus_exit
-                } else {
-                    t.session_focus
-                })
-                .on_hover_text(if self.prefs.ui_layout.canvas_focus {
-                    t.canvas_focus_exit
-                } else {
-                    t.canvas_focus
-                })
-                .clicked()
-        {
-            self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
-            crate::prefs::save_preferences(&self.prefs);
-        }
-        if session_toggle_chip(
-            ui,
-            self.chat_state.composer.deep_thinking,
-            t.session_toggle_deep,
-        )
-        .on_hover_text(t.tip_session_deep_thinking)
-        .clicked()
-        {
-            self.chat_state.composer.deep_thinking = !self.chat_state.composer.deep_thinking;
+        if tuck_secondary {
+            ui.menu_button("⋯", |ui| {
+                if canvas_open {
+                    let focus_on = self.prefs.ui_layout.canvas_focus;
+                    if ui
+                        .selectable_label(
+                            focus_on,
+                            if focus_on {
+                                t.session_focus_exit
+                            } else {
+                                t.session_focus
+                            },
+                        )
+                        .clicked()
+                    {
+                        self.prefs.ui_layout.canvas_focus = !focus_on;
+                        crate::prefs::save_preferences(&self.prefs);
+                        ui.close_menu();
+                    }
+                }
+                let deep_on = self.chat_state.composer.deep_thinking;
+                if ui
+                    .selectable_label(deep_on, t.session_toggle_deep)
+                    .on_hover_text(t.tip_session_deep_thinking)
+                    .clicked()
+                {
+                    self.chat_state.composer.deep_thinking = !deep_on;
+                    ui.close_menu();
+                }
+            });
+        } else {
+            if canvas_open
+                && ui
+                    .button(if self.prefs.ui_layout.canvas_focus {
+                        t.session_focus_exit
+                    } else {
+                        t.session_focus
+                    })
+                    .on_hover_text(if self.prefs.ui_layout.canvas_focus {
+                        t.canvas_focus_exit
+                    } else {
+                        t.canvas_focus
+                    })
+                    .clicked()
+            {
+                self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
+                crate::prefs::save_preferences(&self.prefs);
+            }
+            if session_toggle_chip(
+                ui,
+                self.chat_state.composer.deep_thinking,
+                t.session_toggle_deep,
+            )
+            .on_hover_text(t.tip_session_deep_thinking)
+            .clicked()
+            {
+                self.chat_state.composer.deep_thinking =
+                    !self.chat_state.composer.deep_thinking;
+            }
         }
         if session_toggle_chip(ui, room, t.session_toggle_salon).clicked() {
             let mode = if room {

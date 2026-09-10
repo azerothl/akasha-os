@@ -33,8 +33,9 @@ pub(crate) struct ChatSessionsSplit {
 /// Sidebar and main-chat widths that never exceed `full_w`.
 pub(crate) fn chat_sessions_split(full_w: f32, gap: f32, canvas_open: bool) -> ChatSessionsSplit {
     let min_main = if canvas_open { 240.0_f32 } else { 200.0_f32 };
-    let max_side = if canvas_open { 160.0_f32 } else { 220.0_f32 };
-    let min_side = if canvas_open { 80.0_f32 } else { 120.0_f32 };
+    // Canvas open: keep the session-search placeholder readable in FR.
+    let max_side = if canvas_open { 228.0_f32 } else { 220.0_f32 };
+    let min_side = if canvas_open { 200.0_f32 } else { 120.0_f32 };
     let mut side_w = max_side.min((full_w * 0.30).max(min_side));
     if full_w - side_w - gap < min_main {
         side_w = (full_w - gap - min_main).clamp(80.0, max_side);
