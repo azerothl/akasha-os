@@ -1736,17 +1736,17 @@ fn render_choice(
             if let Some(label) = heading {
                 ui.label(label);
             }
-            for (value, label) in &items {
-                let mut selected = current.clone();
-                if ui
-                    .radio_value(&mut selected, value.clone(), label)
-                    .changed()
-                {
-                    actions
-                        .local_patch
-                        .insert(state_key.clone(), Value::String(value.clone()));
+            ui.horizontal(|ui| {
+                ui.set_min_width(0.0);
+                for (value, label) in &items {
+                    let selected = current == *value;
+                    if ui.selectable_label(selected, label).clicked() && !selected {
+                        actions
+                            .local_patch
+                            .insert(state_key.clone(), Value::String(value.clone()));
+                    }
                 }
-            }
+            });
         } else {
             let display = items
                 .iter()
