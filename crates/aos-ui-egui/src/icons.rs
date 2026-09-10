@@ -1321,6 +1321,11 @@ pub fn move_vertical_button(ui: &mut Ui) -> Response {
     layer_action_icon_button(ui, paint_grip_vertical)
 }
 
+/// Remove layer control (Lucide trash-2 style).
+pub fn layer_delete_button(ui: &mut Ui) -> Response {
+    layer_action_icon_button(ui, paint_trash)
+}
+
 /// Compact painted icon control for Create layer-list rows.
 fn layer_action_icon_button(
     ui: &mut Ui,
@@ -1528,6 +1533,35 @@ fn paint_grip_vertical(ui: &mut Ui, rect: Rect, color: Color32) {
             let p = c + Vec2::new(col * gap_x, row * gap_y);
             ui.painter().circle_filled(p, r, color);
         }
+    }
+}
+
+fn paint_trash(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width() * 0.26;
+    let lid_y = c.y - w * 0.55;
+    painter.line_segment([Pos2::new(c.x - w * 1.1, lid_y), Pos2::new(c.x + w * 1.1, lid_y)], stroke);
+    painter.line_segment(
+        [Pos2::new(c.x - w * 0.45, lid_y), Pos2::new(c.x - w * 0.45, lid_y - w * 0.55)],
+        stroke,
+    );
+    painter.line_segment(
+        [Pos2::new(c.x + w * 0.45, lid_y), Pos2::new(c.x + w * 0.45, lid_y - w * 0.55)],
+        stroke,
+    );
+    painter.rect_stroke(
+        Rect::from_center_size(c + Vec2::new(0.0, w * 0.35), Vec2::new(w * 1.7, w * 1.15)),
+        1.0,
+        stroke,
+        StrokeKind::Outside,
+    );
+    for dx in [-w * 0.35, 0.0, w * 0.35] {
+        painter.line_segment(
+            [Pos2::new(c.x + dx, lid_y + w * 0.15), Pos2::new(c.x + dx, c.y + w * 0.75)],
+            stroke,
+        );
     }
 }
 
