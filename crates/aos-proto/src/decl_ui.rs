@@ -507,6 +507,19 @@ impl DeclUiDocument {
     }
 }
 
+/// Repair classic UTF-8 misread as Latin-1 and re-encoded (e.g. `CrÃ©er` → `Créer`).
+pub fn repair_utf8_mojibake(text: &str) -> String {
+    if !text.contains('Ã') && !text.contains('Â') {
+        return text.to_string();
+    }
+    let bytes: Vec<u8> = text
+        .chars()
+        .filter(|ch| (*ch as u32) < 256)
+        .map(|ch| ch as u8)
+        .collect();
+    String::from_utf8(bytes).unwrap_or_else(|_| text.to_string())
+}
+
 impl DeclUiLabels {
     pub fn validate(&self) -> Result<(), DeclUiError> {
         if self.fallback.trim().is_empty() {
@@ -517,9 +530,10 @@ impl DeclUiLabels {
 
     /// Resolve a label key for `language` (`en`, `fr`, …) with explicit fallback.
     pub fn resolve(&self, language: &str, key: &str) -> Option<String> {
-        locale_map(self, language)
+        let resolved = locale_map(self, language)
             .and_then(|m| m.get(key).cloned())
-            .or_else(|| locale_map(self, &self.fallback).and_then(|m| m.get(key).cloned()))
+            .or_else(|| locale_map(self, &self.fallback).and_then(|m| m.get(key).cloned()));
+        resolved.map(|text| repair_utf8_mojibake(&text))
     }
 }
 
@@ -983,6 +997,20 @@ mod tests {
         };
         assert_eq!(labels.resolve("fr", "create").as_deref(), Some("Créer"));
         assert_eq!(labels.resolve("de", "create").as_deref(), Some("Create"));
+    }
+
+    #[test]
+    fn repair_utf8_mojibake_fixes_double_encoded_french() {
+        assert_eq!(repair_utf8_mojibake("CrÃ©er"), "Créer");
+        assert_eq!(repair_utf8_mojibake("ParamÃ¨tres"), "Paramètres");
+        assert_eq!(repair_utf8_mojibake("GÃ©nÃ©rer"), "Générer");
+        assert_eq!(repair_utf8_mojibake("Créer"), "Créer");
+        let labels = DeclUiLabels {
+            fallback: "en".into(),
+            en: HashMap::new(),
+            fr: HashMap::from([("app_title".into(), "CrÃ©er".into())]),
+        };
+        assert_eq!(labels.resolve("fr", "app_title").as_deref(), Some("Créer"));
     }
 
     #[test]
