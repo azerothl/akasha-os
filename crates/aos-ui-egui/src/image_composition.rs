@@ -1,6 +1,8 @@
 //! Prompt layout injection for `media.image.generate` (composition blocks).
 
-use crate::image_prompt::{prompt_enrichment_kind, PromptEnrichmentKind};
+use crate::image_prompt::{
+    normalize_ideogram_caption, prompt_enrichment_kind, PromptEnrichmentKind,
+};
 use image::{GrayImage, Luma};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -253,10 +255,19 @@ pub fn finalize_prompt_with_layout(
     if active.is_empty() {
         return base_or_enriched.to_string();
     }
-    if had_prior_enrichment || serde_json::from_str::<Value>(base_or_enriched.trim()).is_ok() {
-        merge_layout_into_prompt(base_or_enriched, blocks, model_id)
+    let merged =
+        if had_prior_enrichment || serde_json::from_str::<Value>(base_or_enriched.trim()).is_ok() {
+            merge_layout_into_prompt(base_or_enriched, blocks, model_id)
+        } else {
+            compose_prompt_with_layout(base_or_enriched, blocks, model_id)
+        };
+    if matches!(
+        model_id.and_then(prompt_enrichment_kind),
+        Some(PromptEnrichmentKind::Ideogram4)
+    ) {
+        normalize_ideogram_caption(&merged, base_or_enriched).unwrap_or(merged)
     } else {
-        compose_prompt_with_layout(base_or_enriched, blocks, model_id)
+        merged
     }
 }
 

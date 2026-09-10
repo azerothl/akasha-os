@@ -681,6 +681,17 @@ async fn run_media_image_generate(
             .generation_prompt
             .clone()
             .filter(|text| req.use_edited_enriched && !text.trim().is_empty());
+        if let (Some(prompt), Some(crate::image_prompt::PromptEnrichmentKind::Ideogram4)) = (
+            generation_prompt.take(),
+            req.model_id
+                .as_deref()
+                .and_then(crate::image_prompt::prompt_enrichment_kind),
+        ) {
+            generation_prompt = Some(
+                crate::image_prompt::normalize_ideogram_caption(&prompt, &original_prompt)
+                    .unwrap_or(prompt),
+            );
+        }
         let json_enrichment_supported =
             crate::image_prompt::supports_json_prompt_enrichment(req.model_id.as_deref());
         if req.enrich_prompt && !json_enrichment_supported {

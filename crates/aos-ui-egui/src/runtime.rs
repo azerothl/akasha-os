@@ -4891,7 +4891,8 @@ async fn enrich_image_prompt(
     model_id: Option<&str>,
 ) -> Result<String, String> {
     use crate::image_prompt::{
-        enrichment_status_label, enrichment_system_prompt, prompt_enrichment_kind,
+        enrichment_status_label, enrichment_system_prompt, normalize_ideogram_caption,
+        prompt_enrichment_kind, PromptEnrichmentKind,
     };
     let kind = prompt_enrichment_kind(model_id.unwrap_or(""))
         .ok_or_else(|| "prompt enrichment not supported for this model".to_string())?;
@@ -4907,6 +4908,9 @@ async fn enrich_image_prompt(
     } else {
         out.as_str()
     };
+    if kind == PromptEnrichmentKind::Ideogram4 {
+        return normalize_ideogram_caption(json_str, user_prompt);
+    }
     if serde_json::from_str::<serde_json::Value>(json_str).is_err() {
         return Err(format!(
             "LLM output is not valid JSON: {}",
