@@ -194,6 +194,11 @@ pub struct UiStrings {
     pub settings_auto_download_updates_hint: &'static str,
     pub settings_ui_scale: &'static str,
     pub settings_ui_scale_hint: &'static str,
+    pub settings_ui_font: &'static str,
+    pub settings_ui_font_hint: &'static str,
+    pub settings_ui_font_preview: &'static str,
+    pub settings_ui_font_preview_label: &'static str,
+    pub settings_ui_font_preview_hint: &'static str,
     pub memory_extracted_toast: &'static str,
     pub memory_badge_chat: &'static str,
     pub web_browse_btn: &'static str,
@@ -1182,6 +1187,11 @@ const EN: UiStrings = UiStrings {
     settings_auto_download_updates_hint: "When a newer Release is found, download it in the background. Apply still requires a relaunch (opt-in; off by default).",
     settings_ui_scale: "Interface scale",
     settings_ui_scale_hint: "Scales text and controls across Preview, including the rail and status bar. Takes effect immediately.",
+    settings_ui_font: "Interface font",
+    settings_ui_font_hint: "Applies to Preview chrome (rail, panels, settings). Code blocks keep monospace. Takes effect immediately.",
+    settings_ui_font_preview: "Interface font",
+    settings_ui_font_preview_label: "Preview",
+    settings_ui_font_preview_hint: "The line above reflects the selected font.",
     memory_extracted_toast: "{} fact(s) remembered from chat",
     memory_badge_chat: "chat",
     web_browse_btn: "Read page",
@@ -1284,7 +1294,7 @@ const EN: UiStrings = UiStrings {
     settings_presentation_zen: "Zen",
     settings_presentation_rail: "Compact rail",
     settings_presentation_hint: "Choose how much navigation chrome is visible.",
-    presentation_menu: "☰ Menu",
+    presentation_menu: "Menu",
     presentation_menu_hint: "Open section navigation (Ctrl/Cmd+K).",
     presentation_exit: "Exit focus",
     presentation_exit_hint: "Return to the classic interface.",
@@ -2164,6 +2174,11 @@ const FR: UiStrings = UiStrings {
     settings_auto_download_updates_hint: "Quand une Release plus récente est trouvée, la télécharge en arrière-plan. L’application reste au prochain lancement (opt-in ; désactivé par défaut).",
     settings_ui_scale: "Échelle de l’interface",
     settings_ui_scale_hint: "Ajuste texte et contrôles dans tout Preview, rail et barre d’état inclus. Effet immédiat.",
+    settings_ui_font: "Police de l’interface",
+    settings_ui_font_hint: "S’applique au chrome Preview (rail, panneaux, paramètres). Les blocs code restent en monospace. Effet immédiat.",
+    settings_ui_font_preview: "Police de l’interface",
+    settings_ui_font_preview_label: "Aperçu",
+    settings_ui_font_preview_hint: "Le texte ci-dessus reflète la police sélectionnée.",
     memory_extracted_toast: "{} fait(s) mémorisé(s) depuis le chat",
     memory_badge_chat: "chat",
     web_browse_btn: "Lire la page",
@@ -2266,7 +2281,7 @@ const FR: UiStrings = UiStrings {
     settings_presentation_zen: "Zen",
     settings_presentation_rail: "Rail compact",
     settings_presentation_hint: "Choisissez la quantité de navigation visible.",
-    presentation_menu: "☰ Menu",
+    presentation_menu: "Menu",
     presentation_menu_hint: "Ouvrir la navigation des sections (Ctrl/Cmd+K).",
     presentation_exit: "Quitter le focus",
     presentation_exit_hint: "Revenir à l’interface classique.",
@@ -3155,6 +3170,18 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn locked_interface_font_preview_copy_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.settings_ui_font, "Interface font");
+        assert_eq!(en.settings_ui_font_preview, en.settings_ui_font);
+        assert_eq!(en.settings_ui_font_preview_label, "Preview");
+        assert_eq!(fr.settings_ui_font, "Police de l’interface");
+        assert_eq!(fr.settings_ui_font_preview, fr.settings_ui_font);
+        assert_eq!(fr.settings_ui_font_preview_label, "Aperçu");
     }
 
     #[test]

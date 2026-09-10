@@ -9,7 +9,7 @@
 
 use crate::cmd::Cmd;
 use crate::ui_format::{format_local_datetime, local_tz_offset_minutes};
-use crate::{i18n, UiApp};
+use crate::{i18n, icons, UiApp};
 use aos_proto::AuditEvent;
 use eframe::egui;
 
@@ -205,14 +205,17 @@ impl UiApp {
         // Intégrité de la chaîne.
         match self.security_ui.audit_verified {
             Some(true) => {
-                ui.colored_label(
-                    crate::theme::button_colors(ui).success,
-                    if fr {
-                        "✓ Chaîne intègre (audit.verify)"
-                    } else {
-                        "✓ Chain intact (audit.verify)"
-                    },
-                );
+                ui.horizontal(|ui| {
+                    icons::done_check(ui);
+                    ui.colored_label(
+                        crate::theme::button_colors(ui).success,
+                        if fr {
+                            "Chaîne intègre (audit.verify)"
+                        } else {
+                            "Chain intact (audit.verify)"
+                        },
+                    );
+                });
             }
             Some(false) => {
                 ui.colored_label(
@@ -349,7 +352,7 @@ impl UiApp {
             if let Some(trace) = self.security_ui.audit_trace.clone() {
                 ui.weak(if fr { "chaîne :" } else { "trace:" });
                 ui.monospace(&trace);
-                if ui.small_button("×").clicked() {
+                if icons::close_button(ui).clicked() {
                     self.security_ui.audit_trace = None;
                     self.refresh_audit();
                 }
@@ -381,7 +384,7 @@ impl UiApp {
                 {
                     ui.horizontal(|ui| {
                         if r.ok {
-                            ui.colored_label(crate::theme::button_colors(ui).success, "↻");
+                            icons::refresh_mark(ui, crate::theme::button_colors(ui).success);
                         } else {
                             ui.colored_label(crate::theme::button_colors(ui).danger, "!");
                         }

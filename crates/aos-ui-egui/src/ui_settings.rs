@@ -98,6 +98,8 @@ impl UiApp {
                     "density",
                     "échelle",
                     "scale",
+                    "police",
+                    "font",
                 ]
                 .as_slice(),
                 [
@@ -151,12 +153,14 @@ impl UiApp {
                 "density",
                 "échelle",
                 "scale",
+                "police",
+                "font",
             ],
         ) {
             ui.heading(t.settings_me);
             egui::Grid::new("settings_me")
                 .num_columns(2)
-                .spacing([12.0, 8.0])
+                .spacing([12.0, 10.0])
                 .min_col_width(label_w)
                 .show(ui, |ui| {
                     ui.label(t.language);
@@ -284,6 +288,42 @@ impl UiApp {
                         });
                     ui.end_row();
 
+                    ui.label(t.settings_ui_font);
+                    let fr = self.prefs.language == "fr";
+                    let font_label = crate::fonts::ui_font_label(&self.prefs.ui_font, fr);
+                    egui::ComboBox::from_id_salt("prefs_ui_font")
+                        .selected_text(font_label)
+                        .show_ui(ui, |ui| {
+                            for (idx, id) in crate::prefs::UI_FONT_IDS.iter().enumerate() {
+                                let label = if fr {
+                                    crate::fonts::UI_FONT_LABELS[idx].1
+                                } else {
+                                    crate::fonts::UI_FONT_LABELS[idx].0
+                                };
+                                if ui
+                                    .selectable_label(self.prefs.ui_font == *id, label)
+                                    .on_hover_text(t.settings_ui_font_hint)
+                                    .clicked()
+                                {
+                                    self.prefs.ui_font = (*id).into();
+                                    save_preferences(&self.prefs);
+                                    self.status = t.settings_saved.into();
+                                }
+                            }
+                        });
+                    ui.end_row();
+
+                    ui.label(t.settings_ui_font_preview_label);
+                    ui.vertical(|ui| {
+                        ui.label(
+                            egui::RichText::new(t.settings_ui_font_preview)
+                                .size(15.0)
+                                .strong(),
+                        );
+                        ui.weak(t.settings_ui_font_preview_hint);
+                    });
+                    ui.end_row();
+
                     ui.label(t.settings_density);
                     ui.horizontal(|ui| {
                         for (density, label) in [
@@ -303,30 +343,38 @@ impl UiApp {
                     ui.end_row();
 
                     ui.label(t.settings_presentation);
-                    ui.horizontal_wrapped(|ui| {
-                        for (mode, label) in [
-                            (UiPresentationMode::Classic, t.settings_presentation_classic),
-                            (UiPresentationMode::Focus, t.settings_presentation_focus),
-                            (UiPresentationMode::Zen, t.settings_presentation_zen),
-                            (UiPresentationMode::Rail, t.settings_presentation_rail),
-                        ] {
-                            if ui
-                                .selectable_label(self.prefs.ui_presentation == mode, label)
-                                .on_hover_text(t.settings_presentation_hint)
-                                .clicked()
-                            {
-                                self.prefs.ui_presentation = mode;
-                                save_preferences(&self.prefs);
-                                self.status = t.settings_saved.into();
+                    let presentation_label = match self.prefs.ui_presentation {
+                        UiPresentationMode::Classic => t.settings_presentation_classic,
+                        UiPresentationMode::Focus => t.settings_presentation_focus,
+                        UiPresentationMode::Zen => t.settings_presentation_zen,
+                        UiPresentationMode::Rail => t.settings_presentation_rail,
+                    };
+                    egui::ComboBox::from_id_salt("prefs_presentation")
+                        .selected_text(presentation_label)
+                        .show_ui(ui, |ui| {
+                            for (mode, label) in [
+                                (UiPresentationMode::Classic, t.settings_presentation_classic),
+                                (UiPresentationMode::Focus, t.settings_presentation_focus),
+                                (UiPresentationMode::Zen, t.settings_presentation_zen),
+                                (UiPresentationMode::Rail, t.settings_presentation_rail),
+                            ] {
+                                if ui
+                                    .selectable_label(self.prefs.ui_presentation == mode, label)
+                                    .on_hover_text(t.settings_presentation_hint)
+                                    .clicked()
+                                {
+                                    self.prefs.ui_presentation = mode;
+                                    save_preferences(&self.prefs);
+                                    self.status = t.settings_saved.into();
+                                }
                             }
-                        }
-                    });
+                        });
                     ui.end_row();
 
                     ui.label(t.settings_auto_download_updates);
                     let mut auto_upd = self.prefs.auto_download_updates;
                     if ui
-                        .checkbox(&mut auto_upd, t.settings_auto_download_updates)
+                        .checkbox(&mut auto_upd, "")
                         .on_hover_text(t.settings_auto_download_updates_hint)
                         .changed()
                     {

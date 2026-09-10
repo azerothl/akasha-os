@@ -228,6 +228,9 @@ pub struct Preferences {
     /// Interface scale as a percentage (90, 100, 110, 125, 150). Applied via egui `zoom_factor`.
     #[serde(default = "default_ui_scale_percent")]
     pub ui_scale_percent: u32,
+    /// Interface font id (`default` | `inter` | `source_sans` | `atkinson`).
+    #[serde(default = "default_ui_font")]
+    pub ui_font: String,
     /// `ask` (default) | `autonomous` — inline Allow Once gate for chat agents.
     #[serde(default = "default_agent_gate_mode")]
     pub agent_gate_mode: String,
@@ -246,6 +249,19 @@ pub struct Preferences {
 
 /// Preset scale steps exposed in Settings → Me.
 pub const UI_SCALE_PRESETS: [u32; 5] = [90, 100, 110, 125, 150];
+
+/// Persisted interface font ids exposed in Settings → Me.
+pub const UI_FONT_IDS: [&str; 4] = ["default", "inter", "source_sans", "atkinson"];
+
+/// Normalise a persisted / user-entered font id.
+pub fn normalize_ui_font(raw: &str) -> &'static str {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "inter" => "inter",
+        "source_sans" | "source sans 3" | "sourcesans3" => "source_sans",
+        "atkinson" | "atkinson hyperlegible" => "atkinson",
+        _ => "default",
+    }
+}
 
 /// Preview UI language from OS locale when possible (`en` or `fr`).
 pub fn detect_os_language() -> String {
@@ -326,6 +342,10 @@ fn default_ui_scale_percent() -> u32 {
     100
 }
 
+fn default_ui_font() -> String {
+    "default".into()
+}
+
 fn default_agent_gate_mode() -> String {
     "ask".into()
 }
@@ -402,6 +422,7 @@ impl Default for Preferences {
             image_height: default_image_size(),
             image_steps: default_image_steps(),
             ui_scale_percent: default_ui_scale_percent(),
+            ui_font: default_ui_font(),
             agent_gate_mode: default_agent_gate_mode(),
             cloud_cap_cents: 0,
             cloud_alert_pct: default_cloud_alert_pct(),
@@ -445,6 +466,7 @@ pub fn load_preferences() -> Preferences {
     if let Ok(raw) = std::fs::read_to_string(&p) {
         if let Ok(mut prefs) = serde_json::from_str::<Preferences>(&raw) {
             prefs.ui_scale_percent = clamp_ui_scale_percent(prefs.ui_scale_percent);
+            prefs.ui_font = normalize_ui_font(&prefs.ui_font).into();
             return prefs;
         }
     }
@@ -594,5 +616,13 @@ mod tests {
         assert!(UiDensity::Compact.control_height() >= 32.0);
         assert!(UiDensity::Comfortable.control_height() >= 36.0);
         assert!(UiDensity::Comfortable.rail_width() > UiDensity::Compact.rail_width());
+    }
+
+    #[test]
+    fn ui_font_defaults_and_migrates() {
+        assert_eq!(Preferences::default().ui_font, "default");
+        let raw = r#"{"language":"en","theme":"dark","ui_font":"inter"}"#;
+        let prefs: Preferences = serde_json::from_str(raw).expect("deserialize");
+        assert_eq!(prefs.ui_font, "inter");
     }
 }

@@ -139,7 +139,9 @@ impl UiApp {
                                     == Some(s.id.as_str());
                                 let unread = self.chat_state.session_chat.is_unread(&s.id);
                                 let row = ui.horizontal(|ui| {
-                                    let pin = if s.pinned { "★ " } else { "" };
+                                    if s.pinned {
+                                        icons::pin_indicator(ui);
+                                    }
                                     if unread {
                                         let t = i18n::strings(&self.prefs.language);
                                         icons::status_dot(
@@ -151,7 +153,7 @@ impl UiApp {
                                     // Titre tronqué + tooltip complet : les longs
                                     // titres débordaient sur le compteur.
                                     let short =
-                                        agent_panel::truncate(&format!("{pin}{}", s.title), 26);
+                                        agent_panel::truncate(&s.title, 26);
                                     let title = ui
                                         .selectable_label(selected, short)
                                         .on_hover_text(&s.title);
