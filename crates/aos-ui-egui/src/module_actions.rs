@@ -687,6 +687,7 @@ async fn run_media_image_generate(
         }
         if let Some(ref generated) = generation_prompt {
             req.prompt = generated.clone();
+            req.generation_prompt = Some(generated.clone());
         }
         req.actor = "human:ui".into();
         req.caps = vec![
@@ -878,6 +879,18 @@ fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
     if let Some(camera) = camera {
         if !req.prompt.contains(camera) {
             req.prompt = format!("{}\n{}", req.prompt.trim(), camera);
+        }
+    }
+    let intent = match req.intent_preset.as_deref() {
+        Some("portrait") => Some("Intent: portrait framing and subject emphasis."),
+        Some("product") => Some("Intent: clean product presentation with controlled lighting."),
+        Some("illustration") => Some("Intent: illustrated composition with deliberate graphic shapes."),
+        Some("cinematic") => Some("Intent: cinematic composition and dramatic light."),
+        _ => None,
+    };
+    if let Some(intent) = intent {
+        if !req.prompt.contains(intent) {
+            req.prompt = format!("{}\n{}", req.prompt.trim(), intent);
         }
     }
 }

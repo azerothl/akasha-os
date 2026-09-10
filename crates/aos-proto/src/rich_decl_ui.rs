@@ -481,7 +481,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField("state_key")));
             }
         }
-        "text_input" | "file_picker" | "multiselect" => {
+        "text_input" | "file_picker" | "multiselect" | "prompt_starters" => {
             if w.state_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField("state_key")));
             }

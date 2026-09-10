@@ -492,6 +492,22 @@ impl DeclUiPanelState {
                     }
                 }
             }
+            "prompt_starters" => {
+                let Some(state_key) = &w.state_key else { return };
+                let label = widget_text(w, doc, language)
+                    .unwrap_or_else(|| "Suggestions".into());
+                ui.label(label);
+                ui.horizontal_wrapped(|ui| {
+                    for item in w.items.clone().unwrap_or_default() {
+                        if ui.add_enabled(enabled, egui::Button::new(&item)).clicked() {
+                            actions.local_patch.insert(
+                                state_key.clone(),
+                                Value::String(item),
+                            );
+                        }
+                    }
+                });
+            }
             "checkbox" => {
                 if let Some(state_key) = &w.state_key {
                     let label = widget_text(w, doc, language)
