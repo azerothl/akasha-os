@@ -15,7 +15,7 @@ SCHEMA — keys in this exact order:
 {"high_level_description":"...","style_description":{"aesthetics":"...","lighting":"...","photo":"...","medium":"...","color_palette":["#RRGGBB", "..."]},"compositional_deconstruction":{"background":"...","elements":[ ... ]}}
 - `compositional_deconstruction` is required and must contain `background` then `elements` (an array).
 - Spell the key exactly: compositional_deconstruction (NOT compositional_destruction).
-- `background` is a concrete scene/environment description; do not invent a setting absent from the user idea.
+- `background` is a concrete scene/environment description deduced from `high_level_description` and the user's idea; do not invent a setting absent from the user idea.
 - `elements` are ordered back to front. Every element is either {"type":"obj","bbox":[y_min,x_min,y_max,x_max],"desc":"..."} or {"type":"text","bbox":[y_min,x_min,y_max,x_max],"text":"VERBATIM","desc":"..."}; bbox is optional and coordinates are normalized integers 0–1000 in [y_min,x_min,y_max,x_max] order.
 - `style_description` is optional, but when present it must contain `aesthetics`, `lighting`, and `medium`, plus exactly one of `photo` or `art_style` (never both). For a photo use `photo` before `medium`; for an art style use `medium` before `art_style`.
 - Optional `color_palette` values must be uppercase #RRGGBB strings. Keep the documented key order: aesthetics, lighting, photo, medium, color_palette (photo) or aesthetics, lighting, medium, art_style, color_palette (art).
@@ -108,6 +108,47 @@ fn normalized_element(value: &serde_json::Value) -> Option<serde_json::Value> {
         out.insert("color_palette".into(), palette);
     }
     Some(serde_json::Value::Object(out))
+}
+
+fn meaningful_background(value: Option<&serde_json::Value>) -> Option<String> {
+    let text = string_value(value)?;
+    let lower = text.to_ascii_lowercase();
+    (!lower.contains("unspecified") && !lower.eq_ignore_ascii_case("background")).then_some(text)
+}
+
+fn derive_background(description: &str) -> String {
+    let description = description.trim();
+    // Keep a location clause when the caption contains a common spatial
+    // preposition; otherwise retain the complete high-level description so
+    // the background remains grounded in the user's prompt rather than being
+    // replaced by a fabricated scene.
+    let lower = description.to_ascii_lowercase();
+    let markers = [
+        " in ",
+        " at ",
+        " on ",
+        " under ",
+        " inside ",
+        " near ",
+        " against ",
+        " dans ",
+        " au ",
+        " aux ",
+        " en ",
+        " sur ",
+        " sous ",
+        " devant ",
+        " à ",
+    ];
+    markers
+        .iter()
+        .filter_map(|marker| lower.find(marker).map(|index| (index, marker.len())))
+        .min_by_key(|(index, _)| *index)
+        .map(|(index, marker_len)| description[index + marker_len..].trim())
+        .filter(|tail| !tail.is_empty())
+        .map(|tail| tail.trim_end_matches(['.', ';']).to_owned())
+        .filter(|tail| tail.len() >= 3)
+        .unwrap_or_else(|| description.to_owned())
 }
 
 fn json_fragment(value: &serde_json::Value) -> String {
@@ -243,9 +284,10 @@ pub fn normalize_ideogram_caption(raw: &str, fallback: &str) -> Result<String, S
     });
     let background = composition
         .and_then(serde_json::Value::as_object)
-        .and_then(|c| string_value(c.get("background")))
-        .or_else(|| string_value(root.get("background")))
-        .or_else(|| string_value(root.get("environment")))
+        .and_then(|c| meaningful_background(c.get("background")))
+        .or_else(|| meaningful_background(root.get("background")))
+        .or_else(|| meaningful_background(root.get("environment")))
+        .or_else(|| (!high_level.is_empty()).then(|| derive_background(&high_level)))
         .unwrap_or_else(|| "unspecified background".into());
     let source_elements = composition
         .and_then(serde_json::Value::as_object)
@@ -308,6 +350,12 @@ Rules:
 2. Add plausible, specific details — avoid vague filler ("beautiful", "stunning", "masterpiece").
 3. Do not add major elements the user did not imply.
 4. One paragraph or a few comma-separated phrases; keep under 120 words unless the user idea is already long."##;
+
+/// Concise rewrite used for composition layers. Unlike the global assistant,
+/// this must preserve the element's scope and geometry instead of inventing a
+/// complete scene, camera setup, or unrelated objects.
+pub const CHAT_ENHANCE_LAYER_SYSTEM_PROMPT: &str = r##"Rewrite a single composition-layer description into concise plain text. Output ONLY the rewritten description, with no markdown, JSON, labels, or commentary.
+Preserve exactly the same subject, action, and intended object. Add at most two concrete visual details (material, color, or one simple state). Never invent a new setting, additional objects or people, camera/composition instructions, lighting setup, or a complete scene. Keep it under 35 words and keep the original language when possible."##;
 
 /// Video-specific prose enrichment. Keep the output plain text because sd.cpp
 /// receives it as the actual prompt, but add temporal/camera cues that an
@@ -457,5 +505,16 @@ mod tests {
         );
         assert_eq!(value["style_description"]["art_style"], "watercolor");
         assert!(value["style_description"].get("photo").is_none());
+    }
+
+    #[test]
+    fn ideogram_caption_derives_background_from_high_level_description() {
+        let raw = r#"{"high_level_description":"A red fox resting in a quiet pine forest at dawn","style_description":{"aesthetics":"natural","lighting":"dawn","medium":"photograph","photo":"wildlife"},"compositional_deconstruction":{"background":"unspecified background","elements":[]}}"#;
+        let normalized = normalize_ideogram_caption(raw, "").unwrap();
+        let value: serde_json::Value = serde_json::from_str(&normalized).unwrap();
+        assert_eq!(
+            value["compositional_deconstruction"]["background"],
+            "a quiet pine forest at dawn"
+        );
     }
 }

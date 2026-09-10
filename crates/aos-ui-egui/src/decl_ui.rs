@@ -685,17 +685,48 @@ impl DeclUiPanelState {
             "checkbox" => {
                 if let Some(state_key) = &w.state_key {
                     let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
+                    let edited_active = local_state
+                        .get("use_edited_enriched")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let checkbox_enabled = enabled
+                        && !(edited_active
+                            && matches!(
+                                state_key.as_str(),
+                                "enrich_prompt" | "enhance_prompt_chat"
+                            ));
                     let mut on = local_state
                         .get(state_key)
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
                     if ui
-                        .add_enabled(enabled, egui::Checkbox::new(&mut on, label))
+                        .add_enabled(checkbox_enabled, egui::Checkbox::new(&mut on, label))
                         .changed()
                     {
                         actions
                             .local_patch
                             .insert(state_key.clone(), Value::Bool(on));
+                        // An edited enriched prompt is an explicit source of
+                        // truth: selecting it disables both automatic
+                        // assistants. Conversely, opting into an assistant
+                        // leaves edited-prompt mode so it cannot be silently
+                        // overwritten by a later generation pass.
+                        if state_key == "use_edited_enriched" && on {
+                            actions
+                                .local_patch
+                                .insert("enrich_prompt".into(), Value::Bool(false));
+                            actions
+                                .local_patch
+                                .insert("enhance_prompt_chat".into(), Value::Bool(false));
+                        } else if matches!(
+                            state_key.as_str(),
+                            "enrich_prompt" | "enhance_prompt_chat"
+                        ) && on
+                        {
+                            actions
+                                .local_patch
+                                .insert("use_edited_enriched".into(), Value::Bool(false));
+                        }
                     }
                     return;
                 }

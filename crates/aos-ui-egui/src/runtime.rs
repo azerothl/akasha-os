@@ -4761,6 +4761,23 @@ pub(crate) async fn enrich_prompt_for_module(
     }
 }
 
+/// Layer-specific assistant: concise object rewrite, never a full scene.
+pub(crate) async fn enrich_layer_prompt_for_module(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    prompt: &str,
+) -> Result<String, String> {
+    let out = infer_llm_rewrite(
+        bus,
+        evt_tx,
+        "Layer",
+        crate::image_prompt::CHAT_ENHANCE_LAYER_SYSTEM_PROMPT,
+        prompt,
+    )
+    .await?;
+    Ok(normalize_prose_prompt(&out))
+}
+
 #[derive(Clone, Copy)]
 enum PromptEnhanceMode {
     Json,

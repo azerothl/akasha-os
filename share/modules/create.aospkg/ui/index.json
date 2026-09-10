@@ -598,6 +598,15 @@
                   "kind": "column",
                   "children": [
                     {
+                      "kind": "row",
+                      "children": [
+                        { "kind": "button", "action": "generate_image", "label_key": "generate_image_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } },
+                        { "kind": "button", "action": "generate_video", "label_key": "generate_video_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } }
+                      ]
+                    },
+                    { "kind": "job", "subscription": "generate_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "image"] } },
+                    { "kind": "job", "subscription": "generate_video_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "video"] } },
+                    {
                       "kind": "section",
                       "label_key": "prompt_section",
                       "children": [
@@ -668,15 +677,6 @@
                         ] }
                       ]
                     },
-                    {
-                      "kind": "row",
-                      "children": [
-                        { "kind": "button", "action": "generate_image", "label_key": "generate_image_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } },
-                        { "kind": "button", "action": "generate_video", "label_key": "generate_video_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } }
-                      ]
-                    },
-                    { "kind": "job", "subscription": "generate_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "image"] } },
-                    { "kind": "job", "subscription": "generate_video_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "video"] } }
                   ]
                 }
               },

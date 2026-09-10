@@ -678,13 +678,7 @@ async fn run_media_image_generate(
         apply_create_presets(&mut req);
         normalize_create_options(&mut req.options);
         if req.enhance_prompt_chat && !req.composition_blocks.is_empty() {
-            if enhance_create_layer_prompts(
-                &bus_bg,
-                &evt_tx_bg,
-                &mut req.composition_blocks,
-                req.model_id.as_deref(),
-            )
-            .await
+            if enhance_create_layer_prompts(&bus_bg, &evt_tx_bg, &mut req.composition_blocks).await
             {
                 let _ = evt_tx_bg.send(Evt::ModuleUiLayersGenerated {
                     module: module_bg.clone(),
@@ -705,12 +699,12 @@ async fn run_media_image_generate(
             ));
             req.enrich_prompt = false;
         }
-        if req.enrich_prompt || req.enhance_prompt_chat {
-            // Both assistants may be enabled, even when an edited enriched
-            // prompt is already present. Start from that edit when available,
-            // then run chat first and the structured pass second so Ideogram
-            // always receives its JSON caption rather than the chat prose.
-            let mut assistant_source = edited_prompt.unwrap_or_else(|| original_prompt.clone());
+        if edited_prompt.is_none() && (req.enrich_prompt || req.enhance_prompt_chat) {
+            // Both assistants may be enabled. Run chat first and the
+            // structured pass second so Ideogram receives JSON rather than
+            // the intermediate chat prose. An edited prompt is authoritative
+            // and deliberately bypasses this block.
+            let mut assistant_source = original_prompt.clone();
             if req.enhance_prompt_chat {
                 match crate::runtime::enrich_prompt_for_module(
                     &bus_bg,
@@ -784,17 +778,19 @@ async fn run_media_image_generate(
                 }
             }
         }
-        if let Some(blocks) = parse_composition_blocks(&req.composition_blocks) {
-            if !blocks.is_empty() {
-                let base = generation_prompt.as_deref().unwrap_or(&original_prompt);
-                let merged = crate::image_composition::finalize_prompt_with_layout(
-                    base,
-                    &blocks,
-                    req.model_id.as_deref(),
-                    generation_prompt.is_some(),
-                );
-                if merged != base {
-                    generation_prompt = Some(merged);
+        if !req.use_edited_enriched {
+            if let Some(blocks) = parse_composition_blocks(&req.composition_blocks) {
+                if !blocks.is_empty() {
+                    let base = generation_prompt.as_deref().unwrap_or(&original_prompt);
+                    let merged = crate::image_composition::finalize_prompt_with_layout(
+                        base,
+                        &blocks,
+                        req.model_id.as_deref(),
+                        generation_prompt.is_some(),
+                    );
+                    if merged != base {
+                        generation_prompt = Some(merged);
+                    }
                 }
             }
         }
@@ -1013,7 +1009,6 @@ async fn enhance_create_layer_prompts(
     bus: &BusClient,
     evt_tx: &Sender<Evt>,
     layers: &mut [Value],
-    model_id: Option<&str>,
 ) -> bool {
     let mut changed = false;
     for layer in layers.iter_mut() {
@@ -1037,7 +1032,7 @@ async fn enhance_create_layer_prompts(
                 .map(str::to_owned)
         });
         let Some(source) = source else { continue };
-        match crate::runtime::enrich_prompt_for_module(bus, evt_tx, &source, model_id, true).await {
+        match crate::runtime::enrich_layer_prompt_for_module(bus, evt_tx, &source).await {
             Ok(enriched) if !enriched.trim().is_empty() && enriched.trim() != source.trim() => {
                 if let Some(object) = layer.as_object_mut() {
                     object.insert("prompt".into(), Value::String(enriched));
