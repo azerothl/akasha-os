@@ -18,7 +18,7 @@ const CHROME_SOURCES: &[&str] = &[
 /// Emoji and special symbols that must not appear in chrome control strings.
 const FORBIDDEN_CONTROL_CHARS: &[char] = &[
     '🔘', '⛃', '🖼', '🗀', '☰', '🔔', '👁', '★', '✓', '×', '▲', '▼', '⇅', '▸', '▾', '☐',
-    '☑', '□',
+    '☑', '□', '⋯',
 ];
 
 fn line_looks_like_control(line: &str) -> bool {
@@ -28,6 +28,7 @@ fn line_looks_like_control(line: &str) -> bool {
     }
     t.contains("Button::new")
         || t.contains("small_button(")
+        || t.contains("menu_button(")
         || t.contains("SelectableLabel::new")
         || t.contains(".button(")
 }
