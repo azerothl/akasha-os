@@ -681,6 +681,7 @@ async fn run_media_image_generate(
         // panel used before it became a module.
         let original_prompt = req.prompt.clone();
         apply_create_presets(&mut req);
+        normalize_create_options(&mut req.options);
         let mut generation_prompt = req
             .generation_prompt
             .clone()
@@ -966,9 +967,34 @@ fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
     }
 }
 
+/// Declarative text fields use an empty string for an unset optional value.
+/// The native panel serializes those values as `None`; normalize before
+/// handing the request to modeld (an empty VAE path is otherwise interpreted
+/// as an explicit, invalid file).
+fn normalize_create_options(options: &mut aos_proto::MediaImageOptions) {
+    for value in [
+        &mut options.sampling_method,
+        &mut options.vae,
+        &mut options.backend,
+        &mut options.params_backend,
+        &mut options.max_vram,
+        &mut options.upscale_model,
+        &mut options.init_image,
+        &mut options.end_image,
+        &mut options.mask_image,
+    ] {
+        if value.as_deref().is_some_and(|text| text.trim().is_empty()) {
+            *value = None;
+        }
+    }
+    if options.threads == Some(0) {
+        options.threads = None;
+    }
+}
+
 #[cfg(test)]
 mod create_regression_tests {
-    use super::{apply_create_presets, parse_composition_blocks};
+    use super::{apply_create_presets, normalize_create_options, parse_composition_blocks};
     use aos_proto::MediaImageGenerateRequest;
 
     #[test]
@@ -1025,6 +1051,32 @@ mod create_regression_tests {
         assert_eq!(blocks[0].id, 7);
         assert_eq!(blocks[0].desc, "a red fox");
         assert!((blocks[0].w - 0.4).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn declarative_empty_optional_strings_match_native_none_values() {
+        let mut options = aos_proto::MediaImageOptions {
+            sampling_method: Some(String::new()),
+            vae: Some(String::new()),
+            backend: Some("  ".into()),
+            params_backend: Some(String::new()),
+            max_vram: Some(String::new()),
+            init_image: Some(String::new()),
+            end_image: Some(String::new()),
+            mask_image: Some(String::new()),
+            threads: Some(0),
+            ..Default::default()
+        };
+        normalize_create_options(&mut options);
+        assert!(options.sampling_method.is_none());
+        assert!(options.vae.is_none());
+        assert!(options.backend.is_none());
+        assert!(options.params_backend.is_none());
+        assert!(options.max_vram.is_none());
+        assert!(options.init_image.is_none());
+        assert!(options.end_image.is_none());
+        assert!(options.mask_image.is_none());
+        assert!(options.threads.is_none());
     }
 }
 
