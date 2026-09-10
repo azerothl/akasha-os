@@ -43,10 +43,12 @@ jobs:
     name: Clippy and tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      SCCACHE_DIR: ${{ runner.temp }}/sccache
     steps:
       - uses: actions/checkout@v4
+      - name: Configure sccache directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/sccache"
+          echo "SCCACHE_DIR=$RUNNER_TEMP/sccache" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -95,10 +97,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    env:
-      SCCACHE_DIR: ${{ runner.temp }}/sccache
     steps:
       - uses: actions/checkout@v4
+      - name: Configure sccache directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/sccache"
+          echo "SCCACHE_DIR=$RUNNER_TEMP/sccache" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.5
         with:

@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.16.2
+# Preview features — Akasha OS 0.17.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,16 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 06/09/2026 · Preview **0.16.2**
+> Date: 10/09/2026 · Preview **0.17.0**
+
+### What's new in 0.17.0
+
+- **Create workspace**: split-pane layout, named presets, layer editing with z-index, prompt enrichment and assistants, Ideogram 4 structured prompts
+- **UI chrome**: painted SVG icons (replacing font glyphs), interface font preference, Settings strip and rail/status polish, status bar overflow menu
+- **DeclUI**: mojibake fixes, JSON payloads, denser parameter layout, human-readable labels
+- **Canvas toolbar**, **Mémoire** and **Salon** compact-band refinements; Agents labels and empty-chat CTA
+- **FR parity**: Settings search/pills and chat welcome strings
+- **Module catalogue**: deduplication filter on boot
 
 ### What's new in 0.16.2
 
@@ -417,7 +426,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.16.2
+## 11. Not in Preview 0.17.0
 
 - Bootable / bare-metal image
 - STT / always-on voice
