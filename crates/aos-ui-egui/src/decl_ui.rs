@@ -752,51 +752,60 @@ impl DeclUiPanelState {
                 let ratio = w.split_ratio.unwrap_or(0.5).clamp(0.1, 0.9);
                 if let Some(children) = &w.children {
                     if children.len() == 2 {
-                        ui.horizontal(|ui| {
-                            let w_left = ui.available_width() * ratio;
-                            ui.allocate_ui_with_layout(
-                                egui::vec2(w_left, ui.available_height()),
-                                egui::Layout::top_down(egui::Align::LEFT),
-                                |ui| {
-                                    Self::render_widget(
-                                        ui,
-                                        md_cache,
-                                        &children[0],
-                                        doc,
-                                        language,
-                                        cache,
-                                        binding_cache,
-                                        local_state,
-                                        document_state,
-                                        subscriptions,
-                                        image_views,
-                                        layer_canvases,
-                                        form_fields,
-                                        tool_schemas,
-                                        pending_invoke,
-                                        actions,
-                                    );
-                                },
-                            );
-                            Self::render_widget(
-                                ui,
-                                md_cache,
-                                &children[1],
-                                doc,
-                                language,
-                                cache,
-                                binding_cache,
-                                local_state,
-                                document_state,
-                                subscriptions,
-                                image_views,
-                                layer_canvases,
-                                form_fields,
-                                tool_schemas,
-                                pending_invoke,
-                                actions,
-                            );
-                        });
+                        // Give the split an explicit frame so both panes receive
+                        // the complete height of the host panel, even when their
+                        // initial content is short or an image is not loaded yet.
+                        let available = ui.available_size();
+                        ui.allocate_ui_with_layout(
+                            available,
+                            egui::Layout::left_to_right(egui::Align::TOP),
+                            |ui| {
+                                let pane_height = ui.available_height();
+                                let w_left = (ui.available_width() * ratio).max(1.0);
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(w_left, pane_height),
+                                    egui::Layout::top_down(egui::Align::LEFT),
+                                    |ui| {
+                                        Self::render_widget(
+                                            ui,
+                                            md_cache,
+                                            &children[0],
+                                            doc,
+                                            language,
+                                            cache,
+                                            binding_cache,
+                                            local_state,
+                                            document_state,
+                                            subscriptions,
+                                            image_views,
+                                            layer_canvases,
+                                            form_fields,
+                                            tool_schemas,
+                                            pending_invoke,
+                                            actions,
+                                        );
+                                    },
+                                );
+                                Self::render_widget(
+                                    ui,
+                                    md_cache,
+                                    &children[1],
+                                    doc,
+                                    language,
+                                    cache,
+                                    binding_cache,
+                                    local_state,
+                                    document_state,
+                                    subscriptions,
+                                    image_views,
+                                    layer_canvases,
+                                    form_fields,
+                                    tool_schemas,
+                                    pending_invoke,
+                                    actions,
+                                );
+                            },
+                        );
                     }
                 }
             }

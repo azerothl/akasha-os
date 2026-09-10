@@ -3489,9 +3489,11 @@ impl eframe::App for UiApp {
             Tab::Feedback => overflow_scroll(ui, "feedback", |ui| self.ui_feedback(ui)),
             Tab::Settings => overflow_scroll(ui, "settings", |ui| self.ui_settings(ui)),
             Tab::Files => overflow_scroll(ui, "files", |ui| self.ui_files(ui)),
-            Tab::Module(name) => overflow_scroll(ui, ("decl-mod", name.as_str()), |ui| {
-                self.ui_decl_module(ui, &name)
-            }),
+            // Declarative modules own their scrolling at the widget level.  Wrapping
+            // the whole module in the generic overflow area lets the scroll area
+            // shrink to the module's initial content height, so split-pane modules
+            // no longer receive the full central-panel height.
+            Tab::Module(name) => self.ui_decl_module(ui, &name),
         });
     }
 }
