@@ -178,47 +178,27 @@ impl DeclUiPanelState {
             ui.weak(&self.status);
         }
         ui.separator();
-        if let Some(root) = doc.root.children.clone() {
-            for child in root {
-                Self::render_widget(
-                    ui,
-                    md_cache,
-                    &child,
-                    &doc,
-                    language,
-                    &self.bind_cache,
-                    &self.binding_cache,
-                    &self.local_state,
-                    &self.document_state,
-                    &self.subscriptions,
-                    &mut self.image_views,
-                    &mut self.layer_canvases,
-                    &mut self.form_fields,
-                    &self.tool_schemas,
-                    self.pending_invoke,
-                    &mut actions,
-                );
-            }
-        } else {
-            Self::render_widget(
-                ui,
-                md_cache,
-                &doc.root,
-                &doc,
-                language,
-                &self.bind_cache,
-                &self.binding_cache,
-                &self.local_state,
-                &self.document_state,
-                &self.subscriptions,
-                &mut self.image_views,
-                &mut self.layer_canvases,
-                &mut self.form_fields,
-                &self.tool_schemas,
-                self.pending_invoke,
-                &mut actions,
-            );
-        }
+        // Render the root node itself.  Unwrapping `root.children` here would
+        // discard structural containers such as `split`, turning a two-pane
+        // Create layout into a single vertical stream.
+        Self::render_widget(
+            ui,
+            md_cache,
+            &doc.root,
+            &doc,
+            language,
+            &self.bind_cache,
+            &self.binding_cache,
+            &self.local_state,
+            &self.document_state,
+            &self.subscriptions,
+            &mut self.image_views,
+            &mut self.layer_canvases,
+            &mut self.form_fields,
+            &self.tool_schemas,
+            self.pending_invoke,
+            &mut actions,
+        );
         actions
     }
 
