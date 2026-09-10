@@ -4,12 +4,20 @@
 //! 1. Rail with painted icons (FR)
 //! 2. Settings → Police de l'interface (default font + live preview)
 //! 3. Same panel with Inter selected (preview updates)
+//! 4. Rail with clearer icon metaphors (FR)
+//! 5. Chat sidebar Web / fichiers painted checkbox (unchecked + checked)
+//! 6. Create layer list with painted z-order / visibility / grip icons (FR)
 
+use crate::decl_ui::DeclUiPanelState;
 use crate::prefs::save_preferences;
 use crate::{Tab, UiApp};
 use aos_proto::create_contract::MODULE_NAME;
+use aos_proto::decl_ui::DeclUiDocument;
+use aos_proto::rich_app_contract::UI_CONTRACT_V2;
+use aos_proto::rich_composition::{layers_to_value, RichLayer};
 use aos_proto::ModuleInfo;
 use eframe::egui::{self, ColorImage, Event, UserData};
+use serde_json::json;
 use std::path::{Path, PathBuf};
 
 /// Ensure designer rail shots include primary tabs that depend on module list RPC.
@@ -26,6 +34,71 @@ pub fn seed_screenshot_modules(app: &mut UiApp) {
         ui_mode: Some("declarative_ui".into()),
         ui_title: None,
     });
+}
+
+/// Minimal Create surface for layer-list QA captures (labels locked to shipped FR copy).
+const LAYER_LIST_SHOT_DOC: &str = r#"{
+  "type": "declarative_ui",
+  "contract": 2,
+  "title": "Create",
+  "title_key": "app_title",
+  "labels": {
+    "fallback": "fr",
+    "fr": {
+      "app_title": "Créer",
+      "layers_list_label": "Ordre des calques (arrière vers avant)"
+    }
+  },
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "layer_list",
+        "layers_key": "composition_layers",
+        "selected_key": "composition_selected",
+        "next_id_key": "composition_next_id",
+        "label_key": "layers_list_label"
+      }
+    ]
+  }
+}"#;
+
+/// Load Create declarative UI and seed composition layers for layer-list captures.
+pub fn seed_screenshot_create_layers(app: &mut UiApp) {
+    seed_screenshot_modules(app);
+    let panel = app
+        .decl_panels
+        .entry(MODULE_NAME.into())
+        .or_insert_with(|| DeclUiPanelState::new(MODULE_NAME));
+    match DeclUiDocument::parse_json_with_contract(LAYER_LIST_SHOT_DOC.as_bytes(), UI_CONTRACT_V2) {
+        Ok(doc) => {
+            panel.set_document(doc);
+            let layers: Vec<RichLayer> = (0..5)
+                .map(|i| {
+                    let mut layer = RichLayer::new(i as u64 + 1);
+                    layer.label = if i == 2 {
+                        "arrière-plan".into()
+                    } else {
+                        format!("Calque {}", i + 1)
+                    };
+                    layer
+                })
+                .collect();
+            panel
+                .local_state
+                .insert("composition_layers".into(), layers_to_value(&layers));
+            panel
+                .local_state
+                .insert("composition_selected".into(), json!(3));
+            panel
+                .local_state
+                .insert("composition_next_id".into(), json!(6));
+        }
+        Err(err) => {
+            eprintln!("seed_screenshot_create_layers: parse failed: {err}");
+        }
+    }
+    app.open_module_tab(MODULE_NAME.into());
 }
 
 pub fn screenshot_dir_from_env() -> Option<PathBuf> {
@@ -114,6 +187,37 @@ impl UiScreenshotHarness {
                 self.request(ctx, "03-settings-police-interface-inter-fr");
                 self.step = 3;
                 self.settle_left = 3;
+            }
+            3 => {
+                seed_screenshot_modules(app);
+                app.tab = Tab::Chat;
+                app.prefs.language = "fr".into();
+                app.prefs.ui_font = "default".into();
+                app.chat_state.sidebar.tools_open = false;
+                save_preferences(&app.prefs);
+                self.request(ctx, "04-rail-metaphors-fr");
+                self.step = 4;
+                self.settle_left = 3;
+            }
+            4 => {
+                app.tab = Tab::Chat;
+                app.chat_state.sidebar.tools_open = false;
+                self.request(ctx, "05-composer-web-files-fr");
+                self.step = 5;
+                self.settle_left = 3;
+            }
+            5 => {
+                app.chat_state.sidebar.tools_open = true;
+                self.request(ctx, "05-composer-web-files-checked-fr");
+                self.step = 6;
+                self.settle_left = 3;
+            }
+            6 => {
+                seed_screenshot_create_layers(app);
+                app.prefs.language = "fr".into();
+                self.request(ctx, "06-create-layer-list-fr");
+                self.step = 7;
+                self.settle_left = 5;
             }
             _ => {
                 eprintln!("AOS_UI_SCREENSHOT_DIR: captures complete — exiting");

@@ -219,9 +219,7 @@ impl UiApp {
                 // Tiroir à état explicite (pas de CollapsingHeader) : le bouton
                 // reste visible, le corps ouvert est borné en scroll interne.
                 let tools_open = self.chat_state.sidebar.tools_open;
-                let marker = if tools_open { "▾" } else { "▸" };
-                if ui
-                    .selectable_label(tools_open, format!("{marker} {}", t.sidebar_web_files))
+                if icons::labeled_checkbox_selectable(ui, tools_open, t.sidebar_web_files)
                     .clicked()
                 {
                     self.chat_state.sidebar.tools_open = !tools_open;

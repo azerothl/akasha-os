@@ -7,12 +7,14 @@ const CHROME_SOURCES: &[&str] = &[
     include_str!("ui_chat_sidebar.rs"),
     include_str!("ui_primitives.rs"),
     include_str!("rich_composition_ui.rs"),
+    include_str!("icons.rs"),
     include_str!("i18n.rs"),
 ];
 
 /// Emoji and special symbols that must not appear in chrome control strings.
 const FORBIDDEN_CONTROL_CHARS: &[char] = &[
-    '🔘', '⛃', '🖼', '🗀', '☰', '🔔', '👁', '★', '✓', '×', '▲', '▼', '⇅',
+    '🔘', '⛃', '🖼', '🗀', '☰', '🔔', '👁', '★', '✓', '×', '▲', '▼', '⇅', '▸', '▾', '☐',
+    '☑', '□',
 ];
 
 fn line_looks_like_control(line: &str) -> bool {
@@ -56,7 +58,8 @@ mod tests {
             ("ui_chat_sidebar.rs", CHROME_SOURCES[2]),
             ("ui_primitives.rs", CHROME_SOURCES[3]),
             ("rich_composition_ui.rs", CHROME_SOURCES[4]),
-            ("i18n.rs", CHROME_SOURCES[5]),
+            ("icons.rs", CHROME_SOURCES[5]),
+            ("i18n.rs", CHROME_SOURCES[6]),
         ];
         let mut violations = Vec::new();
         for (name, src) in files {
