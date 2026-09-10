@@ -259,7 +259,7 @@ fn human_title_from_path(path: &str) -> Option<String> {
     if stem.is_empty() {
         return None;
     }
-    Some(stem.replace('-', " ").replace('_', " "))
+    Some(stem.replace(['-', '_'], " "))
 }
 
 fn path_tokens(path: &str) -> Vec<String> {

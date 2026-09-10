@@ -140,10 +140,8 @@ impl HostFolderGrantManager {
                 "chemin logique hors sandbox: utilise fs.* après grant".into(),
             ))
         };
-        if via_once {
-            if result.is_ok() {
-                self.consume_once_grant(agent_id, folder_key);
-            }
+        if via_once && result.is_ok() {
+            self.consume_once_grant(agent_id, folder_key);
         }
         result
     }

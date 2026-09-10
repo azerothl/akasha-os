@@ -17,8 +17,6 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "1"
   GGML_NATIVE: "OFF"
-  # sccache config
-  SCCACHE_DIR: ${{ runner.temp }}/sccache
   SCCACHE_GHA_ENABLED: "true"
   # mold linker
   RUSTFLAGS: "-Clinker=clang -Clink-arg=-fuse-ld=mold"
@@ -45,6 +43,8 @@ jobs:
     name: Clippy and tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      SCCACHE_DIR: ${{ runner.temp }}/sccache
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -95,6 +95,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    env:
+      SCCACHE_DIR: ${{ runner.temp }}/sccache
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

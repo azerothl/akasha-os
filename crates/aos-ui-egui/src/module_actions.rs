@@ -677,14 +677,14 @@ async fn run_media_image_generate(
         let original_prompt = req.prompt.clone();
         apply_create_presets(&mut req);
         normalize_create_options(&mut req.options);
-        if req.enhance_prompt_chat && !req.composition_blocks.is_empty() {
-            if enhance_create_layer_prompts(&bus_bg, &evt_tx_bg, &mut req.composition_blocks).await
-            {
-                let _ = evt_tx_bg.send(Evt::ModuleUiLayersGenerated {
-                    module: module_bg.clone(),
-                    layers: req.composition_blocks.clone(),
-                });
-            }
+        if req.enhance_prompt_chat
+            && !req.composition_blocks.is_empty()
+            && enhance_create_layer_prompts(&bus_bg, &evt_tx_bg, &mut req.composition_blocks).await
+        {
+            let _ = evt_tx_bg.send(Evt::ModuleUiLayersGenerated {
+                module: module_bg.clone(),
+                layers: req.composition_blocks.clone(),
+            });
         }
         let edited_prompt = req
             .generation_prompt
@@ -1129,6 +1129,35 @@ fn normalize_create_options(options: &mut aos_proto::MediaImageOptions) {
     }
 }
 
+pub(crate) async fn cancel_decl_job(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    job_id: &str,
+    subscription_id: &str,
+) {
+    let demo_jobs = demo_jobs();
+    if demo_jobs.lock().unwrap().cancel(job_id) {
+        let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+            module: module.to_string(),
+            subscription_id: subscription_id.to_string(),
+            job: demo_job_tick(job_id, 0, 1, true),
+        });
+        return;
+    }
+    if media_jobs().lock().unwrap().contains(job_id) {
+        let _ = bus
+            .call::<(), bool>("media.image.cancel", &(), vec![])
+            .await;
+        let (step, total) = read_image_gen_progress_file().unwrap_or((0, 1));
+        let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
+            module: module.to_string(),
+            subscription_id: subscription_id.to_string(),
+            job: media_job_cancelled(job_id, step, total.max(1)),
+        });
+    }
+}
+
 #[cfg(test)]
 mod create_regression_tests {
     use super::{apply_create_presets, normalize_create_options, parse_composition_blocks};
@@ -1214,34 +1243,5 @@ mod create_regression_tests {
         assert!(options.end_image.is_none());
         assert!(options.mask_image.is_none());
         assert!(options.threads.is_none());
-    }
-}
-
-pub(crate) async fn cancel_decl_job(
-    bus: &Arc<BusClient>,
-    evt_tx: &Sender<Evt>,
-    module: &str,
-    job_id: &str,
-    subscription_id: &str,
-) {
-    let demo_jobs = demo_jobs();
-    if demo_jobs.lock().unwrap().cancel(job_id) {
-        let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
-            module: module.to_string(),
-            subscription_id: subscription_id.to_string(),
-            job: demo_job_tick(job_id, 0, 1, true),
-        });
-        return;
-    }
-    if media_jobs().lock().unwrap().contains(job_id) {
-        let _ = bus
-            .call::<(), bool>("media.image.cancel", &(), vec![])
-            .await;
-        let (step, total) = read_image_gen_progress_file().unwrap_or((0, 1));
-        let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
-            module: module.to_string(),
-            subscription_id: subscription_id.to_string(),
-            job: media_job_cancelled(job_id, step, total.max(1)),
-        });
     }
 }

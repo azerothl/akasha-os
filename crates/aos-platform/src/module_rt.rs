@@ -1382,8 +1382,7 @@ min_os_api: 1
         make_package(&pkg);
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
         rt.install(&pkg, Some(vec![])).unwrap();
-        let manifest = format!(
-            r#"name: echo-test
+        let manifest = r#"name: echo-test
 version: 0.2.0
 hash: PLACEHOLDER
 permissions:
@@ -1394,8 +1393,7 @@ tools:
     description: renvoie les args
 ui: ~
 min_os_api: 1
-"#
-        );
+"#;
         let bad_pkg = base.join("bad");
         copy_dir(&pkg, &bad_pkg).unwrap();
         let wasm = std::fs::read(bad_pkg.join("module.wasm")).unwrap();

@@ -185,6 +185,61 @@ pub fn run_reference_matrix(model: &ModelDesc) -> Vec<BenchmarkResult> {
         .collect()
 }
 
+pub fn run_extended_matrix(model: &ModelDesc) -> Vec<BenchmarkResult> {
+    extended_scenarios()
+        .iter()
+        .map(|scenario| run_scenario(model, scenario))
+        .collect()
+}
+
+/// Scénarios complémentaires du gate adaptatif. Ils exercent la politique de
+/// sélection et le modèle de coût sans prétendre mesurer un périphérique absent
+/// du processus CI.
+pub fn extended_scenarios() -> Vec<BenchmarkScenario> {
+    let mut thermal = HardwareProfile::reference_v1();
+    thermal.thermal.temperature_c = Some(91.0);
+    thermal.thermal.sustained_temperature_c = Some(88.0);
+    thermal.thermal.throttling = true;
+    vec![
+        BenchmarkScenario {
+            name: "cuda-long-reasoning",
+            hardware: HardwareProfile::reference_v1(),
+            profile: PlacementProfile::Latency,
+            workload: WorkloadKind::LongReasoning,
+            prompt_tokens: 512,
+            context_tokens: 8192,
+            concurrency: 1,
+        },
+        BenchmarkScenario {
+            name: "cuda-agent-tools",
+            hardware: HardwareProfile::reference_v1(),
+            profile: PlacementProfile::Balanced,
+            workload: WorkloadKind::AgentTools,
+            prompt_tokens: 768,
+            context_tokens: 8192,
+            concurrency: 1,
+        },
+        BenchmarkScenario {
+            name: "cuda-concurrent-batch",
+            hardware: HardwareProfile::reference_v1(),
+            profile: PlacementProfile::Balanced,
+            workload: WorkloadKind::Batch,
+            prompt_tokens: 256,
+            context_tokens: 4096,
+            concurrency: 8,
+        },
+        BenchmarkScenario {
+            name: "cuda-thermal-pressure",
+            hardware: thermal,
+            profile: PlacementProfile::Latency,
+            workload: WorkloadKind::Chat,
+            prompt_tokens: 256,
+            context_tokens: 2048,
+            concurrency: 1,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,59 +311,4 @@ mod tests {
         assert_eq!(result.output_bytes, 128);
         assert!(!result.cancelled);
     }
-}
-
-pub fn run_extended_matrix(model: &ModelDesc) -> Vec<BenchmarkResult> {
-    extended_scenarios()
-        .iter()
-        .map(|scenario| run_scenario(model, scenario))
-        .collect()
-}
-
-/// Scénarios complémentaires du gate adaptatif. Ils exercent la politique de
-/// sélection et le modèle de coût sans prétendre mesurer un périphérique absent
-/// du processus CI.
-pub fn extended_scenarios() -> Vec<BenchmarkScenario> {
-    let mut thermal = HardwareProfile::reference_v1();
-    thermal.thermal.temperature_c = Some(91.0);
-    thermal.thermal.sustained_temperature_c = Some(88.0);
-    thermal.thermal.throttling = true;
-    vec![
-        BenchmarkScenario {
-            name: "cuda-long-reasoning",
-            hardware: HardwareProfile::reference_v1(),
-            profile: PlacementProfile::Latency,
-            workload: WorkloadKind::LongReasoning,
-            prompt_tokens: 512,
-            context_tokens: 8192,
-            concurrency: 1,
-        },
-        BenchmarkScenario {
-            name: "cuda-agent-tools",
-            hardware: HardwareProfile::reference_v1(),
-            profile: PlacementProfile::Balanced,
-            workload: WorkloadKind::AgentTools,
-            prompt_tokens: 768,
-            context_tokens: 8192,
-            concurrency: 1,
-        },
-        BenchmarkScenario {
-            name: "cuda-concurrent-batch",
-            hardware: HardwareProfile::reference_v1(),
-            profile: PlacementProfile::Balanced,
-            workload: WorkloadKind::Batch,
-            prompt_tokens: 256,
-            context_tokens: 4096,
-            concurrency: 8,
-        },
-        BenchmarkScenario {
-            name: "cuda-thermal-pressure",
-            hardware: thermal,
-            profile: PlacementProfile::Latency,
-            workload: WorkloadKind::Chat,
-            prompt_tokens: 256,
-            context_tokens: 2048,
-            concurrency: 1,
-        },
-    ]
 }

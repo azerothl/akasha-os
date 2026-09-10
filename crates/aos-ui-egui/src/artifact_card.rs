@@ -127,11 +127,7 @@ fn open_note(app: &mut UiApp, target: &ArtifactTarget) -> bool {
 }
 
 fn open_document(target: &ArtifactTarget) -> bool {
-    if research_document::read_logical_markdown(&target.path).is_some() {
-        true
-    } else {
-        false
-    }
+    research_document::read_logical_markdown(&target.path).is_some()
 }
 
 fn open_image(app: &mut UiApp, target: &ArtifactTarget) -> bool {

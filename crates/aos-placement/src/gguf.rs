@@ -363,8 +363,10 @@ impl GgufModel {
             .ok_or("ligne GGUF tronquée")?;
         let values = match info.tensor_type {
             GgufTensorType::F32 => bytes
-                .chunks_exact(4)
-                .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|chunk| f32::from_le_bytes(*chunk))
                 .collect(),
             GgufTensorType::Q4_0 => decode_q4_0(bytes, input)?,
             GgufTensorType::Q4_1 => decode_q4_1(bytes, input)?,
@@ -394,8 +396,10 @@ impl GgufModel {
         let start = self.data_start as usize + info.offset as usize;
         match info.tensor_type {
             GgufTensorType::F32 => Ok(self.bytes.as_slice()[start..start + size]
-                .chunks_exact(4)
-                .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|bytes| f32::from_le_bytes(*bytes))
                 .collect()),
             GgufTensorType::Q4_0 => decode_q4_0(
                 &self.bytes.as_slice()[start..start + size],
@@ -499,7 +503,7 @@ fn decode_q4_0(bytes: &[u8], elements: usize) -> Result<Vec<f32>, String> {
         return Err("bloc Q4_0 GGUF invalide".into());
     }
     let mut values = Vec::with_capacity(elements);
-    for block in bytes.chunks_exact(18) {
+    for block in bytes.as_chunks::<18>().0 {
         let scale = f16_to_f32(u16::from_le_bytes([block[0], block[1]]));
         for byte in &block[2..18] {
             values.push(scale * ((byte & 0x0f) as f32 - 8.0));
@@ -1028,9 +1032,9 @@ mod tests {
         q8_0[2..].fill(2);
         assert_eq!(decode_q8_0(&q8_0, 32).unwrap(), vec![2.0; 32]);
 
-        assert_eq!(decode_q4_k(&vec![0u8; 144], 256).unwrap(), vec![0.0; 256]);
-        assert_eq!(decode_q5_k(&vec![0u8; 176], 256).unwrap(), vec![0.0; 256]);
-        assert_eq!(decode_q6_k(&vec![0u8; 210], 256).unwrap(), vec![0.0; 256]);
+        assert_eq!(decode_q4_k(&[0u8; 144], 256).unwrap(), vec![0.0; 256]);
+        assert_eq!(decode_q5_k(&[0u8; 176], 256).unwrap(), vec![0.0; 256]);
+        assert_eq!(decode_q6_k(&[0u8; 210], 256).unwrap(), vec![0.0; 256]);
     }
 
     #[test]

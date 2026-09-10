@@ -187,14 +187,14 @@ mod tests {
     #[test]
     fn host_ui_max_includes_v2_rich_contract() {
         assert_eq!(HOST_UI_CONTRACT_MAX, UI_CONTRACT_V2);
-        assert!(CREATE_TARGET_UI_CONTRACT <= HOST_UI_CONTRACT_MAX);
+        const _: () = assert!(CREATE_TARGET_UI_CONTRACT <= HOST_UI_CONTRACT_MAX);
     }
 
     #[test]
     fn document_limits_are_positive_and_ordered() {
-        assert!(MAX_UI_NODES >= MAX_BINDINGS);
-        assert!(MAX_STATE_SLOTS >= MAX_SUBSCRIPTIONS);
-        assert!(MAX_UI_DEPTH > 0);
+        const _: () = assert!(MAX_UI_NODES >= MAX_BINDINGS);
+        const _: () = assert!(MAX_STATE_SLOTS >= MAX_SUBSCRIPTIONS);
+        const _: () = assert!(MAX_UI_DEPTH > 0);
     }
 
     #[test]
