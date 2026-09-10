@@ -608,8 +608,8 @@
                         { "kind": "number", "state_key": "strength", "min": 0.05, "max": 1, "step": 0.05, "label_key": "reference_strength_label", "visible": { "ne": ["$local.init_image", ""] } },
                         { "kind": "textarea", "state_key": "negative_prompt", "label_key": "negative_label" }
                         ,{ "kind": "section", "label_key": "enrichment_section", "children": [
-                          { "kind": "checkbox", "state_key": "enrich_prompt", "label_key": "enrich_prompt_label" },
-                          { "kind": "checkbox", "state_key": "enhance_prompt_chat", "label_key": "enhance_prompt_label" },
+                          { "kind": "checkbox", "state_key": "enrich_prompt", "label_key": "enrich_prompt_label", "tooltip_key": "tip_prompt" },
+                          { "kind": "checkbox", "state_key": "enhance_prompt_chat", "label_key": "enhance_prompt_label", "tooltip_key": "tip_prompt" },
                           { "kind": "checkbox", "state_key": "use_edited_enriched", "label_key": "edited_prompt_label", "visible": { "ne": ["$local.enriched_prompt", ""] } },
                           { "kind": "textarea", "state_key": "enriched_prompt", "label_key": "enriched_prompt_label", "visible": { "or": [{ "eq": ["$local.enrich_prompt", true] }, { "eq": ["$local.enhance_prompt_chat", true] }, { "eq": ["$local.use_edited_enriched", true] }] } }
                         ] }

@@ -2987,6 +2987,9 @@ impl eframe::App for UiApp {
                     subscription_id,
                     job,
                 } => module_event_controller::on_ui_job_update(self, module, subscription_id, job),
+                Evt::ModuleUiPromptGenerated { module, prompt } => {
+                    module_event_controller::on_ui_prompt_generated(self, module, prompt)
+                }
                 Evt::ModuleUiServiceDone {
                     module,
                     action_id: _,

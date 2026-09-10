@@ -111,19 +111,24 @@ pub fn media_job_succeeded(
     job_id: &str,
     response: &MediaGenerateResponse,
     prompt: &str,
+    generation_prompt: Option<&str>,
 ) -> RichJobHandle {
+    let mut result = json!({
+        "path": response.path,
+        "bytes": response.bytes,
+        "engine": response.engine,
+        "model_id": response.model_id,
+        "prompt": prompt,
+    });
+    if let Some(generated) = generation_prompt.filter(|text| !text.trim().is_empty()) {
+        result["generation_prompt"] = Value::String(generated.to_string());
+    }
     RichJobHandle {
         job_id: Some(job_id.into()),
         kind: Some("media.image.generate".into()),
         state: Some("succeeded".into()),
         progress: None,
-        result: Some(json!({
-            "path": response.path,
-            "bytes": response.bytes,
-            "engine": response.engine,
-            "model_id": response.model_id,
-            "prompt": prompt,
-        })),
+        result: Some(result),
         error: None,
     }
 }
@@ -188,6 +193,7 @@ mod tests {
                 model_id: "local:sd".into(),
             },
             "a cat",
+            Some("a detailed cat"),
         );
         assert_eq!(ok.state.as_deref(), Some("succeeded"));
         assert_eq!(
@@ -196,6 +202,13 @@ mod tests {
                 .and_then(|r| r.get("path"))
                 .and_then(|p| p.as_str()),
             Some("/downloads/image-1.png")
+        );
+        assert_eq!(
+            ok.result
+                .as_ref()
+                .and_then(|r| r.get("generation_prompt"))
+                .and_then(|p| p.as_str()),
+            Some("a detailed cat")
         );
         let fail = media_job_failed("j1", "boom");
         assert_eq!(fail.state.as_deref(), Some("failed"));

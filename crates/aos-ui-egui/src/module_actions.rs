@@ -671,11 +671,6 @@ async fn run_media_image_generate(
             }
         });
         let mut req = request;
-        // Match the native panel's precedence rule even for replayed or
-        // programmatic actions that bypass the checkbox interaction.
-        if req.enhance_prompt_chat {
-            req.enrich_prompt = false;
-        }
         // Keep the user's text for history, but honor the same prompt
         // assistant and composition pipeline that the former native Create
         // panel used before it became a module.
@@ -695,21 +690,50 @@ async fn run_media_image_generate(
             req.enrich_prompt = false;
         }
         if generation_prompt.is_none() && (req.enrich_prompt || req.enhance_prompt_chat) {
-            match crate::runtime::enrich_prompt_for_module(
-                &bus_bg,
-                &evt_tx_bg,
-                &original_prompt,
-                req.model_id.as_deref(),
-                req.enhance_prompt_chat,
-            )
-            .await
-            {
-                Ok(text) if !text.trim().is_empty() => generation_prompt = Some(text),
-                Ok(_) => {}
-                Err(err) => {
-                    let _ = evt_tx_bg.send(Evt::Status(format!(
-                        "Prompt assistant unavailable; using the original prompt ({err})"
-                    )));
+            // Both assistants may be enabled. Chain them in the same order a
+            // human would: chat first adds concrete prose, then the structured
+            // pass converts that prose into the model's JSON schema. If either
+            // pass fails, retain the best prompt produced so far.
+            let mut assistant_source = original_prompt.clone();
+            if req.enhance_prompt_chat {
+                match crate::runtime::enrich_prompt_for_module(
+                    &bus_bg,
+                    &evt_tx_bg,
+                    &assistant_source,
+                    req.model_id.as_deref(),
+                    true,
+                )
+                .await
+                {
+                    Ok(text) if !text.trim().is_empty() => {
+                        assistant_source = text.clone();
+                        generation_prompt = Some(text);
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        let _ = evt_tx_bg.send(Evt::Status(format!(
+                            "Prompt improvement unavailable; continuing with the original prompt ({err})"
+                        )));
+                    }
+                }
+            }
+            if req.enrich_prompt && json_enrichment_supported {
+                match crate::runtime::enrich_prompt_for_module(
+                    &bus_bg,
+                    &evt_tx_bg,
+                    &assistant_source,
+                    req.model_id.as_deref(),
+                    false,
+                )
+                .await
+                {
+                    Ok(text) if !text.trim().is_empty() => generation_prompt = Some(text),
+                    Ok(_) => {}
+                    Err(err) => {
+                        let _ = evt_tx_bg.send(Evt::Status(format!(
+                            "Structured prompt unavailable; using the previous prompt ({err})"
+                        )));
+                    }
                 }
             }
         }
@@ -726,6 +750,12 @@ async fn run_media_image_generate(
                     generation_prompt = Some(merged);
                 }
             }
+        }
+        if let Some(generated) = generation_prompt.as_deref() {
+            let _ = evt_tx_bg.send(Evt::ModuleUiPromptGenerated {
+                module: module_bg.clone(),
+                prompt: generated.to_string(),
+            });
         }
         if let Some(ref generated) = generation_prompt {
             req.prompt = generated.clone();
@@ -768,13 +798,29 @@ async fn run_media_image_generate(
                     });
                     return;
                 }
-                let job = media_job_succeeded(&job_id, &response, &prompt);
+                let job = media_job_succeeded(
+                    &job_id,
+                    &response,
+                    &prompt,
+                    req.generation_prompt.as_deref(),
+                );
                 let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
                     module: module_bg.clone(),
                     subscription_id: sub.clone(),
                     job: job.clone(),
                 });
                 if module_bg == "create" {
+                    let metadata = crate::image_history::ImageGenMeta::new(
+                        response.path.clone(),
+                        prompt.clone(),
+                        req.generation_prompt.clone(),
+                        parse_composition_blocks(&req.composition_blocks).unwrap_or_default(),
+                        response.model_id.clone(),
+                        response.engine.clone(),
+                    );
+                    if let Err(error) = crate::image_history::write_image_meta(&metadata) {
+                        eprintln!("Create image metadata write failed: {error}");
+                    }
                     let media_mode = if crate::media_image_defaults::is_video_options(&req.options)
                     {
                         "video"

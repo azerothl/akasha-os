@@ -696,19 +696,6 @@ impl DeclUiPanelState {
                         actions
                             .local_patch
                             .insert(state_key.clone(), Value::Bool(on));
-                        // The native Create panel treats the two prompt
-                        // assistants as mutually exclusive. Preserve that
-                        // invariant so a stale second checkbox cannot shadow
-                        // the selected assistant at generation time.
-                        if on && state_key == "enrich_prompt" {
-                            actions
-                                .local_patch
-                                .insert("enhance_prompt_chat".into(), Value::Bool(false));
-                        } else if on && state_key == "enhance_prompt_chat" {
-                            actions
-                                .local_patch
-                                .insert("enrich_prompt".into(), Value::Bool(false));
-                        }
                     }
                     return;
                 }

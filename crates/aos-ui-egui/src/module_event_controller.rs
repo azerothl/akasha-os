@@ -298,7 +298,28 @@ pub(crate) fn on_ui_job_update(
                 panel
                     .local_state
                     .insert("preview_cleared".into(), Value::Bool(false));
+                if let Some(generated) = job
+                    .result
+                    .as_ref()
+                    .and_then(|r| r.get("generation_prompt"))
+                    .and_then(Value::as_str)
+                {
+                    panel.local_state.insert(
+                        "enriched_prompt".into(),
+                        Value::String(generated.to_string()),
+                    );
+                }
             }
+        }
+    }
+}
+
+pub(crate) fn on_ui_prompt_generated(app: &mut UiApp, module: String, prompt: String) {
+    if module == "create" {
+        if let Some(panel) = app.decl_panels.get_mut(&module) {
+            panel
+                .local_state
+                .insert("enriched_prompt".into(), Value::String(prompt));
         }
     }
 }
