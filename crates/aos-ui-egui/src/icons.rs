@@ -1384,16 +1384,16 @@ fn paint_nav_tab(ui: &mut Ui, rect: Rect, icon: NavTabIcon, color: Color32) {
             }
         }
         NavTabIcon::Create => {
-            // Sparkle — inventiveness / generate (not chat+).
-            let arm = s * 0.62;
-            painter.line_segment([c + Vec2::new(-arm, 0.0), c + Vec2::new(arm, 0.0)], stroke);
-            painter.line_segment([c + Vec2::new(0.0, -arm), c + Vec2::new(0.0, arm)], stroke);
-            for corner in [
-                Vec2::new(-s * 0.88, -s * 0.62),
-                Vec2::new(s * 0.92, s * 0.58),
-            ] {
-                let p = c + corner;
-                let d = s * 0.16;
+            // Wand + sparkle tip — generate / invent (not chat+).
+            let tail = c + Vec2::new(-s * 0.82, s * 0.82);
+            let tip = c + Vec2::new(s * 0.58, -s * 0.58);
+            painter.line_segment([tail, tip], stroke);
+            let spark = s * 0.30;
+            painter.line_segment([tip + Vec2::new(-spark, 0.0), tip + Vec2::new(spark, 0.0)], stroke);
+            painter.line_segment([tip + Vec2::new(0.0, -spark), tip + Vec2::new(0.0, spark)], stroke);
+            for off in [Vec2::new(-s * 0.42, -s * 0.08), Vec2::new(s * 0.18, s * 0.32)] {
+                let p = tip + off;
+                let d = s * 0.11;
                 painter.line_segment([p + Vec2::new(-d, 0.0), p + Vec2::new(d, 0.0)], stroke);
                 painter.line_segment([p + Vec2::new(0.0, -d), p + Vec2::new(0.0, d)], stroke);
             }

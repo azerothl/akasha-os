@@ -1,4 +1,8 @@
 //! Compile-time inventory: chrome sources must not use emoji / tofu-prone glyphs as controls.
+//!
+//! Create module audit (Loïc #175): `modules/create/ui/index.json` ships label keys only;
+//! interactive chrome is host-rendered in `rich_composition_ui.rs` (painted layer icons +
+//! text i18n buttons). No font-symbol icon controls remain in the Create surface.
 
 /// Rust sources scanned for control emoji (buttons, selectable labels used as icons).
 const CHROME_SOURCES: &[&str] = &[
@@ -49,6 +53,32 @@ fn find_control_emoji_violations(src: &str, file: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn create_module_ui_json_has_no_control_font_glyphs() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let candidates = [
+            manifest.join("../../modules/create/ui/index.json"),
+            manifest.join("../../share/modules/create.aospkg/ui/index.json"),
+        ];
+        let mut checked = false;
+        for path in candidates {
+            if !path.exists() {
+                continue;
+            }
+            checked = true;
+            let raw = std::fs::read_to_string(&path).expect("read create ui json");
+            for ch in FORBIDDEN_CONTROL_CHARS {
+                assert!(
+                    !raw.contains(*ch),
+                    "{}: forbidden control glyph `{}`",
+                    path.display(),
+                    ch
+                );
+            }
+        }
+        assert!(checked, "create ui index.json not found for audit");
+    }
 
     #[test]
     fn chrome_inventory_has_no_control_emoji() {
