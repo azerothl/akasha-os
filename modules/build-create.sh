@@ -86,6 +86,10 @@ tools:
     description: Return last generated image path for preview
     input_schema:
       type: object
+  - name: create.models.list
+    description: List image and video model packs for the picker
+    input_schema:
+      type: object
 ui:
   contract: 2
   document: ui/index.json

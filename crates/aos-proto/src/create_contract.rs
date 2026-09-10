@@ -25,6 +25,7 @@ pub const TOOL_IDS: &[&str] = &[
     "create.document.load",
     "create.document.save",
     "create.result.get",
+    "create.models.list",
 ];
 
 /// Filesystem caps declared on the package manifest (invoke + media caps are separate).
@@ -65,7 +66,13 @@ pub mod surface {
     pub const FR_TAB_PREVIEW: &str = "Aperçu";
     pub const FR_TAB_HISTORY: &str = "Historique";
 
+    pub const FR_MODE_LABEL: &str = "Sortie";
+    pub const FR_MODE_IMAGE: &str = "Image";
+    pub const FR_MODE_VIDEO: &str = "Vidéo";
+    pub const FR_MODEL_LABEL: &str = "Modèle";
     pub const FR_PROMPT_LABEL: &str = "Invite";
+    pub const FR_NEGATIVE_LABEL: &str = "Invite négative";
+    pub const FR_SEED_LABEL: &str = "Graine";
     pub const FR_WIDTH_LABEL: &str = "Largeur";
     pub const FR_HEIGHT_LABEL: &str = "Hauteur";
     pub const FR_STEPS_LABEL: &str = "Étapes";
@@ -85,14 +92,26 @@ pub mod surface {
         "tab_params",
         "tab_preview",
         "tab_history",
+        "mode_label",
+        "mode_image",
+        "mode_video",
+        "model_label",
         "prompt_label",
+        "negative_label",
+        "seed_label",
         "width_label",
         "height_label",
         "steps_label",
+        "video_duration_label",
+        "video_duration_2s",
+        "video_duration_3s",
+        "video_duration_4s",
+        "video_fps_label",
         "generate_label",
         "save_label",
         "job_label",
         "preview_empty",
+        "preview_empty_video",
         "history_restore",
         "history_prompt",
         "history_when",
@@ -105,9 +124,10 @@ mod tests {
     use super::*;
     use super::surface::{
         EN_APP_TITLE, FR_APP_TITLE, FR_GENERATE_LABEL, FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
-        FR_JOB_LABEL, FR_PREVIEW_EMPTY, FR_PROMPT_LABEL, FR_RESTORE_LABEL, FR_SAVE_LABEL,
-        FR_STEPS_LABEL, FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_WIDTH_LABEL,
-        LABEL_KEYS,
+        FR_JOB_LABEL, FR_MODE_IMAGE, FR_MODE_LABEL, FR_MODE_VIDEO, FR_MODEL_LABEL,
+        FR_NEGATIVE_LABEL, FR_PREVIEW_EMPTY, FR_PROMPT_LABEL, FR_RESTORE_LABEL, FR_SAVE_LABEL,
+        FR_SEED_LABEL, FR_STEPS_LABEL, FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW,
+        FR_WIDTH_LABEL, LABEL_KEYS,
     };
     use crate::decl_ui::DeclUiDocument;
     use std::path::PathBuf;
@@ -259,7 +279,13 @@ mod tests {
         assert_eq!(fr.get("tab_params").map(String::as_str), Some(FR_TAB_PARAMS));
         assert_eq!(fr.get("tab_preview").map(String::as_str), Some(FR_TAB_PREVIEW));
         assert_eq!(fr.get("tab_history").map(String::as_str), Some(FR_TAB_HISTORY));
+        assert_eq!(fr.get("mode_label").map(String::as_str), Some(FR_MODE_LABEL));
+        assert_eq!(fr.get("mode_image").map(String::as_str), Some(FR_MODE_IMAGE));
+        assert_eq!(fr.get("mode_video").map(String::as_str), Some(FR_MODE_VIDEO));
+        assert_eq!(fr.get("model_label").map(String::as_str), Some(FR_MODEL_LABEL));
         assert_eq!(fr.get("prompt_label").map(String::as_str), Some(FR_PROMPT_LABEL));
+        assert_eq!(fr.get("negative_label").map(String::as_str), Some(FR_NEGATIVE_LABEL));
+        assert_eq!(fr.get("seed_label").map(String::as_str), Some(FR_SEED_LABEL));
         assert_eq!(fr.get("width_label").map(String::as_str), Some(FR_WIDTH_LABEL));
         assert_eq!(fr.get("height_label").map(String::as_str), Some(FR_HEIGHT_LABEL));
         assert_eq!(fr.get("steps_label").map(String::as_str), Some(FR_STEPS_LABEL));
@@ -419,6 +445,31 @@ mod tests {
         assert_eq!(
             fr.get("history_restore").map(String::as_str),
             Some(FR_RESTORE_LABEL)
+        );
+    }
+
+    #[test]
+    fn lot6_create_ui_exposes_image_video_mode_selection() {
+        let doc = read_ui_document();
+        let fr = &doc.labels.as_ref().expect("create labels").fr;
+        assert_eq!(fr.get("mode_image").map(String::as_str), Some(FR_MODE_IMAGE));
+        assert_eq!(fr.get("mode_video").map(String::as_str), Some(FR_MODE_VIDEO));
+        let state = doc.state.as_ref().expect("create state");
+        assert!(state.local.contains_key("media_mode"));
+        assert!(doc.actions.iter().any(|a| a.id == "generate_image"));
+        assert!(doc.actions.iter().any(|a| a.id == "generate_video"));
+        let ui_raw = std::fs::read_to_string(
+            workspace_root().join("share/modules/create.aospkg/ui/index.json"),
+        )
+        .expect("create ui json");
+        assert!(
+            ui_raw.contains("\"state_key\": \"media_mode\"")
+                && ui_raw.contains("\"mode_video\""),
+            "params tab must render image/video mode radio"
+        );
+        assert!(
+            doc.bindings.iter().any(|b| b.tool == "create.models.list"),
+            "create must bind model catalog for picker"
         );
     }
 
