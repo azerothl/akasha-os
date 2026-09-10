@@ -139,6 +139,8 @@ pub fn ui_layer_canvas(
     local_state: &HashMap<String, Value>,
     host: &mut LayerCanvasHostState,
     canvas_id: &str,
+    background_path: Option<&str>,
+    layer_opacity: f32,
 ) -> Option<LayerCanvasPatch> {
     let layers_key = w.layers_key.as_deref().unwrap_or("layers");
     let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
@@ -266,6 +268,24 @@ pub fn ui_layer_canvas(
         egui::Stroke::new(1.5_f32, egui::Color32::from_gray(90)),
         egui::StrokeKind::Inside,
     );
+
+    // The generated result is the canvas background. Layers are painted above
+    // it so users can position and compare composition elements in context.
+    if let Some(path) = background_path.filter(|path| !path.is_empty()) {
+        if let Some(texture) = crate::decl_ui::try_load_png(ui.ctx(), path) {
+            let base = texture.size_vec2();
+            let fit = ((rect.width() - 4.0) / base.x.max(1.0))
+                .min((rect.height() - 4.0) / base.y.max(1.0))
+                .min(1.0);
+            let image_rect = egui::Rect::from_center_size(rect.center(), base * fit);
+            painter.image(
+                texture.id(),
+                image_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+    }
 
     let to_screen = |x: f32, y: f32, w: f32, h: f32| -> egui::Rect {
         egui::Rect::from_min_size(
@@ -423,16 +443,23 @@ pub fn ui_layer_canvas(
         }
         let r = to_screen(layer.x, layer.y, layer.w, layer.h);
         let selected_here = selected == Some(layer.id);
+        let alpha = |base: u8| -> u8 { ((base as f32) * layer_opacity.clamp(0.0, 1.0)) as u8 };
         let fill = if selected_here {
-            egui::Color32::from_rgba_unmultiplied(80, 140, 220, 90)
+            egui::Color32::from_rgba_unmultiplied(80, 140, 220, alpha(90))
         } else {
             let hue = ((40 + i * 37) % 180) as u8;
-            egui::Color32::from_rgba_unmultiplied(60 + hue / 2, 100, 160, 70)
+            egui::Color32::from_rgba_unmultiplied(60 + hue / 2, 100, 160, alpha(70))
         };
         let stroke = if selected_here {
-            egui::Stroke::new(2.0_f32, egui::Color32::from_rgb(120, 190, 255))
+            egui::Stroke::new(
+                2.0_f32,
+                egui::Color32::from_rgba_unmultiplied(120, 190, 255, alpha(255)),
+            )
         } else {
-            egui::Stroke::new(1.0_f32, egui::Color32::from_rgba_unmultiplied(200, 200, 220, 160))
+            egui::Stroke::new(
+                1.0_f32,
+                egui::Color32::from_rgba_unmultiplied(200, 200, 220, alpha(160)),
+            )
         };
         painter.rect_filled(r, 3.0, fill);
         painter.rect_stroke(r, 3.0, stroke, egui::StrokeKind::Inside);
@@ -446,11 +473,15 @@ pub fn ui_layer_canvas(
             egui::Align2::LEFT_TOP,
             label,
             egui::FontId::proportional(12.0),
-            egui::Color32::WHITE,
+            egui::Color32::from_white_alpha(alpha(255)),
         );
         if selected_here && !layer.locked {
             let handle = resize_handle_rect(r);
-            painter.rect_filled(handle, 2.0, egui::Color32::from_rgb(220, 230, 255));
+            painter.rect_filled(
+                handle,
+                2.0,
+                egui::Color32::from_rgba_unmultiplied(220, 230, 255, alpha(255)),
+            );
         }
     }
 

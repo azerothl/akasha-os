@@ -476,16 +476,30 @@ impl DeclUiPanelState {
                 let Some(state_key) = &w.state_key else { return };
                 let label = widget_text(w, doc, language)
                     .unwrap_or_else(|| "Suggestions".into());
-                ui.label(label);
-                ui.horizontal_wrapped(|ui| {
-                    for item in w.items.clone().unwrap_or_default() {
-                        if ui.add_enabled(enabled, egui::Button::new(&item)).clicked() {
-                            actions.local_patch.insert(
-                                state_key.clone(),
-                                Value::String(item),
-                            );
-                        }
-                    }
+                let items = w.items.clone().unwrap_or_default();
+                let current = local_state
+                    .get(state_key)
+                    .and_then(Value::as_str)
+                    .filter(|value| items.iter().any(|item| item == value))
+                    .unwrap_or("Choisir un exemple…")
+                    .to_string();
+                ui.horizontal(|ui| {
+                    ui.label(label);
+                    ui.add_enabled_ui(enabled, |ui| {
+                        egui::ComboBox::from_id_salt(format!("prompt-starter-{state_key}"))
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                for item in &items {
+                                    if ui.selectable_label(false, item).clicked() {
+                                        actions.local_patch.insert(
+                                            state_key.clone(),
+                                            Value::String(item.clone()),
+                                        );
+                                        ui.close_menu();
+                                    }
+                                }
+                            });
+                    });
                 });
             }
             "checkbox" => {
@@ -1028,6 +1042,37 @@ impl DeclUiPanelState {
                 let host = layer_canvases
                     .entry(canvas_id.clone())
                     .or_insert_with(LayerCanvasHostState::new);
+                let background_path = w
+                    .binding
+                    .as_ref()
+                    .map(|_| image_view_path(w, cache, binding_cache, local_state))
+                    .filter(|path| !path.is_empty());
+                let opacity_key = w.state_key.as_deref();
+                let mut layer_opacity = opacity_key
+                    .and_then(|key| local_state.get(key))
+                    .and_then(Value::as_f64)
+                    .map(|value| value as f32)
+                    .unwrap_or(0.72)
+                    .clamp(0.0, 1.0);
+                if let Some(key) = opacity_key {
+                    ui.horizontal(|ui| {
+                        let label = widget_text_from_key(
+                            Some("layer_opacity_label"),
+                            doc,
+                            language,
+                        )
+                        .unwrap_or_else(|| "Layer opacity".into());
+                        ui.label(label);
+                        if ui
+                            .add(egui::Slider::new(&mut layer_opacity, 0.0..=1.0).show_value(true))
+                            .changed()
+                        {
+                            actions
+                                .local_patch
+                                .insert(key.to_string(), Value::from(layer_opacity));
+                        }
+                    });
+                }
                 if let Some(patch) = crate::rich_composition_ui::ui_layer_canvas(
                     ui,
                     w,
@@ -1036,6 +1081,8 @@ impl DeclUiPanelState {
                     local_state,
                     host,
                     &canvas_id,
+                    background_path.as_deref(),
+                    layer_opacity,
                 ) {
                     for (k, v) in patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
@@ -1908,6 +1955,7 @@ fn render_choice(
         })
         .collect());
     let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
+    let has_explicit_label = w.label.is_some() || w.text.is_some() || w.label_key.is_some();
     if let Some(state_key) = state_key {
         let mut current = local_state
             .get(&state_key)
@@ -1915,19 +1963,40 @@ fn render_choice(
             .unwrap_or_else(|| items.first().map(String::as_str).unwrap_or_default())
             .to_string();
         if radio {
-            ui.label(label);
-            for (index, item) in items.iter().enumerate() {
-                if ui
-                    .add_enabled(
+            let mut render_item = |ui: &mut Ui, index: usize, item: &String| {
+                let changed = if w.inline.unwrap_or(false) {
+                    ui.add_enabled(
+                        enabled,
+                        egui::Button::new(&item_labels[index]).selected(current == *item),
+                    )
+                    .clicked()
+                } else {
+                    ui.add_enabled(
                         enabled,
                         egui::RadioButton::new(current == *item, &item_labels[index]),
                     )
                     .clicked()
-                {
+                };
+                if changed {
                     current = item.clone();
                     actions
                         .local_patch
                         .insert(state_key.clone(), Value::String(current.clone()));
+                }
+            };
+            if w.inline.unwrap_or(false) {
+                ui.horizontal(|ui| {
+                    if has_explicit_label {
+                        ui.label(&label);
+                    }
+                    for (index, item) in items.iter().enumerate() {
+                        render_item(ui, index, item);
+                    }
+                });
+            } else {
+                ui.label(label);
+                for (index, item) in items.iter().enumerate() {
+                    render_item(ui, index, item);
                 }
             }
         } else {
@@ -1965,15 +2034,39 @@ fn render_choice(
         .entry(key.clone())
         .or_insert_with(|| items.first().cloned().unwrap_or_default());
     if radio {
-        ui.label(label);
-        for (index, item) in items.iter().enumerate() {
+        let mut render_item = |ui: &mut Ui, index: usize, item: &String| {
             ui.add_enabled_ui(enabled, |ui| {
-                ui.radio_value(
-                    form_fields.get_mut(&key).unwrap(),
-                    item.clone(),
-                    &item_labels[index],
-                );
+                if w.inline.unwrap_or(false) {
+                    let current = form_fields.get(&key).cloned().unwrap_or_default();
+                    if ui
+                        .add(egui::Button::new(&item_labels[index]).selected(current == *item))
+                        .clicked()
+                    {
+                        form_fields.insert(key.clone(), item.clone());
+                    }
+                } else {
+                    ui.radio_value(
+                        form_fields.get_mut(&key).unwrap(),
+                        item.clone(),
+                        &item_labels[index],
+                    );
+                }
             });
+        };
+        if w.inline.unwrap_or(false) {
+            ui.horizontal(|ui| {
+                if has_explicit_label {
+                    ui.label(&label);
+                }
+                for (index, item) in items.iter().enumerate() {
+                    render_item(ui, index, item);
+                }
+            });
+        } else {
+            ui.label(label);
+            for (index, item) in items.iter().enumerate() {
+                render_item(ui, index, item);
+            }
         }
     } else {
         let cur = form_fields.get(&key).cloned().unwrap_or_default();

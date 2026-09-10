@@ -11,6 +11,7 @@
       "tab_history": "History",
       "mode_image": "Image",
       "mode_video": "Video",
+      "layer_opacity_label": "Layer opacity",
       "image_pack_label": "Default image pack",
       "video_pack_label": "Video pack",
       "prompt_section": "What do you want to create?",
@@ -93,6 +94,7 @@
       "tab_history": "Historique",
       "mode_image": "Image",
       "mode_video": "Vidéo",
+      "layer_opacity_label": "Opacité des calques",
       "image_pack_label": "Pack image par défaut",
       "video_pack_label": "Pack vidéo",
       "prompt_section": "Que voulez-vous créer ?",
@@ -205,6 +207,7 @@
       "sd_mode": { "type": "string", "default": "img_gen" },
       "composition_layers": { "type": "array", "default": [] },
       "composition_selected": { "type": "number", "default": 0 },
+      "layer_opacity": { "type": "number", "default": 0.72 },
       "saved_preset_name": { "type": "string", "default": "" },
       "init_image": { "type": "string", "default": "" },
       "end_image": { "type": "string", "default": "" },
@@ -502,7 +505,7 @@
                       "kind": "section",
                       "label_key": "prompt_section",
                       "children": [
-                        { "kind": "radio", "state_key": "media_mode", "items": ["image", "video"], "item_label_keys": ["mode_image", "mode_video"] },
+                        { "kind": "radio", "state_key": "media_mode", "items": ["image", "video"], "item_label_keys": ["mode_image", "mode_video"], "inline": true },
                         { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "image_pack_label", "visible": { "eq": ["$local.media_mode", "image"] } },
                         { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "video_pack_label", "visible": { "eq": ["$local.media_mode", "video"] } },
                         { "kind": "textarea", "state_key": "prompt", "label_key": "prompt_label" },
@@ -536,7 +539,7 @@
                         { "kind": "slider", "state_key": "steps", "min": 4, "max": 40, "step": 1, "label_key": "steps_label" },
                         { "kind": "number", "state_key": "video_frames", "min": 1, "max": 121, "label_key": "video_frames_label", "visible": { "eq": ["$local.media_mode", "video"] } },
                         { "kind": "number", "state_key": "fps", "min": 1, "max": 120, "label_key": "fps_label", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "select", "state_key": "camera_preset", "items": ["custom", "static", "push", "track", "follow"], "label_key": "camera_label" },
+                        { "kind": "select", "state_key": "camera_preset", "items": ["custom", "static", "push", "track", "follow"], "label_key": "camera_label", "visible": { "eq": ["$local.media_mode", "video"] } },
                         { "kind": "checkbox", "state_key": "img2img_enabled", "label_key": "img2img_label" },
                         { "kind": "file_picker", "state_key": "mask_image", "label_key": "inpaint_label", "visible": { "eq": ["$local.img2img_enabled", true] } },
                         { "kind": "section", "label_key": "styles_section", "children": [
@@ -597,8 +600,7 @@
       {
         "kind": "column",
         "children": [
-          { "kind": "image_view", "binding": "preview", "label_key": "tab_preview", "empty_label_key": "preview_empty" },
-          { "kind": "layer_canvas", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected" },
+          { "kind": "layer_canvas", "binding": "preview", "state_key": "layer_opacity", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected", "aspect_w": 16, "aspect_h": 9 },
           {
             "kind": "section",
             "label_key": "upscale_section",

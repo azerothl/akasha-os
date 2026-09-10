@@ -263,6 +263,9 @@ pub struct DeclUiWidget {
     /// Parallel localized labels for `items` / binding rows (never wire ids in chrome).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_label_keys: Option<Vec<String>>,
+    /// Render choice controls side by side (segmented/switch presentation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline: Option<bool>,
     /// When set with `binding`, pick `items` from `binding_cache[binding][resolved key]`.
     /// Key may be `$local.media_mode` to switch option lists (e.g. image vs video packs).
     #[serde(default, skip_serializing_if = "Option::is_none")]

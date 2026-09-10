@@ -211,6 +211,13 @@
                 "null"
               ]
             },
+            "inline": {
+              "description": "Render choice controls side by side (segmented/switch presentation).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "item_label_keys": {
               "description": "Parallel localized labels for `items` / binding rows (never wire ids in chrome).",
               "items": {
@@ -902,6 +909,13 @@
                 "null"
               ]
             },
+            "inline": {
+              "description": "Render choice controls side by side (segmented/switch presentation).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "item_label_keys": {
               "description": "Parallel localized labels for `items` / binding rows (never wire ids in chrome).",
               "items": {
@@ -1182,6 +1196,13 @@
         },
         "hide_headers": {
           "description": "When true, table renders rows without a header band.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "inline": {
+          "description": "Render choice controls side by side (segmented/switch presentation).",
           "type": [
             "boolean",
             "null"
@@ -1666,6 +1687,13 @@
             },
             "hide_headers": {
               "description": "When true, table renders rows without a header band.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "inline": {
+              "description": "Render choice controls side by side (segmented/switch presentation).",
               "type": [
                 "boolean",
                 "null"
