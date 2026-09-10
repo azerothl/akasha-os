@@ -616,9 +616,11 @@ impl ModuleRuntime {
             )));
         }
         let contract = ui.contract_version();
-        validate_ui_contract_supported(contract).map_err(|_| ModuleError::UiContractUnsupported {
-            required: contract,
-            current: aos_proto::rich_app_contract::HOST_UI_CONTRACT_MAX,
+        validate_ui_contract_supported(contract).map_err(|_| {
+            ModuleError::UiContractUnsupported {
+                required: contract,
+                current: aos_proto::rich_app_contract::HOST_UI_CONTRACT_MAX,
+            }
         })?;
         let raw = self.read_asset(name, ui.document_path())?;
         let tool_names: Vec<&str> = m.manifest.tools.iter().map(|t| t.name.as_str()).collect();
@@ -1034,9 +1036,11 @@ fn validate_package_descriptors(
             )));
         }
         let contract = ui.contract_version();
-        validate_ui_contract_supported(contract).map_err(|_| ModuleError::UiContractUnsupported {
-            required: contract,
-            current: aos_proto::rich_app_contract::HOST_UI_CONTRACT_MAX,
+        validate_ui_contract_supported(contract).map_err(|_| {
+            ModuleError::UiContractUnsupported {
+                required: contract,
+                current: aos_proto::rich_app_contract::HOST_UI_CONTRACT_MAX,
+            }
         })?;
         let raw = std::fs::read(&ui_path).map_err(|e| ModuleError::Io(e.to_string()))?;
         if ui.mode == "declarative_ui" {
@@ -1048,7 +1052,8 @@ fn validate_package_descriptors(
                 ));
             }
             if doc.get("root").is_some() {
-                let tool_names: Vec<&str> = manifest.tools.iter().map(|t| t.name.as_str()).collect();
+                let tool_names: Vec<&str> =
+                    manifest.tools.iter().map(|t| t.name.as_str()).collect();
                 let granted = manifest.permissions.required_caps.clone();
                 let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
                     .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
@@ -1159,7 +1164,9 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
         "tasks.list" => serde_json::json!({}),
         "tasks.create" => serde_json::json!({"title": ""}),
         "tasks.update" | "tasks.complete" => serde_json::json!({"id": "__probe_nonexistent__"}),
-        "create.history.list" | "create.document.load" | "create.result.get"
+        "create.history.list"
+        | "create.document.load"
+        | "create.result.get"
         | "create.models.list" => {
             serde_json::json!({})
         }
@@ -2112,7 +2119,8 @@ min_os_api: 1
 
     #[test]
     fn create_package_validates_at_install() {
-        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        let share =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
         if !share.join("module.wasm").is_file() {
             eprintln!("skip create test: run modules/build-create.sh first");
             return;
@@ -2137,7 +2145,10 @@ min_os_api: 1
             "uninstall must keep /documents/create/**"
         );
         assert!(rt.user_removed("create"));
-        assert!(rt.install_preinstalled(&share, Some(create_test_caps())).unwrap().is_none());
+        assert!(rt
+            .install_preinstalled(&share, Some(create_test_caps()))
+            .unwrap()
+            .is_none());
         let _ = std::fs::remove_dir_all(&base);
     }
 
@@ -2154,7 +2165,8 @@ min_os_api: 1
 
     #[test]
     fn create_invalid_upgrade_keeps_last_good_version() {
-        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        let share =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
         if !share.join("module.wasm").is_file() {
             eprintln!("skip create rollback test: run modules/build-create.sh first");
             return;
@@ -2162,7 +2174,8 @@ min_os_api: 1
         let base = tmpbase("create-rollback");
         let caps = create_test_caps();
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
-        rt.install(&share, Some(caps.clone())).expect("create install");
+        rt.install(&share, Some(caps.clone()))
+            .expect("create install");
         let good_wasm = std::fs::read(base.join("modules/create/module.wasm")).unwrap();
         let bad_pkg = base.join("bad-create");
         copy_dir(&share, &bad_pkg).unwrap();
@@ -2192,7 +2205,8 @@ min_os_api: 1
 
     #[test]
     fn create_rejects_unsupported_ui_contract_before_replace() {
-        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
+        let share =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/create.aospkg");
         if !share.join("module.wasm").is_file() {
             eprintln!("skip create contract test: run modules/build-create.sh first");
             return;
@@ -2200,7 +2214,8 @@ min_os_api: 1
         let base = tmpbase("create-contract");
         let caps = create_test_caps();
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
-        rt.install(&share, Some(caps.clone())).expect("create install");
+        rt.install(&share, Some(caps.clone()))
+            .expect("create install");
         let good_wasm = std::fs::read(base.join("modules/create/module.wasm")).unwrap();
         let bad_pkg = base.join("bad-contract");
         copy_dir(&share, &bad_pkg).unwrap();
@@ -2274,7 +2289,8 @@ min_os_api: 1
 
     #[test]
     fn gallery_demo_package_validates_at_install() {
-        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/gallery-demo.aospkg");
+        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/gallery-demo.aospkg");
         if !share.join("module.wasm").is_file() {
             eprintln!("skip gallery-demo test: run modules/build-gallery-demo.sh first");
             return;
@@ -2286,7 +2302,9 @@ min_os_api: 1
             "tool.invoke:gallery-demo".into(),
         ];
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
-        let info = rt.install(&share, Some(caps)).expect("gallery-demo install");
+        let info = rt
+            .install(&share, Some(caps))
+            .expect("gallery-demo install");
         assert_eq!(info.name, "gallery-demo");
         let ui = rt.load_ui("gallery-demo").expect("load ui");
         assert_eq!(ui.document.contract, Some(UI_CONTRACT_V2));

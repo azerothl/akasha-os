@@ -1,12 +1,12 @@
 //! Host-rendered declarative module UI (E15 / Preview 0.7).
 
-use aos_proto::decl_ui::{resolve_row_args, DeclUiDocument, DeclUiRowAction, DeclUiWidget};
-use aos_proto::rich_decl_ui::{eval_predicate, resolve_action_input, RichAction, RichJobHandle};
-use aos_proto::ModuleTool;
 use crate::rich_composition_ui::{patch_to_local_map, LayerCanvasHostState};
 use crate::rich_decl::{
     init_state_from_schema, ImageViewInteractionState, JobProgressThrottle, RichDeclSubscriptions,
 };
+use aos_proto::decl_ui::{resolve_row_args, DeclUiDocument, DeclUiRowAction, DeclUiWidget};
+use aos_proto::rich_decl_ui::{eval_predicate, resolve_action_input, RichAction, RichJobHandle};
+use aos_proto::ModuleTool;
 use eframe::egui::{self, Ui};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints, Points};
@@ -99,7 +99,10 @@ impl DeclUiPanelState {
     }
 
     pub fn set_job_update(&mut self, subscription_id: &str, job: RichJobHandle) {
-        if self.job_throttle.allow(job.job_id.as_deref().unwrap_or(subscription_id)) {
+        if self
+            .job_throttle
+            .allow(job.job_id.as_deref().unwrap_or(subscription_id))
+        {
             self.subscriptions.set_job(subscription_id, job);
         }
     }
@@ -434,11 +437,15 @@ impl DeclUiPanelState {
                 );
             }
             "multiselect" => {
-                let Some(state_key) = &w.state_key else { return };
-                let label = widget_text(w, doc, language)
-                    .unwrap_or_else(|| state_key.clone());
+                let Some(state_key) = &w.state_key else {
+                    return;
+                };
+                let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
                 let dynamic_items = w.binding.as_ref().and_then(|binding_id| {
-                    let mut value = binding_cache.get(binding_id).cloned().unwrap_or(Value::Null);
+                    let mut value = binding_cache
+                        .get(binding_id)
+                        .cloned()
+                        .unwrap_or(Value::Null);
                     if let Some(source) = w.source.as_deref() {
                         if let Some(slice) = value.pointer(source) {
                             value = slice.clone();
@@ -447,12 +454,17 @@ impl DeclUiPanelState {
                     value.as_array().map(|rows| {
                         rows.iter()
                             .filter_map(|row| {
-                                row.as_str().map(|s| (s.to_string(), s.to_string())).or_else(|| {
-                                    row.get("id").and_then(Value::as_str).map(|id| {
-                                        let text = row.get("label").and_then(Value::as_str).unwrap_or(id);
-                                        (id.to_string(), text.to_string())
+                                row.as_str()
+                                    .map(|s| (s.to_string(), s.to_string()))
+                                    .or_else(|| {
+                                        row.get("id").and_then(Value::as_str).map(|id| {
+                                            let text = row
+                                                .get("label")
+                                                .and_then(Value::as_str)
+                                                .unwrap_or(id);
+                                            (id.to_string(), text.to_string())
+                                        })
                                     })
-                                })
                             })
                             .collect::<Vec<_>>()
                     })
@@ -507,9 +519,10 @@ impl DeclUiPanelState {
                 }
             }
             "prompt_starters" => {
-                let Some(state_key) = &w.state_key else { return };
-                let label = widget_text(w, doc, language)
-                    .unwrap_or_else(|| "Suggestions".into());
+                let Some(state_key) = &w.state_key else {
+                    return;
+                };
+                let label = widget_text(w, doc, language).unwrap_or_else(|| "Suggestions".into());
                 let items = w.items.clone().unwrap_or_default();
                 let current = local_state
                     .get(state_key)
@@ -525,10 +538,9 @@ impl DeclUiPanelState {
                             .show_ui(ui, |ui| {
                                 for item in &items {
                                     if ui.selectable_label(false, item).clicked() {
-                                        actions.local_patch.insert(
-                                            state_key.clone(),
-                                            Value::String(item.clone()),
-                                        );
+                                        actions
+                                            .local_patch
+                                            .insert(state_key.clone(), Value::String(item.clone()));
                                         ui.close_menu();
                                     }
                                 }
@@ -667,8 +679,7 @@ impl DeclUiPanelState {
             }
             "checkbox" => {
                 if let Some(state_key) = &w.state_key {
-                    let label = widget_text(w, doc, language)
-                        .unwrap_or_else(|| state_key.clone());
+                    let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
                     let mut on = local_state
                         .get(state_key)
                         .and_then(Value::as_bool)
@@ -677,7 +688,22 @@ impl DeclUiPanelState {
                         .add_enabled(enabled, egui::Checkbox::new(&mut on, label))
                         .changed()
                     {
-                        actions.local_patch.insert(state_key.clone(), Value::Bool(on));
+                        actions
+                            .local_patch
+                            .insert(state_key.clone(), Value::Bool(on));
+                        // The native Create panel treats the two prompt
+                        // assistants as mutually exclusive. Preserve that
+                        // invariant so a stale second checkbox cannot shadow
+                        // the selected assistant at generation time.
+                        if on && state_key == "enrich_prompt" {
+                            actions
+                                .local_patch
+                                .insert("enhance_prompt_chat".into(), Value::Bool(false));
+                        } else if on && state_key == "enhance_prompt_chat" {
+                            actions
+                                .local_patch
+                                .insert("enrich_prompt".into(), Value::Bool(false));
+                        }
                     }
                     return;
                 }
@@ -694,8 +720,7 @@ impl DeclUiPanelState {
             }
             "textarea" => {
                 if let Some(state_key) = &w.state_key {
-                    let label = widget_text(w, doc, language)
-                        .unwrap_or_else(|| state_key.clone());
+                    let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
                     let mut text = local_state
                         .get(state_key)
                         .and_then(|v| v.as_str())
@@ -730,8 +755,7 @@ impl DeclUiPanelState {
             }
             "text_input" => {
                 if let Some(state_key) = &w.state_key {
-                    let label = widget_text(w, doc, language)
-                        .unwrap_or_else(|| state_key.clone());
+                    let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
                     let mut text = local_state
                         .get(state_key)
                         .and_then(Value::as_str)
@@ -757,8 +781,7 @@ impl DeclUiPanelState {
             }
             "file_picker" => {
                 if let Some(state_key) = &w.state_key {
-                    let label = widget_text(w, doc, language)
-                        .unwrap_or_else(|| state_key.clone());
+                    let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
                     let current = local_state
                         .get(state_key)
                         .and_then(Value::as_str)
@@ -825,20 +848,22 @@ impl DeclUiPanelState {
                 };
                 if response.clicked() {
                     if w.action.as_deref() == Some("clear_preview") {
-                        actions.local_patch.insert("result_path".into(), Value::String(String::new()));
-                        actions.local_patch.insert("preview_cleared".into(), Value::Bool(true));
+                        actions
+                            .local_patch
+                            .insert("result_path".into(), Value::String(String::new()));
+                        actions
+                            .local_patch
+                            .insert("preview_cleared".into(), Value::Bool(true));
                     } else if w.action.as_deref() == Some("clear_layers") {
-                        actions.local_patch.insert("composition_layers".into(), Value::Array(Vec::new()));
-                        actions.local_patch.insert("composition_selected".into(), Value::Null);
+                        actions
+                            .local_patch
+                            .insert("composition_layers".into(), Value::Array(Vec::new()));
+                        actions
+                            .local_patch
+                            .insert("composition_selected".into(), Value::Null);
                     } else if let Some(action_id) = &w.action {
                         if let Some(action) = doc.actions.iter().find(|a| &a.id == action_id) {
-                            queue_service_action(
-                                actions,
-                                action,
-                                local_state,
-                                document_state,
-                                doc,
-                            );
+                            queue_service_action(actions, action, local_state, document_state, doc);
                         }
                     } else if let Some(tool) = &w.tool {
                         queue_invoke(
@@ -911,7 +936,10 @@ impl DeclUiPanelState {
             }
             "scroll" => {
                 egui::ScrollArea::vertical()
-                    .id_salt(format!("decl_scroll_{}", w.label_key.as_deref().unwrap_or("")))
+                    .id_salt(format!(
+                        "decl_scroll_{}",
+                        w.label_key.as_deref().unwrap_or("")
+                    ))
                     .show(ui, |ui| {
                         if let Some(children) = &w.children {
                             for c in children {
@@ -1012,7 +1040,9 @@ impl DeclUiPanelState {
                                 .unwrap_or_else(|| format!("Tab {}", i + 1))
                         })
                         .collect();
-                    let tab_id = ui.id().with(("decl-tabs", w.label_key.as_deref(), labels.len()));
+                    let tab_id = ui
+                        .id()
+                        .with(("decl-tabs", w.label_key.as_deref(), labels.len()));
                     let mut selected = ui
                         .memory(|memory| memory.data.get_temp::<usize>(tab_id))
                         .unwrap_or(0)
@@ -1126,16 +1156,15 @@ impl DeclUiPanelState {
                     ui.label(heading);
                     ui.weak(state_label);
                     if let Some(p) = &job.progress {
-                        ui.add(egui::ProgressBar::new(
-                            p.completed as f32 / p.total.max(1) as f32,
-                        )
-                        .text(format!("{}/{}", p.completed, p.total)));
+                        ui.add(
+                            egui::ProgressBar::new(p.completed as f32 / p.total.max(1) as f32)
+                                .text(format!("{}/{}", p.completed, p.total)),
+                        );
                     }
                     if matches!(state_key, "running" | "queued") {
                         if let Some(job_id) = &job.job_id {
                             if ui.button(t.decl_job_cancel).clicked() {
-                                actions.cancel_job =
-                                    Some((job_id.clone(), sub_id.to_string()));
+                                actions.cancel_job = Some((job_id.clone(), sub_id.to_string()));
                             }
                         }
                     }
@@ -1188,12 +1217,10 @@ impl DeclUiPanelState {
                             } else {
                                 ui.vertical_centered(|ui| {
                                     ui.add_space(140.0);
-                                    ui.heading(widget_text_from_key(
-                                        w.label_key.as_deref(),
-                                        doc,
-                                        language,
-                                    )
-                                    .unwrap_or_else(|| "Aperçu".into()));
+                                    ui.heading(
+                                        widget_text_from_key(w.label_key.as_deref(), doc, language)
+                                            .unwrap_or_else(|| "Aperçu".into()),
+                                    );
                                     let empty = widget_text_from_key(
                                         w.empty_label_key.as_deref(),
                                         doc,
@@ -1231,12 +1258,9 @@ impl DeclUiPanelState {
                     .clamp(0.0, 1.0);
                 if let Some(key) = opacity_key {
                     ui.horizontal(|ui| {
-                        let label = widget_text_from_key(
-                            Some("layer_opacity_label"),
-                            doc,
-                            language,
-                        )
-                        .unwrap_or_else(|| "Layer opacity".into());
+                        let label =
+                            widget_text_from_key(Some("layer_opacity_label"), doc, language)
+                                .unwrap_or_else(|| "Layer opacity".into());
                         let response = ui.label(label);
                         if let Some(tip) = widget_tooltip(w, doc, language) {
                             response.on_hover_text(tip);
@@ -1303,10 +1327,7 @@ impl DeclUiPanelState {
                 }
             }
             "undo_redo" => {
-                let canvas_id = w
-                    .canvas_id
-                    .clone()
-                    .unwrap_or_else(|| "layer_canvas".into());
+                let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "layer_canvas".into());
                 let host = layer_canvases
                     .entry(canvas_id)
                     .or_insert_with(LayerCanvasHostState::new);
@@ -2116,20 +2137,29 @@ fn render_choice(
             .as_deref()
             .and_then(|key| key.strip_prefix("$local."))
             .and_then(|key| local_state.get(key).and_then(Value::as_str));
-        let value = binding_cache.get(binding_id).cloned().unwrap_or(Value::Null);
+        let value = binding_cache
+            .get(binding_id)
+            .cloned()
+            .unwrap_or(Value::Null);
         let value = key
             .and_then(|key| value.get(key).cloned())
-            .or_else(|| w.source.as_deref().and_then(|source| value.pointer(source).cloned()))
+            .or_else(|| {
+                w.source
+                    .as_deref()
+                    .and_then(|source| value.pointer(source).cloned())
+            })
             .unwrap_or(value);
         value.as_array().map(|rows| {
             rows.iter()
                 .filter_map(|row| {
-                    row.as_str().map(|s| (s.to_string(), s.to_string())).or_else(|| {
-                        row.get("id").and_then(Value::as_str).map(|id| {
-                            let label = row.get("label").and_then(Value::as_str).unwrap_or(id);
-                            (id.to_string(), label.to_string())
+                    row.as_str()
+                        .map(|s| (s.to_string(), s.to_string()))
+                        .or_else(|| {
+                            row.get("id").and_then(Value::as_str).map(|id| {
+                                let label = row.get("label").and_then(Value::as_str).unwrap_or(id);
+                                (id.to_string(), label.to_string())
+                            })
                         })
-                    })
                 })
                 .collect::<Vec<_>>()
         })
@@ -2141,17 +2171,19 @@ fn render_choice(
     let item_labels: Vec<String> = dynamic_items
         .as_ref()
         .map(|rows| rows.iter().map(|(_, label)| label.clone()).collect())
-        .unwrap_or_else(|| items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            w.item_label_keys
-                .as_ref()
-                .and_then(|keys| keys.get(index))
-                .and_then(|key| widget_text_from_key(Some(key), doc, language))
-                .unwrap_or_else(|| item.clone())
-        })
-        .collect());
+        .unwrap_or_else(|| {
+            items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    w.item_label_keys
+                        .as_ref()
+                        .and_then(|keys| keys.get(index))
+                        .and_then(|key| widget_text_from_key(Some(key), doc, language))
+                        .unwrap_or_else(|| item.clone())
+                })
+                .collect()
+        });
     let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
     let tooltip = widget_tooltip(w, doc, language);
     let has_explicit_label = w.label.is_some() || w.text.is_some() || w.label_key.is_some();
@@ -2161,6 +2193,31 @@ fn render_choice(
             .and_then(Value::as_str)
             .unwrap_or_else(|| items.first().map(String::as_str).unwrap_or_default())
             .to_string();
+        // Dynamic catalogue rows may carry an `installed` flag supplied by
+        // the host. Publish a generic readiness value for declarative actions
+        // (Create uses it to disable generation of unavailable packs).
+        if state_key == "model_id" {
+            let mode = local_state
+                .get("media_mode")
+                .and_then(Value::as_str)
+                .unwrap_or("image");
+            let ready = w
+                .binding
+                .as_deref()
+                .and_then(|binding| binding_cache.get(binding))
+                .and_then(|value| value.get(mode))
+                .and_then(Value::as_array)
+                .and_then(|rows| {
+                    rows.iter()
+                        .find(|row| row.get("id").and_then(Value::as_str) == Some(current.as_str()))
+                })
+                .and_then(|row| row.get("installed"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            actions
+                .local_patch
+                .insert("model_ready".into(), Value::Bool(ready));
+        }
         if radio {
             let mut render_item = |ui: &mut Ui, index: usize, item: &String| {
                 let changed = if w.inline.unwrap_or(false) {
@@ -2201,7 +2258,9 @@ fn render_choice(
         } else {
             ui.add_enabled_ui(enabled, |ui| {
                 let response = ui.label(&label);
-                if let Some(tip) = tooltip.as_deref() { response.on_hover_text(tip); }
+                if let Some(tip) = tooltip.as_deref() {
+                    response.on_hover_text(tip);
+                }
                 let selected_label = items
                     .iter()
                     .position(|item| item == &current)
@@ -2213,11 +2272,7 @@ fn render_choice(
                     .show_ui(ui, |ui| {
                         for (index, item) in items.iter().enumerate() {
                             if ui
-                                .selectable_value(
-                                    &mut current,
-                                    item.clone(),
-                                    &item_labels[index],
-                                )
+                                .selectable_value(&mut current, item.clone(), &item_labels[index])
                                 .changed()
                             {
                                 actions
@@ -2254,10 +2309,12 @@ fn render_choice(
             });
         };
         if w.inline.unwrap_or(false) {
-                ui.horizontal(|ui| {
-                    if has_explicit_label {
-                        let response = ui.label(&label);
-                        if let Some(tip) = tooltip.as_deref() { response.on_hover_text(tip); }
+            ui.horizontal(|ui| {
+                if has_explicit_label {
+                    let response = ui.label(&label);
+                    if let Some(tip) = tooltip.as_deref() {
+                        response.on_hover_text(tip);
+                    }
                 }
                 for (index, item) in items.iter().enumerate() {
                     render_item(ui, index, item);
@@ -2326,7 +2383,13 @@ fn import_decl_media_file(path: &std::path::Path) -> Option<String> {
     let name = path.file_name()?.to_str()?.to_string();
     let safe_name: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -2367,7 +2430,13 @@ fn import_decl_asset(path: &std::path::Path, kind: &str) -> Result<String, Strin
         .ok_or_else(|| "nom de fichier invalide".to_string())?;
     let safe_name: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let root = crate::os_open::aos_home().join("share/models");
     let folder = match kind {
@@ -2417,8 +2486,11 @@ fn add_decl_custom_style(style: &str) -> Result<String, String> {
     if !list.iter().any(|item| item.as_str() == Some(value)) {
         list.push(Value::String(value.to_string()));
     }
-    std::fs::write(&path, serde_json::to_string_pretty(&registry).map_err(|error| error.to_string())?)
-        .map_err(|error| error.to_string())?;
+    std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&registry).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
     Ok(value.to_string())
 }
 

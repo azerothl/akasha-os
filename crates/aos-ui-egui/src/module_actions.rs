@@ -6,8 +6,8 @@ use crate::decl_media_job::{
     media_job_running, media_job_succeeded, media_jobs, new_media_job_id,
     parse_media_generate_request, read_image_gen_progress_file,
 };
-use crate::rich_decl::{demo_job_tick, demo_jobs};
 use crate::notes_panel;
+use crate::rich_decl::{demo_job_tick, demo_jobs};
 use aos_ipc::BusClient;
 use aos_proto::decl_ui::ModuleUiResponse;
 use aos_proto::{
@@ -470,7 +470,10 @@ pub(crate) async fn run_decl_service_action(
                 .to_string();
             let ok = media_jobs().lock().unwrap().contains(&job_id);
             if ok {
-                if let Err(e) = bus.call::<(), bool>("media.image.cancel", &(), vec![]).await {
+                if let Err(e) = bus
+                    .call::<(), bool>("media.image.cancel", &(), vec![])
+                    .await
+                {
                     let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                         module: module.to_string(),
                         action_id: action_id.to_string(),
@@ -585,14 +588,42 @@ async fn run_media_image_generate(
             return;
         }
     };
+    if module == "create" {
+        if request.prompt.trim().is_empty() {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some("Prompt vide : décrivez ce que vous voulez créer.".into()),
+                refresh_binds: refresh_binds.clone(),
+            });
+            return;
+        }
+        if let Some(model_id) = request.model_id.as_deref().filter(|id| !id.is_empty()) {
+            if !crate::models_page::is_model_installed(model_id) {
+                let message = format!(
+                    "Le modèle {model_id} n'est pas installé. Téléchargez-le depuis Modèles avant de générer."
+                );
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(message),
+                    refresh_binds: refresh_binds.clone(),
+                });
+                return;
+            }
+        }
+    }
     let prompt = request.prompt.clone();
     let steps = request.options.steps.unwrap_or(20);
     let job_id = new_media_job_id();
-    let sub = subscription_id.clone().unwrap_or_else(|| "generate_job".into());
-    media_jobs()
-        .lock()
-        .unwrap()
-        .register(&job_id, &sub, steps);
+    let sub = subscription_id
+        .clone()
+        .unwrap_or_else(|| "generate_job".into());
+    media_jobs().lock().unwrap().register(&job_id, &sub, steps);
     let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
         module: module.to_string(),
         subscription_id: sub.clone(),
@@ -628,10 +659,7 @@ async fn run_media_image_generate(
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
                     let (step, total) = read_image_gen_progress_file().unwrap_or((0, steps));
                     let total = if total > 0 { total } else { steps };
-                    let allow = media_jobs()
-                        .lock()
-                        .unwrap()
-                        .allow_progress_emit(&job_id_t);
+                    let allow = media_jobs().lock().unwrap().allow_progress_emit(&job_id_t);
                     if allow {
                         let _ = evt_tx_t.send(Evt::ModuleUiJobUpdate {
                             module: module_t.clone(),
@@ -643,6 +671,11 @@ async fn run_media_image_generate(
             }
         });
         let mut req = request;
+        // Match the native panel's precedence rule even for replayed or
+        // programmatic actions that bypass the checkbox interaction.
+        if req.enhance_prompt_chat {
+            req.enrich_prompt = false;
+        }
         // Keep the user's text for history, but honor the same prompt
         // assistant and composition pipeline that the former native Create
         // panel used before it became a module.
@@ -652,6 +685,14 @@ async fn run_media_image_generate(
             .generation_prompt
             .clone()
             .filter(|text| req.use_edited_enriched && !text.trim().is_empty());
+        let json_enrichment_supported =
+            crate::image_prompt::supports_json_prompt_enrichment(req.model_id.as_deref());
+        if req.enrich_prompt && !json_enrichment_supported {
+            let _ = evt_tx_bg.send(Evt::Status(
+                "Structured prompt is unavailable for this model; using the original prompt".into(),
+            ));
+            req.enrich_prompt = false;
+        }
         if generation_prompt.is_none() && (req.enrich_prompt || req.enhance_prompt_chat) {
             match crate::runtime::enrich_prompt_for_module(
                 &bus_bg,
@@ -690,10 +731,7 @@ async fn run_media_image_generate(
             req.generation_prompt = Some(generated.clone());
         }
         req.actor = "human:ui".into();
-        req.caps = vec![
-            "media.generate".into(),
-            "fs.write:/downloads/**".into(),
-        ];
+        req.caps = vec!["media.generate".into(), "fs.write:/downloads/**".into()];
         req.trace_id = format!("decl-ui-{module_bg}-{job_id}");
         let result = bus_bg
             .call::<aos_proto::MediaImageGenerateRequest, MediaGenerateResponse>(
@@ -736,7 +774,8 @@ async fn run_media_image_generate(
                     job: job.clone(),
                 });
                 if module_bg == "create" {
-                    let media_mode = if crate::media_image_defaults::is_video_options(&req.options) {
+                    let media_mode = if crate::media_image_defaults::is_video_options(&req.options)
+                    {
                         "video"
                     } else {
                         "image"
@@ -861,7 +900,14 @@ fn parse_composition_blocks(
             .or_else(|| object.get("desc").and_then(Value::as_str))
             .unwrap_or("")
             .to_string();
-        blocks.push(crate::image_composition::CompositionBlock { id, x, y, w, h, desc });
+        blocks.push(crate::image_composition::CompositionBlock {
+            id,
+            x,
+            y,
+            w,
+            h,
+            desc,
+        });
     }
     Some(blocks)
 }
@@ -904,7 +950,9 @@ fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
     let intent = match req.intent_preset.as_deref() {
         Some("portrait") => Some("Intent: portrait framing and subject emphasis."),
         Some("product") => Some("Intent: clean product presentation with controlled lighting."),
-        Some("illustration") => Some("Intent: illustrated composition with deliberate graphic shapes."),
+        Some("illustration") => {
+            Some("Intent: illustrated composition with deliberate graphic shapes.")
+        }
         Some("cinematic") => Some("Intent: cinematic composition and dramatic light."),
         _ => None,
     };
@@ -912,6 +960,63 @@ fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
         if !req.prompt.contains(intent) {
             req.prompt = format!("{}\n{}", req.prompt.trim(), intent);
         }
+    }
+}
+
+#[cfg(test)]
+mod create_regression_tests {
+    use super::{apply_create_presets, parse_composition_blocks};
+    use aos_proto::MediaImageGenerateRequest;
+
+    #[test]
+    fn native_create_presets_keep_dimensions_and_steps() {
+        for (format, expected) in [
+            ("1:1", (512, 512)),
+            ("16:9", (768, 432)),
+            ("9:16", (432, 768)),
+        ] {
+            let mut req = MediaImageGenerateRequest {
+                prompt: "subject".into(),
+                path: None,
+                model_id: None,
+                options: Default::default(),
+                generation_prompt: None,
+                enrich_prompt: false,
+                enhance_prompt_chat: false,
+                use_edited_enriched: false,
+                composition_blocks: Vec::new(),
+                format_preset: Some(format.into()),
+                intent_preset: None,
+                quality_profile: Some("balanced".into()),
+                camera_preset: None,
+                actor: String::new(),
+                caps: Vec::new(),
+                trace_id: String::new(),
+            };
+            apply_create_presets(&mut req);
+            assert_eq!(
+                (req.options.width, req.options.height),
+                (Some(expected.0), Some(expected.1))
+            );
+            assert_eq!(req.options.steps, Some(20));
+        }
+    }
+
+    #[test]
+    fn declarative_layer_prompt_maps_to_native_composition_description() {
+        let blocks = parse_composition_blocks(&[serde_json::json!({
+            "id": 7,
+            "x": 0.1,
+            "y": 0.2,
+            "w": 0.4,
+            "h": 0.5,
+            "prompt": "a red fox",
+            "label": "Fox",
+        })])
+        .expect("valid layer");
+        assert_eq!(blocks[0].id, 7);
+        assert_eq!(blocks[0].desc, "a red fox");
+        assert!((blocks[0].w - 0.4).abs() < f32::EPSILON);
     }
 }
 
@@ -932,7 +1037,9 @@ pub(crate) async fn cancel_decl_job(
         return;
     }
     if media_jobs().lock().unwrap().contains(job_id) {
-        let _ = bus.call::<(), bool>("media.image.cancel", &(), vec![]).await;
+        let _ = bus
+            .call::<(), bool>("media.image.cancel", &(), vec![])
+            .await;
         let (step, total) = read_image_gen_progress_file().unwrap_or((0, 1));
         let _ = evt_tx.send(Evt::ModuleUiJobUpdate {
             module: module.to_string(),

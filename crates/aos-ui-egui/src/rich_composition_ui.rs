@@ -1,10 +1,10 @@
 //! Generic layer canvas / list / undo widgets for rich declarative UI (issue #150 lot 5).
 
+use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_proto::rich_composition::{
     bring_layer_to_front, layers_from_value, layers_to_value, reorder_layer, BoundedUndoStack,
     LayerCanvasSnapshot, RichLayer, MAX_LAYERS_PER_CANVAS, MAX_UNDO_DEPTH,
 };
-use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_proto::rich_decl_ui::RichInteractionEvent;
 use eframe::egui;
 use serde_json::{json, Value};
@@ -69,10 +69,7 @@ fn read_u64(local: &HashMap<String, Value>, key: &str) -> Option<u64> {
 }
 
 fn read_layers(local: &HashMap<String, Value>, key: &str) -> Vec<RichLayer> {
-    local
-        .get(key)
-        .map(layers_from_value)
-        .unwrap_or_default()
+    local.get(key).map(layers_from_value).unwrap_or_default()
 }
 
 fn snapshot_from_local(
@@ -100,10 +97,7 @@ fn apply_snapshot_patch(
         selected_key: selected_key.to_string(),
         next_id_key: next_id_key.map(str::to_string),
         layers: layers_to_value(&snap.layers),
-        selected_id: snap
-            .selected_id
-            .map(Value::from)
-            .unwrap_or(Value::Null),
+        selected_id: snap.selected_id.map(Value::from).unwrap_or(Value::Null),
         next_id: next_id_key.map(|_| Value::from(snap.next_id)),
         interaction: None,
     }
@@ -218,7 +212,8 @@ pub fn ui_layer_canvas(
 
     if host.focused {
         // `command` maps to Cmd on macOS and Ctrl on other platforms.
-        let undo = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
+        let undo =
+            ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
         let redo = ui.input(|i| {
             (i.modifiers.command && i.key_pressed(egui::Key::Y))
                 || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
@@ -293,7 +288,10 @@ pub fn ui_layer_canvas(
 
     let to_screen = |x: f32, y: f32, w: f32, h: f32| -> egui::Rect {
         egui::Rect::from_min_size(
-            egui::pos2(rect.left() + x * rect.width(), rect.top() + y * rect.height()),
+            egui::pos2(
+                rect.left() + x * rect.width(),
+                rect.top() + y * rect.height(),
+            ),
             egui::vec2(w * rect.width(), h * rect.height()),
         )
     };
@@ -378,15 +376,7 @@ pub fn ui_layer_canvas(
                             && !layer.locked
                             && to_screen(layer.x, layer.y, layer.w, layer.h).contains(pos)
                     })
-                    .map(|layer| {
-                        (
-                            layer.id,
-                            layer.x,
-                            layer.y,
-                            layer.w,
-                            layer.h,
-                        )
-                    });
+                    .map(|layer| (layer.id, layer.x, layer.y, layer.w, layer.h));
                 if let Some((id, x, y, w, h)) = hit {
                     bring_layer_to_front(&mut layers, id);
                     selected = Some(id);
@@ -623,7 +613,11 @@ pub fn ui_layer_list(
                     "visibility",
                 ));
             }
-            if ui.small_button("⇅").on_hover_text(t.decl_layer_drag_hint).clicked() {
+            if ui
+                .small_button("⇅")
+                .on_hover_text(t.decl_layer_drag_hint)
+                .clicked()
+            {
                 reorder_from = Some(idx);
                 host.drag_layer_index = Some(idx);
             } else if let Some(from) = reorder_from {
@@ -737,20 +731,13 @@ fn build_patch(
     }
 }
 
-fn widget_label_from_key(
-    doc: &DeclUiDocument,
-    language: &str,
-    key: &str,
-) -> Option<String> {
+fn widget_label_from_key(doc: &DeclUiDocument, language: &str, key: &str) -> Option<String> {
     doc.labels.as_ref()?.resolve(language, key)
 }
 
 fn resize_handle_rect(r: egui::Rect) -> egui::Rect {
     let s = 10.0;
-    egui::Rect::from_min_size(
-        egui::pos2(r.right() - s, r.bottom() - s),
-        egui::vec2(s, s),
-    )
+    egui::Rect::from_min_size(egui::pos2(r.right() - s, r.bottom() - s), egui::vec2(s, s))
 }
 
 fn truncate(s: &str, max: usize) -> String {

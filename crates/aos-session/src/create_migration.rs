@@ -7,7 +7,7 @@ use crate::bootstrap;
 use crate::update;
 use aos_proto::create_contract::{HISTORY_PATH, INVOKE_CAP, MANIFEST_FS_CAPS, MODULE_NAME};
 use aos_proto::decl_ui;
-use aos_proto::{MEDIA_GENERATE_CAP, ModuleManifest};
+use aos_proto::{ModuleManifest, MEDIA_GENERATE_CAP};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
@@ -294,7 +294,10 @@ fn write_legacy_history_marker(home: &Path, imported: usize) -> Result<(), Strin
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let body = format!("version: 1\nimported: {imported}\napplied_ms: {}\n", now_ms());
+    let body = format!(
+        "version: 1\nimported: {imported}\napplied_ms: {}\n",
+        now_ms()
+    );
     fs::write(&path, body).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -394,8 +397,7 @@ fn ensure_managed_registry_entry(installed_dir: &Path, registry: &mut ModuleRegi
             .iter_mut()
             .find(|e| e.name == MODULE_NAME)
         {
-            entry.preinstalled = entry.preinstalled
-                || decl_ui::is_preinstalled_module(MODULE_NAME);
+            entry.preinstalled = entry.preinstalled || decl_ui::is_preinstalled_module(MODULE_NAME);
         }
         return;
     }
@@ -517,7 +519,9 @@ pub fn import_legacy_history_if_needed(home: &Path) -> Result<usize, String> {
         store.items.push(entry);
         imported += 1;
     }
-    store.items.sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
+    store
+        .items
+        .sort_by(|a, b| b.created_unix.cmp(&a.created_unix));
     if store.items.len() > 40 {
         store.items.truncate(40);
     }

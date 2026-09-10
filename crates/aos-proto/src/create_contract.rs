@@ -4,8 +4,8 @@
 //! See `docs/create-contract.md` and `docs/adr/0009-rich-module-app-contract.md`.
 
 use crate::rich_app_contract::{
-    CREATE_FS_READ_CAP, CREATE_FS_WRITE_CAP, CREATE_TARGET_UI_CONTRACT,
-    FS_READ_DOWNLOADS_CAP, FS_WRITE_DOWNLOADS_CAP, MEDIA_GENERATE_CAP,
+    CREATE_FS_READ_CAP, CREATE_FS_WRITE_CAP, CREATE_TARGET_UI_CONTRACT, FS_READ_DOWNLOADS_CAP,
+    FS_WRITE_DOWNLOADS_CAP, MEDIA_GENERATE_CAP,
 };
 
 /// Installed module / package name.
@@ -85,8 +85,7 @@ pub mod surface {
     pub const FR_RESTORE_LABEL: &str = "Restaurer";
     pub const FR_JOB_LABEL: &str = "Génération";
 
-    pub const FR_PREVIEW_EMPTY: &str =
-        "Pas encore d'image — saisissez une invite et générez.";
+    pub const FR_PREVIEW_EMPTY: &str = "Pas encore d'image — saisissez une invite et générez.";
     pub const FR_HISTORY_EMPTY: &str = "Aucune génération pour l'instant";
 
     /// Label keys declared in `modules/create/ui/index.json`.
@@ -123,14 +122,14 @@ pub mod surface {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::surface::{
         EN_APP_TITLE, FR_APP_TITLE, FR_GENERATE_LABEL, FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
         FR_IMAGE_PACK_LABEL, FR_JOB_LABEL, FR_MODE_IMAGE, FR_MODE_VIDEO, FR_NEGATIVE_LABEL,
         FR_PREVIEW_EMPTY, FR_PROMPT_LABEL, FR_RESTORE_LABEL, FR_SAVE_LABEL, FR_STEPS_LABEL,
-        FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_VIDEO_DURATION_LABEL,
-        FR_VIDEO_FPS_LABEL, FR_VIDEO_PACK_LABEL, FR_WIDTH_LABEL, LABEL_KEYS,
+        FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_VIDEO_DURATION_LABEL, FR_VIDEO_FPS_LABEL,
+        FR_VIDEO_PACK_LABEL, FR_WIDTH_LABEL, LABEL_KEYS,
     };
+    use super::*;
     use crate::decl_ui::DeclUiDocument;
     use std::path::PathBuf;
 
@@ -278,11 +277,26 @@ mod tests {
         let fr = &labels.fr;
         assert!(!fr.is_empty(), "create ui must declare fr labels");
         assert_eq!(fr.get("app_title").map(String::as_str), Some(FR_APP_TITLE));
-        assert_eq!(fr.get("tab_params").map(String::as_str), Some(FR_TAB_PARAMS));
-        assert_eq!(fr.get("tab_preview").map(String::as_str), Some(FR_TAB_PREVIEW));
-        assert_eq!(fr.get("tab_history").map(String::as_str), Some(FR_TAB_HISTORY));
-        assert_eq!(fr.get("mode_image").map(String::as_str), Some(FR_MODE_IMAGE));
-        assert_eq!(fr.get("mode_video").map(String::as_str), Some(FR_MODE_VIDEO));
+        assert_eq!(
+            fr.get("tab_params").map(String::as_str),
+            Some(FR_TAB_PARAMS)
+        );
+        assert_eq!(
+            fr.get("tab_preview").map(String::as_str),
+            Some(FR_TAB_PREVIEW)
+        );
+        assert_eq!(
+            fr.get("tab_history").map(String::as_str),
+            Some(FR_TAB_HISTORY)
+        );
+        assert_eq!(
+            fr.get("mode_image").map(String::as_str),
+            Some(FR_MODE_IMAGE)
+        );
+        assert_eq!(
+            fr.get("mode_video").map(String::as_str),
+            Some(FR_MODE_VIDEO)
+        );
         assert!(
             fr.get("mode_label").is_none(),
             "image/video segment must not expose a separate mode heading"
@@ -295,8 +309,14 @@ mod tests {
             fr.get("video_pack_label").map(String::as_str),
             Some(FR_VIDEO_PACK_LABEL)
         );
-        assert_eq!(fr.get("prompt_label").map(String::as_str), Some(FR_PROMPT_LABEL));
-        assert_eq!(fr.get("negative_label").map(String::as_str), Some(FR_NEGATIVE_LABEL));
+        assert_eq!(
+            fr.get("prompt_label").map(String::as_str),
+            Some(FR_PROMPT_LABEL)
+        );
+        assert_eq!(
+            fr.get("negative_label").map(String::as_str),
+            Some(FR_NEGATIVE_LABEL)
+        );
         assert_eq!(
             fr.get("video_duration_label").map(String::as_str),
             Some(FR_VIDEO_DURATION_LABEL)
@@ -305,17 +325,35 @@ mod tests {
             fr.get("video_fps_label").map(String::as_str),
             Some(FR_VIDEO_FPS_LABEL)
         );
-        assert_eq!(fr.get("width_label").map(String::as_str), Some(FR_WIDTH_LABEL));
-        assert_eq!(fr.get("height_label").map(String::as_str), Some(FR_HEIGHT_LABEL));
-        assert_eq!(fr.get("steps_label").map(String::as_str), Some(FR_STEPS_LABEL));
-        assert_eq!(fr.get("generate_label").map(String::as_str), Some(FR_GENERATE_LABEL));
-        assert_eq!(fr.get("save_label").map(String::as_str), Some(FR_SAVE_LABEL));
+        assert_eq!(
+            fr.get("width_label").map(String::as_str),
+            Some(FR_WIDTH_LABEL)
+        );
+        assert_eq!(
+            fr.get("height_label").map(String::as_str),
+            Some(FR_HEIGHT_LABEL)
+        );
+        assert_eq!(
+            fr.get("steps_label").map(String::as_str),
+            Some(FR_STEPS_LABEL)
+        );
+        assert_eq!(
+            fr.get("generate_label").map(String::as_str),
+            Some(FR_GENERATE_LABEL)
+        );
+        assert_eq!(
+            fr.get("save_label").map(String::as_str),
+            Some(FR_SAVE_LABEL)
+        );
         assert_eq!(fr.get("job_label").map(String::as_str), Some(FR_JOB_LABEL));
         assert_eq!(
             fr.get("preview_empty").map(String::as_str),
             Some(FR_PREVIEW_EMPTY)
         );
-        assert_eq!(fr.get("history_restore").map(String::as_str), Some(FR_RESTORE_LABEL));
+        assert_eq!(
+            fr.get("history_restore").map(String::as_str),
+            Some(FR_RESTORE_LABEL)
+        );
         assert_eq!(
             fr.get("history_empty").map(String::as_str),
             Some(FR_HISTORY_EMPTY)
@@ -456,11 +494,26 @@ mod tests {
         let doc = read_ui_document();
         let fr = &doc.labels.as_ref().expect("create labels").fr;
         assert_eq!(fr.get("app_title").map(String::as_str), Some(FR_APP_TITLE));
-        assert_eq!(fr.get("tab_params").map(String::as_str), Some(FR_TAB_PARAMS));
-        assert_eq!(fr.get("tab_preview").map(String::as_str), Some(FR_TAB_PREVIEW));
-        assert_eq!(fr.get("tab_history").map(String::as_str), Some(FR_TAB_HISTORY));
-        assert_eq!(fr.get("generate_label").map(String::as_str), Some(FR_GENERATE_LABEL));
-        assert_eq!(fr.get("save_label").map(String::as_str), Some(FR_SAVE_LABEL));
+        assert_eq!(
+            fr.get("tab_params").map(String::as_str),
+            Some(FR_TAB_PARAMS)
+        );
+        assert_eq!(
+            fr.get("tab_preview").map(String::as_str),
+            Some(FR_TAB_PREVIEW)
+        );
+        assert_eq!(
+            fr.get("tab_history").map(String::as_str),
+            Some(FR_TAB_HISTORY)
+        );
+        assert_eq!(
+            fr.get("generate_label").map(String::as_str),
+            Some(FR_GENERATE_LABEL)
+        );
+        assert_eq!(
+            fr.get("save_label").map(String::as_str),
+            Some(FR_SAVE_LABEL)
+        );
         assert_eq!(
             fr.get("history_restore").map(String::as_str),
             Some(FR_RESTORE_LABEL)
@@ -471,8 +524,14 @@ mod tests {
     fn lot6_create_ui_exposes_image_video_mode_selection() {
         let doc = read_ui_document();
         let fr = &doc.labels.as_ref().expect("create labels").fr;
-        assert_eq!(fr.get("mode_image").map(String::as_str), Some(FR_MODE_IMAGE));
-        assert_eq!(fr.get("mode_video").map(String::as_str), Some(FR_MODE_VIDEO));
+        assert_eq!(
+            fr.get("mode_image").map(String::as_str),
+            Some(FR_MODE_IMAGE)
+        );
+        assert_eq!(
+            fr.get("mode_video").map(String::as_str),
+            Some(FR_MODE_VIDEO)
+        );
         let state = doc.state.as_ref().expect("create state");
         assert!(state.local.contains_key("media_mode"));
         assert!(doc.actions.iter().any(|a| a.id == "generate_image"));
@@ -488,8 +547,7 @@ mod tests {
             "params tab must render image/video segment without wire heading"
         );
         assert!(
-            ui_raw.contains("\"image_pack_label\"")
-                && ui_raw.contains("\"video_pack_label\""),
+            ui_raw.contains("\"image_pack_label\"") && ui_raw.contains("\"video_pack_label\""),
             "model picker must use native pack labels per mode"
         );
         assert!(

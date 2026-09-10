@@ -18,7 +18,6 @@ mod chat_ask;
 mod chat_bubble;
 mod chat_canvas;
 mod chat_composer_state;
-mod create_nav;
 mod chat_controller;
 mod chat_delegate;
 mod chat_error_copy;
@@ -34,9 +33,9 @@ mod cmd;
 mod composer_drafts;
 mod composer_layout;
 mod confirmation_ui_state;
+mod create_nav;
 mod decl_media_job;
 mod decl_ui;
-mod rich_decl;
 mod deep_plan_ui;
 mod feedback_event_controller;
 mod feedback_ui_state;
@@ -48,10 +47,9 @@ mod icons;
 mod image_composition;
 mod image_history;
 mod image_prompt;
-mod media_image_defaults;
-mod rich_composition_ui;
 mod library_panel;
 mod media_event_controller;
+mod media_image_defaults;
 mod memory_controller;
 mod memory_ui_state;
 mod model_setup;
@@ -71,6 +69,8 @@ mod research_choice;
 mod research_controller;
 mod research_document;
 mod research_ui_state;
+mod rich_composition_ui;
+mod rich_decl;
 mod runtime;
 mod scenario_ui_state;
 mod scenarios_panel;
@@ -2986,12 +2986,7 @@ impl eframe::App for UiApp {
                     module,
                     subscription_id,
                     job,
-                } => module_event_controller::on_ui_job_update(
-                    self,
-                    module,
-                    subscription_id,
-                    job,
-                ),
+                } => module_event_controller::on_ui_job_update(self, module, subscription_id, job),
                 Evt::ModuleUiServiceDone {
                     module,
                     action_id: _,

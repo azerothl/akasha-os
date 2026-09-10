@@ -138,7 +138,7 @@ pub fn is_heavy_image_model(model_id: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_video_prompt_model;
+    use super::{is_video_prompt_model, prompt_enrichment_kind, PromptEnrichmentKind};
 
     #[test]
     fn video_models_use_temporal_prompt_enrichment() {
@@ -147,5 +147,13 @@ mod tests {
         assert!(is_video_prompt_model(Some("local:minimax-h3")));
         assert!(!is_video_prompt_model(Some("local:sd-v1-5")));
         assert!(!is_video_prompt_model(None));
+    }
+
+    #[test]
+    fn z_image_keeps_generic_structured_prompt_support() {
+        assert_eq!(
+            prompt_enrichment_kind("local:z-image-turbo"),
+            Some(PromptEnrichmentKind::GenericJson)
+        );
     }
 }

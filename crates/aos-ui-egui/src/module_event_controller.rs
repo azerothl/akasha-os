@@ -15,33 +15,40 @@ fn augment_create_catalog(mut result: Value, french: bool) -> Value {
     // declarative module keeps the same installed/not-installed semantics as
     // the former native Create panel without granting it ambient filesystem
     // access.
+    // Use the same catalogue as the native Models/Create surfaces. The guest
+    // list is only an offline fallback and must not drift from installed
+    // offerings or modality semantics.
     for mode in ["image", "video"] {
-        if let Some(rows) = root.get_mut(mode).and_then(Value::as_array_mut) {
-            for row in rows {
-                let Some(obj) = row.as_object_mut() else { continue };
-                let Some(id) = obj.get("id").and_then(Value::as_str).map(str::to_owned) else { continue };
-                let installed = crate::models_page::is_model_installed(&id);
-                obj.insert("installed".into(), Value::Bool(installed));
-                let base = obj
-                    .get("label")
-                    .and_then(Value::as_str)
-                    .unwrap_or(&id)
-                    .to_string();
-                obj.insert(
-                    "label".into(),
-                    Value::String(format!(
-                        "{base} ({})",
-                        if installed {
-                            if french { "installé" } else { "installed" }
-                        } else if french {
-                            "non installé"
-                        } else {
-                            "not installed"
-                        }
-                    )),
-                );
-            }
-        }
+        let rows: Vec<Value> = crate::models_page::load_catalog_models()
+            .into_iter()
+            .filter(|model| {
+                model
+                    .modality
+                    .as_deref()
+                    .map(|modality| modality == mode)
+                    .unwrap_or_else(|| model.profiles.iter().any(|profile| profile == mode))
+            })
+            .map(|model| {
+                let installed = crate::models_page::is_model_installed(&model.id);
+                let suffix = if installed {
+                    if french {
+                        "installé"
+                    } else {
+                        "installed"
+                    }
+                } else if french {
+                    "non installé"
+                } else {
+                    "not installed"
+                };
+                serde_json::json!({
+                    "id": model.id,
+                    "label": format!("{} ({suffix})", model.name),
+                    "installed": installed,
+                })
+            })
+            .collect();
+        root.insert(mode.to_string(), Value::Array(rows));
     }
     let home = crate::os_open::aos_home();
     let mut assets = serde_json::Map::new();
@@ -82,7 +89,10 @@ fn augment_create_catalog(mut result: Value, french: bool) -> Value {
             }
         }
         names.sort_by_key(|n| n.to_ascii_lowercase());
-        assets.insert(key.to_string(), Value::Array(names.into_iter().map(Value::String).collect()));
+        assets.insert(
+            key.to_string(),
+            Value::Array(names.into_iter().map(Value::String).collect()),
+        );
     }
     root.insert("assets".into(), Value::Object(assets));
     result
@@ -211,7 +221,8 @@ pub(crate) fn on_ui_invoke_done(
         panel.set_pending_invoke(false);
         if ok {
             panel.set_bind_result(&tool, result.clone());
-            if module == "create" && (tool == "create.history.get" || tool == "create.preset.load") {
+            if module == "create" && (tool == "create.history.get" || tool == "create.preset.load")
+            {
                 let params_value = result.get("params").unwrap_or(&result);
                 if let Some(params) = params_value.as_object() {
                     for (key, value) in params {

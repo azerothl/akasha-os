@@ -11,15 +11,15 @@ pub mod bridge;
 mod canvas_layers;
 mod canvas_style;
 pub mod chat_document;
+pub mod create_contract;
 pub mod decl_ui;
 pub mod device_capture;
 pub mod device_usb;
 pub mod host_folder;
 pub mod mem_extract;
 pub mod rich_app_contract;
-pub mod rich_decl_ui;
 pub mod rich_composition;
-pub mod create_contract;
+pub mod rich_decl_ui;
 pub mod tasks_contract;
 
 pub use rich_app_contract::{
@@ -29,16 +29,15 @@ pub use rich_app_contract::{
     FS_WRITE_DOWNLOADS_CAP, HOST_UI_CONTRACT_MAX, INTERACTION_PHASES, JOBS_SERVICE_VERSION,
     JOB_STATES, LEGACY_UI_ENTRY, MAX_BINDINGS, MAX_PREDICATE_DEPTH, MAX_PREDICATE_NODES,
     MAX_STATE_SLOTS, MAX_STATE_STRING_LENGTH, MAX_SUBSCRIPTIONS, MAX_UI_DEPTH, MAX_UI_NODES,
-    MEDIA_GENERATE_CAP, MEDIA_IMAGE_SERVICE_VERSION, MIN_OS_API_FIELD, PLATFORM_MEDIA_IMAGE_METHODS,
-    REFERENCE_MACHINE_NOTE, RICH_UI_DOCUMENT, SERVICES_JOBS_FIELD, SERVICES_MEDIA_IMAGE_FIELD,
-    UI_CONTRACT_FIELD, UI_CONTRACT_V1, UI_CONTRACT_V2, UI_DOCUMENT_FIELD, UI_V1_WIDGET_KINDS,
-    UI_V2_ADDITIONAL_WIDGET_KINDS,
+    MEDIA_GENERATE_CAP, MEDIA_IMAGE_SERVICE_VERSION, MIN_OS_API_FIELD,
+    PLATFORM_MEDIA_IMAGE_METHODS, REFERENCE_MACHINE_NOTE, RICH_UI_DOCUMENT, SERVICES_JOBS_FIELD,
+    SERVICES_MEDIA_IMAGE_FIELD, UI_CONTRACT_FIELD, UI_CONTRACT_V1, UI_CONTRACT_V2,
+    UI_DOCUMENT_FIELD, UI_V1_WIDGET_KINDS, UI_V2_ADDITIONAL_WIDGET_KINDS,
 };
 
 pub use rich_composition::{
-    bring_layer_to_front, layers_from_value, layers_to_value, reorder_layer,
-    BoundedUndoStack, LayerCanvasSnapshot, LayerInteractionValue, RichLayer, MAX_LAYERS_PER_CANVAS,
-    MAX_UNDO_DEPTH,
+    bring_layer_to_front, layers_from_value, layers_to_value, reorder_layer, BoundedUndoStack,
+    LayerCanvasSnapshot, LayerInteractionValue, RichLayer, MAX_LAYERS_PER_CANVAS, MAX_UNDO_DEPTH,
 };
 
 pub use create_contract::{
@@ -2839,7 +2838,8 @@ impl ModuleUi {
 
     /// UI contract major version (defaults to v1 for legacy manifests).
     pub fn contract_version(&self) -> u32 {
-        self.contract.unwrap_or(crate::rich_app_contract::UI_CONTRACT_V1)
+        self.contract
+            .unwrap_or(crate::rich_app_contract::UI_CONTRACT_V1)
     }
 }
 

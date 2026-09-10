@@ -92,6 +92,17 @@ impl UiApp {
         // S7.3 : un download terminé compte comme activité + rescan disque.
         crate::models_disk::note_used(&mut self.models_ui.model_usage, &model_id, crate::now_ms());
         self.models_ui.disk_scan = Some(crate::models_disk::DiskScan::refresh());
+        // Refresh Create's catalogue/readiness immediately so a completed
+        // download enables generation without requiring a module reinstall or
+        // an application restart.
+        if let Some(panel) = self.decl_panels.get("create") {
+            if panel.document.is_some() {
+                let _ = self.cmd_tx.send(crate::cmd::Cmd::ModuleUiBind {
+                    module: "create".into(),
+                    tool: "create.models.list".into(),
+                });
+            }
+        }
     }
 
     pub(crate) fn on_model_download_failed(&mut self, model_id: String, error: String) {

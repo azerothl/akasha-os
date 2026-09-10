@@ -118,13 +118,7 @@ pub const MAX_STATE_STRING_LENGTH: u32 = 8_000;
 pub const INTERACTION_PHASES: &[&str] = &["start", "update", "commit", "cancel"];
 
 /// Generic job lifecycle states exposed to packages.
-pub const JOB_STATES: &[&str] = &[
-    "queued",
-    "running",
-    "succeeded",
-    "failed",
-    "cancelled",
-];
+pub const JOB_STATES: &[&str] = &["queued", "running", "succeeded", "failed", "cancelled"];
 
 /// Platform bus methods that remain host-owned (not module tools).
 pub const PLATFORM_MEDIA_IMAGE_METHODS: &[&str] = &[

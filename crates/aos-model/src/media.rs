@@ -247,16 +247,14 @@ pub async fn run_image(
     // Reset the latch for this request. Cancellation may arrive while model
     // placement is still running and will be observed by sd.cpp afterwards.
     aos_sd::clear_media_cancel();
-    let lookup = sub.find_media_model("image", req.model_id.as_deref());
-    let (model_id, weights) = match lookup {
-        Ok((id, path)) => (id, path),
-        Err(_) => (
-            req.model_id
-                .clone()
-                .unwrap_or_else(|| "local:sd-v1-5".into()),
-            std::path::PathBuf::from("missing.safetensors"),
-        ),
-    };
+    // Do not silently turn a missing/uninstalled pack into a stub image. The
+    // old native Create panel disabled generation until the selected model was
+    // ready; returning the lookup error preserves that contract for every
+    // client and gives the user an actionable failure instead of a misleading
+    // successful-looking PNG.
+    let (model_id, weights) = sub
+        .find_media_model("image", req.model_id.as_deref())
+        .map_err(|e| format!("media image model unavailable: {e}"))?;
     if is_video_request(&req.options) {
         let missing = missing_offering_sidecars(&model_id);
         if !missing.is_empty() {

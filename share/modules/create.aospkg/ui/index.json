@@ -203,6 +203,7 @@
       "prompt": { "type": "string", "default": "" },
       "negative_prompt": { "type": "string", "default": "" },
       "media_mode": { "type": "string", "default": "image" },
+      "model_ready": { "type": "boolean", "default": false },
       "format": { "type": "string", "default": "1:1" },
       "intent": { "type": "string", "default": "custom" },
       "profile": { "type": "string", "default": "balanced" },
@@ -607,8 +608,8 @@
                     {
                       "kind": "row",
                       "children": [
-                        { "kind": "button", "action": "generate_image", "label_key": "generate_image_label", "visible": { "eq": ["$local.media_mode", "image"] } },
-                        { "kind": "button", "action": "generate_video", "label_key": "generate_video_label", "visible": { "eq": ["$local.media_mode", "video"] } }
+                        { "kind": "button", "action": "generate_image", "label_key": "generate_image_label", "visible": { "eq": ["$local.media_mode", "image"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } },
+                        { "kind": "button", "action": "generate_video", "label_key": "generate_video_label", "visible": { "eq": ["$local.media_mode", "video"] }, "enabled": { "and": [{ "eq": ["$local.model_ready", true] }, { "ne": ["$local.prompt", ""] }] } }
                       ]
                     },
                     { "kind": "job", "subscription": "generate_job", "label_key": "job_label", "visible": { "eq": ["$local.media_mode", "image"] } },

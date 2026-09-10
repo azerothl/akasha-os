@@ -327,7 +327,8 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing {id}"));
             assert_eq!(tool.required_caps, vec![INVOKE_CAP.to_string()]);
         }
-        let msg = tool_unavailable_message("create.history.list", "absent du catalogue modules actif");
+        let msg =
+            tool_unavailable_message("create.history.list", "absent du catalogue modules actif");
         assert!(!msg.contains("create.history.list"), "{msg}");
     }
 }

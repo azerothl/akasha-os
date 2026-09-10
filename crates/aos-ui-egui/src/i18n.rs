@@ -3232,11 +3232,9 @@ mod tests {
             tool_human_label(&fr, "gallery-demo.preview.ensure"),
             Some("Préparer l'aperçu galerie")
         );
-        assert!(
-            !tool_human_label(&en, "gallery-demo.preview.get")
-                .unwrap()
-                .contains('.')
-        );
+        assert!(!tool_human_label(&en, "gallery-demo.preview.get")
+            .unwrap()
+            .contains('.'));
     }
 
     #[test]
@@ -3256,14 +3254,8 @@ mod tests {
         assert_eq!(fr.tab_create, FR_APP_TITLE);
         assert_ne!(en.tab_create, MODULE_NAME);
         assert_ne!(fr.tab_create, MODULE_NAME);
-        assert_eq!(
-            module_tab_label(&en, MODULE_NAME),
-            Some(EN_APP_TITLE)
-        );
-        assert_eq!(
-            module_tab_label(&fr, MODULE_NAME),
-            Some(FR_APP_TITLE)
-        );
+        assert_eq!(module_tab_label(&en, MODULE_NAME), Some(EN_APP_TITLE));
+        assert_eq!(module_tab_label(&fr, MODULE_NAME), Some(FR_APP_TITLE));
     }
 
     #[test]

@@ -6,11 +6,7 @@ use crate::{nav, UiApp};
 use aos_proto::create_contract::MODULE_NAME;
 use serde_json::Value;
 
-pub(crate) fn open_create_module(
-    app: &mut UiApp,
-    prompt: Option<&str>,
-    path: Option<&str>,
-) {
+pub(crate) fn open_create_module(app: &mut UiApp, prompt: Option<&str>, path: Option<&str>) {
     if prompt.is_some() || path.is_some() {
         let panel = app
             .decl_panels

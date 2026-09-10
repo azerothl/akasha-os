@@ -412,12 +412,7 @@ impl DeclUiDocument {
                 .map_err(crate::rich_decl_ui::RichDeclUiError::Widget)?;
         }
         let contract = self.contract_version(manifest_contract);
-        crate::rich_decl_ui::validate_rich_document(
-            self,
-            contract,
-            manifest_tools,
-            granted_caps,
-        )?;
+        crate::rich_decl_ui::validate_rich_document(self, contract, manifest_tools, granted_caps)?;
         if contract < crate::rich_app_contract::UI_CONTRACT_V2 {
             self.root.validate()?;
         }
@@ -441,18 +436,18 @@ impl DeclUiDocument {
             return true;
         }
         self.actions.iter().any(|a| {
-            a.service.as_deref().is_some_and(|s| {
-                matches!(s, "jobs.demo.start" | "jobs.demo.cancel" | "job.cancel")
-            })
+            a.service
+                .as_deref()
+                .is_some_and(|s| matches!(s, "jobs.demo.start" | "jobs.demo.cancel" | "job.cancel"))
         })
     }
 
     /// True when a declared action calls a platform media image service.
     pub fn uses_media_image_service(&self) -> bool {
         self.actions.iter().any(|a| {
-            a.service
-                .as_deref()
-                .is_some_and(|s| crate::rich_app_contract::PLATFORM_MEDIA_IMAGE_METHODS.contains(&s))
+            a.service.as_deref().is_some_and(|s| {
+                crate::rich_app_contract::PLATFORM_MEDIA_IMAGE_METHODS.contains(&s)
+            })
         })
     }
 
@@ -695,10 +690,7 @@ impl DeclUiWidget {
                 let has_items = self.items.as_ref().is_some_and(|i| !i.is_empty());
                 let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
                 let has_binding = self.binding.as_ref().is_some_and(|b| !b.is_empty())
-                    && self
-                        .items_from_key
-                        .as_ref()
-                        .is_some_and(|k| !k.is_empty());
+                    && self.items_from_key.as_ref().is_some_and(|k| !k.is_empty());
                 if !has_items && !has_bind && !has_binding {
                     return Err(err(DeclUiError::MissingField("items")));
                 }

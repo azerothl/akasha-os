@@ -5,11 +5,10 @@
 
 use crate::decl_ui::{DeclUiDocument, DeclUiError, DeclUiWidget};
 use crate::rich_app_contract::{
-    HOST_UI_CONTRACT_MAX, INTERACTION_PHASES, JOBS_SERVICE_VERSION, JOB_STATES,
-    MAX_BINDINGS, MAX_PREDICATE_DEPTH, MAX_PREDICATE_NODES, MAX_STATE_SLOTS,
-    MAX_STATE_STRING_LENGTH, MAX_SUBSCRIPTIONS, MAX_UI_DEPTH, MAX_UI_NODES,
-    MEDIA_GENERATE_CAP, MEDIA_IMAGE_SERVICE_VERSION, PLATFORM_MEDIA_IMAGE_METHODS,
-    UI_CONTRACT_V2, UI_V2_ADDITIONAL_WIDGET_KINDS,
+    HOST_UI_CONTRACT_MAX, INTERACTION_PHASES, JOBS_SERVICE_VERSION, JOB_STATES, MAX_BINDINGS,
+    MAX_PREDICATE_DEPTH, MAX_PREDICATE_NODES, MAX_STATE_SLOTS, MAX_STATE_STRING_LENGTH,
+    MAX_SUBSCRIPTIONS, MAX_UI_DEPTH, MAX_UI_NODES, MEDIA_GENERATE_CAP, MEDIA_IMAGE_SERVICE_VERSION,
+    PLATFORM_MEDIA_IMAGE_METHODS, UI_CONTRACT_V2, UI_V2_ADDITIONAL_WIDGET_KINDS,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -152,20 +151,32 @@ pub enum RichDeclUiError {
 impl std::fmt::Display for RichDeclUiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ContractUnsupported(v) => write!(f, "ui.contract {v} not supported (host max {HOST_UI_CONTRACT_MAX})"),
+            Self::ContractUnsupported(v) => write!(
+                f,
+                "ui.contract {v} not supported (host max {HOST_UI_CONTRACT_MAX})"
+            ),
             Self::ServicesJobsTooNew { required, host } => {
                 write!(f, "services.jobs {required} > host {host}")
             }
             Self::ServicesMediaImageTooNew { required, host } => {
                 write!(f, "services.media_image {required} > host {host}")
             }
-            Self::MissingServicesJobs => write!(f, "manifest requires services.jobs for job widgets/actions"),
-            Self::MissingServicesMediaImage => {
-                write!(f, "manifest requires services.media_image for media image service actions")
+            Self::MissingServicesJobs => {
+                write!(f, "manifest requires services.jobs for job widgets/actions")
             }
-            Self::TooManyNodes { count, max } => write!(f, "too many widget nodes: {count} > {max}"),
+            Self::MissingServicesMediaImage => {
+                write!(
+                    f,
+                    "manifest requires services.media_image for media image service actions"
+                )
+            }
+            Self::TooManyNodes { count, max } => {
+                write!(f, "too many widget nodes: {count} > {max}")
+            }
             Self::TooDeep { depth, max } => write!(f, "widget tree too deep: {depth} > {max}"),
-            Self::TooManyStateSlots { count, max } => write!(f, "too many state slots: {count} > {max}"),
+            Self::TooManyStateSlots { count, max } => {
+                write!(f, "too many state slots: {count} > {max}")
+            }
             Self::TooManyBindings { count, max } => write!(f, "too many bindings: {count} > {max}"),
             Self::TooManySubscriptions { count, max } => {
                 write!(f, "too many subscriptions: {count} > {max}")
@@ -436,23 +447,23 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
     }
     match w.kind.as_str() {
         "column" | "row" | "scroll" | "section" => {
-            let children = w
-                .children
-                .as_ref()
-                .ok_or(RichDeclUiError::Widget(DeclUiError::MissingField(
-                    "children",
-                )))?;
+            let children =
+                w.children
+                    .as_ref()
+                    .ok_or(RichDeclUiError::Widget(DeclUiError::MissingField(
+                        "children",
+                    )))?;
             for c in children {
                 validate_widget_tree(c, contract)?;
             }
         }
         "split" => {
-            let children = w
-                .children
-                .as_ref()
-                .ok_or(RichDeclUiError::Widget(DeclUiError::MissingField(
-                    "children",
-                )))?;
+            let children =
+                w.children
+                    .as_ref()
+                    .ok_or(RichDeclUiError::Widget(DeclUiError::MissingField(
+                        "children",
+                    )))?;
             if children.len() != 2 {
                 return Err(RichDeclUiError::InvalidSubstitution(
                     "split requires exactly 2 children".into(),
@@ -478,12 +489,16 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
         }
         "slider" | "number" => {
             if w.state_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("state_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "state_key",
+                )));
             }
         }
         "text_input" | "file_picker" | "multiselect" | "prompt_starters" => {
             if w.state_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("state_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "state_key",
+                )));
             }
         }
         "progress" => {
@@ -514,26 +529,38 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
         }
         "layer_canvas" => {
             if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("layers_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "layers_key",
+                )));
             }
             if w.selected_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("selected_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "selected_key",
+                )));
             }
         }
         "layer_list" => {
             if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("layers_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "layers_key",
+                )));
             }
             if w.selected_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("selected_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "selected_key",
+                )));
             }
         }
         "undo_redo" => {
             if w.canvas_id.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("canvas_id")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "canvas_id",
+                )));
             }
             if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
-                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("layers_key")));
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "layers_key",
+                )));
             }
         }
         "spacer" => {}
@@ -560,7 +587,10 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             Ok(())
         }
         "files.save_as" => {
-            if !granted_caps.iter().any(|c| c.starts_with("fs.read:/downloads/")) {
+            if !granted_caps
+                .iter()
+                .any(|c| c.starts_with("fs.read:/downloads/"))
+            {
                 return Err(RichDeclUiError::MissingCapability(
                     "fs.read:/downloads/**".into(),
                 ));
@@ -572,7 +602,11 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
 }
 
 /// Resolve `$local.*`, `$document.*`, `$row.*` placeholders in action input JSON.
-pub fn resolve_action_input(template: &Value, local: &HashMap<String, Value>, document: &HashMap<String, Value>) -> Value {
+pub fn resolve_action_input(
+    template: &Value,
+    local: &HashMap<String, Value>,
+    document: &HashMap<String, Value>,
+) -> Value {
     resolve_action_input_row(template, local, document, None)
 }
 
@@ -586,10 +620,7 @@ pub fn resolve_action_input_row(
         Value::String(s) => {
             if let Some(rest) = s.strip_prefix('$') {
                 if let Some(key) = rest.strip_prefix("local.") {
-                    return local
-                        .get(key)
-                        .cloned()
-                        .unwrap_or(Value::String(s.clone()));
+                    return local.get(key).cloned().unwrap_or(Value::String(s.clone()));
                 }
                 if let Some(key) = rest.strip_prefix("document.") {
                     return document
@@ -598,17 +629,11 @@ pub fn resolve_action_input_row(
                         .unwrap_or(Value::String(s.clone()));
                 }
                 if let (Some(r), Some(key)) = (row, rest.strip_prefix("row.")) {
-                    return r
-                        .get(key)
-                        .cloned()
-                        .unwrap_or(Value::String(s.clone()));
+                    return r.get(key).cloned().unwrap_or(Value::String(s.clone()));
                 }
                 if let (Some(r), None) = (row, Some(rest)) {
                     if !rest.contains('.') {
-                        return r
-                            .get(rest)
-                            .cloned()
-                            .unwrap_or(Value::String(s.clone()));
+                        return r.get(rest).cloned().unwrap_or(Value::String(s.clone()));
                     }
                 }
             }
@@ -622,12 +647,7 @@ pub fn resolve_action_input_row(
         Value::Object(map) => {
             let out: serde_json::Map<String, Value> = map
                 .iter()
-                .map(|(k, v)| {
-                    (
-                        k.clone(),
-                        resolve_action_input_row(v, local, document, row),
-                    )
-                })
+                .map(|(k, v)| (k.clone(), resolve_action_input_row(v, local, document, row)))
                 .collect();
             Value::Object(out)
         }
@@ -642,7 +662,8 @@ pub fn validate_substitutions(value: &Value) -> Result<(), RichDeclUiError> {
             if !(rest.starts_with("local.")
                 || rest.starts_with("document.")
                 || rest.starts_with("row.")
-                || (!rest.contains('.') && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')))
+                || (!rest.contains('.')
+                    && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')))
             {
                 return Err(RichDeclUiError::InvalidSubstitution(s.clone()));
             }
@@ -762,24 +783,24 @@ pub fn eval_predicate(
                 match op.as_str() {
                     "and" => inner
                         .as_array()
-                        .map(|arr| {
-                            arr.iter()
-                                .all(|v| eval_predicate(v, local, document))
-                        })
+                        .map(|arr| arr.iter().all(|v| eval_predicate(v, local, document)))
                         .unwrap_or(false),
                     "or" => inner
                         .as_array()
-                        .map(|arr| {
-                            arr.iter()
-                                .any(|v| eval_predicate(v, local, document))
-                        })
+                        .map(|arr| arr.iter().any(|v| eval_predicate(v, local, document)))
                         .unwrap_or(false),
                     "not" => !eval_predicate(inner, local, document),
                     "eq" => eval_binary(inner, local, document, |a, b| a == b),
                     "ne" => eval_binary(inner, local, document, |a, b| a != b),
-                    "gt" => eval_binary(inner, local, document, |a, b| cmp_f64(a, b) == Some(std::cmp::Ordering::Greater)),
-                    "lt" => eval_binary(inner, local, document, |a, b| cmp_f64(a, b) == Some(std::cmp::Ordering::Less)),
-                    "ref" => eval_ref(inner, local, document).map(|v| truthy(&v)).unwrap_or(false),
+                    "gt" => eval_binary(inner, local, document, |a, b| {
+                        cmp_f64(a, b) == Some(std::cmp::Ordering::Greater)
+                    }),
+                    "lt" => eval_binary(inner, local, document, |a, b| {
+                        cmp_f64(a, b) == Some(std::cmp::Ordering::Less)
+                    }),
+                    "ref" => eval_ref(inner, local, document)
+                        .map(|v| truthy(&v))
+                        .unwrap_or(false),
                     _ => false,
                 }
             } else {
@@ -790,7 +811,12 @@ pub fn eval_predicate(
     }
 }
 
-fn eval_binary<F>(inner: &Value, local: &HashMap<String, Value>, document: &HashMap<String, Value>, f: F) -> bool
+fn eval_binary<F>(
+    inner: &Value,
+    local: &HashMap<String, Value>,
+    document: &HashMap<String, Value>,
+    f: F,
+) -> bool
 where
     F: Fn(&Value, &Value) -> bool,
 {
@@ -798,13 +824,20 @@ where
         Some(a) if a.len() == 2 => a,
         _ => return false,
     };
-    match (eval_ref(&arr[0], local, document), eval_ref(&arr[1], local, document)) {
+    match (
+        eval_ref(&arr[0], local, document),
+        eval_ref(&arr[1], local, document),
+    ) {
         (Some(a), Some(b)) => f(&a, &b),
         _ => false,
     }
 }
 
-fn eval_ref(value: &Value, local: &HashMap<String, Value>, document: &HashMap<String, Value>) -> Option<Value> {
+fn eval_ref(
+    value: &Value,
+    local: &HashMap<String, Value>,
+    document: &HashMap<String, Value>,
+) -> Option<Value> {
     match value {
         Value::String(s) if s.starts_with('$') => {
             let rest = s.trim_start_matches('$');
@@ -912,7 +945,11 @@ mod tests {
     fn resolve_local_substitution() {
         let mut local = HashMap::new();
         local.insert("steps".into(), Value::from(5));
-        let out = resolve_action_input(&Value::String("$local.steps".into()), &local, &HashMap::new());
+        let out = resolve_action_input(
+            &Value::String("$local.steps".into()),
+            &local,
+            &HashMap::new(),
+        );
         assert_eq!(out, Value::from(5));
     }
 

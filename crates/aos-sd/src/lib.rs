@@ -1257,6 +1257,35 @@ mod tests {
     }
 
     #[test]
+    fn z_image_argv_includes_diffusion_llm_and_vae_sidecars() {
+        let opts = ImageGenOpts {
+            diffusion_model: Some(PathBuf::from("z_image_turbo-Q4_K.gguf")),
+            llm_path: Some(PathBuf::from("Qwen3-4B-Instruct-2507.Q4_K_M.gguf")),
+            vae_path: Some(PathBuf::from("ae.safetensors")),
+            backend: Some("te=cpu,llm=cpu,diffusion=gpu,vae=cpu".into()),
+            params_backend: Some("cpu".into()),
+            offload_to_cpu: true,
+            diffusion_fa: true,
+            stream_layers: true,
+            ..Default::default()
+        };
+        let args = collect_image_args(
+            Path::new("z_image_turbo-Q4_K.gguf"),
+            "a blue circle",
+            Path::new("out.png"),
+            &opts,
+            None,
+        );
+        assert!(args.contains(&"--diffusion-model".into()));
+        assert!(args.contains(&"--llm".into()));
+        assert!(args.contains(&"--vae".into()));
+        assert!(args.contains(&"--offload-to-cpu".into()));
+        assert!(args.contains(&"--diffusion-fa".into()));
+        assert!(args.contains(&"--stream-layers".into()));
+        assert!(args.iter().all(|arg| arg != "-m"));
+    }
+
+    #[test]
     fn lora_uses_prompt_tag_and_model_dir() {
         let mut opts = ImageGenOpts::default();
         opts.lora_entries.push(LoraEntry {

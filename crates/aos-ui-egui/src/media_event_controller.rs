@@ -13,7 +13,10 @@ pub(crate) struct MediaOkEvent {
 }
 
 pub(crate) fn on_image_enriched(app: &mut UiApp, enriched: String) {
-    app.status = format!("Image: enhanced prompt ready ({len} chars), generating…", len = enriched.len());
+    app.status = format!(
+        "Image: enhanced prompt ready ({len} chars), generating…",
+        len = enriched.len()
+    );
 }
 
 pub(crate) fn on_image_started(

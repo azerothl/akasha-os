@@ -152,12 +152,7 @@ impl DemoJobRegistry {
     }
 }
 
-pub fn demo_job_tick(
-    job_id: &str,
-    completed: u32,
-    total: u32,
-    cancelled: bool,
-) -> RichJobHandle {
+pub fn demo_job_tick(job_id: &str, completed: u32, total: u32, cancelled: bool) -> RichJobHandle {
     if cancelled {
         return RichJobHandle {
             job_id: Some(job_id.into()),

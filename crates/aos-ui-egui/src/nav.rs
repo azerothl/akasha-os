@@ -200,10 +200,7 @@ mod tests {
         assert_eq!(tab_from_primary_index(3, true), Some(Tab::Memory));
         assert_eq!(tab_from_primary_index(4, true), None);
         assert_eq!(TabKind::Agents.keyboard_shortcut(), Some("Ctrl+2"));
-        assert_eq!(
-            tab_from_primary_index(2, true),
-            Some(create_module_tab())
-        );
+        assert_eq!(tab_from_primary_index(2, true), Some(create_module_tab()));
     }
 
     #[test]
