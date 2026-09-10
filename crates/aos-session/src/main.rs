@@ -845,6 +845,7 @@ fn ensure_layout(home: &Path) -> Vec<String> {
     ] {
         let _ = fs::create_dir_all(home.join(d));
     }
+    sync_bundled_module_catalogue(home);
     bootstrap::sweep_old_sidecars(&home.join("bin"));
 
     // Catalogue offerings (copie depuis le package / repo si absent).
@@ -975,6 +976,36 @@ fn ensure_layout(home: &Path) -> Vec<String> {
         let _ = fs::write(onboard, serde_json::to_string_pretty(&state).unwrap());
     }
     synced
+}
+
+/// Keep the signed local module index in lock-step with the bundled Preview
+/// files.  Without this, an upgraded Create WASM can be rejected against an
+/// older catalogue hash left by a previous installation.
+fn sync_bundled_module_catalogue(home: &Path) {
+    let dst_dir = home.join("share/modules");
+    let mut candidates = vec![PathBuf::from("share/modules")];
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin) = exe.parent() {
+            candidates.push(bin.join("../share/modules"));
+            if let Some(root) = bin.parent() {
+                candidates.push(root.join("share/modules"));
+            }
+        }
+    }
+    for name in ["catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub"] {
+        let dst = dst_dir.join(name);
+        for dir in &candidates {
+            let src = dir.join(name);
+            if !src.is_file() || src == dst {
+                continue;
+            }
+            let differs = fs::read(&src).ok() != fs::read(&dst).ok();
+            if differs {
+                let _ = fs::copy(&src, &dst);
+            }
+            break;
+        }
+    }
 }
 
 fn reload_synced_packaged_modules(synced: &[String]) {
