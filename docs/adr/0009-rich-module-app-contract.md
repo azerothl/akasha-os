@@ -134,15 +134,16 @@ issue #150 lots unless marked **keep**.
 | `crates/aos-ui-egui/src/nav.rs` | `TabKind::Create` → `Tab::Image`, primary rail `Ctrl+3` | **Lot 2** — module tab from package manifest |
 | `crates/aos-ui-egui/src/i18n.rs` | ~64 `studio_*` keys, `tab_create`, status strings | **Lot 2** — `DeclUiLabels` in package (FR/EN only) |
 | `crates/aos-ui-egui/src/guide.rs` | `GuideTopic::Create` ↔ `Tab::Image` | **Lot 2** — package help or generic guide hook |
-| `crates/aos-ui-egui/src/image_studio.rs` | Full Create UI: form, presets, preview, history, generate/cancel | **Lot 2** — declarative UI + WASM reducer; **Lot 5** — delete native panel |
+| `crates/aos-ui-egui/src/image_studio.rs` | Full Create UI (removed lot 5) | **Deleted** — Create package + generic `layer_canvas` primitives |
 | `crates/aos-proto/src/decl_ui.rs` | Create **not** in `PREINSTALLED_MODULES` / `NATIVE_UI_MODULES` | **Lot 2** — optional official app entry |
 
 ### Composition
 
 | Location | What it does | Destination / reason |
 |----------|--------------|------------------------|
-| `crates/aos-ui-egui/src/image_composition.rs` | `CompositionBlock`, `ui_composition_canvas`, `InpaintMask`, `finalize_prompt_with_layout` | **Lot 5** — generic canvas/layer primitives; not first slice |
-| `crates/aos-ui-egui/src/image_studio.rs` | Owns `composition_blocks`, inpaint mode, overlay opacity | **Lot 5** — package state + generic canvas |
+| `crates/aos-proto/src/rich_composition.rs` | `RichLayer`, bounded undo, layer JSON contract | **Lot 5** — generic composition primitives |
+| `crates/aos-ui-egui/src/rich_composition_ui.rs` | `layer_canvas`, `layer_list`, `undo_redo` host renderers | **Lot 5** — generic; `gallery-demo` sample |
+| `crates/aos-ui-egui/src/image_composition.rs` | `CompositionBlock`, `InpaintMask`, `finalize_prompt_with_layout` | **Keep** — chat `/image` prompt injection; UI removed lot 5 |
 | `crates/aos-ui-egui/src/runtime.rs` | Calls `finalize_prompt_with_layout` before `media.image.generate` | **Lot 2** — package action reducer; **keep** bus call in host |
 
 ### History
@@ -219,7 +220,8 @@ Plus #149 additions: `row_actions`, `refresh_binds`, `DeclUiLabels` (FR/EN).
 ### Frozen v2 additions (not implemented)
 
 `slider`, `number`, `progress`, `job`, `image_view`, `split`, `scroll`, `tabs`,
-`spacer`, plus `state`, `bindings`, `actions`, predicate AST, interaction events.
+`spacer`, `layer_canvas`, `layer_list`, `undo_redo`, plus `state`, `bindings`,
+`actions`, predicate AST, interaction events.
 
 ## Frozen public contract
 
@@ -281,7 +283,7 @@ available image engine (not Preview stub).
 4. **`image_view`** — fit/zoom/pan, gallery, semantic interaction events.
 5. **Audited save/picker service** — packages cannot embed raw host paths.
 6. **Create `.aospkg`** — WASM + declarative UI (lot 2).
-7. **Composition primitives** — canvas/layers (lot 5).
+7. **Composition primitives** — `layer_canvas` / `layer_list` / `undo_redo` (lot 5, landed).
 
 ## Designer + supervisor surface locks (#150)
 

@@ -9,26 +9,44 @@
       "app_title": "Gallery Demo",
       "tab_preview": "Preview",
       "tab_controls": "Controls",
+      "tab_composition": "Composition",
       "steps_label": "Demo steps",
       "run_label": "Run demo job",
       "job_label": "Background job",
       "preview_empty": "No preview yet",
-      "about_body": "Independent rich UI sample (not Create). Exercises layout panels, image preview, bindings, and background tasks."
+      "about_body": "Independent rich UI sample (not Create). Exercises layout panels, image preview, layer canvas, undo/redo, bindings, and background tasks.",
+      "canvas_label": "Layer canvas",
+      "layers_label": "Layers",
+      "layer_add": "Add layer",
+      "layer_remove": "Remove",
+      "layer_visible": "Toggle visibility",
+      "undo_label": "Undo",
+      "redo_label": "Redo"
     },
     "fr": {
       "app_title": "Démo galerie",
       "tab_preview": "Aperçu",
       "tab_controls": "Contrôles",
+      "tab_composition": "Composition",
       "steps_label": "Étapes démo",
       "run_label": "Lancer la tâche démo",
       "job_label": "Tâche en arrière-plan",
       "preview_empty": "Pas encore d'aperçu",
-      "about_body": "Exemple d'interface riche indépendant (pas Créer). Met en œuvre les panneaux, l'aperçu image, les liaisons et les tâches en arrière-plan."
+      "about_body": "Exemple d'interface riche indépendant (pas Créer). Panneaux, aperçu, canvas à calques, annuler/rétablir, liaisons et tâches.",
+      "canvas_label": "Canvas à calques",
+      "layers_label": "Calques",
+      "layer_add": "Ajouter un calque",
+      "layer_remove": "Retirer",
+      "layer_visible": "Basculer la visibilité",
+      "undo_label": "Annuler",
+      "redo_label": "Rétablir"
     }
   },
   "state": {
     "local": {
-      "steps": { "type": "number", "default": 8 }
+      "steps": { "type": "number", "default": 8 },
+      "selected_id": { "type": "number", "nullable": true },
+      "next_id": { "type": "number", "default": 1 }
     }
   },
   "bindings": [
@@ -70,6 +88,38 @@
                       "binding": "preview",
                       "label_key": "tab_preview",
                       "empty_label_key": "preview_empty"
+                    }
+                  ]
+                }
+              },
+              {
+                "label_key": "tab_composition",
+                "content": {
+                  "kind": "column",
+                  "children": [
+                    {
+                      "kind": "undo_redo",
+                      "canvas_id": "demo_canvas",
+                      "layers_key": "layers",
+                      "selected_key": "selected_id",
+                      "next_id_key": "next_id"
+                    },
+                    {
+                      "kind": "layer_canvas",
+                      "canvas_id": "demo_canvas",
+                      "layers_key": "layers",
+                      "selected_key": "selected_id",
+                      "next_id_key": "next_id",
+                      "aspect_w": 16,
+                      "aspect_h": 9,
+                      "label_key": "canvas_label"
+                    },
+                    {
+                      "kind": "layer_list",
+                      "canvas_id": "demo_canvas",
+                      "layers_key": "layers",
+                      "selected_key": "selected_id",
+                      "label_key": "layers_label"
                     }
                   ]
                 }
