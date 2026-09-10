@@ -281,6 +281,9 @@ pub struct DeclUiWidget {
     /// Key into [`DeclUiDocument::labels`] for localized copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label_key: Option<String>,
+    /// Optional localized tooltip key shown on the widget chrome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tooltip_key: Option<String>,
     /// Empty-state copy for `image_view` when no image is loaded (never wire paths).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub empty_label_key: Option<String>,
@@ -314,6 +317,12 @@ pub struct DeclUiWidget {
     /// Frame aspect height for `layer_canvas` (default 9).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aspect_h: Option<u32>,
+    /// Local state key that supplies the live frame width for `layer_canvas`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect_w_key: Option<String>,
+    /// Local state key that supplies the live frame height for `layer_canvas`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect_h_key: Option<String>,
     /// When true, table renders rows without a header band.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_headers: Option<bool>,

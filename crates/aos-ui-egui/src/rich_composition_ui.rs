@@ -141,12 +141,16 @@ pub fn ui_layer_canvas(
     canvas_id: &str,
     background_path: Option<&str>,
     layer_opacity: f32,
+    aspect_override: Option<(u32, u32)>,
 ) -> Option<LayerCanvasPatch> {
     let layers_key = w.layers_key.as_deref().unwrap_or("layers");
     let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
     let next_id_key = w.next_id_key.as_deref();
-    let aspect_w = w.aspect_w.unwrap_or(16).max(1);
-    let aspect_h = w.aspect_h.unwrap_or(9).max(1);
+    let (aspect_w, aspect_h) = aspect_override
+        .or_else(|| w.aspect_w.zip(w.aspect_h))
+        .unwrap_or((16, 9));
+    let aspect_w = aspect_w.max(1);
+    let aspect_h = aspect_h.max(1);
 
     let mut layers = read_layers(local_state, layers_key);
     let mut selected = read_u64(local_state, selected_key);

@@ -437,6 +437,43 @@ impl DeclUiPanelState {
                 let Some(state_key) = &w.state_key else { return };
                 let label = widget_text(w, doc, language)
                     .unwrap_or_else(|| state_key.clone());
+                let dynamic_items = w.binding.as_ref().and_then(|binding_id| {
+                    let mut value = binding_cache.get(binding_id).cloned().unwrap_or(Value::Null);
+                    if let Some(source) = w.source.as_deref() {
+                        if let Some(slice) = value.pointer(source) {
+                            value = slice.clone();
+                        }
+                    }
+                    value.as_array().map(|rows| {
+                        rows.iter()
+                            .filter_map(|row| {
+                                row.as_str().map(|s| (s.to_string(), s.to_string())).or_else(|| {
+                                    row.get("id").and_then(Value::as_str).map(|id| {
+                                        let text = row.get("label").and_then(Value::as_str).unwrap_or(id);
+                                        (id.to_string(), text.to_string())
+                                    })
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                });
+                let items: Vec<(String, String)> = dynamic_items.unwrap_or_else(|| {
+                    w.items
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, item)| {
+                            let text = w
+                                .item_label_keys
+                                .as_ref()
+                                .and_then(|keys| keys.get(index))
+                                .and_then(|key| widget_text_from_key(Some(key), doc, language))
+                                .unwrap_or_else(|| item.clone());
+                            (item, text)
+                        })
+                        .collect()
+                });
                 let mut selected: Vec<String> = local_state
                     .get(state_key)
                     .and_then(Value::as_array)
@@ -449,18 +486,15 @@ impl DeclUiPanelState {
                     })
                     .unwrap_or_default();
                 ui.label(label);
-                for (index, item) in w.items.clone().unwrap_or_default().iter().enumerate() {
-                    let item_label = w
-                        .item_label_keys
-                        .as_ref()
-                        .and_then(|keys| keys.get(index))
-                        .and_then(|key| widget_text_from_key(Some(key), doc, language))
-                        .unwrap_or_else(|| item.clone());
+                for (item, item_label) in &items {
                     let mut checked = selected.iter().any(|value| value == item);
-                    if ui.add_enabled(enabled, egui::Checkbox::new(&mut checked, item_label)).changed() {
+                    if ui
+                        .add_enabled(enabled, egui::Checkbox::new(&mut checked, item_label))
+                        .changed()
+                    {
                         if checked {
                             if !selected.iter().any(|value| value == item) {
-                                selected.push(item.clone());
+                                selected.push(item.to_string());
                             }
                         } else {
                             selected.retain(|value| value != item);
@@ -500,6 +534,135 @@ impl DeclUiPanelState {
                                 }
                             });
                     });
+                });
+            }
+            "asset_import" => {
+                let kind_key = w.state_key.as_deref().unwrap_or("asset_import_kind");
+                let path_key = w
+                    .source
+                    .as_deref()
+                    .unwrap_or("asset_import_path")
+                    .trim_start_matches("$local.");
+                let status_key = w
+                    .binding
+                    .as_deref()
+                    .unwrap_or("asset_import_status")
+                    .trim_start_matches("$local.");
+                let mut kind = local_state
+                    .get(kind_key)
+                    .and_then(Value::as_str)
+                    .unwrap_or("lora")
+                    .to_string();
+                let current_path = local_state
+                    .get(path_key)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let mut status = local_state
+                    .get(status_key)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let title = widget_text(w, doc, language).unwrap_or_else(|| "Import assets".into());
+                ui.group(|ui| {
+                    ui.label(title);
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt(format!("asset-kind-{kind_key}"))
+                            .selected_text(kind.as_str())
+                            .show_ui(ui, |ui| {
+                                for candidate in ["lora", "vae", "style"] {
+                                    if ui.selectable_value(&mut kind, candidate.to_string(), candidate).changed() {
+                                        actions.local_patch.insert(kind_key.to_string(), Value::String(kind.clone()));
+                                    }
+                                }
+                            });
+                        if ui.add_enabled(enabled, egui::Button::new("Choisir…")).clicked() {
+                            let filters: &[(&str, &[&str])] = match kind.as_str() {
+                                "style" => &[("Styles", &["txt"][..]), ("Tous les fichiers", &["*"][..])],
+                                _ => &[("Poids", &["safetensors", "ckpt", "pt", "bin"][..]), ("Tous les fichiers", &["*"][..])],
+                            };
+                            if let Some(path) = crate::os_open::pick_os_file(
+                                "Importer un asset",
+                                filters,
+                                crate::os_open::user_downloads_dir().as_deref(),
+                            ) {
+                                if let Some(path) = path.to_str() {
+                                    actions.local_patch.insert(path_key.to_string(), Value::String(path.to_string()));
+                                }
+                            }
+                        }
+                        let shown = std::path::Path::new(&current_path)
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .unwrap_or(if current_path.is_empty() { "Aucun fichier" } else { &current_path });
+                        ui.weak(shown);
+                        if ui.add_enabled(enabled && !current_path.trim().is_empty(), egui::Button::new("Importer")).clicked() {
+                            match import_decl_asset(std::path::Path::new(&current_path), &kind) {
+                                Ok(name) => {
+                                    status = format!("Asset importé : {name}");
+                                    actions.local_patch.insert(status_key.to_string(), Value::String(status.clone()));
+                                    actions.local_patch.insert(path_key.to_string(), Value::String(String::new()));
+                                    if kind == "style" {
+                                        let mut selected = local_state.get("styles").and_then(Value::as_array).cloned().unwrap_or_default();
+                                        if !selected.iter().any(|v| v.as_str() == Some(&name)) { selected.push(Value::String(name)); }
+                                        actions.local_patch.insert("styles".into(), Value::Array(selected));
+                                    } else if kind == "lora" {
+                                        let mut selected = local_state.get("loras").and_then(Value::as_array).cloned().unwrap_or_default();
+                                        if !selected.iter().any(|v| v.as_str() == Some(&name)) { selected.push(Value::String(name)); }
+                                        actions.local_patch.insert("loras".into(), Value::Array(selected));
+                                    } else {
+                                        actions.local_patch.insert("vae".into(), Value::String(name));
+                                    }
+                                }
+                                Err(error) => {
+                                    status = format!("Échec de l’import : {error}");
+                                    actions.local_patch.insert(status_key.to_string(), Value::String(status.clone()));
+                                }
+                            }
+                        }
+                    });
+                    if kind == "style" {
+                        let mut custom = local_state
+                            .get("asset_custom_style")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        ui.horizontal(|ui| {
+                            ui.label("Style personnalisé");
+                            if ui
+                                .add_enabled(enabled, egui::TextEdit::singleline(&mut custom).hint_text("fragment de prompt"))
+                                .changed()
+                            {
+                                actions.local_patch.insert("asset_custom_style".into(), Value::String(custom.clone()));
+                            }
+                            if ui
+                                .add_enabled(enabled && !custom.trim().is_empty(), egui::Button::new("Ajouter le style"))
+                                .clicked()
+                            {
+                                match add_decl_custom_style(&custom) {
+                                    Ok(style) => {
+                                        let mut selected = local_state.get("styles").and_then(Value::as_array).cloned().unwrap_or_default();
+                                        if !selected.iter().any(|v| v.as_str() == Some(&style)) { selected.push(Value::String(style.clone())); }
+                                        actions.local_patch.insert("styles".into(), Value::Array(selected));
+                                        actions.local_patch.insert("asset_custom_style".into(), Value::String(String::new()));
+                                        actions.local_patch.insert(status_key.to_string(), Value::String(format!("Style ajouté : {style}")));
+                                    }
+                                    Err(error) => {
+                                        actions.local_patch.insert(status_key.to_string(), Value::String(format!("Échec : {error}")));
+                                    }
+                                };
+                            }
+                        });
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("Civitai (LoRA / styles)").clicked() {
+                            crate::os_open::open_url("https://civitai.com/models?types=LORA&sort=Most+Downloaded");
+                        }
+                        if ui.button("Hugging Face (modèles)").clicked() {
+                            crate::os_open::open_url("https://huggingface.co/models?pipeline_tag=text-to-image&sort=downloads");
+                        }
+                    });
+                    if !status.is_empty() { ui.weak(status); }
                 });
             }
             "checkbox" => {
@@ -654,7 +817,13 @@ impl DeclUiPanelState {
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "Run".into());
                 let can_run = enabled && !pending_invoke && actions.invoke.is_none();
-                if ui.add_enabled(can_run, egui::Button::new(label)).clicked() {
+                let response = ui.add_enabled(can_run, egui::Button::new(label));
+                let response = if let Some(tip) = widget_tooltip(w, doc, language).as_deref() {
+                    response.on_hover_text(tip)
+                } else {
+                    response
+                };
+                if response.clicked() {
                     if let Some(action_id) = &w.action {
                         if let Some(action) = doc.actions.iter().find(|a| &a.id == action_id) {
                             queue_service_action(
@@ -1062,7 +1231,10 @@ impl DeclUiPanelState {
                             language,
                         )
                         .unwrap_or_else(|| "Layer opacity".into());
-                        ui.label(label);
+                        let response = ui.label(label);
+                        if let Some(tip) = widget_tooltip(w, doc, language) {
+                            response.on_hover_text(tip);
+                        }
                         if ui
                             .add(egui::Slider::new(&mut layer_opacity, 0.0..=1.0).show_value(true))
                             .changed()
@@ -1073,6 +1245,18 @@ impl DeclUiPanelState {
                         }
                     });
                 }
+                let aspect_override = w
+                    .aspect_w_key
+                    .as_deref()
+                    .and_then(|key| local_state.get(key))
+                    .and_then(Value::as_u64)
+                    .and_then(|width| {
+                        w.aspect_h_key
+                            .as_deref()
+                            .and_then(|key| local_state.get(key))
+                            .and_then(Value::as_u64)
+                            .map(|height| (width as u32, height as u32))
+                    });
                 if let Some(patch) = crate::rich_composition_ui::ui_layer_canvas(
                     ui,
                     w,
@@ -1083,6 +1267,7 @@ impl DeclUiPanelState {
                     &canvas_id,
                     background_path.as_deref(),
                     layer_opacity,
+                    aspect_override,
                 ) {
                     for (k, v) in patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
@@ -1955,6 +2140,7 @@ fn render_choice(
         })
         .collect());
     let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
+    let tooltip = widget_tooltip(w, doc, language);
     let has_explicit_label = w.label.is_some() || w.text.is_some() || w.label_key.is_some();
     if let Some(state_key) = state_key {
         let mut current = local_state
@@ -2001,7 +2187,8 @@ fn render_choice(
             }
         } else {
             ui.add_enabled_ui(enabled, |ui| {
-                ui.label(&label);
+                let response = ui.label(&label);
+                if let Some(tip) = tooltip.as_deref() { response.on_hover_text(tip); }
                 let selected_label = items
                     .iter()
                     .position(|item| item == &current)
@@ -2054,9 +2241,10 @@ fn render_choice(
             });
         };
         if w.inline.unwrap_or(false) {
-            ui.horizontal(|ui| {
-                if has_explicit_label {
-                    ui.label(&label);
+                ui.horizontal(|ui| {
+                    if has_explicit_label {
+                        let response = ui.label(&label);
+                        if let Some(tip) = tooltip.as_deref() { response.on_hover_text(tip); }
                 }
                 for (index, item) in items.iter().enumerate() {
                     render_item(ui, index, item);
@@ -2137,6 +2325,88 @@ fn import_decl_media_file(path: &std::path::Path) -> Option<String> {
     std::fs::create_dir_all(target.parent()?).ok()?;
     std::fs::copy(path, &target).ok()?;
     Some(logical)
+}
+
+fn widget_tooltip(w: &DeclUiWidget, doc: &DeclUiDocument, language: &str) -> Option<String> {
+    widget_text_from_key(w.tooltip_key.as_deref(), doc, language)
+}
+
+fn import_decl_asset(path: &std::path::Path, kind: &str) -> Result<String, String> {
+    if !path.is_file() {
+        return Err("fichier introuvable".into());
+    }
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let allowed: &[&str] = if kind == "style" {
+        &["txt"]
+    } else {
+        &["safetensors", "ckpt", "pt", "bin"]
+    };
+    if !allowed.iter().any(|candidate| *candidate == ext) {
+        return Err(format!("extension .{ext} non prise en charge pour {kind}"));
+    }
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "nom de fichier invalide".to_string())?;
+    let safe_name: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .collect();
+    let root = crate::os_open::aos_home().join("share/models");
+    let folder = match kind {
+        "style" => "styles",
+        "vae" => "vae",
+        _ => "lora",
+    };
+    let target_dir = root.join(folder);
+    std::fs::create_dir_all(&target_dir).map_err(|error| error.to_string())?;
+    let mut target = target_dir.join(&safe_name);
+    if target.exists() {
+        let stem = target
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("asset");
+        target = target_dir.join(format!("{stem}-imported.{ext}"));
+    }
+    std::fs::copy(path, &target).map_err(|error| error.to_string())?;
+    Ok(target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&safe_name)
+        .to_string())
+}
+
+fn add_decl_custom_style(style: &str) -> Result<String, String> {
+    let value = style.trim();
+    if value.is_empty() {
+        return Err("style vide".into());
+    }
+    let path = crate::os_open::aos_home().join("var/run/image-assets.json");
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let mut registry = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .unwrap_or_else(|| serde_json::json!({"styles": [], "loras": [], "vaes": []}));
+    let styles = registry
+        .as_object_mut()
+        .ok_or_else(|| "registre d'assets invalide".to_string())?
+        .entry("styles")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let list = styles
+        .as_array_mut()
+        .ok_or_else(|| "liste de styles invalide".to_string())?;
+    if !list.iter().any(|item| item.as_str() == Some(value)) {
+        list.push(Value::String(value.to_string()));
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&registry).map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())?;
+    Ok(value.to_string())
 }
 
 pub(crate) fn try_load_png(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {

@@ -136,12 +136,26 @@
                 "null"
               ]
             },
+            "aspect_h_key": {
+              "description": "Local state key that supplies the live frame height for `layer_canvas`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "aspect_w": {
               "description": "Frame aspect width for `layer_canvas` (default 16).",
               "format": "uint32",
               "minimum": 0.0,
               "type": [
                 "integer",
+                "null"
+              ]
+            },
+            "aspect_w_key": {
+              "description": "Local state key that supplies the live frame width for `layer_canvas`.",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -394,6 +408,13 @@
             },
             "tool": {
               "description": "Tool invoked by `button` / submitted by `form`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tooltip_key": {
+              "description": "Optional localized tooltip key shown on the widget chrome.",
               "type": [
                 "string",
                 "null"
@@ -834,12 +855,26 @@
                 "null"
               ]
             },
+            "aspect_h_key": {
+              "description": "Local state key that supplies the live frame height for `layer_canvas`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "aspect_w": {
               "description": "Frame aspect width for `layer_canvas` (default 16).",
               "format": "uint32",
               "minimum": 0.0,
               "type": [
                 "integer",
+                "null"
+              ]
+            },
+            "aspect_w_key": {
+              "description": "Local state key that supplies the live frame width for `layer_canvas`.",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -1097,6 +1132,13 @@
                 "null"
               ]
             },
+            "tooltip_key": {
+              "description": "Optional localized tooltip key shown on the widget chrome.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "visible": {
               "description": "Typed predicate AST for visibility (contract v2)."
             }
@@ -1126,12 +1168,26 @@
             "null"
           ]
         },
+        "aspect_h_key": {
+          "description": "Local state key that supplies the live frame height for `layer_canvas`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "aspect_w": {
           "description": "Frame aspect width for `layer_canvas` (default 16).",
           "format": "uint32",
           "minimum": 0.0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "aspect_w_key": {
+          "description": "Local state key that supplies the live frame width for `layer_canvas`.",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -1389,6 +1445,13 @@
             "null"
           ]
         },
+        "tooltip_key": {
+          "description": "Optional localized tooltip key shown on the widget chrome.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "visible": {
           "description": "Typed predicate AST for visibility (contract v2)."
         }
@@ -1617,12 +1680,26 @@
                 "null"
               ]
             },
+            "aspect_h_key": {
+              "description": "Local state key that supplies the live frame height for `layer_canvas`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "aspect_w": {
               "description": "Frame aspect width for `layer_canvas` (default 16).",
               "format": "uint32",
               "minimum": 0.0,
               "type": [
                 "integer",
+                "null"
+              ]
+            },
+            "aspect_w_key": {
+              "description": "Local state key that supplies the live frame width for `layer_canvas`.",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -1875,6 +1952,13 @@
             },
             "tool": {
               "description": "Tool invoked by `button` / submitted by `form`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tooltip_key": {
+              "description": "Optional localized tooltip key shown on the widget chrome.",
               "type": [
                 "string",
                 "null"

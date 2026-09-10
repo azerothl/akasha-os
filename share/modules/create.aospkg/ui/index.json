@@ -39,6 +39,17 @@
       "edited_prompt_label": "Use edited enriched prompt",
       "enriched_prompt_label": "Enriched prompt",
       "styles_section": "Styles and adapters",
+      "import_assets_label": "Import or add an asset",
+      "tip_prompt": "Describe the subject, style, lighting and composition to generate.",
+      "tip_model": "Installed models are marked installed; other entries can be downloaded from Models.",
+      "tip_width": "Output width in pixels.",
+      "tip_height": "Output height in pixels.",
+      "tip_steps": "More diffusion steps can improve quality but take longer.",
+      "tip_camera": "Video-only camera motion preset.",
+      "tip_styles": "Optional style presets or custom .txt fragments.",
+      "tip_loras": "Optional LoRA adapters found in share/models/lora/.",
+      "tip_vae": "Optional VAE file used to decode the result.",
+      "tip_layers": "Arrange composition blocks over the preview; use opacity to compare layout and result.",
       "styles_label": "Styles",
       "loras_label": "LoRA adapters",
       "vae_label": "VAE override",
@@ -122,6 +133,17 @@
       "edited_prompt_label": "Utiliser le prompt enrichi modifié",
       "enriched_prompt_label": "Prompt enrichi",
       "styles_section": "Styles et adaptateurs",
+      "import_assets_label": "Importer ou ajouter un asset",
+      "tip_prompt": "Décrivez le sujet, le style, la lumière et la composition à générer.",
+      "tip_model": "Les modèles installés sont indiqués ; les autres peuvent être téléchargés depuis Modèles.",
+      "tip_width": "Largeur de sortie en pixels.",
+      "tip_height": "Hauteur de sortie en pixels.",
+      "tip_steps": "Plus d'étapes améliorent parfois la qualité mais ralentissent le rendu.",
+      "tip_camera": "Préréglage de mouvement réservé à la vidéo.",
+      "tip_styles": "Préréglages de style ou fragments .txt personnalisés.",
+      "tip_loras": "Adaptateurs LoRA disponibles dans share/models/lora/.",
+      "tip_vae": "Fichier VAE optionnel pour décoder le résultat.",
+      "tip_layers": "Placez les blocs sur l'aperçu ; utilisez l'opacité pour comparer mise en page et résultat.",
       "styles_label": "Styles",
       "loras_label": "Adaptateurs LoRA",
       "vae_label": "Remplacement VAE",
@@ -222,6 +244,11 @@
       "steps": { "type": "number", "default": 20 },
       "video_frames": { "type": "number", "default": 49 },
       "fps": { "type": "number", "default": 24 }
+      ,"asset_binding_key": { "type": "string", "default": "assets" }
+      ,"asset_import_kind": { "type": "string", "default": "lora" }
+      ,"asset_import_path": { "type": "string", "default": "" }
+      ,"asset_import_status": { "type": "string", "default": "" }
+      ,"asset_custom_style": { "type": "string", "default": "" }
     }
   },
   "bindings": [
@@ -506,9 +533,9 @@
                       "label_key": "prompt_section",
                       "children": [
                         { "kind": "radio", "state_key": "media_mode", "items": ["image", "video"], "item_label_keys": ["mode_image", "mode_video"], "inline": true },
-                        { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "image_pack_label", "visible": { "eq": ["$local.media_mode", "image"] } },
-                        { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "video_pack_label", "visible": { "eq": ["$local.media_mode", "video"] } },
-                        { "kind": "textarea", "state_key": "prompt", "label_key": "prompt_label" },
+                        { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "image_pack_label", "tooltip_key": "tip_model", "visible": { "eq": ["$local.media_mode", "image"] } },
+                        { "kind": "select", "state_key": "model_id", "binding": "models", "items_from_key": "$local.media_mode", "label_key": "video_pack_label", "tooltip_key": "tip_model", "visible": { "eq": ["$local.media_mode", "video"] } },
+                        { "kind": "textarea", "state_key": "prompt", "label_key": "prompt_label", "tooltip_key": "tip_prompt" },
                         { "kind": "prompt_starters", "state_key": "prompt", "label_key": "starter_label", "items": ["A cinematic portrait with soft natural light", "A product photo on a clean studio background", "An atmospheric landscape at golden hour"] },
                         { "kind": "file_picker", "state_key": "init_image", "label_key": "reference_label" },
                         { "kind": "file_picker", "state_key": "end_image", "label_key": "end_reference_label", "visible": { "eq": ["$local.media_mode", "video"] } },
@@ -543,9 +570,10 @@
                         { "kind": "checkbox", "state_key": "img2img_enabled", "label_key": "img2img_label" },
                         { "kind": "file_picker", "state_key": "mask_image", "label_key": "inpaint_label", "visible": { "eq": ["$local.img2img_enabled", true] } },
                         { "kind": "section", "label_key": "styles_section", "children": [
-                          { "kind": "multiselect", "state_key": "styles", "items": ["cinematic", "photographic", "illustration", "anime", "watercolor"], "label_key": "styles_label" },
-                          { "kind": "multiselect", "state_key": "loras", "items": ["detail", "lighting", "character"], "label_key": "loras_label" },
-                          { "kind": "text_input", "state_key": "vae", "label_key": "vae_label" }
+                        { "kind": "multiselect", "state_key": "styles", "binding": "models", "source": "/assets/styles", "items": [], "label_key": "styles_label", "tooltip_key": "tip_styles" },
+                          { "kind": "multiselect", "state_key": "loras", "binding": "models", "source": "/assets/loras", "items": [], "label_key": "loras_label", "tooltip_key": "tip_loras" },
+                          { "kind": "select", "state_key": "vae", "binding": "models", "items_from_key": "$local.asset_binding_key", "source": "/vaes", "items": [], "label_key": "vae_label", "tooltip_key": "tip_vae" }
+                          ,{ "kind": "asset_import", "state_key": "asset_import_kind", "source": "$local.asset_import_path", "binding": "$local.asset_import_status", "label_key": "import_assets_label" }
                         ] },
                         { "kind": "checkbox", "state_key": "expert", "label_key": "expert_label" }
                       ]
@@ -600,7 +628,7 @@
       {
         "kind": "column",
         "children": [
-          { "kind": "layer_canvas", "binding": "preview", "state_key": "layer_opacity", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected", "aspect_w": 16, "aspect_h": 9 },
+          { "kind": "layer_canvas", "binding": "preview", "state_key": "layer_opacity", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected", "aspect_w_key": "width", "aspect_h_key": "height", "aspect_w": 16, "aspect_h": 9, "tooltip_key": "tip_layers" },
           {
             "kind": "section",
             "label_key": "upscale_section",

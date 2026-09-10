@@ -87,6 +87,7 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "file_picker",
     "multiselect",
     "prompt_starters",
+    "asset_import",
 ];
 
 /// Maximum widget nodes in a single UI document tree.
