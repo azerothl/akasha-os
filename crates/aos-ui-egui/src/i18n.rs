@@ -1684,7 +1684,7 @@ const EN: UiStrings = UiStrings {
     model_setup_provider_test_ok: "Provider OK — {} model(s) found.",
     model_setup_provider_test_fail: "Provider test failed — {}",
     model_setup_api_key: "API key (vault)",
-    agents_refresh_catalogs: "Refresh catalogues (skills / MCP)",
+    agents_refresh_catalogs: "Update tool catalogues",
     agents_model: "Model",
     agents_label: "Name",
     agents_label_required: "Name is required",
@@ -2697,7 +2697,7 @@ const FR: UiStrings = UiStrings {
     model_setup_provider_test_ok: "Provider OK — {} modèle(s) trouvé(s).",
     model_setup_provider_test_fail: "Échec du test provider — {}",
     model_setup_api_key: "Clé API (coffre)",
-    agents_refresh_catalogs: "Rafraîchir catalogues (skills / MCP)",
+    agents_refresh_catalogs: "Mettre à jour les catalogues d’outils",
     agents_model: "Modèle",
     agents_label: "Nom",
     agents_label_required: "Le nom est requis",
@@ -3332,6 +3332,20 @@ mod tests {
         assert!(!roster_skill_label(&en, "notes-writer").contains('-'));
         assert_eq!(roster_skill_label(&fr, "file-author"), "Fichiers et artefacts");
         assert_eq!(roster_skill_label(&en, "planner"), "Planner");
+    }
+
+    #[test]
+    fn locked_agents_refresh_catalogs_copy_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.agents_refresh_catalogs, "Update tool catalogues");
+        assert_eq!(fr.agents_refresh_catalogs, "Mettre à jour les catalogues d’outils");
+        let en_lc = en.agents_refresh_catalogs.to_ascii_lowercase();
+        let fr_lc = fr.agents_refresh_catalogs.to_ascii_lowercase();
+        assert!(!en_lc.contains("skill"));
+        assert!(!en_lc.contains("mcp"));
+        assert!(!fr_lc.contains("skill"));
+        assert!(!fr_lc.contains("mcp"));
     }
 
     #[test]
