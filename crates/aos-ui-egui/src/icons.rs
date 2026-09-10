@@ -1180,6 +1180,10 @@ fn paint_failed_mark(ui: &mut Ui, rect: Rect, color: Color32) {
 }
 
 fn paint_running_dots(ui: &mut Ui, rect: Rect, color: Color32) {
+    paint_ellipsis_horizontal(ui, rect, color);
+}
+
+fn paint_ellipsis_horizontal(ui: &mut Ui, rect: Rect, color: Color32) {
     let c = rect.center();
     let r = rect.width() * 0.09;
     let gap = rect.width() * 0.22;
@@ -1253,6 +1257,41 @@ pub fn nav_rail_tab_button(
         }
     }
     response
+}
+
+/// Horizontal ellipsis overflow control (replaces `⋯` / `ui.menu_button("⋯", …)`).
+pub fn ellipsis_horizontal_button(ui: &mut Ui) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        paint_ellipsis_horizontal(ui, glyph_rect(rect), hover_color(ui, &response));
+    }
+    response
+}
+
+/// Painted ⋯ overflow menu (replaces `ui.menu_button("⋯", …)`).
+pub fn overflow_menu<R>(
+    ui: &mut Ui,
+    id_salt: impl std::hash::Hash,
+    hover: &str,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    let popup_id = ui.id().with(id_salt);
+    let btn = ellipsis_horizontal_button(ui).on_hover_text(hover);
+    if btn.clicked() {
+        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+    }
+    let mut out = None;
+    egui::popup::popup_below_widget(
+        ui,
+        popup_id,
+        &btn,
+        egui::PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            out = Some(add_contents(ui));
+        },
+    );
+    out
 }
 
 /// Hamburger menu opener (replaces `☰`).

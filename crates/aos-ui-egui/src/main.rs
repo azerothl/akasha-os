@@ -2255,9 +2255,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             res.context_menu(|ui| self.ui_status_resources_overflow(ui, t));
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.menu_button("⋯", |ui| self.ui_status_resources_overflow(ui, t))
-                    .response
-                    .on_hover_text(t.status_overflow_menu);
+                icons::overflow_menu(ui, "status_overflow", t.status_overflow_menu, |ui| {
+                    self.ui_status_resources_overflow(ui, t);
+                });
                 let lang_btn = if self.prefs.language.eq_ignore_ascii_case("en") {
                     t.status_lang_en
                 } else {
