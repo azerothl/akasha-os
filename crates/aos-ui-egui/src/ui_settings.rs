@@ -6,6 +6,16 @@ use crate::os_open::aos_home;
 use crate::prefs::{save_preferences, UiDensity, UiPresentationMode, UI_SCALE_PRESETS};
 use crate::{i18n, Tab, UiApp};
 use eframe::egui;
+use std::collections::HashSet;
+
+/// Modules represented by a catalogue row already have their install state and
+/// action there. Keep the standalone list for local modules only.
+fn catalogue_module_names(entries: impl IntoIterator<Item = (String, String)>) -> HashSet<String> {
+    entries
+        .into_iter()
+        .filter_map(|(name, kind)| (kind == "module").then_some(name))
+        .collect()
+}
 
 fn color_from_hex(value: &str) -> egui::Color32 {
     let raw = value.trim().trim_start_matches('#');
@@ -1166,6 +1176,19 @@ impl UiApp {
                             ui.weak(t.settings_catalogue_community_unsigned);
                         }
                     }
+                    let catalogue_modules = self
+                        .settings_ui
+                        .catalogue
+                        .as_ref()
+                        .filter(|cat| cat.signature_ok || cat.extra_signature_ok)
+                        .map(|cat| {
+                            catalogue_module_names(
+                                cat.entries
+                                    .iter()
+                                    .map(|entry| (entry.name.clone(), entry.kind.clone())),
+                            )
+                        })
+                        .unwrap_or_default();
                     match self.settings_ui.catalogue.clone() {
                         Some(cat) if cat.signature_ok || cat.extra_signature_ok => {
                             for e in cat.entries {
@@ -1282,6 +1305,9 @@ impl UiApp {
                     ui.add_space(8.0);
                     ui.weak(t.settings_installed_modules);
                     for m in self.settings_ui.installed_modules.clone() {
+                        if catalogue_modules.contains(&m.name) {
+                            continue;
+                        }
                         ui.horizontal(|ui| {
                             ui.label(format!("{} v{}", m.name, m.version));
                             if aos_proto::decl_ui::is_protected_by_host(&m.name) {
@@ -1365,5 +1391,24 @@ impl UiApp {
         ) {
             self.ui_backup(ui);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::catalogue_module_names;
+
+    #[test]
+    fn installed_catalogue_modules_are_not_repeated_in_the_local_list() {
+        let catalogue = catalogue_module_names([
+            ("notes".to_string(), "module".to_string()),
+            ("morning-brief".to_string(), "skill".to_string()),
+        ]);
+        let installed = ["notes", "cohortmod"];
+        let standalone: Vec<_> = installed
+            .into_iter()
+            .filter(|name| !catalogue.contains(*name))
+            .collect();
+        assert_eq!(standalone, vec!["cohortmod"]);
     }
 }
