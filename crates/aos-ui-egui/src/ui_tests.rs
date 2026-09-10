@@ -706,7 +706,7 @@ mod layout_tests {
     #[test]
     fn session_toggle_reserve_fits_fr_canvas_label() {
         let fr = i18n::strings("fr");
-        let w = session_toggle_reserve_width(&fr, true);
+        let w = session_toggle_reserve_width(&fr, true, false);
         assert!(
             w >= estimate_label_chip_w(fr.session_toggle_canvas) + 40.0,
             "reserve {w} should fit full Canvas label"
@@ -765,7 +765,7 @@ mod layout_tests {
         let min_w = preview_min_inner_width(&fr);
         let composer = composer_row_reserved_width(&fr, true) + COMPOSER_MIN_INPUT_W;
         assert!(min_w >= LEFT_NAV_W + CHAT_SIDE_MIN_W + composer);
-        assert!(min_w >= LEFT_NAV_W + session_toggle_reserve_width(&fr, true) + 200.0);
+        assert!(min_w >= LEFT_NAV_W + session_toggle_reserve_width(&fr, true, false) + 200.0);
     }
 
     #[test]
