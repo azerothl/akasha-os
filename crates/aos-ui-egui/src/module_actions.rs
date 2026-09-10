@@ -843,7 +843,27 @@ fn parse_composition_blocks(
     if values.is_empty() {
         return Some(Vec::new());
     }
-    serde_json::from_value(Value::Array(values.to_vec())).ok()
+    let mut blocks = Vec::with_capacity(values.len());
+    for value in values {
+        let object = value.as_object()?;
+        let id = object.get("id").and_then(Value::as_u64)?;
+        let x = object.get("x").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+        let y = object.get("y").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+        let w = object.get("w").and_then(Value::as_f64).unwrap_or(0.3) as f32;
+        let h = object.get("h").and_then(Value::as_f64).unwrap_or(0.3) as f32;
+        // Rich declarative layers use `prompt` (and `label` for display),
+        // while the legacy native generator called the same field `desc`.
+        let desc = object
+            .get("prompt")
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty())
+            .or_else(|| object.get("label").and_then(Value::as_str))
+            .or_else(|| object.get("desc").and_then(Value::as_str))
+            .unwrap_or("")
+            .to_string();
+        blocks.push(crate::image_composition::CompositionBlock { id, x, y, w, h, desc });
+    }
+    Some(blocks)
 }
 
 fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {

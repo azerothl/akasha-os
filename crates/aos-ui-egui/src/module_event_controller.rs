@@ -284,6 +284,9 @@ pub(crate) fn on_ui_job_update(
                 panel
                     .local_state
                     .insert("result_path".into(), Value::String(path.to_string()));
+                panel
+                    .local_state
+                    .insert("preview_cleared".into(), Value::Bool(false));
             }
         }
     }

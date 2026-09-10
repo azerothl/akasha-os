@@ -824,7 +824,13 @@ impl DeclUiPanelState {
                     response
                 };
                 if response.clicked() {
-                    if let Some(action_id) = &w.action {
+                    if w.action.as_deref() == Some("clear_preview") {
+                        actions.local_patch.insert("result_path".into(), Value::String(String::new()));
+                        actions.local_patch.insert("preview_cleared".into(), Value::Bool(true));
+                    } else if w.action.as_deref() == Some("clear_layers") {
+                        actions.local_patch.insert("composition_layers".into(), Value::Array(Vec::new()));
+                        actions.local_patch.insert("composition_selected".into(), Value::Null);
+                    } else if let Some(action_id) = &w.action {
                         if let Some(action) = doc.actions.iter().find(|a| &a.id == action_id) {
                             queue_service_action(
                                 actions,
@@ -1408,6 +1414,13 @@ fn image_view_path(
     binding_cache: &HashMap<String, Value>,
     local_state: &HashMap<String, Value>,
 ) -> String {
+    if local_state
+        .get("preview_cleared")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return String::new();
+    }
     if let Some(resource) = &w.resource {
         if let Some(rest) = resource.strip_prefix("$local.") {
             if let Some(v) = local_state.get(rest).and_then(|x| x.as_str()) {

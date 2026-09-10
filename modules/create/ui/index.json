@@ -94,6 +94,8 @@
       "tab_preview": "Preview",
       "preview_empty": "No image yet — enter a prompt and generate.",
       "preview_empty_video": "No clip yet — enter a prompt and generate.",
+      "clear_preview_label": "Clear preview",
+      "clear_layers_label": "Clear layers",
       "history_restore": "Restore",
       "history_prompt": "Prompt",
       "history_when": "When",
@@ -188,6 +190,8 @@
       "tab_preview": "Aperçu",
       "preview_empty": "Pas encore d'image — saisissez une invite et générez.",
       "preview_empty_video": "Pas encore de clip — saisissez une invite et générez.",
+      "clear_preview_label": "Effacer l’aperçu",
+      "clear_layers_label": "Effacer les calques",
       "history_restore": "Restaurer",
       "history_prompt": "Invite",
       "history_when": "Date",
@@ -239,6 +243,7 @@
       "upscale_tile_size": { "type": "number", "default": 128 },
       "expert": { "type": "boolean", "default": false },
       "result_path": { "type": "string", "default": "" },
+      "preview_cleared": { "type": "boolean", "default": false },
       "width": { "type": "number", "default": 512 },
       "height": { "type": "number", "default": 512 },
       "steps": { "type": "number", "default": 20 },
@@ -629,6 +634,10 @@
         "kind": "column",
         "children": [
           { "kind": "layer_canvas", "binding": "preview", "state_key": "layer_opacity", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected", "aspect_w_key": "width", "aspect_h_key": "height", "aspect_w": 16, "aspect_h": 9, "tooltip_key": "tip_layers" },
+          { "kind": "row", "children": [
+            { "kind": "button", "action": "clear_preview", "label_key": "clear_preview_label", "enabled": { "ne": ["$local.result_path", ""] } },
+            { "kind": "button", "action": "clear_layers", "label_key": "clear_layers_label" }
+          ] },
           {
             "kind": "section",
             "label_key": "upscale_section",

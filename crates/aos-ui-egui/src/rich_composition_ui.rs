@@ -421,6 +421,20 @@ pub fn ui_layer_canvas(
                 }
                 layer.clamp_in_frame();
             }
+            // Keep the declarative local state in sync during the gesture as
+            // well as on release; this makes resize/move survive the next
+            // frame and avoids losing the edit when another control redraws.
+            patch = Some(build_patch(
+                layers_key,
+                selected_key,
+                next_id_key,
+                &layers,
+                selected,
+                next_id,
+                canvas_id,
+                host,
+                "transform_update",
+            ));
         }
     }
 
@@ -486,6 +500,39 @@ pub fn ui_layer_canvas(
                 2.0,
                 egui::Color32::from_rgba_unmultiplied(220, 230, 255, alpha(255)),
             );
+        }
+    }
+
+    if let Some(selected_id) = selected {
+        if let Some(layer) = layers.iter_mut().find(|layer| layer.id == selected_id) {
+            ui.add_space(4.0);
+            ui.label("Prompt du calque sélectionné");
+            let mut prompt = layer.prompt.clone();
+            if ui
+                .add_sized(
+                    [ui.available_width(), 56.0],
+                    egui::TextEdit::multiline(&mut prompt)
+                        .hint_text("Décrivez cet élément à placer dans la composition…"),
+                )
+                .changed()
+            {
+                push_undo(host, local_state, layers_key, selected_key, next_id_key);
+                layer.prompt = prompt;
+                if layer.label.trim().is_empty() {
+                    layer.label = layer.prompt.chars().take(28).collect();
+                }
+                patch = Some(build_patch(
+                    layers_key,
+                    selected_key,
+                    next_id_key,
+                    &layers,
+                    selected,
+                    next_id,
+                    canvas_id,
+                    host,
+                    "prompt_edit",
+                ));
+            }
         }
     }
 

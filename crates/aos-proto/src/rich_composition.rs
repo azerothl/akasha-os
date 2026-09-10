@@ -24,6 +24,9 @@ pub struct RichLayer {
     pub h: f32,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    /// Prompt fragment sent to the image model for this composition block.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub prompt: String,
     #[serde(default = "default_true")]
     pub visible: bool,
     #[serde(default)]
@@ -43,6 +46,7 @@ impl RichLayer {
             w: 0.30,
             h: 0.30,
             label: String::new(),
+            prompt: String::new(),
             visible: true,
             locked: false,
         }
@@ -212,6 +216,7 @@ mod tests {
             w: 0.5,
             h: 0.5,
             label: String::new(),
+            prompt: String::new(),
             visible: true,
             locked: false,
         };
