@@ -692,21 +692,11 @@ async fn run_media_image_generate(
                 });
             }
         }
-        let mut generation_prompt = req
+        let edited_prompt = req
             .generation_prompt
             .clone()
             .filter(|text| req.use_edited_enriched && !text.trim().is_empty());
-        if let (Some(prompt), Some(crate::image_prompt::PromptEnrichmentKind::Ideogram4)) = (
-            generation_prompt.take(),
-            req.model_id
-                .as_deref()
-                .and_then(crate::image_prompt::prompt_enrichment_kind),
-        ) {
-            generation_prompt = Some(
-                crate::image_prompt::normalize_ideogram_caption(&prompt, &original_prompt)
-                    .unwrap_or(prompt),
-            );
-        }
+        let mut generation_prompt = edited_prompt.clone();
         let json_enrichment_supported =
             crate::image_prompt::supports_json_prompt_enrichment(req.model_id.as_deref());
         if req.enrich_prompt && !json_enrichment_supported {
@@ -715,12 +705,12 @@ async fn run_media_image_generate(
             ));
             req.enrich_prompt = false;
         }
-        if generation_prompt.is_none() && (req.enrich_prompt || req.enhance_prompt_chat) {
-            // Both assistants may be enabled. Chain them in the same order a
-            // human would: chat first adds concrete prose, then the structured
-            // pass converts that prose into the model's JSON schema. If either
-            // pass fails, retain the best prompt produced so far.
-            let mut assistant_source = original_prompt.clone();
+        if req.enrich_prompt || req.enhance_prompt_chat {
+            // Both assistants may be enabled, even when an edited enriched
+            // prompt is already present. Start from that edit when available,
+            // then run chat first and the structured pass second so Ideogram
+            // always receives its JSON caption rather than the chat prose.
+            let mut assistant_source = edited_prompt.unwrap_or_else(|| original_prompt.clone());
             if req.enhance_prompt_chat {
                 match crate::runtime::enrich_prompt_for_module(
                     &bus_bg,
