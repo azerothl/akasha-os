@@ -96,6 +96,7 @@
       "preview_empty_video": "No clip yet — enter a prompt and generate.",
       "clear_preview_label": "Clear preview",
       "clear_layers_label": "Clear layers",
+      "layers_list_label": "Layer order (back to front)",
       "history_restore": "Restore",
       "history_prompt": "Prompt",
       "history_when": "When",
@@ -192,6 +193,7 @@
       "preview_empty_video": "Pas encore de clip — saisissez une invite et générez.",
       "clear_preview_label": "Effacer l’aperçu",
       "clear_layers_label": "Effacer les calques",
+      "layers_list_label": "Ordre des calques (arrière vers avant)",
       "history_restore": "Restaurer",
       "history_prompt": "Invite",
       "history_when": "Date",
@@ -234,6 +236,7 @@
       "sd_mode": { "type": "string", "default": "img_gen" },
       "composition_layers": { "type": "array", "default": [] },
       "composition_selected": { "type": "number", "default": 0 },
+      "composition_next_id": { "type": "number", "default": 1 },
       "layer_opacity": { "type": "number", "default": 0.72 },
       "saved_preset_name": { "type": "string", "default": "" },
       "init_image": { "type": "string", "default": "" },
@@ -695,6 +698,7 @@
         "kind": "column",
         "children": [
           { "kind": "layer_canvas", "binding": "preview", "state_key": "layer_opacity", "canvas_id": "create-composition", "layers_key": "composition_layers", "selected_key": "composition_selected", "aspect_w_key": "width", "aspect_h_key": "height", "aspect_w": 16, "aspect_h": 9, "tooltip_key": "tip_layers" },
+          { "kind": "layer_list", "layers_key": "composition_layers", "selected_key": "composition_selected", "next_id_key": "composition_next_id", "label_key": "layers_list_label" },
           { "kind": "row", "children": [
             { "kind": "button", "action": "clear_preview", "label_key": "clear_preview_label", "enabled": { "ne": ["$local.result_path", ""] } },
             { "kind": "button", "action": "clear_layers", "label_key": "clear_layers_label" }

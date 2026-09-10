@@ -813,6 +813,12 @@ pub(crate) enum Evt {
         module: String,
         prompt: String,
     },
+    /// Layer prompts rewritten by the Create assistant, kept in sync with
+    /// the editable composition list before generation starts.
+    ModuleUiLayersGenerated {
+        module: String,
+        layers: Vec<serde_json::Value>,
+    },
     ModuleUiServiceDone {
         module: String,
         action_id: String,

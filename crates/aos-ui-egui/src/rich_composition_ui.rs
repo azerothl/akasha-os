@@ -576,6 +576,11 @@ pub fn ui_layer_list(
 
     for (idx, layer_id, name, visible) in row_meta.into_iter().rev() {
         ui.horizontal(|ui| {
+            // The stored vector is back-to-front, so the numeric z-index is
+            // also the value sent to the image model. Editing it directly is
+            // less ambiguous than relying only on drag-and-drop.
+            ui.label(format!("z{idx}"))
+                .on_hover_text("Index de profondeur : 0 = arrière-plan");
             let sel = selected == Some(layer_id);
             if ui.selectable_label(sel, &name).clicked() {
                 patch = Some(build_patch(
@@ -589,6 +594,34 @@ pub fn ui_layer_list(
                     host,
                     "select",
                 ));
+            }
+            let max_z = layers.len().saturating_sub(1) as i32;
+            let mut target_z = idx as i32;
+            if ui
+                .add(
+                    egui::DragValue::new(&mut target_z)
+                        .range(0..=max_z)
+                        .speed(1),
+                )
+                .on_hover_text("Modifier le z-index")
+                .changed()
+            {
+                let target = target_z.clamp(0, max_z) as usize;
+                if target != idx {
+                    push_undo(host, local_state, layers_key, selected_key, next_id_key);
+                    reorder_layer(&mut layers, idx, target);
+                    patch = Some(build_patch(
+                        layers_key,
+                        selected_key,
+                        next_id_key,
+                        &layers,
+                        selected,
+                        next_id,
+                        "",
+                        host,
+                        "z_index",
+                    ));
+                }
             }
             let vis_label = widget_label_from_key(doc, language, "layer_visible")
                 .unwrap_or_else(|| t.decl_layer_visible.to_string());
@@ -611,6 +644,46 @@ pub fn ui_layer_list(
                     "",
                     host,
                     "visibility",
+                ));
+            }
+            if idx + 1 < layers.len()
+                && ui
+                    .small_button("▲")
+                    .on_hover_text("Monter le calque (vers l’avant)")
+                    .clicked()
+            {
+                push_undo(host, local_state, layers_key, selected_key, next_id_key);
+                reorder_layer(&mut layers, idx, idx + 1);
+                patch = Some(build_patch(
+                    layers_key,
+                    selected_key,
+                    next_id_key,
+                    &layers,
+                    selected,
+                    next_id,
+                    "",
+                    host,
+                    "z_index",
+                ));
+            }
+            if idx > 0
+                && ui
+                    .small_button("▼")
+                    .on_hover_text("Descendre le calque (vers l’arrière)")
+                    .clicked()
+            {
+                push_undo(host, local_state, layers_key, selected_key, next_id_key);
+                reorder_layer(&mut layers, idx, idx - 1);
+                patch = Some(build_patch(
+                    layers_key,
+                    selected_key,
+                    next_id_key,
+                    &layers,
+                    selected,
+                    next_id,
+                    "",
+                    host,
+                    "z_index",
                 ));
             }
             if ui

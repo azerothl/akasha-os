@@ -323,3 +323,18 @@ pub(crate) fn on_ui_prompt_generated(app: &mut UiApp, module: String, prompt: St
         }
     }
 }
+
+pub(crate) fn on_ui_layers_generated(
+    app: &mut UiApp,
+    module: String,
+    layers: Vec<serde_json::Value>,
+) {
+    if module == "create" {
+        if let Some(panel) = app.decl_panels.get_mut(&module) {
+            panel.local_state.insert(
+                "composition_layers".into(),
+                serde_json::Value::Array(layers),
+            );
+        }
+    }
+}

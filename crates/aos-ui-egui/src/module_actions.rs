@@ -677,6 +677,21 @@ async fn run_media_image_generate(
         let original_prompt = req.prompt.clone();
         apply_create_presets(&mut req);
         normalize_create_options(&mut req.options);
+        if req.enhance_prompt_chat && !req.composition_blocks.is_empty() {
+            if enhance_create_layer_prompts(
+                &bus_bg,
+                &evt_tx_bg,
+                &mut req.composition_blocks,
+                req.model_id.as_deref(),
+            )
+            .await
+            {
+                let _ = evt_tx_bg.send(Evt::ModuleUiLayersGenerated {
+                    module: module_bg.clone(),
+                    layers: req.composition_blocks.clone(),
+                });
+            }
+        }
         let mut generation_prompt = req
             .generation_prompt
             .clone()
@@ -968,6 +983,55 @@ fn parse_composition_blocks(
         });
     }
     Some(blocks)
+}
+
+/// Rewrite each non-empty layer description with the same chat assistant used
+/// for the global prompt. Layer geometry/order stays untouched; only the
+/// editable `prompt` field is replaced and published back to the UI.
+async fn enhance_create_layer_prompts(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    layers: &mut [Value],
+    model_id: Option<&str>,
+) -> bool {
+    let mut changed = false;
+    for layer in layers.iter_mut() {
+        let source = layer.as_object().and_then(|object| {
+            object
+                .get("prompt")
+                .and_then(Value::as_str)
+                .filter(|text| !text.trim().is_empty())
+                .or_else(|| {
+                    object
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .filter(|text| !text.trim().is_empty())
+                })
+                .or_else(|| {
+                    object
+                        .get("desc")
+                        .and_then(Value::as_str)
+                        .filter(|text| !text.trim().is_empty())
+                })
+                .map(str::to_owned)
+        });
+        let Some(source) = source else { continue };
+        match crate::runtime::enrich_prompt_for_module(bus, evt_tx, &source, model_id, true).await {
+            Ok(enriched) if !enriched.trim().is_empty() && enriched.trim() != source.trim() => {
+                if let Some(object) = layer.as_object_mut() {
+                    object.insert("prompt".into(), Value::String(enriched));
+                }
+                changed = true;
+            }
+            Ok(_) => {}
+            Err(error) => {
+                let _ = evt_tx.send(Evt::Status(format!(
+                    "Amélioration du calque indisponible; description conservée ({error})"
+                )));
+            }
+        }
+    }
+    changed
 }
 
 fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {

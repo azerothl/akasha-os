@@ -2990,6 +2990,9 @@ impl eframe::App for UiApp {
                 Evt::ModuleUiPromptGenerated { module, prompt } => {
                     module_event_controller::on_ui_prompt_generated(self, module, prompt)
                 }
+                Evt::ModuleUiLayersGenerated { module, layers } => {
+                    module_event_controller::on_ui_layers_generated(self, module, layers)
+                }
                 Evt::ModuleUiServiceDone {
                     module,
                     action_id: _,
