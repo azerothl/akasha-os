@@ -203,7 +203,7 @@ impl RichStateDecl {
 impl RichStateSlot {
     pub fn validate(&self, name: &str) -> Result<(), RichDeclUiError> {
         match self.slot_type.as_str() {
-            "string" | "number" | "boolean" => {}
+            "string" | "number" | "boolean" | "array" => {}
             other => {
                 return Err(RichDeclUiError::InvalidSubstitution(format!(
                     "state.{name}: unknown type {other}"

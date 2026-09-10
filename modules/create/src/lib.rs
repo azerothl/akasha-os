@@ -94,6 +94,11 @@ struct HistoryEntry {
     height: Option<u32>,
     #[serde(default)]
     steps: Option<u32>,
+    /// Full Create state snapshot so restoring history brings back advanced
+    /// controls (references, adapters, sampling and composition), not just
+    /// the three legacy dimensions.
+    #[serde(default)]
+    params: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -229,7 +234,7 @@ fn history_get(args: &serde_json::Value) -> Result<serde_json::Value, String> {
         .iter()
         .find(|e| e.id == a.id)
         .ok_or_else(|| "history entry not found".to_string())?;
-    let params = json!({
+    let mut params = json!({
         "prompt": entry.prompt,
         "model_id": entry.model_id,
         "media_mode": entry.media_mode,
@@ -238,6 +243,11 @@ fn history_get(args: &serde_json::Value) -> Result<serde_json::Value, String> {
         "steps": entry.steps,
         "result_path": entry.path,
     });
+    if let (Some(base), Some(extra)) = (params.as_object_mut(), entry.params.as_object()) {
+        for (key, value) in extra {
+            base.insert(key.clone(), value.clone());
+        }
+    }
     aos_module_sdk::json_ok(&json!({
         "entry": entry,
         "params": params,
@@ -260,6 +270,8 @@ struct HistoryRecordArgs {
     height: Option<u32>,
     #[serde(default)]
     steps: Option<u32>,
+    #[serde(default)]
+    params: serde_json::Value,
 }
 
 fn history_record(args: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -282,6 +294,7 @@ fn history_record(args: &serde_json::Value) -> Result<serde_json::Value, String>
         width: a.width,
         height: a.height,
         steps: a.steps,
+        params: a.params,
     };
     store.items.insert(0, entry.clone());
     store.items.truncate(40);
@@ -328,6 +341,7 @@ mod tests {
             width: Some(512),
             height: Some(512),
             steps: Some(12),
+            params: serde_json::Value::Null,
         };
         let raw = serde_json::to_string(&e).unwrap();
         assert!(raw.contains("hist-1"));

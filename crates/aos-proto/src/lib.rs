@@ -5340,6 +5340,33 @@ pub struct MediaImageGenerateRequest {
     pub model_id: Option<String>,
     #[serde(default)]
     pub options: MediaImageOptions,
+    /// Optional prompt produced by the Create prompt assistant. When set it
+    /// is sent to the engine instead of `prompt`, while `prompt` remains the
+    /// user-authored text for history/audit purposes.
+    #[serde(default)]
+    pub generation_prompt: Option<String>,
+    /// Ask the UI host to run the local JSON/prose prompt assistant before
+    /// dispatching the request.
+    #[serde(default)]
+    pub enrich_prompt: bool,
+    #[serde(default)]
+    pub enhance_prompt_chat: bool,
+    #[serde(default)]
+    pub use_edited_enriched: bool,
+    /// Declarative composition blocks (JSON mirrors image_composition's
+    /// CompositionBlock without coupling the protocol crate to egui).
+    #[serde(default)]
+    pub composition_blocks: Vec<serde_json::Value>,
+    /// Create presentation presets. Kept protocol-level and optional so
+    /// other media clients remain source-compatible.
+    #[serde(default)]
+    pub format_preset: Option<String>,
+    #[serde(default)]
+    pub intent_preset: Option<String>,
+    #[serde(default)]
+    pub quality_profile: Option<String>,
+    #[serde(default)]
+    pub camera_preset: Option<String>,
     #[serde(default)]
     pub actor: String,
     #[serde(default)]

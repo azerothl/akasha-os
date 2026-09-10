@@ -3699,6 +3699,15 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             path: output_path,
                             model_id,
                             options,
+                            generation_prompt: None,
+                            enrich_prompt: false,
+                            enhance_prompt_chat: false,
+                            use_edited_enriched: false,
+                            composition_blocks: Vec::new(),
+                            format_preset: None,
+                            intent_preset: None,
+                            quality_profile: None,
+                            camera_preset: None,
                             actor: "human:ui".into(),
                             caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                             trace_id: String::new(),
@@ -4731,6 +4740,24 @@ async fn run_prompt_enrichment_phase(
             );
             prompt.to_string()
         }
+    }
+}
+
+/// Shared prompt-assistant entry point for declarative modules.  The legacy
+/// Image Studio and the Create module now use the same schemas and rewrite
+/// implementation, so moving Create out of the native panel does not drop
+/// enrichment behaviour.
+pub(crate) async fn enrich_prompt_for_module(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    prompt: &str,
+    model_id: Option<&str>,
+    chat: bool,
+) -> Result<String, String> {
+    if chat {
+        enhance_image_prompt_chat(bus, evt_tx, prompt, model_id).await
+    } else {
+        enrich_image_prompt(bus, evt_tx, prompt, model_id).await
     }
 }
 

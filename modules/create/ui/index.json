@@ -224,6 +224,15 @@
       "input": {
         "prompt": "$local.prompt",
         "model_id": "$local.model_id",
+        "generation_prompt": "$local.enriched_prompt",
+        "enrich_prompt": "$local.enrich_prompt",
+        "enhance_prompt_chat": "$local.enhance_prompt_chat",
+        "use_edited_enriched": "$local.use_edited_enriched",
+        "composition_blocks": "$local.composition_layers",
+        "format_preset": "$local.format",
+        "intent_preset": "$local.intent",
+        "quality_profile": "$local.profile",
+        "camera_preset": "$local.camera_preset",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
@@ -259,6 +268,15 @@
       "input": {
         "prompt": "$local.prompt",
         "model_id": "$local.model_id",
+        "generation_prompt": "$local.enriched_prompt",
+        "enrich_prompt": "$local.enrich_prompt",
+        "enhance_prompt_chat": "$local.enhance_prompt_chat",
+        "use_edited_enriched": "$local.use_edited_enriched",
+        "composition_blocks": "$local.composition_layers",
+        "format_preset": "$local.format",
+        "intent_preset": "$local.intent",
+        "quality_profile": "$local.profile",
+        "camera_preset": "$local.camera_preset",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
@@ -308,6 +326,15 @@
       "input": {
         "prompt": "$local.prompt",
         "model_id": "$local.model_id",
+        "generation_prompt": "$local.enriched_prompt",
+        "enrich_prompt": "$local.enrich_prompt",
+        "enhance_prompt_chat": "$local.enhance_prompt_chat",
+        "use_edited_enriched": "$local.use_edited_enriched",
+        "composition_blocks": "$local.composition_layers",
+        "format_preset": "$local.format",
+        "intent_preset": "$local.intent",
+        "quality_profile": "$local.profile",
+        "camera_preset": "$local.camera_preset",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
@@ -329,6 +356,11 @@
       "input": {
         "prompt": "$local.prompt",
         "model_id": "$local.model_id",
+        "generation_prompt": "$local.enriched_prompt",
+        "enrich_prompt": "$local.enrich_prompt",
+        "enhance_prompt_chat": "$local.enhance_prompt_chat",
+        "use_edited_enriched": "$local.use_edited_enriched",
+        "composition_blocks": "$local.composition_layers",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
@@ -350,6 +382,11 @@
       "input": {
         "prompt": "$local.prompt",
         "model_id": "$local.model_id",
+        "generation_prompt": "$local.enriched_prompt",
+        "enrich_prompt": "$local.enrich_prompt",
+        "enhance_prompt_chat": "$local.enhance_prompt_chat",
+        "use_edited_enriched": "$local.use_edited_enriched",
+        "composition_blocks": "$local.composition_layers",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
@@ -374,6 +411,11 @@
       "input": {
         "prompt": "$local.prompt",
         "model_id": "$local.model_id",
+        "generation_prompt": "$local.enriched_prompt",
+        "enrich_prompt": "$local.enrich_prompt",
+        "enhance_prompt_chat": "$local.enhance_prompt_chat",
+        "use_edited_enriched": "$local.use_edited_enriched",
+        "composition_blocks": "$local.composition_layers",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
@@ -430,6 +472,12 @@
                         { "kind": "file_picker", "state_key": "end_image", "label_key": "end_reference_label", "visible": { "eq": ["$local.media_mode", "video"] } },
                         { "kind": "number", "state_key": "strength", "min": 0.05, "max": 1, "step": 0.05, "label_key": "reference_strength_label", "visible": { "ne": ["$local.init_image", ""] } },
                         { "kind": "textarea", "state_key": "negative_prompt", "label_key": "negative_label" }
+                        ,{ "kind": "section", "label_key": "enrichment_section", "children": [
+                          { "kind": "checkbox", "state_key": "enrich_prompt", "label_key": "enrich_prompt_label" },
+                          { "kind": "checkbox", "state_key": "enhance_prompt_chat", "label_key": "enhance_prompt_label" },
+                          { "kind": "checkbox", "state_key": "use_edited_enriched", "label_key": "edited_prompt_label", "visible": { "ne": ["$local.enriched_prompt", ""] } },
+                          { "kind": "textarea", "state_key": "enriched_prompt", "label_key": "enriched_prompt_label", "visible": { "or": [{ "eq": ["$local.enrich_prompt", true] }, { "eq": ["$local.enhance_prompt_chat", true] }, { "eq": ["$local.use_edited_enriched", true] }] } }
+                        ] }
                       ]
                     },
                     {

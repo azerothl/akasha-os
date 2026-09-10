@@ -643,6 +643,51 @@ async fn run_media_image_generate(
             }
         });
         let mut req = request;
+        // Keep the user's text for history, but honor the same prompt
+        // assistant and composition pipeline that the former native Create
+        // panel used before it became a module.
+        let original_prompt = req.prompt.clone();
+        apply_create_presets(&mut req);
+        let mut generation_prompt = req
+            .generation_prompt
+            .clone()
+            .filter(|text| req.use_edited_enriched && !text.trim().is_empty());
+        if generation_prompt.is_none() && (req.enrich_prompt || req.enhance_prompt_chat) {
+            match crate::runtime::enrich_prompt_for_module(
+                &bus_bg,
+                &evt_tx_bg,
+                &original_prompt,
+                req.model_id.as_deref(),
+                req.enhance_prompt_chat,
+            )
+            .await
+            {
+                Ok(text) if !text.trim().is_empty() => generation_prompt = Some(text),
+                Ok(_) => {}
+                Err(err) => {
+                    let _ = evt_tx_bg.send(Evt::Status(format!(
+                        "Prompt assistant unavailable; using the original prompt ({err})"
+                    )));
+                }
+            }
+        }
+        if let Some(blocks) = parse_composition_blocks(&req.composition_blocks) {
+            if !blocks.is_empty() {
+                let base = generation_prompt.as_deref().unwrap_or(&original_prompt);
+                let merged = crate::image_composition::finalize_prompt_with_layout(
+                    base,
+                    &blocks,
+                    req.model_id.as_deref(),
+                    generation_prompt.is_some(),
+                );
+                if merged != base {
+                    generation_prompt = Some(merged);
+                }
+            }
+        }
+        if let Some(ref generated) = generation_prompt {
+            req.prompt = generated.clone();
+        }
         req.actor = "human:ui".into();
         req.caps = vec![
             "media.generate".into(),
@@ -704,6 +749,40 @@ async fn run_media_image_generate(
                         "width": req.options.width,
                         "height": req.options.height,
                         "steps": req.options.steps,
+                        "params": {
+                            "media_mode": media_mode,
+                            "model_id": req.model_id,
+                            "format": req.format_preset,
+                            "intent": req.intent_preset,
+                            "profile": req.quality_profile,
+                            "camera_preset": req.camera_preset,
+                            "negative_prompt": req.options.negative_prompt,
+                            "width": req.options.width,
+                            "height": req.options.height,
+                            "steps": req.options.steps,
+                            "cfg_scale": req.options.cfg_scale,
+                            "seed": req.options.seed,
+                            "sampling_method": req.options.sampling_method,
+                            "flow_shift": req.options.flow_shift,
+                            "video_frames": req.options.video_frames,
+                            "fps": req.options.fps,
+                            "styles": req.options.styles,
+                            "loras": req.options.loras,
+                            "lora_scale": req.options.lora_scale,
+                            "vae": req.options.vae,
+                            "init_image": req.options.init_image,
+                            "end_image": req.options.end_image,
+                            "strength": req.options.strength,
+                            "mask_image": req.options.mask_image,
+                            "upscale_model": req.options.upscale_model,
+                            "upscale_repeats": req.options.upscale_repeats,
+                            "upscale_tile_size": req.options.upscale_tile_size,
+                            "enrich_prompt": req.enrich_prompt,
+                            "enhance_prompt_chat": req.enhance_prompt_chat,
+                            "use_edited_enriched": req.use_edited_enriched,
+                            "enriched_prompt": req.generation_prompt,
+                            "composition_layers": req.composition_blocks,
+                        },
                     });
                     let _ = invoke_module_tool_quiet(
                         &bus_bg,
@@ -755,6 +834,52 @@ fn logical_downloads_path(logical: &str) -> PathBuf {
     crate::os_open::aos_home()
         .join("var/storage/data")
         .join(rel)
+}
+
+fn parse_composition_blocks(
+    values: &[Value],
+) -> Option<Vec<crate::image_composition::CompositionBlock>> {
+    if values.is_empty() {
+        return Some(Vec::new());
+    }
+    serde_json::from_value(Value::Array(values.to_vec())).ok()
+}
+
+fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
+    let options = &mut req.options;
+    match req.format_preset.as_deref() {
+        Some("16:9") => {
+            options.width = Some(768);
+            options.height = Some(432);
+        }
+        Some("9:16") => {
+            options.width = Some(432);
+            options.height = Some(768);
+        }
+        Some("1:1") => {
+            options.width = Some(512);
+            options.height = Some(512);
+        }
+        _ => {}
+    }
+    match req.quality_profile.as_deref() {
+        Some("fast") => options.steps = Some(12),
+        Some("balanced") => options.steps = Some(20),
+        Some("quality") => options.steps = Some(32),
+        _ => {}
+    }
+    let camera = match req.camera_preset.as_deref() {
+        Some("static") => None,
+        Some("push") => Some("Camera movement: slow push-in."),
+        Some("track") => Some("Camera movement: smooth lateral tracking shot."),
+        Some("follow") => Some("Camera movement: gentle follow shot."),
+        _ => None,
+    };
+    if let Some(camera) = camera {
+        if !req.prompt.contains(camera) {
+            req.prompt = format!("{}\n{}", req.prompt.trim(), camera);
+        }
+    }
 }
 
 pub(crate) async fn cancel_decl_job(

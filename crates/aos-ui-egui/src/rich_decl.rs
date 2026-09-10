@@ -270,6 +270,7 @@ fn default_for_slot(slot: &aos_proto::rich_decl_ui::RichStateSlot) -> Value {
         "string" => Value::String(String::new()),
         "number" => json!(0),
         "boolean" => Value::Bool(false),
+        "array" => Value::Array(Vec::new()),
         _ => Value::Null,
     }
 }
