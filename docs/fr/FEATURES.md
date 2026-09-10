@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.16.2
+# Fonctionnalités Preview — Akasha OS 0.17.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,16 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 06/09/2026 · Preview **0.16.2**
+> Date : 10/09/2026 · Preview **0.17.0**
+
+### Nouveautés 0.17.0
+
+- **Espace Create** : disposition en volet scindé, presets nommés, édition de calques avec z-index, enrichissement et assistants de prompt, prompts structurés Ideogram 4
+- **Chrome UI** : icônes SVG peintes (remplacement des glyphes police), préférence de police interface, bande Paramètres et finitions rail/statut, menu overflow de la barre de statut
+- **DeclUI** : correctifs mojibake, payloads JSON, disposition plus dense des paramètres, libellés lisibles
+- **Barre outils Canvas**, bandes compactes **Mémoire** et **Salon** ; libellés Agents et CTA chat vide
+- **Parité FR** : chaînes recherche/pills Paramètres et accueil chat
+- **Catalogue modules** : filtre anti-doublon au démarrage
 
 ### Nouveautés 0.16.2
 
@@ -418,7 +427,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.16.2
+## 11. Hors Preview 0.17.0
 
 - Image bootable / fer nu
 - STT / voix permanente

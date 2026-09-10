@@ -7,8 +7,10 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.16.2 — opt-in Windows USB serial I/O (`device.usb.*`), on top of
-the 0.16.1 calm host shell. Not a bootable OS. Cohort gate still open
+**Preview:** 0.17.0 — rich Create module workspace (split-pane, presets,
+layers, prompt assist), painted UI chrome (SVG icons, interface font,
+Settings/rail/status strip), DeclUI fixes — on top of 0.16.2 USB I/O.
+Not a bootable OS. Cohort gate still open
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path). **Next:**
 PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
 documented 2-GPU run.
@@ -25,6 +27,15 @@ documented 2-GPU run.
 | P16.6 | Version, docs, website and release packaging | done |
 | P16.7 | 0.16.1 patch — calm shell, session search/pin/archive | done |
 | P16.8 | 0.16.2 patch — USB I/O (Windows serial, issue #137 slice 3) | done |
+
+## P17 — Preview 0.17.0 (Create workspace + UI chrome) — done
+
+| # | Item | Status |
+|---|------|--------|
+| P17.1 | Rich Create module path (split-pane, presets, layers, prompt assist) | done |
+| P17.2 | Painted UI chrome (SVG icons, interface font, Settings/rail/status) | done |
+| P17.3 | DeclUI P0/P1 — mojibake, JSON payloads, denser params, human labels | done |
+| P17.4 | Version, docs, website and release packaging | done |
 
 ## P13 — Preview 0.13.0 (create + chat documents) — done
 

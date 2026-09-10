@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.16.2
+# Tester protocol — Akasha OS Preview 0.17.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 06/09/2026 · Preview **0.16.2**
+> Date: 10/09/2026 · Preview **0.17.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -384,7 +384,7 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine (long
   protocol; not required of every tester)
 
-## Out of scope Preview 0.16.2
+## Out of scope Preview 0.17.0
 
 - seL4 / bare-metal boot
 - Intel Mac
