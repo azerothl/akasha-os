@@ -466,16 +466,23 @@ fn estimate_label_chip_w(label: &str) -> f32 {
     label.chars().count() as f32 * CHAR_W + PAD
 }
 
-fn session_toggle_reserve_width(t: &i18n::UiStrings, canvas_open: bool) -> f32 {
+fn session_toggle_reserve_width(
+    t: &i18n::UiStrings,
+    canvas_open: bool,
+    tuck_secondary: bool,
+) -> f32 {
     let mut w = estimate_label_chip_w(t.session_toggle_salon)
         + 6.0
         + estimate_label_chip_w(t.session_toggle_canvas)
         + 6.0
-        + estimate_label_chip_w(t.session_toggle_deep)
-        + 6.0
         + icons::SESSION_ICON_SZ;
-    if canvas_open {
-        w += 6.0 + estimate_label_chip_w(t.session_focus);
+    if tuck_secondary {
+        w += 6.0 + icons::SESSION_ICON_SZ;
+    } else {
+        w += 6.0 + estimate_label_chip_w(t.session_toggle_deep);
+        if canvas_open {
+            w += 6.0 + estimate_label_chip_w(t.session_focus);
+        }
     }
     w
 }
@@ -496,7 +503,7 @@ fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
 /// Minimum central chat pane width so composer + session toggles fit (FR labels).
 fn preview_min_inner_width(t: &i18n::UiStrings) -> f32 {
     let composer = composer_row_reserved_width(t, true) + COMPOSER_MIN_INPUT_W;
-    let session_bar = session_toggle_reserve_width(t, true) + 160.0;
+    let session_bar = session_toggle_reserve_width(t, true, false) + 160.0;
     let canvas_split_min = 180.0 + CHAT_SPLIT_GAP + 200.0;
     let main_min = composer.max(session_bar).max(canvas_split_min);
     LEFT_NAV_W + CHAT_SIDE_MIN_W + CHAT_SPLIT_GAP + main_min + CHAT_MAIN_MARGIN
@@ -2058,10 +2065,153 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn status_resources_summary(&self, t: &i18n::UiStrings, compact: bool) -> String {
+        let gate_ask = !self
+            .prefs
+            .agent_gate_mode
+            .eq_ignore_ascii_case("autonomous");
+        let gate_short = if gate_ask {
+            if compact {
+                "?"
+            } else {
+                t.status_gate_ask
+            }
+        } else if compact {
+            "✓"
+        } else {
+            t.status_gate_autonomous
+        };
+        let caps_short = if self.security_ui.caps.is_empty() {
+            "—".to_string()
+        } else if compact {
+            self.security_ui.caps.len().to_string()
+        } else {
+            t.status_caps_count
+                .replace("{n}", &self.security_ui.caps.len().to_string())
+        };
+        format!("{caps_short} · {gate_short}")
+    }
+
+    fn ui_status_network_menu(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        ui.label(if self.network_online {
+            t.status_network_hint_on
+        } else {
+            t.status_network_hint_off
+        });
+        if ui
+            .button(if self.network_online {
+                t.status_network_disable
+            } else {
+                t.status_network_enable
+            })
+            .clicked()
+        {
+            self.network_online = !self.network_online;
+            self.prefs.network_online = self.network_online;
+            save_preferences(&self.prefs);
+            let _ = self.cmd_tx.send(Cmd::NetSetMode {
+                online: self.network_online,
+            });
+            ui.close_menu();
+        }
+    }
+
+    fn ui_status_resources_overflow(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        let gate_ask = !self
+            .prefs
+            .agent_gate_mode
+            .eq_ignore_ascii_case("autonomous");
+        let caps_line = if self.security_ui.caps.is_empty() {
+            format!("{}: —", t.status_caps_label)
+        } else {
+            format!(
+                "{}: {}",
+                t.status_caps_label,
+                t.status_caps_count
+                    .replace("{n}", &self.security_ui.caps.len().to_string())
+            )
+        };
+        ui.label(caps_line);
+        if ui.button(t.status_open_caps).clicked() {
+            self.on_tab_open(Tab::Caps);
+            ui.close_menu();
+        }
+        ui.separator();
+        ui.label(format!(
+            "{}: {}",
+            t.status_gate_label,
+            if gate_ask {
+                t.status_gate_ask
+            } else {
+                t.status_gate_autonomous
+            }
+        ));
+        ui.weak(t.status_gate_menu_hint);
+        if ui
+            .button(if gate_ask {
+                t.status_gate_always
+            } else {
+                t.status_gate_ask_each
+            })
+            .clicked()
+        {
+            self.prefs.agent_gate_mode = if gate_ask {
+                "autonomous".into()
+            } else {
+                "ask".into()
+            };
+            save_preferences(&self.prefs);
+            ui.close_menu();
+        }
+        ui.separator();
+        let (transcript_tok, agent_tok, agent_n) = self.session_token_estimate();
+        let total = transcript_tok + agent_tok;
+        let tok_line = if total >= 10_000 {
+            format!("≈{:.1}k tok", total as f64 / 1000.0)
+        } else {
+            format!("≈{total} tok")
+        };
+        let tok_tip = if self.prefs.language == "fr" {
+            format!(
+                "Estimation ≈ (transcript {transcript_tok} + agents {agent_tok} sur {agent_n})"
+            )
+        } else {
+            format!(
+                "Rough estimate ≈ (transcript {transcript_tok} + agents {agent_tok} over {agent_n})"
+            )
+        };
+        ui.label(tok_line).on_hover_text(tok_tip);
+        self.ui_billing_segment(ui);
+        ui.separator();
+        ui.weak(format!("v{}", self.version));
+        if let Some(pending_ver) = load_pending_update_version() {
+            ui.label(t.status_update_pending.replace("{version}", &pending_ver));
+            if let Some(offer) = load_update_offer() {
+                if ui.button(t.update_notes).clicked() {
+                    open_in_browser(&offer.html_url);
+                }
+            }
+        } else if self.update_download_child.is_some() {
+            let ver = load_update_offer()
+                .map(|o| o.version)
+                .unwrap_or_else(|| "…".into());
+            ui.label(t.status_update_downloading.replace("{version}", &ver));
+        } else if let Some(offer) = load_update_offer() {
+            ui.label(t.update_available.replace("{}", &offer.version));
+            if ui.button(t.status_update_download).clicked() {
+                self.start_update_download();
+            }
+            if ui.button(t.update_notes).clicked() {
+                open_in_browser(&offer.html_url);
+            }
+        } else if !self.update_status.is_empty() {
+            ui.label(&self.update_status);
+        }
+    }
+
     fn ui_status_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        // The bar has a fixed 28 px height, so wrapping would clip vertically
-        // on the supported minimum viewport.  Compact labels keep every
-        // control reachable instead of letting the right side disappear.
+        // Three visible segments — Connexion · Modèle · Ressources — plus
+        // language and an overflow menu for tokens, cloud, version, updates.
         let compact = ui.available_width() < 900.0;
         ui.horizontal(|ui| {
             let net_label = if self.network_online {
@@ -2069,33 +2219,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             } else {
                 t.status_network_off
             };
-            let net_response = ui
-                .small_button(net_label)
-                .on_hover_text("Ouvrir les détails du réseau");
-            net_response.context_menu(|ui| {
-                ui.label(if self.network_online {
-                    "Le réseau est autorisé pour les outils configurés."
-                } else {
-                    "Le réseau est bloqué par défaut."
-                });
-                if ui
-                    .button(if self.network_online {
-                        "Désactiver le réseau"
-                    } else {
-                        "Autoriser le réseau"
-                    })
-                    .clicked()
-                {
-                    self.network_online = !self.network_online;
-                    self.prefs.network_online = self.network_online;
-                    save_preferences(&self.prefs);
-                    let _ = self.cmd_tx.send(Cmd::NetSetMode {
-                        online: self.network_online,
-                    });
-                    ui.close_menu();
-                }
-                    });
-                    ui.separator();
+            let conn = ui
+                .small_button(format!("{} · {}", t.status_connection_label, net_label))
+                .on_hover_text(t.status_network_hover);
+            conn.context_menu(|ui| self.ui_status_network_menu(ui, t));
+
+            ui.separator();
+
             let model_name = self.status_model_name();
             let model_display = if compact {
                 agent_panel::truncate(&model_name, 18)
@@ -2103,113 +2233,24 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 model_name
             };
             if ui
-                .small_button(format!("{}: {}", t.status_model_label, model_display))
+                .small_button(format!("{} · {}", t.status_model_label, model_display))
                 .clicked()
             {
                 self.on_tab_open(Tab::Models);
             }
+
             ui.separator();
-            let caps_text = if compact {
-                if self.security_ui.caps.is_empty() {
-                    "Cap.: —".to_string()
-                } else {
-                    format!("Cap.: {}", self.security_ui.caps.len())
-                }
-            } else if self.security_ui.caps.is_empty() {
-                format!("{}: —", t.status_caps_label)
-            } else {
-                format!(
-                    "{}: {}",
-                    t.status_caps_label,
-                    t.status_caps_count
-                        .replace("{n}", &self.security_ui.caps.len().to_string())
-                )
-            };
-            if ui.small_button(caps_text).clicked() {
-                self.on_tab_open(Tab::Caps);
-            }
-            ui.separator();
-            let gate_ask = !self
-                .prefs
-                .agent_gate_mode
-                .eq_ignore_ascii_case("autonomous");
-            let gate_label = if compact {
-                if gate_ask { "Dem." } else { "Auto" }
-            } else if gate_ask {
-                t.status_gate_ask
-            } else {
-                t.status_gate_autonomous
-            };
-            let gate_title = if compact { "Mode" } else { t.status_gate_label };
-            let gate_response = ui.small_button(format!("{}: {}", gate_title, gate_label));
-            gate_response.context_menu(|ui| {
-                ui.label("Les demandes d’autorisation restent explicites dans la conversation.");
-                if ui
-                    .button(if gate_ask {
-                        "Toujours autoriser"
-                    } else {
-                        "Demander à chaque fois"
-                    })
-                    .clicked()
-                {
-                    self.prefs.agent_gate_mode = if gate_ask {
-                        "autonomous".into()
-                    } else {
-                        "ask".into()
-                    };
-                    save_preferences(&self.prefs);
-                    ui.close_menu();
-                }
-            });
-            if !compact {
-                ui.separator();
-                // S3 : compteur tokens session (estimation ≈ + agents exacts).
-                let (transcript_tok, agent_tok, agent_n) = self.session_token_estimate();
-                let total = transcript_tok + agent_tok;
-                let short = if total >= 10_000 {
-                    format!("≈{:.1}k tok", total as f64 / 1000.0)
-                } else {
-                    format!("≈{total} tok")
-                };
-                let tip = if self.prefs.language == "fr" {
-                    format!(
-                        "Estimation ≈ (transcript {transcript_tok} + agents {agent_tok} sur {agent_n}) — pas de limite connue côté backend"
-                    )
-                } else {
-                    format!(
-                        "Rough estimate ≈ (transcript {transcript_tok} + agents {agent_tok} over {agent_n}) — no known backend limit"
-                    )
-                };
-                ui.weak(short).on_hover_text(tip);
-                ui.separator();
-                // S2 : badge budget cloud.
-                self.ui_billing_segment(ui);
-                ui.separator();
-            }
-            if let Some(pending_ver) = load_pending_update_version() {
-                ui.label(t.status_update_pending.replace("{version}", &pending_ver));
-                if let Some(offer) = load_update_offer() {
-                    if ui.small_button(t.update_notes).clicked() {
-                        open_in_browser(&offer.html_url);
-                    }
-                }
-            } else if self.update_download_child.is_some() {
-                let ver = load_update_offer()
-                    .map(|o| o.version)
-                    .unwrap_or_else(|| "…".into());
-                ui.label(t.status_update_downloading.replace("{version}", &ver));
-            } else if let Some(offer) = load_update_offer() {
-                ui.label(t.update_available.replace("{}", &offer.version));
-                if ui.small_button(t.status_update_download).clicked() {
-                    self.start_update_download();
-                }
-                if ui.small_button(t.update_notes).clicked() {
-                    open_in_browser(&offer.html_url);
-                }
-            } else if !self.update_status.is_empty() {
-                ui.label(&self.update_status);
-            }
+
+            let res_summary = self.status_resources_summary(t, compact);
+            let res = ui
+                .small_button(format!("{} · {}", t.status_resources_label, res_summary))
+                .on_hover_text(t.status_overflow_menu);
+            res.context_menu(|ui| self.ui_status_resources_overflow(ui, t));
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button("⋯", |ui| self.ui_status_resources_overflow(ui, t))
+                    .response
+                    .on_hover_text(t.status_overflow_menu);
                 let lang_btn = if self.prefs.language.eq_ignore_ascii_case("en") {
                     t.status_lang_en
                 } else {
@@ -2222,9 +2263,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                         "en".into()
                     };
                     save_preferences(&self.prefs);
-                }
-                if !compact {
-                    ui.weak(format!("v{}", self.version));
                 }
             });
         });
