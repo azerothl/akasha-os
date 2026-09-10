@@ -5,6 +5,10 @@
 > Date: 09/09/2026 · Status: **accepted** (lot 0 — contract and map only)  
 > Tracking: [issue #150](https://github.com/azerothl/akasha-os/issues/150)
 
+> Historical note: lots 1–5 subsequently landed the contract, Create package,
+> navigation cutover, and generic composition primitives. See
+> [create-contract.md](../create-contract.md) for the shipped surface.
+
 ## Context
 
 The module runtime already ships signed `.aospkg` packages, a WASM guest, capability

@@ -44,19 +44,23 @@ temporairement les panneaux voisins.
 | **Rail principal** | Chat · Agents · Créer · Mémoire | Toujours visible dans le rail gauche. Clavier : `Ctrl+1` … `Ctrl+4`. |
 | **Plus (overflow)** | Notes · Tâches · Modèles · Paramètres · Caps · Audit · Providers · modules DeclUI · *(testeur)* Scénarios · *(testeur)* Retour | Section repliable. Les surfaces testeur ne sont **pas** des onglets pairs du rail. |
 
-**Créer** correspond à l’onglet Studio Image (`Tab::Image`). Les contrôles expert sd.cpp restent dans le studio derrière **Mode expert** — pas promus sur le rail.
+**Créer** correspond au paquet déclaratif installable (`Tab::Module("create")`).
+La génération, la progression, l’annulation, l’aperçu, l’historique et la
+sauvegarde sont fournis par le paquet et les services média hôtes ; les
+contrôles expert sd.cpp restent derrière le **Mode expert** du paquet, sans être
+promus sur le rail.
 
 Les modules DeclUI installés avec `ui.mode=declarative_ui` apparaissent sous **Plus → Modules**, pas comme pairs du rail principal.
 
 Les **sessions chat** restent sous l’onglet Chat — pas un nouvel onglet rail. Le mode **Direct** est le 1:1 par défaut. Le mode **Room** est un salon multi-agent in-app (pas Telegram/Discord) : **Activer le salon** par session, ajout de personas intégrés (Researcher, Critic, Coder, Planner), envoi via `chat.session.room.turn` (conducteur dans `aos-agentd`). L’en-tête de session affiche une **bande membres** (noms du roster). Les bulles résolvent `speaker_id` via le roster — jamais un champ texte libre. Couleurs stables par `speaker_id`. Les workers hors salon gardent les cartes **AgentRef** ; les réponses salon (`origin: room`) n’y dupliquent pas.
 
-Le **canvas chat** est une surface de dessin vectoriel partagée sur la session (pas le studio Image / pas de diffusion). Basculer avec les toggles **Salon** / **Canvas** de la barre de session (ou `/canvas`). Un « dessine » seul part vers **Créer** (studio Image / pixels) ; le canvas vectoriel sert quand le toggle Canvas est ouvert ou que le message dit « sur le canvas » / « au trait ». L’humain dessine (Sélect., crayon, gomme, ligne, courbe, silhouette, rectangle, ellipse) ; calques nommés au-dessus du plateau (masquer / verrouiller / opacité). Les agents n’ont les outils `canvas.*` que lorsque Canvas est ouvert. Les traits apparaissent en direct (peinture optimiste + poll ~200 ms). Export PNG / SVG / JSON sous `/downloads`, distinct de `media.image.generate`. Pas de seau dans la barre : le flood-fill n’existe que sur le raster PNG d’ops `Fill` héritées.
+Le **canvas chat** est une surface de dessin vectoriel partagée sur la session (pas Créer / pas de diffusion). Basculer avec les toggles **Salon** / **Canvas** de la barre de session (ou `/canvas`). Un « dessine » seul part vers **Créer** ; le canvas vectoriel sert quand le toggle Canvas est ouvert ou que le message dit « sur le canvas » / « au trait ». L’humain dessine (Sélect., crayon, gomme, ligne, courbe, silhouette, rectangle, ellipse) ; calques nommés au-dessus du plateau (masquer / verrouiller / opacité). Les agents n’ont les outils `canvas.*` que lorsque Canvas est ouvert. Les traits apparaissent en direct (peinture optimiste + poll ~200 ms). Export PNG / SVG / JSON sous `/downloads`, distinct de `media.image.generate`. Pas de seau dans la barre : le flood-fill n’existe que sur le raster PNG d’ops `Fill` héritées.
 
 ### Ce qui sort de la liste plate d’onglets
 
 Avant cette spec, ~13 onglets latéraux traitaient Chat, Scénarios, Retour, Caps et Providers à égalité. Après :
 
-- **Rail** = usage quotidien (chat, agents, image, mémoire).
+- **Rail** = usage quotidien (chat, agents, Créer, mémoire).
 - **Plus** = administration, confiance, extensions.
 - **Scénarios + Retour** = protocole cohorte / testeur ([TESTER.md](TESTER.md)) ; accessibles via Plus, pas la destination post-tutoriel par défaut.
 
@@ -129,9 +133,11 @@ Les confirmations d’extension OS (module.install, cap.request, …) gardent l�
 
 ## Divulgation progressive
 
-### Studio Image (Créer)
+### Créer (paquet déclaratif)
 
-Surface par défaut : prompt, taille, steps, générer, historique.
+Surface par défaut : sélecteur Image/Vidéo, invite, image de référence, invite
+négative, format/qualité, taille, étapes, images/FPS vidéo, générer, progression,
+aperçu, historique, enregistrement et agrandissement optionnel.
 
 Repli expert : backends sd.cpp, flow-shift, budget VRAM, upscale/img2img — capacité inchangée, pas sur le rail.
 

@@ -12,9 +12,9 @@ for package-specific paths and services.
 | Gate | Field | Current host | Rich-app target |
 |------|-------|--------------|-----------------|
 | Host module API | `min_os_api` | `1` (`OS_API_VERSION`) | Package must be ≤ host |
-| UI vocabulary | `ui.contract` | `1` (Tasks/Notes widgets) | `2` for Create extraction |
-| Job facade | `services.jobs` | — (not enforced yet) | `1` |
-| Image generation facade | `services.media_image` | — (not enforced yet) | `1` |
+| UI vocabulary | `ui.contract` | `2` (v1 + rich widgets) | `2` |
+| Job facade | `services.jobs` | `1` (validated for rich packages) | `1` |
+| Image generation facade | `services.media_image` | `1` (validated for Create) | `1` |
 
 Example manifest fragment (lot 2+ Create package):
 
@@ -45,14 +45,20 @@ Closed widget kinds — must match `decl_ui::WIDGET_KINDS`:
 
 Bindings call **module tools** only.  Row actions and `refresh_binds` landed via #149.
 
-## UI contract v2 (frozen, not enforced yet)
+## UI contract v2 (shipped and enforced)
 
 Adds bounded **state**, **bindings**, **actions**, and native primitives for rich
 interaction.  Not an expression language or script engine.
 
 ### Additional widget kinds (lot 1+)
 
-`slider`, `number`, `progress`, `job`, `image_view`, `split`, `scroll`, `tabs`, `spacer`.
+`slider`, `number`, `progress`, `job`, `image_view`, `split`, `scroll`, `tabs`, `spacer`,
+`section`, `text_input`, `file_picker`.
+
+`section` groups related controls with a visible heading. `text_input` binds a
+single-line string slot and `file_picker` imports a user-selected image into the
+module's logical `/downloads/**` space; the host never exposes an arbitrary host
+filesystem path to the module.
 
 ### Composition widgets (lot 5+)
 
@@ -77,8 +83,8 @@ Local state keys (declared in the UI document):
 
 Pointer moves stay host-local; at most `start` / `update` / `commit` / `cancel`
 interaction phases reach the module (same contract as `image_view` pan/zoom).
-Keyboard: **Ctrl+Z** undo, **Ctrl+Y** or **Ctrl+Shift+Z** redo when the canvas
-has focus. **macOS:** Cmd+Z/Cmd+Shift+Z are not mapped yet (documented gap).
+Keyboard: **Cmd/Ctrl+Z** undo, **Cmd/Ctrl+Y** or **Cmd/Ctrl+Shift+Z** redo when
+the canvas has focus.
 
 Sample: `gallery-demo` **Composition** tab exercises all three widgets.
 
@@ -225,9 +231,9 @@ These rules apply to every lot; Lot 1 enforces them for generic v2 widgets and t
 | Declarative UI validation at install | **Landed** (v1 vocabulary) |
 | Row actions + `refresh_binds` | **Landed** (#149 lot 2) |
 | Module tool discovery for agents | **Landed** (#149 lot 3) |
-| `ui.contract` / `services.*` manifest fields | **Frozen only** (this lot) |
-| State / actions / job subscriptions | **Frozen only** (lot 1+) |
-| `image_view` / `job` widgets | **Frozen only** (lot 1+) |
+| `ui.contract` / `services.*` manifest fields | **Landed** — validated before activation |
+| State / actions / job subscriptions | **Landed** — generic renderer + scoped cleanup |
+| `image_view` / `job` widgets | **Landed** — generic renderer |
 
 ## Not in this contract
 

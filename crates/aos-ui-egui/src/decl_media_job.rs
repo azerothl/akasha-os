@@ -8,7 +8,7 @@ use aos_proto::{MediaGenerateResponse, MediaImageGenerateRequest};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 static MEDIA_JOBS: LazyLock<Mutex<MediaJobRegistry>> =
@@ -107,7 +107,11 @@ pub fn media_job_running(job_id: &str, step: u32, total: u32) -> RichJobHandle {
     }
 }
 
-pub fn media_job_succeeded(job_id: &str, response: &MediaGenerateResponse, prompt: &str) -> RichJobHandle {
+pub fn media_job_succeeded(
+    job_id: &str,
+    response: &MediaGenerateResponse,
+    prompt: &str,
+) -> RichJobHandle {
     RichJobHandle {
         job_id: Some(job_id.into()),
         kind: Some("media.image.generate".into()),
@@ -150,8 +154,15 @@ pub fn media_job_cancelled(job_id: &str, step: u32, total: u32) -> RichJobHandle
     }
 }
 
+/// Create acceptance must never treat the Preview PNG fallback as a real
+/// generation. Other callers may still use the fallback explicitly.
+pub fn media_engine_is_real(engine: &str) -> bool {
+    !engine.trim().is_empty() && !engine.trim().eq_ignore_ascii_case("stub")
+}
+
 pub fn parse_media_generate_request(input: &Value) -> Result<MediaImageGenerateRequest, String> {
-    serde_json::from_value(input.clone()).map_err(|e| format!("invalid media.image.generate input: {e}"))
+    serde_json::from_value(input.clone())
+        .map_err(|e| format!("invalid media.image.generate input: {e}"))
 }
 
 pub fn new_media_job_id() -> String {
@@ -173,16 +184,30 @@ mod tests {
             &MediaGenerateResponse {
                 path: "/downloads/image-1.png".into(),
                 bytes: 42,
-                engine: "stub".into(),
+                engine: "sdcpp".into(),
                 model_id: "local:sd".into(),
             },
             "a cat",
         );
         assert_eq!(ok.state.as_deref(), Some("succeeded"));
-        assert_eq!(ok.result.as_ref().and_then(|r| r.get("path")).and_then(|p| p.as_str()), Some("/downloads/image-1.png"));
+        assert_eq!(
+            ok.result
+                .as_ref()
+                .and_then(|r| r.get("path"))
+                .and_then(|p| p.as_str()),
+            Some("/downloads/image-1.png")
+        );
         let fail = media_job_failed("j1", "boom");
         assert_eq!(fail.state.as_deref(), Some("failed"));
         let cancelled = media_job_cancelled("j1", 2, 10);
         assert_eq!(cancelled.state.as_deref(), Some("cancelled"));
+    }
+
+    #[test]
+    fn preview_stub_is_not_a_real_engine_result() {
+        assert!(!media_engine_is_real("stub"));
+        assert!(!media_engine_is_real(" STUB "));
+        assert!(!media_engine_is_real(""));
+        assert!(media_engine_is_real("sdcpp"));
     }
 }

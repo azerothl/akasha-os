@@ -1,23 +1,32 @@
-# Create module public contract (proposed)
+# Create module public contract (shipped)
 
-Direction frozen for [issue #150](https://github.com/azerothl/akasha-os/issues/150) lot 0.
+Implemented through lots 0–5 of [issue #150](https://github.com/azerothl/akasha-os/issues/150).
 Generic rich-app rules: [rich-app-contract.md](rich-app-contract.md).
 
-**Create is not yet a package.** Image Studio remains native (`Tab::Image` in
-`aos-ui-egui`).  This document freezes the target contract so lot 1+ can implement
-without reopening naming or platform boundaries.
+Create is an installable, preinstalled WASM package rendered by the generic
+declarative host. The old native Image Studio and `Tab::Image` path were removed;
+the primary rail opens `Tab::Module("create")`.
 
 ## Module
 
-- **Name:** `create` (proposed)
-- **Package:** not shipped — sources will live under `modules/create/` (TBD)
+- **Name:** `create`
+- **Package:** `share/modules/create.aospkg` (source: `modules/create/`)
 - **UI contract:** `2` (`CREATE_TARGET_UI_CONTRACT`)
-- **Target navigation:** `Tab::Module("create")` after declarative parity
+- **Navigation:** `Tab::Module("create")` (primary rail label: **Créer** / **Create**)
 
 ## Platform services (host-owned, not module tools)
 
 Create maps user intent to these bus methods.  Agents and other apps use the same
 API when Create is uninstalled.
+
+Create accepts only a real engine response (`sdcpp` or another non-stub engine)
+for both Image and Video output modes. Video requests use the same
+`media.image.generate` service with `sd_mode=vid_gen`, frame count, and FPS.
+The host Preview PNG fallback is reported as an error and is not added to
+Create history.
+The reference Preview smoke run is recorded in
+[recette-preview-2026-09-09.md](recette-preview-2026-09-09.md) (512×512 `sdcpp`
+generation and UI progress/cancel checks).
 
 | Service | Bus method | Capability |
 |---------|------------|------------|
@@ -28,44 +37,39 @@ API when Create is uninstalled.
 Proto types: `MediaImageGenerateRequest`, `MediaImageOptions`, `MediaGenerateResponse`
 in `crates/aos-proto/src/lib.rs`.
 
-## Proposed module tools (lot 2+)
+## Module tools
 
 | Tool id | Purpose |
 |---------|---------|
 | `create.history.list` | List generation history entries for the UI binding |
 | `create.history.get` | Fetch one entry by id |
-| `create.preset.list` | List named parameter presets |
-| `create.preset.save` | Persist a preset |
-| `create.preset.delete` | Remove a preset |
 | `create.document.load` | Load package document state |
 | `create.document.save` | Persist package document state |
 
-Exact schemas ship with the WASM module in lot 2.  Lot 0 freezes ids and storage layout only.
+Schemas are shipped with the WASM module and validated before activation.
 
 ## Storage
 
-### Today (native Image Studio — not the target contract)
+### Shared media artefacts
 
 | Path | Content |
 |------|---------|
 | `/downloads/image-*.png` | Generated images |
-| `/downloads/*.meta.json` | Sidecar metadata (`ImageGenMeta`) |
-| `var/run/create-presets.json` | Named presets (host-local) |
-| `var/run/image-gen-progress.json` | Progress ticker file |
+| `/downloads/video-*.webm` | Generated videos (WebM) |
+| `/downloads/*.meta.json` | Optional generation metadata sidecars |
 
-### Target (lot 2+)
+### Create-owned durable state
 
 | Path | Content |
 |------|---------|
 | `/documents/create/history.json` | Canonical history index |
-| `/documents/create/presets.json` | Named presets |
 | `/documents/create/state.json` | Package document state (selection, layout prefs) |
 | `/downloads/image-*.png` | Generated artefacts (platform service output) |
 
 **Uninstall rule:** removing the Create package must not delete `/documents/create/**`,
 shared models under `share/models/`, or agents' ability to call `media.image.generate`.
 
-### Capabilities (target manifest)
+### Capabilities (shipped manifest)
 
 | Capability | Use |
 |------------|-----|
@@ -75,7 +79,7 @@ shared models under `share/models/`, or agents' ability to call `media.image.gen
 | `tool.invoke:create` | Invoke `create.*` module tools |
 | `media.generate` | Declared service action for generation (host-enforced) |
 
-## First-slice flow (lot 2 acceptance)
+## First-slice flow
 
 Parameters → generate → progress → cancel → result → preview → history → save
 
@@ -88,26 +92,30 @@ Mapped to contract v2 primitives:
 5. **History** — `binding` → `create.history.list` + row restore action
 6. **Save** — audited host file picker service (not raw path strings in UI)
 
-## Coupling inventory (native today)
+## Extraction status
 
-See [ADR 0009](adr/0009-rich-module-app-contract.md) for the full file-level map.
-Primary locations:
+The former native coupling map is retained historically in [ADR 0009](adr/0009-rich-module-app-contract.md).
+The shipped implementation is split across:
 
 | Area | File |
 |------|------|
-| Form, preview, history UI | `crates/aos-ui-egui/src/image_studio.rs` |
+| Generic declarative renderer | `crates/aos-ui-egui/src/decl_ui.rs`, `rich_decl.rs` |
+| Create UI document | `modules/create/ui/index.json` |
+| Create package logic | `modules/create/src/lib.rs` |
+| Media generation bridge | `crates/aos-ui-egui/src/module_actions.rs`, `crates/aos-model/src/media.rs` |
 | Composition / inpaint | `crates/aos-ui-egui/src/image_composition.rs` |
 | Prompt enrichment | `crates/aos-ui-egui/src/image_prompt.rs` |
 | History sidecars | `crates/aos-ui-egui/src/image_history.rs` |
 | Generation commands | `crates/aos-ui-egui/src/runtime.rs` |
 | Event routing | `crates/aos-ui-egui/src/media_event_controller.rs` |
 | Model catalog | `crates/aos-ui-egui/src/models_page.rs` |
-| Navigation | `crates/aos-ui-egui/src/main.rs`, `nav.rs` |
+| Navigation | `crates/aos-ui-egui/src/main.rs`, `nav.rs`, `create_nav.rs` |
 | i18n (~64 `studio_*` keys) | `crates/aos-ui-egui/src/i18n.rs` |
 
-## Not in this contract
+## Deliberate boundaries
 
 - Video generation parity (native today; later lot)
-- Composition canvas / inpaint (lot 5)
+- Generic composition canvas / layer list / undo-redo are shipped in Lot 5;
+  Create-specific authoring semantics remain package-owned.
 - Model catalogue ownership (stays platform — `share/models/catalog-offerings.json`)
 - Chat prompt enrichment internals (Create may call chat LLM via declared caps)

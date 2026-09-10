@@ -93,10 +93,11 @@ impl SignedCatalogue {
         path: PathBuf,
     ) -> Result<Self, CatalogueError> {
         let sig = parse_sig(sig_hex)?;
-        pk.verify(yaml, &sig)
+        let canonical = canonical_catalogue_bytes(yaml);
+        pk.verify(&canonical, &sig)
             .map_err(|_| CatalogueError::BadSignature)?;
         Ok(Self {
-            inner: parse_catalogue_file(yaml, true)?,
+            inner: parse_catalogue_file(&canonical, true)?,
             path,
         })
     }
@@ -478,7 +479,7 @@ pub fn resolve_package(
     match entry.kind.as_str() {
         "skill" => {
             let bytes = resolve_file_bytes(entry, extra, home, &fetch)?;
-            let hash = sha256_hex(&bytes);
+            let hash = sha256_catalogue_content_hex(&bytes);
             if !hashes_equal(&entry.hash, &hash) {
                 return Err(CatalogueError::HashMismatch(entry.name.clone()));
             }
@@ -495,7 +496,7 @@ pub fn resolve_package(
         }
         _ => {
             let bytes = resolve_file_bytes(entry, extra, home, &fetch)?;
-            let hash = sha256_hex(&bytes);
+            let hash = sha256_catalogue_content_hex(&bytes);
             if !hashes_equal(&entry.hash, &hash) {
                 return Err(CatalogueError::HashMismatch(entry.name.clone()));
             }
@@ -629,6 +630,12 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     d.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Hash text catalogue payloads canonically so Git line-ending conversion
+/// cannot invalidate a signed index on Windows.
+fn sha256_catalogue_content_hex(bytes: &[u8]) -> String {
+    sha256_hex(&canonical_catalogue_bytes(bytes))
+}
+
 pub fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -636,11 +643,36 @@ pub fn hex_encode(bytes: &[u8]) -> String {
 /// Signe `catalogue.yaml` avec la seed Preview (tests / régénération).
 pub fn sign_preview_catalogue(yaml_bytes: &[u8]) -> (String, String) {
     let sk = SigningKey::from_bytes(&PREVIEW_CATALOGUE_SEED);
-    let sig = sk.sign(yaml_bytes);
+    let sig = sk.sign(&canonical_catalogue_bytes(yaml_bytes));
     (
         hex_encode(sk.verifying_key().as_bytes()),
         hex_encode(&sig.to_bytes()),
     )
+}
+
+/// Catalogue signatures are defined over LF-normalized YAML. Git checkouts
+/// on Windows may materialize tracked text files with CRLF; normalizing at the
+/// trust boundary keeps the pinned signature stable without weakening it.
+fn canonical_catalogue_bytes(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\r' if bytes.get(i + 1) == Some(&b'\n') => {
+                out.push(b'\n');
+                i += 2;
+            }
+            b'\r' => {
+                out.push(b'\n');
+                i += 1;
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    out
 }
 
 pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, CatalogueError> {
@@ -715,6 +747,20 @@ mod tests {
         let cat = SignedCatalogue::load(&yaml_path).unwrap();
         assert!(cat.inner.signature_ok);
         cat.check_module_hash("unknown", "00").unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crlf_catalogue_bytes_keep_signature_and_text_hash_stable() {
+        let dir = temp_dir("crlf");
+        let yaml = b"version: 1\r\nentries: []\r\n";
+        let yaml_path = write_signed(&dir, yaml);
+        let cat = SignedCatalogue::load(&yaml_path).unwrap();
+        assert!(cat.inner.signature_ok);
+        assert_eq!(
+            sha256_catalogue_content_hex(b"line one\r\nline two\r\n"),
+            sha256_catalogue_content_hex(b"line one\nline two\n")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -887,9 +933,11 @@ mod tests {
                     content_path.display()
                 )
             });
-            let mut hasher = Sha256::new();
-            hasher.update(content);
-            let got = format!("{:x}", hasher.finalize());
+            let got = if entry.kind == "module" {
+                sha256_hex(&content)
+            } else {
+                sha256_catalogue_content_hex(&content)
+            };
             assert_eq!(
                 entry.hash.trim_start_matches("sha256:"),
                 got,

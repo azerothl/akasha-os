@@ -211,10 +211,11 @@ pub fn ui_layer_canvas(
     });
 
     if host.focused {
-        let undo = ui.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
+        // `command` maps to Cmd on macOS and Ctrl on other platforms.
+        let undo = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
         let redo = ui.input(|i| {
-            (i.modifiers.ctrl && i.key_pressed(egui::Key::Y))
-                || (i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(egui::Key::Z))
+            (i.modifiers.command && i.key_pressed(egui::Key::Y))
+                || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
         });
         if undo {
             let current = snapshot_from_local(local_state, layers_key, selected_key, next_id_key);

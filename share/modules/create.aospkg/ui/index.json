@@ -8,15 +8,41 @@
     "en": {
       "app_title": "Create",
       "tab_params": "Parameters",
-      "tab_preview": "Preview",
       "tab_history": "History",
+      "mode_label": "Output",
+      "prompt_section": "What do you want to create?",
       "prompt_label": "Prompt",
+      "negative_label": "Negative prompt",
+      "reference_label": "Reference image",
+      "end_reference_label": "Final frame (optional)",
+      "reference_strength_label": "Reference strength",
+      "format_label": "Format",
+      "intent_label": "Intent",
+      "quality_label": "Quality",
       "width_label": "Width",
       "height_label": "Height",
       "steps_label": "Steps",
+      "model_label": "Model (leave empty for the default)",
       "generate_label": "Generate",
+      "generate_image_label": "Generate image",
+      "generate_video_label": "Generate video",
+      "advanced_section": "Advanced controls",
+      "sampling_section": "Sampling",
+      "cfg_label": "CFG scale",
+      "seed_label": "Seed (-1 = random)",
+      "sampler_label": "Sampler",
+      "flow_shift_label": "Flow shift",
+      "expert_label": "Show expert controls",
+      "video_frames_label": "Video frames",
+      "fps_label": "Frame rate",
+      "upscale_section": "Upscale result",
+      "upscale_model_label": "Upscaler model",
+      "upscale_repeats_label": "Passes",
+      "upscale_tile_label": "Tile size",
+      "upscale_label": "Upscale current image",
       "save_label": "Save image",
       "job_label": "Generation",
+      "tab_preview": "Preview",
       "preview_empty": "No image yet — enter a prompt and generate.",
       "history_restore": "Restore",
       "history_prompt": "Prompt",
@@ -26,15 +52,41 @@
     "fr": {
       "app_title": "Créer",
       "tab_params": "Paramètres",
-      "tab_preview": "Aperçu",
       "tab_history": "Historique",
+      "mode_label": "Sortie",
+      "prompt_section": "Que voulez-vous créer ?",
       "prompt_label": "Invite",
+      "negative_label": "Invite négative",
+      "reference_label": "Image de référence",
+      "end_reference_label": "Dernière image (facultatif)",
+      "reference_strength_label": "Force de la référence",
+      "format_label": "Format",
+      "intent_label": "Intention",
+      "quality_label": "Qualité",
       "width_label": "Largeur",
       "height_label": "Hauteur",
       "steps_label": "Étapes",
+      "model_label": "Modèle (vide = modèle par défaut)",
       "generate_label": "Générer",
+      "generate_image_label": "Générer l'image",
+      "generate_video_label": "Générer la vidéo",
+      "advanced_section": "Réglages avancés",
+      "sampling_section": "Échantillonnage",
+      "cfg_label": "Échelle CFG",
+      "seed_label": "Graine (-1 = aléatoire)",
+      "sampler_label": "Échantillonneur",
+      "flow_shift_label": "Décalage de flux",
+      "expert_label": "Afficher les réglages experts",
+      "video_frames_label": "Images vidéo",
+      "fps_label": "Fréquence d'images",
+      "upscale_section": "Agrandir le résultat",
+      "upscale_model_label": "Modèle d'agrandissement",
+      "upscale_repeats_label": "Passes",
+      "upscale_tile_label": "Taille des tuiles",
+      "upscale_label": "Agrandir l'image actuelle",
       "save_label": "Enregistrer l'image",
       "job_label": "Génération",
+      "tab_preview": "Aperçu",
       "preview_empty": "Pas encore d'image — saisissez une invite et générez.",
       "history_restore": "Restaurer",
       "history_prompt": "Invite",
@@ -45,23 +97,34 @@
   "state": {
     "local": {
       "prompt": { "type": "string", "default": "" },
+      "negative_prompt": { "type": "string", "default": "" },
+      "mode": { "type": "string", "default": "image" },
+      "format": { "type": "string", "default": "1:1" },
+      "intent": { "type": "string", "default": "custom" },
+      "profile": { "type": "string", "default": "balanced" },
+      "model_id": { "type": "string", "default": "" },
+      "cfg_scale": { "type": "number", "default": 7 },
+      "seed": { "type": "number", "default": -1 },
+      "sampling_method": { "type": "string", "default": "" },
+      "flow_shift": { "type": "number", "default": 3 },
+      "init_image": { "type": "string", "default": "" },
+      "end_image": { "type": "string", "default": "" },
+      "strength": { "type": "number", "default": 0.75 },
+      "upscale_model": { "type": "string", "default": "" },
+      "upscale_repeats": { "type": "number", "default": 1 },
+      "upscale_tile_size": { "type": "number", "default": 128 },
+      "expert": { "type": "boolean", "default": false },
       "result_path": { "type": "string", "default": "" },
       "width": { "type": "number", "default": 512 },
       "height": { "type": "number", "default": 512 },
-      "steps": { "type": "number", "default": 20 }
+      "steps": { "type": "number", "default": 20 },
+      "video_frames": { "type": "number", "default": 49 },
+      "fps": { "type": "number", "default": 24 }
     }
   },
   "bindings": [
-    {
-      "id": "preview",
-      "tool": "create.result.get",
-      "target": "/path"
-    },
-    {
-      "id": "history",
-      "tool": "create.history.list",
-      "target": "/items"
-    }
+    { "id": "preview", "tool": "create.result.get", "target": "/path" },
+    { "id": "history", "tool": "create.history.list", "target": "/items" }
   ],
   "actions": [
     {
@@ -69,34 +132,79 @@
       "service": "media.image.generate",
       "input": {
         "prompt": "$local.prompt",
+        "model_id": "$local.model_id",
         "options": {
           "width": "$local.width",
           "height": "$local.height",
-          "steps": "$local.steps"
+          "steps": "$local.steps",
+          "negative_prompt": "$local.negative_prompt",
+          "cfg_scale": "$local.cfg_scale",
+          "seed": "$local.seed",
+          "sampling_method": "$local.sampling_method",
+          "init_image": "$local.init_image",
+          "strength": "$local.strength",
+          "sd_mode": "img_gen",
+          "video_frames": 1
         }
+      },
+      "refresh_binds": ["create.result.get", "create.history.list"]
+    },
+    {
+      "id": "generate_video",
+      "service": "media.image.generate",
+      "input": {
+        "prompt": "$local.prompt",
+        "model_id": "$local.model_id",
+        "options": {
+          "width": "$local.width",
+          "height": "$local.height",
+          "steps": "$local.steps",
+          "negative_prompt": "$local.negative_prompt",
+          "cfg_scale": "$local.cfg_scale",
+          "seed": "$local.seed",
+          "sampling_method": "$local.sampling_method",
+          "init_image": "$local.init_image",
+          "end_image": "$local.end_image",
+          "strength": "$local.strength",
+          "flow_shift": "$local.flow_shift",
+          "sd_mode": "vid_gen",
+          "video_frames": "$local.video_frames",
+          "fps": "$local.fps"
+        }
+      },
+      "refresh_binds": ["create.result.get", "create.history.list"]
+    },
+    {
+      "id": "upscale",
+      "service": "media.image.upscale",
+      "input": {
+        "source_path": "$local.result_path",
+        "upscale_model": "$local.upscale_model",
+        "upscale_repeats": "$local.upscale_repeats",
+        "upscale_tile_size": "$local.upscale_tile_size"
       },
       "refresh_binds": ["create.result.get", "create.history.list"]
     },
     {
       "id": "save_result",
       "service": "files.save_as",
-      "input": {
-        "source_path": "$local.result_path"
-      }
+      "input": { "source_path": "$local.result_path" }
     }
   ],
   "subscriptions": [
-    { "id": "generate_job", "action": "generate", "kind": "media.image.generate" }
+    { "id": "generate_job", "action": "generate", "kind": "media.image.generate" },
+    { "id": "generate_video_job", "action": "generate_video", "kind": "media.image.generate" }
   ],
   "root": {
     "kind": "split",
-    "split_ratio": 0.42,
+    "split_ratio": 0.48,
     "children": [
       {
         "kind": "scroll",
         "children": [
           {
             "kind": "tabs",
+            "label_key": "create-tabs",
             "tabs": [
               {
                 "label_key": "tab_params",
@@ -104,65 +212,53 @@
                   "kind": "column",
                   "children": [
                     {
-                      "kind": "textarea",
-                      "state_key": "prompt",
-                      "label_key": "prompt_label"
+                      "kind": "section",
+                      "label_key": "prompt_section",
+                      "children": [
+                        { "kind": "select", "state_key": "mode", "items": ["image", "video"], "item_label_keys": ["mode_image", "mode_video"], "label_key": "mode_label" },
+                        { "kind": "textarea", "state_key": "prompt", "label_key": "prompt_label" },
+                        { "kind": "file_picker", "state_key": "init_image", "label_key": "reference_label" },
+                        { "kind": "file_picker", "state_key": "end_image", "label_key": "end_reference_label", "visible": { "eq": ["$local.mode", "video"] } },
+                        { "kind": "number", "state_key": "strength", "min": 0.05, "max": 1, "step": 0.05, "label_key": "reference_strength_label", "visible": { "ne": ["$local.init_image", ""] } },
+                        { "kind": "textarea", "state_key": "negative_prompt", "label_key": "negative_label" }
+                      ]
                     },
                     {
-                      "kind": "slider",
-                      "state_key": "width",
-                      "min": 256,
-                      "max": 1024,
-                      "step": 64,
-                      "label_key": "width_label"
+                      "kind": "section",
+                      "label_key": "advanced_section",
+                      "children": [
+                        { "kind": "select", "state_key": "format", "items": ["1:1", "16:9", "9:16"], "label_key": "format_label" },
+                        { "kind": "select", "state_key": "intent", "items": ["custom", "portrait", "product", "illustration", "cinematic"], "label_key": "intent_label" },
+                        { "kind": "select", "state_key": "profile", "items": ["fast", "balanced", "quality"], "label_key": "quality_label" },
+                        { "kind": "text_input", "state_key": "model_id", "label_key": "model_label" },
+                        { "kind": "slider", "state_key": "width", "min": 256, "max": 1024, "step": 64, "label_key": "width_label" },
+                        { "kind": "slider", "state_key": "height", "min": 256, "max": 1024, "step": 64, "label_key": "height_label" },
+                        { "kind": "slider", "state_key": "steps", "min": 4, "max": 40, "step": 1, "label_key": "steps_label" },
+                        { "kind": "number", "state_key": "video_frames", "min": 1, "max": 121, "label_key": "video_frames_label", "visible": { "eq": ["$local.mode", "video"] } },
+                        { "kind": "number", "state_key": "fps", "min": 1, "max": 120, "label_key": "fps_label", "visible": { "eq": ["$local.mode", "video"] } },
+                        { "kind": "checkbox", "state_key": "expert", "label_key": "expert_label" }
+                      ]
                     },
                     {
-                      "kind": "number",
-                      "state_key": "width",
-                      "min": 256,
-                      "max": 1024,
-                      "label_key": "width_label"
+                      "kind": "section",
+                      "label_key": "sampling_section",
+                      "visible": { "eq": ["$local.expert", true] },
+                      "children": [
+                        { "kind": "number", "state_key": "cfg_scale", "min": 1, "max": 30, "step": 0.5, "label_key": "cfg_label" },
+                        { "kind": "number", "state_key": "seed", "min": -1, "max": 2147483647, "label_key": "seed_label" },
+                        { "kind": "select", "state_key": "sampling_method", "items": ["", "euler", "euler_a", "heun", "dpm2", "lcm", "ddim"], "label_key": "sampler_label" },
+                        { "kind": "number", "state_key": "flow_shift", "min": 0, "max": 10, "step": 0.1, "label_key": "flow_shift_label", "visible": { "eq": ["$local.mode", "video"] } }
+                      ]
                     },
                     {
-                      "kind": "slider",
-                      "state_key": "height",
-                      "min": 256,
-                      "max": 1024,
-                      "step": 64,
-                      "label_key": "height_label"
+                      "kind": "row",
+                      "children": [
+                        { "kind": "button", "action": "generate", "label_key": "generate_image_label", "visible": { "eq": ["$local.mode", "image"] } },
+                        { "kind": "button", "action": "generate_video", "label_key": "generate_video_label", "visible": { "eq": ["$local.mode", "video"] } }
+                      ]
                     },
-                    {
-                      "kind": "number",
-                      "state_key": "height",
-                      "min": 256,
-                      "max": 1024,
-                      "label_key": "height_label"
-                    },
-                    {
-                      "kind": "slider",
-                      "state_key": "steps",
-                      "min": 4,
-                      "max": 40,
-                      "step": 1,
-                      "label_key": "steps_label"
-                    },
-                    {
-                      "kind": "number",
-                      "state_key": "steps",
-                      "min": 1,
-                      "max": 50,
-                      "label_key": "steps_label"
-                    },
-                    {
-                      "kind": "button",
-                      "action": "generate",
-                      "label_key": "generate_label"
-                    },
-                    {
-                      "kind": "job",
-                      "subscription": "generate_job",
-                      "label_key": "job_label"
-                    }
+                    { "kind": "job", "subscription": "generate_job", "label_key": "job_label", "visible": { "eq": ["$local.mode", "image"] } },
+                    { "kind": "job", "subscription": "generate_video_job", "label_key": "job_label", "visible": { "eq": ["$local.mode", "video"] } }
                   ]
                 }
               },
@@ -171,28 +267,8 @@
                 "content": {
                   "kind": "column",
                   "children": [
-                    {
-                      "kind": "empty_state",
-                      "bind": "create.history.list",
-                      "source": "items",
-                      "label_key": "history_empty"
-                    },
-                    {
-                      "kind": "table",
-                      "bind": "create.history.list",
-                      "source": "items",
-                      "columns": ["summary", "when"],
-                      "column_label_keys": ["history_prompt", "history_when"],
-                      "hide_headers": false,
-                      "row_actions": [
-                        {
-                          "tool": "create.history.get",
-                          "label_key": "history_restore",
-                          "args": { "id": "$row.id" },
-                          "refresh_binds": ["create.result.get"]
-                        }
-                      ]
-                    }
+                    { "kind": "empty_state", "bind": "create.history.list", "source": "items", "label_key": "history_empty" },
+                    { "kind": "table", "bind": "create.history.list", "source": "items", "columns": ["summary", "when"], "column_label_keys": ["history_prompt", "history_when"], "row_actions": [{ "tool": "create.history.get", "label_key": "history_restore", "args": { "id": "$row.id" }, "refresh_binds": ["create.result.get"] }] }
                   ]
                 }
               }
@@ -203,17 +279,18 @@
       {
         "kind": "column",
         "children": [
+          { "kind": "image_view", "binding": "preview", "label_key": "tab_preview", "empty_label_key": "preview_empty" },
           {
-            "kind": "image_view",
-            "binding": "preview",
-            "label_key": "tab_preview",
-            "empty_label_key": "preview_empty"
+            "kind": "section",
+            "label_key": "upscale_section",
+            "children": [
+              { "kind": "text_input", "state_key": "upscale_model", "label_key": "upscale_model_label" },
+              { "kind": "number", "state_key": "upscale_repeats", "min": 1, "max": 4, "label_key": "upscale_repeats_label" },
+              { "kind": "number", "state_key": "upscale_tile_size", "min": 32, "max": 512, "label_key": "upscale_tile_label" },
+              { "kind": "button", "action": "upscale", "label_key": "upscale_label", "enabled": { "and": [{ "ne": ["$local.result_path", ""] }, { "ne": ["$local.upscale_model", ""] }] } }
+            ]
           },
-          {
-            "kind": "button",
-            "action": "save_result",
-            "label_key": "save_label"
-          }
+          { "kind": "button", "action": "save_result", "label_key": "save_label", "enabled": { "ne": ["$local.result_path", ""] } }
         ]
       }
     ]

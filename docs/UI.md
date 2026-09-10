@@ -44,9 +44,12 @@ bar. Canvas has a focus mode that temporarily hides the surrounding panels.
 
 **Chat sessions** live under the Chat tab — not a new rail tab. **Direct** mode is the default 1:1 assistant. **Room** mode is an in-app multi-agent salon (not Telegram/Discord messaging): enable it per session with **Activer le salon** / **Enable room**, add built-in personas (Researcher, Critic, Coder, Planner), and send messages that route through `chat.session.room.turn` (conductor in `aos-agentd`). The session header shows a **members strip** (roster display names). Bubble labels resolve `speaker_id` via the roster — never a free-text spoof field. Stable per-speaker colors derive from `speaker_id`. Background workers spawned outside the salon still show **AgentRef** cards; room member replies do not duplicate as cards (`origin: room`).
 
-**Chat canvas** is a shared vector drawing surface on the same session (not Image Studio / not diffusion). Toggle with the session bar **Salon** / **Canvas** toggles (or `/canvas`). Bare « draw » / « dessine » routes to **Create** (Image Studio / pixels); vector canvas is used when the Canvas toggle is open or the message says « sur le canvas » / « au trait ». Humans draw with Select, Pan (drag) + scroll zoom, pen, eraser, line, spline, path, rect, and ellipse; per-op opacity, dashed strokes, and optional linear gradient fills; named layers sit above the board (hide / lock / opacity). Agents use `canvas.*` tools only while Canvas is open. Strokes appear live (optimistic human paint + ~200 ms poll for agent ops). Export PNG / SVG / JSON under `/downloads`; import JSON sidecar to restore a prior export. Flood-fill exists only on PNG raster of leftover `Fill` ops — not a human toolbar tool.
+**Chat canvas** is a shared vector drawing surface on the same session (not Create / not diffusion). Toggle with the session bar **Salon** / **Canvas** toggles (or `/canvas`). Bare “draw” / “dessine” routes to **Create**; vector canvas is used when the Canvas toggle is open or the message says “sur le canvas” / “au trait”. Humans draw with Select, Pan (drag) + scroll zoom, pen, eraser, line, spline, path, rect, and ellipse; per-op opacity, dashed strokes, and optional linear gradient fills; named layers sit above the board (hide / lock / opacity). Agents use `canvas.*` tools only while Canvas is open. Strokes appear live (optimistic human paint + ~200 ms poll for agent ops). Export PNG / SVG / JSON under `/downloads`; import JSON sidecar to restore a prior export. Flood-fill exists only on PNG raster of leftover `Fill` ops — not a human toolbar tool.
 
-**Create** is the Image Studio tab (`Tab::Image`). Expert sd.cpp controls stay inside the studio behind **Expert mode** — they are not promoted to the rail.
+**Create** is the installable declarative Create package (`Tab::Module("create")`).
+Generation, progress, cancellation, preview, history, and save are package
+surfaces backed by host media services; expert sd.cpp controls stay behind the
+package's **Expert mode** and are not promoted to the rail.
 
 DeclUI modules installed with `ui.mode=declarative_ui` appear under **More → Modules**, not as primary-rail peers.
 
@@ -54,7 +57,7 @@ DeclUI modules installed with `ui.mode=declarative_ui` appear under **More → M
 
 Before this spec, ~13 peer sidebar tabs treated Chat, Scenarios, Feedback, Caps, and Providers equally. After:
 
-- **Rail** = daily driver (chat, agents, image, memory).
+- **Rail** = daily driver (chat, agents, Create, memory).
 - **More** = workspace admin, trust, and extensions.
 - **Scenarios + Feedback** = cohort / tester protocol ([TESTER.md](TESTER.md)); reachable from More, not the default post-tutorial destination.
 
@@ -127,9 +130,11 @@ Rich OS-extension confirms (module.install, cap.request, …) keep the caps/mani
 
 ## Progressive disclosure
 
-### Image Studio (Create)
+### Create (declarative package)
 
-Default surface: prompt, size, steps, generate, history.
+Default surface: Image/Video selector, prompt, reference image, negative prompt,
+format/quality controls, size, steps, video frames/FPS, generate, progress,
+preview, history, save, and optional upscale.
 
 Expert fold: sd.cpp backends, flow-shift, VRAM budget, upscale/img2img — unchanged capability, not in the rail.
 

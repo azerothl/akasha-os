@@ -211,6 +211,16 @@
                 "null"
               ]
             },
+            "item_label_keys": {
+              "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "items": {
               "items": {
                 "type": "string"
@@ -885,6 +895,16 @@
                 "null"
               ]
             },
+            "item_label_keys": {
+              "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "items": {
               "items": {
                 "type": "string"
@@ -1150,6 +1170,16 @@
           "description": "When true, table renders rows without a header band.",
           "type": [
             "boolean",
+            "null"
+          ]
+        },
+        "item_label_keys": {
+          "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -1617,6 +1647,16 @@
               "description": "When true, table renders rows without a header band.",
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "item_label_keys": {
+              "description": "Localized labels parallel to `items` for `select` / `radio` widgets.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },

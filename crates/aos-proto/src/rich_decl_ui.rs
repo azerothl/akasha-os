@@ -9,7 +9,7 @@ use crate::rich_app_contract::{
     MAX_BINDINGS, MAX_PREDICATE_DEPTH, MAX_PREDICATE_NODES, MAX_STATE_SLOTS,
     MAX_STATE_STRING_LENGTH, MAX_SUBSCRIPTIONS, MAX_UI_DEPTH, MAX_UI_NODES,
     MEDIA_GENERATE_CAP, MEDIA_IMAGE_SERVICE_VERSION, PLATFORM_MEDIA_IMAGE_METHODS,
-    UI_CONTRACT_V1, UI_CONTRACT_V2, UI_V2_ADDITIONAL_WIDGET_KINDS,
+    UI_CONTRACT_V2, UI_V2_ADDITIONAL_WIDGET_KINDS,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -435,7 +435,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
         validate_predicate(pred)?;
     }
     match w.kind.as_str() {
-        "column" | "row" | "scroll" => {
+        "column" | "row" | "scroll" | "section" => {
             let children = w
                 .children
                 .as_ref()
@@ -477,6 +477,11 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
             }
         }
         "slider" | "number" => {
+            if w.state_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField("state_key")));
+            }
+        }
+        "text_input" | "file_picker" => {
             if w.state_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField("state_key")));
             }

@@ -260,6 +260,9 @@ pub struct DeclUiWidget {
     pub columns: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub items: Option<Vec<String>>,
+    /// Localized labels parallel to `items` for `select` / `radio` widgets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_label_keys: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub series: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -619,7 +622,7 @@ impl DeclUiWidget {
         }
         let err = |e: DeclUiError| crate::rich_decl_ui::RichDeclUiError::Widget(e);
         match kind {
-            "column" | "row" => {
+            "column" | "row" | "section" => {
                 let children = self
                     .children
                     .as_ref()
@@ -680,6 +683,11 @@ impl DeclUiWidget {
                 }
             }
             "checkbox" | "textarea" => {}
+            "text_input" | "file_picker" => {
+                if self.state_key.as_ref().is_none_or(|k| k.is_empty()) {
+                    return Err(err(DeclUiError::MissingField("state_key")));
+                }
+            }
             "image" | "audio" => {
                 let has_bind = self.bind.as_ref().is_some_and(|b| !b.is_empty());
                 let has_text = self.text.as_ref().is_some_and(|t| !t.is_empty());

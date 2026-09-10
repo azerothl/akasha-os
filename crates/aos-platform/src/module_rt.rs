@@ -22,7 +22,6 @@
 //! - bornes par invocation : fuel CPU + mémoire linéaire limitée (§7.4).
 
 use aos_proto::decl_ui::{self, DeclUiDocument, ModuleUiResponse, PreviewProfile};
-use aos_proto::rich_app_contract::UI_CONTRACT_V2;
 use aos_proto::rich_decl_ui::{validate_manifest_services, validate_ui_contract_supported};
 use aos_proto::{ModuleInfo, ModuleManifest, OS_API_VERSION};
 use serde::{Deserialize, Serialize};
@@ -1176,6 +1175,7 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aos_proto::rich_app_contract::UI_CONTRACT_V2;
 
     /// Module WAT de test : `invoke` appelle host_call("echo", args) et
     /// retourne sa réponse. Bump allocator volontairement naïf.

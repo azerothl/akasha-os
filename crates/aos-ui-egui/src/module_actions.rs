@@ -2,9 +2,9 @@
 
 use crate::cmd::Evt;
 use crate::decl_media_job::{
-    media_job_cancelled, media_job_failed, media_job_queued, media_job_running,
-    media_job_succeeded, media_jobs, new_media_job_id, parse_media_generate_request,
-    read_image_gen_progress_file,
+    media_engine_is_real, media_job_cancelled, media_job_failed, media_job_queued,
+    media_job_running, media_job_succeeded, media_jobs, new_media_job_id,
+    parse_media_generate_request, read_image_gen_progress_file,
 };
 use crate::rich_decl::{demo_job_tick, demo_jobs};
 use crate::notes_panel;
@@ -423,6 +423,45 @@ pub(crate) async fn run_decl_service_action(
             )
             .await;
         }
+        "media.image.upscale" => {
+            let mut req: aos_proto::MediaImageUpscaleRequest = match serde_json::from_value(input) {
+                Ok(req) => req,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("invalid media.image.upscale input: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            };
+            req.actor = "human:ui".into();
+            req.caps = vec!["media.generate".into(), "fs.write:/downloads/**".into()];
+            req.trace_id = format!("decl-ui-{module}-upscale");
+            let result = bus
+                .call::<aos_proto::MediaImageUpscaleRequest, MediaGenerateResponse>(
+                    "media.image.upscale",
+                    &req,
+                    vec![],
+                )
+                .await;
+            let result_value = result
+                .as_ref()
+                .ok()
+                .and_then(|response| serde_json::to_value(response).ok())
+                .unwrap_or(Value::Null);
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: result.is_ok(),
+                result: result_value,
+                error: result.as_ref().err().map(ToString::to_string),
+                refresh_binds,
+            });
+        }
         "media.image.cancel" => {
             let job_id = input
                 .get("job_id")
@@ -623,6 +662,27 @@ async fn run_media_image_generate(
 
         match result {
             Ok(response) => {
+                if module_bg == "create" && !media_engine_is_real(&response.engine) {
+                    let message =
+                        "Create requires a real image engine; the Preview stub was rejected";
+                    if response.path.starts_with("/downloads/") {
+                        let _ = std::fs::remove_file(logical_downloads_path(&response.path));
+                    }
+                    let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
+                        module: module_bg.clone(),
+                        subscription_id: sub.clone(),
+                        job: media_job_failed(&job_id, message),
+                    });
+                    let _ = evt_tx_bg.send(Evt::ModuleUiServiceDone {
+                        module: module_bg.clone(),
+                        action_id: action_id_bg.clone(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(message.into()),
+                        refresh_binds: Vec::new(),
+                    });
+                    return;
+                }
                 let job = media_job_succeeded(&job_id, &response, &prompt);
                 let _ = evt_tx_bg.send(Evt::ModuleUiJobUpdate {
                     module: module_bg.clone(),

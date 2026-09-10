@@ -110,6 +110,12 @@ impl DeclUiPanelState {
     }
 
     pub fn set_bind_result(&mut self, tool: &str, result: Value) {
+        if tool == "create.result.get" {
+            if let Some(path) = result.get("path").and_then(Value::as_str) {
+                self.local_state
+                    .insert("result_path".into(), Value::String(path.into()));
+            }
+        }
         self.bind_cache.insert(tool.to_string(), result);
     }
 
@@ -278,6 +284,37 @@ impl DeclUiPanelState {
                         });
                     });
             }
+            "section" => {
+                let title = widget_text(w, doc, language);
+                ui.group(|ui| {
+                    if let Some(title) = title {
+                        ui.heading(title);
+                        ui.add_space(4.0);
+                    }
+                    if let Some(children) = &w.children {
+                        for child in children {
+                            Self::render_widget(
+                                ui,
+                                md_cache,
+                                child,
+                                doc,
+                                language,
+                                cache,
+                                binding_cache,
+                                local_state,
+                                document_state,
+                                subscriptions,
+                                image_views,
+                                layer_canvases,
+                                form_fields,
+                                tool_schemas,
+                                pending_invoke,
+                                actions,
+                            );
+                        }
+                    }
+                });
+            }
             "row" => {
                 ui.horizontal(|ui| {
                     if let Some(children) = &w.children {
@@ -389,17 +426,53 @@ impl DeclUiPanelState {
                 }
             }
             "select" => {
-                render_choice(ui, w, form_fields, false);
+                render_choice(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                    form_fields,
+                    actions,
+                    enabled,
+                    false,
+                );
             }
             "radio" => {
-                render_choice(ui, w, form_fields, true);
+                render_choice(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                    form_fields,
+                    actions,
+                    enabled,
+                    true,
+                );
             }
             "checkbox" => {
-                let key = w
-                    .label
-                    .clone()
-                    .or_else(|| w.text.clone())
-                    .unwrap_or_else(|| "flag".into());
+                if let Some(state_key) = &w.state_key {
+                    let label = widget_text(w, doc, language)
+                        .unwrap_or_else(|| state_key.clone());
+                    let mut on = local_state
+                        .get(state_key)
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    if ui
+                        .add_enabled(enabled, egui::Checkbox::new(&mut on, label))
+                        .changed()
+                    {
+                        actions.local_patch.insert(state_key.clone(), Value::Bool(on));
+                    }
+                    return;
+                }
+                let key = {
+                    w.label
+                        .clone()
+                        .or_else(|| w.text.clone())
+                        .unwrap_or_else(|| "flag".into())
+                };
                 let mut on = form_fields.get(&key).map(|s| s == "true").unwrap_or(false);
                 if ui.checkbox(&mut on, &key).changed() {
                     form_fields.insert(key, if on { "true".into() } else { "false".into() });
@@ -415,8 +488,16 @@ impl DeclUiPanelState {
                         .unwrap_or("")
                         .to_string();
                     ui.add_enabled_ui(enabled, |ui| {
-                        ui.label(label);
-                        if ui.text_edit_multiline(&mut text).changed() {
+                        ui.label(&label);
+                        if ui
+                            .add_sized(
+                                [ui.available_width(), 92.0],
+                                egui::TextEdit::multiline(&mut text)
+                                    .desired_rows(4)
+                                    .hint_text("Décrivez ce que vous voulez créer…"),
+                            )
+                            .changed()
+                        {
                             actions
                                 .local_patch
                                 .insert(state_key.clone(), Value::String(text));
@@ -426,7 +507,78 @@ impl DeclUiPanelState {
                     let key = w.label.clone().unwrap_or_else(|| "text".into());
                     form_fields.entry(key.clone()).or_default();
                     ui.label(&key);
-                    ui.text_edit_multiline(form_fields.get_mut(&key).unwrap());
+                    ui.add_sized(
+                        [ui.available_width(), 92.0],
+                        egui::TextEdit::multiline(form_fields.get_mut(&key).unwrap())
+                            .desired_rows(4),
+                    );
+                }
+            }
+            "text_input" => {
+                if let Some(state_key) = &w.state_key {
+                    let label = widget_text(w, doc, language)
+                        .unwrap_or_else(|| state_key.clone());
+                    let mut text = local_state
+                        .get(state_key)
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+                            if ui
+                                .add_sized(
+                                    [ui.available_width().max(80.0), 28.0],
+                                    egui::TextEdit::singleline(&mut text),
+                                )
+                                .changed()
+                            {
+                                actions
+                                    .local_patch
+                                    .insert(state_key.clone(), Value::String(text));
+                            }
+                        });
+                    });
+                }
+            }
+            "file_picker" => {
+                if let Some(state_key) = &w.state_key {
+                    let label = widget_text(w, doc, language)
+                        .unwrap_or_else(|| state_key.clone());
+                    let current = local_state
+                        .get(state_key)
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    ui.horizontal(|ui| {
+                        ui.label(&label);
+                        let shown = if current.is_empty() {
+                            "Aucun fichier sélectionné".to_string()
+                        } else {
+                            std::path::Path::new(&current)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(&current)
+                                .to_string()
+                        };
+                        ui.weak(shown);
+                        if ui
+                            .add_enabled(enabled, egui::Button::new("Choisir…"))
+                            .clicked()
+                        {
+                            if let Some(path) = crate::os_open::pick_os_file(
+                                &label,
+                                &[("Images", &["png", "jpg", "jpeg", "webp"])],
+                                crate::os_open::user_downloads_dir().as_deref(),
+                            ) {
+                                if let Some(logical) = import_decl_media_file(&path) {
+                                    actions
+                                        .local_patch
+                                        .insert(state_key.clone(), Value::String(logical));
+                                }
+                            }
+                        }
+                    });
                 }
             }
             "image" => {
@@ -625,7 +777,11 @@ impl DeclUiPanelState {
                                 .unwrap_or_else(|| format!("Tab {}", i + 1))
                         })
                         .collect();
-                    let mut selected = 0usize;
+                    let tab_id = ui.id().with(("decl-tabs", w.label_key.as_deref(), labels.len()));
+                    let mut selected = ui
+                        .memory(|memory| memory.data.get_temp::<usize>(tab_id))
+                        .unwrap_or(0)
+                        .min(labels.len().saturating_sub(1));
                     ui.horizontal(|ui| {
                         for (i, label) in labels.iter().enumerate() {
                             if ui.selectable_label(selected == i, label).clicked() {
@@ -633,6 +789,7 @@ impl DeclUiPanelState {
                             }
                         }
                     });
+                    ui.memory_mut(|memory| memory.data.insert_temp(tab_id, selected));
                     ui.separator();
                     if let Some(tab) = tabs.get(selected) {
                         if let Some(content) = &tab.content {
@@ -763,29 +920,58 @@ impl DeclUiPanelState {
                     .or_else(|| w.state_key.clone())
                     .unwrap_or_else(|| "preview".into());
                 let view = image_views.entry(id.clone()).or_default();
-                ui.group(|ui| {
-                    if let Some(tex) = try_load_png(ui.ctx(), &path) {
-                        let size = tex.size_vec2() * view.zoom.max(0.1);
-                        let offset = egui::vec2(view.pan[0], view.pan[1]);
-                        ui.image((tex.id(), size));
-                        let rect = ui.min_rect().translate(offset);
-                        let response = ui.interact(rect, ui.id().with("iv"), egui::Sense::drag());
-                        if response.dragged() {
-                            view.pan[0] += response.drag_delta().x;
-                            view.pan[1] += response.drag_delta().y;
-                        }
-                        if response.hovered() {
-                            let scroll = ui.input(|i| i.raw_scroll_delta.y);
-                            if scroll.abs() > 0.0 {
-                                view.zoom = (view.zoom + scroll * 0.001).clamp(0.2, 8.0);
+                let panel_size = egui::vec2(ui.available_width().max(280.0), 420.0);
+                ui.allocate_ui_with_layout(
+                    panel_size,
+                    egui::Layout::top_down(egui::Align::Center),
+                    |ui| {
+                        ui.group(|ui| {
+                            ui.set_min_size(panel_size - egui::vec2(8.0, 8.0));
+                            if let Some(tex) = try_load_png(ui.ctx(), &path) {
+                                let max_w = ui.available_width().max(1.0);
+                                let max_h = ui.available_height().max(1.0);
+                                let base = tex.size_vec2();
+                                let fit = (max_w / base.x.max(1.0))
+                                    .min(max_h / base.y.max(1.0))
+                                    .min(1.0);
+                                let size = base * fit * view.zoom.max(0.1);
+                                let offset = egui::vec2(view.pan[0], view.pan[1]);
+                                ui.image((tex.id(), size));
+                                let rect = ui.min_rect().translate(offset);
+                                let response =
+                                    ui.interact(rect, ui.id().with("iv"), egui::Sense::drag());
+                                if response.dragged() {
+                                    view.pan[0] += response.drag_delta().x;
+                                    view.pan[1] += response.drag_delta().y;
+                                }
+                                if response.hovered() {
+                                    let scroll = ui.input(|i| i.raw_scroll_delta.y);
+                                    if scroll.abs() > 0.0 {
+                                        view.zoom = (view.zoom + scroll * 0.001).clamp(0.2, 8.0);
+                                    }
+                                }
+                            } else {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(140.0);
+                                    ui.heading(widget_text_from_key(
+                                        w.label_key.as_deref(),
+                                        doc,
+                                        language,
+                                    )
+                                    .unwrap_or_else(|| "Aperçu".into()));
+                                    let empty = widget_text_from_key(
+                                        w.empty_label_key.as_deref(),
+                                        doc,
+                                        language,
+                                    )
+                                    .unwrap_or_else(|| t.decl_preview_empty.to_string());
+                                    ui.weak(empty);
+                                    ui.add_space(140.0);
+                                });
                             }
-                        }
-                    } else {
-                        let empty = widget_text_from_key(w.empty_label_key.as_deref(), doc, language)
-                            .unwrap_or_else(|| t.decl_preview_empty.to_string());
-                        ui.weak(empty);
-                    }
-                });
+                        });
+                    },
+                );
             }
             "layer_canvas" => {
                 let canvas_id = w
@@ -1618,32 +1804,122 @@ fn render_scatter(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
 fn render_choice(
     ui: &mut Ui,
     w: &DeclUiWidget,
+    doc: &DeclUiDocument,
+    language: &str,
+    local_state: &HashMap<String, Value>,
     form_fields: &mut HashMap<String, String>,
+    actions: &mut DeclUiActions,
+    enabled: bool,
     radio: bool,
 ) {
-    let key = w
-        .label
+    let state_key = w.state_key.clone();
+    let key = state_key
         .clone()
+        .or_else(|| w.label.clone())
         .or_else(|| w.text.clone())
         .unwrap_or_else(|| "choice".into());
     let items = w.items.clone().unwrap_or_default();
+    let item_labels: Vec<String> = items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            w.item_label_keys
+                .as_ref()
+                .and_then(|keys| keys.get(index))
+                .and_then(|key| widget_text_from_key(Some(key), doc, language))
+                .unwrap_or_else(|| item.clone())
+        })
+        .collect();
+    let label = widget_text(w, doc, language).unwrap_or_else(|| key.clone());
+    if let Some(state_key) = state_key {
+        let mut current = local_state
+            .get(&state_key)
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| items.first().map(String::as_str).unwrap_or_default())
+            .to_string();
+        if radio {
+            ui.label(label);
+            for (index, item) in items.iter().enumerate() {
+                if ui
+                    .add_enabled(
+                        enabled,
+                        egui::RadioButton::new(current == *item, &item_labels[index]),
+                    )
+                    .clicked()
+                {
+                    current = item.clone();
+                    actions
+                        .local_patch
+                        .insert(state_key.clone(), Value::String(current.clone()));
+                }
+            }
+        } else {
+            ui.add_enabled_ui(enabled, |ui| {
+                ui.label(&label);
+                let selected_label = items
+                    .iter()
+                    .position(|item| item == &current)
+                    .and_then(|index| item_labels.get(index))
+                    .cloned()
+                    .unwrap_or_else(|| current.clone());
+                egui::ComboBox::from_id_salt(format!("select-{key}"))
+                    .selected_text(selected_label)
+                    .show_ui(ui, |ui| {
+                        for (index, item) in items.iter().enumerate() {
+                            if ui
+                                .selectable_value(
+                                    &mut current,
+                                    item.clone(),
+                                    &item_labels[index],
+                                )
+                                .changed()
+                            {
+                                actions
+                                    .local_patch
+                                    .insert(state_key.clone(), Value::String(current.clone()));
+                            }
+                        }
+                    });
+            });
+        }
+        return;
+    }
     form_fields
         .entry(key.clone())
         .or_insert_with(|| items.first().cloned().unwrap_or_default());
     if radio {
-        ui.label(&key);
-        for item in &items {
-            ui.radio_value(form_fields.get_mut(&key).unwrap(), item.clone(), item);
+        ui.label(label);
+        for (index, item) in items.iter().enumerate() {
+            ui.add_enabled_ui(enabled, |ui| {
+                ui.radio_value(
+                    form_fields.get_mut(&key).unwrap(),
+                    item.clone(),
+                    &item_labels[index],
+                );
+            });
         }
     } else {
         let cur = form_fields.get(&key).cloned().unwrap_or_default();
-        egui::ComboBox::from_id_salt(format!("select-{key}"))
-            .selected_text(&cur)
-            .show_ui(ui, |ui| {
-                for item in &items {
-                    ui.selectable_value(form_fields.get_mut(&key).unwrap(), item.clone(), item);
-                }
-            });
+        ui.add_enabled_ui(enabled, |ui| {
+            ui.label(&label);
+            let selected_label = items
+                .iter()
+                .position(|item| item == &cur)
+                .and_then(|index| item_labels.get(index))
+                .cloned()
+                .unwrap_or_else(|| cur.clone());
+            egui::ComboBox::from_id_salt(format!("select-{key}"))
+                .selected_text(selected_label)
+                .show_ui(ui, |ui| {
+                    for (index, item) in items.iter().enumerate() {
+                        ui.selectable_value(
+                            form_fields.get_mut(&key).unwrap(),
+                            item.clone(),
+                            &item_labels[index],
+                        );
+                    }
+                });
+        });
     }
 }
 
@@ -1668,6 +1944,29 @@ pub(crate) fn host_file_from_logical(logical: &str) -> std::path::PathBuf {
             .join(rel);
     }
     std::path::PathBuf::from(logical)
+}
+
+/// Import a user-selected image into the module's logical downloads space.
+/// Declarative modules never receive an arbitrary host filesystem path.
+fn import_decl_media_file(path: &std::path::Path) -> Option<String> {
+    if !path.is_file() {
+        return None;
+    }
+    let name = path.file_name()?.to_str()?.to_string();
+    let safe_name: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
+        .collect();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    let filename = format!("create-ref-{stamp}-{safe_name}");
+    let logical = format!("/downloads/{filename}");
+    let target = host_file_from_logical(&logical);
+    std::fs::create_dir_all(target.parent()?).ok()?;
+    std::fs::copy(path, &target).ok()?;
+    Some(logical)
 }
 
 pub(crate) fn try_load_png(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {

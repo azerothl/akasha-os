@@ -82,6 +82,9 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "layer_canvas",
     "layer_list",
     "undo_redo",
+    "section",
+    "text_input",
+    "file_picker",
 ];
 
 /// Maximum widget nodes in a single UI document tree.

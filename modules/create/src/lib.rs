@@ -234,7 +234,7 @@ mod tests {
             path: "/downloads/image-1.png".into(),
             prompt: "cat".into(),
             model_id: "local:sd".into(),
-            engine: "stub".into(),
+            engine: "sdcpp".into(),
             width: Some(512),
             height: Some(512),
             steps: Some(12),
