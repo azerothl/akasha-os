@@ -17,7 +17,7 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 #### Fonctionnalités
 
 - **Espace Create** : disposition en volet scindé, presets nommés, édition de calques avec z-index, enrichissement et assistants de prompt, prompts structurés Ideogram 4 ; le rail principal ouvre le paquet Create ([create-contract.md](../create-contract.md))
-- **Modules riches** : contrat DeclUI v2 (`layer_canvas`, `job`, `image_view`, primitives de composition) ; install transactionnelle avec rollback ; SDK Rust dans [`modules/sdk`](../../modules/sdk) ([rich-app-contract.md](../rich-app-contract.md))
+- **Modules riches** : Apps installables avec calques et composition ([rich-app-contract.md](../rich-app-contract.md))
 - **Cluster LAN** (expérimental, désactivé par défaut) : appairage dans Paramètres → Modèles, découverte, dispatch de shards chiffré — voir [lan-cluster.md](../lan-cluster.md)
 - **Shell calme** : densité confortable par défaut (contrôles 36 px, compositeur 44 px, rail 88 px) ; la densité compacte reste disponible sans descendre sous 32 px
 - **Sessions chat** : recherche insensible à la casse ; groupes Aujourd’hui / Hier / 7 derniers jours / Plus ancien ; sessions épinglées en tête ; archive réversible ; suppression définitive seulement depuis Archives
@@ -28,7 +28,6 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 - **Deep Thinking** : cartes de plan hiérarchique dans le chat quand `cognitive_mode` vaut `deep_thinking` (skill `deep-thinking` livrée)
 - **Chrome UI** : icônes SVG peintes (remplacement des glyphes police), préférence de police interface, barre outils Canvas, bandes compactes **Mémoire** et **Salon** ; libellés Agents et CTA chat vide
 - **Recherche Paramètres** : la saisie filtre Moi / Modèles / Confiance et les replis expert
-- **Parité FR** : chaînes recherche/pills Paramètres et accueil chat
 - **Catalogue modules** : filtre anti-doublon au démarrage
 
 #### Correctifs

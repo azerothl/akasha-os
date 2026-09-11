@@ -17,7 +17,7 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 #### Features
 
 - **Create workspace**: split-pane layout, named presets, layer editing with z-index, prompt enrichment and assistants, Ideogram 4 structured prompts; primary rail opens the Create package ([create-contract.md](create-contract.md))
-- **Rich module apps**: DeclUI contract v2 (`layer_canvas`, `job`, `image_view`, composition primitives); transactional install and rollback; Rust authoring SDK in [`modules/sdk`](../modules/sdk) ([rich-app-contract.md](rich-app-contract.md))
+- **Rich module apps**: Installable apps with layers and composition ([rich-app-contract.md](rich-app-contract.md))
 - **LAN cluster** (experimental, off by default): Settings → Models pairing, discovery, encrypted shard dispatch — see [lan-cluster.md](lan-cluster.md)
 - **Calm shell**: comfortable density is the default (36 px controls, 44 px composer, 88 px rail); compact density stays available without dropping below 32 px
 - **Chat sessions**: case-insensitive search; Today / Yesterday / Last 7 days / Older groups; pinned sessions stay first; reversible archive; permanent delete only from Archives
@@ -28,7 +28,6 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 - **Deep Thinking**: hierarchical plan cards in chat when `cognitive_mode` is `deep_thinking` (shipped skill `deep-thinking`)
 - **UI chrome**: painted SVG icons (replacing font glyphs), interface font preference, Canvas toolbar, **Mémoire** and **Salon** compact-band refinements; Agents labels and empty-chat CTA
 - **Settings search**: typing in Settings filters Me / Models / Trust and the expert folds
-- **FR parity**: Settings search/pills and chat welcome strings
 - **Module catalogue**: deduplication filter on boot
 
 #### Fixes
