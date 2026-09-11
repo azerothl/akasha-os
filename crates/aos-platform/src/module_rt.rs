@@ -1051,24 +1051,23 @@ fn validate_package_descriptors(
                     "type must be declarative_ui".into(),
                 ));
             }
-            if doc.get("root").is_none() {
-                return Err(ModuleError::DeclUiInvalid("missing field: root".into()));
+            if doc.get("root").is_some() {
+                let tool_names: Vec<&str> =
+                    manifest.tools.iter().map(|t| t.name.as_str()).collect();
+                let granted = manifest.permissions.required_caps.clone();
+                let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
+                    .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+                validate_manifest_services(
+                    manifest.services.jobs,
+                    manifest.services.media_image,
+                    &document,
+                    contract,
+                )
+                .map_err(|e| ModuleError::ServicesVersionInvalid(e.to_string()))?;
+                document
+                    .validate_with_contract(contract, &tool_names, &granted)
+                    .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
             }
-            let tool_names: Vec<&str> =
-                manifest.tools.iter().map(|t| t.name.as_str()).collect();
-            let granted = manifest.permissions.required_caps.clone();
-            let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
-                .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
-            validate_manifest_services(
-                manifest.services.jobs,
-                manifest.services.media_image,
-                &document,
-                contract,
-            )
-            .map_err(|e| ModuleError::ServicesVersionInvalid(e.to_string()))?;
-            document
-                .validate_with_contract(contract, &tool_names, &granted)
-                .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
         }
     }
     Ok(())
