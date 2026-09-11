@@ -7,10 +7,12 @@
 use crate::{LanNode, NodeTrust};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use tokio::net::UdpSocket;
 
+/// Default TCP port advertised when the listen field is empty.
+pub const LAN_WORKER_PORT: u16 = 9001;
 pub const LAN_DISCOVERY_PROTOCOL_VERSION: u16 = 1;
 pub const LAN_DISCOVERY_PORT: u16 = 47_821;
 pub const LAN_DISCOVERY_MAGIC: &str = "akasha-os-lan-v1";
@@ -57,16 +59,27 @@ impl LanDiscoveryAdvertisement {
             .address
             .parse::<SocketAddr>()
             .map_err(|_| "adresse annoncée LAN invalide".to_string())?;
-        if !is_lan_ip(source.ip()) || !is_lan_ip(advertised.ip()) {
+        if !is_lan_ip(source.ip()) {
             return Err("annonce LAN hors réseau local".into());
         }
-        if source.ip() != advertised.ip() {
-            return Err("adresse source différente de l'adresse annoncée".into());
+        if !advertised.ip().is_unspecified() && !is_lan_ip(advertised.ip()) {
+            return Err("annonce LAN hors réseau local".into());
         }
+        let reachability_ip = if is_wildcard_or_loopback(advertised.ip()) {
+            source.ip()
+        } else if source.ip() == advertised.ip() {
+            advertised.ip()
+        } else {
+            return Err(format!(
+                "adresse source {} différente de l'adresse annoncée {}",
+                source.ip(),
+                advertised.ip()
+            ));
+        };
         Ok(LanNode {
             node_id: self.node_id.clone(),
             display_name: self.display_name.clone(),
-            address: self.address.clone(),
+            address: SocketAddr::new(reachability_ip, advertised.port()).to_string(),
             public_key_fingerprint: self.public_key_fingerprint.clone(),
             trust: NodeTrust::Unpaired,
             capabilities: self.capabilities.clone(),
@@ -142,6 +155,89 @@ fn is_broadcast_ip(ip: IpAddr) -> bool {
     matches!(ip, IpAddr::V4(ip) if ip == std::net::Ipv4Addr::BROADCAST)
 }
 
+fn is_wildcard_or_loopback(ip: IpAddr) -> bool {
+    ip.is_unspecified() || ip.is_loopback()
+}
+
+/// Best-effort IPv4 of the interface used for LAN broadcast.
+pub fn local_lan_ip() -> Option<IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    let _ = socket.set_broadcast(true);
+    for target in [
+        "255.255.255.255:47821",
+        "10.255.255.255:1",
+        "192.168.255.255:1",
+    ] {
+        if socket.connect(target).is_err() {
+            continue;
+        }
+        let Ok(addr) = socket.local_addr() else {
+            continue;
+        };
+        if is_lan_ip(addr.ip()) && !is_wildcard_or_loopback(addr.ip()) {
+            return Some(addr.ip());
+        }
+    }
+    None
+}
+
+/// Empty, unspecified, or loopback listen values that should be replaced.
+pub fn is_placeholder_listen_address(listen: &str) -> bool {
+    let trimmed = listen.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    trimmed
+        .parse::<SocketAddr>()
+        .map(|addr| is_wildcard_or_loopback(addr.ip()))
+        .unwrap_or(false)
+}
+
+/// Replace a placeholder listen address with this machine's LAN IP.
+///
+/// An explicit private or link-local address is left unchanged. When no LAN
+/// IP can be detected, the original value is returned (or `127.0.0.1:9001`
+/// when the field is empty).
+pub fn reachable_lan_address(listen: &str) -> String {
+    let trimmed = listen.trim();
+    let parsed = trimmed.parse::<SocketAddr>().ok();
+    let port = parsed.map(|addr| addr.port()).unwrap_or(LAN_WORKER_PORT);
+    let needs_fill = trimmed.is_empty()
+        || parsed
+            .map(|addr| is_wildcard_or_loopback(addr.ip()))
+            .unwrap_or(false);
+    if needs_fill {
+        if let Some(ip) = local_lan_ip() {
+            return SocketAddr::new(ip, port).to_string();
+        }
+        if trimmed.is_empty() {
+            return SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port).to_string();
+        }
+    }
+    if trimmed.is_empty() {
+        return SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port).to_string();
+    }
+    trimmed.to_string()
+}
+
+/// Bind address for the worker listener.
+///
+/// Loopback is rewritten to all-interfaces so a paired LAN peer can connect
+/// while the advertised/reachability address stays the observed LAN IP.
+pub fn worker_bind_address(listen: &str) -> String {
+    let Ok(advertised) = listen.trim().parse::<SocketAddr>() else {
+        return listen.trim().to_string();
+    };
+    if advertised.ip().is_loopback() {
+        let wildcard = match advertised.ip() {
+            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+        };
+        return SocketAddr::new(wildcard, advertised.port()).to_string();
+    }
+    listen.trim().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,13 +261,72 @@ mod tests {
             .unwrap();
         assert_eq!(node.node_id, "worker-1");
         assert_eq!(node.trust, NodeTrust::Unpaired);
+        assert_eq!(node.address, "127.0.0.1:9001");
+    }
+
+    #[test]
+    fn annonce_loopback_prend_l_ip_source_lan() {
+        let node = advertisement()
+            .validate_from("192.168.1.20:47821".parse().unwrap())
+            .unwrap();
+        assert_eq!(node.address, "192.168.1.20:9001");
+        assert_eq!(node.trust, NodeTrust::Unpaired);
+    }
+
+    #[test]
+    fn annonce_wildcard_prend_l_ip_source_lan() {
+        let mut ad = advertisement();
+        ad.address = "0.0.0.0:9001".into();
+        let node = ad
+            .validate_from("10.0.0.8:47821".parse().unwrap())
+            .unwrap();
+        assert_eq!(node.address, "10.0.0.8:9001");
     }
 
     #[test]
     fn annonce_refuse_une_source_differente() {
-        assert!(advertisement()
-            .validate_from("127.0.0.2:47821".parse().unwrap())
-            .is_err());
+        let mut ad = advertisement();
+        ad.address = "192.168.1.20:9001".into();
+        let error = ad
+            .validate_from("192.168.1.21:47821".parse().unwrap())
+            .unwrap_err();
+        assert!(error.contains("192.168.1.21"));
+        assert!(error.contains("192.168.1.20"));
+    }
+
+    #[test]
+    fn placeholder_listen_detecte_loopback_et_vide() {
+        assert!(is_placeholder_listen_address(""));
+        assert!(is_placeholder_listen_address("   "));
+        assert!(is_placeholder_listen_address("127.0.0.1:9001"));
+        assert!(is_placeholder_listen_address("0.0.0.0:9001"));
+        assert!(!is_placeholder_listen_address("192.168.1.20:9001"));
+    }
+
+    #[test]
+    fn worker_bind_ouvre_toutes_les_interfaces_sur_loopback() {
+        assert_eq!(worker_bind_address("127.0.0.1:9001"), "0.0.0.0:9001");
+        assert_eq!(
+            worker_bind_address("192.168.1.20:9001"),
+            "192.168.1.20:9001"
+        );
+    }
+
+    #[test]
+    fn reachable_address_preserves_explicit_lan_ip() {
+        assert_eq!(
+            reachable_lan_address("192.168.1.20:9001"),
+            "192.168.1.20:9001"
+        );
+    }
+
+    #[test]
+    fn reachable_address_rewrites_loopback_when_lan_ip_exists() {
+        if local_lan_ip().is_some() {
+            let filled = reachable_lan_address("127.0.0.1:9001");
+            assert!(!filled.starts_with("127.0.0.1"));
+            assert!(filled.ends_with(":9001"));
+        }
     }
 
     #[test]

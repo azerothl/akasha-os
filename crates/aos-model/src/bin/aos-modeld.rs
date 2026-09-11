@@ -5,11 +5,12 @@
 use aos_ipc::{BusClient, BusService, StreamHandle};
 use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
-    AdapterExecutionPhase, BackendKind, DistributedWork, InferencePlanDiagnostic,
-    LanActivationAssembly, LanChatMessage, LanCluster, LanDiscoveryAdvertisement,
-    LanDiscoverySocket, LanNode, LanPairingRegistry, LanSessionKey, LanShardManifest,
-    LanTcpListener, LanTcpTransport, LanWeightRange, LanWorkMessage, LanWorkPlan,
-    LanWorkerRegistry, LayerPipelinePlan, LayerStage, NodeTrust, PlacementProfile, ThermalPolicy,
+    reachable_lan_address, worker_bind_address, AdapterExecutionPhase, BackendKind,
+    DistributedWork, InferencePlanDiagnostic, LanActivationAssembly, LanChatMessage,
+    LanCluster, LanDiscoveryAdvertisement, LanDiscoverySocket, LanNode, LanPairingRegistry,
+    LanSessionKey, LanShardManifest, LanTcpListener, LanTcpTransport, LanWeightRange,
+    LanWorkMessage, LanWorkPlan, LanWorkerRegistry, LayerPipelinePlan, LayerStage, NodeTrust,
+    PlacementProfile, ThermalPolicy,
 };
 use aos_proto::{
     CancelRequest, InferRequest, LanClusterAssignment, LanClusterDiscoverRequest,
@@ -2408,17 +2409,26 @@ async fn main() {
         && config.lan_auto_discovery_at(&preference_home)
     {
         let port = config.lan_discovery_port_at(&preference_home);
+        let advertised_address =
+            reachable_lan_address(&config.lan_listen_address_at(&preference_home));
         let local_node = LanNode {
             node_id: config.lan_node_id_at(&preference_home),
             display_name: "Akasha OS".into(),
-            address: config.lan_listen_address_at(&preference_home),
+            address: advertised_address,
             public_key_fingerprint: config.lan_public_key_fingerprint_at(&preference_home),
             trust: NodeTrust::Unpaired,
             capabilities: Vec::new(),
         };
         let advertisement = if local_node.public_key_fingerprint.trim().is_empty() {
+            eprintln!(
+                "[aos-modeld] découverte LAN active sans annonce (empreinte locale vide)"
+            );
             None
         } else {
+            eprintln!(
+                "[aos-modeld] découverte LAN, annonce {}",
+                local_node.address
+            );
             Some(LanDiscoveryAdvertisement::from_node(&local_node))
         };
         let cluster = lan_cluster.clone();
@@ -2481,7 +2491,8 @@ async fn main() {
     // socket, and an unpaired/revoked peer is rejected before the handshake.
     if config.lan_cluster_enabled_at(&preference_home) {
         let local_node_id = config.lan_node_id_at(&preference_home);
-        let listen_address = config.lan_listen_address_at(&preference_home);
+        let listen_address =
+            worker_bind_address(&config.lan_listen_address_at(&preference_home));
         let secret_name = config.lan_session_key_secret_at(&preference_home);
         match load_lan_session_key(&bus, &secret_name).await {
             Ok(session_key) => {

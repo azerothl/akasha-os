@@ -57,8 +57,9 @@ pub use benchmark::{
 };
 pub use cost::{Bound, CostModel, Estimate};
 pub use discovery::{
+    is_placeholder_listen_address, local_lan_ip, reachable_lan_address, worker_bind_address,
     LanDiscoveryAdvertisement, LanDiscoverySocket, LAN_DISCOVERY_MAGIC, LAN_DISCOVERY_PORT,
-    LAN_DISCOVERY_PROTOCOL_VERSION,
+    LAN_DISCOVERY_PROTOCOL_VERSION, LAN_WORKER_PORT,
 };
 pub use distributed::{
     DistributedWork, LanActivationAssembly, LanChatMessage, LanCluster, LanJobState, LanNode,
