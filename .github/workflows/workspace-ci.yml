@@ -53,10 +53,32 @@ jobs:
         with:
           components: clippy
       # sccache + cargo cache (replaces Swatinem/rust-cache)
-      - uses: mozilla-actions/sccache-action@v0.0.5
+      - name: Setup sccache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@v0.0.9
         with:
           cache-name: sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           cache-version: v1
+      - name: Probe sccache backend
+        if: steps.sccache.outcome == 'success'
+        run: |
+          for attempt in 1 2; do
+            if sccache --start-server >/dev/null 2>&1; then
+              echo "sccache backend OK (attempt $attempt)"
+              exit 0
+            fi
+            echo "sccache start failed (attempt $attempt/2)"
+          done
+          echo "::warning::sccache backend unreachable; building without compile cache"
+          echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=false" >> "$GITHUB_ENV"
+      - name: Disable sccache when setup failed
+        if: steps.sccache.outcome == 'failure'
+        run: |
+          echo "::warning::sccache setup failed; building without compile cache"
+          echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=false" >> "$GITHUB_ENV"
       - name: Install mold linker
         run: |
           sudo apt-get update
@@ -88,7 +110,8 @@ jobs:
           cargo test -p aos-platform --no-default-features
       # Upload sccache stats for visibility
       - name: sccache stats
-        if: always()
+        if: always() && steps.sccache.outcome == 'success'
+        continue-on-error: true
         run: sccache --show-stats
 
   # Separate CUDA build job (manual / scheduled) to avoid PR timeout
@@ -104,10 +127,32 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sccache"
           echo "SCCACHE_DIR=$RUNNER_TEMP/sccache" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.5
+      - name: Setup sccache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@v0.0.9
         with:
           cache-name: sccache-${{ runner.os }}-cuda-${{ hashFiles('**/Cargo.lock') }}
           cache-version: v1
+      - name: Probe sccache backend
+        if: steps.sccache.outcome == 'success'
+        run: |
+          for attempt in 1 2; do
+            if sccache --start-server >/dev/null 2>&1; then
+              echo "sccache backend OK (attempt $attempt)"
+              exit 0
+            fi
+            echo "sccache start failed (attempt $attempt/2)"
+          done
+          echo "::warning::sccache backend unreachable; building without compile cache"
+          echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=false" >> "$GITHUB_ENV"
+      - name: Disable sccache when setup failed
+        if: steps.sccache.outcome == 'failure'
+        run: |
+          echo "::warning::sccache setup failed; building without compile cache"
+          echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=false" >> "$GITHUB_ENV"
       - name: Install CUDA toolkit
         run: |
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
@@ -123,5 +168,6 @@ jobs:
           CUDA_PATH: /usr/local/cuda-12.4
         run: cargo build --workspace --features cuda --release
       - name: sccache stats
-        if: always()
+        if: always() && steps.sccache.outcome == 'success'
+        continue-on-error: true
         run: sccache --show-stats
