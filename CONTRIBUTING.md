@@ -37,6 +37,7 @@ License policy: [ADR 0006](adr/0006-license-split.md) (kernel vs extensions).
 | Skill or module idea | Discussions (Show and tell) or [`community/`](community/README.md) PR | **No** commercial grant. Discussion is always safe. `community/` default MIT |
 | Guest SDK / first-party WASM module | PR under `modules/` | Apache-2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)); **no** commercial grant |
 | Docs typo / translation | Pull request under `docs/` | Host CLA (AGPL + commercial grant) |
+| Public site manual | Pull request under `website/` (see [docs/SITE-MANUAL.md](docs/SITE-MANUAL.md) for HTML vs MD SoT) | Host CLA |
 | ADR proposal | Pull request under `adr/` | Host CLA |
 | Kernel / crate / host UI | Pull request under `crates/`, `packaging/`, `website/` | Host CLA |
 

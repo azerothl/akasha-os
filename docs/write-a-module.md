@@ -9,8 +9,10 @@ human. Preview can scaffold, package, and install a **script** module
 without cargo. Longer than a [skill](write-a-skill.md); still not a kernel
 PR ([ADR 0006](../adr/0006-license-split.md)).
 
-Site chapter:
+Site chapter (**Canonical** live procedure):
 [azerothl.github.io/akasha-os/docs/module.html](https://azerothl.github.io/akasha-os/docs/module.html).
+This Markdown file is the offline twin shipped in release zips — edit the
+HTML first, then mirror here. Mapping: [SITE-MANUAL.md](SITE-MANUAL.md).
 
 ## What this is not
 

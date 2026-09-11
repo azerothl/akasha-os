@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "site_base": "https://azerothl.github.io/akasha-os",
+  "blob_base": "https://github.com/azerothl/akasha-os/blob/main",
+  "html_sot": [
+    {
+      "html": "website/install.html",
+      "site_path": "/install.html",
+      "offline_en": "docs/INSTALL.md",
+      "offline_fr": "docs/fr/INSTALL.md",
+      "note": "Public install chapter; INSTALL.md is the offline/release twin."
+    },
+    {
+      "html": "website/docs/first-run.html",
+      "site_path": "/docs/first-run.html",
+      "offline_en": "docs/FIRST-RUN.md",
+      "offline_fr": "docs/fr/FIRST-RUN.md",
+      "note": "Public first-run chapter."
+    },
+    {
+      "html": "website/docs/skill.html",
+      "site_path": "/docs/skill.html",
+      "offline_en": "docs/write-a-skill.md",
+      "offline_fr": "docs/fr/write-a-skill.md",
+      "note": "Public skill how-to."
+    },
+    {
+      "html": "website/docs/module.html",
+      "site_path": "/docs/module.html",
+      "offline_en": "docs/write-a-module.md",
+      "offline_fr": "docs/fr/write-a-module.md",
+      "note": "Public first-module how-to."
+    },
+    {
+      "html": "website/docs/feedback.html",
+      "site_path": "/docs/feedback.html",
+      "offline_en": "docs/TESTER.md",
+      "offline_fr": "docs/fr/TESTER.md",
+      "note": "HTML is short-path protocol; TESTER.md also holds the long team checklist."
+    },
+    {
+      "html": "website/community.html",
+      "site_path": "/community.html",
+      "offline_en": "docs/community.md",
+      "offline_fr": "docs/fr/community.md",
+      "note": "Hangout page; HTML SoT for public tone."
+    },
+    {
+      "html": "website/docs/use.html",
+      "site_path": "/docs/use.html",
+      "offline_en": null,
+      "offline_fr": null,
+      "depth_en": "docs/FEATURES.md",
+      "depth_fr": "docs/fr/FEATURES.md",
+      "note": "UX manual; FEATURES.md is the full catalogue, not a twin."
+    },
+    {
+      "html": "website/docs/network.html",
+      "site_path": "/docs/network.html",
+      "offline_en": null,
+      "offline_fr": null,
+      "note": "Site-only chapter."
+    },
+    {
+      "html": "website/docs/troubleshoot.html",
+      "site_path": "/docs/troubleshoot.html",
+      "offline_en": null,
+      "offline_fr": null,
+      "note": "Site-only chapter."
+    },
+    {
+      "html": "website/docs/limits.html",
+      "site_path": "/docs/limits.html",
+      "offline_en": null,
+      "offline_fr": null,
+      "note": "Site-only chapter; links STATUS/specs."
+    },
+    {
+      "html": "website/docs/whats-new.html",
+      "site_path": "/docs/whats-new.html",
+      "offline_en": null,
+      "offline_fr": null,
+      "depth_en": "docs/FEATURES.md",
+      "depth_fr": "docs/fr/FEATURES.md",
+      "note": "Site-only version journal."
+    }
+  ],
+  "md_sot_digest": [
+    {
+      "html": "website/docs/module-sdk.html",
+      "canonical_en": "docs/module-sdk.md",
+      "canonical_fr": "docs/fr/module-sdk.md"
+    },
+    {
+      "html": "website/docs/lan-cluster.html",
+      "canonical_en": "docs/lan-cluster.md",
+      "canonical_fr": "docs/fr/cluster-lan.md"
+    },
+    {
+      "html": "website/docs/rich-apps.html",
+      "canonical_en": "docs/rich-app-contract.md",
+      "canonical_fr": null
+    },
+    {
+      "html": "website/docs/devices.html",
+      "canonical_en": "docs/device-capture.md",
+      "canonical_en_alt": "docs/device-usb.md",
+      "canonical_fr": null
+    },
+    {
+      "html": "website/docs/build.html",
+      "canonical_en": "docs/INSTALL.md",
+      "canonical_fr": "docs/fr/INSTALL.md"
+    }
+  ]
+}

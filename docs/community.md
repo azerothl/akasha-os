@@ -10,7 +10,9 @@ There is no Discord, Matrix, or Slack for this project yet — those would
 be empty rooms. Messaging channels are also **out of the OS core** (see
 [evolution-roadmap.md](evolution-roadmap.md)); this page is for humans.
 
-Public site: [Community](https://azerothl.github.io/akasha-os/community.html).
+Public site (**Canonical** hangout page):
+[Community](https://azerothl.github.io/akasha-os/community.html).
+This Markdown file is the offline twin. Mapping: [SITE-MANUAL.md](SITE-MANUAL.md).
 
 License split (kernel AGPL + CLA vs guest extensions Apache/MIT, no
 commercial grant): [ADR 0006](../adr/0006-license-split.md). A Discussion is

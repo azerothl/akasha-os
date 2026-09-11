@@ -10,6 +10,11 @@ Catalogue : [FEATURES.md](FEATURES.md). Lieu de rencontre :
 [community.md](community.md) (Discussions GitHub — pas de Discord pour
 l’instant).
 
+**Canonique** — chapitre chemin court sur le site :
+[azerothl.github.io/akasha-os/docs/feedback.html](https://azerothl.github.io/akasha-os/docs/feedback.html?lang=fr).
+Ce fichier garde le même chemin court plus la checklist équipe longue pour
+les archives Release. Carte : [SITE-MANUAL.md](SITE-MANUAL.md).
+
 **Gate cohorte :** 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon
 suivent le [chemin court](#chemin-court-15-minutes) sans toolchain Rust ;
 chacun laisse un `var/feedback/fb-*.json` exploitable (et de préférence une

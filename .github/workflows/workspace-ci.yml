@@ -31,6 +31,9 @@ jobs:
       - name: Check release version consistency
         shell: pwsh
         run: ./packaging/check-version.ps1
+      - name: Check site manual vs repo docs map
+        shell: pwsh
+        run: ./packaging/check-site-docs.ps1
       - name: Reject UI crate glob imports
         shell: bash
         run: |

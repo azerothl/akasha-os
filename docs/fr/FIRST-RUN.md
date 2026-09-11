@@ -8,6 +8,11 @@
 **NVIDIA est recommandé sur Win/Linux** ; le même zip embarque `aos-modeld-cpu`
 (Réglages → Inférence redémarre modeld dans la session). Les builds macOS sont non signés.
 
+**Canonique** — chapitre site :
+[azerothl.github.io/akasha-os/docs/first-run.html](https://azerothl.github.io/akasha-os/docs/first-run.html?lang=fr).
+Ce fichier est le jumeau offline des archives Release. Carte :
+[SITE-MANUAL.md](SITE-MANUAL.md).
+
 Catalogue : [FEATURES.md](FEATURES.md). Testeurs de cohorte : le
 [chemin de 15 minutes](TESTER.md#chemin-court-15-minutes) suffit pour
 compter ; lieu de rencontre : [community.md](community.md).

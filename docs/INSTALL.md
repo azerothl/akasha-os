@@ -9,6 +9,11 @@
 ships a CPU-linked `aos-modeld-cpu` (Settings → Inference). macOS builds are unsigned. seL4 is a
 separate track.
 
+**Canonical** site chapter:
+[azerothl.github.io/akasha-os/install.html](https://azerothl.github.io/akasha-os/install.html).
+This file is the offline twin for release archives. Mapping:
+[SITE-MANUAL.md](SITE-MANUAL.md).
+
 ## One command
 
 Windows:
