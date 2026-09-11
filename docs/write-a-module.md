@@ -52,8 +52,8 @@ Settings → Modules: `module.scaffold` (kind `script`) → `module.package` →
 
 `module.scaffold` kind `rust` + `module.compile`: critical cap, static
 refuse of `unsafe` / ambient fs/net/process, `CARGO_NET_OFFLINE=true`.
-SDK: [`modules/sdk`](../modules/sdk) (Apache-2.0). Skip until a script
-module has run.
+SDK: [`modules/sdk`](../modules/sdk) (Apache-2.0). Full guide:
+[module-sdk.md](module-sdk.md). Skip until a script module has run.
 
 ## Share
 

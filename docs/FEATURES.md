@@ -11,27 +11,32 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.17.0
 
-- **Create workspace**: split-pane layout, named presets, layer editing with z-index, prompt enrichment and assistants, Ideogram 4 structured prompts
-- **UI chrome**: painted SVG icons (replacing font glyphs), interface font preference, Settings strip and rail/status polish, status bar overflow menu
-- **DeclUI**: mojibake fixes, JSON payloads, denser parameter layout, human-readable labels
-- **Canvas toolbar**, **Mémoire** and **Salon** compact-band refinements; Agents labels and empty-chat CTA
-- **FR parity**: Settings search/pills and chat welcome strings
-- **Module catalogue**: deduplication filter on boot
+Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
+0.16.2 GitHub Releases).
 
-### What's new in 0.16.2
+#### Features
 
-- **USB I/O**: opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Allow once / Always / Deny; Windows, Linux, and macOS serial backends. See [device-usb.md](device-usb.md)
-
-### What's new in 0.16.1
-
+- **Create workspace**: split-pane layout, named presets, layer editing with z-index, prompt enrichment and assistants, Ideogram 4 structured prompts; primary rail opens the Create package ([create-contract.md](create-contract.md))
+- **Rich module apps**: Installable apps with layers and composition ([rich-app-contract.md](rich-app-contract.md))
+- **LAN cluster** (experimental, off by default): Settings → Models pairing, discovery, encrypted shard dispatch — see [lan-cluster.md](lan-cluster.md)
 - **Calm shell**: comfortable density is the default (36 px controls, 44 px composer, 88 px rail); compact density stays available without dropping below 32 px
-- **Chat sessions**: case-insensitive search; Today / Yesterday / Last 7 days / Older groups; pinned sessions stay first
-- **Archive and pin**: pinning and reversible archive from the session list; permanent delete only from Archives
+- **Chat sessions**: case-insensitive search; Today / Yesterday / Last 7 days / Older groups; pinned sessions stay first; reversible archive; permanent delete only from Archives
 - **Composer**: multiline up to five visible lines — Enter sends, Shift+Enter inserts a line break; pending files stay as removable chips
 - **Focus and activity**: Canvas focus mode hides neighbouring panels; agent traces live in a resizable Activity panel; the bell opens the notification centre
-- **Session navigation**: background reloads no longer steal the active chat; `chat.session.set_pinned` / `set_archived` / `list_all` back the new chrome
+- **Device capture**: webcam and microphone on Windows, Linux and macOS (`device.enumerate`, `device.camera.capture`, `device.mic.capture`); confirmation required (Allow once / Always / Deny)
+- **USB I/O**: opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Windows, Linux and macOS serial backends — see [device-usb.md](device-usb.md)
+- **Deep Thinking**: hierarchical plan cards in chat when `cognitive_mode` is `deep_thinking` (shipped skill `deep-thinking`)
+- **UI chrome**: painted SVG icons (replacing font glyphs), interface font preference, Canvas toolbar, **Mémoire** and **Salon** compact-band refinements; Agents labels and empty-chat CTA
 - **Settings search**: typing in Settings filters Me / Models / Trust and the expert folds
-- **Webcam / microphone**: chat can delegate a capture agent (`device.enumerate`, `device.camera.capture`, `device.mic.capture`); Windows writes a PNG the vision model can read after confirmation (Allow once / Always / Deny)
+- **Module catalogue**: deduplication filter on boot
+
+#### Fixes
+
+- **DeclUI**: mojibake fixes, JSON payloads, denser parameter layout, human-readable labels
+- **Settings strip, rail and status**: layout polish and status bar overflow menu icon
+- **Create workflow**: image/video selection parity, option payloads and generation readiness
+- **Salon**: tools routing, `@` mentions, peer follow-up and ask card
+- **Session navigation**: background reloads no longer steal the active chat; `chat.session.set_pinned` / `set_archived` / `list_all` back the new chrome
 
 ### What's new in 0.16.0
 
@@ -123,7 +128,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.7.0
 
-- **Declarative module UI host** (E15): installed modules with `ui.mode=declarative_ui` get a dynamic sidebar tab — no webview, no new hardcoded egui tab per module
+- **Declarative module UI host** (E15): installed modules with `ui.mode=declarative_ui` get a dynamic sidebar tab — no webview, no new hardcoded egui tab per module. Developer guide: [module-sdk.md](module-sdk.md); rich apps: [rich-app-contract.md](rich-app-contract.md), Create: [create-contract.md](create-contract.md)
 - Closed widget tree in `ui/index.html` (`type: declarative_ui`): `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `bar_chart`, `pie`, `scatter`, `form`, `button`, `select` / `radio` / `checkbox` / `textarea`, `image`, `audio`
 - **`module.ui`** intent: platformd validates the document (fail-closed); host binds tool results and routes button/form submits through the same cap review as `module.invoke`
 - **`module.scaffold`** optional `ui` JSON; package/compile copy a real widget tree (default: heading + form + table on the primary tool)
@@ -241,7 +246,9 @@ Slash commands:
 
 **Webcam and microphone (issue #137)** — Windows Media Foundation, Linux V4L2 + cpal, and macOS AVFoundation + cpal capture through `device.enumerate` / `device.camera.capture` / `device.mic.capture`. A one-shot camera capture writes a PNG under `var/sessions/<session>/devices/` and the next agent turn attaches it for vision analysis. Confirmation is required (Allow once / Always / Deny); persistent grants are per agent + device + action. OS permission denials surface as `OsPermissionDenied`. Always-on STT is still out of scope.
 
-**USB I/O (issue #137, slice 3–4)** — opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial open/read/write on Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`), and macOS (`/dev/cu.*`). See `docs/device-usb.md`.
+**USB I/O (issue #137, slice 3–4)** — opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial open/read/write on Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`), and macOS (`/dev/cu.*`). See [device-usb.md](device-usb.md).
+
+**Device capture** — camera/microphone intents and session artefacts under `var/sessions/<session>/devices/`. See [device-capture.md](device-capture.md).
 
 ---
 
@@ -318,6 +325,8 @@ Agent **Detail** (from the Agents tab or a chat card):
 ---
 
 ## 6. Models
+
+- **LAN cluster (experimental, off by default)** — opt-in coordinator in `aos-modeld`; explicit pairing, encrypted transport, inventory in `var/run/lan-pairing.json`. UI: Settings → Models → **LAN cluster**. Operator guide: [lan-cluster.md](lan-cluster.md); technical gate: [technical-specs.md](technical-specs.md) §3.5.11.
 
 - Unified local backends (llama.cpp CUDA **or** CPU) + named **Providers** (P08.12 / F-MDL-04)
 - Routing: **local_only** (default) or **balanced** (Settings)

@@ -2,10 +2,17 @@
 
 **Langue :** [English](../technical-specs.md) | Français
 
-> Version : 0.3  
-> Date : 15/08/2026  
-> Statut : brouillon  
+> Version : 0.17  
+> Date : 11/09/2026  
+> Statut : brouillon (hôte Preview P0)  
 > Référence : `specs-fonctionnelles.md`, `reflexion-agent-os.md`, `FEATURES.md`  
+> Changements v0.17.0 : Preview 0.17.0 — espace Create (module riche, volet scindé, presets, calques) ; finitions DeclUI ; chrome SVG peint (UI seulement) ; dédoublonnage catalogue au boot. Voir §0.
+> Changements v0.16.x : Preview 0.16 — capture périphériques (`device.*`) ; USB série (`device.usb.*`) ; espace Canvas ; sessions chat archive/épingle ; densité shell confortable. Voir §0 et docs détaillées.
+> Changements v0.15.0–0.14.0 : guides in-app ; plannings chat ; documents de recherche ; agents personnalisés + roster salon ; image de référence / inpaint / courte vidéo Create.
+> Changements v0.13.0–0.12.0 : chat vision (`InferRequest.images`) ; gate template Gemma 4 ; zip Preview macOS Apple Silicon.
+> Changements v0.11.0 : E20 KV Q8_0 ; cache de préfixe ; décodage spéculatif prompt-lookup (flux unique).
+> Changements v0.10.x : vault TPM E7 ; `aos-bridged` E8 ; plumbing multi-GPU E9 ; img2img ; mises à jour auto ; widgets pie/scatter.
+> Changements v0.9.0 : migration mid-token E18 ; options média fermées E19 ; onglet studio image.
 > Changements v0.8.0 : Preview 0.8.0 — E16 `media.*` dans modeld ; Download d’un pack média tire sd.cpp / piper dans `bin/` ; E17 artefact CPU/GPU unifié + hystérésis ; pack widgets E15 ; F-MDL-04 Providers.
 > Changements v0.7.0 : Preview 0.7.0 — hôte E15 de widgets `declarative_ui` (pas de webview).
 > Changements v0.6.0 : Preview 0.6.0 — export schémas E8 + contrat HTTP↔bus ; keyring OS E7 ; catalogue local signé E10.
@@ -14,6 +21,69 @@
 > Changements v0.3.1 : Preview 0.3.0 — resync du module notes, dépannage in-app, site Split-Flap.
 > Changements v0.3 : Preview 0.1.2 — `web.browse`, `web.search` multi-moteurs, panneau de transparence egui, Settings persistées (`preferences.json`).  
 > Changements v0.2 : revue de complétude — ajout Agent superviseur/System Assistant/Trust Manager (§4.5-4.7), classification de sensibilité (§6.4), Module Registry (§7), egress réseau (§9.5), confirmation bloquante (§9.4), mises à jour système (§10.1), Module API/Admin API (§11.4-11.5), profil utilisateur (§12), cibles agents concurrents (§13), accessibilité (§8.3), glossaire technique et matrice de traçabilité (§21-22).
+
+---
+
+## 0. Preview 0.17.0 — carte de la documentation
+
+Ce fichier décrit l’**architecture cible** (P1/P2) et des notes sur l’hôte Preview.
+Pour le comportement livré et les étapes testeur, commencez par
+[`FEATURES.md`](FEATURES.md) et [`TESTER.md`](TESTER.md).
+
+### 0.1 Comment naviguer
+
+| Sujet | Point d’entrée | Approfondissement |
+|-------|----------------|-------------------|
+| Catalogue Preview livré | [`FEATURES.md`](FEATURES.md) | [`STATUS.md`](STATUS.md) |
+| Premier module (sans cargo) | [`write-a-module.md`](write-a-module.md) | [`module-sdk.md`](module-sdk.md) |
+| DeclUI / apps riches / Create | [`../rich-app-contract.md`](../rich-app-contract.md) | [`../create-contract.md`](../create-contract.md), [ADR 0009](adr/0009-rich-module-app-contract.md) |
+| Schéma JSON DeclUI | [`../bridge/aos-proto-decl-ui.json`](../bridge/aos-proto-decl-ui.json) | `crates/aos-proto/src/decl_ui.rs`, `rich_decl_ui.rs` |
+| Cluster LAN (expérimental) | [`cluster-lan.md`](cluster-lan.md) | §3.5.11 ; `var/run/lan-pairing.json` |
+| Capture périphériques (caméra/micro) | [`../device-capture.md`](../device-capture.md) | §2 chat dans [`FEATURES.md`](FEATURES.md) |
+| USB série | [`../device-usb.md`](../device-usb.md) | cap `device.usb.io` |
+| Pont HTTP sibling | [`../sibling-bridge.md`](../sibling-bridge.md) | schémas [`../bridge/`](../bridge/) |
+| Salon (mode Room) | [`UI.md`](UI.md) | [`FEATURES.md`](FEATURES.md) |
+| Artefacts session périphériques | `var/sessions/<id>/devices/` | [`../device-capture.md`](../device-capture.md) |
+| Packaging modules (mainteneurs) | [`module-sdk.md`](module-sdk.md) | `modules/build-*.sh` / `modules/build-*.ps1` |
+
+### 0.2 Deltas architecture Preview 0.17.0 (livré)
+
+**Apps module riches (DeclUI contrat v2).** Create est un paquet WASM préinstallé
+(`share/modules/create.aospkg`, sources `modules/create/`). L’hôte ouvre
+`Tab::Module("create")` sur le rail principal. Gates manifeste :
+`min_os_api: 1`, `ui.contract: 2`, `services.jobs: 1`, `services.media_image: 1`.
+La génération image/vidéo reste un **service plateforme** (`media.image.generate`) ;
+le paquet possède l’état UI sous `/documents/create/**`. Voir
+[`../create-contract.md`](../create-contract.md).
+
+**Chemin SDK module / DeclUI.** Les modules script réutilisent le WASM `ext-rt`
+précompilé ; les modules Rust compilent contre [`modules/sdk`](../../modules/sdk)
+(Apache-2.0) avec `host_call` uniquement — pas de WASI ambiant. Scripts de
+packaging sous `modules/`. Parcours : [`write-a-module.md`](write-a-module.md) →
+[`module-sdk.md`](module-sdk.md).
+
+**Cluster LAN (expérimental, désactivé par défaut).** Coordinateur opt-in dans
+`aos-modeld` ; appairage explicite, transport chiffré, découverte en échec fermé.
+UI : Paramètres → Modèles → **Cluster LAN**. Inventaire :
+`var/run/lan-pairing.json`. Intents et procédure :
+[`cluster-lan.md`](cluster-lan.md) ; gate placement §3.5.11.
+
+**Capture et USB.** Caméra/micro (`device.enumerate`, `device.camera.capture`,
+`device.mic.capture`) écrivent sous `var/sessions/<session>/devices/`. L’USB
+série est séparé (`device.usb.*`, cap `device.usb.io`). Confirmation obligatoire
+(une fois / toujours / refuser). Voir [`../device-capture.md`](../device-capture.md)
+et [`../device-usb.md`](../device-usb.md).
+
+**Salon (mode Room).** Chat multi-agent in-app (`ChatSessionMode::Room`) avec
+`chat.session.room.turn` et personas du roster — pas des canaux de messagerie.
+Règles UI : [`UI.md`](UI.md).
+
+**Chrome peint (UI seulement).** La 0.17.0 remplace certaines icônes glyphe par
+des SVG peints dans le shell egui. Aucun impact sur capabilities, IPC ou contrats
+modules.
+
+**Catalogue modules.** Index signé `share/modules/catalogue.yaml` + ed25519 ;
+dédoublonnage au boot (0.17.0).
 
 ---
 
@@ -656,15 +726,34 @@ ui:
 min_os_api: 1
 ```
 
-`declarative_ui` (Preview **0.7.0** / E15) : arbre de widgets JSON peint par
-l’hôte egui. Vocabulaire fermé : `column`, `row`, `heading`, `text`,
-`markdown`, `stat_row`, `table`, `line_chart`, `form`, `button`. Les kinds
-inconnus sont refusés (fail-closed). Données et actions liées aux outils du
-module via `tool.invoke`. Ce n’est **pas** du HTML/JS. `sandboxed_webview`
-reste une option fer nu / E13, pas un chemin Preview hôte. Preview **0.8.0**
-(P08.11) élargit la même liste fermée : champs `form` typés depuis le JSON
-Schema, `select` / `radio` / `checkbox` / `textarea`, `bar_chart`, `image`,
-`audio`.
+`declarative_ui` (Preview **0.7.0+** / E15) : arbre de widgets JSON peint par
+l’hôte egui — **pas** de HTML/JS. `sandboxed_webview` reste une option fer nu /
+E13, pas un chemin Preview hôte.
+
+| `ui.contract` | Jeu de widgets | Paquets typiques |
+|---------------|----------------|------------------|
+| `1` (défaut) | `decl_ui::WIDGET_KINDS` — column/row, graphiques, form, image/audio, … | `notes`, `tasks`, modules script |
+| `2` (app riche) | kinds v1 + `UI_V2_ADDITIONAL_WIDGET_KINDS` — slider, tabs, split, `layer_canvas`, `job`, … | `create`, `gallery-demo` |
+
+Exemple manifeste (app riche) :
+
+```yaml
+ui:
+  contract: 2
+  document: ui/index.json
+  mode: declarative_ui
+services:
+  jobs: 1
+  media_image: 1   # Create uniquement, si déclaré
+min_os_api: 1
+```
+
+Kinds inconnus ou contrat incompatible → refus à l’install (fail-closed).
+Bindings et actions appellent uniquement les **outils module** ou services
+plateforme déclarés. Gates vérifiées :
+`crates/aos-proto/src/rich_app_contract.rs`. Rédaction :
+[`module-sdk.md`](module-sdk.md), [`../rich-app-contract.md`](../rich-app-contract.md).
+Export schéma : [`../bridge/aos-proto-decl-ui.json`](../bridge/aos-proto-decl-ui.json).
 
 > Exemple de capacité réseau pour un module nécessitant un accès externe (ex. recherche web) : `required_caps: [net.connect:api.example.com:443]` — soumise à revue utilisateur à l'installation et au contrôle d'egress (§9.5).
 
@@ -1109,14 +1198,32 @@ Audit.append(infer_started/finished)
 
 ### C. Documents liés
 
+**Specs cœur**
+
 - `specs-fonctionnelles.md`
 - `reflexion-agent-os.md`
+- `FEATURES.md` — catalogue Preview livré (0.17.0)
 - `plan-developpement-phases.md` — plan détaillé par phase (livrables, gates, risques)
+
+**Approfondissements hôte Preview (0.17.0)**
+
+- `module-sdk.md` — scaffold, package, install, contrats, versioning
+- `../rich-app-contract.md` — DeclUI contrat v2 + gates apps riches
+- `../create-contract.md` — chemins et services du paquet Create
+- `cluster-lan.md` — coordinateur LAN expérimental (guide opérateur)
+- `../device-capture.md` — intents caméra/micro et artefacts
+- `../device-usb.md` — USB série
+- `../sibling-bridge.md` — contrat pont HTTP JSON ↔ CBOR
+- `../bridge/` — schémas JSON exportés (`mem.*`, `secrets.*`, DeclUI)
+
+**ADR**
+
 - `adr/0002-model-placement.md` — algorithme de placement et modèle de coût (P0)
 - `adr/0003-ui-framework.md` — choix du framework UI (accepté : egui)
 - `adr/0001-microkernel.md` — noyau de caps hôte P4 + piste seL4
 - `adr/0005-offload-etat-de-l-art.md` — état de l'art offload CPU/GPU/RAM/disque (pré-P1)
 - `adr/0006-license-split.md` — hôte AGPL+CLA vs guest Apache/MIT (acceptée)
+- `adr/0009-rich-module-app-contract.md` — frontière app module riche (Create)
 - (futur) `adr/0004-scope-mono-vs-multi-utilisateur.md`
 
 ---

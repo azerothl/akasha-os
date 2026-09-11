@@ -54,7 +54,8 @@ Settings → Installed modules (pas les quatre bundlés).
 `module.scaffold` kind `rust` + `module.compile` : cap critique, refus
 statique de `unsafe` / fs/net/process ambiants,
 `CARGO_NET_OFFLINE=true`. SDK : [`modules/sdk`](../../modules/sdk)
-(Apache-2.0). Passer tant qu’un module script n’a pas tourné.
+(Apache-2.0). Guide complet : [module-sdk.md](module-sdk.md). Passer tant
+qu’un module script n’a pas tourné.
 
 ## Partager
 
