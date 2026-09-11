@@ -7,9 +7,9 @@ ne contacte de pairs sur Internet.
 ## Configuration dans l’interface
 
 1. Ouvrez **Paramètres → Modèles** et activez **Cluster LAN**.
-2. Renseignez l’identité du nœud local, son adresse d’écoute annoncée et le
-   nom du secret de clé de session. Le nom par défaut est
-   `lan_cluster_session_key`.
+2. Renseignez l’identité du nœud local et le nom du secret de clé de
+   session. Le nom par défaut est `lan_cluster_session_key`. Une adresse
+   d’écoute vide ou en loopback est remplacée par l’IP LAN de la machine.
 3. Renseignez l’empreinte de clé publique locale, activez **Découvrir
    automatiquement les candidats LAN** et utilisez le même port UDP de
    découverte sur les hôtes concernés.
@@ -40,9 +40,10 @@ dans `var/run/lan-pairing.json`.
 - Un nœud n’est éligible aux travaux qu’après appairage.
 - Une empreinte modifiée pour un nœud connu est refusée.
 - Une révocation reste effective après redémarrage.
-- Les annonces sont des indications non authentifiées. L’IP source doit
-  correspondre à l’adresse LAN annoncée ; un nouvel hôte reste toujours
-  `Unpaired` jusqu’à validation manuelle.
+- Les annonces sont des indications non authentifiées. Une adresse annoncée
+  en loopback ou non spécifiée est réécrite vers l’IP source observée. Une
+  adresse LAN explicite doit toujours correspondre à l’IP source. Un nouvel
+  hôte reste toujours `Unpaired` jusqu’à validation manuelle.
 
 ## État d’exécution actuel
 

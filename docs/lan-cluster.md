@@ -7,9 +7,9 @@ peers.
 ## Configure it in the UI
 
 1. Open **Settings → Models** and enable **LAN cluster**.
-2. Set the local node identity, the advertised listener address, and the name
-   of the session-key secret. The default secret name is
-   `lan_cluster_session_key`.
+2. Set the local node identity and the name of the session-key secret. The
+   default secret name is `lan_cluster_session_key`. An empty or loopback
+   listener address is filled with this machine's LAN IP.
 3. Set the local public-key fingerprint, enable **Auto-discover LAN
    candidates**, and keep the same UDP discovery port on the participating
    hosts.
@@ -37,9 +37,10 @@ preferences file. The node inventory and trust state are persisted in
 - A changed fingerprint for an existing node is rejected.
 - A node is not eligible for work until it is paired.
 - Revocation is fail-closed and survives a restart.
-- Discovery advertisements are unauthenticated hints. The source IP must
-  match the advertised LAN address; a changed fingerprint is rejected and a
-  new candidate always remains `Unpaired`.
+- Discovery advertisements are unauthenticated hints. Loopback or
+  unspecified advertised addresses are rewritten to the observed source IP.
+  An explicit LAN address must still match the source IP. A changed
+  fingerprint is rejected and a new candidate always remains `Unpaired`.
 
 ## Current execution state
 
