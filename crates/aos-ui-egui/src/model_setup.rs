@@ -171,6 +171,8 @@ pub fn run() -> eframe::Result<()> {
                 default_embed,
                 include_optional: false,
                 confirmed: false,
+                deferred: false,
+                cancelled: false,
                 language,
                 providers,
                 provider_id: String::new(),
@@ -194,6 +196,8 @@ struct SetupApp {
     default_embed: String,
     include_optional: bool,
     confirmed: bool,
+    deferred: bool,
+    cancelled: bool,
     language: String,
     providers: Vec<ProviderRecord>,
     provider_id: String,
@@ -457,11 +461,33 @@ impl SetupApp {
         }
         self.confirmed = true;
     }
+
+    fn try_defer(&mut self) {
+        if self.deferred || self.confirmed {
+            return;
+        }
+        let dir = self.home.join("var/models");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
+        }
+        let deferred_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let raw = format!("{{\n  \"deferred_ms\": {}\n}}\n", deferred_ms);
+        if std::fs::write(dir.join("setup_deferred.json"), raw).is_ok() {
+            let _ = std::fs::remove_file(self.home.join("var/run/model_setup_offer.json"));
+            self.deferred = true;
+        }
+    }
 }
 
 impl eframe::App for SetupApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.confirmed {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.confirmed && !self.deferred {
+            self.try_defer();
+        }
+        if self.confirmed || self.deferred || self.cancelled {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
@@ -612,8 +638,11 @@ impl eframe::App for SetupApp {
                         {
                             self.try_confirm();
                         }
+                        if ui.button(t.model_setup_later).clicked() {
+                            self.try_defer();
+                        }
                         if ui.button(t.model_setup_cancel).clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            self.cancelled = true;
                         }
                     });
                 });
@@ -664,6 +693,8 @@ mod tests {
             selected,
             include_optional: false,
             confirmed: false,
+            deferred: false,
+            cancelled: false,
             language: "en".into(),
             providers: Vec::new(),
             provider_id: String::new(),

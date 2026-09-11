@@ -323,7 +323,14 @@ pub fn read_setup_choice(home: &Path) -> Option<ModelSetupChoice> {
     serde_json::from_str(&raw).ok()
 }
 
+pub fn setup_deferred(home: &Path) -> bool {
+    home.join("var/models/setup_deferred.json").is_file()
+}
+
 pub fn setup_needed(home: &Path) -> bool {
+    if setup_deferred(home) {
+        return false;
+    }
     let inst = load_installed(home);
     if !inst.models.is_empty() {
         return false;
@@ -970,5 +977,25 @@ mod vision_catalog_tests {
         assert!(is_remote_model_id("provider:openai:gpt-4o"));
         assert!(is_remote_model_id("remote:mock:gpt-x"));
         assert!(!is_remote_model_id("local:qwen-9b"));
+    }
+
+    #[test]
+    fn setup_deferred_skips_setup_needed() {
+        use super::setup_needed;
+        let home = std::env::temp_dir().join(format!(
+            "aos-setup-deferred-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        assert!(setup_needed(&home));
+        let models_dir = home.join("var/models");
+        std::fs::create_dir_all(&models_dir).unwrap();
+        std::fs::write(models_dir.join("setup_deferred.json"), "{\"deferred_ms\":1}\n").unwrap();
+        assert!(!setup_needed(&home));
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

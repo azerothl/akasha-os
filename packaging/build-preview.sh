@@ -125,7 +125,11 @@ EOF
   fi
   if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
     echo "== canvas module =="
-  "${ROOT}/modules/build-canvas.sh"
+    "${ROOT}/modules/build-canvas.sh"
+  fi
+  if [ -f "${ROOT}/modules/build-create.sh" ]; then
+    echo "== create module =="
+    "${ROOT}/modules/build-create.sh"
   fi
   if [ -f "${ROOT}/modules/build-ext-rt.ps1" ] && command -v pwsh >/dev/null 2>&1; then
     echo "== ext-rt module =="
@@ -341,6 +345,22 @@ elif [ -d "${ROOT}/modules/canvas.aospkg" ]; then
   rm -rf "${OUT}/share/modules/canvas.aospkg"
   cp -a "${ROOT}/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
 fi
+if [ -d "${ROOT}/share/modules/create.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/create.aospkg"
+  cp -a "${ROOT}/share/modules/create.aospkg" "${OUT}/share/modules/create.aospkg"
+elif [ -d "${ROOT}/modules/create.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/create.aospkg"
+  cp -a "${ROOT}/modules/create.aospkg" "${OUT}/share/modules/create.aospkg"
+else
+  echo "ERROR: create.aospkg absent — run modules/build-create.sh" >&2
+  exit 1
+fi
+for rel in manifest.yaml module.wasm ui/index.json; do
+  if [ ! -s "${OUT}/share/modules/create.aospkg/${rel}" ]; then
+    echo "ERROR: create.aospkg incomplete — missing ${rel}" >&2
+    exit 1
+  fi
+done
 
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   src="${ROOT}/share/modules/${cat}"

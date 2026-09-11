@@ -4,7 +4,7 @@
 # GGUF optional (SKIP_MODELS=1) — downloaded on first run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.17.0)}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.17.1)}"
 OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-macos-arm64}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 
@@ -76,6 +76,10 @@ if [ "$SKIP_BUILD" != "1" ]; then
   if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
     echo "== canvas module =="
     "${ROOT}/modules/build-canvas.sh"
+  fi
+  if [ -f "${ROOT}/modules/build-create.sh" ]; then
+    echo "== create module =="
+    "${ROOT}/modules/build-create.sh"
   fi
   env -u RUSTFLAGS \
     cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
@@ -185,7 +189,7 @@ if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
   cp -f "${ROOT}/share/models/catalog-offerings.json" "${OUT}/share/models/catalog-offerings.json"
 fi
 
-for pkg in notes ext-rt canvas; do
+for pkg in notes ext-rt canvas create; do
   for base in "${ROOT}/share/modules/${pkg}.aospkg" "${ROOT}/modules/${pkg}.aospkg"; do
     if [ -d "${base}" ]; then
       rm -rf "${OUT}/share/modules/${pkg}.aospkg"

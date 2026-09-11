@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.17.0
+# Protocole testeur — Akasha OS Preview 0.17.1
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 10/09/2026 · Preview **0.17.0**
+> Date : 11/09/2026 · Preview **0.17.1**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.

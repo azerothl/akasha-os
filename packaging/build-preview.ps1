@@ -72,6 +72,19 @@ if (-not $SkipBuild) {
         pwsh -NoProfile -File (Join-Path $root "modules\build-canvas.ps1")
         if ($LASTEXITCODE -ne 0) { throw "build-canvas.ps1 failed ($LASTEXITCODE)" }
     }
+    Write-Host "== package create module =="
+    pwsh -NoProfile -File (Join-Path $root "modules\build-create.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "build-create.ps1 failed ($LASTEXITCODE)" }
+    Write-Host "== refresh bundled catalogue signature =="
+    Push-Location $root
+    try {
+        $env:UPDATE_CATALOGUE = "1"
+        cargo test -p aos-platform --no-default-features catalogue::tests::committed_catalogue_signature_matches -- --nocapture
+        if ($LASTEXITCODE -ne 0) { throw "catalogue signature refresh failed ($LASTEXITCODE)" }
+    } finally {
+        Remove-Item Env:UPDATE_CATALOGUE -ErrorAction SilentlyContinue
+        Pop-Location
+    }
 }
 
 $binSrc = Join-Path $root "target\release"
@@ -234,6 +247,26 @@ if (Test-Path $canvasShare) {
     Copy-ReplaceDir $canvas (Join-Path $OutDir "share\modules\canvas.aospkg")
 } else {
     Write-Warning "canvas.aospkg absent — lancer modules\build-canvas.ps1"
+}
+
+$createShare = Join-Path $root "share\modules\create.aospkg"
+$create = Join-Path $root "modules\create.aospkg"
+$createOut = Join-Path $OutDir "share\modules\create.aospkg"
+if (Test-Path $createShare) {
+    Copy-ReplaceDir $createShare $createOut
+} elseif (Test-Path $create) {
+    Copy-ReplaceDir $create $createOut
+} else {
+    throw "create.aospkg absent — run modules\build-create.ps1"
+}
+foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
+    $path = Join-Path $createOut $rel
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "create.aospkg incomplete — missing $rel"
+    }
+    if ((Get-Item -LiteralPath $path).Length -eq 0) {
+        throw "create.aospkg incomplete — empty $rel"
+    }
 }
 
 foreach ($cat in @("catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub")) {

@@ -87,19 +87,64 @@ struct HistoryEntry {
     steps: Option<u32>,
 }
 
+#[derive(Debug)]
+struct CreatePkgResolveError {
+    debug: String,
+}
+
+fn create_language(home: &Path) -> String {
+    fs::read_to_string(home.join("var/run/onboarding.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| v.get("language")?.as_str().map(str::to_string))
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| "fr".into())
+}
+
+fn create_unavailable_boot_message(lang: &str) -> &'static str {
+    if lang.eq_ignore_ascii_case("en") {
+        "The Create app isn't available in this install."
+    } else {
+        "L'app Créer n'est pas disponible dans cette installation."
+    }
+}
+
+fn create_install_failed_message(lang: &str) -> &'static str {
+    if lang.eq_ignore_ascii_case("en") {
+        "Couldn't install Create. Try again."
+    } else {
+        "Impossible d'installer Créer. Réessayez."
+    }
+}
+
 /// Manage the Create module at boot. Returns `true` when the installed package changed
 /// (caller should `module.reload`).
 pub fn manage_create_module(home: &Path) -> bool {
     match manage_create_module_inner(home) {
         Ok(synced) => synced,
         Err(e) => {
-            eprintln!("[aos-session] create migration: {e}");
+            let lang = create_language(home);
+            if e.debug.starts_with("bundled create package not found") {
+                eprintln!("[aos-session] {}", create_unavailable_boot_message(&lang));
+            } else {
+                eprintln!("[aos-session] {}", create_install_failed_message(&lang));
+            }
+            eprintln!("[aos-session] create migration (debug): {}", e.debug);
             false
         }
     }
 }
 
-fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
+fn map_create_err<T, E: std::fmt::Display>(
+    result: Result<T, E>,
+    context: &str,
+) -> Result<T, CreatePkgResolveError> {
+    result.map_err(|e| CreatePkgResolveError {
+        debug: format!("{context}: {e}"),
+    })
+}
+
+fn manage_create_module_inner(home: &Path) -> Result<bool, CreatePkgResolveError> {
     let profile = decl_ui::resolve_preview_profile(home);
     let registry_path = modules_root(home).join("registry.yaml");
     let installed_dir = modules_root(home).join(MODULE_NAME);
@@ -122,9 +167,9 @@ fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
                 ensure_managed_registry_entry(&installed_dir, &mut registry);
                 if registry_dirty(&registry_path, &registry) {
                     backup_registry(&registry_path);
-                    save_registry(&registry_path, &registry)?;
+                    map_create_err(save_registry(&registry_path, &registry), "registry")?;
                 }
-                import_legacy_history_if_needed(home)?;
+                map_create_err(import_legacy_history_if_needed(home), "legacy history")?;
                 return Ok(false);
             }
             if !preinstall {
@@ -135,11 +180,17 @@ fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
     };
 
     if !migration_marker_exists(home) && had_historical {
-        migrate_historical_install(home, &registry_path, &installed_dir, &mut registry)?;
-        write_migration_marker(home)?;
+        map_create_err(
+            migrate_historical_install(home, &registry_path, &installed_dir, &mut registry),
+            "historical migrate",
+        )?;
+        map_create_err(write_migration_marker(home), "migration marker")?;
     }
 
-    let package_changed = sync_create_package_if_needed(home, &share, &installed_dir, &registry)?;
+    let package_changed = map_create_err(
+        sync_create_package_if_needed(home, &share, &installed_dir, &registry),
+        "package sync",
+    )?;
     ensure_managed_registry_entry(&installed_dir, &mut registry);
     if package_changed && registry.granted_caps(MODULE_NAME).is_empty() && !had_historical {
         let caps: Vec<String> = full_manifest_caps();
@@ -148,11 +199,11 @@ fn manage_create_module_inner(home: &Path) -> Result<bool, String> {
 
     if registry_dirty(&registry_path, &registry) {
         backup_registry(&registry_path);
-        save_registry(&registry_path, &registry)?;
+        map_create_err(save_registry(&registry_path, &registry), "registry")?;
     }
 
     if installed_dir.join("module.wasm").is_file() {
-        import_legacy_history_if_needed(home)?;
+        map_create_err(import_legacy_history_if_needed(home), "legacy history")?;
     }
 
     Ok(package_changed)
@@ -182,18 +233,27 @@ fn history_host_path(home: &Path) -> PathBuf {
 }
 
 /// Resolve bundled Create package (Preview share path, dev repo fallback).
-fn resolve_create_share_pkg(home: &Path) -> Result<PathBuf, String> {
+fn resolve_create_share_pkg(home: &Path) -> Result<PathBuf, CreatePkgResolveError> {
     let candidates = [
         home.join("share/modules/create.aospkg"),
         home.join("modules/create.aospkg"),
         PathBuf::from("share/modules/create.aospkg"),
     ];
-    for cand in candidates {
+    let checked = candidates
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>();
+    for cand in &candidates {
         if cand.join("module.wasm").is_file() {
-            return Ok(cand);
+            return Ok(cand.clone());
         }
     }
-    Err("create.aospkg introuvable".into())
+    Err(CreatePkgResolveError {
+        debug: format!(
+            "bundled create package not found (checked {})",
+            checked.join(", ")
+        ),
+    })
 }
 
 fn load_registry(path: &Path) -> ModuleRegistry {
@@ -725,6 +785,38 @@ mod tests {
         let history2 = load_history_store(&history_host_path(&home));
         assert_eq!(history2.items.len(), 1);
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn missing_bundled_package_uses_human_debug_detail() {
+        let home = temp_home("missing-share");
+        let onboarding = home.join("var/run/onboarding.json");
+        fs::create_dir_all(onboarding.parent().unwrap()).unwrap();
+        fs::write(onboarding, r#"{"language":"en"}"#).unwrap();
+        assert!(!manage_create_module(&home));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn create_boot_messages_are_localized_and_human() {
+        assert_eq!(
+            create_unavailable_boot_message("en"),
+            "The Create app isn't available in this install."
+        );
+        assert_eq!(
+            create_unavailable_boot_message("fr"),
+            "L'app Créer n'est pas disponible dans cette installation."
+        );
+        assert_eq!(
+            create_install_failed_message("en"),
+            "Couldn't install Create. Try again."
+        );
+        assert_eq!(
+            create_install_failed_message("fr"),
+            "Impossible d'installer Créer. Réessayez."
+        );
+        assert!(!create_unavailable_boot_message("en").contains(".aospkg"));
+        assert!(!create_install_failed_message("en").contains(".aospkg"));
     }
 
     #[test]

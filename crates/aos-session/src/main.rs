@@ -557,6 +557,10 @@ fn run_model_setup(home: &Path, hw: &hardware::HardwareInfo, version: &str) -> R
             ui_cmd.env("LD_LIBRARY_PATH", &ld);
         }
         let st = ui_cmd.status().map_err(|e| e.to_string())?;
+        if offerings::setup_deferred(home) {
+            eprintln!("[aos-session] model setup — reporté par l'utilisateur (Plus tard)");
+            return Ok(());
+        }
         if !st.success() {
             return Err("fenêtre de choix des modèles fermée sans validation".into());
         }

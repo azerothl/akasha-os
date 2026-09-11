@@ -152,11 +152,13 @@ pub(crate) fn on_ui_loaded(app: &mut UiApp, response: ModuleUiResponse) {
 }
 
 pub(crate) fn on_ui_failed(app: &mut UiApp, module: String, error: String) {
+    let t = crate::i18n::strings(&app.prefs.language);
+    let visible = crate::chat_error_copy::user_visible_module_error(&t, &module, &error);
     let panel = app
         .decl_panels
         .entry(module.clone())
         .or_insert_with(|| decl_ui::DeclUiPanelState::new(&module));
-    panel.set_error(error);
+    panel.set_error(visible);
 }
 
 pub(crate) fn on_ui_bind(
@@ -196,7 +198,8 @@ pub(crate) fn on_ui_bind(
             panel.set_binding_result(&id, val);
         }
         if let Some(error) = error {
-            panel.status = error;
+            let t = crate::i18n::strings(&app.prefs.language);
+            panel.status = crate::chat_error_copy::user_visible_module_error(&t, &module, &error);
         }
     }
 }
