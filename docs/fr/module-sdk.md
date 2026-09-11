@@ -6,7 +6,7 @@
 
 Guide pour contributeurs et testeurs avancés qui packagent des modules WASM avec
 UI déclarative. Pour un premier module sans cargo, commencez par
-[write-a-module.md](write-a-module.md). Ce document ne invente pas d’API — il
+[write-a-module.md](write-a-module.md). Ce document n’invente pas d’API — il
 cite chemins, constantes et scripts de build livrés.
 
 Contrats associés :

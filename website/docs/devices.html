@@ -44,13 +44,13 @@
             Device capture and USB I/O are opt-in grants in Preview
             <span data-aos-version="0.17.0">0.17.0</span>. Camera and microphone
             are separate from USB serial. Both require confirmation before the
-            host opens a handle.
+            host grants access.
           </span>
           <span data-lang="fr">
             La capture périphériques et l’USB sont des grants opt-in dans la
             Preview <span data-aos-version="0.17.0">0.17.0</span>. Caméra et
             micro sont distincts de l’USB série. Les deux exigent une
-            confirmation avant que l’hôte ouvre un handle.
+            confirmation avant que l’hôte ouvre l’accès.
           </span>
         </h1>
 
@@ -79,7 +79,7 @@
             <code>device.camera.capture</code>, <code>device.mic.capture</code>,
             <code>device.capture.stop</code>. A one-shot camera capture writes a
             PNG under <code>var/sessions/&lt;session&gt;/devices/</code> for
-            vision on the next agent turn. Grant chrome: Allow once · Always ·
+            vision on the next agent turn. Grant chrome: Allow once / Always /
             Deny. Always-on speech-to-text is out of scope.
           </p>
           <p class="hist" data-lang="fr">
@@ -88,8 +88,8 @@
             <code>device.capture.stop</code>. Une capture caméra ponctuelle
             écrit un PNG sous
             <code>var/sessions/&lt;session&gt;/devices/</code> pour la vision au
-            tour d’agent suivant. Chrome de grant : une fois · toujours ·
-            refuser. Le STT en continu reste hors scope.
+            tour d’agent suivant. Chrome de grant : Autoriser une fois /
+            Toujours / Refuser. Le STT en continu reste hors scope.
           </p>
         </article>
 
