@@ -7,6 +7,7 @@ mod bootstrap;
 mod create_migration;
 mod engines;
 mod hardware;
+mod module_registry;
 mod offerings;
 mod tasks_migration;
 mod update;
@@ -601,6 +602,9 @@ fn run_model_setup(home: &Path, hw: &hardware::HardwareInfo, version: &str) -> R
 }
 
 fn ensure_installed_files_present(home: &Path) -> Result<(), String> {
+    if offerings::setup_deferred(home) {
+        return Ok(());
+    }
     let inst = offerings::load_installed(home);
     if inst.models.is_empty() {
         if offerings::setup_defaults_complete(&inst) {
@@ -919,43 +923,20 @@ fn ensure_layout(home: &Path) -> Vec<String> {
         synced.push("create".into());
     }
 
-    // Module canvas (chat drawing) — même resync au boot.
+    // Module canvas (chat drawing) — structured registry merge (never raw-append).
     let canvas_share = home.join("share/modules/canvas.aospkg");
     let canvas_installed = home.join("var/modules/canvas");
     if canvas_share.exists() && bootstrap::sync_packaged_module(&canvas_share, &canvas_installed) {
         synced.push("canvas".into());
         let reg = home.join("var/modules/registry.yaml");
-        if let Ok(mut raw) = fs::read_to_string(&reg) {
-            if !raw.contains("name: canvas") {
-                // Match existing list indent (`- name:` vs `  - name:`).
-                let entry = if raw.lines().any(|l| l.starts_with("- name:")) {
-                    r#"
-- name: canvas
-  granted_caps:
-  - fs.write:/downloads/**
-  quarantined: false
-"#
-                } else {
-                    r#"
-  - name: canvas
-    granted_caps:
-      - fs.write:/downloads/**
-    quarantined: false
-"#
-                };
-                raw.push_str(entry);
-                let _ = fs::write(&reg, raw);
-            }
-        } else {
-            let _ = fs::write(
-                &reg,
-                r#"installed:
-  - name: canvas
-    granted_caps:
-      - fs.write:/downloads/**
-    quarantined: false
-"#,
-            );
+        if let Err(e) = module_registry::ensure_packaged_module_registry_entry(
+            &reg,
+            &canvas_installed,
+            "canvas",
+            vec!["fs.write:/downloads/**".into()],
+            true,
+        ) {
+            eprintln!("[aos-session] canvas registry: {e}");
         }
     }
 
