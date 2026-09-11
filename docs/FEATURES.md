@@ -123,7 +123,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.7.0
 
-- **Declarative module UI host** (E15): installed modules with `ui.mode=declarative_ui` get a dynamic sidebar tab — no webview, no new hardcoded egui tab per module
+- **Declarative module UI host** (E15): installed modules with `ui.mode=declarative_ui` get a dynamic sidebar tab — no webview, no new hardcoded egui tab per module. Developer guide: [module-sdk.md](module-sdk.md); rich apps: [rich-app-contract.md](rich-app-contract.md), Create: [create-contract.md](create-contract.md)
 - Closed widget tree in `ui/index.html` (`type: declarative_ui`): `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `bar_chart`, `pie`, `scatter`, `form`, `button`, `select` / `radio` / `checkbox` / `textarea`, `image`, `audio`
 - **`module.ui`** intent: platformd validates the document (fail-closed); host binds tool results and routes button/form submits through the same cap review as `module.invoke`
 - **`module.scaffold`** optional `ui` JSON; package/compile copy a real widget tree (default: heading + form + table on the primary tool)
@@ -241,7 +241,9 @@ Slash commands:
 
 **Webcam and microphone (issue #137)** — Windows Media Foundation, Linux V4L2 + cpal, and macOS AVFoundation + cpal capture through `device.enumerate` / `device.camera.capture` / `device.mic.capture`. A one-shot camera capture writes a PNG under `var/sessions/<session>/devices/` and the next agent turn attaches it for vision analysis. Confirmation is required (Allow once / Always / Deny); persistent grants are per agent + device + action. OS permission denials surface as `OsPermissionDenied`. Always-on STT is still out of scope.
 
-**USB I/O (issue #137, slice 3–4)** — opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial open/read/write on Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`), and macOS (`/dev/cu.*`). See `docs/device-usb.md`.
+**USB I/O (issue #137, slice 3–4)** — opt-in USB via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capability `device.usb.io`; confirmation mirrors capture (Allow once / Always / Deny). Serial open/read/write on Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`), and macOS (`/dev/cu.*`). See [device-usb.md](device-usb.md).
+
+**Device capture** — camera/microphone intents and session artefacts under `var/sessions/<session>/devices/`. See [device-capture.md](device-capture.md).
 
 ---
 
@@ -318,6 +320,8 @@ Agent **Detail** (from the Agents tab or a chat card):
 ---
 
 ## 6. Models
+
+- **LAN cluster (experimental, off by default)** — opt-in coordinator in `aos-modeld`; explicit pairing, encrypted transport, inventory in `var/run/lan-pairing.json`. UI: Settings → Models → **LAN cluster**. Operator guide: [lan-cluster.md](lan-cluster.md); technical gate: [technical-specs.md](technical-specs.md) §3.5.11.
 
 - Unified local backends (llama.cpp CUDA **or** CPU) + named **Providers** (P08.12 / F-MDL-04)
 - Routing: **local_only** (default) or **balanced** (Settings)

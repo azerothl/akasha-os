@@ -123,7 +123,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 ### Nouveautés 0.7.0
 
-- **Hôte d’UI de module déclarative** (E15) : les modules installés avec `ui.mode=declarative_ui` obtiennent un onglet dynamique dans la barre latérale — pas de webview, pas de nouvel onglet egui codé à la main par module
+- **Hôte d’UI de module déclarative** (E15) : les modules installés avec `ui.mode=declarative_ui` obtiennent un onglet dynamique dans la barre latérale — pas de webview, pas de nouvel onglet egui codé à la main par module. Guide développeur : [module-sdk.md](module-sdk.md) ; apps riches : [rich-app-contract.md](../rich-app-contract.md), Create : [create-contract.md](../create-contract.md)
 - Arbre de widgets fermé dans `ui/index.html` (`type: declarative_ui`) : `column`, `row`, `heading`, `text`, `markdown`, `stat_row`, `table`, `line_chart`, `bar_chart`, `pie`, `scatter`, `form`, `button`, `select` / `radio` / `checkbox` / `textarea`, `image`, `audio`
 - Intent **`module.ui`** : platformd valide le document (fail-closed) ; l’hôte lie les résultats d’outils et route boutons/formulaires via la même revue de caps que `module.invoke`
 - **`module.scaffold`** : champ optionnel `ui` JSON ; package/compile copient un vrai arbre (défaut : heading + form + table sur le premier outil)
@@ -243,7 +243,9 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 **Webcam et microphone (issue #137)** — capture Windows Media Foundation, Linux V4L2 + cpal et macOS AVFoundation + cpal via `device.enumerate` / `device.camera.capture` / `device.mic.capture`. Une capture caméra ponctuelle écrit un PNG sous `var/sessions/<session>/devices/` et le tour d’agent suivant le joint pour l’analyse vision. Confirmation obligatoire (une fois / toujours / refuser) ; les autorisations persistantes sont par agent + périphérique + action. Les refus de permission OS remontent en `OsPermissionDenied`. Le STT en continu reste hors scope.
 
-**USB I/O (issue #137, tranche 3–4)** — accès USB opt-in via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capacité `device.usb.io` ; confirmation calquée sur la capture (une fois / toujours / refuser). Ouverture/lecture/écriture série sous Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`) et macOS (`/dev/cu.*`). Voir `docs/device-usb.md`.
+**USB I/O (issue #137, tranche 3–4)** — accès USB opt-in via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capacité `device.usb.io` ; confirmation calquée sur la capture (une fois / toujours / refuser). Ouverture/lecture/écriture série sous Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`) et macOS (`/dev/cu.*`). Voir [device-usb.md](../device-usb.md).
+
+**Capture périphériques** — intents caméra/micro et artefacts session sous `var/sessions/<session>/devices/`. Voir [device-capture.md](../device-capture.md).
 
 ---
 
@@ -319,6 +321,8 @@ Skills livrées : **notes-writer**, **research**, **file-author**, **planner**, 
 ---
 
 ## 6. Modèles
+
+- **Cluster LAN (expérimental, désactivé par défaut)** — coordinateur opt-in dans `aos-modeld` ; appairage explicite, transport chiffré, inventaire dans `var/run/lan-pairing.json`. UI : Paramètres → Modèles → **Cluster LAN**. Guide opérateur : [cluster-lan.md](cluster-lan.md) ; gate technique : [specs-techniques.md](specs-techniques.md) §3.5.11.
 
 - Backends locaux unifiés (llama.cpp CUDA **ou** CPU) + **Providers** nommés (P08.12 / F-MDL-04)
 - Routage : **local_only** (défaut) ou **balanced** (Settings)
