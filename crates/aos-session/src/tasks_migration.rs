@@ -346,7 +346,6 @@ mod tests {
         );
         fs::write(share.join("manifest.yaml"), manifest).unwrap();
         fs::write(share.join("module.wasm"), wasm).unwrap();
-        fs::write(share.join("ui/index.html"), "{}").unwrap();
     }
 
     fn write_installed_pkg(home: &Path, version: &str, wasm: &[u8]) {

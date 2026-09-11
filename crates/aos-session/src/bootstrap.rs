@@ -680,7 +680,7 @@ pub fn should_upgrade_packaged_module(share_pkg: &Path, installed_dir: &Path) ->
     }
     let bundled_ver = read_manifest_version(share_pkg);
     let installed_ver = read_manifest_version(installed_dir);
-    if !installed_ver.is_empty() && crate::update::is_newer(&installed_ver, &bundled_ver) {
+    if !installed_ver.is_empty() && crate::update::is_newer(&bundled_ver, &installed_ver) {
         return false;
     }
     if !bundled_ver.is_empty()
