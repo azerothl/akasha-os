@@ -351,7 +351,16 @@ if [ -d "${ROOT}/share/modules/create.aospkg" ]; then
 elif [ -d "${ROOT}/modules/create.aospkg" ]; then
   rm -rf "${OUT}/share/modules/create.aospkg"
   cp -a "${ROOT}/modules/create.aospkg" "${OUT}/share/modules/create.aospkg"
+else
+  echo "ERROR: create.aospkg absent — run modules/build-create.sh" >&2
+  exit 1
 fi
+for rel in manifest.yaml module.wasm ui/index.json; do
+  if [ ! -s "${OUT}/share/modules/create.aospkg/${rel}" ]; then
+    echo "ERROR: create.aospkg incomplete — missing ${rel}" >&2
+    exit 1
+  fi
+done
 
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   src="${ROOT}/share/modules/${cat}"

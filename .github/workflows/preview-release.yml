@@ -114,6 +114,37 @@ jobs:
           .\packaging\build-preview.ps1 -SkipModels -RequireCuda -Version $ver
           $dir = "dist\AgentOS-Preview-$ver-windows-x64"
           $zip = "dist\AgentOS-Preview-$ver-windows-x64.zip"
+          foreach ($module in @("notes", "tasks", "ext-rt", "canvas", "create")) {
+            $manifest = Join-Path $dir "share\modules\$module.aospkg\manifest.yaml"
+            $wasm = Join-Path $dir "share\modules\$module.aospkg\module.wasm"
+            if ($module -eq "create") {
+              $createUi = Join-Path $dir "share\modules\create.aospkg\ui\index.json"
+              if (-not (Test-Path -LiteralPath $createUi) -or (Get-Item -LiteralPath $createUi).Length -eq 0) {
+                throw "missing packaged create ui/index.json: $createUi"
+              }
+            }
+            if (-not (Test-Path -LiteralPath $manifest) -or (Get-Item -LiteralPath $manifest).Length -eq 0) {
+              throw "missing packaged module manifest: $manifest"
+            }
+            if (-not (Test-Path -LiteralPath $wasm) -or (Get-Item -LiteralPath $wasm).Length -eq 0) {
+              throw "missing packaged module wasm: $wasm"
+            }
+            $wasmHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $wasm).Hash.ToLowerInvariant()
+            $manifestText = Get-Content -LiteralPath $manifest -Raw
+            $manifestMatch = [regex]::Match($manifestText, '(?m)^hash:\s*(?:sha256:)?([a-f0-9]{64})\s*$')
+            if (-not $manifestMatch.Success -or $manifestMatch.Groups[1].Value -ne $wasmHash) {
+              throw "module hash mismatch for $module (wasm=$wasmHash, manifest=$($manifestMatch.Groups[1].Value))"
+            }
+            $catalogueText = Get-Content -LiteralPath (Join-Path $dir "share\modules\catalogue.yaml") -Raw
+            $escapedModule = [regex]::Escape($module)
+            $catalogueMatch = [regex]::Match(
+              $catalogueText,
+              "(?ms)^  - name: $escapedModule\r?\n.*?^    hash: sha256:([a-f0-9]{64})\s*$"
+            )
+            if (-not $catalogueMatch.Success -or $catalogueMatch.Groups[1].Value -ne $wasmHash) {
+              throw "catalogue hash mismatch for $module (wasm=$wasmHash, catalogue=$($catalogueMatch.Groups[1].Value))"
+            }
+          }
           Compress-Archive -Path "$dir\*" -DestinationPath $zip -Force
           .\packaging\verify-preview-windows.ps1 `
             -OutDir $dir -Version $ver -ArchivePath $zip -RequireCuda
@@ -201,6 +232,9 @@ jobs:
           for module in notes tasks ext-rt canvas create; do
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
+            if [ "${module}" = "create" ]; then
+              test -s "${OUT}/share/modules/create.aospkg/ui/index.json"
+            fi
             wasm_hash=$(sha256sum "${OUT}/share/modules/${module}.aospkg/module.wasm" | awk '{print $1}')
             manifest_hash=$(awk '$1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
               "${OUT}/share/modules/${module}.aospkg/manifest.yaml")
@@ -313,6 +347,9 @@ jobs:
           for module in notes tasks ext-rt canvas create; do
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
+            if [ "${module}" = "create" ]; then
+              test -s "${OUT}/share/modules/create.aospkg/ui/index.json"
+            fi
             wasm_hash=$(shasum -a 256 "${OUT}/share/modules/${module}.aospkg/module.wasm" | awk '{print $1}')
             manifest_hash=$(awk '$1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
               "${OUT}/share/modules/${module}.aospkg/manifest.yaml")

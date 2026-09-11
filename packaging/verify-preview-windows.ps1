@@ -68,6 +68,9 @@ foreach ($binary in $binaries) {
 foreach ($module in @("notes", "ext-rt", "canvas", "create")) {
     $requiredFiles += "share\modules\$module.aospkg\manifest.yaml"
     $requiredFiles += "share\modules\$module.aospkg\module.wasm"
+    if ($module -eq "create") {
+        $requiredFiles += "share\modules\create.aospkg\ui\index.json"
+    }
 }
 
 $profilePath = Join-Path $resolvedOut "share\preview-profile.yaml"
