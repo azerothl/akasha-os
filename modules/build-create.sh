@@ -100,6 +100,24 @@ tools:
     description: List image and video model packs for the picker
     input_schema:
       type: object
+  - name: create.preset.save
+    description: Save named parameter preset to document state
+    input_schema:
+      type: object
+      properties:
+        name:
+          type: string
+        params:
+          type: object
+      required: [name]
+  - name: create.preset.load
+    description: Load named parameter preset from document state
+    input_schema:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
 ui:
   contract: 2
   document: ui/index.json

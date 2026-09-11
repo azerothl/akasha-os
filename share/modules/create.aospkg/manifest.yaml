@@ -1,6 +1,6 @@
 name: create
 version: 1.0.0
-hash: 59b39d59d842e1c9e05bd1d203f028e9bef30a8cd82994da0e350eb162a7b0aa
+hash: 2c0ca17245af18370f9c6327fba5f0e67a28387bbc08bacb70f507c634fbad98
 permissions:
   required_caps:
     - fs.read:/documents/create/**
@@ -46,13 +46,23 @@ tools:
     input_schema:
       type: object
   - name: create.preset.save
-    description: Save a named Create parameter preset
+    description: Save named parameter preset to document state
     input_schema:
       type: object
+      properties:
+        name:
+          type: string
+        params:
+          type: object
+      required: [name]
   - name: create.preset.load
-    description: Restore a named Create parameter preset
+    description: Load named parameter preset from document state
     input_schema:
       type: object
+      properties:
+        name:
+          type: string
+      required: [name]
 ui:
   contract: 2
   document: ui/index.json
