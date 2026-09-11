@@ -1051,23 +1051,24 @@ fn validate_package_descriptors(
                     "type must be declarative_ui".into(),
                 ));
             }
-            if doc.get("root").is_some() {
-                let tool_names: Vec<&str> =
-                    manifest.tools.iter().map(|t| t.name.as_str()).collect();
-                let granted = manifest.permissions.required_caps.clone();
-                let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
-                    .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
-                validate_manifest_services(
-                    manifest.services.jobs,
-                    manifest.services.media_image,
-                    &document,
-                    contract,
-                )
-                .map_err(|e| ModuleError::ServicesVersionInvalid(e.to_string()))?;
-                document
-                    .validate_with_contract(contract, &tool_names, &granted)
-                    .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+            if doc.get("root").is_none() {
+                return Err(ModuleError::DeclUiInvalid("missing field: root".into()));
             }
+            let tool_names: Vec<&str> =
+                manifest.tools.iter().map(|t| t.name.as_str()).collect();
+            let granted = manifest.permissions.required_caps.clone();
+            let document = DeclUiDocument::parse_json_with_contract(&raw, contract)
+                .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
+            validate_manifest_services(
+                manifest.services.jobs,
+                manifest.services.media_image,
+                &document,
+                contract,
+            )
+            .map_err(|e| ModuleError::ServicesVersionInvalid(e.to_string()))?;
+            document
+                .validate_with_contract(contract, &tool_names, &granted)
+                .map_err(|e| ModuleError::DeclUiInvalid(e.to_string()))?;
         }
     }
     Ok(())
@@ -2112,6 +2113,33 @@ min_os_api: 1
         let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
         let err = rt.install(&pkg, Some(vec![])).unwrap_err();
         assert!(matches!(err, ModuleError::UiContractUnsupported { .. }));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    fn tasks_test_caps() -> Vec<String> {
+        vec![
+            "fs.read:/documents/tasks/**".into(),
+            "fs.write:/documents/tasks/**".into(),
+        ]
+    }
+
+    #[test]
+    fn tasks_package_validates_at_install() {
+        let share =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/tasks.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip tasks test: run modules/build-tasks.sh first");
+            return;
+        }
+        let base = tmpbase("tasks");
+        let caps = tasks_test_caps();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let info = rt.install(&share, Some(caps)).expect("tasks install");
+        assert_eq!(info.name, "tasks");
+        let ui = rt.load_ui("tasks").expect("load tasks ui");
+        assert_eq!(ui.document.doc_type, "declarative_ui");
+        assert_eq!(ui.document.root.kind, "column");
+        assert_eq!(ui.document.chrome_title("fr"), "Tâches");
         let _ = std::fs::remove_dir_all(&base);
     }
 

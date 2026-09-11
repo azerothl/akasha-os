@@ -36,6 +36,17 @@ if [[ ! -f "$UI_SRC" ]]; then
 fi
 
 mkdir -p "${STAGING}/ui" "${STAGING}/schemas"
+python3 - <<'PY' "${UI_SRC}"
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+raw = path.read_text(encoding="utf-8")
+doc = json.loads(raw)
+if doc.get("type") != "declarative_ui":
+    raise SystemExit(f"ERROR: {path} type must be declarative_ui")
+if "root" not in doc:
+    raise SystemExit(f"ERROR: {path} missing declarative_ui root widget tree")
+print(f"== validated declarative UI: {path} ==")
+PY
 cp -f "$WASM_SRC" "${STAGING}/module.wasm"
 cp -f "$UI_SRC" "${STAGING}/ui/index.html"
 
@@ -54,7 +65,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: tasks
-version: 1.0.0
+version: 1.0.1
 hash: ${HASH}
 permissions:
   required_caps:

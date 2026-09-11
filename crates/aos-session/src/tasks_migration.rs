@@ -7,9 +7,8 @@
 //! - Registry and installed package are backed up before a package switch.
 
 use crate::bootstrap;
-use crate::update;
 use aos_proto::tasks_contract::{MANIFEST_FS_CAPS, MODULE_NAME};
-use aos_proto::{decl_ui, ModuleManifest};
+use aos_proto::decl_ui;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -263,34 +262,16 @@ fn backup_installed_package(home: &Path, installed_dir: &Path) {
     }
 }
 
-fn read_manifest_version(dir: &Path) -> Option<String> {
-    let raw = fs::read_to_string(dir.join("manifest.yaml")).ok()?;
-    serde_yaml::from_str::<ModuleManifest>(&raw)
-        .ok()
-        .map(|m| m.version)
-}
-
-fn bundled_is_newer_than_installed(share: &Path, installed_dir: &Path) -> bool {
-    let bundled = read_manifest_version(share).unwrap_or_default();
-    let installed = read_manifest_version(installed_dir).unwrap_or_default();
-    if installed.is_empty() {
-        return true;
-    }
-    update::is_newer(&installed, &bundled)
-}
-
 fn sync_tasks_package_if_needed(
     home: &Path,
     share: &Path,
     installed_dir: &Path,
     _registry: &ModuleRegistry,
 ) -> Result<bool, String> {
-    let wasm_present = installed_dir.join("module.wasm").is_file();
-    let need_install = !wasm_present;
-    let need_upgrade = wasm_present && bundled_is_newer_than_installed(share, installed_dir);
-    if !need_install && !need_upgrade {
+    if !bootstrap::should_upgrade_packaged_module(share, installed_dir) {
         return Ok(false);
     }
+    let need_install = !installed_dir.join("module.wasm").is_file();
     backup_installed_package(home, installed_dir);
     let synced = bootstrap::sync_packaged_module(share, installed_dir);
     if synced {
@@ -448,6 +429,46 @@ mod tests {
             fs::read(modules_root(&home).join(MODULE_NAME).join("module.wasm")).unwrap(),
             b"standalone wasm v2"
         );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn upgrades_when_ui_differs_at_same_version() {
+        let home = temp_home("ui-upgrade");
+        let share = home.join("share/modules/tasks.aospkg");
+        fs::create_dir_all(share.join("ui")).unwrap();
+        use sha2::{Digest, Sha256};
+        let wasm = b"tasks wasm v1";
+        let hash = format!("{:x}", Sha256::digest(wasm));
+        let manifest = format!(
+            "name: tasks\nversion: 1.0.0\nhash: {hash}\npermissions:\n  required_caps:\n    - fs.read:/documents/tasks/**\n    - fs.write:/documents/tasks/**\ntools:\n  - name: tasks.list\n    description: List\n    input_schema:\n      type: object\nui:\n  entry: ui/index.html\n  mode: declarative_ui\nmin_os_api: 1\n"
+        );
+        fs::write(share.join("manifest.yaml"), manifest).unwrap();
+        fs::write(share.join("module.wasm"), wasm).unwrap();
+        fs::write(
+            share.join("ui/index.html"),
+            br#"{"type":"declarative_ui","title":"Tasks","root":{"kind":"column","children":[]}}"#,
+        )
+        .unwrap();
+
+        write_installed_pkg(&home, "1.0.0", wasm);
+        let ui_dir = modules_root(&home).join(MODULE_NAME).join("ui");
+        fs::create_dir_all(&ui_dir).unwrap();
+        fs::write(
+            ui_dir.join("index.html"),
+            br#"{"type":"declarative_ui","title":"Tasks","commands":["tasks.list"]}"#,
+        )
+        .unwrap();
+        write_registry(
+            &home,
+            "installed:\n  - name: tasks\n    granted_caps:\n      - fs.read:/documents/tasks/**\n      - fs.write:/documents/tasks/**\n    quarantined: false\n",
+        );
+        write_migration_marker_for_test(&home);
+
+        assert!(manage_tasks_module(&home));
+        let installed_ui = fs::read_to_string(ui_dir.join("index.html"))
+        .unwrap();
+        assert!(installed_ui.contains("\"root\""));
         let _ = fs::remove_dir_all(&home);
     }
 

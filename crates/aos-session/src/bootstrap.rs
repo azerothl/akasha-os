@@ -615,6 +615,83 @@ fn wasm_fingerprint(dir: &Path) -> Option<(u64, u64)> {
     Some((len, mtime))
 }
 
+/// Fingerprint declarative UI assets under `ui/` (manifest hash tracks WASM only).
+fn ui_tree_fingerprint(dir: &Path) -> Option<String> {
+    let ui_dir = dir.join("ui");
+    if !ui_dir.is_dir() {
+        return None;
+    }
+    let mut files: Vec<PathBuf> = Vec::new();
+    for ent in fs::read_dir(&ui_dir).ok()?.flatten() {
+        let path = ent.path();
+        if path.is_file() {
+            files.push(path);
+        }
+    }
+    if files.is_empty() {
+        return None;
+    }
+    files.sort();
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    for path in files {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        hasher.update(name.as_bytes());
+        if let Ok(bytes) = fs::read(&path) {
+            hasher.update(&bytes);
+        }
+    }
+    Some(format!("{:x}", hasher.finalize()))
+}
+
+/// True when the bundled package differs from the installed copy (WASM, manifest hash, or UI).
+pub fn packaged_module_needs_sync(share_pkg: &Path, installed_dir: &Path) -> bool {
+    if !share_pkg.is_dir() || !share_pkg.join("module.wasm").exists() {
+        return false;
+    }
+    if !installed_dir.join("module.wasm").exists() {
+        return true;
+    }
+    let share_manifest = module_manifest_hash(share_pkg);
+    let inst_manifest = module_manifest_hash(installed_dir);
+    let share_wasm = wasm_sha256(share_pkg);
+    let inst_wasm = wasm_sha256(installed_dir);
+    let wasm_or_manifest_diff = match (share_manifest, inst_manifest, share_wasm, inst_wasm) {
+        (Some(a), Some(b), Some(sw), Some(iw)) => a != b || sw != iw,
+        _ => wasm_fingerprint(share_pkg) != wasm_fingerprint(installed_dir),
+    };
+    if wasm_or_manifest_diff {
+        return true;
+    }
+    ui_tree_fingerprint(share_pkg) != ui_tree_fingerprint(installed_dir)
+}
+
+fn read_manifest_version(dir: &Path) -> String {
+    let raw = fs::read_to_string(dir.join("manifest.yaml")).unwrap_or_default();
+    serde_yaml::from_str::<aos_proto::ModuleManifest>(&raw)
+        .map(|m| m.version)
+        .unwrap_or_default()
+}
+
+/// Whether a managed preinstall may replace an existing install (never downgrades version).
+pub fn should_upgrade_packaged_module(share_pkg: &Path, installed_dir: &Path) -> bool {
+    if !installed_dir.join("module.wasm").is_file() {
+        return true;
+    }
+    let bundled_ver = read_manifest_version(share_pkg);
+    let installed_ver = read_manifest_version(installed_dir);
+    if !installed_ver.is_empty() && crate::update::is_newer(&installed_ver, &bundled_ver) {
+        return false;
+    }
+    if !bundled_ver.is_empty()
+        && bundled_ver != installed_ver
+        && crate::update::is_newer(&installed_ver, &bundled_ver)
+    {
+        return true;
+    }
+    packaged_module_needs_sync(share_pkg, installed_dir)
+}
+
 /// Ensure the bundled notes module is registered when its WASM is on disk.
 /// Upgrades from early Preview builds may have synced `var/modules/notes` without
 /// adding a registry row (issue #111).
@@ -649,19 +726,7 @@ pub fn sync_packaged_module(share_pkg: &Path, installed_dir: &Path) -> bool {
     if !share_pkg.is_dir() || !share_pkg.join("module.wasm").exists() {
         return false;
     }
-    let need = if !installed_dir.join("module.wasm").exists() {
-        true
-    } else {
-        let share_manifest = module_manifest_hash(share_pkg);
-        let inst_manifest = module_manifest_hash(installed_dir);
-        let share_wasm = wasm_sha256(share_pkg);
-        let inst_wasm = wasm_sha256(installed_dir);
-        match (share_manifest, inst_manifest, share_wasm, inst_wasm) {
-            (Some(a), Some(b), Some(sw), Some(iw)) => a != b || sw != iw,
-            _ => wasm_fingerprint(share_pkg) != wasm_fingerprint(installed_dir),
-        }
-    };
-    if !need {
+    if !packaged_module_needs_sync(share_pkg, installed_dir) {
         return false;
     }
     let _ = fs::remove_dir_all(installed_dir);
@@ -809,6 +874,39 @@ mod tests {
             "Couldn't finish starting.",
             "Try again"
         ));
+    }
+
+    #[test]
+    fn sync_packaged_module_replaces_when_ui_differs_same_wasm() {
+        let root = temp_dir("sync-packaged-ui");
+        let share_pkg = root.join("share/modules/tasks.aospkg");
+        let installed_dir = root.join("var/modules/tasks");
+        fs::create_dir_all(share_pkg.join("ui")).unwrap();
+        fs::create_dir_all(installed_dir.join("ui")).unwrap();
+
+        let manifest = "name: tasks\nhash: same-hash\nversion: 1.0.0\n";
+        let wasm = b"same wasm bytes";
+        fs::write(share_pkg.join("manifest.yaml"), manifest).unwrap();
+        fs::write(share_pkg.join("module.wasm"), wasm).unwrap();
+        fs::write(
+            share_pkg.join("ui/index.html"),
+            br#"{"type":"declarative_ui","title":"Tasks","root":{"kind":"column","children":[]}}"#,
+        )
+        .unwrap();
+
+        fs::write(installed_dir.join("manifest.yaml"), manifest).unwrap();
+        fs::write(installed_dir.join("module.wasm"), wasm).unwrap();
+        fs::write(
+            installed_dir.join("ui/index.html"),
+            br#"{"type":"declarative_ui","title":"Tasks","commands":["tasks.list"]}"#,
+        )
+        .unwrap();
+
+        assert!(sync_packaged_module(&share_pkg, &installed_dir));
+        let installed_ui = fs::read_to_string(installed_dir.join("ui/index.html")).unwrap();
+        assert!(installed_ui.contains("\"root\""));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

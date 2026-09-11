@@ -61,6 +61,15 @@ pub(crate) fn is_tasks_quarantine_error(msg: &str) -> bool {
         && (lower.contains("quarantaine") || lower.contains("quarantined"))
 }
 
+/// True when the host rejected a Tasks declarative UI document.
+pub(crate) fn is_tasks_decl_ui_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("ui déclarative invalide")
+        || lower.contains("decluiinvalid")
+        || (lower.contains("declarative_ui") && lower.contains("root"))
+        || (lower.contains("type must be declarative_ui") && lower.contains("root"))
+}
+
 /// True when a catalogue/module install failure targets Create.
 pub(crate) fn is_create_install_error(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
@@ -92,6 +101,9 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
     }
     if is_tasks_quarantine_error(stripped) {
         return t.tasks_quarantined.to_string();
+    }
+    if module == "tasks" && is_tasks_decl_ui_error(stripped) {
+        return t.chat_error_generic.to_string();
     }
     if module == "create" && is_create_install_error(stripped) {
         return t.create_install_failed.to_string();
@@ -210,6 +222,16 @@ mod tests {
         let t = crate::i18n::strings("fr");
         let out = user_visible_chat_error(&t, "media.image.generate: génération annulée");
         assert_eq!(out, t.studio_generation_cancelled);
+    }
+
+    #[test]
+    fn tasks_decl_ui_error_maps_to_generic_copy() {
+        let en = crate::i18n::strings("en");
+        let raw = "statut BadRequest: UI déclarative invalide: type must be declarative_ui, got missing field `root` at line 6 column 1";
+        let out = user_visible_module_error(&en, "tasks", raw);
+        assert_eq!(out, en.chat_error_generic);
+        assert!(!out.contains("BadRequest"));
+        assert!(!out.contains("root"));
     }
 
     #[test]
