@@ -9,6 +9,13 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 > Date : 10/09/2026 · Preview **0.17.0**
 
+### Nouveautés 0.17.2
+
+#### Correctifs
+
+- **Installation Create** : les outils preset enregistrer et charger sont de nouveau dans le manifeste Create empaqueté ; l'installation aboutit à nouveau
+- **Assistant modèles** : **Plus tard** ouvre l'UI principale sans téléchargement forcé ; fusion du registre modules pour que le Salon reste accessible après migration Create
+
 ### Nouveautés 0.17.0
 
 Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
@@ -436,7 +443,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.17.1
+## 11. Hors Preview 0.17.2
 
 - Image bootable / fer nu
 - STT / voix permanente

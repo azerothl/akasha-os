@@ -7,14 +7,23 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.17.1 — correctif : module Create empaqueté dans les artefacts Preview,
-chemin **Plus tard** à l'assistant modèles, messages d'échec Create lisibles (FR+EN). Voir 0.17.0 pour l'espace Create enrichi (volet scindé, presets, calques,
-assist prompt), chrome UI peint (icônes SVG, police interface, bande
-statut/rail/Paramètres), correctifs DeclUI — par-dessus l’I/O USB 0.16.2.
-Pas un OS bootable. Gate cohorte encore
-ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
+**Preview :** 0.17.2 — correctif : outils preset Create dans le manifeste empaqueté,
+**Plus tard** sans téléchargement forcé, fusion registre après migration Create,
+correctifs écoute/annonce découverte LAN. Voir 0.17.0 pour l'espace Create enrichi
+(volet scindé, presets, calques, assist prompt), chrome UI peint (icônes SVG,
+police interface, bande statut/rail/Paramètres), correctifs DeclUI — par-dessus
+l’I/O USB 0.16.2. Pas un OS bootable. Gate cohorte encore ouverte
+(**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
 **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ; E9
 hard-green après un run 2 GPU documenté.
+
+## P17.2 — Preview 0.17.2 (installation Create + Plus tard/registre + LAN) — fait
+
+| # | Élément | État |
+|---|---------|------|
+| P17.2.1 | Outils preset enregistrer/charger dans le manifeste build-create | fait |
+| P17.2.2 | Assistant modèles **Plus tard** sans téléchargement ; fusion registre → Salon après migration Create | fait |
+| P17.2.3 | Réécriture annonces découverte loopback LAN + auto-remplissage adresse d'écoute | fait |
 
 ## P16 — Preview 0.16.0 (qualité Canvas + opérations modèles) — fait
 

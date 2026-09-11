@@ -7,15 +7,23 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.17.1 — hotfix: Create module packaged in Preview artefacts,
-model-setup **Later** path, human Create install errors (FR+EN). See 0.17.0 for
-rich Create module workspace (split-pane, presets,
-layers, prompt assist), painted UI chrome (SVG icons, interface font,
-Settings/rail/status strip), DeclUI fixes — on top of 0.16.2 USB I/O.
-Not a bootable OS. Cohort gate still open
+**Preview:** 0.17.2 — hotfix: Create preset tools in packaged manifest,
+**Later** without forced model download, registry merge after Create migration,
+LAN discovery listen/ad fixes. See 0.17.0 for rich Create module workspace
+(split-pane, presets, layers, prompt assist), painted UI chrome (SVG icons,
+interface font, Settings/rail/status strip), DeclUI fixes — on top of 0.16.2
+USB I/O. Not a bootable OS. Cohort gate still open
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path). **Next:**
 PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
 documented 2-GPU run.
+
+## P17.2 — Preview 0.17.2 (Create install + Later/registry + LAN) — done
+
+| # | Item | Status |
+|---|------|--------|
+| P17.2.1 | Create preset save/load tools in build-create manifest | done |
+| P17.2.2 | Model setup **Later** without download; registry merge keeps Chat after Create migration | done |
+| P17.2.3 | LAN loopback discovery ad rewrite + auto-fill listen address | done |
 
 ## P16 — Preview 0.16.0 (canvas quality + model operations) — done
 

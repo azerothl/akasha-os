@@ -9,6 +9,13 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 > Date: 10/09/2026 · Preview **0.17.0**
 
+### What's new in 0.17.2
+
+#### Fixes
+
+- **Create install**: preset save and load tools ship in the packaged Create manifest again so installation completes
+- **Models setup**: **Later** enters the main UI without forcing a model download; merged module registry keeps Chat available after Create migration
+
 ### What's new in 0.17.0
 
 Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
@@ -435,7 +442,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.17.1
+## 11. Not in Preview 0.17.2
 
 - Bootable / bare-metal image
 - STT / always-on voice
