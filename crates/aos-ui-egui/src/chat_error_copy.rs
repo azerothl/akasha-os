@@ -61,13 +61,29 @@ pub(crate) fn is_tasks_quarantine_error(msg: &str) -> bool {
         && (lower.contains("quarantaine") || lower.contains("quarantined"))
 }
 
-/// True when the host rejected a Tasks declarative UI document.
-pub(crate) fn is_tasks_decl_ui_error(msg: &str) -> bool {
+/// True when a Tasks open/install failure should use locked human chrome copy.
+pub(crate) fn is_tasks_open_or_install_error(msg: &str) -> bool {
+    if is_tasks_quarantine_error(msg) {
+        return false;
+    }
     let lower = msg.to_ascii_lowercase();
-    lower.contains("ui déclarative invalide")
+    if lower.contains("__tasks_open_failed__") {
+        return true;
+    }
+    if lower.contains("ui déclarative invalide")
         || lower.contains("decluiinvalid")
-        || (lower.contains("declarative_ui") && lower.contains("root"))
-        || (lower.contains("type must be declarative_ui") && lower.contains("root"))
+        || lower.contains("declarative_ui")
+        || lower.contains("missing field")
+        || lower.contains("type must be declarative_ui")
+    {
+        return true;
+    }
+    lower.contains("tasks")
+        && (lower.contains("catalogue")
+            || lower.contains("hash")
+            || lower.contains("install")
+            || lower.contains("badrequest")
+            || lower.contains(".aospkg"))
 }
 
 /// True when a catalogue/module install failure targets Create.
@@ -102,8 +118,11 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
     if is_tasks_quarantine_error(stripped) {
         return t.tasks_quarantined.to_string();
     }
-    if module == "tasks" && is_tasks_decl_ui_error(stripped) {
-        return t.chat_error_generic.to_string();
+    if module == "tasks" && is_tasks_open_or_install_error(stripped) {
+        return t.tasks_open_failed.to_string();
+    }
+    if is_tasks_open_or_install_error(stripped) {
+        return t.tasks_open_failed.to_string();
     }
     if module == "create" && is_create_install_error(stripped) {
         return t.create_install_failed.to_string();
@@ -143,6 +162,9 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
     if is_create_install_error(raw) {
         return t.create_install_failed.to_string();
     }
+    if is_tasks_open_or_install_error(raw) {
+        return t.tasks_open_failed.to_string();
+    }
     if raw.contains("BadRequest:") || raw.contains("badrequest:") {
         return t.chat_error_generic.to_string();
     }
@@ -150,8 +172,12 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
         return t.chat_load_fail_message.to_string();
     }
     if leaks_filesystem_path(raw) || raw.contains(".aospkg") {
-        if raw.to_ascii_lowercase().contains("create") {
+        let lower = raw.to_ascii_lowercase();
+        if lower.contains("create") {
             return t.create_install_failed.to_string();
+        }
+        if lower.contains("tasks") {
+            return t.tasks_open_failed.to_string();
         }
         return t.chat_error_generic.to_string();
     }
@@ -225,13 +251,27 @@ mod tests {
     }
 
     #[test]
-    fn tasks_decl_ui_error_maps_to_generic_copy() {
+    fn tasks_open_failure_maps_to_locked_copy() {
         let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
         let raw = "statut BadRequest: UI déclarative invalide: type must be declarative_ui, got missing field `root` at line 6 column 1";
-        let out = user_visible_module_error(&en, "tasks", raw);
-        assert_eq!(out, en.chat_error_generic);
-        assert!(!out.contains("BadRequest"));
-        assert!(!out.contains("root"));
+        let out_en = user_visible_module_error(&en, "tasks", raw);
+        let out_fr = user_visible_module_error(&fr, "tasks", raw);
+        assert_eq!(out_en, en.tasks_open_failed);
+        assert_eq!(out_fr, fr.tasks_open_failed);
+        assert!(!out_en.contains("BadRequest"));
+        assert!(!out_en.contains("root"));
+        assert!(!out_en.contains("declarative"));
+    }
+
+    #[test]
+    fn tasks_catalogue_install_failure_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        let raw = "statut BadRequest: hash catalogue non conforme pour tasks";
+        assert_eq!(user_visible_chat_error(&en, raw), en.tasks_open_failed);
+        assert_eq!(user_visible_chat_error(&fr, raw), fr.tasks_open_failed);
+        assert!(!user_visible_chat_error(&en, raw).contains("BadRequest"));
     }
 
     #[test]
