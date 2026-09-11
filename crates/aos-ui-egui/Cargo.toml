@@ -19,8 +19,9 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio.workspace = true
 eframe = "0.31"
-egui_commonmark = { version = "0.20", default-features = false, features = ["pulldown_cmark"] }
+egui_commonmark = { version = "0.20", default-features = false, features = ["pulldown_cmark", "better_syntax_highlighting"] }
 egui_plot = "0.31"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = "0.15"
 sha2 = "0.10"
+syntect = { version = "5", default-features = false, features = ["default-fancy"] }

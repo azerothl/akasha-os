@@ -1023,6 +1023,12 @@ pub struct AgentSpec {
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Painted avatar key (`spark`, `search`, `code`, …). Empty / None → initials.
+    #[serde(default)]
+    pub avatar: Option<String>,
+    /// Accent color hex `#RRGGBB` for salon rail / avatar ring. None → hash of agent id.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Profil cognitif : normal (défaut) ou deep thinking (plan hiérarchique dédié).
     #[serde(default)]
     pub cognitive_mode: CognitiveMode,
@@ -1097,6 +1103,12 @@ pub struct AgentCreateRequest {
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Painted avatar key (`spark`, `search`, `code`, …).
+    #[serde(default)]
+    pub avatar: Option<String>,
+    /// Accent color hex `#RRGGBB`.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Profil cognitif : normal (défaut) ou deep thinking.
     #[serde(default)]
     pub cognitive_mode: CognitiveMode,
@@ -1137,6 +1149,8 @@ impl AgentCreateRequest {
             optimize_prompt: false,
             gate_mode: default_agent_gate_mode(),
             origin: None,
+            avatar: None,
+            color: None,
             cognitive_mode: CognitiveMode::default(),
         }
     }
@@ -1180,6 +1194,10 @@ pub struct AgentRosterUpdateRequest {
     pub mcp_servers: Vec<String>,
     #[serde(default)]
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1549,6 +1567,12 @@ pub struct AgentInfo {
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Painted avatar key (`spark`, `search`, `code`, …). Empty / None → initials.
+    #[serde(default)]
+    pub avatar: Option<String>,
+    /// Accent color hex `#RRGGBB` for salon rail / avatar. None → hash of agent id.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Snapshot du plan Deep Thinking courant (si mode deep).
     #[serde(default)]
     pub deep_plan: Option<DeepPlan>,
@@ -6056,6 +6080,8 @@ mod chat_session_room_tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         assert_eq!(info.display_title(), "Coder");
         assert!(info.is_roster());
@@ -6103,6 +6129,8 @@ mod chat_session_room_tests {
             origin: Some("library".into()),
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         assert!(custom.uses_typed_display_name());
         assert!(!custom.is_ephemeral_chat_spawn());

@@ -1,15 +1,15 @@
 //! Conversation transcript, message cards, and attachment rendering.
 
 use crate::chat_bubble::{
-    chat_bubble_colors, chat_bubble_kind, chat_markdown_viewer, chat_message_frame,
-    chat_role_label, ChatBubbleKind,
+    chat_bubble_colors, chat_bubble_kind, chat_message_frame, chat_role_label, reply_meta_line,
+    show_chat_markdown, ChatBubbleKind,
 };
 use crate::chat_error_copy;
 use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
     agent_act_phrase, agent_canvas_session_ops, agent_panel, artifact_card, chat_ask, chat_media,
-    chat_room, i18n, local_tz_offset_minutes, now_ms, research_choice, research_document,
+    chat_room, i18n, icons, local_tz_offset_minutes, now_ms, research_choice, research_document,
     schedule_card, skill_offer, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
@@ -197,62 +197,98 @@ impl UiApp {
                             );
                         }
                     }
-                    let (fill, stroke, role_color) = if kind == ChatBubbleKind::RoomSpeaker {
+                    let role_color = if kind == ChatBubbleKind::RoomSpeaker {
                         if let Some(sid) = speaker_id.as_deref() {
-                            let (r, g, b) =
-                                chat_room::speaker_color_rgb(sid, ui.visuals().dark_mode);
-                            let c = egui::Color32::from_rgb(r, g, b);
-                            // Surchargable et contrasté : teinte speaker mélangée
-                            // au fond au lieu de gamma_multiply(0.25) qui écrasait tout.
-                            let panel = ui.visuals().panel_fill;
-                            let t = 0.16_f32.clamp(0.0, 1.0);
-                            let inv = 1.0 - t;
-                            let fill = egui::Color32::from_rgb(
-                                (f32::from(panel.r()) * inv + f32::from(c.r()) * t) as u8,
-                                (f32::from(panel.g()) * inv + f32::from(c.g()) * t) as u8,
-                                (f32::from(panel.b()) * inv + f32::from(c.b()) * t) as u8,
+                            let color = self
+                                .agents
+                                .iter()
+                                .find(|a| a.agent_id == sid)
+                                .map(|a| a.color.as_deref())
+                                .unwrap_or(None);
+                            let (r, g, b) = chat_room::resolve_agent_color_rgb(
+                                sid,
+                                color,
+                                ui.visuals().dark_mode,
                             );
-                            (fill, c, c)
+                            egui::Color32::from_rgb(r, g, b)
                         } else {
-                            chat_bubble_colors(ui, kind)
+                            chat_bubble_colors(ui, kind).2
                         }
                     } else {
-                        chat_bubble_colors(ui, kind)
+                        chat_bubble_colors(ui, kind).2
                     };
-                    let frame_colors = if kind == ChatBubbleKind::RoomSpeaker {
-                        Some((fill, stroke))
+                    let stamp = if ts_ms > 0 {
+                        let mut s = format_chat_stamp(ts_ms, chat_now, tz_offset);
+                        if duration_ms > 0
+                            && (role == "assistant" || kind == ChatBubbleKind::RoomSpeaker)
+                        {
+                            s = format!("{} · {}", s, agent_panel::fmt_ms(duration_ms));
+                        }
+                        s
                     } else {
-                        None
+                        String::new()
                     };
-                    chat_message_frame(ui, kind, frame_colors, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.colored_label(
-                                role_color,
-                                egui::RichText::new(&shown_role).strong().small(),
-                            );
-                            if ts_ms > 0 {
-                                // Horodatage en texte normal (pas weak) : il
-                                // disparaissait visuellement sur fond sombre.
-                                ui.label(
-                                    egui::RichText::new(format_chat_stamp(
-                                        ts_ms, chat_now, tz_offset,
-                                    ))
-                                    .small(),
-                                );
-                            }
-                            if duration_ms > 0
-                                && (role == "assistant" || kind == ChatBubbleKind::RoomSpeaker)
-                            {
-                                ui.weak(
-                                    egui::RichText::new(agent_panel::fmt_ms(duration_ms)).small(),
-                                );
-                            }
-                            if ui.small_button(t.btn_copy).clicked() {
-                                ui.ctx().copy_text(text.clone());
-                                self.push_status(t.copied.into());
-                            }
-                        });
+                    let agent_tokens = attachments.iter().find_map(|att| match att {
+                        ChatAttachment::AgentRef { agent_id, .. } => self
+                            .agents
+                            .iter()
+                            .find(|a| a.agent_id == *agent_id)
+                            .map(|a| {
+                                self.agent_ui
+                                    .traces
+                                    .get(agent_id)
+                                    .map(|tr| tr.tokens_used)
+                                    .unwrap_or(a.tokens_used)
+                            }),
+                        _ => None,
+                    });
+                    let meta = if role == "assistant" || kind == ChatBubbleKind::RoomSpeaker {
+                        reply_meta_line(duration_ms, &text, agent_tokens.unwrap_or(0))
+                    } else {
+                        String::new()
+                    };
+                    let copy_text = text.clone();
+                    let speaker_rail = (kind == ChatBubbleKind::RoomSpeaker).then_some(role_color);
+                    let bubble = chat_message_frame(ui, kind, None, speaker_rail, |ui| {
                         if kind == ChatBubbleKind::RoomSpeaker {
+                            ui.horizontal(|ui| {
+                                let avatar_id = speaker_id
+                                    .as_deref()
+                                    .and_then(|sid| {
+                                        self.agents
+                                            .iter()
+                                            .find(|a| a.agent_id == sid)
+                                            .map(|a| chat_room::agent_avatar_id(a))
+                                    })
+                                    .or_else(|| {
+                                        speaker_id.as_deref().and_then(|sid| {
+                                            room_members.iter().find(|m| m.agent_id == sid).map(
+                                                |m| {
+                                                    chat_room::resolved_avatar_id(
+                                                        None,
+                                                        m.persona_id.as_deref(),
+                                                    )
+                                                },
+                                            )
+                                        })
+                                    })
+                                    .unwrap_or_else(|| "clay:circle/happy/idle".into());
+                                icons::agent_avatar(
+                                    ui,
+                                    role_color,
+                                    &avatar_id,
+                                    &shown_role,
+                                    22.0,
+                                    false,
+                                );
+                                ui.colored_label(
+                                    role_color,
+                                    egui::RichText::new(&shown_role).strong().small(),
+                                );
+                                if !meta.is_empty() {
+                                    ui.weak(egui::RichText::new(&meta).small());
+                                }
+                            });
                             if let Some(th) = thinking.as_deref().filter(|s| !s.trim().is_empty()) {
                                 chat_room::room_thinking_toggle(
                                     ui,
@@ -262,12 +298,14 @@ impl UiApp {
                                     &mut self.chat_state.view.room_thinking_open,
                                 );
                             }
+                        } else if !meta.is_empty()
+                            && (role == "assistant" || role == "user" || role == "vous")
+                            && kind == ChatBubbleKind::Assistant
+                        {
+                            ui.weak(egui::RichText::new(&meta).small());
                         }
                         if !text.is_empty() {
-                            if room_mode
-                                && (kind == ChatBubbleKind::RoomSpeaker
-                                    || kind == ChatBubbleKind::User)
-                            {
+                            if room_mode && kind == ChatBubbleKind::User {
                                 ui.push_id(("room_bubble", i), |ui| {
                                     chat_room::paint_room_bubble_body(
                                         ui,
@@ -277,13 +315,14 @@ impl UiApp {
                                         room_members,
                                     );
                                 });
-                            } else if role == "assistant" || role == "user" || role == "vous" {
+                            } else if role == "assistant"
+                                || role == "user"
+                                || role == "vous"
+                                || kind == ChatBubbleKind::RoomSpeaker
+                            {
+                                let md = chat_room::prepare_markdown_body(&text);
                                 ui.push_id(("chat_md", i), |ui| {
-                                    chat_markdown_viewer(ui).show(
-                                        ui,
-                                        &mut self.chat_md_cache,
-                                        &text,
-                                    );
+                                    show_chat_markdown(ui, &mut self.chat_md_cache, &md);
                                 });
                             } else {
                                 ui.add(egui::Label::new(&text).wrap());
@@ -399,20 +438,99 @@ impl UiApp {
                                     agent_id,
                                     act_id,
                                     state,
-                                    ..
+                                    action,
+                                    args,
+                                    phrase,
                                 } => {
-                                    if state == "pending" {
-                                        ui.horizontal(|ui| {
-                                            if ui.button(t.agent_act_allow_once).clicked() {
-                                                act_decision =
-                                                    Some((agent_id.clone(), act_id.clone(), true));
-                                            }
-                                            if ui.button(t.agent_act_deny).clicked() {
-                                                act_decision =
-                                                    Some((agent_id.clone(), act_id.clone(), false));
+                                    let sentence = crate::agent_act_phrase::thread_display_text(
+                                        t, action, args, state, phrase,
+                                    );
+                                    let pending = state == "pending";
+                                    let tc = crate::theme::button_colors(ui);
+                                    egui::Frame::new()
+                                        .fill(ui.visuals().faint_bg_color)
+                                        .stroke(egui::Stroke::new(
+                                            1.0_f32,
+                                            ui.visuals().widgets.noninteractive.bg_stroke.color,
+                                        ))
+                                        .inner_margin(egui::Margin::symmetric(12, 8))
+                                        .corner_radius(crate::theme::RADIUS_MD)
+                                        .show(ui, |ui| {
+                                            let sentence_block = |ui: &mut egui::Ui| {
+                                                ui.vertical(|ui| {
+                                                    ui.label(&sentence);
+                                                    if !action.is_empty() {
+                                                        ui.weak(
+                                                            egui::RichText::new(action.as_str())
+                                                                .small(),
+                                                        );
+                                                    }
+                                                });
+                                            };
+                                            if pending {
+                                                ui.with_layout(
+                                                    egui::Layout::right_to_left(
+                                                        egui::Align::Center,
+                                                    ),
+                                                    |ui| {
+                                                        if ui
+                                                            .add(
+                                                                egui::Button::new(
+                                                                    egui::RichText::new(
+                                                                        t.confirm_deny,
+                                                                    )
+                                                                    .color(tc.danger),
+                                                                )
+                                                                .fill(ui.visuals().faint_bg_color)
+                                                                .stroke(egui::Stroke::new(
+                                                                    1.0_f32, tc.danger,
+                                                                ))
+                                                                .corner_radius(
+                                                                    crate::theme::RADIUS_SM,
+                                                                ),
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            act_decision = Some((
+                                                                agent_id.clone(),
+                                                                act_id.clone(),
+                                                                false,
+                                                            ));
+                                                        }
+                                                        if ui
+                                                            .add(
+                                                                egui::Button::new(
+                                                                    egui::RichText::new(
+                                                                        t.confirm_grant,
+                                                                    )
+                                                                    .color(crate::theme::VOID),
+                                                                )
+                                                                .fill(tc.accent)
+                                                                .corner_radius(
+                                                                    crate::theme::RADIUS_SM,
+                                                                ),
+                                                            )
+                                                            .clicked()
+                                                        {
+                                                            act_decision = Some((
+                                                                agent_id.clone(),
+                                                                act_id.clone(),
+                                                                true,
+                                                            ));
+                                                        }
+                                                        ui.add_space(8.0);
+                                                        ui.with_layout(
+                                                            egui::Layout::left_to_right(
+                                                                egui::Align::Center,
+                                                            ),
+                                                            sentence_block,
+                                                        );
+                                                    },
+                                                );
+                                            } else {
+                                                sentence_block(ui);
                                             }
                                         });
-                                    }
                                 }
                                 ChatAttachment::SkillOffer { .. } => {
                                     skill_offer::render_skill_offer_card(
@@ -556,6 +674,22 @@ impl UiApp {
                             }
                         }
                     });
+                    let bubble = if stamp.is_empty() {
+                        bubble
+                    } else {
+                        bubble.on_hover_text(&stamp)
+                    };
+                    let mut copied = false;
+                    bubble.context_menu(|ui| {
+                        if ui.button(t.btn_copy).clicked() {
+                            ui.ctx().copy_text(copy_text.clone());
+                            copied = true;
+                            ui.close_menu();
+                        }
+                    });
+                    if copied {
+                        self.push_status(t.copied.into());
+                    }
                 }
                 if let Some((agent_id, act_id, approved)) = act_decision {
                     let _ = self.cmd_tx.send(Cmd::AgentActDecision {
@@ -633,7 +767,7 @@ impl UiApp {
                 }
                 if !self.chat_state.runtime.streaming.is_empty() {
                     let (_, _, role_color) = chat_bubble_colors(ui, ChatBubbleKind::Assistant);
-                    chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
+                    chat_message_frame(ui, ChatBubbleKind::Assistant, None, None, |ui| {
                         ui.horizontal(|ui| {
                             ui.colored_label(
                                 role_color,
@@ -655,7 +789,7 @@ impl UiApp {
                             t,
                         );
                         ui.push_id("chat_md_stream", |ui| {
-                            chat_markdown_viewer(ui).show(ui, &mut self.chat_md_cache, &streaming);
+                            show_chat_markdown(ui, &mut self.chat_md_cache, &streaming);
                         });
                     });
                 } else if self.chat_state.runtime.pending {
@@ -677,7 +811,7 @@ impl UiApp {
                     } else {
                         t.chat_assistant.to_string()
                     };
-                    chat_message_frame(ui, ChatBubbleKind::Assistant, None, |ui| {
+                    chat_message_frame(ui, ChatBubbleKind::Assistant, None, None, |ui| {
                         ui.horizontal(|ui| {
                             ui.colored_label(
                                 role_color,

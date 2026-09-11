@@ -12,6 +12,94 @@ use eframe::egui;
 const ACTIVITY_NARROW_BREAK: f32 = 900.0;
 const ACTIVITY_SHEET_COMPOSER_RESERVE: f32 = 150.0;
 
+fn clay_studio_labels<'a>(t: &'a i18n::UiStrings) -> crate::clay_avatar::ClayStudioLabels<'a> {
+    crate::clay_avatar::ClayStudioLabels {
+        look: t.agents_avatar_look,
+        move_tab: t.agents_avatar_move,
+        surprise: t.agents_avatar_surprise,
+        shape: t.agents_avatar_shape,
+        face: t.agents_avatar_face,
+        colour: t.agents_avatar_colour,
+        colour_auto: t.agents_color_auto,
+        animations: t.agents_avatar_animations,
+        shapes: [
+            t.clay_shape_circle,
+            t.clay_shape_pebble,
+            t.clay_shape_squircle,
+            t.clay_shape_capsule,
+            t.clay_shape_triangle,
+            t.clay_shape_hexagon,
+            t.clay_shape_cloud,
+            t.clay_shape_droplet,
+        ],
+        faces: [
+            t.clay_face_neutral,
+            t.clay_face_attentive,
+            t.clay_face_surprised,
+            t.clay_face_excited,
+            t.clay_face_happy,
+            t.clay_face_laughing,
+            t.clay_face_angry,
+            t.clay_face_sad,
+            t.clay_face_curious,
+            t.clay_face_proud,
+            t.clay_face_shy,
+            t.clay_face_sleepy,
+        ],
+        anims: [
+            t.clay_anim_idle,
+            t.clay_anim_thinking,
+            t.clay_anim_wink,
+            t.clay_anim_wide,
+            t.clay_anim_alert,
+            t.clay_anim_sleep,
+            t.clay_anim_orbit,
+            t.clay_anim_burst,
+        ],
+    }
+}
+
+fn avatar_compact_row(
+    ui: &mut egui::Ui,
+    t: &i18n::UiStrings,
+    avatar: &str,
+    color_hex: &str,
+    name: &str,
+    fallback: egui::Color32,
+    studio_open: &mut bool,
+) {
+    let color = chat_room::parse_agent_color_hex(color_hex)
+        .map(|(r, g, b)| egui::Color32::from_rgb(r, g, b))
+        .unwrap_or(fallback);
+    let spec = crate::clay_avatar::ClaySpec::resolve(avatar);
+    let labels = clay_studio_labels(t);
+    ui.horizontal(|ui| {
+        icons::agent_avatar(ui, color, avatar, name, 40.0, false);
+        ui.vertical(|ui| {
+            ui.label(egui::RichText::new(t.agents_avatar).strong());
+            ui.weak(
+                egui::RichText::new(format!(
+                    "{} · {} · {}",
+                    labels.shape_name(spec.shape),
+                    labels.face_name(spec.face),
+                    labels.anim_name(spec.anim)
+                ))
+                .small(),
+            );
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let label = if *studio_open {
+                t.agents_avatar_done
+            } else {
+                t.agents_avatar_edit
+            };
+            if ui.button(label).clicked() {
+                *studio_open = !*studio_open;
+            }
+        });
+    });
+}
+
 fn agent_activity_icon(state: &AgentState) -> icons::AgentActivityIcon {
     match state {
         AgentState::Done => icons::AgentActivityIcon::Done,
@@ -59,6 +147,35 @@ impl UiApp {
         }
         ui.label(t.agents_label);
         ui.text_edit_singleline(&mut self.agent_ui.display_name);
+        let fallback = {
+            let (r, g, b) = chat_room::speaker_color_rgb(
+                self.agent_ui.display_name.trim(),
+                ui.visuals().dark_mode,
+            );
+            egui::Color32::from_rgb(r, g, b)
+        };
+        avatar_compact_row(
+            ui,
+            &t,
+            &self.agent_ui.avatar,
+            &self.agent_ui.color,
+            self.agent_ui.display_name.trim(),
+            fallback,
+            &mut self.agent_ui.avatar_studio_open,
+        );
+        if self.agent_ui.avatar_studio_open {
+            ui.add_space(4.0);
+            ui.push_id("agent_create_avatar_studio", |ui| {
+                icons::agent_avatar_editor_i18n(
+                    ui,
+                    &mut self.agent_ui.avatar,
+                    &mut self.agent_ui.color,
+                    self.agent_ui.display_name.trim(),
+                    fallback,
+                    &clay_studio_labels(&t),
+                );
+            });
+        }
         ui.label(t.agents_role);
         ui.weak(t.agents_role_optional);
         ui.add(
@@ -98,11 +215,7 @@ impl UiApp {
                     for name in ["notes-writer", "research", "file-author", "planner"] {
                         let mut on = self.agent_ui.skill_selected.iter().any(|s| s == name);
                         let label = i18n::roster_skill_label(&t, name);
-                        if ui
-                            .checkbox(&mut on, label)
-                            .on_hover_text(name)
-                            .changed()
-                        {
+                        if ui.checkbox(&mut on, label).on_hover_text(name).changed() {
                             if on {
                                 self.agent_ui.skill_selected.push(name.into());
                             } else {
@@ -281,6 +394,15 @@ impl UiApp {
             let selected = self.agent_ui.active_tab.as_deref() == Some(a.agent_id.as_str());
             let label = chat_room::roster_agent_label(&t, a);
             let label = agent_panel::truncate(&label, 48);
+            let (r, g, b) = chat_room::agent_color_rgb(a, ui.visuals().dark_mode);
+            icons::agent_avatar(
+                ui,
+                egui::Color32::from_rgb(r, g, b),
+                &chat_room::agent_avatar_id(a),
+                &label,
+                22.0,
+                selected,
+            );
             let hover = if chat_room::is_persona_agent_id(&a.agent_id) {
                 label.clone()
             } else {
@@ -374,6 +496,35 @@ impl UiApp {
             return;
         };
         ui.separator();
+        let fallback = {
+            let (r, g, b) = chat_room::speaker_color_rgb(agent_id, ui.visuals().dark_mode);
+            egui::Color32::from_rgb(r, g, b)
+        };
+        let name = draft.display_name.clone();
+        let avatar_snapshot = draft.avatar.clone();
+        let color_snapshot = draft.color.clone();
+        avatar_compact_row(
+            ui,
+            &t,
+            &avatar_snapshot,
+            &color_snapshot,
+            &name,
+            fallback,
+            &mut draft.avatar_studio_open,
+        );
+        if draft.avatar_studio_open {
+            ui.add_space(4.0);
+            ui.push_id(("roster_avatar_studio", agent_id), |ui| {
+                icons::agent_avatar_editor_i18n(
+                    ui,
+                    &mut draft.avatar,
+                    &mut draft.color,
+                    &draft.display_name,
+                    fallback,
+                    &clay_studio_labels(&t),
+                );
+            });
+        }
         ui.collapsing(t.agents_tools, |ui| {
             ui_roster_tool_checkboxes(ui, &t, &mut draft.tools);
         });
@@ -383,11 +534,7 @@ impl UiApp {
                 for name in ["notes-writer", "research", "file-author", "planner"] {
                     let mut on = draft.skills.iter().any(|s| s == name);
                     let label = i18n::roster_skill_label(&t, name);
-                    if ui
-                        .checkbox(&mut on, label)
-                        .on_hover_text(name)
-                        .changed()
-                    {
+                    if ui.checkbox(&mut on, label).on_hover_text(name).changed() {
                         if on {
                             draft.skills.push(name.into());
                         } else {
@@ -461,6 +608,16 @@ impl UiApp {
                     None
                 } else {
                     Some(draft.model_id)
+                },
+                avatar: if draft.avatar.trim().is_empty() {
+                    None
+                } else {
+                    Some(draft.avatar)
+                },
+                color: if draft.color.trim().is_empty() {
+                    Some(String::new())
+                } else {
+                    Some(draft.color)
                 },
             });
         }

@@ -83,12 +83,11 @@ impl UiApp {
                 let mut send_clicked = false;
                 let mut stop_clicked = false;
                 let mut input_response: Option<egui::Response> = None;
+                let has_last_image = self.chat_state.composer.last_session_image.is_some();
 
                 let mut run_attach_menu = |ui: &mut egui::Ui| {
                     icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
-                        if self.chat_state.composer.last_session_image.is_some()
-                            && ui.button(t.chat_last_session_image).clicked()
-                        {
+                        if has_last_image && ui.button(t.chat_last_session_image).clicked() {
                             reuse_last_image = true;
                         }
                         if ui.button(t.chat_attach_image).clicked() {
@@ -102,71 +101,116 @@ impl UiApp {
 
                 let row_w = ui.available_width();
                 let input_h = chat_composer_input_height(&self.chat_state.composer.input);
+                let frame_pad = 16.0_f32;
+                let inner_w = (row_w - frame_pad).max(0.0);
+                let model_chip_w = 92.0_f32;
                 let field_w = composer_field_width(
-                    row_w,
-                    send_w,
+                    inner_w,
+                    send_w + model_chip_w + item_gap,
                     icons::ATTACH_BTN_W,
                     stop_w,
                     item_gap,
                     show_stop,
                 );
+                let frame_h = input_h + frame_pad;
 
                 ui.allocate_ui_with_layout(
-                    egui::vec2(row_w, input_h),
-                    egui::Layout::right_to_left(egui::Align::Center),
+                    egui::vec2(row_w, frame_h),
+                    egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
-                        if show_stop {
-                            if room_mode {
-                                if ui
-                                    .add_sized(
-                                        egui::vec2(stop_w, input_h),
-                                        egui::Button::new(t.chat_stop),
-                                    )
-                                    .clicked()
-                                {
-                                    if let Some(sid) = self.chat_state.active_session.clone() {
-                                        let _ = self
-                                            .cmd_tx
-                                            .send(Cmd::RoomTurnCancel { session_id: sid });
+                        egui::Frame::NONE
+                            .fill(ui.visuals().faint_bg_color)
+                            .stroke(egui::Stroke::new(
+                                1.0_f32,
+                                ui.visuals().widgets.noninteractive.bg_stroke.color,
+                            ))
+                            .corner_radius(crate::theme::RADIUS_MD)
+                            .inner_margin(egui::Margin::symmetric(8, 6))
+                            .show(ui, |ui| {
+                                ui.set_min_width((row_w - 4.0).max(0.0));
+                                ui.horizontal(|ui| {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(icons::ATTACH_BTN_W, input_h),
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            run_attach_menu(ui);
+                                        },
+                                    );
+                                    let r = ui.add_sized(
+                                        egui::vec2(field_w, input_h),
+                                        egui::TextEdit::multiline(
+                                            &mut self.chat_state.composer.input,
+                                        )
+                                        .id_salt("chat_input")
+                                        .frame(false)
+                                        .desired_rows(2)
+                                        .hint_text(&hint),
+                                    );
+                                    input_response = Some(r);
+
+                                    let model_id = self.status_model_name();
+                                    let model_human = crate::models_page::model_human_label(
+                                        &model_id,
+                                        &self.models_ui.model_infos,
+                                        t.status_model_default,
+                                    );
+                                    let model_short =
+                                        crate::agent_panel::truncate(&model_human, 14);
+                                    let model_resp = ui
+                                        .add(
+                                            egui::Label::new(
+                                                egui::RichText::new(model_short).small(),
+                                            )
+                                            .sense(egui::Sense::click()),
+                                        )
+                                        .on_hover_text(&model_id);
+                                    self.ui_session_model_picker(
+                                        ui,
+                                        &t,
+                                        &model_resp,
+                                        "composer_model_picker",
+                                        true,
+                                    );
+
+                                    let btn_h = 28.0_f32;
+                                    let send_btn = ui
+                                        .add_sized(
+                                            egui::vec2(send_w, btn_h),
+                                            egui::Button::new(t.agent_send)
+                                                .corner_radius(crate::theme::RADIUS_SM)
+                                                .fill(crate::theme::button_colors(ui).accent),
+                                        )
+                                        .on_hover_text(format!("{} (Enter)", t.tip_send));
+                                    send_clicked |= send_btn.clicked();
+                                    if show_stop {
+                                        if room_mode {
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(stop_w, btn_h),
+                                                    egui::Button::new(t.chat_stop),
+                                                )
+                                                .clicked()
+                                            {
+                                                if let Some(sid) =
+                                                    self.chat_state.active_session.clone()
+                                                {
+                                                    let _ = self.cmd_tx.send(Cmd::RoomTurnCancel {
+                                                        session_id: sid,
+                                                    });
+                                                }
+                                            }
+                                        } else if ui
+                                            .add_sized(
+                                                egui::vec2(stop_w, btn_h),
+                                                egui::Button::new(t.chat_stop),
+                                            )
+                                            .clicked()
+                                        {
+                                            stop_clicked = true;
+                                        }
                                     }
-                                }
-                            } else if ui
-                                .add_sized(
-                                    egui::vec2(stop_w, input_h),
-                                    egui::Button::new(t.chat_stop),
-                                )
-                                .clicked()
-                            {
-                                stop_clicked = true;
-                            }
-                        }
-                        let send_btn = ui
-                            .add_sized(
-                                egui::vec2(send_w, input_h.max(44.0)),
-                                egui::Button::new(t.agent_send)
-                                    .corner_radius(crate::theme::RADIUS_MD)
-                                    // Surchargable : accent du thème courant, pas SIGNAL en dur.
-                                    .fill(crate::theme::button_colors(ui).accent),
-                            )
-                            .on_hover_text(format!("{} (Enter)", t.tip_send));
-                        send_clicked |= send_btn.clicked();
-
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(icons::ATTACH_BTN_W, input_h),
-                            egui::Layout::left_to_right(egui::Align::Center),
-                            |ui| {
-                                run_attach_menu(ui);
-                            },
-                        );
-
-                        let r = ui.add_sized(
-                            egui::vec2(field_w, input_h),
-                            egui::TextEdit::multiline(&mut self.chat_state.composer.input)
-                                .id_salt("chat_input")
-                                .desired_rows(2)
-                                .hint_text(&hint),
-                        );
-                        input_response = Some(r);
+                                });
+                            });
                     },
                 );
 

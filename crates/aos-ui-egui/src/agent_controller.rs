@@ -45,6 +45,8 @@ impl UiApp {
             origin: "library".into(),
             join_active_room,
             library,
+            avatar: self.agent_ui.avatar.clone(),
+            color: self.agent_ui.color.clone(),
         });
     }
 

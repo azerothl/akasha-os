@@ -1024,8 +1024,7 @@ impl UiApp {
                     .show(ui, |ui| {
                         ui.label(t.trust_default);
                         ui.horizontal(|ui| {
-                            for (code, label) in
-                                [("low", t.trust_low), ("medium", t.trust_medium)]
+                            for (code, label) in [("low", t.trust_low), ("medium", t.trust_medium)]
                             {
                                 if ui
                                     .selectable_label(self.prefs.trust_default == code, label)
@@ -1118,10 +1117,7 @@ impl UiApp {
                             .show_ui(ui, |ui| {
                                 for eng in ["auto", "brave", "searxng", "duckduckgo", "bing"] {
                                     if ui
-                                        .selectable_label(
-                                            self.prefs.web_search_engine == eng,
-                                            eng,
-                                        )
+                                        .selectable_label(self.prefs.web_search_engine == eng, eng)
                                         .clicked()
                                     {
                                         self.prefs.web_search_engine = eng.into();
@@ -1176,103 +1172,103 @@ impl UiApp {
 
         if section_visible("secrets", &["secret", "clé", "token", "api"]) {
             show_settings_section(ui, show_section_heading, t.settings_secrets, |ui| {
-                    ui.weak(t.settings_secrets_blurb);
-                    egui::Grid::new("settings_secrets")
-                        .num_columns(2)
-                        .spacing([12.0, 8.0])
-                        .min_col_width(label_w)
-                        .show(ui, |ui| {
-                            ui.label("Brave Search");
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.settings_ui.secret_brave)
-                                        .password(true)
-                                        .desired_width(220.0)
-                                        .hint_text("BSA…"),
-                                );
-                                if ui.button(t.settings_secret_save).clicked() {
-                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
-                                        name: "brave_search_api_key".into(),
-                                        value: self.settings_ui.secret_brave.clone(),
-                                    });
-                                    self.settings_ui.secret_brave.clear();
-                                }
-                            });
-                            ui.end_row();
-
-                            ui.label("GitHub token");
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.settings_ui.secret_github)
-                                        .password(true)
-                                        .desired_width(220.0)
-                                        .hint_text("ghp_…"),
-                                );
-                                if ui.button(t.settings_secret_save).clicked() {
-                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
-                                        name: "github_token".into(),
-                                        value: self.settings_ui.secret_github.clone(),
-                                    });
-                                    self.settings_ui.secret_github.clear();
-                                }
-                            });
-                            ui.end_row();
-
-                            ui.label(t.settings_secret_openai);
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.settings_ui.secret_openai)
-                                        .password(true)
-                                        .desired_width(220.0)
-                                        .hint_text("sk-…"),
-                                );
-                                if ui.button(t.settings_secret_save).clicked() {
-                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
-                                        name: "openai_api_key".into(),
-                                        value: self.settings_ui.secret_openai.clone(),
-                                    });
-                                    self.settings_ui.secret_openai.clear();
-                                }
-                            });
-                            ui.end_row();
-
-                            ui.label(t.lan_session_value);
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.settings_ui.secret_lan_session,
-                                    )
+                ui.weak(t.settings_secrets_blurb);
+                egui::Grid::new("settings_secrets")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label("Brave Search");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.settings_ui.secret_brave)
                                     .password(true)
                                     .desired_width(220.0)
-                                    .hint_text("64 hex characters"),
-                                );
-                                if ui.button(t.settings_secret_save).clicked() {
-                                    let name = self.prefs.lan_session_key_secret.clone();
-                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
-                                        name,
-                                        value: self.settings_ui.secret_lan_session.clone(),
-                                    });
-                                    self.settings_ui.secret_lan_session.clear();
-                                }
-                            });
-                            ui.end_row();
+                                    .hint_text("BSA…"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: "brave_search_api_key".into(),
+                                    value: self.settings_ui.secret_brave.clone(),
+                                });
+                                self.settings_ui.secret_brave.clear();
+                            }
                         });
-                    ui.horizontal(|ui| {
-                        if ui.button(t.settings_secret_list).clicked() {
-                            let _ = self.cmd_tx.send(Cmd::SecretList);
-                        }
-                        if self.settings_ui.secret_vault_encrypted {
-                            ui.weak(t.settings_secret_encrypted);
-                        }
-                        if !self.settings_ui.secret_names.is_empty() {
-                            ui.weak(format!(
-                                "{}: {}",
-                                t.settings_secret_configured,
-                                self.settings_ui.secret_names.join(", ")
-                            ));
-                        }
+                        ui.end_row();
+
+                        ui.label("GitHub token");
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.settings_ui.secret_github)
+                                    .password(true)
+                                    .desired_width(220.0)
+                                    .hint_text("ghp_…"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: "github_token".into(),
+                                    value: self.settings_ui.secret_github.clone(),
+                                });
+                                self.settings_ui.secret_github.clear();
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label(t.settings_secret_openai);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.settings_ui.secret_openai)
+                                    .password(true)
+                                    .desired_width(220.0)
+                                    .hint_text("sk-…"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: "openai_api_key".into(),
+                                    value: self.settings_ui.secret_openai.clone(),
+                                });
+                                self.settings_ui.secret_openai.clear();
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label(t.lan_session_value);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(
+                                    &mut self.settings_ui.secret_lan_session,
+                                )
+                                .password(true)
+                                .desired_width(220.0)
+                                .hint_text("64 hex characters"),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let name = self.prefs.lan_session_key_secret.clone();
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name,
+                                    value: self.settings_ui.secret_lan_session.clone(),
+                                });
+                                self.settings_ui.secret_lan_session.clear();
+                            }
+                        });
+                        ui.end_row();
                     });
-                    ui.weak(t.settings_brave_hint);
+                ui.horizontal(|ui| {
+                    if ui.button(t.settings_secret_list).clicked() {
+                        let _ = self.cmd_tx.send(Cmd::SecretList);
+                    }
+                    if self.settings_ui.secret_vault_encrypted {
+                        ui.weak(t.settings_secret_encrypted);
+                    }
+                    if !self.settings_ui.secret_names.is_empty() {
+                        ui.weak(format!(
+                            "{}: {}",
+                            t.settings_secret_configured,
+                            self.settings_ui.secret_names.join(", ")
+                        ));
+                    }
+                });
+                ui.weak(t.settings_brave_hint);
             });
         }
 
@@ -1281,246 +1277,231 @@ impl UiApp {
             &["catalogue", "catalog", "module", "community", "communauté"],
         ) {
             show_settings_section(ui, show_section_heading, t.settings_catalogue, |ui| {
-                    ui.weak(t.settings_catalogue_blurb);
-                    if ui.button(t.settings_secret_list).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
-                        let _ = self.cmd_tx.send(Cmd::ModuleList);
+                ui.weak(t.settings_catalogue_blurb);
+                if ui.button(t.settings_secret_list).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
+                    let _ = self.cmd_tx.send(Cmd::ModuleList);
+                }
+                ui.add_space(6.0);
+                ui.weak(t.settings_catalogue_community_blurb);
+                let mut community_on = self.prefs.community_catalogue_enabled;
+                if ui
+                    .checkbox(&mut community_on, t.settings_catalogue_community_enable)
+                    .changed()
+                {
+                    self.prefs.community_catalogue_enabled = community_on;
+                    save_preferences(&self.prefs);
+                    let _ = self.cmd_tx.send(Cmd::CatalogueSetSource {
+                        enabled: community_on,
+                    });
+                }
+                if community_on && ui.button(t.settings_catalogue_community_fetch).clicked() {
+                    let _ = self.cmd_tx.send(Cmd::CatalogueFetchExtra);
+                }
+                if let Some(cat) = &self.settings_ui.catalogue {
+                    if cat.extra_enabled && cat.extra_cached && cat.extra_signature_ok {
+                        ui.weak(t.settings_catalogue_community_cached);
                     }
-                    ui.add_space(6.0);
-                    ui.weak(t.settings_catalogue_community_blurb);
-                    let mut community_on = self.prefs.community_catalogue_enabled;
-                    if ui
-                        .checkbox(&mut community_on, t.settings_catalogue_community_enable)
-                        .changed()
-                    {
-                        self.prefs.community_catalogue_enabled = community_on;
-                        save_preferences(&self.prefs);
-                        let _ = self.cmd_tx.send(Cmd::CatalogueSetSource {
-                            enabled: community_on,
-                        });
+                    if cat.extra_enabled && !cat.extra_error.is_empty() {
+                        ui.weak(format!(
+                            "{} ({})",
+                            t.settings_catalogue_community_unsigned, cat.extra_error
+                        ));
+                    } else if cat.extra_enabled && !cat.extra_signature_ok {
+                        ui.weak(t.settings_catalogue_community_unsigned);
                     }
-                    if community_on && ui.button(t.settings_catalogue_community_fetch).clicked() {
-                        let _ = self.cmd_tx.send(Cmd::CatalogueFetchExtra);
-                    }
-                    if let Some(cat) = &self.settings_ui.catalogue {
-                        if cat.extra_enabled && cat.extra_cached && cat.extra_signature_ok {
-                            ui.weak(t.settings_catalogue_community_cached);
-                        }
-                        if cat.extra_enabled && !cat.extra_error.is_empty() {
-                            ui.weak(format!(
-                                "{} ({})",
-                                t.settings_catalogue_community_unsigned, cat.extra_error
-                            ));
-                        } else if cat.extra_enabled && !cat.extra_signature_ok {
-                            ui.weak(t.settings_catalogue_community_unsigned);
-                        }
-                    }
-                    let catalogue_modules = self
-                        .settings_ui
-                        .catalogue
-                        .as_ref()
-                        .filter(|cat| cat.signature_ok || cat.extra_signature_ok)
-                        .map(|cat| {
-                            catalogue_module_names(
-                                cat.entries
-                                    .iter()
-                                    .map(|entry| (entry.name.clone(), entry.kind.clone())),
-                            )
-                        })
-                        .unwrap_or_default();
-                    match self.settings_ui.catalogue.clone() {
-                        Some(cat) if cat.signature_ok || cat.extra_signature_ok => {
-                            for e in cat.entries {
-                                let source_label = if e.source == "community" {
-                                    t.settings_catalogue_source_community
-                                } else {
-                                    t.settings_catalogue_source_bundled
-                                };
-                                let installed_mod = self
-                                    .settings_ui
-                                    .installed_modules
-                                    .iter()
-                                    .find(|m| m.name == e.name)
-                                    .cloned();
-                                let skill_installed = self
-                                    .settings_ui
-                                    .installed_skills
-                                    .iter()
-                                    .any(|n| n == &e.name);
-                                ui.horizontal(|ui| {
-                                    let mut label = format!(
-                                        "{} {} ({}) [{}]",
-                                        e.name, e.version, e.kind, source_label
-                                    );
-                                    if !e.license.is_empty() {
-                                        label.push_str(&format!(" {}", e.license));
+                }
+                let catalogue_modules = self
+                    .settings_ui
+                    .catalogue
+                    .as_ref()
+                    .filter(|cat| cat.signature_ok || cat.extra_signature_ok)
+                    .map(|cat| {
+                        catalogue_module_names(
+                            cat.entries
+                                .iter()
+                                .map(|entry| (entry.name.clone(), entry.kind.clone())),
+                        )
+                    })
+                    .unwrap_or_default();
+                match self.settings_ui.catalogue.clone() {
+                    Some(cat) if cat.signature_ok || cat.extra_signature_ok => {
+                        for e in cat.entries {
+                            let source_label = if e.source == "community" {
+                                t.settings_catalogue_source_community
+                            } else {
+                                t.settings_catalogue_source_bundled
+                            };
+                            let installed_mod = self
+                                .settings_ui
+                                .installed_modules
+                                .iter()
+                                .find(|m| m.name == e.name)
+                                .cloned();
+                            let skill_installed = self
+                                .settings_ui
+                                .installed_skills
+                                .iter()
+                                .any(|n| n == &e.name);
+                            ui.horizontal(|ui| {
+                                let mut label = format!(
+                                    "{} {} ({}) [{}]",
+                                    e.name, e.version, e.kind, source_label
+                                );
+                                if !e.license.is_empty() {
+                                    label.push_str(&format!(" {}", e.license));
+                                }
+                                if installed_mod.is_some() || skill_installed {
+                                    label.push_str(&format!(
+                                        " [{}]",
+                                        t.settings_catalogue_installed
+                                    ));
+                                    if installed_mod
+                                        .as_ref()
+                                        .map(|m| m.quarantined)
+                                        .unwrap_or(false)
+                                    {
+                                        label.push_str(" [quarantine]");
                                     }
-                                    if installed_mod.is_some() || skill_installed {
-                                        label.push_str(&format!(
-                                            " [{}]",
-                                            t.settings_catalogue_installed
-                                        ));
-                                        if installed_mod
-                                            .as_ref()
-                                            .map(|m| m.quarantined)
-                                            .unwrap_or(false)
-                                        {
-                                            label.push_str(" [quarantine]");
-                                        }
-                                    }
-                                    ui.label(label);
-                                    match e.kind.as_str() {
-                                        "module" => {
-                                            if aos_proto::decl_ui::is_protected_by_host(&e.name) {
-                                                ui.weak(t.settings_bundled_locked);
-                                            } else if installed_mod.is_some() {
-                                                if ui
-                                                    .button(t.settings_catalogue_uninstall)
-                                                    .clicked()
-                                                {
-                                                    let _ =
-                                                        self.cmd_tx.send(Cmd::ModuleUninstall {
-                                                            name: e.name.clone(),
-                                                        });
-                                                }
-                                            } else if e.source == "community" {
-                                                if ui.button(t.settings_catalogue_install).clicked()
-                                                {
-                                                    let _ =
-                                                        self.cmd_tx.send(Cmd::CatalogueInstall {
-                                                            name: e.name.clone(),
-                                                        });
-                                                }
-                                            } else if ui
-                                                .button(t.settings_catalogue_install)
-                                                .clicked()
-                                            {
-                                                let src = aos_home().join(&e.path);
-                                                let _ = self.cmd_tx.send(Cmd::ModuleInstall {
-                                                    source_dir: src.to_string_lossy().into_owned(),
-                                                    approved_caps: None,
+                                }
+                                ui.label(label);
+                                match e.kind.as_str() {
+                                    "module" => {
+                                        if aos_proto::decl_ui::is_protected_by_host(&e.name) {
+                                            ui.weak(t.settings_bundled_locked);
+                                        } else if installed_mod.is_some() {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked() {
+                                                let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                                    name: e.name.clone(),
                                                 });
                                             }
-                                        }
-                                        "skill" => {
-                                            if skill_installed {
-                                                if ui
-                                                    .button(t.settings_catalogue_uninstall)
-                                                    .clicked()
-                                                {
-                                                    let _ = self.cmd_tx.send(Cmd::SkillUninstall {
-                                                        name: e.name.clone(),
-                                                    });
-                                                }
-                                            } else if ui
-                                                .button(t.settings_catalogue_install)
-                                                .clicked()
-                                            {
+                                        } else if e.source == "community" {
+                                            if ui.button(t.settings_catalogue_install).clicked() {
                                                 let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
                                                     name: e.name.clone(),
                                                 });
                                             }
+                                        } else if ui.button(t.settings_catalogue_install).clicked()
+                                        {
+                                            let src = aos_home().join(&e.path);
+                                            let _ = self.cmd_tx.send(Cmd::ModuleInstall {
+                                                source_dir: src.to_string_lossy().into_owned(),
+                                                approved_caps: None,
+                                            });
                                         }
-                                        _ => {}
                                     }
-                                });
-                                if !e.attested_caps.is_empty() {
-                                    ui.weak(format!(
-                                        "{}: {}",
-                                        t.settings_catalogue_caps,
-                                        e.attested_caps.join(", ")
-                                    ));
+                                    "skill" => {
+                                        if skill_installed {
+                                            if ui.button(t.settings_catalogue_uninstall).clicked() {
+                                                let _ = self.cmd_tx.send(Cmd::SkillUninstall {
+                                                    name: e.name.clone(),
+                                                });
+                                            }
+                                        } else if ui.button(t.settings_catalogue_install).clicked()
+                                        {
+                                            let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
+                                                name: e.name.clone(),
+                                            });
+                                        }
+                                    }
+                                    _ => {}
                                 }
+                            });
+                            if !e.attested_caps.is_empty() {
+                                ui.weak(format!(
+                                    "{}: {}",
+                                    t.settings_catalogue_caps,
+                                    e.attested_caps.join(", ")
+                                ));
                             }
                         }
-                        Some(_) => {
-                            ui.weak(t.settings_catalogue_unsigned);
-                        }
-                        None => {
-                            ui.weak(t.settings_catalogue_unsigned);
-                        }
                     }
+                    Some(_) => {
+                        ui.weak(t.settings_catalogue_unsigned);
+                    }
+                    None => {
+                        ui.weak(t.settings_catalogue_unsigned);
+                    }
+                }
 
-                    ui.add_space(8.0);
-                    ui.weak(t.settings_installed_modules);
-                    for m in self.settings_ui.installed_modules.clone() {
-                        if catalogue_modules.contains(&m.name) {
-                            continue;
-                        }
-                        ui.horizontal(|ui| {
-                            ui.label(format!("{} v{}", m.name, m.version));
-                            if aos_proto::decl_ui::is_protected_by_host(&m.name) {
-                                ui.weak(t.settings_bundled_locked);
-                            } else if ui.button(t.settings_catalogue_uninstall).clicked() {
-                                let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
-                                    name: m.name.clone(),
-                                });
-                            }
-                        });
+                ui.add_space(8.0);
+                ui.weak(t.settings_installed_modules);
+                for m in self.settings_ui.installed_modules.clone() {
+                    if catalogue_modules.contains(&m.name) {
+                        continue;
                     }
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{} v{}", m.name, m.version));
+                        if aos_proto::decl_ui::is_protected_by_host(&m.name) {
+                            ui.weak(t.settings_bundled_locked);
+                        } else if ui.button(t.settings_catalogue_uninstall).clicked() {
+                            let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
+                                name: m.name.clone(),
+                            });
+                        }
+                    });
+                }
             });
         }
 
         if section_visible("schedule", &["planification", "schedule", "tâche", "task"]) {
             show_settings_section(ui, show_section_heading, t.schedule_heading, |ui| {
-                    egui::Grid::new("settings_schedules")
-                        .num_columns(2)
-                        .spacing([12.0, 8.0])
-                        .min_col_width(label_w)
-                        .show(ui, |ui| {
-                            ui.label(t.schedule_goal);
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.settings_ui.schedule_goal)
-                                    .desired_width(280.0)
-                                    .hint_text("agent goal"),
-                            );
-                            ui.end_row();
+                egui::Grid::new("settings_schedules")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .min_col_width(label_w)
+                    .show(ui, |ui| {
+                        ui.label(t.schedule_goal);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.settings_ui.schedule_goal)
+                                .desired_width(280.0)
+                                .hint_text("agent goal"),
+                        );
+                        ui.end_row();
 
-                            ui.label(t.schedule_interval);
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::DragValue::new(
-                                        &mut self.settings_ui.schedule_interval_secs,
-                                    )
+                        ui.label(t.schedule_interval);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut self.settings_ui.schedule_interval_secs)
                                     .range(30..=86_400)
                                     .suffix(" s"),
-                                );
-                                if ui
-                                    .button(t.schedule_create)
-                                    .on_hover_text(t.tip_schedule_create)
-                                    .clicked()
-                                {
-                                    self.send_settings_schedule_create();
-                                }
-                                if ui.button(t.caps_refresh).clicked() {
-                                    let _ = self.cmd_tx.send(Cmd::ScheduleList);
-                                }
-                            });
-                            ui.end_row();
+                            );
+                            if ui
+                                .button(t.schedule_create)
+                                .on_hover_text(t.tip_schedule_create)
+                                .clicked()
+                            {
+                                self.send_settings_schedule_create();
+                            }
+                            if ui.button(t.caps_refresh).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::ScheduleList);
+                            }
                         });
-                    if self.schedule_ui.entries.is_empty() {
-                        ui.weak("Aucun schedule");
-                    } else {
-                        for s in self.schedule_ui.entries.clone() {
-                            ui.horizontal(|ui| {
-                                let flag = if s.enabled { "ON" } else { "OFF" };
-                                ui.monospace(&s.id);
-                                ui.label(format!(
-                                    "[{flag}] every {}s · fires={} · {}",
-                                    s.interval_secs, s.fire_count, s.goal
-                                ));
-                                if s.enabled
-                                    && ui
-                                        .small_button(t.schedule_cancel)
-                                        .on_hover_text(t.tip_schedule_cancel)
-                                        .clicked()
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id });
-                                }
-                            });
-                        }
+                        ui.end_row();
+                    });
+                if self.schedule_ui.entries.is_empty() {
+                    ui.weak("Aucun schedule");
+                } else {
+                    for s in self.schedule_ui.entries.clone() {
+                        ui.horizontal(|ui| {
+                            let flag = if s.enabled { "ON" } else { "OFF" };
+                            ui.monospace(&s.id);
+                            ui.label(format!(
+                                "[{flag}] every {}s · fires={} · {}",
+                                s.interval_secs, s.fire_count, s.goal
+                            ));
+                            if s.enabled
+                                && ui
+                                    .small_button(t.schedule_cancel)
+                                    .on_hover_text(t.tip_schedule_cancel)
+                                    .clicked()
+                            {
+                                let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id });
+                            }
+                        });
                     }
-                });
+                }
+            });
         }
         if section_visible(
             "backup",

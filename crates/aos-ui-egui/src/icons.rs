@@ -63,6 +63,29 @@ pub fn help_button(ui: &mut Ui) -> Response {
     response
 }
 
+/// Compact plus control (new session, add member).
+pub fn plus_button(ui: &mut Ui) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        if response.hovered() {
+            ui.painter()
+                .rect_filled(rect, 6.0, ui.visuals().widgets.hovered.bg_fill);
+        }
+        paint_plus(ui, glyph_rect(rect), hover_color(ui, &response));
+    }
+    response
+}
+
+fn paint_plus(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.5_f32, color);
+    let c = rect.center();
+    let arm = rect.width() * 0.32;
+    let painter = ui.painter();
+    painter.line_segment([c + Vec2::new(-arm, 0.0), c + Vec2::new(arm, 0.0)], stroke);
+    painter.line_segment([c + Vec2::new(0.0, -arm), c + Vec2::new(0.0, arm)], stroke);
+}
+
 fn paint_help(ui: &mut Ui, rect: Rect, color: Color32) {
     let stroke = Stroke::new(1.4_f32, color);
     let painter = ui.painter();
@@ -103,6 +126,9 @@ pub fn attach_menu<R>(
         &btn,
         egui::PopupCloseBehavior::CloseOnClickOutside,
         |ui| {
+            // Parent slot is ~28px wide; force a readable menu width.
+            ui.set_min_width(200.0);
+            ui.set_max_width(320.0);
             out = Some(add_contents(ui));
         },
     );
@@ -242,11 +268,17 @@ fn paint_checkbox(ui: &mut Ui, rect: Rect, color: Color32, checked: bool) {
         let c = inner.center();
         let s = inner.width() * 0.22;
         painter.line_segment(
-            [c + Vec2::new(-s * 1.1, s * 0.05), c + Vec2::new(-s * 0.2, s * 0.85)],
+            [
+                c + Vec2::new(-s * 1.1, s * 0.05),
+                c + Vec2::new(-s * 0.2, s * 0.85),
+            ],
             Stroke::new(1.6_f32, color),
         );
         painter.line_segment(
-            [c + Vec2::new(-s * 0.2, s * 0.85), c + Vec2::new(s * 1.1, -s * 0.75)],
+            [
+                c + Vec2::new(-s * 0.2, s * 0.85),
+                c + Vec2::new(s * 1.1, -s * 0.75),
+            ],
             Stroke::new(1.6_f32, color),
         );
     }
@@ -289,6 +321,120 @@ pub fn status_dot(ui: &mut Ui, color: Color32) -> Response {
             .circle_filled(rect.center(), rect.width() * 0.32, color);
     }
     response
+}
+
+/// Legacy glyph ids still accepted; new agents store `clay:shape/face/anim`.
+pub const AGENT_AVATAR_IDS: &[&str] = &[
+    "clay:circle/happy/idle",
+    "clay:pebble/curious/thinking",
+    "clay:squircle/attentive/idle",
+    "clay:hexagon/angry/alert",
+    "clay:capsule/proud/idle",
+    "clay:cloud/happy/idle",
+    "clay:triangle/excited/burst",
+    "clay:droplet/shy/idle",
+];
+
+pub fn avatar_initials(name: &str) -> String {
+    let mut letters = String::new();
+    for word in name.split_whitespace() {
+        if let Some(ch) = word.chars().find(|c| c.is_alphanumeric()) {
+            letters.push(ch.to_ascii_uppercase());
+        }
+        if letters.chars().count() >= 2 {
+            break;
+        }
+    }
+    if letters.is_empty() {
+        "A".into()
+    } else {
+        letters
+    }
+}
+
+pub fn agent_avatar(
+    ui: &mut Ui,
+    color: Color32,
+    avatar_id: &str,
+    _name: &str,
+    size: f32,
+    selected: bool,
+) -> Response {
+    let spec = crate::clay_avatar::ClaySpec::resolve(avatar_id);
+    // Motion only in studio-scale slots; transcript/list stay static for CPU.
+    let animate = size >= 56.0;
+    crate::clay_avatar::show_clay_avatar(ui, color, spec, size, selected, animate)
+}
+
+/// Clay studio: Look (shape/face/colour) · Move (animation).
+pub fn agent_avatar_editor(
+    ui: &mut Ui,
+    selected: &mut String,
+    color_hex: &mut String,
+    name: &str,
+    fallback_color: Color32,
+) {
+    agent_avatar_editor_i18n(
+        ui,
+        selected,
+        color_hex,
+        name,
+        fallback_color,
+        &default_clay_labels(),
+    );
+}
+
+pub fn agent_avatar_editor_i18n(
+    ui: &mut Ui,
+    selected: &mut String,
+    color_hex: &mut String,
+    name: &str,
+    fallback_color: Color32,
+    labels: &crate::clay_avatar::ClayStudioLabels<'_>,
+) {
+    if selected.trim().is_empty() {
+        *selected = crate::clay_avatar::ClaySpec::default().encode();
+    }
+    crate::clay_avatar::clay_avatar_studio(ui, selected, color_hex, name, fallback_color, labels);
+}
+
+fn default_clay_labels() -> crate::clay_avatar::ClayStudioLabels<'static> {
+    crate::clay_avatar::ClayStudioLabels {
+        look: "Look",
+        move_tab: "Move",
+        surprise: "Surprise me",
+        shape: "Shape",
+        face: "Face",
+        colour: "Colour",
+        colour_auto: "Auto",
+        animations: "Animations",
+        shapes: [
+            "Circle", "Pebble", "Squircle", "Capsule", "Triangle", "Hexagon", "Cloud", "Droplet",
+        ],
+        faces: [
+            "Neutral",
+            "Attentive",
+            "Surprised",
+            "Excited",
+            "Happy",
+            "Laughing",
+            "Angry",
+            "Sad",
+            "Curious",
+            "Proud",
+            "Shy",
+            "Sleepy",
+        ],
+        anims: [
+            "Idle", "Thinking", "Wink", "Wide eyes", "Alert", "Sleep", "Orbit", "Burst",
+        ],
+    }
+}
+
+/// Compatibility wrapper used by older call sites.
+pub fn agent_avatar_picker(ui: &mut Ui, selected: &mut String, color: Color32, name: &str) {
+    let mut color_hex = String::new();
+    agent_avatar_editor(ui, selected, &mut color_hex, name, color);
 }
 
 /// Child-agent tree branch marker (replaces `↳`).
@@ -410,9 +556,125 @@ pub fn activity_toggle_button(ui: &mut Ui, open: bool) -> Response {
         } else {
             hover_color(ui, &response)
         };
-        paint_activity_list(ui, glyph_rect(rect), color);
+        paint_activity_panel(
+            ui,
+            Rect::from_center_size(rect.center(), Vec2::splat(20.0)),
+            color,
+        );
     }
     response
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionChromeIcon {
+    Salon,
+    Canvas,
+    Deep,
+}
+
+/// Icon-only session-bar toggle (Salon / Canvas / Deep). Label lives in the hover.
+pub fn session_chrome_toggle(
+    ui: &mut Ui,
+    selected: bool,
+    icon: SessionChromeIcon,
+    hover: &str,
+) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        if selected {
+            ui.painter()
+                .rect_filled(rect, 8.0, ui.visuals().faint_bg_color);
+        } else if response.hovered() {
+            ui.painter()
+                .rect_filled(rect, 8.0, ui.visuals().widgets.hovered.bg_fill);
+        }
+        let color = if selected {
+            crate::theme::button_colors(ui).accent
+        } else {
+            hover_color(ui, &response)
+        };
+        paint_session_chrome(
+            ui,
+            Rect::from_center_size(rect.center(), Vec2::splat(20.0)),
+            icon,
+            color,
+        );
+    }
+    response.on_hover_text(hover)
+}
+
+fn paint_session_chrome(ui: &mut Ui, rect: Rect, icon: SessionChromeIcon, color: Color32) {
+    let stroke = Stroke::new(1.5_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width();
+    match icon {
+        SessionChromeIcon::Salon => {
+            // Two people talking — the room is a salon, not two tiles.
+            let front = c + Vec2::new(-w * 0.12, w * 0.04);
+            painter.circle_stroke(front + Vec2::new(0.0, -w * 0.22), w * 0.14, stroke);
+            painter.add(Shape::closed_line(
+                vec![
+                    front + Vec2::new(-w * 0.28, w * 0.38),
+                    front + Vec2::new(-w * 0.28, w * 0.08),
+                    front + Vec2::new(0.0, w * 0.02),
+                    front + Vec2::new(w * 0.28, w * 0.08),
+                    front + Vec2::new(w * 0.28, w * 0.38),
+                ],
+                stroke,
+            ));
+            let back = c + Vec2::new(w * 0.22, -w * 0.10);
+            painter.circle_stroke(back + Vec2::new(0.0, -w * 0.16), w * 0.11, stroke);
+            painter.add(Shape::closed_line(
+                vec![
+                    back + Vec2::new(-w * 0.18, w * 0.28),
+                    back + Vec2::new(-w * 0.18, w * 0.06),
+                    back + Vec2::new(0.0, 0.0),
+                    back + Vec2::new(w * 0.18, w * 0.06),
+                    back + Vec2::new(w * 0.18, w * 0.28),
+                ],
+                stroke,
+            ));
+        }
+        SessionChromeIcon::Canvas => {
+            let frame = Rect::from_center_size(c, Vec2::splat(w * 0.78));
+            painter.rect_stroke(frame, 2.0, stroke, StrokeKind::Middle);
+            painter.add(Shape::line(
+                vec![
+                    Pos2::new(frame.left() + 2.0, frame.bottom() - 3.0),
+                    c + Vec2::new(-w * 0.08, w * 0.04),
+                    c + Vec2::new(w * 0.06, -w * 0.16),
+                    Pos2::new(frame.right() - 2.0, frame.bottom() - 3.0),
+                ],
+                stroke,
+            ));
+            painter.circle_filled(c + Vec2::new(w * 0.16, -w * 0.16), w * 0.06, color);
+        }
+        SessionChromeIcon::Deep => {
+            // Branching plan (root + two children), not another list of lines.
+            let root = c + Vec2::new(0.0, -w * 0.22);
+            let left = c + Vec2::new(-w * 0.26, w * 0.22);
+            let right = c + Vec2::new(w * 0.26, w * 0.22);
+            painter.circle_stroke(root, w * 0.11, stroke);
+            painter.circle_stroke(left, w * 0.10, stroke);
+            painter.circle_stroke(right, w * 0.10, stroke);
+            painter.line_segment(
+                [
+                    root + Vec2::new(0.0, w * 0.11),
+                    left + Vec2::new(0.0, -w * 0.10),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    root + Vec2::new(0.0, w * 0.11),
+                    right + Vec2::new(0.0, -w * 0.10),
+                ],
+                stroke,
+            );
+        }
+    }
 }
 
 /// Outgoing note link (replaces `->`).
@@ -423,6 +685,35 @@ pub fn link_outgoing(ui: &mut Ui) {
 /// Backlink / incoming note link (replaces `<-`).
 pub fn link_backlink(ui: &mut Ui) {
     paint_link_arrow(ui, false);
+}
+
+/// Compact square-arrow export control (done agent card).
+pub fn export_square_button(ui: &mut Ui, tooltip: &str) -> Response {
+    let size = Vec2::splat(16.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let color = hover_color(ui, &response);
+        let stroke = Stroke::new(1.3_f32, color);
+        let painter = ui.painter();
+        let box_r = Rect::from_min_max(
+            Pos2::new(rect.left() + 1.0, rect.center().y - 1.0),
+            Pos2::new(rect.center().x + 1.5, rect.bottom() - 1.0),
+        );
+        painter.rect_stroke(box_r, 1.5, stroke, StrokeKind::Outside);
+        let tip = Pos2::new(rect.right() - 1.5, rect.top() + 1.5);
+        painter.line_segment([box_r.right_top() + Vec2::new(-0.5, 1.5), tip], stroke);
+        painter.line_segment([tip, tip + Vec2::new(-4.0, 0.0)], stroke);
+        painter.line_segment([tip, tip + Vec2::new(0.0, 4.0)], stroke);
+    }
+    response.on_hover_text(tooltip)
+}
+
+/// Small painted overflow-nav glyph without the 28px hit target.
+pub fn overflow_glyph(ui: &mut Ui, icon: OverflowNavIcon, color: Color32, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    if ui.is_rect_visible(rect) {
+        paint_overflow_nav(ui, rect, icon, color);
+    }
 }
 
 /// Broken / unresolved note link — straight cut stroke with a clean gap.
@@ -1151,23 +1442,19 @@ fn paint_archived_filter(ui: &mut Ui, rect: Rect, color: Color32, selected: bool
     }
 }
 
-fn paint_activity_list(ui: &mut Ui, rect: Rect, color: Color32) {
-    let stroke = Stroke::new(1.4_f32, color);
+fn paint_activity_panel(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.5_f32, color);
     let painter = ui.painter();
-    let c = rect.center();
-    let w = rect.width() * 0.30;
-    let gap = rect.height() * 0.22;
-    for dy in [-gap, 0.0, gap] {
-        let y = c.y + dy;
-        let half = if dy < 0.0 {
-            w * 0.85
-        } else if dy > 0.0 {
-            w * 0.65
-        } else {
-            w
-        };
-        painter.line_segment([Pos2::new(c.x - half, y), Pos2::new(c.x + half, y)], stroke);
-    }
+    let frame = Rect::from_center_size(rect.center(), Vec2::splat(rect.width() * 0.78));
+    painter.rect_stroke(frame, 2.0, stroke, StrokeKind::Middle);
+    let split_x = frame.left() + frame.width() * 0.62;
+    painter.line_segment(
+        [
+            Pos2::new(split_x, frame.top()),
+            Pos2::new(split_x, frame.bottom()),
+        ],
+        stroke,
+    );
 }
 
 fn paint_failed_mark(ui: &mut Ui, rect: Rect, color: Color32) {
@@ -1199,6 +1486,7 @@ pub enum NavTabIcon {
     Agents,
     Create,
     Memory,
+    More,
 }
 
 /// Map a primary-rail tab to its painted icon.
@@ -1227,25 +1515,30 @@ pub fn nav_rail_tab_button(
     let w = ui.available_width().max(1.0);
     let (rect, response) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
     if ui.is_rect_visible(rect) {
+        let well = rect.shrink2(Vec2::new(4.0, 3.0));
+        let painter = ui.painter();
         if selected {
-            ui.painter()
-                .rect_filled(rect, 4.0, ui.visuals().selection.bg_fill);
+            painter.rect_filled(well, 8.0, ui.visuals().faint_bg_color);
+            let bar = Rect::from_min_max(
+                Pos2::new(rect.left() + 1.0, well.top() + 4.0),
+                Pos2::new(rect.left() + 4.0, well.bottom() - 4.0),
+            );
+            painter.rect_filled(bar, 1.0, crate::theme::button_colors(ui).accent);
         } else if response.hovered() {
-            ui.painter()
-                .rect_filled(rect, 4.0, ui.visuals().widgets.hovered.bg_fill);
+            painter.rect_filled(well, 8.0, ui.visuals().widgets.hovered.bg_fill);
         }
         let color = if selected {
-            ui.visuals().strong_text_color()
+            crate::theme::button_colors(ui).accent
         } else {
             hover_color(ui, &response)
         };
         if icon_only {
-            paint_nav_tab(ui, glyph_rect(rect), icon, color);
+            let _ = label;
+            let g = Rect::from_center_size(rect.center(), Vec2::splat(22.0));
+            paint_nav_tab(ui, g, icon, color);
         } else {
-            let icon_slot = Rect::from_min_size(
-                rect.min + Vec2::new(8.0, (h - BTN) * 0.5),
-                Vec2::splat(BTN),
-            );
+            let icon_slot =
+                Rect::from_min_size(rect.min + Vec2::new(8.0, (h - BTN) * 0.5), Vec2::splat(BTN));
             paint_nav_tab(ui, glyph_rect(icon_slot), icon, color);
             ui.painter().text(
                 Pos2::new(icon_slot.right() + 6.0, rect.center().y),
@@ -1257,6 +1550,258 @@ pub fn nav_rail_tab_button(
         }
     }
     response
+}
+
+/// Overflow destinations shown in the More flyout (not the primary rail).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverflowNavIcon {
+    Notes,
+    Library,
+    Tasks,
+    Files,
+    Models,
+    Documents,
+    Providers,
+    Settings,
+    Caps,
+    Audit,
+    Scenarios,
+    Feedback,
+    Module,
+}
+
+/// Full-width More-menu row: painted icon + label, no wrapping.
+pub fn nav_more_row(ui: &mut Ui, selected: bool, icon: OverflowNavIcon, label: &str) -> Response {
+    let h = 32.0;
+    let w = ui.available_width().max(1.0);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
+    if ui.is_rect_visible(rect) {
+        {
+            let painter = ui.painter();
+            if selected {
+                painter.rect_filled(rect, 6.0, ui.visuals().faint_bg_color);
+            } else if response.hovered() {
+                painter.rect_filled(rect, 6.0, ui.visuals().widgets.hovered.bg_fill);
+            }
+        }
+        let color = if selected {
+            crate::theme::button_colors(ui).accent
+        } else {
+            hover_color(ui, &response)
+        };
+        let icon_rect = Rect::from_center_size(
+            Pos2::new(rect.left() + 16.0, rect.center().y),
+            Vec2::splat(crate::theme::ICON_GLYPH),
+        );
+        paint_overflow_nav(ui, icon_rect, icon, color);
+        ui.painter().text(
+            Pos2::new(icon_rect.right() + 8.0, rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            egui::FontId::proportional(13.0),
+            color,
+        );
+    }
+    response
+}
+
+fn paint_overflow_nav(ui: &mut Ui, rect: Rect, icon: OverflowNavIcon, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let s = rect.width() * 0.32;
+    match icon {
+        OverflowNavIcon::Notes => {
+            let page = Rect::from_center_size(c, Vec2::new(s * 1.7, s * 2.1));
+            painter.rect_stroke(page, 2.0, stroke, StrokeKind::Outside);
+            for dy in [-s * 0.35, 0.0, s * 0.35] {
+                painter.line_segment(
+                    [
+                        Pos2::new(page.left() + s * 0.28, c.y + dy),
+                        Pos2::new(page.right() - s * 0.28, c.y + dy),
+                    ],
+                    stroke,
+                );
+            }
+        }
+        OverflowNavIcon::Library => {
+            let left =
+                Rect::from_center_size(c + Vec2::new(-s * 0.55, 0.0), Vec2::new(s * 0.7, s * 2.0));
+            let right = Rect::from_center_size(
+                c + Vec2::new(s * 0.45, s * 0.08),
+                Vec2::new(s * 0.7, s * 1.85),
+            );
+            painter.rect_stroke(left, 1.5, stroke, StrokeKind::Outside);
+            painter.rect_stroke(right, 1.5, stroke, StrokeKind::Outside);
+        }
+        OverflowNavIcon::Tasks => {
+            let box_r =
+                Rect::from_center_size(c + Vec2::new(-s * 0.55, -s * 0.45), Vec2::splat(s * 0.7));
+            painter.rect_stroke(box_r, 1.5, stroke, StrokeKind::Outside);
+            painter.line_segment(
+                [
+                    box_r.left_top() + Vec2::new(s * 0.12, s * 0.38),
+                    box_r.center() + Vec2::new(s * 0.05, s * 0.2),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    box_r.center() + Vec2::new(s * 0.05, s * 0.2),
+                    box_r.right_top() + Vec2::new(-s * 0.05, s * 0.12),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    c + Vec2::new(s * 0.05, -s * 0.45),
+                    c + Vec2::new(s * 1.05, -s * 0.45),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    c + Vec2::new(-s * 0.9, s * 0.45),
+                    c + Vec2::new(s * 1.05, s * 0.45),
+                ],
+                stroke,
+            );
+        }
+        OverflowNavIcon::Files => {
+            let tab = Rect::from_min_max(
+                c + Vec2::new(-s * 0.95, -s * 0.55),
+                c + Vec2::new(-s * 0.05, -s * 0.22),
+            );
+            let body =
+                Rect::from_center_size(c + Vec2::new(0.0, s * 0.2), Vec2::new(s * 1.9, s * 1.45));
+            painter.rect_stroke(tab, 1.5, stroke, StrokeKind::Outside);
+            painter.rect_stroke(body, 1.5, stroke, StrokeKind::Outside);
+        }
+        OverflowNavIcon::Models => {
+            let r = s * 0.95;
+            painter.rect_stroke(
+                Rect::from_center_size(c, Vec2::splat(r * 1.35)),
+                2.0,
+                stroke,
+                StrokeKind::Outside,
+            );
+            painter.line_segment(
+                [
+                    c + Vec2::new(-r * 0.4, -r * 0.4),
+                    c + Vec2::new(r * 0.4, r * 0.4),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    c + Vec2::new(r * 0.4, -r * 0.4),
+                    c + Vec2::new(-r * 0.4, r * 0.4),
+                ],
+                stroke,
+            );
+        }
+        OverflowNavIcon::Documents => {
+            let page = Rect::from_center_size(
+                c + Vec2::new(-s * 0.08, 0.08 * s),
+                Vec2::new(s * 1.55, s * 2.0),
+            );
+            painter.rect_stroke(page, 2.0, stroke, StrokeKind::Outside);
+            let fold = page.right_top();
+            painter.line_segment(
+                [
+                    fold + Vec2::new(-s * 0.45, 0.0),
+                    fold + Vec2::new(-s * 0.45, s * 0.45),
+                ],
+                stroke,
+            );
+            painter.line_segment([fold + Vec2::new(-s * 0.45, s * 0.45), fold], stroke);
+        }
+        OverflowNavIcon::Providers => {
+            painter.circle_stroke(c + Vec2::new(0.0, -s * 0.35), s * 0.55, stroke);
+            painter.line_segment(
+                [c + Vec2::new(0.0, s * 0.2), c + Vec2::new(0.0, s * 1.05)],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    c + Vec2::new(-s * 0.45, s * 0.7),
+                    c + Vec2::new(s * 0.45, s * 0.7),
+                ],
+                stroke,
+            );
+        }
+        OverflowNavIcon::Settings => {
+            painter.circle_stroke(c, s * 0.42, stroke);
+            for i in 0..6 {
+                let a = i as f32 * std::f32::consts::TAU / 6.0;
+                let inner = c + Vec2::angled(a) * (s * 0.55);
+                let outer = c + Vec2::angled(a) * (s * 0.95);
+                painter.line_segment([inner, outer], stroke);
+            }
+        }
+        OverflowNavIcon::Caps => {
+            painter.circle_stroke(c + Vec2::new(-s * 0.35, -s * 0.15), s * 0.42, stroke);
+            painter.line_segment(
+                [
+                    c + Vec2::new(s * 0.05, 0.05 * s),
+                    c + Vec2::new(s * 1.0, 0.05 * s),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    c + Vec2::new(s * 0.55, 0.05 * s),
+                    c + Vec2::new(s * 0.55, s * 0.45),
+                ],
+                stroke,
+            );
+        }
+        OverflowNavIcon::Audit => {
+            let clip =
+                Rect::from_center_size(c + Vec2::new(0.0, s * 0.12), Vec2::new(s * 1.7, s * 2.0));
+            painter.rect_stroke(clip, 2.0, stroke, StrokeKind::Outside);
+            painter.rect_stroke(
+                Rect::from_center_size(c + Vec2::new(0.0, -s * 0.85), Vec2::new(s * 0.7, s * 0.4)),
+                1.5,
+                stroke,
+                StrokeKind::Outside,
+            );
+        }
+        OverflowNavIcon::Scenarios => {
+            painter.add(Shape::convex_polygon(
+                vec![
+                    c + Vec2::new(-s * 0.55, -s * 0.85),
+                    c + Vec2::new(s * 0.95, 0.0),
+                    c + Vec2::new(-s * 0.55, s * 0.85),
+                ],
+                Color32::TRANSPARENT,
+                stroke,
+            ));
+        }
+        OverflowNavIcon::Feedback => {
+            let bubble =
+                Rect::from_center_size(c + Vec2::new(0.0, -s * 0.1), Vec2::new(s * 2.0, s * 1.45));
+            painter.rect_stroke(bubble, 3.0, stroke, StrokeKind::Outside);
+            painter.line_segment(
+                [
+                    c + Vec2::new(-s * 0.2, bubble.bottom()),
+                    c + Vec2::new(-s * 0.55, bubble.bottom() + s * 0.55),
+                ],
+                stroke,
+            );
+        }
+        OverflowNavIcon::Module => {
+            let cell = s * 0.55;
+            for (dx, dy) in [(-0.55, -0.55), (0.55, -0.55), (-0.55, 0.55), (0.55, 0.55)] {
+                painter.rect_stroke(
+                    Rect::from_center_size(c + Vec2::new(dx * s, dy * s), Vec2::splat(cell)),
+                    1.5,
+                    stroke,
+                    StrokeKind::Outside,
+                );
+            }
+        }
+    }
 }
 
 /// Horizontal ellipsis overflow control (replaces `⋯` / `ui.menu_button("⋯", …)`).
@@ -1288,6 +1833,9 @@ pub fn overflow_menu<R>(
         &btn,
         egui::PopupCloseBehavior::CloseOnClickOutside,
         |ui| {
+            // Status-bar / icon parents are too narrow for wrapped labels.
+            ui.set_min_width(240.0);
+            ui.set_max_width(360.0);
             out = Some(add_contents(ui));
         },
     );
@@ -1366,10 +1914,7 @@ pub fn layer_delete_button(ui: &mut Ui) -> Response {
 }
 
 /// Compact painted icon control for Create layer-list rows.
-fn layer_action_icon_button(
-    ui: &mut Ui,
-    paint: impl FnOnce(&mut Ui, Rect, Color32),
-) -> Response {
+fn layer_action_icon_button(ui: &mut Ui, paint: impl FnOnce(&mut Ui, Rect, Color32)) -> Response {
     let size = Vec2::splat(BTN);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
@@ -1392,74 +1937,113 @@ pub fn refresh_mark(ui: &mut Ui, color: Color32) {
     paint_refresh(ui, rect, color);
 }
 
+fn paint_star_4(painter: &egui::Painter, at: Pos2, arm: f32, stroke: Stroke) {
+    painter.line_segment(
+        [at + Vec2::new(-arm, 0.0), at + Vec2::new(arm, 0.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [at + Vec2::new(0.0, -arm), at + Vec2::new(0.0, arm)],
+        stroke,
+    );
+}
+
 fn paint_nav_tab(ui: &mut Ui, rect: Rect, icon: NavTabIcon, color: Color32) {
-    let stroke = Stroke::new(1.4_f32, color);
+    let stroke = Stroke::new(1.5_f32, color);
     let painter = ui.painter();
     let c = rect.center();
-    let s = rect.width() * 0.28;
+    let w = rect.width();
     match icon {
         NavTabIcon::Chat => {
-            let bubble = Rect::from_center_size(c + Vec2::new(0.0, -s * 0.08), Vec2::splat(s * 2.2));
-            painter.rect_stroke(bubble, 3.0, stroke, StrokeKind::Outside);
+            // Lucide message-square: bubble + attached tail, not a round tile.
+            let bubble =
+                Rect::from_center_size(c + Vec2::new(0.4, -1.4), Vec2::new(w * 0.78, w * 0.58));
+            painter.rect_stroke(bubble, 3.5, stroke, StrokeKind::Middle);
+            painter.add(Shape::closed_line(
+                vec![
+                    Pos2::new(bubble.left() + 3.0, bubble.bottom() - 0.5),
+                    Pos2::new(bubble.left() + 8.5, bubble.bottom() - 0.5),
+                    Pos2::new(bubble.left() + 1.0, bubble.bottom() + 5.0),
+                ],
+                stroke,
+            ));
+        }
+        NavTabIcon::Agents => {
+            // Lucide `bot` — robot head with antenna. Two-people read as noise at 22px.
+            let head =
+                Rect::from_center_size(c + Vec2::new(0.0, 1.2), Vec2::new(w * 0.72, w * 0.58));
+            painter.rect_stroke(head, 3.0, stroke, StrokeKind::Middle);
             painter.line_segment(
                 [
-                    c + Vec2::new(-s * 0.35, bubble.bottom() - 1.0),
-                    c + Vec2::new(-s * 0.75, bubble.bottom() + s * 0.55),
+                    Pos2::new(c.x, head.top()),
+                    Pos2::new(c.x, head.top() - w * 0.16),
                 ],
                 stroke,
             );
-        }
-        NavTabIcon::Agents => {
-            // Bot cluster — square heads + bodies, not people / eyeglasses.
-            for dx in [-s * 0.62, s * 0.62] {
-                let bot = c + Vec2::new(dx, s * 0.12);
-                painter.line_segment(
-                    [bot + Vec2::new(0.0, -s * 1.05), bot + Vec2::new(0.0, -s * 0.78)],
-                    stroke,
-                );
-                painter.circle_filled(bot + Vec2::new(0.0, -s * 1.08), s * 0.08, color);
-                let head = Rect::from_center_size(
-                    bot + Vec2::new(0.0, -s * 0.52),
-                    Vec2::new(s * 0.42, s * 0.36),
-                );
-                painter.rect_stroke(head, 1.0, stroke, StrokeKind::Outside);
-                let body = Rect::from_center_size(bot + Vec2::new(0.0, s * 0.18), Vec2::new(s * 0.62, s * 0.72));
-                painter.rect_stroke(body, 1.5, stroke, StrokeKind::Outside);
-            }
+            painter.circle_filled(Pos2::new(c.x, head.top() - w * 0.20), w * 0.055, color);
+            let eye_y = head.center().y - 0.6;
+            painter.circle_filled(
+                Pos2::new(head.center().x - w * 0.16, eye_y),
+                w * 0.07,
+                color,
+            );
+            painter.circle_filled(
+                Pos2::new(head.center().x + w * 0.16, eye_y),
+                w * 0.07,
+                color,
+            );
         }
         NavTabIcon::Create => {
-            // Wand + sparkle tip — generate / invent (not chat+).
-            let tail = c + Vec2::new(-s * 0.82, s * 0.82);
-            let tip = c + Vec2::new(s * 0.58, -s * 0.58);
-            painter.line_segment([tail, tip], stroke);
-            let spark = s * 0.30;
-            painter.line_segment([tip + Vec2::new(-spark, 0.0), tip + Vec2::new(spark, 0.0)], stroke);
-            painter.line_segment([tip + Vec2::new(0.0, -spark), tip + Vec2::new(0.0, spark)], stroke);
-            for off in [Vec2::new(-s * 0.42, -s * 0.08), Vec2::new(s * 0.18, s * 0.32)] {
-                let p = tip + off;
-                let d = s * 0.11;
-                painter.line_segment([p + Vec2::new(-d, 0.0), p + Vec2::new(d, 0.0)], stroke);
-                painter.line_segment([p + Vec2::new(0.0, -d), p + Vec2::new(0.0, d)], stroke);
-            }
+            // Sparkle-first wand: the star is the readable bit, not the stem.
+            let star = c + Vec2::new(w * 0.16, -w * 0.18);
+            paint_star_4(&painter, star, w * 0.22, stroke);
+            let d = w * 0.09;
+            painter.line_segment([star + Vec2::new(-d, -d), star + Vec2::new(d, d)], stroke);
+            painter.line_segment([star + Vec2::new(-d, d), star + Vec2::new(d, -d)], stroke);
+            let grip = c + Vec2::new(-w * 0.22, w * 0.22);
+            painter.line_segment([grip, star + Vec2::new(-w * 0.08, w * 0.08)], stroke);
+            paint_star_4(
+                &painter,
+                c + Vec2::new(-w * 0.28, -w * 0.28),
+                w * 0.08,
+                stroke,
+            );
         }
         NavTabIcon::Memory => {
-            // Open book — knowledge / memory (not hamburger bars).
-            let top = c.y - s * 0.78;
-            let bot = c.y + s * 0.78;
+            // Open book: two pages sharing a spine, not a hash of lines.
             let spine = c.x;
+            let top = c.y - w * 0.34;
+            let bot = c.y + w * 0.34;
             painter.line_segment([Pos2::new(spine, top), Pos2::new(spine, bot)], stroke);
             for sign in [-1.0_f32, 1.0] {
-                let outer = spine + sign * s * 0.82;
-                painter.line_segment([Pos2::new(outer, top + s * 0.12), Pos2::new(spine, top)], stroke);
-                painter.line_segment([Pos2::new(outer, bot - s * 0.12), Pos2::new(spine, bot)], stroke);
-                painter.line_segment([Pos2::new(outer, top + s * 0.12), Pos2::new(outer, bot - s * 0.12)], stroke);
-                for dy in [0.0, s * 0.38] {
-                    painter.line_segment(
-                        [
-                            Pos2::new(spine + sign * s * 0.18, c.y + dy - s * 0.12),
-                            Pos2::new(outer - sign * s * 0.12, c.y + dy - s * 0.12),
-                        ],
-                        stroke,
+                let outer = spine + sign * w * 0.38;
+                painter.add(Shape::closed_line(
+                    vec![
+                        Pos2::new(spine, top),
+                        Pos2::new(outer, top + w * 0.08),
+                        Pos2::new(outer, bot - w * 0.06),
+                        Pos2::new(spine, bot),
+                    ],
+                    stroke,
+                ));
+                painter.line_segment(
+                    [
+                        Pos2::new(spine + sign * w * 0.08, c.y - w * 0.08),
+                        Pos2::new(outer - sign * w * 0.08, c.y - w * 0.02),
+                    ],
+                    stroke,
+                );
+            }
+        }
+        NavTabIcon::More => {
+            let d = w * 0.18;
+            let cell = w * 0.16;
+            for dx in [-d, d] {
+                for dy in [-d, d] {
+                    painter.rect_filled(
+                        Rect::from_center_size(c + Vec2::new(dx, dy), Vec2::splat(cell)),
+                        1.2,
+                        color,
                     );
                 }
             }
@@ -1489,7 +2073,13 @@ fn paint_bell(ui: &mut Ui, rect: Rect, color: Color32) {
     let c = rect.center();
     let w = rect.width() * 0.28;
     let top = c.y - rect.height() * 0.22;
-    painter.line_segment([Pos2::new(c.x, top), Pos2::new(c.x, top + rect.height() * 0.08)], stroke);
+    painter.line_segment(
+        [
+            Pos2::new(c.x, top),
+            Pos2::new(c.x, top + rect.height() * 0.08),
+        ],
+        stroke,
+    );
     painter.add(Shape::closed_line(
         vec![
             Pos2::new(c.x - w * 0.35, top + rect.height() * 0.08),
@@ -1506,11 +2096,7 @@ fn paint_bell(ui: &mut Ui, rect: Rect, color: Color32) {
         ],
         stroke,
     );
-    painter.circle_stroke(
-        c + Vec2::new(0.0, rect.height() * 0.34),
-        w * 0.18,
-        stroke,
-    );
+    painter.circle_stroke(c + Vec2::new(0.0, rect.height() * 0.34), w * 0.18, stroke);
 }
 
 fn paint_eye(ui: &mut Ui, rect: Rect, color: Color32, open: bool) {
@@ -1581,13 +2167,25 @@ fn paint_trash(ui: &mut Ui, rect: Rect, color: Color32) {
     let c = rect.center();
     let w = rect.width() * 0.26;
     let lid_y = c.y - w * 0.55;
-    painter.line_segment([Pos2::new(c.x - w * 1.1, lid_y), Pos2::new(c.x + w * 1.1, lid_y)], stroke);
     painter.line_segment(
-        [Pos2::new(c.x - w * 0.45, lid_y), Pos2::new(c.x - w * 0.45, lid_y - w * 0.55)],
+        [
+            Pos2::new(c.x - w * 1.1, lid_y),
+            Pos2::new(c.x + w * 1.1, lid_y),
+        ],
         stroke,
     );
     painter.line_segment(
-        [Pos2::new(c.x + w * 0.45, lid_y), Pos2::new(c.x + w * 0.45, lid_y - w * 0.55)],
+        [
+            Pos2::new(c.x - w * 0.45, lid_y),
+            Pos2::new(c.x - w * 0.45, lid_y - w * 0.55),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            Pos2::new(c.x + w * 0.45, lid_y),
+            Pos2::new(c.x + w * 0.45, lid_y - w * 0.55),
+        ],
         stroke,
     );
     painter.rect_stroke(
@@ -1598,7 +2196,10 @@ fn paint_trash(ui: &mut Ui, rect: Rect, color: Color32) {
     );
     for dx in [-w * 0.35, 0.0, w * 0.35] {
         painter.line_segment(
-            [Pos2::new(c.x + dx, lid_y + w * 0.15), Pos2::new(c.x + dx, c.y + w * 0.75)],
+            [
+                Pos2::new(c.x + dx, lid_y + w * 0.15),
+                Pos2::new(c.x + dx, c.y + w * 0.75),
+            ],
             stroke,
         );
     }

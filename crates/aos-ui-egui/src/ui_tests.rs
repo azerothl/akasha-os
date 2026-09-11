@@ -587,6 +587,8 @@ mod canvas_completion_tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         }
     }
 
@@ -704,12 +706,24 @@ mod layout_tests {
     }
 
     #[test]
-    fn session_toggle_reserve_fits_fr_canvas_label() {
+    fn session_picker_stays_inside_the_window() {
+        let size = crate::ui_chat::session_picker_max_size(1600.0, 900.0);
+        assert!(size.x <= 280.0);
+        assert!(size.y <= 460.0);
+        assert!(size.y <= 900.0 * 0.58 + 0.01);
+        let small = crate::ui_chat::session_picker_max_size(800.0, 500.0);
+        assert!(small.x <= 800.0);
+        assert!(small.y <= 500.0);
+        assert!(small.y <= 460.0);
+    }
+
+    #[test]
+    fn session_toggle_reserve_fits_icon_chrome() {
         let fr = i18n::strings("fr");
         let w = session_toggle_reserve_width(&fr, true, false);
         assert!(
-            w >= estimate_label_chip_w(fr.session_toggle_canvas) + 40.0,
-            "reserve {w} should fit full Canvas label"
+            w >= icons::SESSION_ICON_SZ * 5.0,
+            "reserve {w} should fit icon session chrome"
         );
     }
 
@@ -742,7 +756,7 @@ mod layout_tests {
     #[test]
     fn composer_reserve_height_is_single_row() {
         let h = chat_composer_reserve_height(400.0, 0, 0, 0, false);
-        assert!((h - COMPOSER_INPUT_ROW_H).abs() < 0.01);
+        assert!((h - (COMPOSER_INPUT_ROW_H + 16.0)).abs() < 0.01);
     }
 
     #[test]

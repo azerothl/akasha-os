@@ -131,7 +131,10 @@ impl UiScreenshotHarness {
             i.events
                 .iter()
                 .filter_map(|ev| {
-                    if let Event::Screenshot { image, user_data, .. } = ev {
+                    if let Event::Screenshot {
+                        image, user_data, ..
+                    } = ev
+                    {
                         user_data
                             .data
                             .as_ref()
@@ -146,7 +149,10 @@ impl UiScreenshotHarness {
         for (tag, image) in shots {
             let path = self.dir.join(format!("{tag}.png"));
             if let Err(err) = save_png(&path, &image) {
-                eprintln!("AOS_UI_SCREENSHOT_DIR: failed to write {}: {err}", path.display());
+                eprintln!(
+                    "AOS_UI_SCREENSHOT_DIR: failed to write {}: {err}",
+                    path.display()
+                );
             } else {
                 eprintln!("AOS_UI_SCREENSHOT_DIR: wrote {}", path.display());
             }
@@ -260,10 +266,7 @@ mod tests {
     fn save_png_writes_valid_dimensions() {
         let img = ColorImage {
             size: [2, 1],
-            pixels: vec![
-                egui::Color32::RED,
-                egui::Color32::BLUE,
-            ],
+            pixels: vec![egui::Color32::RED, egui::Color32::BLUE],
         };
         let dir = std::env::temp_dir().join("aos_ui_shot_test");
         let path = dir.join("test.png");

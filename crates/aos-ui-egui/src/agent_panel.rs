@@ -493,66 +493,146 @@ fn collapse_consecutive_duplicate_paragraphs(text: &str) -> String {
 /// Retire les fuites meta (identifiants outils, JSON, rules, raisonnement à voix haute).
 pub fn sanitize_chat_visible_bubble(text: &str) -> String {
     let text = strip_chat_control_tokens(text.trim());
-    let text = truncate_before_chat_meta_leak(&text);
+    if text.is_empty() {
+        return String::new();
+    }
+    let mapped =
+        crate::chat_room::map_markdown_fences(&text, sanitize_chat_visible_prose, |_, _, raw| {
+            raw.to_string()
+        });
+    collapse_consecutive_duplicate_paragraphs(&mapped)
+        .trim()
+        .to_string()
+}
+
+fn sanitize_chat_visible_prose(text: &str) -> String {
+    let text = truncate_before_chat_meta_leak(text);
     if text.is_empty() {
         return String::new();
     }
     let mut kept_paras = Vec::new();
     for para in text.split("\n\n") {
-        let para = para.trim();
-        if para.is_empty() {
+        if para.trim().is_empty() {
             continue;
         }
-        let mut kept_sentences = Vec::new();
+        let structural = para.lines().any(is_markdown_structure_line);
+        let mut kept_lines = Vec::new();
         for line in para.lines() {
-            let line = line.trim();
-            if line.is_empty() {
+            if line.trim().is_empty() {
                 continue;
             }
+            let keep_indent = is_markdown_structure_line(line);
+            let line = if keep_indent {
+                line.trim_end()
+            } else {
+                line.trim()
+            };
+            let mut kept_sentences = Vec::new();
+            let chars: Vec<char> = line.chars().collect();
             let mut buf = String::new();
-            for ch in line.chars() {
-                buf.push(ch);
-                if matches!(ch, '.' | '!' | '?') {
-                    if !chat_sentence_is_meta_leak(&buf) {
-                        kept_sentences.push(buf.trim().to_string());
+            for i in 0..chars.len() {
+                buf.push(chars[i]);
+                if matches!(chars[i], '.' | '!' | '?') {
+                    if chars[i] == '.' && ordered_list_prefix_before_dot(&buf) {
+                        continue;
                     }
-                    buf.clear();
+                    let next = chars.get(i + 1).copied();
+                    let sentence_end = next.is_none_or(|c| c.is_whitespace());
+                    if sentence_end && !chat_sentence_is_meta_leak(&buf) {
+                        kept_sentences.push(if keep_indent {
+                            buf.to_string()
+                        } else {
+                            buf.trim().to_string()
+                        });
+                        buf.clear();
+                    }
                 }
             }
             if !buf.trim().is_empty() && !chat_sentence_is_meta_leak(&buf) {
-                kept_sentences.push(buf.trim().to_string());
+                kept_sentences.push(if keep_indent {
+                    buf.to_string()
+                } else {
+                    buf.trim().to_string()
+                });
+            }
+            if !kept_sentences.is_empty() {
+                kept_lines.push(kept_sentences.join(" "));
             }
         }
-        if !kept_sentences.is_empty() {
-            kept_paras.push(kept_sentences.join(" "));
+        if !kept_lines.is_empty() {
+            kept_paras.push(if structural {
+                kept_lines.join("\n")
+            } else {
+                kept_lines.join(" ")
+            });
         }
     }
-    collapse_consecutive_duplicate_paragraphs(&kept_paras.join("\n\n"))
-        .trim()
-        .to_string()
+    kept_paras.join("\n\n")
+}
+
+fn is_markdown_structure_line(line: &str) -> bool {
+    let t = line.trim_start();
+    if t.is_empty() {
+        return false;
+    }
+    t.starts_with('#')
+        || t.starts_with("> ")
+        || t == ">"
+        || t.starts_with("- ")
+        || t.starts_with("* ")
+        || t.starts_with("+ ")
+        || t.starts_with("```")
+        || t.starts_with('|')
+        || ordered_list_marker(t)
+}
+
+fn ordered_list_marker(t: &str) -> bool {
+    let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
+    digits > 0 && t.get(digits..).is_some_and(|rest| rest.starts_with(". "))
+}
+
+fn ordered_list_prefix_before_dot(buf: &str) -> bool {
+    let before = buf.trim_end_matches('.');
+    !before.is_empty()
+        && before
+            .chars()
+            .all(|c| c.is_ascii_digit() || c.is_whitespace())
 }
 
 /// Extrait la prose hors blocs JSON / TOOL: / DSML tool_call.
 pub fn prose_without_json(response: &str) -> String {
     let mut out = strip_think_tags(response);
     out = aos_agent::actions::strip_tool_markup_tags(&out);
-    if let Some(start) = out.find("```json") {
-        if let Some(end_rel) = out[start + 7..].find("```") {
-            let end = start + 7 + end_rel + 3;
-            out = format!("{}{}", &out[..start], &out[end..]);
-        }
-    } else if let Some(start) = out.find('{') {
-        // Retire le premier objet JSON équilibré
-        if let Some(end) = find_json_object_end(&out[start..]) {
-            out = format!("{}{}", &out[..start], &out[start + end..]);
-        }
-    }
+    out = crate::chat_room::map_markdown_fences(
+        &out,
+        strip_action_json_from_prose,
+        |lang, _, raw| {
+            if lang.trim().eq_ignore_ascii_case("json") {
+                String::new()
+            } else {
+                raw.to_string()
+            }
+        },
+    );
     out.lines()
         .filter(|l| !l.trim().starts_with("TOOL:"))
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
         .to_string()
+}
+
+fn strip_action_json_from_prose(prose: &str) -> String {
+    let mut out = prose.to_string();
+    if let Some(start) = out.find('{') {
+        if let Some(end) = find_json_object_end(&out[start..]) {
+            let obj = &out[start..start + end];
+            if looks_like_action_json(obj) {
+                out = format!("{}{}", &out[..start], &out[start + end..]);
+            }
+        }
+    }
+    out
 }
 
 /// Clés d'args dont la valeur string est du contenu utilisateur (souvent markdown).
@@ -763,89 +843,150 @@ pub fn chat_agent_card(
     let canvas_muted = canvas_draw_failure_muted(info, session_ops, trace);
     let canvas_fail = canvas_draw_fail_chrome(info, session_ops, trace);
     let canvas_continue = canvas_draw_step_cap_continue(info, session_ops, trace);
-    let (state_label, color, step, max_steps, task, fail, is_blocked) = if let Some(a) = info {
+    let (state, state_label, fail, is_blocked) = if let Some(a) = info {
         (
+            a.state.clone(),
             if canvas_fail || canvas_muted {
                 String::new()
             } else {
                 agent_state_label(t, &a.state).to_string()
             },
-            state_color(&a.state),
-            a.step,
-            a.max_steps,
-            a.current_task.clone().unwrap_or_default(),
             a.fail_reason.clone(),
             a.state == AgentState::Blocked,
         )
     } else {
-        ("…".into(), Color32::GRAY, 0, 0, String::new(), None, false)
+        (AgentState::Created, "…".into(), None, false)
     };
     let ask_card = origin == "ask" && (is_blocked || selected_for_reply);
-    let stroke_color = if selected_for_reply && ask_card {
-        Color32::from_rgb(250, 190, 80)
+    let tc = theme::button_colors(ui);
+    let stroke = if selected_for_reply && ask_card {
+        egui::Stroke::new(1.5_f32, tc.warning)
     } else {
-        color
+        egui::Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color)
     };
-    let fill = if selected_for_reply && ask_card {
-        Color32::from_rgb(48, 42, 28)
-    } else {
-        Color32::from_rgb(32, 36, 44)
+    let shown = if title.is_empty() { agent_id } else { title };
+    let tool_n = trace
+        .map(|tr| {
+            tr.steps
+                .iter()
+                .filter(|s| !s.action.trim().is_empty())
+                .count()
+        })
+        .unwrap_or(0);
+    let status_color = match state {
+        AgentState::Running => tc.accent,
+        AgentState::Done => tc.success,
+        AgentState::Failed | AgentState::Killed => tc.danger,
+        AgentState::Blocked => tc.warning,
+        _ => ui.visuals().weak_text_color(),
     };
     egui::Frame::NONE
-        .fill(fill)
-        .stroke(egui::Stroke::new(
-            if selected_for_reply && ask_card {
-                2.0_f32
-            } else {
-                1.0_f32
-            },
-            stroke_color,
-        ))
-        .inner_margin(8.0)
-        .corner_radius(4.0)
+        .fill(ui.visuals().faint_bg_color)
+        .stroke(stroke)
+        .inner_margin(egui::Margin::symmetric(12, 8))
+        .corner_radius(theme::RADIUS_MD)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                icons::status_dot(ui, color);
+                match state {
+                    AgentState::Running => {
+                        icons::agent_activity_icon(ui, icons::AgentActivityIcon::Running)
+                    }
+                    AgentState::Done => {
+                        icons::agent_activity_icon(ui, icons::AgentActivityIcon::Done)
+                    }
+                    AgentState::Failed | AgentState::Killed => {
+                        icons::agent_activity_icon(ui, icons::AgentActivityIcon::Failed)
+                    }
+                    AgentState::Blocked => {
+                        icons::agent_activity_icon(ui, icons::AgentActivityIcon::Blocked)
+                    }
+                    _ => {
+                        icons::status_dot(ui, status_color);
+                    }
+                }
+                ui.strong(truncate(shown, 48));
                 if !state_label.is_empty() {
-                    ui.colored_label(color, RichText::new(state_label).strong());
+                    ui.weak("·");
+                    ui.colored_label(
+                        status_color,
+                        RichText::new(state_label.to_lowercase()).small(),
+                    );
                 }
-                let shown = if title.is_empty() { agent_id } else { title };
-                ui.strong(truncate(shown, 64));
-                if !crate::chat_room::is_persona_agent_id(agent_id) {
-                    ui.weak(agent_id);
+                let tokens = info
+                    .map(|a| {
+                        trace
+                            .map(|tr| tr.tokens_used)
+                            .filter(|n| *n > 0)
+                            .unwrap_or(a.tokens_used)
+                    })
+                    .unwrap_or(0);
+                let duration = trace
+                    .map(|tr| {
+                        if tr.total_duration_ms > 0 {
+                            tr.total_duration_ms
+                        } else {
+                            tr.steps.iter().map(|s| s.duration_ms).sum()
+                        }
+                    })
+                    .unwrap_or(0);
+                if duration > 0 {
+                    ui.weak("·");
+                    ui.weak(RichText::new(fmt_ms(duration)).small());
                 }
-                if max_steps > 0 && !canvas_fail && !canvas_muted {
-                    ui.label(format!("step {step}/{max_steps}"));
+                if tokens > 0 {
+                    ui.weak("·");
+                    ui.weak(RichText::new(format!("{tokens} tok")).small());
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(t.agent_export).small()).clicked() {
-                        action = ChatCardAction::Export;
-                    }
-                    if ui.add(egui::Button::new(t.agent_detail).small()).clicked() {
-                        action = ChatCardAction::OpenDetail;
+                    if matches!(state, AgentState::Done) {
+                        if icons::export_square_button(ui, t.agent_export).clicked() {
+                            action = ChatCardAction::Export;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new(t.agent_card_journal).color(tc.accent),
+                                )
+                                .frame(false),
+                            )
+                            .clicked()
+                        {
+                            action = ChatCardAction::OpenDetail;
+                        }
+                    } else {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new(t.agent_card_open).color(tc.accent),
+                                )
+                                .frame(false),
+                            )
+                            .clicked()
+                        {
+                            action = ChatCardAction::OpenDetail;
+                        }
+                        if tool_n > 0 && matches!(state, AgentState::Running) {
+                            ui.weak(
+                                RichText::new(
+                                    t.agent_tools_count.replace("{n}", &tool_n.to_string()),
+                                )
+                                .small(),
+                            );
+                        }
                     }
                     if ask_card {
                         if selected_for_reply {
-                            ui.colored_label(
-                                Color32::from_rgb(240, 190, 100),
-                                RichText::new(t.agent_reply_here).small(),
-                            );
+                            ui.colored_label(tc.warning, RichText::new(t.agent_reply_here).small());
                         } else if ui.add(egui::Button::new(t.agent_reply).small()).clicked() {
                             action = ChatCardAction::TargetReply;
                         }
                     }
                 });
             });
-            let goal = if title.is_empty() {
-                info.map(|a| a.directive.as_str()).unwrap_or("")
-            } else {
-                title
-            };
-            if !goal.is_empty() {
-                ui.label(RichText::new(truncate(goal, 120)).italics());
-            }
-            if !task.is_empty() && !canvas_fail && !canvas_muted {
-                ui.weak(format!("tâche : {}", truncate(&task, 80)));
+            if matches!(state, AgentState::Running | AgentState::Blocked) {
+                if let Some(trace) = trace {
+                    chat_trace_preview(ui, trace, tc.accent);
+                }
             }
             if canvas_fail {
                 ui.colored_label(
@@ -874,6 +1015,64 @@ pub fn chat_agent_card(
             }
         });
     action
+}
+
+fn first_string_arg(args: &serde_json::Value) -> Option<String> {
+    match args {
+        serde_json::Value::String(s) => {
+            let s = s.trim();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        }
+        serde_json::Value::Object(map) => map
+            .values()
+            .find_map(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        _ => None,
+    }
+}
+
+fn chat_trace_preview(ui: &mut Ui, trace: &AgentTrace, accent: Color32) {
+    let mut steps: Vec<&AgentStepRecord> = trace
+        .steps
+        .iter()
+        .filter(|s| !s.action.trim().is_empty())
+        .collect();
+    if steps.len() > 4 {
+        let skip = steps.len() - 4;
+        steps = steps[skip..].to_vec();
+    }
+    if steps.is_empty() {
+        return;
+    }
+    ui.add_space(6.0);
+    for rec in steps {
+        ui.horizontal(|ui| {
+            let done = !rec.tool_result.trim().is_empty();
+            icons::status_dot(
+                ui,
+                if done {
+                    accent
+                } else {
+                    ui.visuals().weak_text_color()
+                },
+            );
+            ui.label(RichText::new(truncate(&rec.action, 28)).small().monospace());
+            if let Some(arg) = first_string_arg(&rec.args) {
+                ui.weak(RichText::new(format!("\"{}\"", truncate(&arg, 26))).small());
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let result = rec.tool_result.trim();
+                if !result.is_empty() {
+                    ui.weak(RichText::new(truncate(result, 28)).small());
+                }
+            });
+        });
+    }
 }
 
 fn find_json_object_end(s: &str) -> Option<usize> {
@@ -1229,7 +1428,7 @@ pub fn draw_agent_detail(
                 } else {
                     let last = tr.steps.len().saturating_sub(1);
                     for (i, rec) in tr.steps.iter().enumerate() {
-                        draw_step(ui, id, rec, i == last, md_cache, t, &mut actions);
+                        draw_step(ui, id, rec, i, i == last, md_cache, t, &mut actions);
                     }
                 }
                 if let Some(a) = info {
@@ -1252,14 +1451,17 @@ fn draw_step(
     ui: &mut Ui,
     agent_id: &str,
     rec: &AgentStepRecord,
+    step_idx: usize,
     default_open: bool,
     md_cache: &mut CommonMarkCache,
     t: &crate::i18n::UiStrings,
     actions: &mut PanelActions,
 ) {
     let header = step_header(rec, crate::local_tz_offset_minutes(), t);
+    // `rec.step` can repeat across rows; include list index for unique widget IDs.
+    let salt = format!("step-{agent_id}-{step_idx}-{}", rec.step);
     egui::CollapsingHeader::new(header)
-        .id_salt(format!("step-{agent_id}-{}", rec.step))
+        .id_salt(&salt)
         .default_open(default_open)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1329,7 +1531,7 @@ fn draw_step(
                             .small()
                             .strong(),
                     );
-                    ui.push_id(("step_prose", agent_id, rec.step), |ui| {
+                    ui.push_id(("step_prose", agent_id, step_idx, rec.step), |ui| {
                         CommonMarkViewer::new().show(ui, md_cache, &prose);
                     });
                 });
@@ -1343,7 +1545,7 @@ fn draw_step(
                             .small()
                             .strong(),
                     );
-                    ui.push_id(("step_content", agent_id, rec.step), |ui| {
+                    ui.push_id(("step_content", agent_id, step_idx, rec.step), |ui| {
                         CommonMarkViewer::new().show(ui, md_cache, md);
                     });
                 });
@@ -1466,7 +1668,7 @@ fn draw_step(
                     } else if !rec.tool_result.is_empty() && !is_canvas_draw_tool(&rec.action) {
                         let tr = truncate(&rec.tool_result, 1200);
                         if tr.contains('#') || tr.contains("**") || tr.contains('\n') {
-                            ui.push_id(("step_tool", agent_id, rec.step), |ui| {
+                            ui.push_id(("step_tool", agent_id, step_idx, rec.step), |ui| {
                                 CommonMarkViewer::new().show(ui, md_cache, &tr);
                             });
                         } else {
@@ -1753,6 +1955,8 @@ Je vais répondre de manière naturelle"#;
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         }
     }
 
@@ -1820,6 +2024,8 @@ Je vais répondre de manière naturelle"#;
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         assert!(canvas_draw_fail_chrome(Some(&info), None, None));
         let raw = "max_steps (64) atteint";
@@ -1861,6 +2067,8 @@ Je vais répondre de manière naturelle"#;
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let ops = vec![aos_proto::CanvasOp {
             seq: 1,
@@ -1921,6 +2129,8 @@ Je vais répondre de manière naturelle"#;
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let trace = AgentTrace {
             agent_id: "agent-99".into(),
@@ -1972,6 +2182,8 @@ Je vais répondre de manière naturelle"#;
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let raw = "max_steps (64) atteint";
         let en = resolve_visible_fail_reason(&t_en, Some(&info), raw, None, None);
@@ -2008,6 +2220,8 @@ Je vais répondre de manière naturelle"#;
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         assert!(notes_create_fail_chrome(Some(&ag), true, 0));
         assert!(!notes_create_fail_chrome(Some(&ag), true, 2));
@@ -2060,5 +2274,26 @@ Je vais répondre de manière naturelle"#;
         assert!(!out.to_ascii_lowercase().contains("erreur bus"), "{out}");
         assert!(!out.to_ascii_lowercase().contains("internalerror"), "{out}");
         assert!(out.contains("Dessin en cours"), "{out}");
+    }
+
+    #[test]
+    fn sanitize_preserves_rust_fence_and_numbered_list() {
+        let raw = "Voici un exemple :\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\n1. L'agent écrit la note.\n2. La skill valide.";
+        let out = sanitize_chat_visible_bubble(raw);
+        assert!(out.contains("```rust"), "{out}");
+        assert!(out.contains("fn main()"), "{out}");
+        assert!(out.contains("    println!"), "{out}");
+        assert!(out.contains("1. L'agent écrit la note."), "{out}");
+        assert!(out.contains('\n'), "{out}");
+        let rust = "Voici un exemple de code Hello World en Rust:\n\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n\nPour l'exécuter, sauvegardez ce code dans un fichier nommé hello.rs";
+        let shown = format_chat_assistant_display(rust, &t_en());
+        assert!(shown.contains("```rust"), "{shown}");
+        assert!(shown.contains("fn main()"), "{shown}");
+        assert!(shown.contains("hello.rs"), "{shown}");
+        let js = "Voici un hello world en JavaScript :```javascript // Hello monde (\"Hello World !\");```C'est la version la plus simple.";
+        let js_out = format_chat_assistant_display(js, &t_en());
+        assert!(js_out.contains("```javascript"), "{js_out}");
+        assert!(js_out.contains("Hello World"), "{js_out}");
+        assert!(js_out.contains('\n'), "{js_out}");
     }
 }

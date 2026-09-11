@@ -1,10 +1,7 @@
 //! Conversation session bar, room members, and canvas session actions.
 
 use crate::cmd::Cmd;
-use crate::{
-    chat_canvas, chat_room, guide, i18n, icons, models_page, session_toggle_chip,
-    session_toggle_reserve_width, UiApp,
-};
+use crate::{chat_canvas, chat_room, guide, i18n, icons, session_toggle_reserve_width, UiApp};
 use aos_proto::{
     align_canvas_op_body, canvas_op_bbox, normalize_canvas_color, set_canvas_op_body_dash,
     set_canvas_op_body_gradient, set_canvas_op_body_opacity, set_canvas_op_rotation,
@@ -21,15 +18,16 @@ impl UiApp {
         mem: &ChatRoomMember,
     ) {
         let name = chat_room::member_display_label(t, mem);
-        let border = ui.visuals().widgets.inactive.fg_stroke.color;
+        let border = ui.visuals().widgets.noninteractive.bg_stroke.color;
         egui::Frame::new()
             .fill(ui.visuals().faint_bg_color)
             .stroke(egui::Stroke::new(1.0_f32, border))
-            .inner_margin(egui::Margin::symmetric(6, 2))
+            .corner_radius(crate::theme::RADIUS_SM)
+            .inner_margin(egui::Margin::symmetric(5, 1))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
-                    ui.strong(&name);
+                    ui.label(egui::RichText::new(&name).small());
                     if icons::close_button(ui)
                         .on_hover_text(t.room_member_remove)
                         .clicked()
@@ -54,39 +52,50 @@ impl UiApp {
         if candidates.is_empty() {
             return;
         }
-        let add_resp = ui.menu_button("+", |ui| {
-            ui.label(t.room_add_from_library);
-            ui.separator();
-            for agent in candidates {
-                let label = chat_room::roster_agent_label(t, agent);
-                if ui.button(&label).clicked() {
-                    if let Some(persona_id) = agent.persona_id.clone() {
-                        let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
-                            session_id: session_id.to_string(),
-                            persona_id,
-                            model_id: model_id.clone(),
-                        });
-                    } else {
-                        let stored_name = agent
-                            .display_name
-                            .clone()
-                            .filter(|n| !n.trim().is_empty())
-                            .unwrap_or_else(|| label.clone());
-                        let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
-                            session_id: session_id.to_string(),
-                            member: ChatRoomMember {
-                                agent_id: agent.agent_id.clone(),
-                                display_name: stored_name,
-                                persona_id: None,
-                                joined_ms: chat_room::joined_ms_now(),
-                            },
-                        });
+        let popup_id = ui.id().with("room_add_library");
+        let btn = icons::plus_button(ui).on_hover_text(t.room_add_from_library);
+        if btn.clicked() {
+            ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+        }
+        egui::popup::popup_below_widget(
+            ui,
+            popup_id,
+            &btn,
+            egui::PopupCloseBehavior::CloseOnClickOutside,
+            |ui| {
+                ui.set_min_width(180.0);
+                ui.label(t.room_add_from_library);
+                ui.separator();
+                for agent in candidates {
+                    let label = chat_room::roster_agent_label(t, agent);
+                    if ui.button(&label).clicked() {
+                        if let Some(persona_id) = agent.persona_id.clone() {
+                            let _ = self.cmd_tx.send(Cmd::RoomAddPersona {
+                                session_id: session_id.to_string(),
+                                persona_id,
+                                model_id: model_id.clone(),
+                            });
+                        } else {
+                            let stored_name = agent
+                                .display_name
+                                .clone()
+                                .filter(|n| !n.trim().is_empty())
+                                .unwrap_or_else(|| label.clone());
+                            let _ = self.cmd_tx.send(Cmd::SessionMembersAdd {
+                                session_id: session_id.to_string(),
+                                member: ChatRoomMember {
+                                    agent_id: agent.agent_id.clone(),
+                                    display_name: stored_name,
+                                    persona_id: None,
+                                    joined_ms: chat_room::joined_ms_now(),
+                                },
+                            });
+                        }
+                        ui.close_menu();
                     }
-                    ui.close_menu();
                 }
-            }
-        });
-        add_resp.response.on_hover_text(t.room_add_from_library);
+            },
+        );
     }
 
     pub(crate) fn dispatch_canvas_ui_action(
@@ -479,7 +488,21 @@ impl UiApp {
     }
 
     pub(crate) fn ui_session_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        let Some(sid) = self.chat_state.active_session.clone() else {
+        let sid = self.chat_state.active_session.clone();
+        if sid.is_none() {
+            ui.horizontal(|ui| {
+                self.ui_session_switcher(ui, t);
+                if icons::plus_button(ui)
+                    .on_hover_text(t.session_new)
+                    .clicked()
+                {
+                    let n = self.chat_state.sessions.len() + 1;
+                    self.request_session_create(Some(format!("Session {n}")));
+                }
+            });
+            return;
+        }
+        let Some(sid) = sid else {
             return;
         };
         let meta = chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()));
@@ -488,13 +511,6 @@ impl UiApp {
         let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
         let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
-        let session_title = self
-            .chat_state
-            .sessions
-            .iter()
-            .find(|s| s.id == sid)
-            .map(|s| s.title.clone())
-            .unwrap_or_else(|| "Session".to_string());
         let count_line = t
             .room_header_member_count
             .replace("{n}", &members.len().to_string());
@@ -508,26 +524,15 @@ impl UiApp {
         let bar_w = ui.available_width();
         let narrow = (bar_w - session_toggle_reserve_width(t, canvas_open, true)) < 200.0;
         if narrow {
-            self.ui_session_bar_left(
-                ui,
-                t,
-                &g,
-                &sid,
-                room,
-                canvas_open,
-                model_id.clone(),
-                session_title.clone(),
-                &count_line,
-                !members.is_empty(),
-                true,
-            );
+            self.ui_session_bar_left(ui, t, &g, room, &count_line, !members.is_empty());
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open, true);
                 });
             });
         } else {
-            let tuck_secondary = canvas_open && (bar_w - session_toggle_reserve_width(t, canvas_open, true)) < 280.0;
+            let tuck_secondary =
+                canvas_open && (bar_w - session_toggle_reserve_width(t, canvas_open, true)) < 280.0;
             ui.horizontal(|ui| {
                 let full_w = ui.available_width();
                 let toggle_w = session_toggle_reserve_width(t, canvas_open, tuck_secondary);
@@ -537,19 +542,7 @@ impl UiApp {
                     egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
                         ui.set_max_width(left_w);
-                        self.ui_session_bar_left(
-                            ui,
-                            t,
-                            &g,
-                            &sid,
-                            room,
-                            canvas_open,
-                            model_id.clone(),
-                            session_title.clone(),
-                            &count_line,
-                            !members.is_empty(),
-                            false,
-                        );
+                        self.ui_session_bar_left(ui, t, &g, room, &count_line, !members.is_empty());
                     },
                 );
                 ui.allocate_ui_with_layout(
@@ -567,33 +560,24 @@ impl UiApp {
             let mut open_canvas_guide = false;
             let select_active = self.chat_state.view.canvas.tool == chat_canvas::CanvasTool::Select
                 && self.chat_state.view.canvas.selected_seq.is_some();
-            let toolbar_rows = chat_canvas::toolbar_row_count(select_active);
+            let track_w = ui.available_width();
+            let toolbar_rows = chat_canvas::toolbar_row_count(select_active, track_w);
             let toolbar_h = (toolbar_rows as f32 * chat_canvas::toolbar_row_height() + 4.0)
                 .min(chat_canvas::toolbar_max_height());
-            let toolbar_min_w = chat_canvas::toolbar_content_min_width(
-                self.chat_state.view.canvas.seeing,
-                self.chat_state.view.canvas.clear_confirm_open,
-            );
-            let track_w = ui.available_width();
             ui.allocate_ui_with_layout(
                 egui::vec2(track_w, toolbar_h),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(track_w);
-                    egui::ScrollArea::horizontal()
-                        .id_salt("canvas_toolbar_scroll")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.set_min_width(toolbar_min_w.max(track_w));
-                            toolbar_action = chat_canvas::ui_canvas_toolbar(
-                                ui,
-                                t,
-                                &mut self.chat_state.view.canvas,
-                                chat_canvas::canvas_agent_drawing_on_session(&self.agents, &sid),
-                                Some(g.help_tooltip),
-                                &mut open_canvas_guide,
-                            );
-                        });
+                    ui.set_max_width(track_w);
+                    toolbar_action = chat_canvas::ui_canvas_toolbar(
+                        ui,
+                        t,
+                        &mut self.chat_state.view.canvas,
+                        chat_canvas::canvas_agent_drawing_on_session(&self.agents, &sid),
+                        Some(g.help_tooltip),
+                        &mut open_canvas_guide,
+                    );
                 },
             );
             if open_canvas_guide {
@@ -614,8 +598,7 @@ impl UiApp {
                         self.ui_room_member_chip(ui, t, &sid, mem);
                     }
                 }
-                let candidates =
-                    chat_room::library_add_candidates(&self.agents, members, t);
+                let candidates = chat_room::library_add_candidates(&self.agents, members, t);
                 self.ui_room_add_library_menu(ui, t, &sid, model_id.clone(), &candidates);
                 if guide::tab_help_button(ui, g.help_tooltip) {
                     self.guide.open_topic(guide::GuideTopic::Salon);
@@ -626,108 +609,90 @@ impl UiApp {
         ui.add_space(4.0);
     }
 
-    /// Moitié gauche de la barre : modèle, titre, aide, activité.
-    /// `compact` resserre (picker 120, titre 24) quand le canvas est ouvert
-    /// ou la barre sur deux lignes.
-    #[allow(clippy::too_many_arguments)]
+    fn ui_session_switcher(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        let title = self
+            .chat_state
+            .active_session
+            .as_deref()
+            .and_then(|id| {
+                self.chat_state
+                    .sessions
+                    .iter()
+                    .find(|s| s.id == id)
+                    .map(|s| s.title.as_str())
+            })
+            .filter(|s| !s.is_empty())
+            .unwrap_or(t.session_picker);
+        let short = crate::agent_panel::truncate(title, 32);
+        let open = self.chat_state.sidebar.picker_open;
+        let galley = ui.fonts(|f| {
+            f.layout_no_wrap(
+                short.to_string(),
+                egui::FontId::proportional(14.0),
+                egui::Color32::PLACEHOLDER,
+            )
+        });
+        let size = egui::vec2((galley.size().x + 28.0).max(72.0), 28.0);
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+        if ui.is_rect_visible(rect) {
+            let hovered = response.hovered() || open;
+            if hovered {
+                ui.painter().rect_filled(
+                    rect,
+                    crate::theme::RADIUS_SM as f32,
+                    ui.visuals().widgets.hovered.bg_fill,
+                );
+            }
+            let text_pos = egui::pos2(rect.left() + 8.0, rect.center().y);
+            ui.painter().text(
+                text_pos,
+                egui::Align2::LEFT_CENTER,
+                short,
+                egui::FontId::proportional(14.0),
+                ui.visuals().strong_text_color(),
+            );
+            let caret_rect = egui::Rect::from_center_size(
+                egui::pos2(rect.right() - 10.0, rect.center().y),
+                egui::vec2(10.0, 10.0),
+            );
+            let color = ui.visuals().weak_text_color();
+            let stroke = egui::Stroke::new(1.4_f32, color);
+            let c = caret_rect.center();
+            let s = 3.2_f32;
+            ui.painter().line_segment(
+                [c + egui::vec2(-s, -s * 0.2), c + egui::vec2(0.0, s * 0.7)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [c + egui::vec2(0.0, s * 0.7), c + egui::vec2(s, -s * 0.2)],
+                stroke,
+            );
+        }
+        if response.on_hover_text(t.session_picker_hint).clicked() {
+            self.chat_state.sidebar.picker_open = !open;
+        }
+    }
+
+    /// Moitié gauche de la barre : switcher, compteur salon, aide.
     fn ui_session_bar_left(
         &mut self,
         ui: &mut egui::Ui,
         t: &i18n::UiStrings,
         g: &guide::GuideStrings,
-        sid: &str,
         room: bool,
-        canvas_open: bool,
-        model_id: Option<String>,
-        session_title: String,
         count_line: &str,
         has_members: bool,
-        compact: bool,
     ) {
-        let mut selected_model = model_id.clone().unwrap_or_default();
-        let model_human = models_page::model_human_label(
-            selected_model.as_str(),
-            &self.models_ui.model_infos,
-            t.status_model_default,
-        );
-        let model_w = if canvas_open || compact { 120.0 } else { 150.0 };
-        egui::ComboBox::from_id_salt("chat_model_picker")
-            .selected_text(model_human)
-            .width(model_w)
-            .show_ui(ui, |ui| {
-                if ui
-                    .selectable_value(&mut selected_model, String::new(), t.status_model_default)
-                    .on_hover_text("default")
-                    .changed()
-                {
-                    let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                        session_id: sid.to_string(),
-                        model_id: None,
-                    });
-                }
-                for m in self
-                    .models_ui
-                    .model_infos
-                    .iter()
-                    .filter(|m| !m.id.starts_with("provider:"))
-                {
-                    let picker_label = models_page::load_catalog_models()
-                        .iter()
-                        .find(|c| c.id == m.id)
-                        .map(|catalog| {
-                            let badges = models_page::picker_surface_badges(catalog, t);
-                            if badges.is_empty() {
-                                m.name.clone()
-                            } else {
-                                format!("{} · {}", m.name, badges[0])
-                            }
-                        })
-                        .unwrap_or_else(|| m.name.clone());
-                    if ui
-                        .selectable_value(&mut selected_model, m.id.clone(), picker_label)
-                        .changed()
-                    {
-                        let _ = self.cmd_tx.send(Cmd::SessionSetModel {
-                            session_id: sid.to_string(),
-                            model_id: Some(m.id.clone()),
-                        });
-                    }
-                }
-            });
-        let title_max = if canvas_open || compact { 24 } else { 42 };
-        let header =
-            egui::RichText::new(crate::agent_panel::truncate(&session_title, title_max)).strong();
-        let title_resp = ui.add(egui::Label::new(header).sense(egui::Sense::hover()));
-        if session_title.len() > title_max {
-            title_resp.on_hover_text(&session_title);
-        }
+        self.ui_session_switcher(ui, t);
         if room && has_members {
-            ui.weak(format!("· {count_line}"));
+            ui.weak(egui::RichText::new(count_line).small());
         }
-
         if guide::tab_help_button(ui, g.help_tooltip) {
             self.guide.open_topic(guide::GuideTopic::Chat);
         }
-        if !canvas_open {
-            let activity_label = if self.prefs.ui_layout.activity_panel_open {
-                t.activity_close.to_string()
-            } else {
-                t.activity_open.to_string()
-            };
-            if ui
-                .button(activity_label)
-                .on_hover_text(t.activity_open)
-                .clicked()
-            {
-                self.prefs.ui_layout.activity_panel_open =
-                    !self.prefs.ui_layout.activity_panel_open;
-                crate::prefs::save_preferences(&self.prefs);
-            }
-        }
     }
 
-    /// Moitié droite de la barre : toggles Salon/Deep/Canvas (+Focus).
-    /// Tailles naturelles, jamais de chevauchement.
+    /// Moitié droite : Activité / Salon / Deep / Canvas en icônes.
     fn ui_session_bar_toggles(
         &mut self,
         ui: &mut egui::Ui,
@@ -737,19 +702,14 @@ impl UiApp {
         canvas_open: bool,
         tuck_secondary: bool,
     ) {
-        if canvas_open
-            && icons::activity_toggle_button(ui, self.prefs.ui_layout.activity_panel_open)
-                .on_hover_text(if self.prefs.ui_layout.activity_panel_open {
-                    t.activity_close
-                } else {
-                    t.activity_open
-                })
-                .clicked()
+        if icons::session_chrome_toggle(
+            ui,
+            canvas_open,
+            icons::SessionChromeIcon::Canvas,
+            t.session_toggle_canvas,
+        )
+        .clicked()
         {
-            self.prefs.ui_layout.activity_panel_open = !self.prefs.ui_layout.activity_panel_open;
-            crate::prefs::save_preferences(&self.prefs);
-        }
-        if session_toggle_chip(ui, canvas_open, t.session_toggle_canvas).clicked() {
             let new_open = !canvas_open;
             self.set_canvas_open_local(sid, new_open);
             let _ = self.cmd_tx.send(Cmd::CanvasSetOpen {
@@ -758,7 +718,7 @@ impl UiApp {
             });
         }
         if tuck_secondary {
-            ui.menu_button("⋯", |ui| {
+            let _ = icons::overflow_menu(ui, "session_more_toggles", t.session_toggle_deep, |ui| {
                 if canvas_open {
                     let focus_on = self.prefs.ui_layout.canvas_focus;
                     if ui
@@ -788,36 +748,45 @@ impl UiApp {
                 }
             });
         } else {
-            if canvas_open
-                && ui
-                    .button(if self.prefs.ui_layout.canvas_focus {
-                        t.session_focus_exit
-                    } else {
-                        t.session_focus
-                    })
-                    .on_hover_text(if self.prefs.ui_layout.canvas_focus {
-                        t.canvas_focus_exit
-                    } else {
-                        t.canvas_focus
-                    })
-                    .clicked()
-            {
-                self.prefs.ui_layout.canvas_focus = !self.prefs.ui_layout.canvas_focus;
-                crate::prefs::save_preferences(&self.prefs);
+            if canvas_open {
+                let _ = icons::overflow_menu(ui, "session_canvas_focus", t.session_focus, |ui| {
+                    let focus_on = self.prefs.ui_layout.canvas_focus;
+                    if ui
+                        .selectable_label(
+                            focus_on,
+                            if focus_on {
+                                t.session_focus_exit
+                            } else {
+                                t.session_focus
+                            },
+                        )
+                        .clicked()
+                    {
+                        self.prefs.ui_layout.canvas_focus = !focus_on;
+                        crate::prefs::save_preferences(&self.prefs);
+                        ui.close_menu();
+                    }
+                });
             }
-            if session_toggle_chip(
+            if icons::session_chrome_toggle(
                 ui,
                 self.chat_state.composer.deep_thinking,
-                t.session_toggle_deep,
+                icons::SessionChromeIcon::Deep,
+                t.tip_session_deep_thinking,
             )
-            .on_hover_text(t.tip_session_deep_thinking)
             .clicked()
             {
-                self.chat_state.composer.deep_thinking =
-                    !self.chat_state.composer.deep_thinking;
+                self.chat_state.composer.deep_thinking = !self.chat_state.composer.deep_thinking;
             }
         }
-        if session_toggle_chip(ui, room, t.session_toggle_salon).clicked() {
+        if icons::session_chrome_toggle(
+            ui,
+            room,
+            icons::SessionChromeIcon::Salon,
+            t.session_toggle_salon,
+        )
+        .clicked()
+        {
             let mode = if room {
                 ChatSessionMode::Direct
             } else {
@@ -827,6 +796,91 @@ impl UiApp {
                 session_id: sid.to_string(),
                 mode,
             });
+        }
+        if icons::activity_toggle_button(ui, self.prefs.ui_layout.activity_panel_open)
+            .on_hover_text(if self.prefs.ui_layout.activity_panel_open {
+                t.activity_close
+            } else {
+                t.activity_open
+            })
+            .clicked()
+        {
+            self.prefs.ui_layout.activity_panel_open = !self.prefs.ui_layout.activity_panel_open;
+            crate::prefs::save_preferences(&self.prefs);
+        }
+    }
+
+    /// Session-model picker anchored on a clock/composer control.
+    pub(crate) fn ui_session_model_picker(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &i18n::UiStrings,
+        anchor: &egui::Response,
+        id_salt: &str,
+        above: bool,
+    ) {
+        let popup_id = ui.id().with(id_salt);
+        if anchor.clicked() {
+            ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+        }
+        let placement = if above {
+            egui::AboveOrBelow::Above
+        } else {
+            egui::AboveOrBelow::Below
+        };
+        let current = self.status_model_name();
+        let infos = self.models_ui.model_infos.clone();
+        let sid = self.chat_state.active_session.clone();
+        let mut picked: Option<Option<String>> = None;
+        egui::popup::popup_above_or_below_widget(
+            ui,
+            popup_id,
+            anchor,
+            placement,
+            egui::PopupCloseBehavior::CloseOnClickOutside,
+            |ui| {
+                ui.set_min_width(240.0);
+                ui.set_max_width(320.0);
+                ui.label(egui::RichText::new(t.status_model_label).small().strong());
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .show(ui, |ui| {
+                        let default_on = current.eq_ignore_ascii_case("default");
+                        if ui
+                            .selectable_label(default_on, t.status_model_default)
+                            .clicked()
+                        {
+                            picked = Some(None);
+                        }
+                        for m in &infos {
+                            let selected = current == m.id;
+                            let label = crate::models_page::model_human_label(
+                                &m.id,
+                                &infos,
+                                t.status_model_default,
+                            );
+                            if ui
+                                .selectable_label(selected, label)
+                                .on_hover_text(&m.id)
+                                .clicked()
+                            {
+                                picked = Some(Some(m.id.clone()));
+                            }
+                        }
+                    });
+            },
+        );
+        if let Some(model_id) = picked {
+            if let Some(sid) = sid {
+                let _ = self.cmd_tx.send(Cmd::SessionSetModel {
+                    session_id: sid,
+                    model_id,
+                });
+            } else if let Some(model_id) = model_id {
+                self.prefs.default_agent_model = Some(model_id);
+                crate::prefs::save_preferences(&self.prefs);
+            }
+            ui.memory_mut(|mem| mem.close_popup());
         }
     }
 }

@@ -14,6 +14,7 @@ pub(crate) struct ChatSidebarState {
     /// Popup de renommage ouverte (plus de champ inline 120px qui débordait).
     #[allow(dead_code)]
     pub(crate) rename_open: bool,
+    pub(crate) picker_open: bool,
     pub(crate) web_query: String,
     pub(crate) web_results: Vec<WebSearchHit>,
     pub(crate) fetch_url: String,
@@ -32,6 +33,7 @@ impl Default for ChatSidebarState {
             rename: String::new(),
             tools_open: false,
             rename_open: false,
+            picker_open: false,
             web_query: String::new(),
             web_results: Vec::new(),
             fetch_url: String::new(),
@@ -40,5 +42,16 @@ impl Default for ChatSidebarState {
             generated_content: String::new(),
             generated_path: "/downloads/note.md".into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_picker_starts_closed() {
+        let state = ChatSidebarState::default();
+        assert!(!state.picker_open);
     }
 }

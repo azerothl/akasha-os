@@ -1,12 +1,12 @@
 //! Generic layer canvas / list / undo widgets for rich declarative UI (issue #150 lot 5).
 
+use crate::icons;
 use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_proto::rich_composition::{
     bring_layer_to_front, layers_from_value, layers_to_value, reorder_layer, BoundedUndoStack,
     LayerCanvasSnapshot, RichLayer, MAX_LAYERS_PER_CANVAS, MAX_UNDO_DEPTH,
 };
 use aos_proto::rich_decl_ui::RichInteractionEvent;
-use crate::icons;
 use eframe::egui;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -484,13 +484,7 @@ pub fn ui_layer_canvas(
             font_id.clone(),
             egui::Color32::from_black_alpha(alpha(200)),
         );
-        painter.text(
-            text_pos,
-            egui::Align2::LEFT_TOP,
-            label,
-            font_id,
-            text_color,
-        );
+        painter.text(text_pos, egui::Align2::LEFT_TOP, label, font_id, text_color);
         if selected_here && !layer.locked {
             let handle = resize_handle_rect(r);
             painter.rect_filled(

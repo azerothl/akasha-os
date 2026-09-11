@@ -149,7 +149,7 @@ pub(crate) fn chat_composer_reserve_height(
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
 
-    let mut height = COMPOSER_INPUT_ROW_H;
+    let mut height = COMPOSER_INPUT_ROW_H + 16.0;
     if ask_queue_len > 1 {
         height += ASK_QUEUE_H;
     }

@@ -117,6 +117,8 @@ pub fn agents_with_library_placeholders(agents: &[AgentInfo], _t: &UiStrings) ->
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         });
     }
     out
@@ -139,6 +141,58 @@ pub fn roster_agent_label(t: &UiStrings, agent: &AgentInfo) -> String {
     }
     agent.display_title().to_string()
 }
+
+pub fn resolved_avatar_id(avatar: Option<&str>, persona_id: Option<&str>) -> String {
+    if let Some(id) = avatar.map(str::trim).filter(|s| !s.is_empty()) {
+        return id.to_string();
+    }
+    aos_agent::room_personas::persona_default_avatar(persona_id.unwrap_or("")).to_string()
+}
+
+pub fn agent_avatar_id(agent: &AgentInfo) -> String {
+    resolved_avatar_id(agent.avatar.as_deref(), agent.persona_id.as_deref())
+}
+
+pub fn parse_agent_color_hex(raw: &str) -> Option<(u8, u8, u8)> {
+    let t = raw.trim();
+    let hex = t.strip_prefix('#').unwrap_or(t);
+    if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
+pub fn format_agent_color_hex(r: u8, g: u8, b: u8) -> String {
+    format!("#{r:02X}{g:02X}{b:02X}")
+}
+
+/// Prefer stored accent color; otherwise hash of speaker / agent id.
+pub fn resolve_agent_color_rgb(agent_id: &str, color: Option<&str>, dark: bool) -> (u8, u8, u8) {
+    if let Some((r, g, b)) = color.and_then(parse_agent_color_hex) {
+        return (r, g, b);
+    }
+    speaker_color_rgb(agent_id, dark)
+}
+
+pub fn agent_color_rgb(agent: &AgentInfo, dark: bool) -> (u8, u8, u8) {
+    resolve_agent_color_rgb(&agent.agent_id, agent.color.as_deref(), dark)
+}
+
+pub const AGENT_COLOR_PRESETS: &[(u8, u8, u8)] = &[
+    (62, 224, 196),  // signal
+    (94, 231, 255),  // ice
+    (232, 93, 76),   // hydrogen
+    (120, 190, 255), // sky
+    (255, 170, 70),  // amber
+    (130, 220, 140), // leaf
+    (255, 130, 170), // rose
+    (180, 160, 255), // lilac
+    (240, 220, 120), // sand
+    (160, 200, 210), // mist
+];
 
 /// Salon picker entry: built-in personas, roster library, and page-created Task agents.
 pub fn is_salon_picker_candidate(agent: &AgentInfo) -> bool {
@@ -219,7 +273,6 @@ pub fn prepare_room_bubble_text(
     let base = humanize_tool_id_tokens(&base, t);
     let base = strip_tool_id_tokens(&base);
     let base = format_salon_json_for_display(&base);
-    let base = strip_salon_markdown_markers(&base);
     let base = strip_salon_sentinels(&base);
     let base = localize_roster_persona_names_in_prose(t, &base, members);
     let base = aos_agent::room_reply::sanitize_visible_chars(&base);
@@ -233,7 +286,7 @@ pub fn strip_salon_sentinels(text: &str) -> String {
         work = work.replace(&format!("`{sentinel}`"), "");
         work = remove_bare_token(&work, sentinel);
     }
-    collapse_paint_spaces(&work)
+    collapse_paint_spaces_outside_fences(&work)
 }
 
 fn remove_bare_token(text: &str, token: &str) -> String {
@@ -272,7 +325,7 @@ fn remove_bare_token(text: &str, token: &str) -> String {
             i += ch.len_utf8();
         }
     }
-    collapse_paint_spaces(&out)
+    collapse_paint_spaces_outside_fences(&out)
 }
 
 fn is_ident_char(c: char) -> bool {
@@ -345,8 +398,365 @@ fn replace_word_ignore_case(haystack: &str, needle: &str, replacement: &str) -> 
     out
 }
 
+/// Rewrite markdown, leaving fenced code blocks intact.
+/// Flattened or mid-line fences (`… :```javascript code ``` …`) are rebuilt
+/// as canonical CommonMark fences so the viewer can paint a real code block.
+pub fn map_markdown_fences(
+    text: &str,
+    mut map_prose: impl FnMut(&str) -> String,
+    mut map_fence: impl FnMut(&str, &str, &str) -> String,
+) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0usize;
+    while i < text.len() {
+        let Some(span) = next_fence(&text[i..]) else {
+            out.push_str(&map_prose(&text[i..]));
+            break;
+        };
+        let open_abs = i + span.open;
+        if open_abs > i {
+            let prose = map_prose(&text[i..open_abs]);
+            out.push_str(&prose);
+            if !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
+        }
+        let body = &text[i + span.body_start..i + span.body_end];
+        let canonical = canonical_markdown_fence(&span.lang, body);
+        out.push_str(&map_fence(&span.lang, body, &canonical));
+        i += span.raw_end;
+        if i < text.len() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Walk prose / fence chunks for painting (fences already canonicalized).
+pub fn for_each_markdown_part(text: &str, mut visit: impl FnMut(&str, Option<(&str, &str)>)) {
+    let mut i = 0usize;
+    while i < text.len() {
+        let Some(span) = next_fence(&text[i..]) else {
+            visit(&text[i..], None);
+            break;
+        };
+        let open_abs = i + span.open;
+        if open_abs > i {
+            visit(&text[i..open_abs], None);
+        }
+        let body = &text[i + span.body_start..i + span.body_end];
+        visit("", Some((span.lang.as_str(), body)));
+        i += span.raw_end;
+    }
+}
+
+pub fn canonical_markdown_fence(lang: &str, body: &str) -> String {
+    let body = body.trim_matches('\n');
+    if lang.is_empty() {
+        format!("```\n{body}\n```")
+    } else {
+        format!("```{lang}\n{body}\n```")
+    }
+}
+
+struct FenceSpan {
+    open: usize,
+    lang: String,
+    body_start: usize,
+    body_end: usize,
+    raw_end: usize,
+}
+
+fn next_fence(text: &str) -> Option<FenceSpan> {
+    let mut i = 0usize;
+    let mut bol = true;
+    while i < text.len() {
+        let ch = text[i..].chars().next()?;
+        if ch == '\n' {
+            bol = true;
+            i += 1;
+            continue;
+        }
+        if ch == '\r' {
+            i += 1;
+            continue;
+        }
+        if bol {
+            let mut spaces = 0usize;
+            let mut j = i;
+            while spaces < 3 && text[j..].starts_with(' ') {
+                spaces += 1;
+                j += 1;
+            }
+            if let Some(span) = try_open_fence(text, j, true) {
+                return Some(span);
+            }
+            i = j;
+            bol = false;
+            if j == i {
+                i += ch.len_utf8();
+            }
+            continue;
+        }
+        if let Some(span) = try_open_fence(text, i, false) {
+            return Some(span);
+        }
+        bol = false;
+        i += ch.len_utf8();
+    }
+    None
+}
+
+fn try_open_fence(text: &str, i: usize, bol: bool) -> Option<FenceSpan> {
+    let rest = text.get(i..)?;
+    let tick = rest.chars().next()?;
+    if tick != '`' && tick != '~' {
+        return None;
+    }
+    let n = rest.chars().take_while(|c| *c == tick).count();
+    if n < 3 {
+        return None;
+    }
+    let after_ticks = i + n;
+    let after = &text[after_ticks..];
+    let nl = after.find('\n');
+    let info = nl.map(|k| &after[..k]).unwrap_or(after);
+    let lang = fence_info_lang(info);
+    if !bol && (lang.is_empty() || !looks_like_code_lang(&lang)) {
+        return None;
+    }
+    if let Some(nl_off) = nl {
+        let body_start = after_ticks + nl_off + 1;
+        let (body_end, raw_end) =
+            find_close_fence(text, body_start, tick, n).unwrap_or((text.len(), text.len()));
+        return Some(FenceSpan {
+            open: i,
+            lang,
+            body_start,
+            body_end,
+            raw_end,
+        });
+    }
+    let after_lang = if lang.is_empty() {
+        after
+    } else {
+        let trimmed = after.trim_start();
+        let skip = after.len() - trimmed.len() + lang.len();
+        after.get(skip..).unwrap_or("")
+    };
+    if let Some(close_rel) = find_ticks_run(after_lang, tick, n) {
+        let body_start = text.len() - after_lang.len();
+        let body_end = body_start + close_rel;
+        let raw_end = body_end + n;
+        return Some(FenceSpan {
+            open: i,
+            lang,
+            body_start,
+            body_end,
+            raw_end,
+        });
+    }
+    Some(FenceSpan {
+        open: i,
+        lang,
+        body_start: after_ticks,
+        body_end: text.len(),
+        raw_end: text.len(),
+    })
+}
+
+fn fence_info_lang(info: &str) -> String {
+    let t = info.trim();
+    let n = t
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '#' | '-' | '_'))
+        .count();
+    t[..n].to_ascii_lowercase()
+}
+
+fn looks_like_code_lang(lang: &str) -> bool {
+    matches!(
+        lang,
+        "javascript"
+            | "js"
+            | "node"
+            | "nodejs"
+            | "react"
+            | "typescript"
+            | "ts"
+            | "tsx"
+            | "jsx"
+            | "rust"
+            | "rs"
+            | "python"
+            | "py"
+            | "bash"
+            | "sh"
+            | "zsh"
+            | "shell"
+            | "json"
+            | "jsonc"
+            | "json5"
+            | "html"
+            | "css"
+            | "scss"
+            | "less"
+            | "go"
+            | "golang"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "sql"
+            | "c"
+            | "cpp"
+            | "c++"
+            | "h"
+            | "java"
+            | "ruby"
+            | "php"
+            | "xml"
+            | "md"
+            | "markdown"
+            | "text"
+            | "plaintext"
+            | "plain"
+            | "txt"
+            | "diff"
+            | "ini"
+            | "dockerfile"
+            | "docker"
+            | "makefile"
+            | "make"
+            | "wasm"
+            | "swift"
+            | "kotlin"
+            | "lua"
+            | "perl"
+            | "scala"
+            | "csharp"
+            | "cs"
+            | "c#"
+            | "powershell"
+            | "ps1"
+            | "elixir"
+            | "ex"
+            | "exs"
+            | "vue"
+            | "svelte"
+            | "graphql"
+            | "proto"
+            | "zig"
+            | "nim"
+            | "haskell"
+            | "dart"
+            | "http"
+            | "console"
+            | "terminal"
+            | "cmd"
+    )
+}
+
+fn find_close_fence(text: &str, body_start: usize, tick: char, n: usize) -> Option<(usize, usize)> {
+    let mut i = body_start;
+    let mut bol = true;
+    while i < text.len() {
+        let ch = text[i..].chars().next()?;
+        if ch == '\n' {
+            bol = true;
+            i += 1;
+            continue;
+        }
+        if bol {
+            let mut spaces = 0usize;
+            let mut j = i;
+            while spaces < 3 && text[j..].starts_with(' ') {
+                spaces += 1;
+                j += 1;
+            }
+            let rest = &text[j..];
+            let run = rest.chars().take_while(|c| *c == tick).count();
+            if run >= n {
+                let after = &rest[run..];
+                let line_rest = after.split('\n').next().unwrap_or(after);
+                if line_rest.trim().is_empty() {
+                    let raw_end = if after.starts_with('\n') {
+                        j + run + 1
+                    } else {
+                        j + run + line_rest.len()
+                    };
+                    return Some((i, raw_end.min(text.len())));
+                }
+            }
+            bol = false;
+        }
+        i += ch.len_utf8();
+    }
+    None
+}
+
+fn find_ticks_run(text: &str, tick: char, n: usize) -> Option<usize> {
+    let mut i = 0usize;
+    while i < text.len() {
+        let ch = text[i..].chars().next()?;
+        if ch == tick {
+            let run = text[i..].chars().take_while(|c| *c == tick).count();
+            if run >= n {
+                return Some(i);
+            }
+            i += run;
+            continue;
+        }
+        i += ch.len_utf8();
+    }
+    None
+}
+
+fn is_json_fence_lang(lang: &str) -> bool {
+    matches!(
+        lang.trim().to_ascii_lowercase().as_str(),
+        "json" | "jsonc" | "json5"
+    )
+}
+
+fn collapse_paint_spaces_keep(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev_space_on_line = false;
+    for ch in text.chars() {
+        if ch == '\n' {
+            out.push('\n');
+            prev_space_on_line = false;
+        } else if ch.is_whitespace() {
+            if !prev_space_on_line {
+                out.push(' ');
+                prev_space_on_line = true;
+            }
+        } else {
+            out.push(ch);
+            prev_space_on_line = false;
+        }
+    }
+    out
+}
+
+fn collapse_paint_spaces_outside_fences(text: &str) -> String {
+    map_markdown_fences(text, collapse_paint_spaces_keep, |_, _, raw| {
+        raw.to_string()
+    })
+    .trim()
+    .to_string()
+}
+
 /// Replace known tool ids with human labels; strip unknown tool-like tokens.
 pub fn humanize_tool_id_tokens(text: &str, t: &crate::i18n::UiStrings) -> String {
+    let work = map_markdown_fences(
+        text,
+        |prose| humanize_tool_id_tokens_prose(prose, t),
+        |_, _, raw| raw.to_string(),
+    );
+    collapse_paint_spaces_outside_fences(&work)
+}
+
+fn humanize_tool_id_tokens_prose(text: &str, t: &crate::i18n::UiStrings) -> String {
     let mut work = text.to_string();
     while let Some(start) = work.find('`') {
         if let Some(end_rel) = work[start + 1..].find('`') {
@@ -369,7 +779,7 @@ pub fn humanize_tool_id_tokens(text: &str, t: &crate::i18n::UiStrings) -> String
         }
         break;
     }
-    collapse_paint_spaces(&humanize_bare_tool_id_tokens(&work, t))
+    humanize_bare_tool_id_tokens(&work, t)
 }
 
 fn humanize_bare_tool_id_tokens(text: &str, t: &crate::i18n::UiStrings) -> String {
@@ -407,6 +817,13 @@ fn push_humanized_or_drop_token(out: &mut String, token: &str, t: &crate::i18n::
 
 /// Never paint `tool.id` tokens (inline code or bare) in salon bubbles.
 pub fn strip_tool_id_tokens(text: &str) -> String {
+    let work = map_markdown_fences(text, strip_tool_id_tokens_prose, |_, _, raw| {
+        raw.to_string()
+    });
+    collapse_paint_spaces_outside_fences(&work)
+}
+
+fn strip_tool_id_tokens_prose(text: &str) -> String {
     let mut work = text.to_string();
     while let Some(start) = work.find('`') {
         if let Some(end_rel) = work[start + 1..].find('`') {
@@ -425,12 +842,12 @@ pub fn strip_tool_id_tokens(text: &str) -> String {
         }
         break;
     }
-    collapse_paint_spaces(&strip_bare_tool_id_tokens(&work))
+    strip_bare_tool_id_tokens(&work)
 }
 
 fn looks_like_tool_id(token: &str) -> bool {
     let token = token.trim();
-    if token.is_empty() || !token.contains('.') {
+    if token.is_empty() || !token.contains('.') || looks_like_filename(token) {
         return false;
     }
     let parts: Vec<&str> = token.split('.').collect();
@@ -443,6 +860,44 @@ fn looks_like_tool_id(token: &str) -> bool {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     })
+}
+
+fn looks_like_filename(token: &str) -> bool {
+    let Some((_, ext)) = token.rsplit_once('.') else {
+        return false;
+    };
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "rs" | "py"
+            | "js"
+            | "ts"
+            | "tsx"
+            | "jsx"
+            | "go"
+            | "rb"
+            | "java"
+            | "kt"
+            | "c"
+            | "h"
+            | "cpp"
+            | "hpp"
+            | "md"
+            | "json"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "sh"
+            | "bash"
+            | "zsh"
+            | "txt"
+            | "png"
+            | "jpg"
+            | "jpeg"
+            | "svg"
+            | "html"
+            | "css"
+            | "wasm"
+    )
 }
 
 fn strip_bare_tool_id_tokens(text: &str) -> String {
@@ -468,60 +923,31 @@ fn strip_bare_tool_id_tokens(text: &str) -> String {
 }
 
 fn collapse_paint_spaces(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut prev_space_on_line = false;
-    for ch in text.chars() {
-        if ch == '\n' {
-            out.push('\n');
-            prev_space_on_line = false;
-        } else if ch.is_whitespace() {
-            if !prev_space_on_line {
-                out.push(' ');
-                prev_space_on_line = true;
-            }
-        } else {
-            out.push(ch);
-            prev_space_on_line = false;
-        }
-    }
-    out.trim().to_string()
+    collapse_paint_spaces_keep(text).trim().to_string()
 }
 
 /// Pretty-print embedded JSON and preserve line breaks for wrapped salon bubbles.
 pub fn format_salon_json_for_display(text: &str) -> String {
-    let work = expand_fenced_json_blocks(text);
-    let work = pretty_format_embedded_json_objects(&work);
-    soft_wrap_long_lines(&work, 96)
-}
-
-fn expand_fenced_json_blocks(text: &str) -> String {
-    let mut out = String::new();
-    let mut rest = text;
-    while let Some(start) = rest.find("```") {
-        out.push_str(&rest[..start]);
-        let after_ticks = &rest[start + 3..];
-        let body_start = match after_ticks.find('\n') {
-            Some(nl) => start + 3 + nl + 1,
-            None => {
-                out.push_str(&rest[start..]);
-                return out;
+    let work = map_markdown_fences(
+        text,
+        |prose| pretty_format_embedded_json_objects(prose),
+        |lang, body, raw| {
+            if is_json_fence_lang(lang) {
+                let mut out = pretty_json_text(body);
+                if !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                out
+            } else {
+                raw.to_string()
             }
-        };
-        let close_rel = rest[body_start..].find("```");
-        let Some(close_rel) = close_rel else {
-            out.push_str(&rest[start..]);
-            return out;
-        };
-        let body = rest[body_start..body_start + close_rel].trim();
-        if !out.is_empty() && !out.ends_with('\n') {
-            out.push('\n');
-        }
-        out.push_str(&pretty_json_text(body));
-        out.push('\n');
-        rest = &rest[body_start + close_rel + 3..];
-    }
-    out.push_str(rest);
-    out
+        },
+    );
+    map_markdown_fences(
+        &work,
+        |prose| soft_wrap_long_lines(prose, 96),
+        |_, _, raw| raw.to_string(),
+    )
 }
 
 fn pretty_format_embedded_json_objects(text: &str) -> String {
@@ -830,7 +1256,8 @@ fn split_prose_paint_units(text: &str) -> Vec<ProsePaintUnit> {
     let mut i = 0usize;
     while i < text.len() {
         let marker_len = prose_list_marker_len(text, i);
-        let bullet = if let Some(marker_len) = marker_len.filter(|_| is_prose_list_marker(text, i)) {
+        let bullet = if let Some(marker_len) = marker_len.filter(|_| is_prose_list_marker(text, i))
+        {
             Some((i, i + marker_len))
         } else if is_prose_bullet_label_start(text, i) {
             Some((i, i))
@@ -927,7 +1354,7 @@ fn paint_bubble_paragraph(
             paint_prose_lines(ui, prose, body_w, labels, chip_fill, chip_text, chip_stroke);
         }
         if !json.is_empty() {
-            paint_wrapped_prose_block(ui, json, body_w);
+            paint_code_block(ui, json, body_w);
         }
         return;
     }
@@ -1105,6 +1532,61 @@ pub fn paint_room_bubble_body(
     }
 }
 
+/// Fence unwrapped JSON so the markdown viewer can paint it as a code block.
+pub fn prepare_markdown_body(text: &str) -> String {
+    let text = protect_wiki_links(text);
+    if text.contains("```") {
+        return text;
+    }
+    if !is_json_block_paragraph(&text) {
+        return text;
+    }
+    let (prose, json) = split_prose_prefix_from_json_block(&text);
+    if json.is_empty() {
+        return text;
+    }
+    if prose.is_empty() {
+        format!("```json\n{json}\n```")
+    } else {
+        format!("{prose}\n\n```json\n{json}\n```")
+    }
+}
+
+fn protect_wiki_links(text: &str) -> String {
+    map_markdown_fences(
+        text,
+        |prose| {
+            let mut out = String::with_capacity(prose.len());
+            let mut rest = prose;
+            while let Some(start) = rest.find("[[") {
+                out.push_str(&rest[..start]);
+                if let Some(end) = rest[start + 2..].find("]]") {
+                    let inner = &rest[start + 2..start + 2 + end];
+                    if is_wiki_link_inner(inner) {
+                        out.push_str("[[");
+                        out.push_str(&inner.replace('_', "\\_").replace('*', "\\*"));
+                        out.push_str("]]");
+                        rest = &rest[start + 2 + end + 2..];
+                        continue;
+                    }
+                }
+                out.push_str("[[");
+                rest = &rest[start + 2..];
+            }
+            out.push_str(rest);
+            out
+        },
+        |_, _, raw| raw.to_string(),
+    )
+}
+
+fn is_wiki_link_inner(inner: &str) -> bool {
+    !inner.is_empty()
+        && inner
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '/' || c == ' ')
+}
+
 fn normalize_mention_chip_segments(segments: Vec<BubbleSegment>) -> Vec<BubbleSegment> {
     let mut out = Vec::new();
     for seg in trim_prose_after_leading_mention_run(segments) {
@@ -1272,6 +1754,26 @@ fn paint_line_with_mention_chips(
             }
         }
     });
+}
+
+fn paint_code_block(ui: &mut egui::Ui, text: &str, max_w: f32) {
+    egui::Frame::NONE
+        .fill(ui.visuals().extreme_bg_color)
+        .stroke(egui::Stroke::new(
+            1.0_f32,
+            ui.visuals().widgets.noninteractive.bg_stroke.color,
+        ))
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .corner_radius(crate::theme::RADIUS_SM)
+        .show(ui, |ui| {
+            ui.set_max_width(max_w);
+            ui.label(
+                egui::RichText::new(text)
+                    .monospace()
+                    .small()
+                    .color(ui.visuals().text_color()),
+            );
+        });
 }
 
 fn paint_wrapped_prose_block(ui: &mut egui::Ui, text: &str, max_w: f32) {
@@ -1902,6 +2404,8 @@ mod tests {
             origin: Some("library".into()),
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         }
     }
 
@@ -1932,6 +2436,8 @@ mod tests {
             origin: Some("form".into()),
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         }
     }
 
@@ -1962,6 +2468,8 @@ mod tests {
             origin: Some("assistant".into()),
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         }
     }
 
@@ -2067,6 +2575,16 @@ mod tests {
         let out = humanize_tool_id_tokens(raw, &t);
         assert!(!out.contains("windmill.run"), "{out}");
         assert!(out.contains("échoué"), "{out}");
+    }
+
+    #[test]
+    fn prepare_markdown_body_fences_json_blocks() {
+        let raw = "Plan:\n{\"goal\": \"ship\"}";
+        let md = prepare_markdown_body(raw);
+        assert!(md.contains("```json"));
+        assert!(md.contains("\"goal\""));
+        let already = prepare_markdown_body("```json\n{}\n```");
+        assert_eq!(already, "```json\n{}\n```");
     }
 
     #[test]
@@ -2414,6 +2932,50 @@ json {"args":{"nodes":[{"id":"phase-1","status":"pending"}]},"thought":"Plan"}"#
         assert!(!formatted.contains("```"));
         assert!(formatted.contains("Prologue"));
         assert!(formatted.contains("Epilogue"));
+    }
+
+    #[test]
+    fn format_salon_json_for_display_keeps_rust_fences() {
+        let raw = "Voici Rust:\n```rust\nfn main() {\n    println!(\"Hello, world!\");\n}\n```\n";
+        let formatted = format_salon_json_for_display(raw);
+        assert!(formatted.contains("```rust"), "{formatted}");
+        assert!(formatted.contains("fn main()"), "{formatted}");
+        assert!(formatted.contains("    println!"), "{formatted}");
+    }
+
+    #[test]
+    fn map_markdown_fences_rebuilds_inline_javascript() {
+        let raw = "Voici un hello world en JavaScript :```javascript // Hello monde en JavaScript (\"Hello World !\");```C'est la version la plus simple.";
+        let out = map_markdown_fences(raw, |p| p.to_string(), |_, _, raw| raw.to_string());
+        assert!(out.contains("```javascript\n"), "{out}");
+        assert!(out.contains("Hello World"), "{out}");
+        assert!(out.contains("C'est la version"), "{out}");
+        assert!(!out.contains(":```javascript"), "{out}");
+    }
+
+    #[test]
+    fn map_markdown_fences_keeps_indented_and_tilde_fences() {
+        let raw = "Intro\n  ```js\nconsole.log(1);\n  ```\nThen\n~~~python\nprint(1)\n~~~\n";
+        let out = map_markdown_fences(raw, |p| p.to_string(), |_, _, raw| raw.to_string());
+        assert!(out.contains("```js\nconsole.log(1);"), "{out}");
+        assert!(out.contains("```python\nprint(1)"), "{out}");
+    }
+
+    #[test]
+    fn humanize_tool_id_tokens_keeps_source_filenames_and_rust_fences() {
+        let t = i18n::strings("fr");
+        let raw = "sauvez dans hello.rs\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```";
+        let out = humanize_tool_id_tokens(raw, &t);
+        assert!(out.contains("hello.rs"), "{out}");
+        assert!(out.contains("```rust"), "{out}");
+        assert!(out.contains("    println!"), "{out}");
+    }
+
+    #[test]
+    fn prepare_markdown_body_escapes_wiki_underscores() {
+        let md = prepare_markdown_body("voir [[linked_notes]] et [[Status]]");
+        assert!(md.contains("[[linked\\_notes]]"), "{md}");
+        assert!(md.contains("[[Status]]"), "{md}");
     }
 
     #[test]

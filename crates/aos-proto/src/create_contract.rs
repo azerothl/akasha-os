@@ -603,10 +603,8 @@ mod tests {
 
     #[test]
     fn create_params_expose_human_option_labels_not_wire_tokens() {
-        let ui_raw = std::fs::read_to_string(
-            workspace_root().join("modules/create/ui/index.json"),
-        )
-        .expect("create ui json");
+        let ui_raw = std::fs::read_to_string(workspace_root().join("modules/create/ui/index.json"))
+            .expect("create ui json");
         assert!(
             ui_raw.contains("profile_fast")
                 && ui_raw.contains("profile_balanced")
@@ -623,7 +621,10 @@ mod tests {
         );
         let doc = read_ui_document();
         let en = &doc.labels.as_ref().expect("labels").en;
-        assert_eq!(en.get("profile_balanced").map(String::as_str), Some("Balanced"));
+        assert_eq!(
+            en.get("profile_balanced").map(String::as_str),
+            Some("Balanced")
+        );
         assert_eq!(en.get("camera_push").map(String::as_str), Some("Push in"));
     }
 }

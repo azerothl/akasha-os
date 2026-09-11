@@ -37,6 +37,10 @@ pub(crate) struct RosterEditDraft {
     pub(crate) tools: Vec<String>,
     pub(crate) mcp_servers: Vec<String>,
     pub(crate) model_id: String,
+    pub(crate) avatar: String,
+    pub(crate) color: String,
+    /// Clay studio expanded in the detail panel.
+    pub(crate) avatar_studio_open: bool,
 }
 
 /// Brouillon d'édition de politique S6 phase 2 (avant Apply).
@@ -85,6 +89,10 @@ pub(crate) struct AgentUiState {
     pub(crate) max_steps: u32,
     pub(crate) timeout_secs: u64,
     pub(crate) model_id: String,
+    pub(crate) avatar: String,
+    pub(crate) color: String,
+    /// Clay studio expanded on the create form.
+    pub(crate) avatar_studio_open: bool,
     pub(crate) join_room_on_create: bool,
     // skills / tools / MCP
     pub(crate) skill_catalog: Vec<SkillInfo>,
@@ -132,6 +140,9 @@ impl Default for AgentUiState {
             max_steps: 0,
             timeout_secs: 0,
             model_id: String::new(),
+            avatar: "clay:circle/happy/idle".into(),
+            color: String::new(),
+            avatar_studio_open: false,
             join_room_on_create: false,
             skill_catalog: Vec::new(),
             skill_selected: Vec::new(),
@@ -295,6 +306,18 @@ impl AgentUiState {
                 tools: spec.tools.clone(),
                 mcp_servers: spec.mcp_servers.clone(),
                 model_id: spec.model_id.clone().unwrap_or_default(),
+                avatar: spec
+                    .avatar
+                    .clone()
+                    .or_else(|| {
+                        spec.persona_id
+                            .as_deref()
+                            .map(aos_agent::room_personas::persona_default_avatar)
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_else(|| "clay:circle/happy/idle".into()),
+                color: spec.color.clone().unwrap_or_default(),
+                avatar_studio_open: false,
             },
         );
     }
@@ -506,6 +529,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         state.upsert_roster_draft_from_spec(&spec);
         let draft = state.roster_edit_drafts.get("roster-1").expect("draft");
