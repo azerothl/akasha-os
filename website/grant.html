@@ -57,21 +57,26 @@
           <h3 data-lang="en">How to read this page</h3>
           <h3 data-lang="fr">Comment lire cette page</h3>
           <p data-lang="en">
-            Each section describes a capability you can exercise after install.
-            For step-by-step use of every tab, see the
-            <a href="docs/use.html">Using Preview</a> chapter. For extending
-            Preview with modules, skills, and MCP, that chapter’s “Extend”
-            section goes deeper. A skill in ten minutes:
-            <a href="docs/skill.html">write a skill</a>. A module without cargo:
+            This is the capability catalogue — what Preview offers, in marketing
+            tone. For tab-by-tab operation, open the manual chapter
+            <a href="docs/use.html">Using Preview</a> (includes
+            <a href="docs/use.html#canvas">Canvas</a>). Diagnostics and
+            non-destructive Release overlays:
+            <a href="docs/troubleshoot.html">Troubleshoot &amp; Updates</a>.
+            Extend without cargo:
+            <a href="docs/skill.html">write a skill</a> ·
             <a href="docs/module.html">first module</a>.
           </p>
           <p data-lang="fr">
-            Chaque section décrit une capacité que vous pouvez exercer après
-            l’installation. Pour le détail onglet par onglet, voir
-            <a href="docs/use.html">Utiliser la Preview</a>. Pour étendre la
-            Preview avec modules, skills et MCP, la section « Étendre » de ce
-            chapitre va plus loin. Un skill en dix minutes :
-            <a href="docs/skill.html">écrire un skill</a>. Un module sans cargo :
+            Ceci est le catalogue de capacités — ce que la Preview offre, en
+            ton marketing. Pour l’opération onglet par onglet, ouvrez le
+            chapitre manuel
+            <a href="docs/use.html">Utiliser la Preview</a> (inclut
+            <a href="docs/use.html#canvas">Canvas</a>). Diagnostics et
+            superpositions Release non destructives :
+            <a href="docs/troubleshoot.html">Diagnostic &amp; MAJ</a>. Étendre
+            sans cargo :
+            <a href="docs/skill.html">écrire un skill</a> ·
             <a href="docs/module.html">premier module</a>.
           </p>
         </aside>
@@ -238,27 +243,45 @@
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">Image Studio and speech</h2>
-          <h2 data-lang="fr">Image Studio et parole</h2>
+          <h2>Canvas</h2>
           <p class="hist" data-lang="en">
-            After you download an image pack from Models, the Image tab becomes
-            a studio: prompt, size, steps, CFG, seed, sampler, styles, LoRAs,
+            Session-scoped vector drawing for humans and agents
+            (<code>/canvas</code>). Layers, snap, export PNG/SVG/JSON — distinct
+            from Create composition. How-to:
+            <a href="docs/use.html#canvas">Using Preview · Canvas</a>.
+          </p>
+          <p class="hist" data-lang="fr">
+            Dessin vectoriel lié à la session pour humains et agents
+            (<code>/canvas</code>). Calques, aimantation, export PNG/SVG/JSON —
+            distinct de la composition Create. Mode d’emploi :
+            <a href="docs/use.html#canvas">Utiliser la Preview · Canvas</a>.
+          </p>
+        </article>
+
+        <article class="grant">
+          <h2 data-lang="en">Create and speech</h2>
+          <h2 data-lang="fr">Create et parole</h2>
+          <p class="hist" data-lang="en">
+            After you download an image pack from Models, Create becomes a
+            studio: prompt, size, steps, CFG, seed, sampler, styles, LoRAs,
             optional upscale, and a composition canvas that turns placement
             blocks into structured layout for the prompt. Chat
             <code>/image</code> and <code>/speak</code> write PNG or WAV under
             downloads once the matching pack (and engine) is present. A TTS
             card can open from <code>/speak</code> so you set voice knobs before
-            generating.
+            generating. Operation detail:
+            <a href="docs/use.html#image-tts">Using Preview · Create &amp; TTS</a>.
           </p>
           <p class="hist" data-lang="fr">
-            Après téléchargement d’un pack image depuis Models, l’onglet Image
-            devient un studio : prompt, taille, steps, CFG, seed, sampler,
-            styles, LoRA, upscale optionnel, et un canvas de composition qui
-            transforme des blocs de placement en layout structuré pour le
-            prompt. Le chat <code>/image</code> et <code>/speak</code> écrivent
-            PNG ou WAV sous downloads une fois le pack (et le moteur)
-            présents. Une carte TTS peut s’ouvrir depuis <code>/speak</code>
-            pour régler la voix avant de générer.
+            Après téléchargement d’un pack image depuis Models, Create devient
+            un studio : prompt, taille, steps, CFG, seed, sampler, styles,
+            LoRA, upscale optionnel, et un canvas de composition qui transforme
+            des blocs de placement en layout structuré pour le prompt. Le chat
+            <code>/image</code> et <code>/speak</code> écrivent PNG ou WAV sous
+            downloads une fois le pack (et le moteur) présents. Une carte TTS
+            peut s’ouvrir depuis <code>/speak</code> pour régler la voix avant
+            de générer. Détail opérationnel :
+            <a href="docs/use.html#image-tts">Utiliser la Preview · Create &amp; TTS</a>.
           </p>
         </article>
 
@@ -271,8 +294,8 @@
             overlays <code>bin/</code> and <code>share/</code> without wiping
             <code>var/</code> or blindly overwriting your
             <code>etc/*.yaml</code> (conflicting files get a
-            <code>.new</code> sibling). Apply is intentional across launches,
-            not a silent in-place rewrite of your whole home.
+            <code>.new</code> sibling). Step-by-step plus Troubleshoot:
+            <a href="docs/troubleshoot.html">Troubleshoot &amp; Updates</a>.
           </p>
           <p class="hist" data-lang="fr">
             Quand une Release GitHub plus récente existe, une bannière peut
@@ -281,13 +304,14 @@
             <code>bin/</code> et <code>share/</code> sans effacer
             <code>var/</code> ni écraser aveuglément vos
             <code>etc/*.yaml</code> (les conflits reçoivent un frère
-            <code>.new</code>). L’application est volontaire d’un lancement à
-            l’autre, pas une réécriture silencieuse de tout le home.
+            <code>.new</code>). Pas à pas plus Troubleshoot :
+            <a href="docs/troubleshoot.html">Diagnostic &amp; MAJ</a>.
           </p>
         </article>
 
-        <a class="continue pager" href="docs/">
-          <span class="continue-label">Docs</span>
+        <a class="continue pager" href="docs/use.html">
+          <span class="continue-label" data-lang="en">Using Preview</span>
+          <span class="continue-label" data-lang="fr">Utiliser la Preview</span>
         </a>
       </main>
       <footer>
