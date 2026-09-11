@@ -6,7 +6,7 @@
     <title>Using Preview — Akasha OS</title>
     <meta
       name="description"
-      content="User manual for Akasha OS Preview 0.17.0: Chat, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Image Studio, TTS, and extending Preview."
+      content="User manual for Akasha OS Preview 0.17.0: Chat, Canvas, Models, Memory, Notes, Tasks, Modules, Agents, Caps, Audit, Providers, Settings, Network, Create, TTS, and extending Preview."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -74,6 +74,28 @@
             <a href="https://github.com/azerothl/akasha-os/blob/main/docs/FEATURES.md">FEATURES.md</a>.
           </p>
         </aside>
+
+        <nav class="page-toc" aria-label="On this page">
+          <p class="page-toc-title"><span data-lang="en">On this page</span><span data-lang="fr">Sur cette page</span></p>
+          <ol>
+            <li><a href="#intro"><span data-lang="en">Intro</span><span data-lang="fr">Intro</span></a></li>
+            <li><a href="#chat">Chat / Sessions</a></li>
+            <li><a href="#canvas">Canvas</a></li>
+            <li><a href="#models">Models</a></li>
+            <li><a href="#memory">Memory</a></li>
+            <li><a href="#notes">Notes</a></li>
+            <li><a href="#tasks">Tasks</a></li>
+            <li><a href="#modules">Modules</a></li>
+            <li><a href="#agents">Agents</a></li>
+            <li><a href="#caps">Caps</a></li>
+            <li><a href="#audit">Audit</a></li>
+            <li><a href="#providers">Providers</a></li>
+            <li><a href="#settings">Settings</a></li>
+            <li><a href="#network">Network</a></li>
+            <li><a href="#image-tts"><span data-lang="en">Create &amp; TTS</span><span data-lang="fr">Create &amp; TTS</span></a></li>
+            <li><a href="#extend"><span data-lang="en">Extend Preview</span><span data-lang="fr">Étendre la Preview</span></a></li>
+          </ol>
+        </nav>
 
         <article class="grant" id="intro">
           <h2 data-lang="en">Intro</h2>
@@ -165,6 +187,44 @@
               Créez trois sessions, parlez dans chacune, redémarrez Preview :
               les historiques doivent réapparaître. C’est le contrôle de
               persistance de session pour la cohorte.
+            </p>
+          </aside>
+        </article>
+
+        <article class="grant" id="canvas">
+          <h2>Canvas</h2>
+          <p class="hist" data-lang="en">
+            Session-scoped vector drawing surface shared by you and agents.
+            Open it with <code>/canvas</code> or the Canvas rail entry. Humans
+            get Select (move / delete / align / rotate), Pan + scroll zoom, pen,
+            line, spline, path, rect, ellipse, and text labels; layers (hide /
+            lock / opacity); grid and snap; export PNG, SVG, or JSON (round-trip
+            import). Agents use the bundled WASM <code>canvas.*</code> tools.
+            A CPU-only validator checks geometry every few mutations. Document:
+            <code>var/sessions/&lt;id&gt;/canvas.json</code>. Distinct from Create
+            / Image Studio composition.
+          </p>
+          <p class="hist" data-lang="fr">
+            Surface de dessin vectoriel liée à la session, partagée avec les
+            agents. Ouvrez-la avec <code>/canvas</code> ou l’entrée Canvas du
+            rail. Humains : Select (déplacer / supprimer / aligner / rotation),
+            Pan + zoom molette, stylo, ligne, spline, path, rect, ellipse,
+            labels texte ; calques (masquer / verrouiller / opacité) ; grille et
+            aimantation ; export PNG, SVG ou JSON (import aller-retour). Les
+            agents utilisent les outils WASM <code>canvas.*</code>. Un
+            validateur CPU vérifie la géométrie toutes les quelques mutations.
+            Document : <code>var/sessions/&lt;id&gt;/canvas.json</code>. Distinct
+            de la composition Create / Studio Image.
+          </p>
+          <aside class="callout">
+            <p data-lang="en">
+              Focus mode hides neighbouring panels. The Activity panel stays
+              resizable beside the scene. In-app guide: ? after Clear all.
+            </p>
+            <p data-lang="fr">
+              Le mode focus masque les panneaux voisins. Le volet Activité reste
+              redimensionnable à côté de la scène. Guide in-app : ? après Tout
+              effacer.
             </p>
           </aside>
         </article>
@@ -591,8 +651,8 @@
         </article>
 
         <article class="grant" id="image-tts">
-          <h2 data-lang="en">Image Studio &amp; TTS</h2>
-          <h2 data-lang="fr">Studio Image &amp; TTS</h2>
+          <h2 data-lang="en">Create &amp; TTS</h2>
+          <h2 data-lang="fr">Create &amp; TTS</h2>
           <p class="hist" data-lang="en">
             Intents <code>media.image.generate</code> /
             <code>media.audio.generate</code> write PNG / WAV under

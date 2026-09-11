@@ -79,7 +79,138 @@
     });
   }
 
+  function normalizePath(pathname) {
+    return pathname.replace(/\\/g, "/");
+  }
+
+  function isManualPage() {
+    const path = normalizePath(window.location.pathname);
+    return /\/docs(\/|$)/.test(path) || /\/install\.html$/.test(path);
+  }
+
+  function isInstallPage() {
+    return /\/install\.html$/.test(normalizePath(window.location.pathname));
+  }
+
+  function manualBase() {
+    return isInstallPage() ? "docs/" : "";
+  }
+
+  function installHref() {
+    return isInstallPage() ? "install.html" : "../install.html";
+  }
+
+  function hubHref() {
+    return isInstallPage() ? "docs/" : "./";
+  }
+
+  function currentManualKey() {
+    const path = normalizePath(window.location.pathname);
+    if (/\/install\.html$/.test(path)) {
+      return "install";
+    }
+    if (/\/docs\/?$/.test(path) || /\/docs\/index\.html$/.test(path)) {
+      return "hub";
+    }
+    const match = path.match(/\/docs\/([^/]+)\.html$/);
+    return match ? match[1] : "";
+  }
+
+  function spanLang(en, fr) {
+    return `<span data-lang="en">${en}</span><span data-lang="fr">${fr}</span>`;
+  }
+
+  function railLink(href, key, en, fr) {
+    const current = currentManualKey() === key ? ' aria-current="page"' : "";
+    return `<a href="${href}"${current}>${spanLang(en, fr)}</a>`;
+  }
+
+  function injectDocsRail() {
+    if (!isManualPage()) {
+      return;
+    }
+    const shell = document.querySelector(".shell");
+    const main = document.getElementById("content");
+    if (!shell || !main || shell.querySelector(".docs-layout")) {
+      return;
+    }
+
+    document.body.classList.add("docs-manual");
+
+    const base = manualBase();
+    const layout = document.createElement("div");
+    layout.className = "docs-layout";
+
+    const rail = document.createElement("nav");
+    rail.className = "docs-rail";
+    rail.setAttribute("aria-label", "Manual");
+    rail.innerHTML = `
+      <a class="docs-rail-hub" href="${hubHref()}"${currentManualKey() === "hub" ? ' aria-current="page"' : ""}>${spanLang("Manual", "Manuel")}</a>
+      <details class="docs-rail-group" open>
+        <summary>${spanLang("Start", "Démarrer")}</summary>
+        <div class="docs-rail-links">
+          ${railLink(installHref(), "install", "Install", "Install")}
+          ${railLink(`${base}first-run.html`, "first-run", "First run", "First run")}
+        </div>
+      </details>
+      <details class="docs-rail-group" open>
+        <summary>${spanLang("Use", "Utiliser")}</summary>
+        <div class="docs-rail-links">
+          ${railLink(`${base}use.html`, "use", "Use", "Use")}
+          ${railLink(`${base}network.html`, "network", "Network", "Network")}
+          ${railLink(`${base}devices.html`, "devices", "Devices", "Périphériques")}
+        </div>
+      </details>
+      <details class="docs-rail-group" open>
+        <summary>${spanLang("Extend", "Étendre")}</summary>
+        <div class="docs-rail-links">
+          ${railLink(`${base}skill.html`, "skill", "Write a skill", "Écrire un skill")}
+          ${railLink(`${base}module.html`, "module", "First module", "Premier module")}
+          ${railLink(`${base}lan-cluster.html`, "lan-cluster", "LAN cluster", "Cluster LAN")}
+        </div>
+      </details>
+      <details class="docs-rail-group" open>
+        <summary>${spanLang("Reference", "Référence")}</summary>
+        <div class="docs-rail-links">
+          ${railLink(`${base}module-sdk.html`, "module-sdk", "Module SDK", "SDK module")}
+          ${railLink(`${base}rich-apps.html`, "rich-apps", "Rich apps", "Apps riches")}
+          ${railLink(`${base}build.html`, "build", "Build", "Build")}
+        </div>
+      </details>
+      <details class="docs-rail-group" open>
+        <summary>${spanLang("Cohort", "Cohorte")}</summary>
+        <div class="docs-rail-links">
+          ${railLink(`${base}feedback.html`, "feedback", "Feedback", "Feedback")}
+          ${railLink(`${base}limits.html`, "limits", "Limits", "Limits")}
+          ${railLink(`${base}whats-new.html`, "whats-new", "What's new", "Nouveauté")}
+        </div>
+      </details>
+    `;
+
+    const active = rail.querySelector("[aria-current='page']");
+    if (active) {
+      const group = active.closest("details");
+      if (group) {
+        group.open = true;
+      }
+    }
+
+    main.parentNode.insertBefore(layout, main);
+    layout.appendChild(rail);
+    layout.appendChild(main);
+  }
+
+  function enhancePageToc() {
+    const toc = document.querySelector("nav.page-toc");
+    if (!toc) {
+      return;
+    }
+    toc.classList.add("page-toc-ready");
+  }
+
   applyLang(currentLang());
+  injectDocsRail();
+  enhancePageToc();
 
   document.querySelectorAll("[data-set-lang]").forEach((button) => {
     button.addEventListener("click", () => {
