@@ -998,4 +998,26 @@ mod vision_catalog_tests {
         assert!(!setup_needed(&home));
         let _ = std::fs::remove_dir_all(&home);
     }
+
+    #[test]
+    fn setup_deferred_is_detected_for_later_flow() {
+        use super::setup_deferred;
+        let home = std::env::temp_dir().join(format!(
+            "aos-setup-deferred-flag-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(home.join("var/models")).unwrap();
+        assert!(!setup_deferred(&home));
+        std::fs::write(
+            home.join("var/models/setup_deferred.json"),
+            "{\"deferred_ms\":42}\n",
+        )
+        .unwrap();
+        assert!(setup_deferred(&home));
+        let _ = std::fs::remove_dir_all(&home);
+    }
 }

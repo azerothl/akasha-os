@@ -615,39 +615,32 @@ fn wasm_fingerprint(dir: &Path) -> Option<(u64, u64)> {
     Some((len, mtime))
 }
 
-const NOTES_REGISTRY_ENTRY: &str = r#"
-  - name: notes
-    granted_caps:
-      - fs.read:/documents/notes/**
-      - fs.write:/documents/notes/**
-      - mem.write:module:notes
-      - mem.query:module:notes
-    quarantined: false
-"#;
-
 /// Ensure the bundled notes module is registered when its WASM is on disk.
 /// Upgrades from early Preview builds may have synced `var/modules/notes` without
 /// adding a registry row (issue #111).
 pub fn ensure_notes_registry_entry(registry_path: &Path) {
-    if !registry_path
+    let notes_dir = registry_path
         .parent()
-        .is_some_and(|p| p.join("notes/module.wasm").exists())
-    {
+        .map(|p| p.join("notes"))
+        .unwrap_or_else(|| PathBuf::from("var/modules/notes"));
+    if !notes_dir.join("module.wasm").is_file() {
         return;
     }
-    if let Ok(raw) = fs::read_to_string(registry_path) {
-        if raw.contains("name: notes") {
-            return;
-        }
-        let mut updated = raw;
-        if !updated.ends_with('\n') {
-            updated.push('\n');
-        }
-        updated.push_str(NOTES_REGISTRY_ENTRY);
-        let _ = fs::write(registry_path, updated);
-        return;
+    let caps = vec![
+        "fs.read:/documents/notes/**".into(),
+        "fs.write:/documents/notes/**".into(),
+        "mem.write:module:notes".into(),
+        "mem.query:module:notes".into(),
+    ];
+    if let Err(e) = crate::module_registry::ensure_packaged_module_registry_entry(
+        registry_path,
+        &notes_dir,
+        "notes",
+        caps,
+        true,
+    ) {
+        eprintln!("[aos-session] notes registry: {e}");
     }
-    let _ = fs::write(registry_path, format!("installed:{NOTES_REGISTRY_ENTRY}"));
 }
 
 /// Copie `share/.../*.aospkg` → `var/modules/<name>` si absent ou obsolète.
