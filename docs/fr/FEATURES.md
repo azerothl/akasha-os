@@ -11,27 +11,33 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 ### Nouveautés 0.17.0
 
-- **Espace Create** : disposition en volet scindé, presets nommés, édition de calques avec z-index, enrichissement et assistants de prompt, prompts structurés Ideogram 4
-- **Chrome UI** : icônes SVG peintes (remplacement des glyphes police), préférence de police interface, bande Paramètres et finitions rail/statut, menu overflow de la barre de statut
-- **DeclUI** : correctifs mojibake, payloads JSON, disposition plus dense des paramètres, libellés lisibles
-- **Barre outils Canvas**, bandes compactes **Mémoire** et **Salon** ; libellés Agents et CTA chat vide
+Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
+0.16.1 / 0.16.2 distinctes).
+
+#### Fonctionnalités
+
+- **Espace Create** : disposition en volet scindé, presets nommés, édition de calques avec z-index, enrichissement et assistants de prompt, prompts structurés Ideogram 4 ; le rail principal ouvre le paquet Create ([create-contract.md](../create-contract.md))
+- **Modules riches** : contrat DeclUI v2 (`layer_canvas`, `job`, `image_view`, primitives de composition) ; install transactionnelle avec rollback ; SDK Rust dans [`modules/sdk`](../../modules/sdk) ([rich-app-contract.md](../rich-app-contract.md))
+- **Cluster LAN** (expérimental, désactivé par défaut) : appairage dans Paramètres → Modèles, découverte, dispatch de shards chiffré — voir [lan-cluster.md](../lan-cluster.md)
+- **Shell calme** : densité confortable par défaut (contrôles 36 px, compositeur 44 px, rail 88 px) ; la densité compacte reste disponible sans descendre sous 32 px
+- **Sessions chat** : recherche insensible à la casse ; groupes Aujourd’hui / Hier / 7 derniers jours / Plus ancien ; sessions épinglées en tête ; archive réversible ; suppression définitive seulement depuis Archives
+- **Compositeur** : multiligne jusqu’à cinq lignes visibles — Entrée envoie, Maj+Entrée insère un retour ; les fichiers en attente restent des chips
+- **Focus et activité** : mode focus Canvas masque les panneaux voisins ; traces agent dans un volet Activité redimensionnable ; la cloche ouvre le centre de notifications
+- **Capture périphérique** : webcam et micro sous Windows, Linux et macOS (`device.enumerate`, `device.camera.capture`, `device.mic.capture`) ; confirmation requise (une fois / toujours / refuser)
+- **USB I/O** : accès série USB opt-in (`device.usb.enumerate` / `open` / `read` / `write` / `close`) ; capacité `device.usb.io` ; backends série Windows, Linux et macOS — voir [device-usb.md](../device-usb.md)
+- **Deep Thinking** : cartes de plan hiérarchique dans le chat quand `cognitive_mode` vaut `deep_thinking` (skill `deep-thinking` livrée)
+- **Chrome UI** : icônes SVG peintes (remplacement des glyphes police), préférence de police interface, barre outils Canvas, bandes compactes **Mémoire** et **Salon** ; libellés Agents et CTA chat vide
+- **Recherche Paramètres** : la saisie filtre Moi / Modèles / Confiance et les replis expert
 - **Parité FR** : chaînes recherche/pills Paramètres et accueil chat
 - **Catalogue modules** : filtre anti-doublon au démarrage
 
-### Nouveautés 0.16.2
+#### Correctifs
 
-- **USB I/O** : accès série USB opt-in (`device.usb.enumerate` / `open` / `read` / `write` / `close`) ; capacité `device.usb.io` ; une fois / toujours / refuser ; backends série Windows, Linux et macOS. Voir [device-usb.md](../device-usb.md)
-
-### Nouveautés 0.16.1
-
-- **Shell calme** : densité confortable par défaut (contrôles 36 px, compositeur 44 px, rail 88 px) ; la densité compacte reste disponible sans descendre sous 32 px
-- **Sessions chat** : recherche insensible à la casse ; groupes Aujourd’hui / Hier / 7 derniers jours / Plus ancien ; sessions épinglées en tête
-- **Archive et épingle** : épinglage et archivage réversible depuis la liste ; suppression définitive seulement depuis Archives
-- **Compositeur** : multiligne jusqu’à cinq lignes visibles — Entrée envoie, Maj+Entrée insère un retour ; les fichiers en attente restent des chips
-- **Focus et activité** : mode focus Canvas masque les panneaux voisins ; traces agent dans un volet Activité redimensionnable ; la cloche ouvre le centre de notifications
+- **DeclUI** : correctifs mojibake, payloads JSON, disposition plus dense des paramètres, libellés lisibles
+- **Bande Paramètres, rail et statut** : finitions de disposition et icône menu overflow de la barre de statut
+- **Parcours Create** : parité sélection image/vidéo, payloads d’options et préparation génération
+- **Salon** : routage outils, mentions `@`, relance pair et carte ask
 - **Navigation session** : un rechargement en arrière-plan n’enlève plus le chat actif ; `chat.session.set_pinned` / `set_archived` / `list_all` alimentent le nouveau chrome
-- **Recherche Paramètres** : la saisie filtre Moi / Modèles / Confiance et les replis expert
-- **Webcam / microphone** : le chat peut déléguer un agent de capture (`device.enumerate`, `device.camera.capture`, `device.mic.capture`) ; sous Windows, une PNG lisible par un modèle vision est écrite après confirmation (une fois / toujours / refuser)
 
 ### Nouveautés 0.16.0
 
@@ -243,7 +249,7 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 **Webcam et microphone (issue #137)** — capture Windows Media Foundation, Linux V4L2 + cpal et macOS AVFoundation + cpal via `device.enumerate` / `device.camera.capture` / `device.mic.capture`. Une capture caméra ponctuelle écrit un PNG sous `var/sessions/<session>/devices/` et le tour d’agent suivant le joint pour l’analyse vision. Confirmation obligatoire (une fois / toujours / refuser) ; les autorisations persistantes sont par agent + périphérique + action. Les refus de permission OS remontent en `OsPermissionDenied`. Le STT en continu reste hors scope.
 
-**USB I/O (issue #137, tranche 3–4)** — accès USB opt-in via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capacité `device.usb.io` ; confirmation calquée sur la capture (une fois / toujours / refuser). Ouverture/lecture/écriture série sous Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`) et macOS (`/dev/cu.*`). Voir [device-usb.md](../device-usb.md).
+**USB I/O (issue #137, tranche 3–4)** — accès USB opt-in via `device.usb.enumerate` / `device.usb.open` / `device.usb.read` / `device.usb.write` / `device.usb.close`. Capacité `device.usb.io` ; confirmation calquée sur la capture (Autoriser une fois / Toujours / Refuser). Ouverture/lecture/écriture série sous Windows (COM), Linux (`/dev/ttyUSB*`, `/dev/ttyACM*`) et macOS (`/dev/cu.*`). Voir [device-usb.md](../device-usb.md).
 
 **Capture périphériques** — intents caméra/micro et artefacts session sous `var/sessions/<session>/devices/`. Voir [device-capture.md](../device-capture.md).
 
