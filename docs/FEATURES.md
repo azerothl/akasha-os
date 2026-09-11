@@ -435,7 +435,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.17.0
+## 11. Not in Preview 0.17.1
 
 - Bootable / bare-metal image
 - STT / always-on voice
