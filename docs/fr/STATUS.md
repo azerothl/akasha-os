@@ -7,7 +7,8 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.17.0 — espace Create enrichi (volet scindé, presets, calques,
+**Preview :** 0.17.1 — correctif : module Create empaqueté dans les artefacts Preview,
+chemin **Plus tard** à l'assistant modèles, messages d'échec Create lisibles (FR+EN). Voir 0.17.0 pour l'espace Create enrichi (volet scindé, presets, calques,
 assist prompt), chrome UI peint (icônes SVG, police interface, bande
 statut/rail/Paramètres), correctifs DeclUI — par-dessus l’I/O USB 0.16.2.
 Pas un OS bootable. Gate cohorte encore
@@ -27,6 +28,14 @@ hard-green après un run 2 GPU documenté.
 | P16.6 | Version, documentation, site et packaging release | fait |
 | P16.7 | Patch 0.16.1 — shell calme, recherche/épingle/archive des sessions | fait |
 | P16.8 | Patch 0.16.2 — USB I/O (série Windows, issue #137 tranche 3) | fait |
+
+## P17.1 — Preview 0.17.1 (packaging Create + correctif premier lancement) — fait
+
+| # | Élément | État |
+|---|---------|------|
+| P17.1.1 | Empaqueter `create.aospkg` dans les builds Preview Win/Linux/macOS + CI | fait |
+| P17.1.2 | Assistant modèles **Plus tard** / fermeture → UI principale sans quitter la session | fait |
+| P17.1.3 | Messages d'échec Create lisibles (sans chemin `create.aospkg` brut) | fait |
 
 ## P17 — Preview 0.17.0 (espace Create + chrome UI) — fait
 

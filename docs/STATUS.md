@@ -7,7 +7,9 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.17.0 — rich Create module workspace (split-pane, presets,
+**Preview:** 0.17.1 — hotfix: Create module packaged in Preview artefacts,
+model-setup **Later** path, human Create install errors (FR+EN). See 0.17.0 for
+rich Create module workspace (split-pane, presets,
 layers, prompt assist), painted UI chrome (SVG icons, interface font,
 Settings/rail/status strip), DeclUI fixes — on top of 0.16.2 USB I/O.
 Not a bootable OS. Cohort gate still open
@@ -27,6 +29,14 @@ documented 2-GPU run.
 | P16.6 | Version, docs, website and release packaging | done |
 | P16.7 | 0.16.1 patch — calm shell, session search/pin/archive | done |
 | P16.8 | 0.16.2 patch — USB I/O (Windows serial, issue #137 slice 3) | done |
+
+## P17.1 — Preview 0.17.1 (Create packaging + first-run hotfix) — done
+
+| # | Item | Status |
+|---|------|--------|
+| P17.1.1 | Pack `create.aospkg` in Win/Linux/macOS Preview builds + CI verify | done |
+| P17.1.2 | Model setup **Later** / window close continues into main UI | done |
+| P17.1.3 | Human Create install failure copy (no raw `create.aospkg` paths) | done |
 
 ## P17 — Preview 0.17.0 (Create workspace + UI chrome) — done
 
