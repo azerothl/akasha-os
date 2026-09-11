@@ -323,23 +323,6 @@ pub fn read_setup_choice(home: &Path) -> Option<ModelSetupChoice> {
     serde_json::from_str(&raw).ok()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SetupDeferred {
-    deferred_ms: u64,
-}
-
-pub fn write_setup_deferred(home: &Path) -> Result<(), String> {
-    let dir = home.join("var/models");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let marker = SetupDeferred {
-        deferred_ms: now_ms(),
-    };
-    let raw = serde_json::to_string_pretty(&marker).map_err(|e| e.to_string())?;
-    fs::write(dir.join("setup_deferred.json"), raw).map_err(|e| e.to_string())?;
-    let _ = fs::remove_file(home.join("var/run/model_setup_offer.json"));
-    Ok(())
-}
-
 pub fn setup_deferred(home: &Path) -> bool {
     home.join("var/models/setup_deferred.json").is_file()
 }
@@ -998,7 +981,7 @@ mod vision_catalog_tests {
 
     #[test]
     fn setup_deferred_skips_setup_needed() {
-        use super::{setup_needed, write_setup_deferred};
+        use super::setup_needed;
         let home = std::env::temp_dir().join(format!(
             "aos-setup-deferred-{}-{}",
             std::process::id(),
@@ -1009,7 +992,9 @@ mod vision_catalog_tests {
         ));
         std::fs::create_dir_all(&home).unwrap();
         assert!(setup_needed(&home));
-        write_setup_deferred(&home).unwrap();
+        let models_dir = home.join("var/models");
+        std::fs::create_dir_all(&models_dir).unwrap();
+        std::fs::write(models_dir.join("setup_deferred.json"), "{\"deferred_ms\":1}\n").unwrap();
         assert!(!setup_needed(&home));
         let _ = std::fs::remove_dir_all(&home);
     }
