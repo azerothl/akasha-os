@@ -1,5 +1,6 @@
 //! Préférences utilisateur persistées (`var/run/preferences.json`).
 
+use aos_placement::{is_placeholder_listen_address, reachable_lan_address};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -460,6 +461,19 @@ fn onboarding_path() -> PathBuf {
     aos_run_dir().join("onboarding.json")
 }
 
+/// Replace an empty or loopback listen address with this machine's LAN IP.
+pub fn ensure_lan_listen_address(prefs: &mut Preferences) -> bool {
+    if !is_placeholder_listen_address(&prefs.lan_listen_address) {
+        return false;
+    }
+    let filled = reachable_lan_address(&prefs.lan_listen_address);
+    if filled == prefs.lan_listen_address {
+        return false;
+    }
+    prefs.lan_listen_address = filled;
+    true
+}
+
 /// Charge les préférences ; migre depuis `onboarding.json` si le fichier est absent.
 pub fn load_preferences() -> Preferences {
     let p = preferences_path();
@@ -467,6 +481,9 @@ pub fn load_preferences() -> Preferences {
         if let Ok(mut prefs) = serde_json::from_str::<Preferences>(&raw) {
             prefs.ui_scale_percent = clamp_ui_scale_percent(prefs.ui_scale_percent);
             prefs.ui_font = normalize_ui_font(&prefs.ui_font).into();
+            if ensure_lan_listen_address(&mut prefs) {
+                save_preferences(&prefs);
+            }
             return prefs;
         }
     }
@@ -484,6 +501,7 @@ pub fn load_preferences() -> Preferences {
             }
         }
     }
+    let _ = ensure_lan_listen_address(&mut prefs);
     save_preferences(&prefs);
     prefs
 }
@@ -624,5 +642,21 @@ mod tests {
         let raw = r#"{"language":"en","theme":"dark","ui_font":"inter"}"#;
         let prefs: Preferences = serde_json::from_str(raw).expect("deserialize");
         assert_eq!(prefs.ui_font, "inter");
+    }
+
+    #[test]
+    fn lan_listen_address_autofills_loopback_default() {
+        let mut prefs = Preferences {
+            lan_listen_address: "127.0.0.1:9001".into(),
+            ..Preferences::default()
+        };
+        if aos_placement::local_lan_ip().is_some() {
+            assert!(ensure_lan_listen_address(&mut prefs));
+            assert!(!prefs.lan_listen_address.starts_with("127.0.0.1"));
+            assert!(prefs.lan_listen_address.ends_with(":9001"));
+        }
+        prefs.lan_listen_address = "192.168.1.20:9001".into();
+        assert!(!ensure_lan_listen_address(&mut prefs));
+        assert_eq!(prefs.lan_listen_address, "192.168.1.20:9001");
     }
 }

@@ -553,7 +553,7 @@ impl UiApp {
                                             &mut self.prefs.lan_listen_address,
                                         )
                                         .desired_width(220.0)
-                                        .hint_text("127.0.0.1:9001"),
+                                        .hint_text("192.168.1.20:9001"),
                                     )
                                     .changed()
                                 {
