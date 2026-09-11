@@ -159,6 +159,7 @@
           ${railLink(`${base}use.html`, "use", "Use", "Use")}
           ${railLink(`${base}network.html`, "network", "Network", "Network")}
           ${railLink(`${base}devices.html`, "devices", "Devices", "Périphériques")}
+          ${railLink(`${base}troubleshoot.html`, "troubleshoot", "Troubleshoot", "Diagnostic")}
         </div>
       </details>
       <details class="docs-rail-group" open>

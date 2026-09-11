@@ -696,6 +696,64 @@ main.plate-main {
   border-left-color: var(--signal);
 }
 
+.page-paths {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--u) * 2);
+  max-width: 52rem;
+  margin: 0 0 calc(var(--u) * 5);
+}
+
+.page-path {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1.25);
+  padding: calc(var(--u) * 2) calc(var(--u) * 2.5);
+  background: var(--plate);
+  border-left: 4px solid var(--signal);
+  text-decoration: none;
+  color: inherit;
+}
+
+.page-path:hover,
+.page-path:focus-visible {
+  background: color-mix(in srgb, var(--signal) 16%, var(--plate));
+}
+
+.page-path-who {
+  margin: 0;
+  color: var(--signal);
+  font-family: var(--display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.page-path-need {
+  margin: 0;
+  color: var(--paper);
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.page-path-route {
+  margin: 0;
+  color: var(--mute);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.doc-journal {
+  margin: calc(var(--u) * 6) 0 0;
+  max-width: 52rem;
+  padding-top: calc(var(--u) * 3);
+  border-top: 1px solid color-mix(in srgb, var(--signal) 28%, var(--void));
+}
+
 .page-toc {
   max-width: var(--measure);
   margin: 0 0 calc(var(--u) * 4);
@@ -1103,6 +1161,10 @@ footer p {
     grid-template-columns: 1fr;
     gap: calc(var(--u) * 2);
     padding: 0 calc(var(--u) * 2) calc(var(--u) * 3);
+  }
+
+  .page-paths {
+    grid-template-columns: 1fr;
   }
 
   .docs-rail {
