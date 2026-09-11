@@ -31,7 +31,7 @@ A neighboring chat wrapper or “AI desktop” cannot truthfully claim that agen
 - First run: model download if needed, then in-app tutorial
 - Tester protocol: `docs/TESTER.md` — 15-minute path (install without cargo, one offline chat, one note, feedback from the UI); long protocol remains the team checklist
 - Community hangout: GitHub Discussions; public page `website/community.html`. No Discord yet.
-- End-user manual lives on the public site (`website/docs/`). Repo specs, ADRs, and the seL4 track stay in `docs/` (French mirrors under `docs/fr/`).
+- End-user manual lives on the public site (`website/docs/`). Repo specs, ADRs, and the seL4 track stay in `docs/` (French mirrors under `docs/fr/`). When HTML and Markdown overlap, [SITE-MANUAL.md](SITE-MANUAL.md) defines the source of truth (guarded by `packaging/check-site-docs.ps1`).
 - Contact for commercial license: loic.peaudecerf@proton.me
 
 ## Capabilities and Constraints

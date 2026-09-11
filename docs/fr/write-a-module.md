@@ -10,8 +10,10 @@ installer un module **script** sans cargo. Plus long qu’un
 [skill](write-a-skill.md) ; toujours pas une PR noyau
 ([ADR 0006](../../adr/0006-license-split.md)).
 
-Chapitre site :
+Chapitre site (**Canonique** — procédure live) :
 [azerothl.github.io/akasha-os/docs/module.html](https://azerothl.github.io/akasha-os/docs/module.html?lang=fr).
+Ce Markdown est le jumeau offline des archives Release — éditer le HTML
+d’abord, puis mirroir ici. Carte : [SITE-MANUAL.md](SITE-MANUAL.md).
 
 ## Ce que ce n’est pas
 

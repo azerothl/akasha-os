@@ -8,8 +8,10 @@ A skill is a Markdown recipe. You can copy one into Preview without cargo,
 without a kernel pull request, and without granting the commercial license
 ([ADR 0006](../adr/0006-license-split.md)).
 
-Site chapter (same procedure):
+Site chapter (**Canonical** live procedure):
 [azerothl.github.io/akasha-os/docs/skill.html](https://azerothl.github.io/akasha-os/docs/skill.html).
+This Markdown file is the offline twin shipped in release zips — edit the
+HTML first, then mirror here. Mapping: [SITE-MANUAL.md](SITE-MANUAL.md).
 
 ## What this is not
 

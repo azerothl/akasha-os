@@ -9,6 +9,11 @@ the repo, exercise the main paths, and send feedback **from the UI**.
 Feature catalogue: [FEATURES.md](FEATURES.md). Community hangout:
 [community.md](community.md) (GitHub Discussions — no Discord yet).
 
+**Canonical** short-path chapter on the site:
+[azerothl.github.io/akasha-os/docs/feedback.html](https://azerothl.github.io/akasha-os/docs/feedback.html).
+This file keeps the same short path plus the long team checklist for
+release zips. Mapping: [SITE-MANUAL.md](SITE-MANUAL.md).
+
 **Cohort gate:** 3 Windows + 1 Linux + 1 macOS Apple Silicon testers complete
 the [short path](#short-path-15-minutes) without a Rust toolchain; each leaves
 a usable `var/feedback/fb-*.json` (and preferably a GitHub issue). The long

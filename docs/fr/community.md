@@ -11,8 +11,9 @@ seraient des salons vides. Les canaux de messagerie sont aussi **hors du
 noyau OS** (voir [plan-evolutions.md](plan-evolutions.md)) ; cette page
 est pour les humains.
 
-Site public :
+Site public (**Canonique** — page hangout) :
 [Community](https://azerothl.github.io/akasha-os/community.html?lang=fr).
+Ce Markdown est le jumeau offline. Carte : [SITE-MANUAL.md](SITE-MANUAL.md).
 
 Split de licence (noyau AGPL + CLA vs extensions guest Apache/MIT, pas
 d’octroi commercial) : [ADR 0006](../../adr/0006-license-split.md). Une

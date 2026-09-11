@@ -8,6 +8,11 @@
 (échafaudage hôte, ADR 0001). **NVIDIA est recommandé sur Win/Linux** ; le **même zip**
 embarque `aos-modeld-cpu` (Réglages → Inférence). Les builds macOS sont non signés. seL4 = piste séparée.
 
+**Canonique** — chapitre site :
+[azerothl.github.io/akasha-os/install.html](https://azerothl.github.io/akasha-os/install.html?lang=fr).
+Ce fichier est le jumeau offline des archives Release. Carte :
+[SITE-MANUAL.md](SITE-MANUAL.md).
+
 ## Une commande
 
 Windows :
