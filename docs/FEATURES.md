@@ -11,27 +11,33 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 ### What's new in 0.17.0
 
-- **Create workspace**: split-pane layout, named presets, layer editing with z-index, prompt enrichment and assistants, Ideogram 4 structured prompts
-- **UI chrome**: painted SVG icons (replacing font glyphs), interface font preference, Settings strip and rail/status polish, status bar overflow menu
-- **DeclUI**: mojibake fixes, JSON payloads, denser parameter layout, human-readable labels
-- **Canvas toolbar**, **Mémoire** and **Salon** compact-band refinements; Agents labels and empty-chat CTA
+Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
+0.16.2 GitHub Releases).
+
+#### Features
+
+- **Create workspace**: split-pane layout, named presets, layer editing with z-index, prompt enrichment and assistants, Ideogram 4 structured prompts; primary rail opens the Create package ([create-contract.md](create-contract.md))
+- **Rich module apps**: DeclUI contract v2 (`layer_canvas`, `job`, `image_view`, composition primitives); transactional install and rollback; Rust authoring SDK in [`modules/sdk`](../modules/sdk) ([rich-app-contract.md](rich-app-contract.md))
+- **LAN cluster** (experimental, off by default): Settings → Models pairing, discovery, encrypted shard dispatch — see [lan-cluster.md](lan-cluster.md)
+- **Calm shell**: comfortable density is the default (36 px controls, 44 px composer, 88 px rail); compact density stays available without dropping below 32 px
+- **Chat sessions**: case-insensitive search; Today / Yesterday / Last 7 days / Older groups; pinned sessions stay first; reversible archive; permanent delete only from Archives
+- **Composer**: multiline up to five visible lines — Enter sends, Shift+Enter inserts a line break; pending files stay as removable chips
+- **Focus and activity**: Canvas focus mode hides neighbouring panels; agent traces live in a resizable Activity panel; the bell opens the notification centre
+- **Device capture**: webcam and microphone on Windows, Linux and macOS (`device.enumerate`, `device.camera.capture`, `device.mic.capture`); confirmation required (Allow once / Always / Deny)
+- **USB I/O**: opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Windows, Linux and macOS serial backends — see [device-usb.md](device-usb.md)
+- **Deep Thinking**: hierarchical plan cards in chat when `cognitive_mode` is `deep_thinking` (shipped skill `deep-thinking`)
+- **UI chrome**: painted SVG icons (replacing font glyphs), interface font preference, Canvas toolbar, **Mémoire** and **Salon** compact-band refinements; Agents labels and empty-chat CTA
+- **Settings search**: typing in Settings filters Me / Models / Trust and the expert folds
 - **FR parity**: Settings search/pills and chat welcome strings
 - **Module catalogue**: deduplication filter on boot
 
-### What's new in 0.16.2
+#### Fixes
 
-- **USB I/O**: opt-in serial USB (`device.usb.enumerate` / `open` / `read` / `write` / `close`); capability `device.usb.io`; Allow once / Always / Deny; Windows, Linux, and macOS serial backends. See [device-usb.md](device-usb.md)
-
-### What's new in 0.16.1
-
-- **Calm shell**: comfortable density is the default (36 px controls, 44 px composer, 88 px rail); compact density stays available without dropping below 32 px
-- **Chat sessions**: case-insensitive search; Today / Yesterday / Last 7 days / Older groups; pinned sessions stay first
-- **Archive and pin**: pinning and reversible archive from the session list; permanent delete only from Archives
-- **Composer**: multiline up to five visible lines — Enter sends, Shift+Enter inserts a line break; pending files stay as removable chips
-- **Focus and activity**: Canvas focus mode hides neighbouring panels; agent traces live in a resizable Activity panel; the bell opens the notification centre
+- **DeclUI**: mojibake fixes, JSON payloads, denser parameter layout, human-readable labels
+- **Settings strip, rail and status**: layout polish and status bar overflow menu icon
+- **Create workflow**: image/video selection parity, option payloads and generation readiness
+- **Salon**: tools routing, `@` mentions, peer follow-up and ask card
 - **Session navigation**: background reloads no longer steal the active chat; `chat.session.set_pinned` / `set_archived` / `list_all` back the new chrome
-- **Settings search**: typing in Settings filters Me / Models / Trust and the expert folds
-- **Webcam / microphone**: chat can delegate a capture agent (`device.enumerate`, `device.camera.capture`, `device.mic.capture`); Windows writes a PNG the vision model can read after confirmation (Allow once / Always / Deny)
 
 ### What's new in 0.16.0
 

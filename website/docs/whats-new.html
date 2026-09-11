@@ -71,8 +71,6 @@
 
         <nav class="log-toc" aria-label="Versions">
           <a href="#v0-17-0">0.17.0</a>
-          <a href="#v0-16-2">0.16.2</a>
-          <a href="#v0-16-1">0.16.1</a>
           <a href="#v0-16-0">0.16.0</a>
           <a href="#v0-15-0">0.15.0</a>
           <a href="#v0-14-0">0.14.0</a>
@@ -99,87 +97,63 @@
           <h2>0.17.0</h2>
           <p class="rev-when">10/09/2026</p>
           <p class="hist" data-lang="en">
-            Create gets a full vertical workspace: split-pane layout, named
-            presets, layer editing, and prompt assistants. UI chrome moves to
-            painted SVG icons with an interface-font preference; Settings,
-            rail and status strips are polished. DeclUI fixes cover mojibake,
-            JSON payloads and denser human labels. Still a host app, not a
-            bootable OS.
+            Since 0.16.0, Create becomes a rich installable module with a full
+            vertical workspace; the host gains painted UI chrome, a calmer
+            session shell, opt-in device and USB I/O, and an experimental LAN
+            cluster. DeclUI and rail/status polish close the release. Same Win /
+            Linux / Mac mill bands — still a host app, not a bootable OS.
           </p>
           <p class="hist" data-lang="fr">
-            Create reçoit un espace vertical complet : volet scindé, presets
-            nommés, édition de calques et assistants de prompt. Le chrome UI
-            passe à des icônes SVG peintes avec une préférence de police
-            interface ; bandes Paramètres, rail et statut affinées. Les
-            correctifs DeclUI couvrent mojibake, JSON et libellés plus denses.
-            Toujours une appli hôte, pas un OS bootable.
-          </p>
-          <ul class="ticks">
-            <li data-lang="en"><strong>Create</strong>: split-pane workspace, presets, layer z-index, prompt enrichment, Ideogram 4 structured prompts.</li>
-            <li data-lang="fr"><strong>Create</strong> : espace en volet scindé, presets, z-index des calques, enrichissement de prompt, prompts structurés Ideogram 4.</li>
-            <li data-lang="en"><strong>UI chrome</strong>: painted SVG icons, interface font preference, Settings strip, rail/status polish, status overflow menu.</li>
-            <li data-lang="fr"><strong>Chrome UI</strong> : icônes SVG peintes, préférence police interface, bande Paramètres, finitions rail/statut, menu overflow.</li>
-            <li data-lang="en"><strong>DeclUI</strong>: mojibake, JSON payloads, denser params, human-readable labels.</li>
-            <li data-lang="fr"><strong>DeclUI</strong> : mojibake, payloads JSON, paramètres plus denses, libellés lisibles.</li>
-          </ul>
-        </article>
-
-        <article class="grant" id="v0-16-2">
-          <h2>0.16.2</h2>
-          <p class="rev-when">06/09/2026</p>
-          <p class="hist" data-lang="en">
-            Agents can open USB serial ports on Windows after an explicit grant.
-            Enumeration, read and write stay quota-bounded; Linux and macOS
-            return UnsupportedPlatform in this slice. Still a host app, not a
-            bootable OS.
-          </p>
-          <p class="hist" data-lang="fr">
-            Les agents peuvent ouvrir des ports série USB sous Windows après
-            un accord explicite. L’énumération, la lecture et l’écriture restent
-            bornées par quota ; Linux et macOS renvoient UnsupportedPlatform
-            dans cette tranche. Toujours une appli hôte, pas un OS bootable.
-          </p>
-          <ul class="ticks">
-            <li data-lang="en"><strong>USB serial</strong>: <code>device.usb.enumerate</code> / <code>open</code> / <code>read</code> / <code>write</code> / <code>close</code> on Windows COM ports.</li>
-            <li data-lang="fr"><strong>USB série</strong> : <code>device.usb.enumerate</code> / <code>open</code> / <code>read</code> / <code>write</code> / <code>close</code> sur les ports COM Windows.</li>
-            <li data-lang="en"><strong>Grant</strong>: USB · Allow once / Always / Deny; cap <code>device.usb.io</code>; revoke closes handles.</li>
-            <li data-lang="fr"><strong>Accord</strong> : USB · une fois / toujours / refuser ; cap <code>device.usb.io</code> ; la révocation ferme les handles.</li>
-            <li data-lang="en"><strong>Other hosts</strong>: Linux/macOS enumerate returns UnsupportedPlatform until a later slice.</li>
-            <li data-lang="fr"><strong>Autres hôtes</strong> : Linux/macOS renvoient UnsupportedPlatform jusqu’à une tranche suivante.</li>
-          </ul>
-        </article>
-
-        <article class="grant" id="v0-16-1">
-          <h2>0.16.1</h2>
-          <p class="rev-when">03/09/2026</p>
-          <p class="hist" data-lang="en">
-            The host shell gets a calmer default density, a searchable session
-            list with date groups and pin, and reversible archive. The composer
-            is multiline. Canvas can hide neighbouring panels; agent traces and
-            notices live in Activity and the bell. Background reloads no longer
-            steal the active chat. Same Win / Linux / Mac mill bands — still a
-            host app, not a bootable OS.
-          </p>
-          <p class="hist" data-lang="fr">
-            Le shell hôte passe en densité confortable par défaut, avec une
-            liste de sessions cherchable, des groupes de dates et l’épingle, plus
-            un archivage réversible. Le compositeur est multiligne. Le Canvas
-            peut masquer les panneaux voisins ; traces agent et notices vivent
-            dans Activité et la cloche. Un rechargement en arrière-plan n’enlève
-            plus le chat actif. Mêmes bandes mill Win / Linux / Mac — toujours
+            Depuis la 0.16.0, Create devient un module installable riche avec
+            un espace vertical complet ; l’hôte gagne un chrome UI peint, un
+            shell de sessions plus calme, des I/O périphériques et USB opt-in,
+            et un cluster LAN expérimental. Les finitions DeclUI et rail/statut
+            ferment la release. Mêmes bandes mill Win / Linux / Mac — toujours
             une appli hôte, pas un OS bootable.
           </p>
+          <p class="hist" data-lang="en"><strong>Features</strong></p>
+          <p class="hist" data-lang="fr"><strong>Fonctionnalités</strong></p>
           <ul class="ticks">
-            <li data-lang="en"><strong>Density</strong>: comfortable 36 px controls and 88 px rail by default; compact never drops below 32 px.</li>
-            <li data-lang="fr"><strong>Densité</strong> : contrôles 36 px et rail 88 px en confortable ; compact jamais sous 32 px.</li>
+            <li data-lang="en"><strong>Create</strong>: split-pane workspace, named presets, layer z-index, prompt enrichment, Ideogram 4 structured prompts; primary rail opens the Create package (native Image Studio removed).</li>
+            <li data-lang="fr"><strong>Create</strong> : espace en volet scindé, presets nommés, z-index des calques, enrichissement de prompt, prompts structurés Ideogram 4 ; le rail principal ouvre le paquet Create (studio Image natif retiré).</li>
+            <li data-lang="en"><strong>Rich modules</strong>: DeclUI contract v2 (<code>layer_canvas</code>, <code>job</code>, <code>image_view</code>, composition primitives); transactional install; Rust SDK under <code>modules/sdk</code>.</li>
+            <li data-lang="fr"><strong>Modules riches</strong> : contrat DeclUI v2 (<code>layer_canvas</code>, <code>job</code>, <code>image_view</code>, primitives de composition) ; install transactionnelle ; SDK Rust sous <code>modules/sdk</code>.</li>
+            <li data-lang="en"><strong>LAN cluster</strong> (experimental, off by default): Settings → Models pairing, discovery, encrypted shard dispatch — see <a href="https://github.com/azerothl/akasha-os/blob/main/docs/lan-cluster.md">lan-cluster.md</a>.</li>
+            <li data-lang="fr"><strong>Cluster LAN</strong> (expérimental, désactivé par défaut) : appairage dans Paramètres → Modèles, découverte, dispatch de shards chiffré — voir <a href="https://github.com/azerothl/akasha-os/blob/main/docs/lan-cluster.md">lan-cluster.md</a>.</li>
+            <li data-lang="en"><strong>Calm shell</strong>: comfortable density by default (36 px controls, 88 px rail); compact stays ≥ 32 px.</li>
+            <li data-lang="fr"><strong>Shell calme</strong> : densité confortable par défaut (contrôles 36 px, rail 88 px) ; compact reste ≥ 32 px.</li>
             <li data-lang="en"><strong>Sessions</strong>: search, Today/Yesterday/Last 7 days/Older, pin first, reversible archive, delete only from Archives.</li>
             <li data-lang="fr"><strong>Sessions</strong> : recherche, Aujourd’hui/Hier/7 jours/Plus ancien, épingle en tête, archive réversible, suppression seulement depuis Archives.</li>
             <li data-lang="en"><strong>Composer</strong>: up to five visible lines; Enter sends, Shift+Enter inserts a line break.</li>
             <li data-lang="fr"><strong>Compositeur</strong> : jusqu’à cinq lignes visibles ; Entrée envoie, Maj+Entrée insère un retour.</li>
             <li data-lang="en"><strong>Focus</strong>: Canvas focus mode, resizable Activity panel, notification centre from the bell.</li>
             <li data-lang="fr"><strong>Focus</strong> : mode focus Canvas, volet Activité redimensionnable, centre de notifications depuis la cloche.</li>
-            <li data-lang="en"><strong>Navigation</strong>: background session reloads keep the open chat; pin/archive/list_all bus routes.</li>
-            <li data-lang="fr"><strong>Navigation</strong> : le chat ouvert reste en place ; routes bus pin/archive/list_all.</li>
+            <li data-lang="en"><strong>Device capture</strong>: webcam and microphone on Windows, Linux and macOS after Allow once / Always / Deny.</li>
+            <li data-lang="fr"><strong>Capture périphérique</strong> : webcam et micro sous Windows, Linux et macOS après une fois / toujours / refuser.</li>
+            <li data-lang="en"><strong>USB serial</strong>: opt-in <code>device.usb.*</code> on Windows, Linux and macOS; cap <code>device.usb.io</code>; revoke closes handles.</li>
+            <li data-lang="fr"><strong>USB série</strong> : <code>device.usb.*</code> opt-in sous Windows, Linux et macOS ; cap <code>device.usb.io</code> ; la révocation ferme les handles.</li>
+            <li data-lang="en"><strong>Deep Thinking</strong>: hierarchical plan cards in chat when deep-thinking mode is active.</li>
+            <li data-lang="fr"><strong>Deep Thinking</strong> : cartes de plan hiérarchique dans le chat quand le mode deep-thinking est actif.</li>
+            <li data-lang="en"><strong>UI chrome</strong>: painted SVG icons, interface font preference, Canvas toolbar, Mémoire and Salon compact bands, Agents labels, empty-chat CTA.</li>
+            <li data-lang="fr"><strong>Chrome UI</strong> : icônes SVG peintes, préférence police interface, barre outils Canvas, bandes compactes Mémoire et Salon, libellés Agents, CTA chat vide.</li>
+            <li data-lang="en"><strong>Module catalogue</strong>: deduplication filter on boot.</li>
+            <li data-lang="fr"><strong>Catalogue modules</strong> : filtre anti-doublon au démarrage.</li>
+            <li data-lang="en"><strong>FR parity</strong>: Settings search/pills and chat welcome strings.</li>
+            <li data-lang="fr"><strong>Parité FR</strong> : chaînes recherche/pills Paramètres et accueil chat.</li>
+          </ul>
+          <p class="hist" data-lang="en"><strong>Fixes</strong></p>
+          <p class="hist" data-lang="fr"><strong>Correctifs</strong></p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>DeclUI</strong>: mojibake, JSON payloads, denser params, human-readable labels.</li>
+            <li data-lang="fr"><strong>DeclUI</strong> : mojibake, payloads JSON, paramètres plus denses, libellés lisibles.</li>
+            <li data-lang="en"><strong>Settings / rail / status</strong>: strip layout, status polish, overflow menu icon.</li>
+            <li data-lang="fr"><strong>Paramètres / rail / statut</strong> : disposition de la bande, finitions statut, icône menu overflow.</li>
+            <li data-lang="en"><strong>Create workflow</strong>: image/video selection parity, option payloads and generation readiness.</li>
+            <li data-lang="fr"><strong>Parcours Create</strong> : parité sélection image/vidéo, payloads d’options et préparation génération.</li>
+            <li data-lang="en"><strong>Salon</strong>: tools routing, @ mentions, peer follow-up and ask card.</li>
+            <li data-lang="fr"><strong>Salon</strong> : routage outils, mentions @, relance pair et carte ask.</li>
+            <li data-lang="en"><strong>Session navigation</strong>: background reloads no longer steal the active chat.</li>
+            <li data-lang="fr"><strong>Navigation session</strong> : un rechargement en arrière-plan n’enlève plus le chat actif.</li>
           </ul>
         </article>
 
