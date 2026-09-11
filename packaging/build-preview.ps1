@@ -72,6 +72,11 @@ if (-not $SkipBuild) {
         pwsh -NoProfile -File (Join-Path $root "modules\build-canvas.ps1")
         if ($LASTEXITCODE -ne 0) { throw "build-canvas.ps1 failed ($LASTEXITCODE)" }
     }
+    if (Test-Path (Join-Path $root "modules\build-create.ps1")) {
+        Write-Host "== package create module =="
+        pwsh -NoProfile -File (Join-Path $root "modules\build-create.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "build-create.ps1 failed ($LASTEXITCODE)" }
+    }
 }
 
 $binSrc = Join-Path $root "target\release"
@@ -234,6 +239,16 @@ if (Test-Path $canvasShare) {
     Copy-ReplaceDir $canvas (Join-Path $OutDir "share\modules\canvas.aospkg")
 } else {
     Write-Warning "canvas.aospkg absent — lancer modules\build-canvas.ps1"
+}
+
+$createShare = Join-Path $root "share\modules\create.aospkg"
+$create = Join-Path $root "modules\create.aospkg"
+if (Test-Path $createShare) {
+    Copy-ReplaceDir $createShare (Join-Path $OutDir "share\modules\create.aospkg")
+} elseif (Test-Path $create) {
+    Copy-ReplaceDir $create (Join-Path $OutDir "share\modules\create.aospkg")
+} else {
+    Write-Warning "create.aospkg absent — lancer modules\build-create.ps1"
 }
 
 foreach ($cat in @("catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub")) {

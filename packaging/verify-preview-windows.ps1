@@ -65,7 +65,7 @@ foreach ($binary in $binaries) {
     $requiredFiles += "bin\$binary"
 }
 
-foreach ($module in @("notes", "ext-rt", "canvas")) {
+foreach ($module in @("notes", "ext-rt", "canvas", "create")) {
     $requiredFiles += "share\modules\$module.aospkg\manifest.yaml"
     $requiredFiles += "share\modules\$module.aospkg\module.wasm"
 }
@@ -89,7 +89,7 @@ foreach ($relativePath in $requiredFiles) {
 
 $catalogueText = Get-Content -LiteralPath `
     (Join-Path $resolvedOut "share\modules\catalogue.yaml") -Raw
-$modulesToVerify = @("notes", "ext-rt", "canvas")
+$modulesToVerify = @("notes", "ext-rt", "canvas", "create")
 if ($previewProfile -ne "minimal") {
     $modulesToVerify += "tasks"
 }

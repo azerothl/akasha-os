@@ -125,7 +125,11 @@ EOF
   fi
   if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
     echo "== canvas module =="
-  "${ROOT}/modules/build-canvas.sh"
+    "${ROOT}/modules/build-canvas.sh"
+  fi
+  if [ -f "${ROOT}/modules/build-create.sh" ]; then
+    echo "== create module =="
+    "${ROOT}/modules/build-create.sh"
   fi
   if [ -f "${ROOT}/modules/build-ext-rt.ps1" ] && command -v pwsh >/dev/null 2>&1; then
     echo "== ext-rt module =="
@@ -340,6 +344,13 @@ if [ -d "${ROOT}/share/modules/canvas.aospkg" ]; then
 elif [ -d "${ROOT}/modules/canvas.aospkg" ]; then
   rm -rf "${OUT}/share/modules/canvas.aospkg"
   cp -a "${ROOT}/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
+fi
+if [ -d "${ROOT}/share/modules/create.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/create.aospkg"
+  cp -a "${ROOT}/share/modules/create.aospkg" "${OUT}/share/modules/create.aospkg"
+elif [ -d "${ROOT}/modules/create.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/create.aospkg"
+  cp -a "${ROOT}/modules/create.aospkg" "${OUT}/share/modules/create.aospkg"
 fi
 
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do

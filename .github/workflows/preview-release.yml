@@ -13,9 +13,9 @@ on:
         type: boolean
         default: true
       release_version:
-        description: "Release version to attach (e.g. 0.17.0). Empty = VERSION file in checkout."
+        description: "Release version to attach (e.g. 0.17.1). Empty = VERSION file in checkout."
         type: string
-        default: "0.17.0"
+        default: "0.17.1"
       upload_release:
         description: "Upload macOS zip + refresh latest.json on the GitHub Release"
         type: boolean
@@ -190,7 +190,7 @@ jobs:
           VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
           export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
-          chmod +x packaging/build-preview.sh modules/build-canvas.sh
+          chmod +x packaging/build-preview.sh modules/build-canvas.sh modules/build-create.sh
           bash packaging/build-preview.sh
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           for bin in \
@@ -198,7 +198,7 @@ jobs:
             aos-agent-worker aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
             test -x "${OUT}/bin/${bin}"
           done
-          for module in notes tasks ext-rt canvas; do
+          for module in notes tasks ext-rt canvas create; do
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
             wasm_hash=$(sha256sum "${OUT}/share/modules/${module}.aospkg/module.wasm" | awk '{print $1}')
@@ -302,7 +302,7 @@ jobs:
         run: |
           sccache --show-stats
           export VERSION
-          chmod +x packaging/build-preview-macos.sh modules/build-canvas.sh
+          chmod +x packaging/build-preview-macos.sh modules/build-canvas.sh modules/build-create.sh
           ./packaging/build-preview-macos.sh
           OUT="dist/AgentOS-Preview-${VERSION}-macos-arm64"
           for bin in \
@@ -310,7 +310,7 @@ jobs:
             aos-agent-worker aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
             test -x "${OUT}/bin/${bin}"
           done
-          for module in notes tasks ext-rt canvas; do
+          for module in notes tasks ext-rt canvas create; do
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
             wasm_hash=$(shasum -a 256 "${OUT}/share/modules/${module}.aospkg/module.wasm" | awk '{print $1}')
