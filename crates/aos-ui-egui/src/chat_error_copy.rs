@@ -54,6 +54,54 @@ pub(crate) fn room_host_path_disallowed_toast(t: &UiStrings) -> Option<&'static 
     }
 }
 
+/// True when the runtime error indicates a quarantined Tasks module.
+pub(crate) fn is_tasks_quarantine_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("tasks")
+        && (lower.contains("quarantaine") || lower.contains("quarantined"))
+}
+
+/// True when a catalogue/module install failure targets Create.
+pub(crate) fn is_create_install_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    if lower.contains(".aospkg") && lower.contains("create") {
+        return true;
+    }
+    if lower.contains("__create_install_failed__") {
+        return true;
+    }
+    lower.contains("create")
+        && (lower.contains("catalogue")
+            || lower.contains("hash")
+            || lower.contains("install")
+            || lower.contains("badrequest"))
+}
+
+fn strip_ipc_status_prefix(msg: &str) -> &str {
+    const PREFIX: &str = "statut BadRequest: ";
+    msg.strip_prefix(PREFIX)
+        .or_else(|| msg.strip_prefix("statut badrequest: "))
+        .unwrap_or(msg)
+}
+
+/// Map a raw module UI/runtime error to localized chrome copy (no IPC status leaks).
+pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) -> String {
+    let stripped = strip_ipc_status_prefix(raw);
+    if module == "tasks" && is_tasks_quarantine_error(stripped) {
+        return t.tasks_quarantined.to_string();
+    }
+    if is_tasks_quarantine_error(stripped) {
+        return t.tasks_quarantined.to_string();
+    }
+    if module == "create" && is_create_install_error(stripped) {
+        return t.create_install_failed.to_string();
+    }
+    if is_create_install_error(stripped) {
+        return t.create_install_failed.to_string();
+    }
+    user_visible_chat_error(t, stripped)
+}
+
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
     if is_room_host_path_sentinel(raw) {
@@ -77,11 +125,27 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
         }
         return t.studio_generation_failed.to_string();
     }
+    if is_tasks_quarantine_error(raw) {
+        return t.tasks_quarantined.to_string();
+    }
+    if is_create_install_error(raw) {
+        return t.create_install_failed.to_string();
+    }
+    if raw.contains("BadRequest:") || raw.contains("badrequest:") {
+        return t.chat_error_generic.to_string();
+    }
     if is_model_load_fail_error(raw) {
         return t.chat_load_fail_message.to_string();
     }
-    if leaks_filesystem_path(raw) {
+    if leaks_filesystem_path(raw) || raw.contains(".aospkg") {
+        if raw.to_ascii_lowercase().contains("create") {
+            return t.create_install_failed.to_string();
+        }
         return t.chat_error_generic.to_string();
+    }
+    let stripped = strip_ipc_status_prefix(raw);
+    if stripped != raw {
+        return user_visible_chat_error(t, stripped);
     }
     raw.to_string()
 }
@@ -146,6 +210,33 @@ mod tests {
         let t = crate::i18n::strings("fr");
         let out = user_visible_chat_error(&t, "media.image.generate: génération annulée");
         assert_eq!(out, t.studio_generation_cancelled);
+    }
+
+    #[test]
+    fn tasks_quarantine_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        let raw = "statut BadRequest: module en quarantaine: tasks";
+        assert_eq!(user_visible_module_error(&en, "tasks", raw), en.tasks_quarantined);
+        assert_eq!(user_visible_module_error(&fr, "tasks", raw), fr.tasks_quarantined);
+        assert!(!user_visible_module_error(&en, "tasks", raw).contains("BadRequest"));
+    }
+
+    #[test]
+    fn create_install_failure_maps_to_locked_copy() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        let raw = "statut BadRequest: hash catalogue non conforme pour create";
+        assert_eq!(
+            user_visible_chat_error(&en, raw),
+            en.create_install_failed
+        );
+        assert_eq!(
+            user_visible_chat_error(&fr, raw),
+            fr.create_install_failed
+        );
+        assert!(!user_visible_chat_error(&en, raw).contains("BadRequest"));
+        assert!(!user_visible_chat_error(&en, raw).contains(".aospkg"));
     }
 
     #[test]

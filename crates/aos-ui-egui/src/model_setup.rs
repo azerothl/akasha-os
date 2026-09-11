@@ -172,6 +172,7 @@ pub fn run() -> eframe::Result<()> {
                 include_optional: false,
                 confirmed: false,
                 deferred: false,
+                cancelled: false,
                 language,
                 providers,
                 provider_id: String::new(),
@@ -196,6 +197,7 @@ struct SetupApp {
     include_optional: bool,
     confirmed: bool,
     deferred: bool,
+    cancelled: bool,
     language: String,
     providers: Vec<ProviderRecord>,
     provider_id: String,
@@ -485,7 +487,7 @@ impl eframe::App for SetupApp {
         if ctx.input(|i| i.viewport().close_requested()) && !self.confirmed && !self.deferred {
             self.try_defer();
         }
-        if self.confirmed || self.deferred {
+        if self.confirmed || self.deferred || self.cancelled {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
@@ -639,6 +641,9 @@ impl eframe::App for SetupApp {
                         if ui.button(t.model_setup_later).clicked() {
                             self.try_defer();
                         }
+                        if ui.button(t.model_setup_cancel).clicked() {
+                            self.cancelled = true;
+                        }
                     });
                 });
         });
@@ -689,6 +694,7 @@ mod tests {
             include_optional: false,
             confirmed: false,
             deferred: false,
+            cancelled: false,
             language: "en".into(),
             providers: Vec::new(),
             provider_id: String::new(),

@@ -101,11 +101,19 @@ fn create_language(home: &Path) -> String {
         .unwrap_or_else(|| "fr".into())
 }
 
-fn create_pkg_user_message(lang: &str) -> &'static str {
+fn create_unavailable_boot_message(lang: &str) -> &'static str {
     if lang.eq_ignore_ascii_case("en") {
-        "Create could not be installed automatically — try again from the module catalogue."
+        "The Create app isn't available in this install."
     } else {
-        "Impossible d'installer Créer automatiquement — réessayez depuis le catalogue des modules."
+        "L'app Créer n'est pas disponible dans cette installation."
+    }
+}
+
+fn create_install_failed_message(lang: &str) -> &'static str {
+    if lang.eq_ignore_ascii_case("en") {
+        "Couldn't install Create. Try again."
+    } else {
+        "Impossible d'installer Créer. Réessayez."
     }
 }
 
@@ -115,9 +123,11 @@ pub fn manage_create_module(home: &Path) -> bool {
     match manage_create_module_inner(home) {
         Ok(synced) => synced,
         Err(e) => {
+            let lang = create_language(home);
             if e.debug.starts_with("bundled create package not found") {
-                let lang = create_language(home);
-                eprintln!("[aos-session] {}", create_pkg_user_message(&lang));
+                eprintln!("[aos-session] {}", create_unavailable_boot_message(&lang));
+            } else {
+                eprintln!("[aos-session] {}", create_install_failed_message(&lang));
             }
             eprintln!("[aos-session] create migration (debug): {}", e.debug);
             false
@@ -788,10 +798,25 @@ mod tests {
     }
 
     #[test]
-    fn create_pkg_user_message_is_localized() {
-        assert!(create_pkg_user_message("en").contains("module catalogue"));
-        assert!(create_pkg_user_message("fr").contains("catalogue des modules"));
-        assert!(!create_pkg_user_message("en").contains("create.aospkg"));
+    fn create_boot_messages_are_localized_and_human() {
+        assert_eq!(
+            create_unavailable_boot_message("en"),
+            "The Create app isn't available in this install."
+        );
+        assert_eq!(
+            create_unavailable_boot_message("fr"),
+            "L'app Créer n'est pas disponible dans cette installation."
+        );
+        assert_eq!(
+            create_install_failed_message("en"),
+            "Couldn't install Create. Try again."
+        );
+        assert_eq!(
+            create_install_failed_message("fr"),
+            "Impossible d'installer Créer. Réessayez."
+        );
+        assert!(!create_unavailable_boot_message("en").contains(".aospkg"));
+        assert!(!create_install_failed_message("en").contains(".aospkg"));
     }
 
     #[test]
