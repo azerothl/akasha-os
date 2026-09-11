@@ -602,6 +602,155 @@ main.plate-main {
   text-align: start;
 }
 
+.docs-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
+  gap: calc(var(--u) * 3);
+  align-items: start;
+  flex: 1 1 auto;
+  padding: 0 calc(var(--u) * 3) calc(var(--u) * 4);
+}
+
+.docs-layout > .plate-main {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+
+.docs-rail {
+  position: sticky;
+  top: calc(var(--u) * 2);
+  max-height: calc(100dvh - calc(var(--u) * 4));
+  overflow: auto;
+  padding: calc(var(--u) * 2) 0;
+  border-right: 1px solid color-mix(in srgb, var(--signal) 28%, var(--void));
+}
+
+.docs-rail-hub {
+  display: block;
+  margin: 0 0 calc(var(--u) * 2);
+  padding: 0 calc(var(--u) * 1.5) 0 0;
+  color: var(--signal);
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.docs-rail-hub[aria-current="page"] {
+  color: var(--paper);
+}
+
+.docs-rail-group {
+  margin: 0 0 calc(var(--u) * 1.5);
+}
+
+.docs-rail-group > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--mute);
+  font-family: var(--display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: calc(var(--u) * 0.75) calc(var(--u) * 1.5) calc(var(--u) * 0.75) 0;
+}
+
+.docs-rail-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.docs-rail-group > summary:hover,
+.docs-rail-group > summary:focus-visible {
+  color: var(--paper);
+}
+
+.docs-rail-links {
+  display: grid;
+  gap: calc(var(--u) * 0.5);
+  padding: 0 calc(var(--u) * 1.5) calc(var(--u) * 0.5) 0;
+}
+
+.docs-rail-links a {
+  color: var(--paper);
+  text-decoration: none;
+          font-family: var(--body);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  padding: calc(var(--u) * 0.5) 0;
+  border-left: 2px solid transparent;
+  padding-left: calc(var(--u) * 1.25);
+  margin-left: calc(var(--u) * -0.25);
+}
+
+.docs-rail-links a:hover,
+.docs-rail-links a:focus-visible {
+  color: var(--signal);
+}
+
+.docs-rail-links a[aria-current="page"] {
+  color: var(--signal);
+  border-left-color: var(--signal);
+}
+
+.page-toc {
+  max-width: var(--measure);
+  margin: 0 0 calc(var(--u) * 4);
+  padding: calc(var(--u) * 2) calc(var(--u) * 2.5);
+  background: var(--plate);
+  border-left: 4px solid var(--signal);
+}
+
+.page-toc-title {
+  margin: 0 0 calc(var(--u) * 1.5);
+  color: var(--mute);
+  font-family: var(--display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.page-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: calc(var(--u) * 0.75);
+  columns: 2;
+  column-gap: calc(var(--u) * 3);
+}
+
+.page-toc li {
+  break-inside: avoid;
+}
+
+.page-toc a {
+  color: var(--paper);
+  text-decoration: none;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.page-toc a:hover,
+.page-toc a:focus-visible {
+  color: var(--signal);
+}
+
+.log-toc-sticky {
+  position: sticky;
+  top: calc(var(--u) * 2);
+  z-index: 2;
+  margin-top: calc(var(--u) * 3);
+  margin-bottom: calc(var(--u) * 3);
+  padding: calc(var(--u) * 1.5) calc(var(--u) * 2);
+  background: color-mix(in srgb, var(--void) 88%, var(--plate));
+  border-left: 4px solid var(--signal);
+}
+
 h1 {
   margin: calc(var(--u) * 6) 0 calc(var(--u) * 4);
   max-width: var(--measure);
@@ -889,8 +1038,9 @@ code {
 }
 
 .doc-band .band-hz {
-  min-width: 2.4rem;
+  min-width: 5.5rem;
   color: var(--signal);
+  font-size: 0.82rem;
 }
 
 .honesty .home-news {
@@ -947,6 +1097,32 @@ footer p {
 
   .mark-id {
     font-size: 1.05rem;
+  }
+
+  .docs-layout {
+    grid-template-columns: 1fr;
+    gap: calc(var(--u) * 2);
+    padding: 0 calc(var(--u) * 2) calc(var(--u) * 3);
+  }
+
+  .docs-rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding: calc(var(--u) * 1.5) 0;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--signal) 28%, var(--void));
+  }
+
+  .docs-rail-group {
+    display: inline-block;
+    vertical-align: top;
+    width: calc(50% - var(--u));
+    margin-right: var(--u);
+  }
+
+  .page-toc ol {
+    columns: 1;
   }
 
   .fold {
