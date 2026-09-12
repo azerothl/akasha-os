@@ -273,6 +273,7 @@ async fn infer_bus(
                     role: "user".into(),
                     content: prompt.into(),
                 }],
+                tools: vec![],
                 params: InferParams {
                     max_tokens: 8,
                     temperature: 0.2,

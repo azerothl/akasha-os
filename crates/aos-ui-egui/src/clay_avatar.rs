@@ -442,7 +442,7 @@ fn paint_clay(
     paint_face(painter, c, s, spec.face, pose);
 
     if selected {
-        painter.circle_stroke(c, s * 1.18, Stroke::new(2.0, color));
+        painter.circle_stroke(c, s * 1.18, Stroke::new(2.0_f32, color));
     }
 }
 
@@ -938,7 +938,7 @@ fn paint_color_row(ui: &mut Ui, color_hex: &mut String, fallback: Color32, auto_
             ui.painter().circle_stroke(
                 rect.center(),
                 9.0,
-                Stroke::new(if auto_on { 2.0 } else { 1.0 }, fallback),
+                Stroke::new(if auto_on { 2.0_f32 } else { 1.0_f32 }, fallback),
             );
             ui.painter().text(
                 rect.center(),
@@ -963,7 +963,7 @@ fn paint_color_row(ui: &mut Ui, color_hex: &mut String, fallback: Color32, auto_
                     ui.painter().circle_stroke(
                         rect.center(),
                         9.0,
-                        Stroke::new(2.0, ui.visuals().strong_text_color()),
+                        Stroke::new(2.0_f32, ui.visuals().strong_text_color()),
                     );
                 }
             }

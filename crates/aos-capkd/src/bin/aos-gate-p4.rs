@@ -66,6 +66,7 @@ async fn infer_ok(bus: &BusClient, prompt: &str, max_tokens: u32) -> bool {
                     role: "user".into(),
                     content: prompt.into(),
                 }],
+                tools: vec![],
                 params: InferParams {
                     max_tokens,
                     ..Default::default()

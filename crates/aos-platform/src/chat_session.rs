@@ -5,9 +5,9 @@ use aos_proto::{
     normalize_canvas_color, normalize_canvas_op_coords, resolve_canvas_op_style_ex,
     set_canvas_op_body_dash, set_canvas_op_body_gradient, set_canvas_op_body_opacity,
     set_canvas_op_rotation, translate_canvas_op_body, usable_canvas_bbox, CanvasAspect, CanvasDoc,
-    CanvasEdit, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody, CanvasPenStyle,
-    ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
-    ChatSessionMode, DeepPlan,
+    CanvasEdit, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody,
+    CanvasPenStyle, CanvasSceneSpec, ChatAttachment, ChatRoomConductorPolicy, ChatRoomMember,
+    ChatSessionMessage, ChatSessionMeta, ChatSessionMode, DeepPlan,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -529,6 +529,112 @@ impl ChatSessionStore {
         meta.updated_ms = Self::now_ms();
         self.save_meta(&meta)?;
         Ok((self.to_public(meta), doc))
+    }
+
+    /// Met à jour les guides de construction partagés par l'UI et les agents.
+    pub fn canvas_set_guides(
+        &self,
+        id: &str,
+        show_grid: Option<bool>,
+        snap: Option<bool>,
+        grid_size: Option<f32>,
+        snap_mode: Option<aos_proto::CanvasSnapMode>,
+    ) -> Result<(ChatSessionMeta, CanvasDoc), SessionError> {
+        let _ = self.load_meta(id)?;
+        let mut doc = self.load_canvas(id)?;
+        doc.session_id = id.into();
+        if let Some(v) = show_grid {
+            doc.guides.show_grid = v;
+        }
+        if let Some(v) = snap {
+            doc.guides.snap = v;
+        }
+        if let Some(v) = grid_size {
+            if !v.is_finite() || !(0.001..=0.25).contains(&v) {
+                return Err(SessionError::BadRequest(
+                    "grid_size doit être compris entre 0.001 et 0.25".into(),
+                ));
+            }
+            doc.guides.grid_size = v;
+        }
+        if let Some(v) = snap_mode {
+            doc.guides.snap_mode = v;
+        }
+        self.save_canvas(&doc)?;
+        let mut meta = self.load_meta(id)?;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok((self.to_public(meta), doc))
+    }
+
+    /// Compile une scène intermédiaire en opérations vectorielles persistées.
+    /// Les calques nommés de la scène sont créés à la volée si nécessaire.
+    pub fn canvas_compose(
+        &self,
+        id: &str,
+        author_id: &str,
+        scene: CanvasSceneSpec,
+    ) -> Result<(ChatSessionMeta, CanvasDoc, usize), SessionError> {
+        if author_id.trim().is_empty() {
+            return Err(SessionError::BadRequest("author_id requis".into()));
+        }
+        let mut meta = self.load_meta(id)?;
+        let mut doc = self.load_canvas(id)?;
+        doc.session_id = id.into();
+        ensure_canvas_layers(&mut doc);
+        if let Some(guides) = scene.guides.clone() {
+            doc.guides = guides;
+        }
+        let compiled = aos_proto::compile_canvas_scene(&scene)
+            .map_err(SessionError::BadRequest)?;
+        let mut applied_count = 0;
+        for (layer_name, mut body) in compiled {
+            let layer_id = if let Some(name) = layer_name.filter(|v| !v.trim().is_empty()) {
+                if let Some(layer) = doc
+                    .layers
+                    .iter()
+                    .find(|layer| layer.id == name || layer.name == name)
+                {
+                    layer.id.clone()
+                } else {
+                    let id = format!("lyr-{}", doc.next_layer_id.max(2));
+                    doc.next_layer_id = doc.next_layer_id.saturating_add(1);
+                    doc.layers.push(CanvasLayer {
+                        id: id.clone(),
+                        name,
+                        ..Default::default()
+                    });
+                    id
+                }
+            } else {
+                doc.active_layer_id.clone()
+            };
+            if canvas_layer_effective_locked(&doc, &layer_id) {
+                return Err(SessionError::BadRequest(format!(
+                    "calque verrouillé: {layer_id}"
+                )));
+            }
+            normalize_canvas_op_coords(&mut body);
+            resolve_canvas_op_style_ex(&mut body, &doc.pen);
+            let op = CanvasOp {
+                seq: doc.next_seq,
+                author_id: author_id.into(),
+                ts_ms: Self::now_ms(),
+                layer_id,
+                body,
+            };
+            doc.next_seq = doc.next_seq.saturating_add(1);
+            doc.ops.push(op);
+            applied_count += 1;
+        }
+        doc.scene = Some(scene);
+        self.save_canvas(&doc)?;
+        if !meta.canvas_open {
+            meta.canvas_open = true;
+        }
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok((self.to_public(meta), doc, applied_count))
     }
 
     pub fn canvas_set_open(&self, id: &str, open: bool) -> Result<ChatSessionMeta, SessionError> {

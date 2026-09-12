@@ -21,6 +21,26 @@ pub struct ToolDesc {
     pub required_caps: Vec<String>,
 }
 
+/// Convertit le catalogue interne vers le format attendu par les chat
+/// templates HuggingFace/OpenAI. Les templates natifs (Gemma 4 notamment)
+/// utilisent cette structure pour injecter les déclarations `<|tool>`, alors
+/// que le runtime continue d'exécuter le nom et les arguments normalisés.
+pub fn chat_template_tool_definitions(tools: &[ToolDesc]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema,
+                }
+            })
+        })
+        .collect()
+}
+
 /// Catalogue de base des outils natifs plateforme + runtime.
 pub fn builtin_catalog() -> Vec<ToolDesc> {
     let mut v = vec![
@@ -614,6 +634,53 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             "description":"Omit — runtime binds the agent chat session_id (do not invent chat-1/default)"
         })
     };
+    let scene_geometry_schema = serde_json::json!({
+        "oneOf":[
+            {"type":"object","properties":{
+                "kind":{"const":"rect"},"x":{"type":"number"},"y":{"type":"number"},
+                "w":{"type":"number","exclusiveMinimum":0},"h":{"type":"number","exclusiveMinimum":0},
+                "rotation":{"type":"number"}
+            },"required":["kind","x","y","w","h"]},
+            {"type":"object","properties":{
+                "kind":{"const":"ellipse"},"x":{"type":"number"},"y":{"type":"number"},
+                "w":{"type":"number","exclusiveMinimum":0},"h":{"type":"number","exclusiveMinimum":0},
+                "rotation":{"type":"number"}
+            },"required":["kind","x","y","w","h"]},
+            {"type":"object","properties":{
+                "kind":{"const":"line"},"p0":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]},
+                "p1":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}
+            },"required":["kind","p0","p1"]},
+            {"type":"object","properties":{
+                "kind":{"enum":["path","spline"]},
+                "points":{"type":"array","minItems":2,"items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
+                "closed":{"type":"boolean"}
+            },"required":["kind","points"]},
+            {"type":"object","properties":{
+                "kind":{"const":"text"},"x":{"type":"number"},"y":{"type":"number"},"text":{"type":"string"},
+                "size":{"type":"number","exclusiveMinimum":0},"rotation":{"type":"number"}
+            },"required":["kind","x","y","text"]}
+        ]
+    });
+    let scene_schema = serde_json::json!({
+        "type":"object",
+        "description":"CanvasSceneSpec v1. Coordonnées normalisées 0..1, origine en haut à gauche. Pour rect/ellipse, x,y est le coin haut-gauche et w,h la taille : le centre vaut (x+w/2,y+h/2), donc centre=.5 avec w=.4 signifie x=.3, pas x=.5.",
+        "properties":{
+            "version":{"const":1},
+            "profile":{"enum":["primitives","illustration","diagram","math","freeform"]},
+            "subject":{"type":"string"},"reference":{"type":"string"},"view":{"type":"string"},
+            "elements":{"type":"array","minItems":1,"items":{"type":"object","properties":{
+                "id":{"type":"string"},"role":{"type":"string"},"layer":{"type":"string"},
+                "color":{"type":"string","description":"#RRGGBB"},"width":{"type":"number"},"fill":{"type":"boolean"},
+                "opacity":{"type":"number"},"dash":{"type":"array","items":{"type":"number"}},
+                "geometry":scene_geometry_schema
+            },"required":["id","geometry"]}},
+            "relations":{"type":"array","items":{"type":"object","properties":{
+                "from":{"type":"string"},"relation":{"type":"string","description":"ex. attached_to, overlaps, aligns_with"},"to":{"type":"string"}
+            },"required":["from","relation","to"]}},
+            "guides":{"type":"object"}
+        },
+        "required":["elements"]
+    });
     let canvas_tools = [
         (
             "canvas.set_style",
@@ -931,6 +998,33 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             }),
         ),
         (
+            "canvas.set_guides",
+            "Configurer les guides partagés (grille visible, aimant, taille de grille et mode grid|anchors|edges|grid_and_anchors)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "show_grid":{"type":"boolean"},
+                    "snap":{"type":"boolean"},
+                    "grid_size":{"type":"number","description":"pas normalisé 0.001..0.25"},
+                    "snap_mode":{"type":"string","description":"grid|anchors|edges|grid_and_anchors"}
+                }
+            }),
+        ),
+        (
+            "canvas.compose",
+            "Compiler une CanvasSceneSpec versionnée en une scène complète. Coordonnées 0..1, origine haut-gauche : pour rect/ellipse x,y=coin haut-gauche et w,h=taille (centre=(x+w/2,y+h/2), jamais x,y=centre). Pour profile=illustration, les masses qui composent le sujet doivent se chevaucher ou se toucher ; indique les relations attached_to/overlaps et vérifie les avertissements scene_check avant export. Pour un graphe ou des maths, préférer les primitives.",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "author_id":{"type":"string"},
+                    "scene":scene_schema
+                },
+                "required":["scene"]
+            }),
+        ),
+        (
             "canvas.get",
             "Lire le canvas existant (toujours en premier ; after_seq optionnel) — poursuis le dessin, ne redémarre pas sauf demande",
             serde_json::json!({
@@ -995,6 +1089,8 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.layer_activate",
     "canvas.align",
     "canvas.rotate",
+    "canvas.set_guides",
+    "canvas.compose",
 ];
 
 /// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.
@@ -1075,10 +1171,12 @@ pub fn restrict_canvas_tools(tool_ids: &mut Vec<String>, exported: &[String]) {
 
 /// Short drawing strategy for canvas agents — only mentions exported tools.
 pub fn canvas_draw_strategy_hint(exported: &[String]) -> String {
-    if exported.iter().any(|t| t == "canvas.path") {
-        "canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels.".into()
+    if exported.iter().any(|t| t == "canvas.compose") {
+        "PROTOCOLE : canvas.get → pour une illustration/objet/personnage, préfère une seule canvas.compose avec profile=illustration et une scène complète (masse principale, partie supérieure, appendices, détails, calques) ; pour graphe/schéma/math, utilise les primitives → relis → canvas.export en dernier.".into()
+    } else if exported.iter().any(|t| t == "canvas.path") {
+        "PROTOCOLE : canvas.get → lis digest/capture → une seule op (canvas.path pour silhouette, canvas.stroke/rect/ellipse pour détails) → relis → répète → canvas.export en dernier.".into()
     } else {
-        "canvas.get puis canvas.stroke/spline/rect/ellipse (fill:true pour remplir) en traits séquentiels.".into()
+        "PROTOCOLE : canvas.get → lis digest/capture → une seule op (canvas.stroke/spline/rect/ellipse, fill:true pour remplir) → relis → répète → canvas.export en dernier.".into()
     }
 }
 
@@ -1467,6 +1565,13 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
             }
         }
         obj.remove("fill_color");
+        if name == "canvas.compose" && !obj.contains_key("scene") {
+            // Common model wrapper alias. The module contract is `scene`,
+            // while local models often call the same payload `scene_spec`.
+            if let Some(scene) = obj.remove("scene_spec") {
+                obj.insert("scene".into(), scene);
+            }
+        }
     }
     if name == "media.audio.generate" && !obj.contains_key("text") {
         for k in ["prompt", "content", "message", "speech"] {
@@ -1533,6 +1638,27 @@ pub fn caps_subset(parent: &[String], child: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chat_template_tool_definitions_use_openai_function_shape() {
+        let input = ToolDesc {
+            name: "canvas.get".into(),
+            description: "Lire la scène".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {"after_seq": {"type": "integer"}}
+            }),
+            backend: ToolBackend::Runtime,
+            required_caps: vec![],
+        };
+        let defs = chat_template_tool_definitions(&[input]);
+        assert_eq!(defs[0]["type"], "function");
+        assert_eq!(defs[0]["function"]["name"], "canvas.get");
+        assert_eq!(
+            defs[0]["function"]["parameters"]["properties"]["after_seq"]["type"],
+            "integer"
+        );
+    }
 
     #[test]
     fn subset_ok() {
@@ -1648,6 +1774,23 @@ mod tests {
         assert_eq!(args["color"], "#333333");
         assert_eq!(args["width"], 0.02);
         assert!(args.get("style").is_none());
+    }
+
+    #[test]
+    fn normalize_canvas_compose_scene_spec_alias() {
+        let args = normalize_tool_args(
+            "canvas.compose",
+            &serde_json::json!({
+                "scene_spec": {
+                    "version": 1,
+                    "profile": "illustration",
+                    "subject": "chat",
+                    "elements": []
+                }
+            }),
+        );
+        assert_eq!(args["scene"]["subject"], "chat");
+        assert!(args.get("scene_spec").is_none());
     }
 
     #[test]

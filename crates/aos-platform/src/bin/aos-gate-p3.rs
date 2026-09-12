@@ -109,6 +109,7 @@ async fn main() {
                     role: "user".into(),
                     content: "dis bonjour".into(),
                 }],
+                tools: vec![],
                 params: InferParams {
                     max_tokens: 8,
                     ..Default::default()
@@ -178,6 +179,7 @@ async fn main() {
                     role: "user".into(),
                     content: "test".into(),
                 }],
+                tools: vec![],
                 params: InferParams::default(),
                 priority: 1,
                 data_refs: vec![],

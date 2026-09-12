@@ -21,6 +21,19 @@ pub(crate) fn on_done(
     session_id: String,
     attachments: Vec<ChatAttachment>,
 ) {
+    let model_id = app
+        .chat_state
+        .sessions
+        .iter()
+        .find(|session| session.id == session_id)
+        .and_then(|session| session.model_id.clone())
+        .filter(|id| !id.trim().is_empty())
+        .or_else(|| {
+            app.prefs
+                .default_agent_model
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+        });
     session_chat::on_done(
         &mut app.chat_state.session_chat,
         app.chat_state.active_session.as_deref(),
@@ -31,6 +44,7 @@ pub(crate) fn on_done(
         &mut app.chat_state.runtime.streaming,
         &mut app.chat_state.runtime.pending,
         &mut app.chat_state.runtime.inference_id,
+        model_id,
     );
     app.chat_state.runtime.load_fail_retry = None;
     if app.status.starts_with("assistant :") {

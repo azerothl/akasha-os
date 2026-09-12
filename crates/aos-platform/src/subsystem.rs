@@ -942,6 +942,8 @@ impl HostServices for PlatformSubsystem {
                     "pen": doc.pen,
                     "layers": doc.layers,
                     "active_layer_id": doc.active_layer_id,
+                    "guides": doc.guides,
+                    "scene": doc.scene,
                 }))
             }
             "canvas.set_style" => {
@@ -966,6 +968,79 @@ impl HostServices for PlatformSubsystem {
                     "canvas_open": meta.canvas_open,
                     "pen": doc.pen,
                     "next_seq": doc.next_seq,
+                }))
+            }
+            "canvas.set_guides" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.set_guides réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let show_grid = args.get("show_grid").and_then(|v| v.as_bool());
+                let snap = args.get("snap").and_then(|v| v.as_bool());
+                let grid_size = args
+                    .get("grid_size")
+                    .and_then(|v| v.as_f64())
+                    .map(|v| v as f32);
+                let snap_mode = args
+                    .get("snap_mode")
+                    .cloned()
+                    .map(serde_json::from_value::<aos_proto::CanvasSnapMode>)
+                    .transpose()
+                    .map_err(|e| format!("snap_mode invalide: {e}"))?;
+                let apply_lock = self.canvas_apply_lock(&session_id);
+                let _guard = apply_lock.lock().unwrap();
+                let (meta, doc) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_set_guides(&session_id, show_grid, snap, grid_size, snap_mode)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "canvas_open": meta.canvas_open,
+                    "guides": doc.guides,
+                    "next_seq": doc.next_seq,
+                }))
+            }
+            "canvas.compose" => {
+                if ctx.module != "canvas" {
+                    return Err("canvas.compose réservé au module canvas".into());
+                }
+                let session_id = args["session_id"].as_str().unwrap_or("").to_string();
+                if session_id.is_empty() {
+                    return Err("session_id requis".into());
+                }
+                let scene = args
+                    .get("scene")
+                    .cloned()
+                    .ok_or_else(|| "scene requise".to_string())
+                    .and_then(|v| {
+                        serde_json::from_value::<aos_proto::CanvasSceneSpec>(v)
+                            .map_err(|e| format!("scene invalide: {e}"))
+                    })?;
+                let author_id = args
+                    .get("author_id")
+                    .and_then(|v| v.as_str())
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(|| ctx.actor.strip_prefix("agent:").unwrap_or("agent"));
+                let apply_lock = self.canvas_apply_lock(&session_id);
+                let _guard = apply_lock.lock().unwrap();
+                let (meta, doc, applied_count) = self
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .canvas_compose(&session_id, author_id, scene.clone())
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({
+                    "canvas_open": meta.canvas_open,
+                    "next_seq": doc.next_seq,
+                    "applied_count": applied_count,
+                    "scene": scene,
+                    "guides": doc.guides,
+                    "layers": doc.layers,
+                    "active_layer_id": doc.active_layer_id,
                 }))
             }
             "canvas.apply" => {
@@ -1037,6 +1112,8 @@ impl HostServices for PlatformSubsystem {
                     "ops": doc.ops,
                     "layers": doc.layers,
                     "active_layer_id": doc.active_layer_id,
+                    "guides": doc.guides,
+                    "scene": doc.scene,
                 }))
             }
             "canvas.export" => {

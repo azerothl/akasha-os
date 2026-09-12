@@ -412,6 +412,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         thinking: m.thinking,
                         ts_ms: m.ts_ms,
                         duration_ms: 0,
+                        model_id: None,
                     }
                 })
                 .collect();
@@ -2891,6 +2892,8 @@ impl eframe::App for UiApp {
                     canvas_seeing,
                     layers,
                     active_layer_id,
+                    guides,
+                    scene,
                 } => {
                     canvas_event_controller::on_canvas_snapshot(
                         self,
@@ -2905,6 +2908,8 @@ impl eframe::App for UiApp {
                             canvas_seeing,
                             layers,
                             active_layer_id,
+                            guides,
+                            scene,
                         },
                     );
                 }

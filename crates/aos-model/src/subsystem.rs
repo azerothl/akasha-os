@@ -81,6 +81,7 @@ struct DispatchJob {
     job_id: u64,
     priority: u8,
     messages: Vec<(String, String)>,
+    tools: Vec<serde_json::Value>,
     params: GenParams,
     /// Chemins locaux PNG/JPEG pour le dernier tour user (vision / mtmd).
     images: Vec<String>,
@@ -896,6 +897,7 @@ impl ModelSubsystem {
                 .iter()
                 .map(|m| (m.role.clone(), m.content.clone()))
                 .collect(),
+            tools: req.tools.clone(),
             params: GenParams {
                 max_tokens: req.params.max_tokens,
                 temperature: req.params.temperature,
@@ -1663,15 +1665,17 @@ impl ModelSubsystem {
                             let res = if should_use_vision_infer(guard.has_vision(), &job.images) {
                                 let paths: Vec<PathBuf> =
                                     job.images.iter().map(PathBuf::from).collect();
-                                guard.generate_with_images(
+                                guard.generate_with_images_and_tools(
                                     &job.messages,
+                                    &job.tools,
                                     &job.params,
                                     &paths,
                                     on_delta,
                                 )
                             } else if use_prefix_spec {
-                                guard.generate_lookup(
+                                guard.generate_lookup_with_tools(
                                     &job.messages,
+                                    &job.tools,
                                     &job.params,
                                     job.abort.clone(),
                                     job.pause.clone(),
@@ -1679,7 +1683,12 @@ impl ModelSubsystem {
                                     on_delta,
                                 )
                             } else {
-                                guard.generate(&job.messages, &job.params, on_delta)
+                                guard.generate_with_tools(
+                                    &job.messages,
+                                    &job.tools,
+                                    &job.params,
+                                    on_delta,
+                                )
                             };
                             let gen_text = generated.lock().unwrap().clone();
                             let warm_out = if use_prefix_spec {
@@ -1741,6 +1750,7 @@ impl ModelSubsystem {
                                     job_id: job.job_id,
                                     priority: job.priority,
                                     messages: resume_messages(&job.messages, &gen_text),
+                                    tools: job.tools,
                                     params,
                                     images: vec![],
                                     abort: job.abort,
@@ -1813,6 +1823,7 @@ impl ModelSubsystem {
                 job_id: u64,
                 priority: u8,
                 messages: Vec<(String, String)>,
+                tools: Vec<serde_json::Value>,
                 params: GenParams,
                 delta_tx: mpsc::Sender<TokenEvent>,
                 done_tx: Option<oneshot::Sender<InferOutcome>>,
@@ -1827,6 +1838,7 @@ impl ModelSubsystem {
                         job_id: j.job_id,
                         priority: j.priority,
                         messages: j.messages.clone(),
+                        tools: j.tools.clone(),
                         params: j.params.clone(),
                         delta_tx: j.delta_tx.clone(),
                         done_tx: None, // rempli après move
@@ -1846,6 +1858,7 @@ impl ModelSubsystem {
                     done_txs[i] = Some(j.done_tx);
                     BatchItem {
                         messages: j.messages,
+                        tools: j.tools,
                         params: j.params,
                         abort: j.abort,
                         pause: j.pause,
@@ -1895,6 +1908,7 @@ impl ModelSubsystem {
                                 }
                                 let item = BatchItem {
                                     messages: j.messages.clone(),
+                                    tools: j.tools.clone(),
                                     params: j.params.clone(),
                                     abort: j.abort.clone(),
                                     pause: j.pause.clone(),
@@ -1905,6 +1919,7 @@ impl ModelSubsystem {
                                     job_id: j.job_id,
                                     priority: j.priority,
                                     messages: j.messages,
+                                    tools: j.tools,
                                     params: j.params,
                                     delta_tx: j.delta_tx,
                                     done_tx: Some(j.done_tx),
@@ -2007,6 +2022,7 @@ impl ModelSubsystem {
                             job_id: io.job_id,
                             priority: io.priority,
                             messages: resume_messages(&io.messages, &io.generated),
+                            tools: io.tools,
                             params,
                             images: vec![],
                             abort: io.abort,
