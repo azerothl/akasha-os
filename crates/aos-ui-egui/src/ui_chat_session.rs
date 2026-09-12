@@ -555,39 +555,6 @@ impl UiApp {
             });
         }
 
-        if canvas_open {
-            let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
-            let mut open_canvas_guide = false;
-            let select_active = self.chat_state.view.canvas.tool == chat_canvas::CanvasTool::Select
-                && self.chat_state.view.canvas.selected_seq.is_some();
-            let track_w = ui.available_width();
-            let toolbar_rows = chat_canvas::toolbar_row_count(select_active, track_w);
-            let toolbar_h = (toolbar_rows as f32 * chat_canvas::toolbar_row_height() + 4.0)
-                .min(chat_canvas::toolbar_max_height());
-            ui.allocate_ui_with_layout(
-                egui::vec2(track_w, toolbar_h),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.set_width(track_w);
-                    ui.set_max_width(track_w);
-                    toolbar_action = chat_canvas::ui_canvas_toolbar(
-                        ui,
-                        t,
-                        &mut self.chat_state.view.canvas,
-                        chat_canvas::canvas_agent_drawing_on_session(&self.agents, &sid),
-                        Some(g.help_tooltip),
-                        &mut open_canvas_guide,
-                    );
-                },
-            );
-            if open_canvas_guide {
-                self.guide.open_topic(guide::GuideTopic::Canvas);
-            }
-            if let Some(action) = toolbar_action {
-                self.dispatch_canvas_ui_action(Some(action), &sid);
-            }
-        }
-
         if room {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -607,6 +574,47 @@ impl UiApp {
         }
 
         ui.add_space(4.0);
+    }
+
+    /// Tools / style / export strip that sits above the canvas surface only
+    /// (keeps transcript height free when the detail panel is open).
+    pub(crate) fn ui_canvas_tools_above_surface(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &i18n::UiStrings,
+        session_id: &str,
+    ) {
+        let mut toolbar_action: Option<chat_canvas::CanvasUiAction> = None;
+        let mut open_canvas_guide = false;
+        let select_active = self.chat_state.view.canvas.tool == chat_canvas::CanvasTool::Select
+            && self.chat_state.view.canvas.selected_seq.is_some();
+        let track_w = ui.available_width();
+        let toolbar_rows = chat_canvas::toolbar_row_count(select_active, track_w);
+        let toolbar_h = (toolbar_rows as f32 * chat_canvas::toolbar_row_height() + 4.0)
+            .min(chat_canvas::toolbar_max_height());
+        ui.allocate_ui_with_layout(
+            egui::vec2(track_w, toolbar_h),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_width(track_w);
+                ui.set_max_width(track_w);
+                let g = guide::strings(&self.prefs.language);
+                toolbar_action = chat_canvas::ui_canvas_toolbar(
+                    ui,
+                    t,
+                    &mut self.chat_state.view.canvas,
+                    chat_canvas::canvas_agent_drawing_on_session(&self.agents, session_id),
+                    Some(g.help_tooltip),
+                    &mut open_canvas_guide,
+                );
+            },
+        );
+        if open_canvas_guide {
+            self.guide.open_topic(guide::GuideTopic::Canvas);
+        }
+        if let Some(action) = toolbar_action {
+            self.dispatch_canvas_ui_action(Some(action), session_id);
+        }
     }
 
     fn ui_session_switcher(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
@@ -839,8 +847,10 @@ impl UiApp {
             placement,
             egui::PopupCloseBehavior::CloseOnClickOutside,
             |ui| {
-                ui.set_min_width(240.0);
-                ui.set_max_width(320.0);
+                // Keep the menu inside the window when the composer sits in a narrow pane.
+                let max_w = (ui.ctx().screen_rect().width() * 0.42).clamp(160.0, 280.0);
+                ui.set_min_width(max_w.min(200.0));
+                ui.set_max_width(max_w);
                 ui.label(egui::RichText::new(t.status_model_label).small().strong());
                 egui::ScrollArea::vertical()
                     .max_height(260.0)
@@ -859,8 +869,9 @@ impl UiApp {
                                 &infos,
                                 t.status_model_default,
                             );
+                            let short = crate::agent_panel::truncate(&label, 36);
                             if ui
-                                .selectable_label(selected, label)
+                                .selectable_label(selected, short)
                                 .on_hover_text(&m.id)
                                 .clicked()
                             {

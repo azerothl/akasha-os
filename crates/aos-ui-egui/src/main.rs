@@ -140,7 +140,7 @@ use chat_delegate::{
 };
 use cmd::{ChatLine, Cmd, Evt, NoticeSeverity};
 #[cfg(test)]
-use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
+use composer_layout::chat_composer_wraps;
 use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 use eframe::egui;
 use egui_commonmark::CommonMarkCache;

@@ -312,6 +312,27 @@ pub fn caret(ui: &mut Ui, expanded: bool) -> Response {
     response
 }
 
+/// Painted dropdown chevron (two strokes) — not a font glyph.
+pub fn dropdown_chevron(ui: &mut Ui) -> Response {
+    let size = Vec2::new(12.0, 12.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let color = ui.visuals().weak_text_color();
+        let stroke = Stroke::new(1.5_f32, color);
+        let c = rect.center();
+        let s = 3.4_f32;
+        ui.painter().line_segment(
+            [c + Vec2::new(-s, -s * 0.15), c + Vec2::new(0.0, s * 0.65)],
+            stroke,
+        );
+        ui.painter().line_segment(
+            [c + Vec2::new(0.0, s * 0.65), c + Vec2::new(s, -s * 0.15)],
+            stroke,
+        );
+    }
+    response
+}
+
 /// Status dot prefix (replaces `●`).
 pub fn status_dot(ui: &mut Ui, color: Color32) -> Response {
     let size = Vec2::splat(10.0);

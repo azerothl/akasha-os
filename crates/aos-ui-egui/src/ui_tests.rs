@@ -663,8 +663,8 @@ mod layout_tests {
     use super::*;
     use crate::chat_bubble::ChatBubbleKind;
     use crate::composer_layout::{
-        bounded_chat_workspace_width, chat_canvas_layout, chat_composer_reserve_height,
-        chat_sessions_split, composer_field_width, ChatCanvasLayout,
+        self as composer_layout, bounded_chat_workspace_width, chat_canvas_layout,
+        chat_composer_reserve_height, chat_sessions_split, composer_field_width, ChatCanvasLayout,
     };
 
     #[test]
@@ -735,28 +735,35 @@ mod layout_tests {
     }
 
     #[test]
-    fn composer_field_width_reserves_fr_envoyer() {
+    fn composer_field_width_reserves_attach_only() {
         let fr = i18n::strings("fr");
         let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
         let field = composer_field_width(420.0, send_w, icons::ATTACH_BTN_W, 0.0, 4.0, false);
-        assert!(field > 80.0);
+        // Actions sit on the strip below — field only loses attach + gap.
+        assert!((field - (420.0 - icons::ATTACH_BTN_W - 4.0)).abs() < 0.01);
         assert!(send_w >= estimate_composer_buttons_w("Envoyer", false, ""));
     }
 
     #[test]
-    fn composer_field_width_at_900_central_pane() {
+    fn composer_field_width_at_narrow_detail_pane() {
         let fr = i18n::strings("fr");
         let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
         let stop_w = estimate_composer_buttons_w("Stop", false, "");
-        let field = composer_field_width(580.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
+        let field = composer_field_width(280.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
         assert!(field > 200.0);
-        assert!(field + send_w + stop_w + icons::ATTACH_BTN_W + 12.0 <= 580.0 + 0.01);
+        assert!(field + icons::ATTACH_BTN_W + 4.0 <= 280.0 + 0.01);
     }
 
     #[test]
-    fn composer_reserve_height_is_single_row() {
-        let h = chat_composer_reserve_height(400.0, 0, 0, 0, false);
-        assert!((h - (COMPOSER_INPUT_ROW_H + 16.0)).abs() < 0.01);
+    fn composer_reserve_height_includes_action_strip() {
+        let h = chat_composer_reserve_height(900.0, 0, 0, 0, false);
+        let expected = composer_layout::composer_frame_base_height();
+        assert!(
+            (h - expected).abs() < 0.01,
+            "wide pane should reserve one action strip: got {h}, expected {expected}"
+        );
+        let narrow = chat_composer_reserve_height(300.0, 0, 0, 0, false);
+        assert!(narrow > expected, "narrow pane reserves a wrapped action strip");
     }
 
     #[test]

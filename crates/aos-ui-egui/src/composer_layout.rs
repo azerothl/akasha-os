@@ -4,7 +4,19 @@ use crate::i18n::UiStrings;
 use eframe::egui;
 
 pub(crate) const COMPOSER_MIN_INPUT_W: f32 = 140.0;
+/// Minimum height of the multiline field (one visual line).
 pub(crate) const COMPOSER_INPUT_ROW_H: f32 = 44.0;
+/// Action strip under the field (model chip + send/stop). Must fit chip
+/// padding + 28px control — too short and Envoyer clips under the frame.
+pub(crate) const COMPOSER_ACTION_ROW_H: f32 = 36.0;
+/// Vertical gap between field zone and action strip inside the frame.
+pub(crate) const COMPOSER_ZONE_GAP: f32 = 6.0;
+/// Inner vertical padding of the composer frame (top + bottom).
+pub(crate) const COMPOSER_FRAME_PAD_V: f32 = 16.0;
+/// Below this inner width, the action strip wraps onto two lines.
+pub(crate) const COMPOSER_NARROW_W: f32 = 420.0;
+/// Reserved width for the model chip before egui measures it.
+pub(crate) const COMPOSER_MODEL_CHIP_W: f32 = 120.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ComposerEnterAction {
@@ -117,7 +129,7 @@ pub(crate) fn stop_button_reserved_width(ui: &egui::Ui, strings: &UiStrings) -> 
     measured.max(french_floor)
 }
 
-/// Field width after reserving fixed send, stop, paperclip, and gap chrome.
+/// Field width after reserving only the attach control (actions live on a strip below).
 pub(crate) fn composer_field_width(
     row_w: f32,
     send_w: f32,
@@ -126,17 +138,38 @@ pub(crate) fn composer_field_width(
     gap: f32,
     show_stop: bool,
 ) -> f32 {
-    let gaps = if show_stop { gap * 3.0 } else { gap * 2.0 };
-    let chrome = send_w + attach_w + gaps + if show_stop { stop_w } else { 0.0 };
-    (row_w - chrome).max(0.0)
+    let _ = (send_w, stop_w, show_stop);
+    (row_w - attach_w - gap).max(0.0)
 }
 
+/// True when the action strip (model chip + buttons) should stack.
 #[cfg(test)]
 pub(crate) fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
-    available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
+    let _ = attach_w;
+    available_w < COMPOSER_NARROW_W
+        || available_w - COMPOSER_MODEL_CHIP_W - buttons_w < 24.0
 }
 
-/// Vertical space for the fixed send row and optional stacks growing upward.
+/// Base frame height for a one-line field + action strip.
+pub(crate) fn composer_frame_base_height() -> f32 {
+    COMPOSER_INPUT_ROW_H
+        + COMPOSER_ZONE_GAP
+        + COMPOSER_ACTION_ROW_H
+        + COMPOSER_FRAME_PAD_V
+        + 4.0
+}
+
+/// How many action-strip rows to reserve for the current width.
+pub(crate) fn composer_action_row_count(available_w: f32, show_stop: bool, buttons_w: f32) -> usize {
+    let chrome = COMPOSER_MODEL_CHIP_W + buttons_w + if show_stop { 8.0 } else { 4.0 };
+    if available_w < COMPOSER_NARROW_W || available_w < chrome + 16.0 {
+        2
+    } else {
+        1
+    }
+}
+
+/// Vertical space for the composer frame and optional stacks growing upward.
 pub(crate) fn chat_composer_reserve_height(
     chat_w: f32,
     ask_queue_len: usize,
@@ -149,7 +182,15 @@ pub(crate) fn chat_composer_reserve_height(
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
 
-    let mut height = COMPOSER_INPUT_ROW_H + 16.0;
+    // Assume Stop may show; FR Envoyer + Stop is the worst case for wrap.
+    let buttons_w = estimate_composer_buttons_w("Envoyer", true, "Stop");
+    let action_rows = composer_action_row_count(chat_w, true, buttons_w) as f32;
+    let mut height = COMPOSER_INPUT_ROW_H
+        + COMPOSER_ZONE_GAP
+        + COMPOSER_ACTION_ROW_H * action_rows
+        + COMPOSER_FRAME_PAD_V
+        + 4.0; // breathe so chip/send never clip under the frame edge
+    // Keep in sync with composer_frame_base_height()'s +4 for the single-row case.
     if ask_queue_len > 1 {
         height += ASK_QUEUE_H;
     }
@@ -165,11 +206,10 @@ pub(crate) fn chat_composer_reserve_height(
     height
 }
 
-/// Height of the multiline composer, capped at five visible lines.  The first
-/// line keeps the 44 px minimum target from the original single-line control.
+/// Height of the multiline composer field, capped at five visible lines.
 pub(crate) fn chat_composer_input_height(input: &str) -> f32 {
     let lines = input.lines().count().clamp(1, 5) as f32;
-    (44.0 + (lines - 1.0) * 22.0).min(132.0)
+    (COMPOSER_INPUT_ROW_H + (lines - 1.0) * 22.0).min(132.0)
 }
 
 #[cfg(test)]
