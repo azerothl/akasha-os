@@ -333,6 +333,31 @@ pub fn dropdown_chevron(ui: &mut Ui) -> Response {
     response
 }
 
+/// Painted right-pointing send arrow (shaft + filled head) — not a font glyph.
+pub fn send_arrow(ui: &mut Ui, color: Color32) -> Response {
+    let size = Vec2::new(20.0, 10.0);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let stroke = Stroke::new(1.6_f32, color);
+        let y = rect.center().y;
+        let tip_x = rect.right() - 1.0;
+        let tail = Pos2::new(rect.left() + 1.0, y);
+        let tip = Pos2::new(tip_x, y);
+        let head = 4.2_f32;
+        ui.painter().line_segment([tail, Pos2::new(tip_x - head * 0.35, y)], stroke);
+        ui.painter().add(Shape::convex_polygon(
+            vec![
+                tip,
+                Pos2::new(tip_x - head, y - head * 0.72),
+                Pos2::new(tip_x - head, y + head * 0.72),
+            ],
+            color,
+            Stroke::NONE,
+        ));
+    }
+    response
+}
+
 /// Status dot prefix (replaces `●`).
 pub fn status_dot(ui: &mut Ui, color: Color32) -> Response {
     let size = Vec2::splat(10.0);
