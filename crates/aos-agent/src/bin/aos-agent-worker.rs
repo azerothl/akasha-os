@@ -1180,7 +1180,6 @@ async fn main() {
                                 }
                                 last_canvas_scene_png = Some(png);
                                 canvas_scene_changed = true;
-                                final_canvas_visual_review_pending = false;
                             }
                         }
                     }
@@ -1354,7 +1353,6 @@ async fn main() {
                             }
                             last_canvas_scene_png = Some(png);
                             canvas_scene_changed = true;
-                            final_canvas_visual_review_pending = false;
                         }
                     }
                 }
@@ -1674,6 +1672,7 @@ async fn main() {
                         )
                         .await;
                     } else {
+                        final_canvas_visual_review_pending = false;
                         report(
                             &bus,
                             &agent_id,
