@@ -486,6 +486,31 @@ pub fn canvas_critic_system_prompt() -> &'static str {
      Réponds directement, sans balises <think> ni monologue Thinking Process."
 }
 
+/// Parse the compact decision emitted by the visual canvas critic.
+///
+/// The critic is deliberately constrained to one machine-readable line so a
+/// final visual check can distinguish an explicit approval from prose such as
+/// "the drawing is probably fine". Unknown/malformed answers stay `None` and
+/// must not be treated as approval.
+pub fn canvas_critic_action(text: &str) -> Option<&'static str> {
+    text.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        if !key.trim().eq_ignore_ascii_case("ACTION") {
+            return None;
+        }
+        match value.trim().to_ascii_lowercase().as_str() {
+            "continue" => Some("continue"),
+            "modify" => Some("modify"),
+            "stop" => Some("stop"),
+            _ => None,
+        }
+    })
+}
+
+pub fn canvas_critic_approved(text: &str) -> bool {
+    canvas_critic_action(text) == Some("stop")
+}
+
 /// User content for reflect when canvas tools are available — includes recent canvas ops.
 pub fn canvas_reflect_user_content(
     step: u32,
@@ -567,6 +592,8 @@ pub async fn fetch_canvas_scene_digest(bus: &BusClient, session_id: &str) -> Opt
             pen: resp.pen,
             layers: resp.layers,
             active_layer_id: resp.active_layer_id,
+            guides: resp.guides,
+            scene: resp.scene,
             ..Default::default()
         },
         resp.canvas_aspect,
@@ -578,7 +605,11 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
     format!(
         "## Canvas actuel (canvas.get — ne pas deviner)\n\
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
-         Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
+         PROTOCOLE OBLIGATOIRE : (1) `canvas.get` avant toute autre opération canvas ; \
+         (2) lis le digest et la capture renvoyés ; (3) exécute une seule opération de composition ; \
+         (4) relis le résultat avant l'opération suivante ; (5) appelle `canvas.export` en dernier. \
+         Le runtime rejette toute opération canvas faite avant `canvas.get` : ne devine jamais l'état. \
+         État au début du tour :\n\
          ```\n{digest}\n```\n\
          Poursuis le dessin existant : ajoute une seule pièce manquante — ne restack pas la même bbox, pas canvas.clear. \
          Chaque op canvas doit inclure `color` (#RRGGBB) pour la teinte voulue (`fill_color` est un alias normalisé). \
@@ -671,6 +702,7 @@ pub fn canvas_draw_tool_applies_trait(tool: &str) -> bool {
             | "canvas.text"
             | "canvas.fill"
             | "canvas.erase"
+            | "canvas.compose"
     )
 }
 
@@ -742,6 +774,7 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
             | "canvas.layer_activate"
             | "canvas.align"
             | "canvas.rotate"
+            | "canvas.compose"
     )
 }
 
@@ -758,6 +791,7 @@ pub fn canvas_tool_completes_plan_node(tool: &str) -> bool {
             | "canvas.ellipse"
             | "canvas.text"
             | "canvas.fill"
+            | "canvas.compose"
     )
 }
 
@@ -870,7 +904,10 @@ fn model_is_resident(m: &ModelInfo) -> bool {
 /// Does not pick an on-disk vision GGUF (loading it would surprise VRAM).
 pub fn resident_vision_model_id(preferred: Option<&str>, models: &[ModelInfo]) -> Option<String> {
     if let Some(id) = preferred.filter(|s| !s.is_empty()) {
-        if models.iter().any(|m| m.id == id && m.has_vision) {
+        if models
+            .iter()
+            .any(|m| m.id == id && m.has_vision && model_is_resident(m))
+        {
             return Some(id.to_string());
         }
     }
@@ -899,7 +936,7 @@ pub async fn session_model_has_vision(bus: &BusClient, model_id: Option<&str>) -
         return models
             .iter()
             .find(|m| m.id == id)
-            .is_some_and(|m| m.has_vision);
+            .is_some_and(|m| m.has_vision && model_is_resident(m));
     }
     models.iter().any(|m| m.has_vision && model_is_resident(m))
 }
@@ -1149,6 +1186,8 @@ pub async fn fetch_canvas_aspect(bus: &BusClient, session_id: &str) -> CanvasAsp
             canvas_seeing: false,
             layers: vec![],
             active_layer_id: String::new(),
+            guides: Default::default(),
+            scene: None,
         });
     resp.canvas_aspect
 }
@@ -1328,6 +1367,7 @@ mod tests {
         assert!(canvas_tool_mutates_scene("canvas.fill"));
         assert!(canvas_tool_mutates_scene("canvas.move"));
         assert!(canvas_tool_mutates_scene("canvas.layer_set"));
+        assert!(canvas_tool_mutates_scene("canvas.compose"));
         assert!(!canvas_tool_mutates_scene("canvas.get"));
     }
 
@@ -1336,6 +1376,7 @@ mod tests {
         assert!(canvas_tool_completes_plan_node("canvas.spline"));
         assert!(canvas_tool_completes_plan_node("canvas.path"));
         assert!(canvas_tool_completes_plan_node("canvas.stroke"));
+        assert!(canvas_tool_completes_plan_node("canvas.compose"));
         assert!(!canvas_tool_completes_plan_node("canvas.set_style"));
         assert!(!canvas_tool_completes_plan_node("canvas.get"));
         assert!(!canvas_tool_completes_plan_node("canvas.export"));
@@ -1520,6 +1561,21 @@ mod tests {
         );
         assert!(resident_vision_model_id(Some("text"), &models[..1]).is_none());
         assert!(resident_vision_model_id(None, &models[..2]).is_none());
+    }
+
+    #[test]
+    fn critic_requires_an_explicit_stop_decision() {
+        assert_eq!(
+            canvas_critic_action("ACTION: continue\nSEQUENCES: 2\nNOTE: add eyes"),
+            Some("continue")
+        );
+        assert_eq!(
+            canvas_critic_action("ACTION: STOP\nSEQUENCES: none\nNOTE: enough"),
+            Some("stop")
+        );
+        assert!(!canvas_critic_approved("The image looks good enough."));
+        assert!(canvas_critic_approved("ACTION: stop\nSEQUENCES: none\nNOTE: done"));
+        assert_eq!(canvas_critic_action("ACTION: maybe"), None);
     }
 
     #[test]

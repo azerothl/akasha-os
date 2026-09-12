@@ -10,7 +10,8 @@ use aos_agent::actions::{
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason,
-    canvas_critic_system_prompt, canvas_op_succeeded, canvas_reflect_user_content,
+    canvas_critic_approved, canvas_critic_system_prompt, canvas_op_succeeded,
+    canvas_reflect_user_content,
     canvas_repeat_stroke_verdict, canvas_scene_prompt_block, canvas_text_only_critic_system_prompt,
     canvas_tool_mutates_scene, canvas_visual_fingerprint, canvas_visual_progress,
     canvas_visual_progress_note, end_canvas_vision, fetch_canvas_aspect,
@@ -567,6 +568,7 @@ async fn main() {
     let mut device_describe_hinted = false;
     let mut device_no_vision_hinted = false;
     let mut last_canvas_visual = None;
+    let mut final_canvas_visual_review_pending = false;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
 
     while terminal.is_none() {
@@ -986,6 +988,17 @@ async fn main() {
 
         let mut batch_actions = parse_actions(&infer.text);
         let parsed_ok = !batch_actions.is_empty();
+        if canvas_agent && batch_actions.len() > 1 {
+            // Canvas feedback is only meaningful after the previous op has
+            // been committed, exported, and re-read. Executing a whole tool
+            // batch lets identical shapes bypass the trace-based duplicate
+            // guard and makes vision critique stale for every op after the
+            // first one.
+            batch_actions.truncate(1);
+            shared.state.lock().await.push_user(
+                "[runtime] Canvas : une seule opération par tour. L'opération a été exécutée ; relis la capture et le digest avant la suivante.",
+            );
+        }
         if batch_actions.is_empty() {
             let prose = full_text.trim();
             let device_png_attached = last_device_capture_png
@@ -1072,7 +1085,7 @@ async fn main() {
             let canonical_action = canonicalize_tool_name(&action.action);
             let canvas_stage_block = {
                 let st = shared.state.lock().await;
-                st.canvas_preparation_action_block_reason(&canonical_action)
+                st.canvas_read_gate_reason(&canonical_action)
                     .map(str::to_string)
             };
             let duplicate_canvas_op = {
@@ -1167,6 +1180,7 @@ async fn main() {
                                 }
                                 last_canvas_scene_png = Some(png);
                                 canvas_scene_changed = true;
+                                final_canvas_visual_review_pending = false;
                             }
                         }
                     }
@@ -1340,6 +1354,7 @@ async fn main() {
                             }
                             last_canvas_scene_png = Some(png);
                             canvas_scene_changed = true;
+                            final_canvas_visual_review_pending = false;
                         }
                     }
                 }
@@ -1382,24 +1397,35 @@ async fn main() {
             }
             ActResult::Continue(_) => {}
             ActResult::Complete(summary) => {
-                tool_result = summary.clone();
-                // Verifier pass
-                let ok = verify_goal(&bus, &shared, &spec, &summary).await;
-                if ok {
-                    shared.state.lock().await.artifacts.push(summary.clone());
-                    report(
-                        &bus,
-                        &agent_id,
-                        AgentOutputEvent::Log {
-                            line: format!("goal.complete : {summary}"),
-                        },
-                    )
-                    .await;
-                    terminal = Some(AgentState::Done);
+                let canvas_ready = if canvas_agent {
+                    shared.state.lock().await.canvas_plan_is_complete()
+                        && !final_canvas_visual_review_pending
                 } else {
-                    shared.state.lock().await.push_user(
-                        "Le vérificateur estime que les critères ne sont pas remplis. Continue.",
-                    );
+                    true
+                };
+                if !canvas_ready {
+                    tool_result = "canvas : goal.complete refusé avant la fin du plan de composition et l'export final. Continue avec une seule pièce distincte, puis appelle canvas.export.".into();
+                    shared.state.lock().await.push_user(&tool_result);
+                } else {
+                    tool_result = summary.clone();
+                    // Verifier pass
+                    let ok = verify_goal(&bus, &shared, &spec, &summary).await;
+                    if ok {
+                        shared.state.lock().await.artifacts.push(summary.clone());
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Log {
+                                line: format!("goal.complete : {summary}"),
+                            },
+                        )
+                        .await;
+                        terminal = Some(AgentState::Done);
+                    } else {
+                        shared.state.lock().await.push_user(
+                            "Le vérificateur estime que les critères ne sont pas remplis. Continue.",
+                        );
+                    }
                 }
             }
             ActResult::Fail(reason) => {
@@ -1613,21 +1639,57 @@ async fn main() {
                     )
                     .await;
                 } else {
-                    report(
-                        &bus,
-                        &agent_id,
-                        AgentOutputEvent::Log {
-                            line: "plan canvas terminé et validation globale acceptée".into(),
-                        },
-                    )
-                    .await;
-                    shared
-                        .state
-                        .lock()
-                        .await
-                        .artifacts
-                        .push("plan canvas terminé et validation globale acceptée".into());
-                    terminal = Some(AgentState::Done);
+                    // Geometry validation cannot tell whether a pile of
+                    // valid paths actually resembles the requested subject.
+                    // With a resident vision model, require the compact
+                    // critic to explicitly approve the final PNG.
+                    let has_visual_critic =
+                        session_model_has_vision(&bus, spec.model_id.as_deref()).await;
+                    let visual_review = if has_visual_critic {
+                        reflect(&bus, &shared, &spec).await
+                    } else {
+                        None
+                    };
+                    if has_visual_critic
+                        && !visual_review
+                            .as_deref()
+                            .is_some_and(canvas_critic_approved)
+                    {
+                        final_canvas_visual_review_pending = true;
+                        let feedback = visual_review.unwrap_or_else(|| {
+                            "[canvas visual critic] réponse invalide ou absente : regarde le PNG final et corrige une seule pièce distinctive.".into()
+                        });
+                        let feedback = format!(
+                            "{feedback}\nLe contrôle visuel final n'est pas approuvé : corrige une seule pièce distinctive puis exporte à nouveau."
+                        );
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .push_user(&feedback);
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Reflection { text: feedback },
+                        )
+                        .await;
+                    } else {
+                        report(
+                            &bus,
+                            &agent_id,
+                            AgentOutputEvent::Log {
+                                line: "plan canvas terminé et validation globale acceptée".into(),
+                            },
+                        )
+                        .await;
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .artifacts
+                            .push("plan canvas terminé et validation globale acceptée".into());
+                        terminal = Some(AgentState::Done);
+                    }
                 }
             }
         }

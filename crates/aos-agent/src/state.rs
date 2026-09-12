@@ -55,6 +55,10 @@ pub struct CognitiveState {
     /// Successful canvas draw ops on the current pending plan node (for cap-based advance).
     #[serde(default)]
     pub canvas_draw_ops_on_current_task: u32,
+    /// L'agent a lu le canvas vivant pendant ce run.
+    /// Toute mutation est rejetée tant que cette étape n'est pas faite.
+    #[serde(default)]
+    pub canvas_prepared: bool,
     /// Version de schéma (migration future).
     pub version: u32,
 }
@@ -81,6 +85,7 @@ impl CognitiveState {
             deep_plan_id: None,
             deep_thinking: false,
             canvas_draw_ops_on_current_task: 0,
+            canvas_prepared: false,
             version: 2,
         }
     }
@@ -208,6 +213,9 @@ impl CognitiveState {
         if !succeeded {
             return false;
         }
+        if tool == "canvas.get" {
+            self.canvas_prepared = true;
+        }
         if self.current_task_is_canvas_preparation() {
             // Analysis is a real stage, but it is complete as soon as the
             // canvas has been read. Previously it could never advance, so all
@@ -216,6 +224,21 @@ impl CognitiveState {
         }
         if self.current_task_is_canvas_export() {
             return tool == "canvas.export" && self.complete_current_plan_node();
+        }
+        if tool == "canvas.compose" {
+            // A structured scene is already a complete composition. Consume
+            // all drawing stages and leave only the explicit export stage.
+            let mut advanced = false;
+            while self
+                .current_task_title()
+                .is_some_and(|title| !title.to_ascii_lowercase().contains("export"))
+            {
+                if !self.complete_current_plan_node() {
+                    break;
+                }
+                advanced = true;
+            }
+            return advanced;
         }
         if !canvas_tool_completes_plan_node(tool) {
             return false;
@@ -275,6 +298,21 @@ impl CognitiveState {
             )
         } else {
             None
+        }
+    }
+
+    /// Universal canvas protocol gate. The first canvas operation in an agent
+    /// run must be a successful `canvas.get`, regardless of the plan wording.
+    /// This keeps tool ordering in the runtime instead of relying on prompt
+    /// compliance alone.
+    pub fn canvas_read_gate_reason(&self, tool: &str) -> Option<&'static str> {
+        if tool.starts_with("canvas.") && tool != "canvas.get" && !self.canvas_prepared {
+            Some(
+                "protocole canvas : canvas.get est obligatoire avant toute autre opération canvas. \
+                 Lis son digest et sa capture, puis exécute une seule opération à la fois.",
+            )
+        } else {
+            self.canvas_preparation_action_block_reason(tool)
         }
     }
 
@@ -632,6 +670,31 @@ mod tests {
     }
 
     #[test]
+    fn canvas_read_gate_is_universal_and_opens_after_successful_get() {
+        let mut st = CognitiveState::new("agent-222", vec![]);
+        assert!(st.canvas_read_gate_reason("canvas.path").is_some());
+        assert!(st.canvas_read_gate_reason("canvas.set_style").is_some());
+        assert!(st.canvas_read_gate_reason("canvas.export").is_some());
+        assert!(st.canvas_read_gate_reason("canvas.get").is_none());
+        assert!(st.canvas_read_gate_reason("goal.complete").is_none());
+
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
+        assert!(st.canvas_prepared);
+        assert!(st.canvas_read_gate_reason("canvas.path").is_none());
+        assert!(st.canvas_read_gate_reason("canvas.export").is_none());
+    }
+
+    #[test]
+    fn failed_canvas_get_does_not_open_read_gate() {
+        let mut st = CognitiveState::new("agent-223", vec![]);
+        assert!(!st.maybe_advance_plan_after_canvas_draw(
+            "canvas.get",
+            r#"{"error":"session missing"}"#
+        ));
+        assert!(st.canvas_read_gate_reason("canvas.path").is_some());
+    }
+
+    #[test]
     fn canvas_export_completes_an_export_stage() {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(vec![TaskNode {
@@ -643,6 +706,19 @@ mod tests {
         assert!(st
             .maybe_advance_plan_after_canvas_draw("canvas.export", "ok path=/downloads/final.png"));
         assert!(st.canvas_plan_is_complete());
+    }
+
+    #[test]
+    fn structured_compose_consumes_composition_stages_but_leaves_export() {
+        let mut st = CognitiveState::new("agent-scene", vec![]);
+        st.set_plan(CognitiveState::canonical_canvas_composition_plan());
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
+        assert!(st.maybe_advance_plan_after_canvas_draw(
+            "canvas.compose",
+            "ok scene profile=diagram applied_count=3"
+        ));
+        assert_eq!(st.current_task_title().as_deref(), Some("Export final (canvas.export)"));
+        assert!(!st.canvas_plan_is_complete());
     }
 
     #[test]
