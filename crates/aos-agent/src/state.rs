@@ -103,13 +103,20 @@ impl CognitiveState {
         self.deep_thinking && self.needs_plan && self.deep_plan_id.is_none()
     }
 
-    /// Actions autorisées sous le gate : `plan.update` et `goal.fail` uniquement.
+    /// Actions autorisées sous le gate : le plan (ou la lecture Canvas initiale)
+    /// et `goal.fail` uniquement. `canvas.get` reste toujours autorisé : la
+    /// lecture du support est le prérequis universel du protocole Canvas, y
+    /// compris lorsqu'un plan doit encore être créé.
     pub fn blocks_action(&self, action: &str) -> bool {
         if self.deep_plan_gate_active() {
-            return action != "plan.create" && action != "goal.fail" && action != "user.ask";
+            return action != "plan.create"
+                && action != "canvas.get"
+                && action != "goal.fail"
+                && action != "user.ask";
         }
         self.plan_gate_active()
             && action != "plan.update"
+            && action != "canvas.get"
             && action != "goal.fail"
             && action != "user.ask"
     }
@@ -451,6 +458,7 @@ mod tests {
         assert!(st.plan_gate_active());
         assert!(st.blocks_action("web.search"));
         assert!(st.blocks_action("noop"));
+        assert!(!st.blocks_action("canvas.get"));
         assert!(!st.blocks_action("plan.update"));
         assert!(!st.blocks_action("goal.fail"));
         assert!(!st.blocks_action("user.ask"));
@@ -473,6 +481,7 @@ mod tests {
         assert!(!st.plan_gate_active());
         assert!(st.blocks_action("web.search"));
         assert!(st.blocks_action("plan.update"));
+        assert!(!st.blocks_action("canvas.get"));
         assert!(!st.blocks_action("plan.create"));
         assert!(!st.blocks_action("goal.fail"));
         st.deep_plan_id = Some("dplan-1".into());

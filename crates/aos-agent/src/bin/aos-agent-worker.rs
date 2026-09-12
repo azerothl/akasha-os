@@ -4122,7 +4122,11 @@ async fn apply_assess_to_runtime(
     module_tools: &[ToolDesc],
     assess: &AssessResult,
 ) {
-    {
+    // Canvas doit pouvoir commencer par `canvas.get`, mais le reste du dessin
+    // doit rester borné par le plan canonique. On amorce donc ce plan ici,
+    // après la classification, au lieu de laisser le gate attendre un
+    // `plan.update` que le protocole Canvas interdit de faire avant la lecture.
+    let seeded_canvas_plan = {
         let mut st = shared.state.lock().await;
         st.complexity = Some(assess.complexity.clone());
         if st.deep_thinking {
@@ -4138,6 +4142,50 @@ async fn apply_assess_to_runtime(
             if st.task_graph.is_empty() && st.deep_plan_id.is_none() {
                 st.plan_memory_recalled = false;
             }
+        }
+        if assess.is_complex()
+            && agent_has_canvas_tools(&spec.tools)
+            && !st.deep_thinking
+            && st.task_graph.is_empty()
+        {
+            let nodes = CognitiveState::canonical_canvas_composition_plan();
+            st.set_plan(nodes.clone());
+            let need_mem = st.needs_plan && !st.plan_memory_recalled;
+            if need_mem {
+                st.plan_memory_recalled = true;
+            }
+            Some((nodes, need_mem))
+        } else {
+            None
+        }
+    };
+
+    if let Some((nodes, need_mem)) = seeded_canvas_plan {
+        report(
+            bus,
+            &spec.agent_id,
+            AgentOutputEvent::PlanUpdated {
+                nodes: nodes.clone(),
+            },
+        )
+        .await;
+        if need_mem {
+            let query = nodes
+                .iter()
+                .find(|n| {
+                    n.status == TaskNodeStatus::Pending || n.status == TaskNodeStatus::Running
+                })
+                .map(|n| n.title.clone())
+                .or_else(|| nodes.first().map(|n| n.title.clone()))
+                .unwrap_or_else(|| spec.goal.statement.clone());
+            bootstrap_memory_recall(
+                bus,
+                shared,
+                &spec.agent_id,
+                &query,
+                "après plan Canvas automatique",
+            )
+            .await;
         }
     }
 
@@ -4237,11 +4285,14 @@ async fn run_task_assess(
             }
         }
     }
-    let assess = if text.trim().is_empty() {
+    let parsed_assess = if text.trim().is_empty() {
         AssessResult::complex("task.assess: pas de réponse modèle — plan par défaut")
     } else {
         parse_assess_response(&text)
     };
+    // Keep the trace truthful: Canvas is intentionally promoted to complex
+    // even when the short text goal was classified as simple.
+    let assess = require_canvas_plan(parsed_assess, spec);
     let tool_ms = t0.elapsed().as_millis() as u64;
 
     let record = AgentStepRecord {
