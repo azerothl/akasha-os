@@ -182,10 +182,10 @@ impl CognitiveState {
     pub fn canonical_canvas_composition_plan() -> Vec<TaskNode> {
         [
             "Analyse (canvas.get)",
-            "Composition (fond ou ancrage, 2 formes)",
-            "Volumes principaux (silhouette et masses, 3 formes)",
-            "Détails distinctifs (3 formes)",
-            "Finitions (ombres ou accents, 2 formes)",
+            "Silhouette globale (masse principale + partie supérieure, 2 formes)",
+            "Volumes secondaires (appendices, supports ou parties saillantes, 3 formes)",
+            "Détails distinctifs (visage, ouvertures ou motifs, 3 formes)",
+            "Finitions (contours, ombres ou accents, 2 formes)",
             "Export final (canvas.export)",
         ]
         .iter()
@@ -336,7 +336,16 @@ impl CognitiveState {
             return 1;
         };
         let title = title.to_ascii_lowercase();
-        if [
+        // The global silhouette is deliberately a two-op stage (main mass +
+        // upper part). Check it before the generic `masse`/`structure` words,
+        // which are used for the later three-op volume stage.
+        if title.contains("silhouette globale")
+            || ["composition", "ancrage"]
+                .iter()
+                .any(|word| title.contains(word))
+        {
+            2
+        } else if [
             "détail",
             "detail",
             "roue",
@@ -351,8 +360,6 @@ impl CognitiveState {
         {
             3
         } else if [
-            "composition",
-            "ancrage",
             "ombre",
             "shadow",
             "finition",

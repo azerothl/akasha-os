@@ -10,7 +10,8 @@ use aos_agent::actions::{
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason,
-    canvas_critic_approved, canvas_critic_system_prompt, canvas_op_succeeded,
+    canvas_critic_approved, canvas_critic_system_prompt, canvas_draw_tool_applies_trait,
+    canvas_goal_prefers_scene, canvas_op_succeeded,
     canvas_reflect_user_content,
     canvas_repeat_stroke_verdict, canvas_scene_prompt_block, canvas_text_only_critic_system_prompt,
     canvas_tool_mutates_scene, canvas_visual_fingerprint, canvas_visual_progress,
@@ -1088,12 +1089,43 @@ async fn main() {
                 st.canvas_read_gate_reason(&canonical_action)
                     .map(str::to_string)
             };
+            let canvas_scene_block = if canonical_action != "canvas.compose"
+                && canvas_draw_tool_applies_trait(&canonical_action)
+                && tools.iter().any(|tool| tool.name == "canvas.compose")
+                && canvas_goal_prefers_scene(&spec.goal.statement)
+            {
+                let st = shared.state.lock().await;
+                let has_existing_traits = st.trace.iter().any(|record| {
+                    if record.action != "canvas.get" {
+                        return false;
+                    }
+                    serde_json::from_str::<aos_proto::CanvasGetResponse>(&record.tool_result)
+                        .map(|canvas| !canvas.ops.is_empty())
+                        .unwrap_or(false)
+                });
+                let has_agent_traits = st.trace.iter().any(|record| {
+                    canvas_draw_tool_applies_trait(record.action.trim())
+                        && record.action.trim() != "canvas.compose"
+                        && canvas_op_succeeded(&record.tool_result)
+                });
+                if !has_existing_traits && !has_agent_traits {
+                    Some(
+                        "illustration canvas : la première forme doit être une scène complète via canvas.compose. Utilise args.scene (pas scene_spec) avec {version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{id,role,layer,color,fill,geometry:{kind:\"ellipse\",x,y,w,h}}]}; inclus au minimum masse principale, partie supérieure, appendices et détails dans des positions cohérentes. Les graphes/maths utilisent les primitives.",
+                    )
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let duplicate_canvas_op = {
                 let st = shared.state.lock().await;
                 canvas_action_near_duplicate_reason(&st.trace, &canonical_action, &action.args)
             };
             let one = if let Some(reason) = canvas_stage_block {
                 ActResult::Continue(reason)
+            } else if let Some(reason) = canvas_scene_block {
+                ActResult::Continue(reason.into())
             } else if let Some(reason) = duplicate_canvas_op {
                 ActResult::Continue(reason)
             } else if should_gate_action(&spec, &action.action) {

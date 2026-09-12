@@ -463,6 +463,68 @@ pub fn agent_has_canvas_path(tool_ids: &[String]) -> bool {
     tool_ids.iter().any(|t| t == "canvas.path")
 }
 
+/// Whether a goal is better served by one semantic scene composition than by
+/// incremental primitive strokes. Graphs, diagrams and mathematical drawings
+/// deliberately stay on the primitive path so the illustration policy cannot
+/// interfere with precise technical layouts.
+pub fn canvas_goal_prefers_scene(goal: &str) -> bool {
+    let lower = goal.to_ascii_lowercase();
+    let technical = [
+        "graph",
+        "graphe",
+        "diagram",
+        "schéma",
+        "schema",
+        "architecture",
+        "flowchart",
+        "organigramme",
+        "math",
+        "mathématique",
+        "mathematique",
+        "équation",
+        "equation",
+        "formule",
+        "plot",
+        "courbe",
+        "triangle",
+        "cercle",
+        "rectangle",
+        "tableau",
+    ];
+    if technical.iter().any(|marker| lower.contains(marker)) {
+        return false;
+    }
+    [
+        "illustration",
+        "illustrer",
+        "dessin",
+        "dessine",
+        "draw",
+        "chat",
+        "cat",
+        "chien",
+        "dog",
+        "animal",
+        "maison",
+        "house",
+        "portrait",
+        "personnage",
+        "character",
+        "logo",
+        "icône",
+        "icone",
+        "icon",
+        "objet",
+        "object",
+        "arbre",
+        "tree",
+        "fleur",
+        "flower",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
 fn canvas_empty_scene_hint(tool_ids: &[String]) -> String {
     if agent_has_canvas_path(tool_ids) {
         "commence par canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — lis la dernière bbox avant la suivante)".into()
@@ -613,7 +675,8 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          ```\n{digest}\n```\n\
          Poursuis le dessin existant : ajoute une seule pièce manquante — ne restack pas la même bbox, pas canvas.clear. \
          Chaque op canvas doit inclure `color` (#RRGGBB) pour la teinte voulue (`fill_color` est un alias normalisé). \
-         Silhouettes : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
+         Pour une illustration, un animal, un personnage ou un objet : préfère `canvas.compose` une seule fois avec `profile:\"illustration\"` et toute la scène (masse principale, partie supérieure, appendices et détails), afin de préserver les proportions et les calques. Utilise exactement cette structure : `scene:{{version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{{id,role,layer,color,fill,geometry:{{kind:\"ellipse\",x,y,w,h}}}}]}}` ; pour chaque géométrie, `kind` vaut `ellipse`, `rect`, `path`, `spline`, `line` ou `text`. N'invente pas `scene_spec`, `composition`, `shape`, `coords` ou `type` dans cette scène. Pour un graphe, schéma ou dessin mathématique, reste en primitives (`canvas.line`, `canvas.rect`, `canvas.text`, etc.). \
+         Silhouettes en primitives : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant seulement si le modèle chargé est vision ; sinon le digest est la source de vérité. \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
@@ -1390,6 +1453,14 @@ mod tests {
         assert!(block.contains("scene_bbox"));
         assert!(block.contains("[canvas digest]"));
         assert!(block.contains("capture PNG"));
+    }
+
+    #[test]
+    fn illustration_goals_prefer_scene_but_technical_drawings_keep_primitives() {
+        assert!(canvas_goal_prefers_scene("dessine un chat stylisé"));
+        assert!(canvas_goal_prefers_scene("create a house illustration"));
+        assert!(!canvas_goal_prefers_scene("dessine un graphe d'architecture"));
+        assert!(!canvas_goal_prefers_scene("représentation graphique mathématique"));
     }
 
     #[test]
