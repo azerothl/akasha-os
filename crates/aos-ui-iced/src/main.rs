@@ -137,6 +137,7 @@ async fn runtime_main(cmd_rx: Receiver<Cmd>, evt_tx: Sender<Evt>) {
                     let req = InferRequest {
                         model_id: None,
                         messages,
+                        tools: vec![],
                         params: InferParams {
                             max_tokens: 256,
                             ..Default::default()

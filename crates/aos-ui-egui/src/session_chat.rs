@@ -123,6 +123,7 @@ pub(crate) fn on_done(
     streaming: &mut String,
     chat_pending: &mut bool,
     chat_inference_id: &mut Option<u64>,
+    model_id: Option<String>,
 ) {
     let started_ms = state
         .inflight(session_id)
@@ -146,6 +147,7 @@ pub(crate) fn on_done(
                 thinking: None,
                 ts_ms,
                 duration_ms,
+                model_id,
             });
         }
         streaming.clear();
@@ -300,6 +302,7 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            None,
         );
 
         assert!(
@@ -332,12 +335,14 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            Some("local:test-model".into()),
         );
 
         assert_eq!(chat.len(), 2);
         assert_eq!(chat[1].role, "assistant");
         assert_eq!(chat[1].text, "reply");
         assert!(chat[1].ts_ms > 0);
+        assert_eq!(chat[1].model_id.as_deref(), Some("local:test-model"));
         assert!(!state.is_unread(session_a()));
         assert!(!pending);
     }
@@ -419,6 +424,7 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            None,
         );
 
         assert!(

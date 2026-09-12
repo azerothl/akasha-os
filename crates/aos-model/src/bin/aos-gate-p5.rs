@@ -28,6 +28,7 @@ async fn infer(bus: &BusClient, prompt: &str, max_tokens: u32) -> Result<(f64, f
                     role: "user".into(),
                     content: prompt.into(),
                 }],
+                tools: vec![],
                 params: InferParams {
                     max_tokens,
                     temperature: 0.2,

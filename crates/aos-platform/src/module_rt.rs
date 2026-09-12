@@ -1142,6 +1142,24 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
             "y": 0.1,
             "text": "probe"
         }),
+        "canvas.set_guides" => serde_json::json!({
+            "session_id": "__probe__",
+            "show_grid": true,
+            "snap": true,
+            "grid_size": 0.01,
+            "snap_mode": "grid"
+        }),
+        "canvas.compose" => serde_json::json!({
+            "session_id": "__probe__",
+            "scene": {
+                "version": 1,
+                "profile": "primitives",
+                "elements": [{
+                    "id": "probe",
+                    "geometry": {"kind": "rect", "x": 0.1, "y": 0.1, "w": 0.1, "h": 0.1}
+                }]
+            }
+        }),
         "canvas.erase" => serde_json::json!({
             "session_id": "__probe__",
             "points": [{"x": 0.1, "y": 0.1}, {"x": 0.2, "y": 0.2}]

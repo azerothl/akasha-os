@@ -2168,6 +2168,7 @@ async fn main() {
                         role: "user".into(),
                         content: prompt,
                     }],
+                    tools: vec![],
                     params: InferParams {
                         max_tokens: 512,
                         temperature: 0.3,

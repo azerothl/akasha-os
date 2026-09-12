@@ -107,12 +107,23 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
 
     // 6. Catalogue outils
     if !input.tools.is_empty() {
-        let mut tools_block = String::from("## Catalogue d'outils (utilise uniquement ceux-ci)\n");
+        let native_tools = uses_gemma4_native_tools(input.spec, input.tools);
+        let mut tools_block = if native_tools {
+            String::from(
+                "## Catalogue d'outils (déclarations natives fournies par le template)\n",
+            )
+        } else {
+            String::from("## Catalogue d'outils (utilise uniquement ceux-ci)\n")
+        };
         for t in input.tools {
-            tools_block.push_str(&format!(
-                "- `{}` : {} | schema: {}\n",
-                t.name, t.description, t.input_schema
-            ));
+            if native_tools {
+                tools_block.push_str(&format!("- `{}` : {}\n", t.name, t.description));
+            } else {
+                tools_block.push_str(&format!(
+                    "- `{}` : {} | schema: {}\n",
+                    t.name, t.description, t.input_schema
+                ));
+            }
         }
         parts.push(tools_block);
     }
@@ -140,8 +151,21 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     } else {
         parts.push(ACTION_PROTOCOL.to_string());
     }
+    if uses_gemma4_native_tools(input.spec, input.tools) {
+        parts.push(GEMMA4_NATIVE_TOOL_PROTOCOL.to_string());
+    }
 
     parts.join("\n\n")
+}
+
+pub(crate) fn uses_gemma4_native_tools(spec: &AgentSpec, tools: &[ToolDesc]) -> bool {
+    if tools.is_empty() {
+        return false;
+    }
+    spec.model_id.as_deref().is_some_and(|model_id| {
+        let model_id = model_id.to_ascii_lowercase();
+        model_id.contains("gemma-4") || model_id.contains("gemma4")
+    })
 }
 
 fn format_goal(goal: &AgentGoal) -> String {
@@ -229,6 +253,19 @@ Exemples :
 - goal.complete : {"summary":"…"} — summary obligatoire (résultat lisible pour l'utilisateur)
 "#;
 
+const GEMMA4_NATIVE_TOOL_PROTOCOL: &str = r#"## Format d'outils du modèle courant
+
+Ce modèle utilise le format natif Gemma 4 pour les appels d'outils. Quand une action est nécessaire,
+utilise directement le catalogue natif fourni par le template :
+`<|channel>thought
+raisonnement très court
+<channel|><|tool_call>call:nom.outil{clé:valeur}<tool_call|>`.
+Pour un objet JSON, utilise des clés/valeurs JSON valides entre accolades. N'émets pas l'enveloppe
+`{"thought":…,"action":…,"args":…}` pour cet appel natif : le runtime la convertit en action.
+N'émets jamais un canal `thought` vide ou répété ; appelle immédiatement l'outil requis, en commençant
+par `canvas.get` pour le Canvas. Après le résultat de l'outil, produis l'appel natif suivant ou
+`goal.complete` selon le protocole général."#;
+
 /// Prompt court pour optimiser le system prompt.
 pub fn optimize_prompt_request(
     goal: &str,
@@ -303,6 +340,17 @@ mod tests {
         assert!(!out.contains("Mémoire d'abord"));
         assert!(out.contains("task.assess"));
         assert!(out.contains("plan.update"));
+
+        let mut gemma_spec = spec.clone();
+        gemma_spec.model_id = Some("local:gemma-4-12b-qat".into());
+        let native = compile_system_prompt(&PromptCompileInput {
+            spec: &gemma_spec,
+            skills: &[],
+            tools: &tools,
+            doc_index: &[],
+        });
+        assert!(native.contains("Format d'outils du modèle courant"));
+        assert!(native.contains("<|tool_call>call:nom.outil"));
     }
 
     #[test]

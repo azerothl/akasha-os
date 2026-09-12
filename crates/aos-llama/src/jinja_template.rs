@@ -17,6 +17,7 @@ pub fn apply_jinja_chat_template(
     template_src: &str,
     messages: &[(String, String)],
     add_generation_prompt: bool,
+    tools: &[Json],
 ) -> Result<String, hf_chat_template::Error> {
     let tmpl = ChatTemplate::from_str(template_src)?;
     let msgs: Vec<Message> = messages
@@ -27,6 +28,7 @@ pub fn apply_jinja_chat_template(
     extra.insert("enable_thinking".into(), Json::Bool(false));
     let input = RenderInput {
         messages: msgs,
+        tools: tools.to_vec(),
         add_generation_prompt,
         extra,
         ..Default::default()
@@ -49,7 +51,7 @@ mod tests {
     fn gemma4_text_only_user_message() {
         let template = gemma4_fixture();
         let messages = vec![("user".to_string(), "Hello".to_string())];
-        let rendered = apply_jinja_chat_template(&template, &messages, true)
+        let rendered = apply_jinja_chat_template(&template, &messages, true, &[])
             .expect("gemma4 template should render");
         assert!(rendered.contains("<|turn>user"));
         assert!(rendered.contains("Hello"));
@@ -63,7 +65,7 @@ mod tests {
             "user".to_string(),
             "<__media__>\nDescribe this image".to_string(),
         )];
-        let rendered = apply_jinja_chat_template(&template, &messages, true)
+        let rendered = apply_jinja_chat_template(&template, &messages, true, &[])
             .expect("gemma4 vision marker in user content");
         assert!(rendered.contains("<__media__>"));
         assert!(rendered.contains("Describe this image"));
@@ -78,8 +80,8 @@ mod tests {
             ("assistant".to_string(), "Hello!".to_string()),
             ("user".to_string(), "Again".to_string()),
         ];
-        let rendered =
-            apply_jinja_chat_template(&template, &messages, true).expect("multi-turn gemma4");
+        let rendered = apply_jinja_chat_template(&template, &messages, true, &[])
+            .expect("multi-turn gemma4");
         assert!(rendered.contains("<|turn>user"));
         assert!(rendered.contains("<|turn>model"));
         assert!(rendered.contains("Again"));
@@ -100,7 +102,27 @@ mod tests {
         );
         // Rendering must succeed via jinja fallback.
         let messages = vec![("user".to_string(), "ping".to_string())];
-        let out = apply_jinja_chat_template(&template, &messages, true).expect("jinja fallback");
+        let out = apply_jinja_chat_template(&template, &messages, true, &[])
+            .expect("jinja fallback");
         assert!(out.contains("ping"));
+    }
+
+    #[test]
+    fn gemma4_renders_native_tool_declarations() {
+        let template = gemma4_fixture();
+        let messages = vec![("user".to_string(), "dessine un chat".to_string())];
+        let tools = vec![serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "canvas.get",
+                "description": "Lire la scène Canvas",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        })];
+        let out = apply_jinja_chat_template(&template, &messages, true, &tools)
+            .expect("gemma4 native tool declaration");
+        assert!(out.contains("<|tool>"));
+        assert!(out.contains("declaration:canvas.get"));
+        assert!(out.contains("<tool|>"));
     }
 }

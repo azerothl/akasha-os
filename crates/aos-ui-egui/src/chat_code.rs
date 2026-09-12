@@ -210,7 +210,7 @@ pub fn show_code_fence(ui: &mut egui::Ui, lang: &str, body: &str) {
     let stroke = ui.visuals().widgets.noninteractive.bg_stroke.color;
     egui::Frame::NONE
         .fill(fill)
-        .stroke(egui::Stroke::new(1.0, stroke))
+        .stroke(egui::Stroke::new(1.0_f32, stroke))
         .corner_radius(crate::theme::RADIUS_MD)
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {

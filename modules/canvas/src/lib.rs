@@ -35,6 +35,8 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "canvas.layer_activate" => layer_activate(args),
         "canvas.align" => align(args),
         "canvas.rotate" => rotate(args),
+        "canvas.set_guides" => set_guides(args),
+        "canvas.compose" => compose(args),
         _ => Err(format!("outil inconnu: {tool}")),
     }
 }
@@ -590,6 +592,41 @@ fn get(args: &Value) -> Result<Value, String> {
         payload["after_seq"] = after.clone();
     }
     aos_module_sdk::call("canvas.get", &payload)
+}
+
+fn set_guides(args: &Value) -> Result<Value, String> {
+    let sid = require_session(args)?;
+    let mut payload = json!({"session_id": sid});
+    for key in ["show_grid", "snap", "grid_size", "snap_mode"] {
+        if let Some(value) = args.get(key) {
+            payload[key] = value.clone();
+        }
+    }
+    aos_module_sdk::call("canvas.set_guides", &payload)
+}
+
+fn compose(args: &Value) -> Result<Value, String> {
+    let sid = require_session(args)?;
+    let scene = args
+        .get("scene")
+        .cloned()
+        .ok_or_else(|| "scene requis (CanvasSceneSpec)".to_string())?;
+    let mut payload = json!({"session_id": sid, "scene": scene});
+    if let Some(author) = args.get("author_id") {
+        payload["author_id"] = author.clone();
+    }
+    let response = aos_module_sdk::call("canvas.compose", &payload)?;
+    let profile = scene
+        .get("profile")
+        .and_then(|v| v.as_str())
+        .unwrap_or("primitives");
+    let count = response
+        .get("applied_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    Ok(json!(format!(
+        "ok scene profile={profile} applied_count={count}"
+    )))
 }
 
 fn export(args: &Value) -> Result<Value, String> {

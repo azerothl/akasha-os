@@ -385,6 +385,18 @@ impl UiApp {
                     dash,
                 });
             }
+            Some(chat_canvas::CanvasUiAction::SetGuides {
+                show_grid,
+                snap,
+                grid_size,
+            }) => {
+                let _ = self.cmd_tx.send(Cmd::CanvasSetGuides {
+                    session_id: session_id.to_string(),
+                    show_grid,
+                    snap,
+                    grid_size,
+                });
+            }
             Some(chat_canvas::CanvasUiAction::ExportPng) => {
                 let aspect = self
                     .chat_state

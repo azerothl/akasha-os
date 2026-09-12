@@ -22,6 +22,7 @@ use crate::module_discovery::{
     tool_unavailable_message,
 };
 use crate::persist;
+use crate::prompt::uses_gemma4_native_tools;
 use crate::room_ask::handle_room_user_ask;
 use crate::room_conductor::{
     apply_peer_followups, build_initial_queue, effective_max_turns, effective_peer_followup_budget,
@@ -33,8 +34,9 @@ use crate::skills::load_skills;
 use crate::storage_path::{post_room_host_path_notice, ROOM_HOST_PATH_DISALLOWED};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools, default_agent_tools,
-    merge_canvas_tools, select_tools, ToolDesc,
+    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools,
+    chat_template_tool_definitions, default_agent_tools, merge_canvas_tools, select_tools,
+    ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -354,6 +356,14 @@ pub fn build_room_system_prompt(
         out.push('\n');
         out.push_str(ROOM_ACTION_PROTOCOL);
         out.push('\n');
+        if uses_gemma4_native_tools(spec, tools) {
+            out.push_str(
+                "\n## Format d'outils du modèle courant\n\
+                 Ce modèle utilise les appels natifs Gemma 4 : \
+                 `<|channel>thought\\n...\\n<channel|><|tool_call>call:nom.outil{clé:valeur}<tool_call|>`. \
+                 N'émets pas l'enveloppe JSON d'action pour un appel natif et ne répète jamais un canal thought vide.\n",
+            );
+        }
     }
     out
 }
@@ -471,6 +481,7 @@ async fn run_infer_once(
     round: &RoomRoundState,
     model_id: Option<String>,
     messages: &[ChatMessage],
+    tools: &[ToolDesc],
     infer_caps: &[String],
     images: &[String],
     max_tokens: u32,
@@ -478,6 +489,7 @@ async fn run_infer_once(
     let req = InferRequest {
         model_id,
         messages: messages.to_vec(),
+        tools: chat_template_tool_definitions(tools),
         params: InferParams {
             max_tokens,
             temperature: 0.3,
@@ -556,6 +568,7 @@ async fn run_infer(
     round: &RoomRoundState,
     model_id: Option<String>,
     messages: &mut Vec<ChatMessage>,
+    tools: &[ToolDesc],
     infer_caps: &[String],
     images: &[String],
 ) -> Result<String, String> {
@@ -573,6 +586,7 @@ async fn run_infer(
             round,
             model_id.clone(),
             messages,
+            tools,
             infer_caps,
             images,
             gen_tokens,
@@ -676,6 +690,7 @@ async fn run_room_tool_loop(
             round,
             infer_model.clone(),
             &mut messages,
+            &tool_descs,
             caps,
             &step_refs,
         )
@@ -862,6 +877,7 @@ pub async fn execute_room_turn(
             round,
             model_id,
             &mut messages,
+            &[],
             &room_turn_infer_caps(),
             &refs,
         )
