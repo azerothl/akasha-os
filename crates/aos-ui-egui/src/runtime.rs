@@ -550,6 +550,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             let req = InferRequest {
                 model_id: model_id.clone(),
                 messages,
+                tools: vec![],
                 params: InferParams {
                     max_tokens: 1024,
                     ..Default::default()
@@ -4922,6 +4923,7 @@ async fn infer_llm_rewrite(
                 content: user_prompt.to_string(),
             },
         ],
+        tools: vec![],
         params: InferParams {
             max_tokens: 2048,
             temperature: 0.7,

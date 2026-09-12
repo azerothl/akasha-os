@@ -4568,6 +4568,7 @@ async fn infer_extract_completion(
                 content: user_prompt.into(),
             },
         ],
+        tools: vec![],
         params: InferParams {
             max_tokens: 512,
             temperature: 0.1,

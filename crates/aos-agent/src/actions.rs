@@ -229,14 +229,20 @@ fn remove_literal_marker(text: &str, marker: &str) -> String {
 }
 
 fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
-    let stripped = strip_tool_markup(text);
-    let payloads = extract_tag_block_payloads(text, "tool_call");
+    // A few Gemma-compatible chat templates surface JSON quotes as a token
+    // boundary marker (`<|"|>`).  It is presentation noise, not part of the
+    // native call protocol; normalize it before looking for the balanced
+    // `call:name{...}` object so an otherwise valid call is not downgraded to
+    // `noop`.
+    let normalized = normalize_native_tool_markup(text);
+    let stripped = strip_tool_markup(&normalized);
+    let payloads = extract_tag_block_payloads(&normalized, "tool_call");
     let mut actions: Vec<AgentAction> = payloads
         .iter()
         .filter_map(|p| action_from_openai_tool_json(p))
         .collect();
     if actions.is_empty() {
-        actions = extract_tag_block_payloads(text, "function_call")
+        actions = extract_tag_block_payloads(&normalized, "function_call")
             .iter()
             .filter_map(|p| action_from_openai_tool_json(p))
             .collect();
@@ -245,7 +251,7 @@ fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
     // JSON/XML: `call:canvas.get{session_id: "..."}`. Treat it as a tool call
     // only when a balanced argument object follows the action token.
     if actions.is_empty() {
-        actions = parse_colon_call_actions(text);
+        actions = parse_colon_call_actions(&normalized);
     }
     if actions.is_empty() && !stripped.trim().is_empty() {
         if let Some(a) = parse_action_clean(&stripped) {
@@ -253,6 +259,11 @@ fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
         }
     }
     actions
+}
+
+fn normalize_native_tool_markup(text: &str) -> String {
+    text.replace("<|\"|>", "\"")
+        .replace("<｜\"｜>", "\"")
 }
 
 fn parse_colon_call_actions(text: &str) -> Vec<AgentAction> {
@@ -872,6 +883,17 @@ Thinking Process:
         let actions = parse_actions(text);
         assert_eq!(actions.len(), 1);
         assert_eq!(actions[0].action, "canvas.get");
+        assert_eq!(actions[0].args["session_id"], "sess-1");
+    }
+
+    #[test]
+    fn parse_native_dsml_with_tokenized_quotes() {
+        let text = r#"<|channel>thought
+<channel|><|tool_call>call:canvas.set_style{color:<|"|>#8c7355<|"|>,session_id:<|"|>sess-1<|"|>,width:0.02}<tool_call|>"#;
+        let actions = parse_actions(text);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action, "canvas.set_style");
+        assert_eq!(actions[0].args["color"], "#8c7355");
         assert_eq!(actions[0].args["session_id"], "sess-1");
     }
 

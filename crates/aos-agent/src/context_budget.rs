@@ -361,6 +361,14 @@ pub fn looks_like_tool_failure(tool_result: &str) -> bool {
 
 impl LoopGuard {
     pub fn observe(&mut self, action: &str, tool_result: &str) -> LoopVerdict {
+        // This is a deterministic model/protocol incompatibility, not a
+        // transient noop. Retrying the same 1.5–2k-token generation only
+        // burns the step timeout while reproducing the native channel loop.
+        if tool_result.contains("marqueurs de canal/outils natifs") {
+            return LoopVerdict::Abort(
+                "incompatibilité de format modèle détectée : arrêt immédiat après une boucle de marqueurs natifs ; aucun outil n'a été appelé".into(),
+            );
+        }
         let is_noop = action == "noop";
         let looks_stuck = is_noop || looks_like_tool_failure(tool_result);
 
@@ -508,6 +516,16 @@ mod tests {
             g.observe("noop", "aucune action JSON"),
             LoopVerdict::Abort(_)
         ));
+    }
+
+    #[test]
+    fn loop_guard_aborts_native_channel_loop_immediately() {
+        let mut g = LoopGuard::default();
+        let verdict = g.observe(
+            "noop",
+            "aucune action JSON détectée : le modèle a bouclé sur ses marqueurs de canal/outils natifs",
+        );
+        assert!(matches!(verdict, LoopVerdict::Abort(message) if message.contains("incompatibilité de format modèle")));
     }
 
     #[test]

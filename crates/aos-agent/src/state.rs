@@ -232,7 +232,7 @@ impl CognitiveState {
         if self.current_task_is_canvas_export() {
             return tool == "canvas.export" && self.complete_current_plan_node();
         }
-        if tool == "canvas.compose" {
+        if tool == "canvas.compose" && !outcome.contains("scene_check=warning:") {
             // A structured scene is already a complete composition. Consume
             // all drawing stages and leave only the explicit export stage.
             let mut advanced = false;
@@ -246,6 +246,12 @@ impl CognitiveState {
                 advanced = true;
             }
             return advanced;
+        }
+        if tool == "canvas.compose" {
+            // Keep the composition stage open when the canvas runtime found a
+            // disconnected structural element. The next turn can use the
+            // reported seq/bbox with canvas.move/delete/restyle before export.
+            return false;
         }
         if !canvas_tool_completes_plan_node(tool) {
             return false;

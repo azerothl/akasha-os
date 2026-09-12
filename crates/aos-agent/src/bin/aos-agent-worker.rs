@@ -41,7 +41,8 @@ use aos_agent::skills::{
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, canvas_draw_strategy_hint, canvas_tool_denied_by_allowlist,
-    canvas_tools_from_module_list, caps_for_tools, caps_subset, classify_action,
+    canvas_tools_from_module_list, caps_for_tools, caps_subset, chat_template_tool_definitions,
+    classify_action,
     normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool, restrict_canvas_tools,
     select_tools, select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend, ToolDesc,
 };
@@ -862,6 +863,7 @@ async fn main() {
                 &bus,
                 &shared,
                 &infer_spec,
+                &tools,
                 &step_refs,
                 &mut cmd_rx,
                 gen_tokens,
@@ -1116,7 +1118,7 @@ async fn main() {
                 });
                 if !has_existing_traits && !has_agent_traits {
                     Some(
-                        "illustration canvas : la première forme doit être une scène complète via canvas.compose. Utilise args.scene (pas scene_spec) avec {version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{id,role,layer,color,fill,geometry:{kind:\"ellipse\",x,y,w,h}}]}; inclus au minimum masse principale, partie supérieure, appendices et détails dans des positions cohérentes. Les graphes/maths utilisent les primitives.",
+                        "illustration canvas : la première forme doit être une scène complète via canvas.compose. Utilise args.scene (pas scene_spec) avec {version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{id,role,layer,color,fill,geometry:{kind:\"ellipse\",x,y,w,h}}],relations:[{from,to,relation}]}; pour rect/ellipse x,y est le coin haut-gauche et w,h la taille (centre=(x+w/2,y+h/2), donc une forme centrée en .5 de largeur .4 commence à .3). Fais chevaucher/toucher les masses structurelles et les appendices. Si scene_check=warning apparaît, corrige avant export. Les graphes/maths utilisent les primitives.",
                     )
                 } else {
                     None
@@ -1819,6 +1821,7 @@ async fn infer_turn(
     bus: &BusClient,
     shared: &Shared,
     spec: &AgentSpec,
+    tools: &[ToolDesc],
     data_refs: &[String],
     cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
     max_tokens: u32,
@@ -1849,6 +1852,7 @@ async fn infer_turn(
     let req = InferRequest {
         model_id: spec.model_id.clone(),
         messages,
+        tools: chat_template_tool_definitions(tools),
         params: InferParams {
             temperature: 0.2,
             max_tokens,
@@ -4306,6 +4310,7 @@ async fn run_task_assess(
                 content: format!("Tâche ({reason}) : {statement}"),
             },
         ],
+        tools: vec![],
         params: InferParams {
             max_tokens: 80,
             temperature: 0.0,
@@ -4620,6 +4625,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
                 content: progress,
             },
         ],
+        tools: vec![],
         params: InferParams {
             max_tokens: 220,
             temperature: 0.1,
@@ -4694,6 +4700,7 @@ async fn verify_goal(bus: &BusClient, shared: &Shared, spec: &AgentSpec, summary
                 ),
             },
         ],
+        tools: vec![],
         params: InferParams {
             max_tokens: 8,
             temperature: 0.0,
@@ -4737,6 +4744,7 @@ async fn optimize_prompt_now(bus: &BusClient, spec: &AgentSpec) -> Result<String
             role: "user".into(),
             content: prompt,
         }],
+        tools: vec![],
         params: InferParams {
             max_tokens: 512,
             temperature: 0.3,

@@ -531,6 +531,8 @@ unsafe extern "C" fn abort_trampoline(data: *mut c_void) -> bool {
 /// Job d'un batch continu (P5.1).
 pub struct BatchItem {
     pub messages: Vec<(String, String)>,
+    /// Tool definitions forwarded to templates with native tool support.
+    pub tools: Vec<serde_json::Value>,
     pub params: GenParams,
     pub abort: Arc<AtomicBool>,
     /// Distinct from `abort`: stop at a token boundary and keep the stream (E18).
@@ -645,7 +647,11 @@ impl LlamaContext {
     }
 
     /// Applique le chat template du modèle (fallback ChatML si absent).
-    fn render_prompt(&self, messages: &[(String, String)]) -> Result<String, LlamaError> {
+    fn render_prompt(
+        &self,
+        messages: &[(String, String)],
+        tools: &[serde_json::Value],
+    ) -> Result<String, LlamaError> {
         let model = &self.model;
         match &model.chat_template {
             Some(tmpl) => {
@@ -687,7 +693,12 @@ impl LlamaContext {
                         // Native matcher cannot parse complex Jinja (e.g. Gemma 4 tool-calling
                         // templates embedded in GGUF). Render with minijinja instead.
                         if let Ok(rendered) =
-                            jinja_template::apply_jinja_chat_template(&tmpl_s, messages, true)
+                            jinja_template::apply_jinja_chat_template(
+                                &tmpl_s,
+                                messages,
+                                true,
+                                tools,
+                            )
                         {
                             return Ok(suppress_hybrid_thinking(&rendered, &tmpl_s));
                         }
@@ -770,7 +781,25 @@ impl LlamaContext {
         params: &GenParams,
         on_delta: impl FnMut(&str) -> bool,
     ) -> Result<GenStats, LlamaError> {
-        self.generate_with_images(messages, params, &[] as &[&Path], on_delta)
+        self.generate_with_tools(messages, &[], params, on_delta)
+    }
+
+    /// Génère une réponse avec des définitions d'outils natives pour les
+    /// templates Jinja qui les prennent en charge (notamment Gemma 4).
+    pub fn generate_with_tools(
+        &mut self,
+        messages: &[(String, String)],
+        tools: &[serde_json::Value],
+        params: &GenParams,
+        on_delta: impl FnMut(&str) -> bool,
+    ) -> Result<GenStats, LlamaError> {
+        self.generate_with_images_and_tools(
+            messages,
+            tools,
+            params,
+            &[] as &[&Path],
+            on_delta,
+        )
     }
 
     /// Comme [`Self::generate`], avec chemins d'images locaux (PNG/JPEG) pour le
@@ -778,6 +807,19 @@ impl LlamaContext {
     pub fn generate_with_images(
         &mut self,
         messages: &[(String, String)],
+        params: &GenParams,
+        images: &[impl AsRef<Path>],
+        on_delta: impl FnMut(&str) -> bool,
+    ) -> Result<GenStats, LlamaError> {
+        self.generate_with_images_and_tools(messages, &[], params, images, on_delta)
+    }
+
+    /// Comme [`Self::generate_with_images`], avec des définitions d'outils
+    /// natives transmises au template de chat.
+    pub fn generate_with_images_and_tools(
+        &mut self,
+        messages: &[(String, String)],
+        tools: &[serde_json::Value],
         params: &GenParams,
         images: &[impl AsRef<Path>],
         mut on_delta: impl FnMut(&str) -> bool,
@@ -796,7 +838,7 @@ impl LlamaContext {
         self.seq0_tokens.clear();
 
         let n_prompt = if images.is_empty() {
-            let prompt = self.render_prompt(messages)?;
+            let prompt = self.render_prompt(messages, tools)?;
             let prompt_tokens = self.tokenize(&prompt, false)?;
             let n_prompt = prompt_tokens.len();
             if n_prompt + params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
@@ -809,7 +851,7 @@ impl LlamaContext {
             self.prefill_text_tokens(&prompt_tokens)?;
             n_prompt
         } else {
-            self.prefill_vision(messages, images)?
+            self.prefill_vision(messages, images, tools)?
         };
 
         // Sampler chain : top_p → temp → dist.
@@ -1004,6 +1046,7 @@ impl LlamaContext {
         &mut self,
         messages: &[(String, String)],
         images: &[impl AsRef<Path>],
+        tools: &[serde_json::Value],
     ) -> Result<usize, LlamaError> {
         let mtmd = self.mtmd.ok_or(LlamaError::VisionUnavailable)?;
         let marker = unsafe {
@@ -1023,7 +1066,7 @@ impl LlamaContext {
             }
             *content = format!("{prefix}{content}");
         }
-        let prompt = self.render_prompt(&msgs)?;
+        let prompt = self.render_prompt(&msgs, tools)?;
         let cprompt = CString::new(prompt.as_str()).map_err(|_| LlamaError::Tokenize)?;
         let text = sys::mtmd_input_text {
             text: cprompt.as_ptr(),
@@ -1110,6 +1153,7 @@ impl LlamaContext {
         &mut self,
         _messages: &[(String, String)],
         _images: &[impl AsRef<Path>],
+        _tools: &[serde_json::Value],
     ) -> Result<usize, LlamaError> {
         Err(LlamaError::VisionUnavailable)
     }
@@ -1331,6 +1375,29 @@ impl LlamaContext {
         abort: Arc<AtomicBool>,
         pause: Arc<AtomicBool>,
         max_draft_tokens: usize,
+        on_delta: impl FnMut(&str) -> bool,
+    ) -> Result<GenStats, LlamaError> {
+        self.generate_lookup_with_tools(
+            messages,
+            &[],
+            params,
+            abort,
+            pause,
+            max_draft_tokens,
+            on_delta,
+        )
+    }
+
+    /// Variante de [`Self::generate_lookup`] qui transmet les définitions
+    /// d'outils au template de chat.
+    pub fn generate_lookup_with_tools(
+        &mut self,
+        messages: &[(String, String)],
+        tools: &[serde_json::Value],
+        params: &GenParams,
+        abort: Arc<AtomicBool>,
+        pause: Arc<AtomicBool>,
+        max_draft_tokens: usize,
         mut on_delta: impl FnMut(&str) -> bool,
     ) -> Result<GenStats, LlamaError> {
         let n_draft = max_draft_tokens.max(1);
@@ -1338,7 +1405,7 @@ impl LlamaContext {
         const NGRAM_MAX: usize = 8;
 
         self.abort.store(false, Ordering::SeqCst);
-        let prompt = self.render_prompt(messages)?;
+        let prompt = self.render_prompt(messages, tools)?;
         let prompt_tokens = self.tokenize(&prompt, false)?;
         let n_prompt = prompt_tokens.len();
         if n_prompt + params.max_tokens as usize + 8 > self.n_ctx_seq() as usize {
@@ -1666,7 +1733,7 @@ impl LlamaContext {
 
         for (i, item) in items.iter().enumerate() {
             match self
-                .render_prompt(&item.messages)
+                .render_prompt(&item.messages, &item.tools)
                 .and_then(|p| self.tokenize(&p, false))
             {
                 Ok(toks) => {
@@ -1795,7 +1862,7 @@ impl LlamaContext {
                     break;
                 }
                 match slf
-                    .render_prompt(&item.messages)
+                    .render_prompt(&item.messages, &item.tools)
                     .and_then(|p| slf.tokenize(&p, false))
                 {
                     Ok(toks)
@@ -2135,6 +2202,7 @@ mod tests {
         assert_ne!(StopReason::Paused, StopReason::Aborted);
         let item = BatchItem {
             messages: vec![],
+            tools: vec![],
             params: GenParams {
                 max_tokens: 8,
                 temperature: 0.7,

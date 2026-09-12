@@ -46,6 +46,7 @@ async fn infer_once(
             role: "user".into(),
             content: prompt.into(),
         }],
+        tools: vec![],
         params: InferParams {
             max_tokens,
             temperature: 0.2,

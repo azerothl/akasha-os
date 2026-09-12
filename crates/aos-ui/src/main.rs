@@ -304,6 +304,7 @@ async fn run_chat(bus: Arc<BusClient>, history: Vec<(String, String)>, tx: mpsc:
     let req = InferRequest {
         model_id: None,
         messages,
+        tools: vec![],
         params: InferParams {
             max_tokens: 256,
             temperature: 0.7,

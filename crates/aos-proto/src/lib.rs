@@ -127,6 +127,10 @@ pub struct InferRequest {
     /// `None` → modèle par défaut (assistant système).
     pub model_id: Option<String>,
     pub messages: Vec<ChatMessage>,
+    /// Définitions OpenAI/HuggingFace des outils à fournir au chat template.
+    /// Elles restent optionnelles pour préserver les clients existants.
+    #[serde(default)]
+    pub tools: Vec<serde_json::Value>,
     #[serde(default)]
     pub params: InferParams,
     /// Priorité demandée (0=batch .. 4=system critical, cf. §3.6).
@@ -168,6 +172,7 @@ mod infer_request_tests {
                 role: "user".into(),
                 content: "décris".into(),
             }],
+            tools: vec![],
             params: InferParams::default(),
             priority: 1,
             data_refs: vec!["/tmp/doc.txt".into()],
@@ -179,6 +184,17 @@ mod infer_request_tests {
             req.data_refs,
             vec!["/tmp/doc.txt".to_string(), "/tmp/a.png".to_string(),]
         );
+    }
+
+    #[test]
+    fn infer_request_without_tool_definitions_stays_backward_compatible() {
+        let req: InferRequest = serde_json::from_value(serde_json::json!({
+            "model_id": null,
+            "messages": [{"role": "user", "content": "bonjour"}]
+        }))
+        .expect("legacy infer payload");
+        assert!(req.tools.is_empty());
+        assert!(req.images.is_empty());
     }
 }
 
@@ -4066,6 +4082,100 @@ pub fn compile_canvas_scene(
     Ok(out)
 }
 
+/// Retourne des avertissements de composition pour les scènes illustrées.
+///
+/// Ce contrôle reste volontairement non bloquant : une illustration peut
+/// contenir des éléments flottants (étoiles, pluie, décor). En revanche, les
+/// éléments qui portent un rôle structurel explicite doivent être proches de
+/// leur masse parente. Le diagnostic est injecté dans le digest afin que
+/// l'agent corrige la scène avant de l'exporter.
+pub fn canvas_scene_diagnostics(scene: &CanvasSceneSpec) -> Vec<String> {
+    if scene.profile != CanvasSceneProfile::Illustration {
+        return Vec::new();
+    }
+
+    let entries: Vec<(&CanvasSceneElement, Option<CanvasBBox>)> = scene
+        .elements
+        .iter()
+        .map(|element| (element, canvas_scene_element_bbox(element)))
+        .collect();
+    let mut warnings = Vec::new();
+
+    let find_role = |needles: &[&str]| {
+        entries.iter().find(|(element, bbox)| {
+            bbox.is_some() && contains_scene_term(element, needles)
+        })
+    };
+    if let (Some((body, Some(body_bbox))), Some((head, Some(head_bbox)))) = (
+        find_role(&["body", "corps", "torso", "masse_principale", "masse"]),
+        find_role(&["head", "tête", "tete", "tête", "partie_superieure", "upper"]),
+    ) {
+        if !canvas_scene_bboxes_connected(*body_bbox, *head_bbox, 0.018) {
+            warnings.push(format!(
+                "la partie supérieure `{}` ne touche pas la masse `{}` ; fais chevaucher ou joindre leurs bbox",
+                head.id, body.id
+            ));
+        }
+    }
+
+    for (element, bbox) in &entries {
+        let Some(bbox) = bbox else {
+            continue;
+        };
+        if !contains_scene_term(element, &[
+            "ear", "oreille", "tail", "queue", "leg", "patte", "arm", "bras", "wing",
+            "aile", "appendage", "appendice",
+        ]) {
+            continue;
+        }
+        let attached = entries.iter().any(|(other, other_bbox)| {
+            other.id != element.id
+                && other_bbox.is_some()
+                && !contains_scene_term(other, &["detail", "œil", "oeil", "eye", "moustache", "whisker"])
+                && canvas_scene_bboxes_connected(*bbox, other_bbox.unwrap(), 0.018)
+        });
+        if !attached {
+            warnings.push(format!(
+                "l'appendice `{}` est isolé ; rapproche sa base d'une masse principale",
+                element.id
+            ));
+        }
+    }
+    warnings
+}
+
+fn contains_scene_term(element: &CanvasSceneElement, terms: &[&str]) -> bool {
+    let haystack = format!("{} {}", element.id, element.role).to_ascii_lowercase();
+    terms.iter().any(|term| haystack.contains(&term.to_ascii_lowercase()))
+}
+
+fn canvas_scene_bboxes_connected(a: CanvasBBox, b: CanvasBBox, tolerance: f32) -> bool {
+    let x_gap = (a.x0 - b.x1).max(b.x0 - a.x1).max(0.0);
+    let y_gap = (a.y0 - b.y1).max(b.y0 - a.y1).max(0.0);
+    x_gap <= tolerance && y_gap <= tolerance
+}
+
+fn canvas_scene_element_bbox(element: &CanvasSceneElement) -> Option<CanvasBBox> {
+    let mut bbox = CanvasBBox::empty();
+    match &element.geometry {
+        CanvasSceneGeometry::Rect { x, y, w, h, .. }
+        | CanvasSceneGeometry::Ellipse { x, y, w, h, .. } => {
+            bbox.expand_rect(*x, *y, *w, *h);
+        }
+        CanvasSceneGeometry::Line { p0, p1 } => {
+            bbox.expand_point(p0.x, p0.y);
+            bbox.expand_point(p1.x, p1.y);
+        }
+        CanvasSceneGeometry::Spline { points } | CanvasSceneGeometry::Path { points, .. } => {
+            bbox.expand_points(points);
+        }
+        CanvasSceneGeometry::Text { x, y, size, .. } => {
+            bbox.expand_rect(*x, *y, *size * 0.55, *size * 1.2);
+        }
+    }
+    bbox.is_valid().then_some(bbox)
+}
+
 /// Normalise `#RRGGBB` (6 hex digits).
 pub fn normalize_canvas_color(s: &str) -> Option<String> {
     let t = s.trim().trim_start_matches('#');
@@ -4513,6 +4623,11 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
             "scene_bbox=({:.3},{:.3})-({:.3},{:.3})",
             scene_bbox.x0, scene_bbox.y0, scene_bbox.x1, scene_bbox.y1
         ));
+    }
+    if let Some(scene) = doc.scene.as_ref() {
+        for warning in canvas_scene_diagnostics(scene) {
+            lines.push(format!("scene_check=warning: {warning}"));
+        }
     }
     if let Some(last) = doc.ops.last() {
         if let Some(b) = canvas_op_bbox(&last.body) {
@@ -5934,7 +6049,8 @@ mod media_option_tests {
 #[cfg(test)]
 mod chat_session_room_tests {
     use super::{
-        compile_canvas_scene, AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState,
+        canvas_scene_diagnostics, compile_canvas_scene, AgentCreateRequest, AgentGoal, AgentInfo,
+        AgentKind, AgentState,
         CanvasAspect, CanvasGuides, CanvasOpBody, CanvasPoint, CanvasSceneElement,
         CanvasSceneGeometry, CanvasSceneProfile, CanvasSceneRelation, CanvasSceneSpec,
         CanvasSnapMode,
@@ -6352,6 +6468,51 @@ mod chat_session_room_tests {
             }
             _ => panic!("expected rectangle"),
         }
+    }
+
+    #[test]
+    fn illustration_scene_diagnostics_find_disconnected_structure() {
+        let element = |id: &str, role: &str, geometry| CanvasSceneElement {
+            id: id.into(),
+            role: role.into(),
+            layer: None,
+            color: None,
+            width: None,
+            fill: true,
+            opacity: 1.0,
+            dash: vec![],
+            geometry,
+        };
+        let scene = CanvasSceneSpec {
+            profile: CanvasSceneProfile::Illustration,
+            elements: vec![
+                element("body", "masse principale", CanvasSceneGeometry::Ellipse {
+                        x: 0.5,
+                        y: 0.6,
+                        w: 0.4,
+                        h: 0.3,
+                        rotation: 0.0,
+                    }),
+                element("head", "partie supérieure", CanvasSceneGeometry::Ellipse {
+                        x: 0.5,
+                        y: 0.35,
+                        w: 0.25,
+                        h: 0.22,
+                        rotation: 0.0,
+                    }),
+                element("ear_l", "oreille", CanvasSceneGeometry::Path {
+                        points: vec![
+                            CanvasPoint { x: 0.42, y: 0.25 },
+                            CanvasPoint { x: 0.48, y: 0.30 },
+                        ],
+                        closed: true,
+                    }),
+            ],
+            ..Default::default()
+        };
+        let warnings = canvas_scene_diagnostics(&scene).join("\n");
+        assert!(warnings.contains("partie supérieure `head` ne touche pas"));
+        assert!(warnings.contains("appendice `ear_l` est isolé"));
     }
 
     #[test]
