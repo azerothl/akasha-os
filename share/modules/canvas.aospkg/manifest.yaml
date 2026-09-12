@@ -1,6 +1,6 @@
 name: canvas
 version: 1.0.0
-hash: 957f12bbe0b021d9e0b18bc54e2a471b7b0220a306c9afcc21a697e6944dbd46
+hash: 0db7466188b71be32ca2aec82a05b61e7190a06ce636b974d9f5443c953c9f7f
 permissions:
   required_caps:
     - fs.write:/downloads/**
@@ -249,4 +249,24 @@ tools:
         seq: { type: integer }
         rotation: { type: number }
       required: [session_id, seq, rotation]
+  - name: canvas.set_guides
+    description: Set shared construction guides (grid visibility, snapping, grid size, and snap mode)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        show_grid: { type: boolean }
+        snap: { type: boolean }
+        grid_size: { type: number }
+        snap_mode: { type: string, description: grid|anchors|edges|grid_and_anchors }
+      required: [session_id]
+  - name: canvas.compose
+    description: Compile a CanvasSceneSpec profile (illustration|diagram|math|primitives|freeform) into vector operations
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        author_id: { type: string }
+        scene: { type: object, description: Versioned scene with profile, elements, relations, and optional reference }
+      required: [session_id, scene]
 min_os_api: 1

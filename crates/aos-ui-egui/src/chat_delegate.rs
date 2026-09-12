@@ -443,10 +443,11 @@ pub(crate) fn device_vision_model_id(
 }
 
 /// A canvas critic needs pixels, not merely a capable model installed on disk.
-/// Keep an explicitly selected chat model untouched; only fill an absent model
-/// with a vision-capable model that is already resident.
+/// Prefer a resident vision model even when the chat session selected a
+/// text-only model; retain the selected model only when no vision model is
+/// available on the machine.
 pub(crate) fn canvas_model_id(selected: Option<String>, available: &[ModelInfo]) -> Option<String> {
-    selected.or_else(|| {
+    let resident_vision = || {
         available
             .iter()
             .find(|model| {
@@ -457,7 +458,23 @@ pub(crate) fn canvas_model_id(selected: Option<String>, available: &[ModelInfo])
                     )
             })
             .map(|model| model.id.clone())
-    })
+    };
+
+    match selected {
+        Some(id) if available.iter().any(|model| {
+            model.id == id
+                && model.has_vision
+                && matches!(
+                    model.state,
+                    ModelState::Loaded | ModelState::PartiallyOffloaded
+                )
+        }) => Some(id),
+        // A text-only chat model cannot critique pixels. Prefer a resident
+        // vision model for canvas delegation while retaining the selected
+        // model as a last resort when the machine has no vision model.
+        Some(id) => resident_vision().or(Some(id)),
+        None => resident_vision(),
+    }
 }
 
 pub(crate) fn chat_delegate_kit(

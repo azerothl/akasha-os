@@ -1,7 +1,7 @@
 //! Event handlers for canvas session metadata, snapshots, and exports.
 
 use crate::{ChatAttachment, ChatLine, UiApp};
-use aos_proto::{CanvasLayer, CanvasOp, CanvasPenStyle, ChatSessionMeta};
+use aos_proto::{CanvasGuides, CanvasLayer, CanvasOp, CanvasPenStyle, CanvasSceneSpec, ChatSessionMeta};
 use eframe::egui;
 
 pub(crate) struct CanvasSnapshotEvent {
@@ -14,6 +14,8 @@ pub(crate) struct CanvasSnapshotEvent {
     pub(crate) canvas_seeing: Option<bool>,
     pub(crate) layers: Vec<CanvasLayer>,
     pub(crate) active_layer_id: String,
+    pub(crate) guides: CanvasGuides,
+    pub(crate) scene: Option<CanvasSceneSpec>,
 }
 
 pub(crate) fn on_canvas_meta(app: &mut UiApp, meta: ChatSessionMeta) {
@@ -33,6 +35,8 @@ pub(crate) fn on_canvas_snapshot(app: &mut UiApp, ctx: &egui::Context, event: Ca
         canvas_seeing,
         layers,
         active_layer_id,
+        guides,
+        scene,
     } = event;
     if let Some(session) = app
         .chat_state
@@ -71,6 +75,8 @@ pub(crate) fn on_canvas_snapshot(app: &mut UiApp, ctx: &egui::Context, event: Ca
             .canvas
             .sync_layers(layers, active_layer_id);
     }
+    app.chat_state.view.canvas.sync_guides(&guides);
+    app.chat_state.view.canvas.sync_scene(scene);
     if let Some(seeing) = canvas_seeing {
         app.chat_state.view.canvas.seeing = seeing;
     }

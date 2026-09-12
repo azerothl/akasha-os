@@ -4246,6 +4246,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                 canvas_seeing: Some(resp.canvas_seeing),
                                 layers: resp.layers.clone(),
                                 active_layer_id: resp.active_layer_id.clone(),
+                                guides: resp.guides,
+                                scene: resp.scene,
                             });
                         }
                     }
@@ -4284,6 +4286,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         canvas_seeing: None,
                         layers: resp.doc.layers.clone(),
                         active_layer_id: resp.doc.active_layer_id.clone(),
+                        guides: resp.doc.guides,
+                        scene: resp.doc.scene,
                     });
                     if resp.canvas_open {
                         refresh_sessions(&bus, &evt_tx).await;
@@ -4326,6 +4330,48 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         canvas_seeing: None,
                         layers: resp.doc.layers.clone(),
                         active_layer_id: resp.doc.active_layer_id.clone(),
+                        guides: resp.doc.guides,
+                        scene: resp.doc.scene,
+                    });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::CanvasSetGuides {
+            session_id,
+            show_grid,
+            snap,
+            grid_size,
+        } => {
+            match bus
+                .call::<aos_proto::CanvasSetGuidesRequest, aos_proto::CanvasSetGuidesResponse>(
+                    "canvas.set_guides",
+                    &aos_proto::CanvasSetGuidesRequest {
+                        session_id: session_id.clone(),
+                        show_grid,
+                        snap,
+                        grid_size,
+                        snap_mode: None,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::CanvasSnapshot {
+                        session_id,
+                        canvas_open: resp.canvas_open,
+                        next_seq: resp.doc.next_seq,
+                        ops: resp.doc.ops,
+                        pen: resp.doc.pen,
+                        delta: false,
+                        canvas_seeing: None,
+                        layers: resp.doc.layers,
+                        active_layer_id: resp.doc.active_layer_id,
+                        guides: resp.guides,
+                        scene: resp.doc.scene,
                     });
                 }
                 Err(e) => {
@@ -4359,6 +4405,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     canvas_seeing: Some(resp.canvas_seeing),
                     layers: resp.layers.clone(),
                     active_layer_id: resp.active_layer_id.clone(),
+                    guides: resp.guides,
+                    scene: resp.scene,
                 });
             }
         }
@@ -4411,6 +4459,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         canvas_seeing: None,
                         layers: resp.layers,
                         active_layer_id: resp.active_layer_id,
+                        guides: resp.guides,
+                        scene: resp.scene,
                     });
                     if resp.canvas_open {
                         refresh_sessions(&bus, &evt_tx).await;
@@ -4439,6 +4489,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             canvas_seeing: Some(resp.canvas_seeing),
                             layers: resp.layers,
                             active_layer_id: resp.active_layer_id,
+                            guides: resp.guides,
+                            scene: resp.scene,
                         });
                     }
                 }
@@ -4472,6 +4524,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         canvas_seeing: None,
                         layers: resp.layers,
                         active_layer_id: resp.active_layer_id,
+                        guides: resp.guides,
+                        scene: resp.scene,
                     });
                     refresh_sessions(&bus, &evt_tx).await;
                 }

@@ -469,6 +469,12 @@ pub(crate) enum Cmd {
         opacity: Option<f32>,
         dash: Option<Vec<f32>>,
     },
+    CanvasSetGuides {
+        session_id: String,
+        show_grid: Option<bool>,
+        snap: Option<bool>,
+        grid_size: Option<f32>,
+    },
     CanvasPoll {
         session_id: String,
         after_seq: Option<u64>,
@@ -650,6 +656,8 @@ pub(crate) enum Evt {
         canvas_seeing: Option<bool>,
         layers: Vec<aos_proto::CanvasLayer>,
         active_layer_id: String,
+        guides: aos_proto::CanvasGuides,
+        scene: Option<aos_proto::CanvasSceneSpec>,
     },
     CanvasExported {
         path: String,

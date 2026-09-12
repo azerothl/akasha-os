@@ -60,7 +60,7 @@ mod delegate_tests {
     }
 
     #[test]
-    fn canvas_uses_loaded_vision_model_only_when_chat_model_is_absent() {
+    fn canvas_prefers_loaded_vision_model_over_a_text_chat_model() {
         let models = vec![
             model("vision-on-disk", ModelState::OnDisk, true),
             model("text-loaded", ModelState::Loaded, false),
@@ -72,7 +72,7 @@ mod delegate_tests {
         );
         assert_eq!(
             canvas_model_id(Some("chosen-text".into()), &models).as_deref(),
-            Some("chosen-text")
+            Some("vision-loaded")
         );
         assert_eq!(
             crate::chat_delegate::device_vision_model_id(Some("text-loaded".into()), &models)
