@@ -128,6 +128,17 @@ pub fn strip_tool_markup_tags(text: &str) -> String {
     }
     out = remove_tag_blocks(&out, "tool_call");
     out = remove_tag_blocks(&out, "function_call");
+    // Native DSML emitted by some local models uses asymmetric delimiters
+    // (`<|tool_call>…<tool_call|>`) and channel wrappers. If these markers are
+    // kept in assistant memory, the next inference tends to echo them forever
+    // instead of producing the next Canvas action.
+    for (open, close) in NATIVE_TOOL_MARKUP_WRAPPERS {
+        out = remove_empty_wrapper_tags(&out, open, close);
+        out = remove_all_wrapper_tags(&out, open, close);
+    }
+    for marker in NATIVE_CONTROL_MARKERS {
+        out = remove_literal_marker(&out, marker);
+    }
     out.trim().to_string()
 }
 
@@ -155,6 +166,34 @@ const TOOL_MARKUP_WRAPPERS: &[(&str, &str)] = &[
     ("<function_calls>", "</function_calls>"),
 ];
 
+const NATIVE_TOOL_MARKUP_WRAPPERS: &[(&str, &str)] = &[
+    ("<|tool_call>", "<tool_call|>"),
+    ("<|function_call>", "<function_call|>"),
+    ("<|channel>", "<channel|>"),
+];
+
+const NATIVE_CONTROL_MARKERS: &[&str] = &[
+    "<|tool_call>",
+    "<tool_call|>",
+    "<|function_call>",
+    "<function_call|>",
+    "<|channel>",
+    "<channel|>",
+];
+
+fn remove_literal_marker(text: &str, marker: &str) -> String {
+    let mut out = text.to_string();
+    loop {
+        let lower = out.to_ascii_lowercase();
+        let marker_lower = marker.to_ascii_lowercase();
+        let Some(start) = lower.find(&marker_lower) else {
+            break;
+        };
+        out = format!("{}{}", &out[..start], &out[start + marker.len()..]);
+    }
+    out
+}
+
 fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
     let stripped = strip_tool_markup(text);
     let payloads = extract_tag_block_payloads(text, "tool_call");
@@ -168,12 +207,154 @@ fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
             .filter_map(|p| action_from_openai_tool_json(p))
             .collect();
     }
+    // Some local instruct models emit their native DSML dialect instead of
+    // JSON/XML: `call:canvas.get{session_id: "..."}`. Treat it as a tool call
+    // only when a balanced argument object follows the action token.
+    if actions.is_empty() {
+        actions = parse_colon_call_actions(text);
+    }
     if actions.is_empty() && !stripped.trim().is_empty() {
         if let Some(a) = parse_action_clean(&stripped) {
             actions.push(a);
         }
     }
     actions
+}
+
+fn parse_colon_call_actions(text: &str) -> Vec<AgentAction> {
+    let lower = text.to_ascii_lowercase();
+    let mut actions = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative) = lower[cursor..].find("call:") {
+        let marker = cursor + relative;
+        let action_start = marker + "call:".len();
+        let action_end = text[action_start..]
+            .char_indices()
+            .take_while(|(_, ch)| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-'))
+            .last()
+            .map(|(index, ch)| action_start + index + ch.len_utf8())
+            .unwrap_or(action_start);
+        if action_end == action_start {
+            cursor = action_start;
+            continue;
+        }
+        let object_start = text[action_end..]
+            .char_indices()
+            .find(|(_, ch)| !ch.is_ascii_whitespace())
+            .map(|(index, _)| action_end + index);
+        let Some(object_start) = object_start.filter(|index| text[*index..].starts_with('{'))
+        else {
+            cursor = action_end;
+            continue;
+        };
+        let Some(object_end) = find_balanced_object_end(text, object_start) else {
+            break;
+        };
+        let raw_args = &text[object_start..=object_end];
+        if let Some(args) = parse_loose_json_object(raw_args) {
+            actions.push(AgentAction {
+                thought: String::new(),
+                action: text[action_start..action_end].to_string(),
+                args,
+            });
+        }
+        cursor = object_end + 1;
+    }
+    actions
+}
+
+fn find_balanced_object_end(text: &str, start: usize) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, ch) in text[start..].char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(start + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn parse_loose_json_object(raw: &str) -> Option<serde_json::Value> {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
+        return if value.is_object() { Some(value) } else { None };
+    }
+    // The native dialect leaves object keys unquoted while keeping values in
+    // JSON syntax. Quote only identifier-like tokens followed by `:` and
+    // leave strings untouched, including escaped quotes.
+    let mut normalized = String::with_capacity(raw.len() + 8);
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            let start = i;
+            i += 1;
+            let mut escaped = false;
+            while i < bytes.len() {
+                if escaped {
+                    escaped = false;
+                } else if bytes[i] == b'\\' {
+                    escaped = true;
+                } else if bytes[i] == b'"' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            normalized.push_str(&raw[start..i]);
+            continue;
+        }
+        if bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' {
+            let start = i;
+            i += 1;
+            while i < bytes.len()
+                && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'_' | b'-' | b'.'))
+            {
+                i += 1;
+            }
+            let token_end = i;
+            while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if i < bytes.len() && bytes[i] == b':' {
+                normalized.push('"');
+                normalized.push_str(&raw[start..token_end]);
+                normalized.push('"');
+                normalized.push_str(&raw[token_end..i]);
+                normalized.push(':');
+                i += 1;
+                continue;
+            }
+            normalized.push_str(&raw[start..token_end]);
+            continue;
+        }
+        normalized.push(bytes[i] as char);
+        i += 1;
+    }
+    let value = serde_json::from_str::<serde_json::Value>(&normalized).ok()?;
+    if value.is_object() {
+        Some(value)
+    } else {
+        None
+    }
 }
 
 fn action_from_openai_tool_json(json: &str) -> Option<AgentAction> {
@@ -346,7 +527,14 @@ fn parse_action_clean(text: &str) -> Option<AgentAction> {
 }
 
 /// Clés réservées du wrapper d'action — tout le reste peut être un arg aplati.
-const ACTION_WRAPPER_KEYS: &[&str] = &["action", "args", "thought", "thinking", "reasoning"];
+const ACTION_WRAPPER_KEYS: &[&str] = &[
+    "action",
+    "args",
+    "action_input",
+    "thought",
+    "thinking",
+    "reasoning",
+];
 
 /// Parse un objet JSON en `AgentAction`, en remontant les champs frères dans `args`.
 ///
@@ -373,13 +561,25 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
         .unwrap_or("")
         .to_string();
 
+    let action_input = obj
+        .get("action_input")
+        .and_then(|value| value.as_object())
+        .cloned();
     let mut args = match obj.get("args") {
         Some(a) if a.is_object() => a.clone(),
         Some(a) if !a.is_null() => serde_json::json!({ "value": a.clone() }),
-        _ => serde_json::json!({}),
+        _ => action_input
+            .clone()
+            .map(serde_json::Value::Object)
+            .unwrap_or_else(|| serde_json::json!({})),
     };
 
     if let Some(map) = args.as_object_mut() {
+        if let Some(input) = action_input {
+            for (k, v) in input {
+                map.entry(k).or_insert(v);
+            }
+        }
         for (k, v) in obj {
             if ACTION_WRAPPER_KEYS.contains(&k.as_str()) {
                 continue;
@@ -550,6 +750,36 @@ mod tests {
     }
 
     #[test]
+    fn parse_action_input_wrapper_as_tool_args() {
+        let text = r#"{
+  "action": "canvas.path",
+  "action_input": {
+    "session_id": "sess-1",
+    "points": [{"x": 0.1, "y": 0.2}],
+    "fill": true
+  }
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.action, "canvas.path");
+        assert_eq!(a.args["session_id"], "sess-1");
+        assert_eq!(a.args["points"][0]["x"], 0.1);
+        assert_eq!(a.args["fill"], true);
+        assert!(a.args.get("action_input").is_none());
+    }
+
+    #[test]
+    fn nested_args_take_precedence_over_action_input_wrapper() {
+        let text = r##"{
+  "action": "canvas.set_style",
+  "args": {"color": "#111111"},
+  "action_input": {"color": "#222222", "width": 0.03}
+}"##;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.args["color"], "#111111");
+        assert_eq!(a.args["width"], 0.03);
+    }
+
+    #[test]
     fn parse_nested_args_wins_over_flat_sibling() {
         let text = r#"{
   "action": "agent.spawn",
@@ -602,6 +832,16 @@ Thinking Process:
     }
 
     #[test]
+    fn parse_native_dsml_colon_call_canvas_get() {
+        let text = r#"<|channel>thought
+<channel|><|tool_call>call:canvas.get{session_id: "sess-1"}<tool_call|>"#;
+        let actions = parse_actions(text);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action, "canvas.get");
+        assert_eq!(actions[0].args["session_id"], "sess-1");
+    }
+
+    #[test]
     fn empty_dsml_wrapper_is_not_an_action() {
         let text = "<｜DSML｜tool_call>\n\n</｜DSML｜tool_call>";
         assert!(parse_actions(text).is_empty());
@@ -616,6 +856,14 @@ Thinking Process:
         assert!(!stripped.contains("tool_call"));
         assert!(!stripped.contains("DSML"));
         assert!(!stripped.contains("canvas.rect"));
+    }
+
+    #[test]
+    fn strip_tool_markup_removes_native_dsml_from_assistant_memory() {
+        let raw = r#"<|channel>thought
+<channel|><|tool_call>call:canvas.get{session_id: "sess-1"}<tool_call|>"#;
+        let stripped = strip_tool_markup(raw);
+        assert!(stripped.is_empty());
     }
 
     #[test]

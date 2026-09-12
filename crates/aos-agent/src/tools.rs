@@ -931,6 +931,33 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             }),
         ),
         (
+            "canvas.set_guides",
+            "Configurer les guides partagés (grille visible, aimant, taille de grille et mode grid|anchors|edges|grid_and_anchors)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "show_grid":{"type":"boolean"},
+                    "snap":{"type":"boolean"},
+                    "grid_size":{"type":"number","description":"pas normalisé 0.001..0.25"},
+                    "snap_mode":{"type":"string","description":"grid|anchors|edges|grid_and_anchors"}
+                }
+            }),
+        ),
+        (
+            "canvas.compose",
+            "Compiler une CanvasSceneSpec versionnée en une scène complète. Pour une illustration, utiliser profile=illustration et elements [{id,role,layer,color,fill,geometry:{kind:ellipse|rect|path|spline|line|text,...}}] ; ne pas utiliser scene_spec/composition/shape/coords/type. Pour un graphe ou des maths, préférer les primitives.",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id": sid_schema(),
+                    "author_id":{"type":"string"},
+                    "scene":{"type":"object","description":"CanvasSceneSpec : version, profile, subject, reference, view, elements, relations, guides"}
+                },
+                "required":["scene"]
+            }),
+        ),
+        (
             "canvas.get",
             "Lire le canvas existant (toujours en premier ; after_seq optionnel) — poursuis le dessin, ne redémarre pas sauf demande",
             serde_json::json!({
@@ -995,6 +1022,8 @@ pub const CANVAS_TOOL_IDS: &[&str] = &[
     "canvas.layer_activate",
     "canvas.align",
     "canvas.rotate",
+    "canvas.set_guides",
+    "canvas.compose",
 ];
 
 /// Phrases that beat Create/image routing — must stay aligned with `chat_canvas` routing.
@@ -1075,10 +1104,12 @@ pub fn restrict_canvas_tools(tool_ids: &mut Vec<String>, exported: &[String]) {
 
 /// Short drawing strategy for canvas agents — only mentions exported tools.
 pub fn canvas_draw_strategy_hint(exported: &[String]) -> String {
-    if exported.iter().any(|t| t == "canvas.path") {
-        "canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir) en traits séquentiels.".into()
+    if exported.iter().any(|t| t == "canvas.compose") {
+        "PROTOCOLE : canvas.get → pour une illustration/objet/personnage, préfère une seule canvas.compose avec profile=illustration et une scène complète (masse principale, partie supérieure, appendices, détails, calques) ; pour graphe/schéma/math, utilise les primitives → relis → canvas.export en dernier.".into()
+    } else if exported.iter().any(|t| t == "canvas.path") {
+        "PROTOCOLE : canvas.get → lis digest/capture → une seule op (canvas.path pour silhouette, canvas.stroke/rect/ellipse pour détails) → relis → répète → canvas.export en dernier.".into()
     } else {
-        "canvas.get puis canvas.stroke/spline/rect/ellipse (fill:true pour remplir) en traits séquentiels.".into()
+        "PROTOCOLE : canvas.get → lis digest/capture → une seule op (canvas.stroke/spline/rect/ellipse, fill:true pour remplir) → relis → répète → canvas.export en dernier.".into()
     }
 }
 
@@ -1467,6 +1498,13 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
             }
         }
         obj.remove("fill_color");
+        if name == "canvas.compose" && !obj.contains_key("scene") {
+            // Common model wrapper alias. The module contract is `scene`,
+            // while local models often call the same payload `scene_spec`.
+            if let Some(scene) = obj.remove("scene_spec") {
+                obj.insert("scene".into(), scene);
+            }
+        }
     }
     if name == "media.audio.generate" && !obj.contains_key("text") {
         for k in ["prompt", "content", "message", "speech"] {
@@ -1648,6 +1686,23 @@ mod tests {
         assert_eq!(args["color"], "#333333");
         assert_eq!(args["width"], 0.02);
         assert!(args.get("style").is_none());
+    }
+
+    #[test]
+    fn normalize_canvas_compose_scene_spec_alias() {
+        let args = normalize_tool_args(
+            "canvas.compose",
+            &serde_json::json!({
+                "scene_spec": {
+                    "version": 1,
+                    "profile": "illustration",
+                    "subject": "chat",
+                    "elements": []
+                }
+            }),
+        );
+        assert_eq!(args["scene"]["subject"], "chat");
+        assert!(args.get("scene_spec").is_none());
     }
 
     #[test]

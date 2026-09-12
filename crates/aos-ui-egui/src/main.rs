@@ -2891,6 +2891,8 @@ impl eframe::App for UiApp {
                     canvas_seeing,
                     layers,
                     active_layer_id,
+                    guides,
+                    scene,
                 } => {
                     canvas_event_controller::on_canvas_snapshot(
                         self,
@@ -2905,6 +2907,8 @@ impl eframe::App for UiApp {
                             canvas_seeing,
                             layers,
                             active_layer_id,
+                            guides,
+                            scene,
                         },
                     );
                 }

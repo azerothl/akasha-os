@@ -3,8 +3,8 @@
 use aos_proto::{
     canvas_hit_test, canvas_layer_effective_locked, canvas_op_bbox, canvas_rect_corners,
     canvas_rotate_point, default_canvas_opacity, translate_canvas_op_body, CanvasAspect,
-    CanvasEdit, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody, CanvasPenStyle,
-    CanvasPoint,
+    CanvasEdit, CanvasGuides, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody,
+    CanvasPenStyle, CanvasPoint, CanvasSceneSpec,
 };
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, Shape, StrokeKind};
 use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
@@ -41,6 +41,11 @@ pub enum CanvasUiAction {
         opacity: Option<f32>,
         dash: Option<Vec<f32>>,
     },
+    SetGuides {
+        show_grid: Option<bool>,
+        snap: Option<bool>,
+        grid_size: Option<f32>,
+    },
     ExportPng,
     ExportSvg,
     ExportJson,
@@ -75,6 +80,8 @@ pub struct CanvasPanelState {
     pub show_grid: bool,
     /// Snap pointer and committed coords to 0.01.
     pub snap: bool,
+    /// Normalized grid step used by snapping.
+    pub grid_size: f32,
     pub selected_seq: Option<u64>,
     pub layers: Vec<CanvasLayer>,
     pub active_layer_id: String,
@@ -93,6 +100,8 @@ pub struct CanvasPanelState {
     pub layer_rename_text: String,
     /// S4 : saisie de texte en cours (position ancrée + contenu).
     pub text_edit: Option<CanvasTextEdit>,
+    /// Last structured scene compiled into this canvas, if any.
+    pub scene: Option<CanvasSceneSpec>,
 }
 
 /// S4 : état de la saisie inline d'une étiquette.
@@ -130,6 +139,7 @@ impl Default for CanvasPanelState {
             seeing: false,
             show_grid: false,
             snap: false,
+            grid_size: 0.01,
             selected_seq: None,
             layers: Vec::new(),
             active_layer_id: String::new(),
@@ -142,6 +152,7 @@ impl Default for CanvasPanelState {
             layer_rename_id: None,
             layer_rename_text: String::new(),
             text_edit: None,
+            scene: None,
         }
     }
 }
@@ -223,6 +234,16 @@ impl CanvasPanelState {
         self.layers = layers;
         self.active_layer_id = active_layer_id;
     }
+
+    pub fn sync_guides(&mut self, guides: &CanvasGuides) {
+        self.show_grid = guides.show_grid;
+        self.snap = guides.snap;
+        self.grid_size = guides.grid_size.clamp(0.001, 0.25);
+    }
+
+    pub fn sync_scene(&mut self, scene: Option<CanvasSceneSpec>) {
+        self.scene = scene;
+    }
 }
 
 pub use canvas_paint::color_to_hex;
@@ -274,7 +295,12 @@ fn clamp_in_range(value: f32, a: f32, b: f32) -> f32 {
 const SNAP_STEP: f32 = 0.01;
 
 pub(crate) fn snap_unit(v: f32) -> f32 {
-    ((v / SNAP_STEP).round() * SNAP_STEP).clamp(0.0, 1.0)
+    snap_unit_step(v, SNAP_STEP)
+}
+
+fn snap_unit_step(v: f32, step: f32) -> f32 {
+    let step = step.clamp(0.001, 0.25);
+    ((v / step).round() * step).clamp(0.0, 1.0)
 }
 
 pub(crate) fn snap_point(p: CanvasPoint) -> CanvasPoint {
@@ -284,45 +310,50 @@ pub(crate) fn snap_point(p: CanvasPoint) -> CanvasPoint {
     }
 }
 
-fn snap_points(points: &mut [CanvasPoint]) {
-    for p in points {
-        *p = snap_point(*p);
+fn snap_point_step(p: CanvasPoint, step: f32) -> CanvasPoint {
+    CanvasPoint {
+        x: snap_unit_step(p.x, step),
+        y: snap_unit_step(p.y, step),
     }
 }
 
-fn snap_body(body: &mut CanvasOpBody) {
+fn snap_body(body: &mut CanvasOpBody, step: f32) {
     match body {
         CanvasOpBody::Stroke { points, .. }
         | CanvasOpBody::Erase { points, .. }
         | CanvasOpBody::Spline { points, .. }
-        | CanvasOpBody::Path { points, .. } => snap_points(points),
+        | CanvasOpBody::Path { points, .. } => {
+            for p in points {
+                *p = snap_point_step(*p, step);
+            }
+        }
         CanvasOpBody::Line { p0, p1, .. } => {
-            *p0 = snap_point(*p0);
-            *p1 = snap_point(*p1);
+            *p0 = snap_point_step(*p0, step);
+            *p1 = snap_point_step(*p1, step);
         }
         CanvasOpBody::Rect { x, y, w, h, .. } | CanvasOpBody::Ellipse { x, y, w, h, .. } => {
-            let x1 = snap_unit(*x + *w);
-            let y1 = snap_unit(*y + *h);
-            *x = snap_unit(*x);
-            *y = snap_unit(*y);
-            *w = (x1 - *x).abs().max(SNAP_STEP);
-            *h = (y1 - *y).abs().max(SNAP_STEP);
+            let x1 = snap_unit_step(*x + *w, step);
+            let y1 = snap_unit_step(*y + *h, step);
+            *x = snap_unit_step(*x, step);
+            *y = snap_unit_step(*y, step);
+            *w = (x1 - *x).abs().max(step);
+            *h = (y1 - *y).abs().max(step);
         }
         CanvasOpBody::Fill { x, y, .. } => {
-            *x = snap_unit(*x);
-            *y = snap_unit(*y);
+            *x = snap_unit_step(*x, step);
+            *y = snap_unit_step(*y, step);
         }
         CanvasOpBody::Text { x, y, .. } => {
-            *x = snap_unit(*x);
-            *y = snap_unit(*y);
+            *x = snap_unit_step(*x, step);
+            *y = snap_unit_step(*y, step);
         }
         CanvasOpBody::Clear | CanvasOpBody::Undo => {}
     }
 }
 
-fn maybe_snap_point(p: CanvasPoint, snap: bool) -> CanvasPoint {
+fn maybe_snap_point(p: CanvasPoint, snap: bool, step: f32) -> CanvasPoint {
     if snap {
-        snap_point(p)
+        snap_point_step(p, step)
     } else {
         p
     }
@@ -1214,6 +1245,11 @@ pub fn ui_canvas_toolbar(
             if icons::toolbar_action_selectable(ui, grid_on, ToolbarActionIcon::Grid, t.canvas_grid)
             {
                 state.show_grid = !grid_on;
+                action = Some(CanvasUiAction::SetGuides {
+                    show_grid: Some(state.show_grid),
+                    snap: None,
+                    grid_size: None,
+                });
             }
             let snap_on = state.snap;
             if icons::toolbar_action_selectable(ui, snap_on, ToolbarActionIcon::Snap, t.canvas_snap)
@@ -1222,6 +1258,11 @@ pub fn ui_canvas_toolbar(
                 if state.snap {
                     state.show_grid = true;
                 }
+                action = Some(CanvasUiAction::SetGuides {
+                    show_grid: Some(state.show_grid),
+                    snap: Some(state.snap),
+                    grid_size: None,
+                });
             }
             if state.clear_confirm_open {
                 if icons::toolbar_action_button(
@@ -1704,7 +1745,7 @@ pub fn ui_canvas_surface(
             if !rect.contains(pos) {
                 return action;
             }
-            let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+            let p = maybe_snap_point(to_norm(rect, pos), state.snap, state.grid_size);
             match state.tool {
                 CanvasTool::Pan => {}
                 CanvasTool::Pen | CanvasTool::Eraser | CanvasTool::Spline | CanvasTool::Path => {
@@ -1739,7 +1780,7 @@ pub fn ui_canvas_surface(
     if response.clicked() && state.tool == CanvasTool::Select {
         if let Some(pos) = response.interact_pointer_pos() {
             if rect.contains(pos) {
-                let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+                let p = maybe_snap_point(to_norm(rect, pos), state.snap, state.grid_size);
                 let visible: Vec<&CanvasOp> = state
                     .ops
                     .iter()
@@ -1758,7 +1799,7 @@ pub fn ui_canvas_surface(
     if state.tool == CanvasTool::Text && response.clicked() {
         if let Some(pos) = response.interact_pointer_pos() {
             if rect.contains(pos) {
-                let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+                let p = maybe_snap_point(to_norm(rect, pos), state.snap, state.grid_size);
                 state.text_edit = Some(CanvasTextEdit {
                     pos: p,
                     content: String::new(),
@@ -1782,7 +1823,7 @@ pub fn ui_canvas_surface(
         } else if response.clicked() {
             if let Some(pos) = response.interact_pointer_pos() {
                 if rect.contains(pos) {
-                    let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+                    let p = maybe_snap_point(to_norm(rect, pos), state.snap, state.grid_size);
                     if state
                         .draft_points
                         .last()
@@ -1866,7 +1907,7 @@ pub fn ui_canvas_surface(
             if !text.trim().is_empty() {
                 let (opacity, _, _) = pen_style_fields(state);
                 if let Some(edit) = state.text_edit.take() {
-                    let p = maybe_snap_point(edit.pos, state.snap);
+            let p = maybe_snap_point(edit.pos, state.snap, state.grid_size);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Text {
                         x: p.x,
                         y: p.y,
@@ -2073,7 +2114,7 @@ pub fn ui_canvas_surface(
 
     if let Some(pos) = response.hover_pos() {
         if rect.contains(pos) {
-            let p = maybe_snap_point(to_norm(rect, pos), state.snap);
+            let p = maybe_snap_point(to_norm(rect, pos), state.snap, state.grid_size);
             let (ew, eh) = aspect.export_dimensions(1024);
             let px = p.x * (ew.saturating_sub(1) as f32);
             let py = p.y * (eh.saturating_sub(1) as f32);
@@ -2090,7 +2131,7 @@ pub fn ui_canvas_surface(
 
     if state.snap {
         if let Some(CanvasUiAction::Apply(body)) = action.as_mut() {
-            snap_body(body);
+            snap_body(body, state.grid_size);
         }
     }
 
@@ -2225,16 +2266,60 @@ un shape par forme lisible. Traits fins : canvas.stroke/line. "
     let tools_line = if allowed.is_empty() {
         "Outils canvas : (module non chargé — commence par canvas.get si disponible).".to_string()
     } else {
-        let mut names: Vec<&str> = allowed
+        let groups: [(&str, &[&str]); 7] = [
+            ("Lecture", &["canvas.get"]),
+            ("Scène structurée", &["canvas.compose"]),
+            (
+                "Pen et courbes",
+                &["canvas.set_style", "canvas.stroke", "canvas.line", "canvas.spline"],
+            ),
+            (
+                "Silhouettes et formes",
+                &["canvas.path", "canvas.rect", "canvas.ellipse", "canvas.text"],
+            ),
+            (
+                "Calques",
+                &[
+                    "canvas.layer_create",
+                    "canvas.layer_activate",
+                    "canvas.layer_set",
+                    "canvas.layer_rename",
+                    "canvas.layer_reorder",
+                    "canvas.layer_delete",
+                ],
+            ),
+            (
+                "Édition et placement",
+                &[
+                    "canvas.move",
+                    "canvas.delete",
+                    "canvas.restyle",
+                    "canvas.reorder",
+                    "canvas.align",
+                    "canvas.rotate",
+                ],
+            ),
+            (
+                "Finalisation",
+                &["canvas.export", "canvas.undo", "canvas.erase", "canvas.clear"],
+            ),
+        ];
+        let usage = groups
             .iter()
-            .filter(|t| t.starts_with("canvas."))
-            .map(|s| s.as_str())
-            .collect();
-        names.sort_unstable();
+            .filter_map(|(label, names)| {
+                let present: Vec<&str> = names
+                    .iter()
+                    .copied()
+                    .filter(|name| allowed.iter().any(|tool| tool == name))
+                    .collect();
+                (!present.is_empty()).then(|| format!("{label}: {}", present.join(", ")))
+            })
+            .collect::<Vec<_>>();
         format!(
-            "Outils : {} (coords 0..1 ; rect/ellipse : x,y,w,h — alias width/height acceptés). \
+            "Outils par usage : {}. (coords 0..1 ; rect/ellipse : x,y,w,h — alias width/height acceptés). \
+Grille et aimant : réglages d'édition humaine, pas des outils agent actuellement ; pour aligner, utilise canvas.align ou des coordonnées normalisées. \
 Pas media.image.generate. Pas agent.spawn.",
-            names.join(", ")
+            usage.join(" ; ")
         )
     };
     format!(
@@ -2247,8 +2332,14 @@ Lis `scene_bbox` dans le digest : ne superpose pas les nouvelles formes au même
 Plan de composition imposé : Analyse (canvas.get seulement, aucun trait), Composition (2 formes d'ancrage), \
 Volumes principaux (3 formes distinctes), Détails distinctifs (3 formes), Finitions (2 accents/ombres), Export. \
 Chaque volume doit contribuer à la reconnaissance du sujet ; ne redessine jamais la silhouette aux étapes suivantes. \
-`width` est l'épaisseur du contour, pas la largeur géométrique : ≤0.04 ; pour rect/ellipse, la taille est `w`,`h`. \
-Commence par canvas.get. Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
+        `width` est l'épaisseur du contour, pas la largeur géométrique : ≤0.04 ; pour rect/ellipse, la taille est `w`,`h`. \
+        PROTOCOLE OUTILS OBLIGATOIRE : (1) appelle `canvas.get` avant toute autre opération canvas ; \
+        (2) lis le digest et la capture renvoyés ; (3) exécute une seule forme ou modification ; \
+        (4) attends le digest/capture rafraîchis avant l'opération suivante ; (5) appelle `canvas.export` en dernier. \
+        Le runtime rejette les opérations dans le mauvais ordre. `canvas.set_style` vient après `canvas.get` et avant les formes si nécessaire. \
+        Pour un diagramme, un graphe mathématique ou une illustration structurée, prépare une CanvasSceneSpec puis appelle `canvas.compose` une seule fois ; \
+        pour du dessin libre, utilise les outils Pen et courbes. Ne mélange pas composition structurée et formes improvisées dans le même tour. \
+        Couleur : canvas.set_style {{color:\"#RRGGBB\"}} ou color= sur chaque op — \
 le teal signal n'est pas la seule teinte ; après critique, change de teinte pour ombres/détails.\n\
 Après critique : ajoute la pièce manquante seulement — jamais canvas.clear ni redessiner le sujet depuis zéro sauf si l'humain dit effacer.\n\
 {windmill}\
@@ -2661,6 +2752,11 @@ mod routing_tests {
             .collect();
         let prompt = super::canvas_agent_system_prompt(CanvasAspect::Square, &exported);
         assert!(prompt.contains("canvas.set_style"));
+        assert!(prompt.contains("canvas.get` avant toute autre opération canvas"));
+        assert!(prompt.contains("canvas.export` en dernier"));
+        assert!(prompt.contains("Pen et courbes"));
+        assert!(prompt.contains("Calques"));
+        assert!(prompt.contains("Grille et aimant"));
         assert!(prompt.contains("Pas agent.spawn"));
         assert!(prompt.contains("auteur unique"));
         assert!(!prompt.contains("agent.spawn : le brief"));

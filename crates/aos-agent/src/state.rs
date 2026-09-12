@@ -55,6 +55,10 @@ pub struct CognitiveState {
     /// Successful canvas draw ops on the current pending plan node (for cap-based advance).
     #[serde(default)]
     pub canvas_draw_ops_on_current_task: u32,
+    /// L'agent a lu le canvas vivant pendant ce run.
+    /// Toute mutation est rejetée tant que cette étape n'est pas faite.
+    #[serde(default)]
+    pub canvas_prepared: bool,
     /// Version de schéma (migration future).
     pub version: u32,
 }
@@ -81,6 +85,7 @@ impl CognitiveState {
             deep_plan_id: None,
             deep_thinking: false,
             canvas_draw_ops_on_current_task: 0,
+            canvas_prepared: false,
             version: 2,
         }
     }
@@ -98,13 +103,20 @@ impl CognitiveState {
         self.deep_thinking && self.needs_plan && self.deep_plan_id.is_none()
     }
 
-    /// Actions autorisées sous le gate : `plan.update` et `goal.fail` uniquement.
+    /// Actions autorisées sous le gate : le plan (ou la lecture Canvas initiale)
+    /// et `goal.fail` uniquement. `canvas.get` reste toujours autorisé : la
+    /// lecture du support est le prérequis universel du protocole Canvas, y
+    /// compris lorsqu'un plan doit encore être créé.
     pub fn blocks_action(&self, action: &str) -> bool {
         if self.deep_plan_gate_active() {
-            return action != "plan.create" && action != "goal.fail" && action != "user.ask";
+            return action != "plan.create"
+                && action != "canvas.get"
+                && action != "goal.fail"
+                && action != "user.ask";
         }
         self.plan_gate_active()
             && action != "plan.update"
+            && action != "canvas.get"
             && action != "goal.fail"
             && action != "user.ask"
     }
@@ -170,10 +182,10 @@ impl CognitiveState {
     pub fn canonical_canvas_composition_plan() -> Vec<TaskNode> {
         [
             "Analyse (canvas.get)",
-            "Composition (fond ou ancrage, 2 formes)",
-            "Volumes principaux (silhouette et masses, 3 formes)",
-            "Détails distinctifs (3 formes)",
-            "Finitions (ombres ou accents, 2 formes)",
+            "Silhouette globale (masse principale + partie supérieure, 2 formes)",
+            "Volumes secondaires (appendices, supports ou parties saillantes, 3 formes)",
+            "Détails distinctifs (visage, ouvertures ou motifs, 3 formes)",
+            "Finitions (contours, ombres ou accents, 2 formes)",
             "Export final (canvas.export)",
         ]
         .iter()
@@ -208,6 +220,9 @@ impl CognitiveState {
         if !succeeded {
             return false;
         }
+        if tool == "canvas.get" {
+            self.canvas_prepared = true;
+        }
         if self.current_task_is_canvas_preparation() {
             // Analysis is a real stage, but it is complete as soon as the
             // canvas has been read. Previously it could never advance, so all
@@ -216,6 +231,21 @@ impl CognitiveState {
         }
         if self.current_task_is_canvas_export() {
             return tool == "canvas.export" && self.complete_current_plan_node();
+        }
+        if tool == "canvas.compose" {
+            // A structured scene is already a complete composition. Consume
+            // all drawing stages and leave only the explicit export stage.
+            let mut advanced = false;
+            while self
+                .current_task_title()
+                .is_some_and(|title| !title.to_ascii_lowercase().contains("export"))
+            {
+                if !self.complete_current_plan_node() {
+                    break;
+                }
+                advanced = true;
+            }
+            return advanced;
         }
         if !canvas_tool_completes_plan_node(tool) {
             return false;
@@ -278,6 +308,21 @@ impl CognitiveState {
         }
     }
 
+    /// Universal canvas protocol gate. The first canvas operation in an agent
+    /// run must be a successful `canvas.get`, regardless of the plan wording.
+    /// This keeps tool ordering in the runtime instead of relying on prompt
+    /// compliance alone.
+    pub fn canvas_read_gate_reason(&self, tool: &str) -> Option<&'static str> {
+        if tool.starts_with("canvas.") && tool != "canvas.get" && !self.canvas_prepared {
+            Some(
+                "protocole canvas : canvas.get est obligatoire avant toute autre opération canvas. \
+                 Lis son digest et sa capture, puis exécute une seule opération à la fois.",
+            )
+        } else {
+            self.canvas_preparation_action_block_reason(tool)
+        }
+    }
+
     fn current_task_is_canvas_export(&self) -> bool {
         let Some(title) = self.current_task_title() else {
             return false;
@@ -291,7 +336,16 @@ impl CognitiveState {
             return 1;
         };
         let title = title.to_ascii_lowercase();
-        if [
+        // The global silhouette is deliberately a two-op stage (main mass +
+        // upper part). Check it before the generic `masse`/`structure` words,
+        // which are used for the later three-op volume stage.
+        if title.contains("silhouette globale")
+            || ["composition", "ancrage"]
+                .iter()
+                .any(|word| title.contains(word))
+        {
+            2
+        } else if [
             "détail",
             "detail",
             "roue",
@@ -306,8 +360,6 @@ impl CognitiveState {
         {
             3
         } else if [
-            "composition",
-            "ancrage",
             "ombre",
             "shadow",
             "finition",
@@ -413,6 +465,7 @@ mod tests {
         assert!(st.plan_gate_active());
         assert!(st.blocks_action("web.search"));
         assert!(st.blocks_action("noop"));
+        assert!(!st.blocks_action("canvas.get"));
         assert!(!st.blocks_action("plan.update"));
         assert!(!st.blocks_action("goal.fail"));
         assert!(!st.blocks_action("user.ask"));
@@ -435,6 +488,7 @@ mod tests {
         assert!(!st.plan_gate_active());
         assert!(st.blocks_action("web.search"));
         assert!(st.blocks_action("plan.update"));
+        assert!(!st.blocks_action("canvas.get"));
         assert!(!st.blocks_action("plan.create"));
         assert!(!st.blocks_action("goal.fail"));
         st.deep_plan_id = Some("dplan-1".into());
@@ -632,6 +686,31 @@ mod tests {
     }
 
     #[test]
+    fn canvas_read_gate_is_universal_and_opens_after_successful_get() {
+        let mut st = CognitiveState::new("agent-222", vec![]);
+        assert!(st.canvas_read_gate_reason("canvas.path").is_some());
+        assert!(st.canvas_read_gate_reason("canvas.set_style").is_some());
+        assert!(st.canvas_read_gate_reason("canvas.export").is_some());
+        assert!(st.canvas_read_gate_reason("canvas.get").is_none());
+        assert!(st.canvas_read_gate_reason("goal.complete").is_none());
+
+        assert!(!st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
+        assert!(st.canvas_prepared);
+        assert!(st.canvas_read_gate_reason("canvas.path").is_none());
+        assert!(st.canvas_read_gate_reason("canvas.export").is_none());
+    }
+
+    #[test]
+    fn failed_canvas_get_does_not_open_read_gate() {
+        let mut st = CognitiveState::new("agent-223", vec![]);
+        assert!(!st.maybe_advance_plan_after_canvas_draw(
+            "canvas.get",
+            r#"{"error":"session missing"}"#
+        ));
+        assert!(st.canvas_read_gate_reason("canvas.path").is_some());
+    }
+
+    #[test]
     fn canvas_export_completes_an_export_stage() {
         let mut st = CognitiveState::new("agent-98", vec![]);
         st.set_plan(vec![TaskNode {
@@ -643,6 +722,19 @@ mod tests {
         assert!(st
             .maybe_advance_plan_after_canvas_draw("canvas.export", "ok path=/downloads/final.png"));
         assert!(st.canvas_plan_is_complete());
+    }
+
+    #[test]
+    fn structured_compose_consumes_composition_stages_but_leaves_export() {
+        let mut st = CognitiveState::new("agent-scene", vec![]);
+        st.set_plan(CognitiveState::canonical_canvas_composition_plan());
+        assert!(st.maybe_advance_plan_after_canvas_draw("canvas.get", "ok canvas"));
+        assert!(st.maybe_advance_plan_after_canvas_draw(
+            "canvas.compose",
+            "ok scene profile=diagram applied_count=3"
+        ));
+        assert_eq!(st.current_task_title().as_deref(), Some("Export final (canvas.export)"));
+        assert!(!st.canvas_plan_is_complete());
     }
 
     #[test]

@@ -463,6 +463,68 @@ pub fn agent_has_canvas_path(tool_ids: &[String]) -> bool {
     tool_ids.iter().any(|t| t == "canvas.path")
 }
 
+/// Whether a goal is better served by one semantic scene composition than by
+/// incremental primitive strokes. Graphs, diagrams and mathematical drawings
+/// deliberately stay on the primitive path so the illustration policy cannot
+/// interfere with precise technical layouts.
+pub fn canvas_goal_prefers_scene(goal: &str) -> bool {
+    let lower = goal.to_ascii_lowercase();
+    let technical = [
+        "graph",
+        "graphe",
+        "diagram",
+        "schéma",
+        "schema",
+        "architecture",
+        "flowchart",
+        "organigramme",
+        "math",
+        "mathématique",
+        "mathematique",
+        "équation",
+        "equation",
+        "formule",
+        "plot",
+        "courbe",
+        "triangle",
+        "cercle",
+        "rectangle",
+        "tableau",
+    ];
+    if technical.iter().any(|marker| lower.contains(marker)) {
+        return false;
+    }
+    [
+        "illustration",
+        "illustrer",
+        "dessin",
+        "dessine",
+        "draw",
+        "chat",
+        "cat",
+        "chien",
+        "dog",
+        "animal",
+        "maison",
+        "house",
+        "portrait",
+        "personnage",
+        "character",
+        "logo",
+        "icône",
+        "icone",
+        "icon",
+        "objet",
+        "object",
+        "arbre",
+        "tree",
+        "fleur",
+        "flower",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
 fn canvas_empty_scene_hint(tool_ids: &[String]) -> String {
     if agent_has_canvas_path(tool_ids) {
         "commence par canvas.get puis canvas.path (silhouettes) ou canvas.stroke/rect/ellipse (fill:true pour remplir ; x,y = coin haut-gauche, y vers le bas — lis la dernière bbox avant la suivante)".into()
@@ -484,6 +546,31 @@ pub fn canvas_critic_system_prompt() -> &'static str {
      Indique une seule pièce unique à corriger si nécessaire. Réponds exactement avec trois lignes : `ACTION: continue|modify|stop`, `SEQUENCES: ...`, puis `NOTE: ...`. \
      `stop` signifie une recommandation : ne le propose jamais tant que le plan contient encore des étapes de dessin non réalisées. \
      Réponds directement, sans balises <think> ni monologue Thinking Process."
+}
+
+/// Parse the compact decision emitted by the visual canvas critic.
+///
+/// The critic is deliberately constrained to one machine-readable line so a
+/// final visual check can distinguish an explicit approval from prose such as
+/// "the drawing is probably fine". Unknown/malformed answers stay `None` and
+/// must not be treated as approval.
+pub fn canvas_critic_action(text: &str) -> Option<&'static str> {
+    text.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        if !key.trim().eq_ignore_ascii_case("ACTION") {
+            return None;
+        }
+        match value.trim().to_ascii_lowercase().as_str() {
+            "continue" => Some("continue"),
+            "modify" => Some("modify"),
+            "stop" => Some("stop"),
+            _ => None,
+        }
+    })
+}
+
+pub fn canvas_critic_approved(text: &str) -> bool {
+    canvas_critic_action(text) == Some("stop")
 }
 
 /// User content for reflect when canvas tools are available — includes recent canvas ops.
@@ -567,6 +654,8 @@ pub async fn fetch_canvas_scene_digest(bus: &BusClient, session_id: &str) -> Opt
             pen: resp.pen,
             layers: resp.layers,
             active_layer_id: resp.active_layer_id,
+            guides: resp.guides,
+            scene: resp.scene,
             ..Default::default()
         },
         resp.canvas_aspect,
@@ -578,11 +667,16 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
     format!(
         "## Canvas actuel (canvas.get — ne pas deviner)\n\
          Digest compact (compteurs + bbox par seq, pas le JSON brut). \
-         Commence par `canvas.get` si tu dessines ; état au début du tour :\n\
+         PROTOCOLE OBLIGATOIRE : (1) `canvas.get` avant toute autre opération canvas ; \
+         (2) lis le digest et la capture renvoyés ; (3) exécute une seule opération de composition ; \
+         (4) relis le résultat avant l'opération suivante ; (5) appelle `canvas.export` en dernier. \
+         Le runtime rejette toute opération canvas faite avant `canvas.get` : ne devine jamais l'état. \
+         État au début du tour :\n\
          ```\n{digest}\n```\n\
          Poursuis le dessin existant : ajoute une seule pièce manquante — ne restack pas la même bbox, pas canvas.clear. \
          Chaque op canvas doit inclure `color` (#RRGGBB) pour la teinte voulue (`fill_color` est un alias normalisé). \
-         Silhouettes : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
+         Pour une illustration, un animal, un personnage ou un objet : préfère `canvas.compose` une seule fois avec `profile:\"illustration\"` et toute la scène (masse principale, partie supérieure, appendices et détails), afin de préserver les proportions et les calques. Utilise exactement cette structure : `scene:{{version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{{id,role,layer,color,fill,geometry:{{kind:\"ellipse\",x,y,w,h}}}}]}}` ; pour chaque géométrie, `kind` vaut `ellipse`, `rect`, `path`, `spline`, `line` ou `text`. N'invente pas `scene_spec`, `composition`, `shape`, `coords` ou `type` dans cette scène. Pour un graphe, schéma ou dessin mathématique, reste en primitives (`canvas.line`, `canvas.rect`, `canvas.text`, etc.). \
+         Silhouettes en primitives : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant seulement si le modèle chargé est vision ; sinon le digest est la source de vérité. \
          Placement : coords 0..1 max=1.0 (pas de pixels). \
@@ -671,6 +765,7 @@ pub fn canvas_draw_tool_applies_trait(tool: &str) -> bool {
             | "canvas.text"
             | "canvas.fill"
             | "canvas.erase"
+            | "canvas.compose"
     )
 }
 
@@ -742,6 +837,7 @@ pub fn canvas_tool_mutates_scene(tool: &str) -> bool {
             | "canvas.layer_activate"
             | "canvas.align"
             | "canvas.rotate"
+            | "canvas.compose"
     )
 }
 
@@ -758,6 +854,7 @@ pub fn canvas_tool_completes_plan_node(tool: &str) -> bool {
             | "canvas.ellipse"
             | "canvas.text"
             | "canvas.fill"
+            | "canvas.compose"
     )
 }
 
@@ -870,7 +967,10 @@ fn model_is_resident(m: &ModelInfo) -> bool {
 /// Does not pick an on-disk vision GGUF (loading it would surprise VRAM).
 pub fn resident_vision_model_id(preferred: Option<&str>, models: &[ModelInfo]) -> Option<String> {
     if let Some(id) = preferred.filter(|s| !s.is_empty()) {
-        if models.iter().any(|m| m.id == id && m.has_vision) {
+        if models
+            .iter()
+            .any(|m| m.id == id && m.has_vision && model_is_resident(m))
+        {
             return Some(id.to_string());
         }
     }
@@ -899,7 +999,7 @@ pub async fn session_model_has_vision(bus: &BusClient, model_id: Option<&str>) -
         return models
             .iter()
             .find(|m| m.id == id)
-            .is_some_and(|m| m.has_vision);
+            .is_some_and(|m| m.has_vision && model_is_resident(m));
     }
     models.iter().any(|m| m.has_vision && model_is_resident(m))
 }
@@ -1149,6 +1249,8 @@ pub async fn fetch_canvas_aspect(bus: &BusClient, session_id: &str) -> CanvasAsp
             canvas_seeing: false,
             layers: vec![],
             active_layer_id: String::new(),
+            guides: Default::default(),
+            scene: None,
         });
     resp.canvas_aspect
 }
@@ -1328,6 +1430,7 @@ mod tests {
         assert!(canvas_tool_mutates_scene("canvas.fill"));
         assert!(canvas_tool_mutates_scene("canvas.move"));
         assert!(canvas_tool_mutates_scene("canvas.layer_set"));
+        assert!(canvas_tool_mutates_scene("canvas.compose"));
         assert!(!canvas_tool_mutates_scene("canvas.get"));
     }
 
@@ -1336,6 +1439,7 @@ mod tests {
         assert!(canvas_tool_completes_plan_node("canvas.spline"));
         assert!(canvas_tool_completes_plan_node("canvas.path"));
         assert!(canvas_tool_completes_plan_node("canvas.stroke"));
+        assert!(canvas_tool_completes_plan_node("canvas.compose"));
         assert!(!canvas_tool_completes_plan_node("canvas.set_style"));
         assert!(!canvas_tool_completes_plan_node("canvas.get"));
         assert!(!canvas_tool_completes_plan_node("canvas.export"));
@@ -1349,6 +1453,14 @@ mod tests {
         assert!(block.contains("scene_bbox"));
         assert!(block.contains("[canvas digest]"));
         assert!(block.contains("capture PNG"));
+    }
+
+    #[test]
+    fn illustration_goals_prefer_scene_but_technical_drawings_keep_primitives() {
+        assert!(canvas_goal_prefers_scene("dessine un chat stylisé"));
+        assert!(canvas_goal_prefers_scene("create a house illustration"));
+        assert!(!canvas_goal_prefers_scene("dessine un graphe d'architecture"));
+        assert!(!canvas_goal_prefers_scene("représentation graphique mathématique"));
     }
 
     #[test]
@@ -1520,6 +1632,21 @@ mod tests {
         );
         assert!(resident_vision_model_id(Some("text"), &models[..1]).is_none());
         assert!(resident_vision_model_id(None, &models[..2]).is_none());
+    }
+
+    #[test]
+    fn critic_requires_an_explicit_stop_decision() {
+        assert_eq!(
+            canvas_critic_action("ACTION: continue\nSEQUENCES: 2\nNOTE: add eyes"),
+            Some("continue")
+        );
+        assert_eq!(
+            canvas_critic_action("ACTION: STOP\nSEQUENCES: none\nNOTE: enough"),
+            Some("stop")
+        );
+        assert!(!canvas_critic_approved("The image looks good enough."));
+        assert!(canvas_critic_approved("ACTION: stop\nSEQUENCES: none\nNOTE: done"));
+        assert_eq!(canvas_critic_action("ACTION: maybe"), None);
     }
 
     #[test]

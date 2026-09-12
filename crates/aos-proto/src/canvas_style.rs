@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    normalize_canvas_color, CanvasAspect, CanvasDoc, CanvasLayer, CanvasOp, CanvasOpBody,
-    CanvasPenStyle,
+    normalize_canvas_color, CanvasAspect, CanvasDoc, CanvasGuides, CanvasLayer, CanvasOp,
+    CanvasOpBody, CanvasPenStyle, CanvasSceneSpec,
 };
 
 /// Linear fill gradient in normalized board space (angle in degrees, 0 = left→right).
@@ -157,6 +157,10 @@ pub fn parse_canvas_sidecar_json(raw: &str) -> Result<(CanvasDoc, CanvasAspect),
         active_layer_id: String,
         #[serde(default)]
         next_layer_id: u64,
+        #[serde(default)]
+        guides: CanvasGuides,
+        #[serde(default)]
+        scene: Option<CanvasSceneSpec>,
     }
     let sidecar: Sidecar = serde_json::from_str(raw).map_err(|e| e.to_string())?;
     let doc = CanvasDoc {
@@ -167,6 +171,8 @@ pub fn parse_canvas_sidecar_json(raw: &str) -> Result<(CanvasDoc, CanvasAspect),
         layers: sidecar.layers,
         active_layer_id: sidecar.active_layer_id,
         next_layer_id: sidecar.next_layer_id,
+        guides: sidecar.guides,
+        scene: sidecar.scene,
     };
     Ok((doc, sidecar.canvas_aspect))
 }
