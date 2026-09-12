@@ -128,6 +128,17 @@ pub fn strip_tool_markup_tags(text: &str) -> String {
     }
     out = remove_tag_blocks(&out, "tool_call");
     out = remove_tag_blocks(&out, "function_call");
+    // Native DSML emitted by some local models uses asymmetric delimiters
+    // (`<|tool_call>…<tool_call|>`) and channel wrappers. If these markers are
+    // kept in assistant memory, the next inference tends to echo them forever
+    // instead of producing the next Canvas action.
+    for (open, close) in NATIVE_TOOL_MARKUP_WRAPPERS {
+        out = remove_empty_wrapper_tags(&out, open, close);
+        out = remove_all_wrapper_tags(&out, open, close);
+    }
+    for marker in NATIVE_CONTROL_MARKERS {
+        out = remove_literal_marker(&out, marker);
+    }
     out.trim().to_string()
 }
 
@@ -154,6 +165,34 @@ const TOOL_MARKUP_WRAPPERS: &[(&str, &str)] = &[
     ("<|dsml|function_calls>", "</|dsml|function_calls>"),
     ("<function_calls>", "</function_calls>"),
 ];
+
+const NATIVE_TOOL_MARKUP_WRAPPERS: &[(&str, &str)] = &[
+    ("<|tool_call>", "<tool_call|>"),
+    ("<|function_call>", "<function_call|>"),
+    ("<|channel>", "<channel|>"),
+];
+
+const NATIVE_CONTROL_MARKERS: &[&str] = &[
+    "<|tool_call>",
+    "<tool_call|>",
+    "<|function_call>",
+    "<function_call|>",
+    "<|channel>",
+    "<channel|>",
+];
+
+fn remove_literal_marker(text: &str, marker: &str) -> String {
+    let mut out = text.to_string();
+    loop {
+        let lower = out.to_ascii_lowercase();
+        let marker_lower = marker.to_ascii_lowercase();
+        let Some(start) = lower.find(&marker_lower) else {
+            break;
+        };
+        out = format!("{}{}", &out[..start], &out[start + marker.len()..]);
+    }
+    out
+}
 
 fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
     let stripped = strip_tool_markup(text);
@@ -768,6 +807,14 @@ Thinking Process:
         assert!(!stripped.contains("tool_call"));
         assert!(!stripped.contains("DSML"));
         assert!(!stripped.contains("canvas.rect"));
+    }
+
+    #[test]
+    fn strip_tool_markup_removes_native_dsml_from_assistant_memory() {
+        let raw = r#"<|channel>thought
+<channel|><|tool_call>call:canvas.get{session_id: "sess-1"}<tool_call|>"#;
+        let stripped = strip_tool_markup(raw);
+        assert!(stripped.is_empty());
     }
 
     #[test]
