@@ -412,6 +412,7 @@ pub(crate) async fn load_session(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, id:
                         thinking: m.thinking,
                         ts_ms: m.ts_ms,
                         duration_ms: 0,
+                        model_id: None,
                     }
                 })
                 .collect();

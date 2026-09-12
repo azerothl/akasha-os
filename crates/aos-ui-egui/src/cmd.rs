@@ -890,6 +890,8 @@ pub(crate) struct ChatLine {
     pub(crate) thinking: Option<String>,
     pub(crate) ts_ms: u64,
     pub(crate) duration_ms: u64,
+    /// Model that produced this assistant/agent reply (live turn; not always on disk).
+    pub(crate) model_id: Option<String>,
 }
 
 impl Default for ChatLine {
@@ -903,6 +905,7 @@ impl Default for ChatLine {
             thinking: None,
             ts_ms: now_epoch_ms(),
             duration_ms: 0,
+            model_id: None,
         }
     }
 }

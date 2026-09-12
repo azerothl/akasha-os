@@ -150,9 +150,17 @@ pub(crate) fn show_chat_markdown(ui: &mut egui::Ui, cache: &mut CommonMarkCache,
     });
 }
 
-/// Quiet duration / token line for assistant and agent replies.
-pub(crate) fn reply_meta_line(duration_ms: u64, text: &str, exact_tokens: u64) -> String {
+/// Quiet duration / token / model line for assistant and agent replies.
+pub(crate) fn reply_meta_line(
+    duration_ms: u64,
+    text: &str,
+    exact_tokens: u64,
+    model_label: Option<&str>,
+) -> String {
     let mut parts = Vec::new();
+    if let Some(label) = model_label.map(str::trim).filter(|s| !s.is_empty()) {
+        parts.push(label.to_string());
+    }
     if duration_ms > 0 {
         parts.push(crate::agent_panel::fmt_ms(duration_ms));
     }
@@ -262,11 +270,18 @@ mod tests {
 
     #[test]
     fn reply_meta_line_includes_duration_and_approx_tokens() {
-        let line = reply_meta_line(3_200, "abcdefghij", 0);
+        let line = reply_meta_line(3_200, "abcdefghij", 0, None);
         assert!(line.contains("s"));
         assert!(line.contains("tok"));
         assert!(line.contains('≈'));
-        let exact = reply_meta_line(0, "abcdefghij", 42);
+        let exact = reply_meta_line(0, "abcdefghij", 42, None);
         assert_eq!(exact, "42 tok");
+    }
+
+    #[test]
+    fn reply_meta_line_includes_model_label() {
+        let line = reply_meta_line(1_000, "abcdefghij", 12, Some("Qwen3.5 9B"));
+        assert!(line.starts_with("Qwen3.5 9B"), "{line}");
+        assert!(line.contains("12 tok"), "{line}");
     }
 }

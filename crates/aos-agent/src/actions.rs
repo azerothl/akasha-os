@@ -158,6 +158,40 @@ pub fn looks_like_tool_markup(text: &str) -> bool {
         || lower.contains("<function_calls>")
 }
 
+/// Retourne une explication exploitable quand le modèle n'a produit aucune
+/// action. Certains modèles locaux bouclent sur leurs tokens de canal au lieu
+/// de respecter le protocole JSON ; il faut distinguer ce cas d'un simple
+/// texte libre ou d'une sortie réellement tronquée.
+pub fn unparsed_action_diagnostic(text: &str, generated_tokens: u32, max_tokens: u32) -> String {
+    let lower = text.to_ascii_lowercase();
+    let channel_open = lower.matches("<|channel>").count();
+    let channel_close = lower.matches("<channel|>").count();
+    let native_tool_markers = lower.matches("<|tool_call>").count()
+        + lower.matches("<tool_call|>").count()
+        + lower.matches("<|function_call>").count()
+        + lower.matches("<function_call|>").count();
+    let likely_limit = max_tokens > 0 && generated_tokens >= max_tokens.saturating_mul(9) / 10;
+
+    if channel_open >= 2 || channel_close >= 2 || native_tool_markers >= 2 {
+        return format!(
+            "aucune action JSON détectée : le modèle a bouclé sur ses marqueurs de canal/outils natifs (<|channel>/<channel|>) sans produire d'appel exploitable. Le canvas n'a exécuté aucune opération. Cause probable : template de chat ou format d'outils incompatible avec ce modèle{} ; vérifie sa configuration ou utilise un modèle configuré pour les sorties JSON.",
+            if likely_limit {
+                format!(" et génération arrêtée près de la limite ({generated_tokens}/{max_tokens} tokens)")
+            } else {
+                String::new()
+            }
+        );
+    }
+
+    if likely_limit {
+        return format!(
+            "aucune action JSON détectée : la réponse du modèle semble tronquée avant son objet action ({generated_tokens}/{max_tokens} tokens). Le canvas n'a exécuté aucune opération ; réduis le contexte ou la longueur de génération."
+        );
+    }
+
+    "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable. Le canvas n'a exécuté aucune opération.".into()
+}
+
 const TOOL_MARKUP_WRAPPERS: &[(&str, &str)] = &[
     ("<｜dsml｜tool_call>", "</｜dsml｜tool_call>"),
     ("<|dsml|tool_call>", "</|dsml|tool_call>"),
@@ -864,6 +898,22 @@ Thinking Process:
 <channel|><|tool_call>call:canvas.get{session_id: "sess-1"}<tool_call|>"#;
         let stripped = strip_tool_markup(raw);
         assert!(stripped.is_empty());
+    }
+
+    #[test]
+    fn unparsed_action_diagnostic_explains_native_channel_loop() {
+        let raw = "<|channel>thought<channel|>\n".repeat(4);
+        let diagnostic = unparsed_action_diagnostic(&raw, 1536, 1536);
+        assert!(diagnostic.contains("marqueurs de canal/outils natifs"));
+        assert!(diagnostic.contains("1536/1536 tokens"));
+        assert!(diagnostic.contains("aucune opération"));
+    }
+
+    #[test]
+    fn unparsed_action_diagnostic_explains_plain_output() {
+        let diagnostic = unparsed_action_diagnostic("je réfléchis", 20, 1536);
+        assert!(diagnostic.contains("pas d'objet action exploitable"));
+        assert!(diagnostic.contains("aucune opération"));
     }
 
     #[test]

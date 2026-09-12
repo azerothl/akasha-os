@@ -135,6 +135,7 @@ impl UiApp {
                     let thinking = self.chat[i].thinking.clone();
                     let ts_ms = self.chat[i].ts_ms;
                     let duration_ms = self.chat[i].duration_ms;
+                    let line_model_id = self.chat[i].model_id.clone();
                     if ts_ms > 0 {
                         let day = local_day_index(ts_ms, tz_offset);
                         if last_day != Some(day) {
@@ -242,8 +243,52 @@ impl UiApp {
                             }),
                         _ => None,
                     });
+                    let model_label = {
+                        let model_id = line_model_id
+                            .as_deref()
+                            .filter(|id| !id.trim().is_empty())
+                            .map(str::to_string)
+                            .or_else(|| {
+                                speaker_id.as_deref().and_then(|sid| {
+                                    self.agents
+                                        .iter()
+                                        .find(|a| a.agent_id == sid)
+                                        .and_then(|a| a.model_id.clone())
+                                        .filter(|id| !id.trim().is_empty())
+                                })
+                            })
+                            .or_else(|| {
+                                if role == "assistant" || kind == ChatBubbleKind::RoomSpeaker {
+                                    self.chat_state
+                                        .active_session
+                                        .as_deref()
+                                        .and_then(|sid| {
+                                            self.chat_state
+                                                .sessions
+                                                .iter()
+                                                .find(|s| s.id == sid)
+                                                .and_then(|s| s.model_id.clone())
+                                        })
+                                        .filter(|id| !id.trim().is_empty())
+                                } else {
+                                    None
+                                }
+                            });
+                        model_id.map(|id| {
+                            crate::models_page::model_human_label(
+                                &id,
+                                &self.models_ui.model_infos,
+                                t.status_model_default,
+                            )
+                        })
+                    };
                     let meta = if role == "assistant" || kind == ChatBubbleKind::RoomSpeaker {
-                        reply_meta_line(duration_ms, &text, agent_tokens.unwrap_or(0))
+                        reply_meta_line(
+                            duration_ms,
+                            &text,
+                            agent_tokens.unwrap_or(0),
+                            model_label.as_deref(),
+                        )
                     } else {
                         String::new()
                     };

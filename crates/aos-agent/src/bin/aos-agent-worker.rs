@@ -4,8 +4,8 @@
 //!          [--restore]`
 
 use aos_agent::actions::{
-    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup, AgentAction,
-    THREAD_FAIL_COULD_NOT_ACT, THREAD_FAIL_COULD_NOT_CONTINUE,
+    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
+    unparsed_action_diagnostic, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::canvas_scene::{
@@ -1030,7 +1030,13 @@ async fn main() {
                         reasoning.chars().take(400).collect()
                     },
                     action: "noop".into(),
-                    args: serde_json::json!({}),
+                    args: serde_json::json!({
+                        "_runtime_diagnostic": unparsed_action_diagnostic(
+                            &infer.text,
+                            infer.generated_tokens,
+                            gen_tokens,
+                        )
+                    }),
                 });
             }
         }
@@ -1492,18 +1498,22 @@ async fn main() {
                     .push_user(&format!("[runtime] {msg}"));
             }
             LoopVerdict::Abort(reason) => {
-                step_fail_reason = Some(THREAD_FAIL_COULD_NOT_ACT.into());
+                let visible_reason = if action.action == "noop" && !tool_result.trim().is_empty() {
+                    format!("{reason}. Dernier diagnostic : {}", tool_result.trim())
+                } else {
+                    reason.clone()
+                };
                 shared
                     .state
                     .lock()
                     .await
                     .artifacts
-                    .push(THREAD_FAIL_COULD_NOT_ACT.into());
+                    .push(visible_reason.clone());
                 report(
                     &bus,
                     &agent_id,
                     AgentOutputEvent::Error {
-                        message: THREAD_FAIL_COULD_NOT_ACT.into(),
+                        message: visible_reason.clone(),
                     },
                 )
                 .await;
@@ -1511,7 +1521,7 @@ async fn main() {
                     &bus,
                     &agent_id,
                     AgentOutputEvent::Log {
-                        line: reason.clone(),
+                        line: visible_reason.clone(),
                     },
                 )
                 .await;
@@ -1519,7 +1529,8 @@ async fn main() {
                     .state
                     .lock()
                     .await
-                    .push_user(&format!("[runtime] {reason}"));
+                    .push_user(&format!("[runtime] {visible_reason}"));
+                step_fail_reason = Some(visible_reason);
                 terminal = Some(AgentState::Failed);
             }
         }
@@ -2084,11 +2095,12 @@ async fn execute_action(
 
     match name {
         "noop" => ActResult::Continue(
-            "aucune action JSON détectée (souvent tronquée). \
-             Réponds uniquement par {\"thought\":\"…\",\"action\":\"<outil>\",\"args\":{…}}. \
-             Note longue : notes.create (titre + outline court) puis notes.update par sections \
-             (≤ ~1200 car. de content)."
-                .into(),
+            args.get("_runtime_diagnostic")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    "aucune action JSON détectée : réponds uniquement par {\"thought\":\"…\",\"action\":\"<outil>\",\"args\":{…}}.".into()
+                }),
         ),
         "goal.complete" => {
             let prior = {

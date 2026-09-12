@@ -2061,8 +2061,11 @@ impl LlamaContext {
 /// on préremplit une fermeture vide pour forcer la réponse utile.
 fn suppress_hybrid_thinking(prompt: &str, template: &str) -> String {
     let tmpl_l = template.to_ascii_lowercase();
-    let hybrid = tmpl_l.contains("enable_thinking")
-        || tmpl_l.contains("<think>")
+    // `enable_thinking` is also a configuration variable in Gemma 4's native
+    // channel template. It must not by itself trigger the Qwen `<think>`
+    // prefill, otherwise Gemma receives a foreign control block and can loop
+    // on `<|channel>thought` without ever emitting a tool call.
+    let hybrid = tmpl_l.contains("<think>")
         || tmpl_l.contains("</think>");
     if !hybrid {
         return prompt.to_string();
@@ -2122,7 +2125,7 @@ mod tests {
     use super::{
         accumulate_pooled_chunk, common_prefix_len, finish_mean_pool, l2_normalize,
         prompt_lookup_draft, semantic_prefix_len, speculation_disable_reason, BatchItem,
-        DraftDisableReason, GenParams, KvType, LlamaError, StopReason,
+        suppress_hybrid_thinking, DraftDisableReason, GenParams, KvType, LlamaError, StopReason,
     };
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -2211,6 +2214,15 @@ mod tests {
         next[10] = 99;
         let anchors = vec![0, 6];
         assert_eq!(semantic_prefix_len(&prev, &next, &anchors), 6);
+    }
+
+    #[test]
+    fn gemma4_channel_template_does_not_receive_qwen_think_prefill() {
+        let template = include_str!("../fixtures/gemma4-e4b-chat-template.jinja");
+        let prompt = "<|turn>model\n";
+        let rendered = suppress_hybrid_thinking(prompt, template);
+        assert_eq!(rendered, prompt);
+        assert!(!rendered.contains("<think>"));
     }
 
     #[test]

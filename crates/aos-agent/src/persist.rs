@@ -126,6 +126,14 @@ pub fn export_fail_reason(
         if crate::canvas_scene::canvas_has_applied_traits(session_ops, trace) {
             return String::new();
         }
+        // Keep actionable protocol diagnostics visible. The generic canvas
+        // copy is useful for exhausted-step failures, but it hid the real
+        // cause when the model emitted no parseable action at all.
+        if reason.contains("aucune action JSON détectée")
+            || reason.contains("boucle détectée")
+        {
+            return reason.to_string();
+        }
         return if en {
             "Couldn't draw.".into()
         } else {
