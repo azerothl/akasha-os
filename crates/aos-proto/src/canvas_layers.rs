@@ -145,6 +145,10 @@ pub struct CanvasEditResponse {
     pub active_layer_id: String,
     #[serde(default)]
     pub pen: CanvasPenStyle,
+    #[serde(default)]
+    pub guides: super::CanvasGuides,
+    #[serde(default)]
+    pub scene: Option<super::CanvasSceneSpec>,
 }
 
 /// Fill missing layer table so legacy `canvas.json` remains readable.

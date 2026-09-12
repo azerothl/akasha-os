@@ -3764,6 +3764,308 @@ impl Default for CanvasPenStyle {
     }
 }
 
+/// Réglages de construction géométrique partagés par l'UI et les agents.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasGuides {
+    #[serde(default)]
+    pub show_grid: bool,
+    #[serde(default)]
+    pub snap: bool,
+    #[serde(default = "default_canvas_grid_size")]
+    pub grid_size: f32,
+    #[serde(default)]
+    pub snap_mode: CanvasSnapMode,
+}
+
+fn default_canvas_grid_size() -> f32 {
+    0.01
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasSnapMode {
+    #[default]
+    Grid,
+    Anchors,
+    Edges,
+    GridAndAnchors,
+}
+
+impl Default for CanvasGuides {
+    fn default() -> Self {
+        Self {
+            show_grid: false,
+            snap: false,
+            grid_size: default_canvas_grid_size(),
+            snap_mode: CanvasSnapMode::Grid,
+        }
+    }
+}
+
+/// Profil de construction choisi avant la compilation en opérations Canvas.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasSceneProfile {
+    #[default]
+    Primitives,
+    Illustration,
+    Diagram,
+    Math,
+    Freeform,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasSceneSpec {
+    #[serde(default = "default_canvas_scene_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub profile: CanvasSceneProfile,
+    #[serde(default)]
+    pub subject: String,
+    #[serde(default)]
+    pub reference: Option<String>,
+    #[serde(default)]
+    pub view: Option<String>,
+    #[serde(default)]
+    pub elements: Vec<CanvasSceneElement>,
+    #[serde(default)]
+    pub relations: Vec<CanvasSceneRelation>,
+    #[serde(default)]
+    pub guides: Option<CanvasGuides>,
+}
+
+fn default_canvas_scene_version() -> u32 {
+    1
+}
+
+impl Default for CanvasSceneSpec {
+    fn default() -> Self {
+        Self {
+            version: default_canvas_scene_version(),
+            profile: CanvasSceneProfile::default(),
+            subject: String::new(),
+            reference: None,
+            view: None,
+            elements: Vec::new(),
+            relations: Vec::new(),
+            guides: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasSceneRelation {
+    pub from: String,
+    pub relation: String,
+    pub to: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasSceneElement {
+    pub id: String,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub layer: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub width: Option<f32>,
+    #[serde(default)]
+    pub fill: bool,
+    #[serde(default = "default_canvas_opacity")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub dash: Vec<f32>,
+    pub geometry: CanvasSceneGeometry,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CanvasSceneGeometry {
+    Rect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        #[serde(default)]
+        rotation: f32,
+    },
+    Ellipse {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        #[serde(default)]
+        rotation: f32,
+    },
+    Line {
+        p0: CanvasPoint,
+        p1: CanvasPoint,
+    },
+    Spline {
+        points: Vec<CanvasPoint>,
+    },
+    Path {
+        points: Vec<CanvasPoint>,
+        #[serde(default = "default_canvas_path_closed")]
+        closed: bool,
+    },
+    Text {
+        x: f32,
+        y: f32,
+        text: String,
+        #[serde(default = "default_canvas_text_size")]
+        size: f32,
+        #[serde(default)]
+        rotation: f32,
+    },
+}
+
+/// Convertit une scène sémantique validée en opérations vectorielles sans
+/// dépendre d'une bibliothèque d'objets prédéfinis.
+pub fn compile_canvas_scene(
+    scene: &CanvasSceneSpec,
+) -> Result<Vec<(Option<String>, CanvasOpBody)>, String> {
+    if scene.version != 1 {
+        return Err(format!("version de scène non supportée: {}", scene.version));
+    }
+    if scene.elements.len() > 128 {
+        return Err("scene: 128 éléments maximum".into());
+    }
+    if scene.elements.is_empty() {
+        return Err("scene: au moins un élément requis".into());
+    }
+    let mut ids = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(scene.elements.len());
+    for element in &scene.elements {
+        if element.id.trim().is_empty() || !ids.insert(element.id.clone()) {
+            return Err("scene: ids d'éléments uniques et non vides requis".into());
+        }
+        if !element.opacity.is_finite()
+            || element.width.is_some_and(|width| !width.is_finite() || width < 0.0)
+            || element.dash.iter().any(|value| !value.is_finite() || *value < 0.0)
+        {
+            return Err(format!("scene: style invalide pour {}", element.id));
+        }
+        let color = element.color.clone().unwrap_or_default();
+        let width = element.width.unwrap_or(0.0);
+        let opacity = element.opacity.clamp(0.0, 1.0);
+        let dash = element.dash.clone();
+        let body = match &element.geometry {
+            CanvasSceneGeometry::Rect {
+                x,
+                y,
+                w,
+                h,
+                rotation,
+            } if [*x, *y, *w, *h, *rotation].iter().all(|v| v.is_finite())
+                && *w > 0.0
+                && *h > 0.0 => CanvasOpBody::Rect {
+                x: *x,
+                y: *y,
+                w: *w,
+                h: *h,
+                color,
+                fill: element.fill,
+                width,
+                rotation: *rotation,
+                opacity,
+                dash,
+                gradient: None,
+            },
+            CanvasSceneGeometry::Ellipse {
+                x,
+                y,
+                w,
+                h,
+                rotation,
+            } if [*x, *y, *w, *h, *rotation].iter().all(|v| v.is_finite())
+                && *w > 0.0
+                && *h > 0.0 => CanvasOpBody::Ellipse {
+                x: *x,
+                y: *y,
+                w: *w,
+                h: *h,
+                color,
+                fill: element.fill,
+                width,
+                rotation: *rotation,
+                opacity,
+                dash,
+                gradient: None,
+            },
+            CanvasSceneGeometry::Line { p0, p1 }
+                if p0.x.is_finite()
+                    && p0.y.is_finite()
+                    && p1.x.is_finite()
+                    && p1.y.is_finite() => CanvasOpBody::Line {
+                p0: *p0,
+                p1: *p1,
+                color,
+                width,
+                opacity,
+                dash,
+            },
+            CanvasSceneGeometry::Spline { points }
+                if points.len() >= 2
+                    && points.iter().all(|p| p.x.is_finite() && p.y.is_finite()) =>
+                CanvasOpBody::Spline {
+                points: points.clone(),
+                color,
+                width,
+                opacity,
+                dash,
+            },
+            CanvasSceneGeometry::Path { points, closed }
+                if points.len() >= 2
+                    && points.iter().all(|p| p.x.is_finite() && p.y.is_finite()) =>
+                CanvasOpBody::Path {
+                points: points.clone(),
+                color,
+                width,
+                fill: element.fill,
+                closed: *closed,
+                opacity,
+                dash,
+                gradient: None,
+            },
+            CanvasSceneGeometry::Text {
+                x,
+                y,
+                text,
+                size,
+                rotation,
+            } if x.is_finite()
+                && y.is_finite()
+                && size.is_finite()
+                && *size > 0.0
+                && !text.trim().is_empty() => CanvasOpBody::Text {
+                x: *x,
+                y: *y,
+                text: text.clone(),
+                size: *size,
+                color,
+                rotation: *rotation,
+                opacity,
+            },
+            _ => return Err(format!("scene: géométrie invalide pour {}", element.id)),
+        };
+        out.push((element.layer.clone(), body));
+    }
+    for relation in &scene.relations {
+        if relation.from.trim().is_empty()
+            || relation.to.trim().is_empty()
+            || relation.relation.trim().is_empty()
+            || !ids.contains(&relation.from)
+            || !ids.contains(&relation.to)
+        {
+            return Err("scene: relation vers des éléments inconnus ou vide".into());
+        }
+    }
+    Ok(out)
+}
+
 /// Normalise `#RRGGBB` (6 hex digits).
 pub fn normalize_canvas_color(s: &str) -> Option<String> {
     let t = s.trim().trim_start_matches('#');
@@ -4151,7 +4453,13 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         ),
         "coords=normalized 0..1 (origin top-left; x→ right, y↓ down; letterboxed board face — not pixels; max=1.0)"
             .into(),
-        "snap_step=0.01 (1% of board edge; copy last_bbox x,w to stack vertically)".into(),
+        format!(
+            "guides=grid:{} snap:{} step={:.3} mode={:?}",
+            if doc.guides.show_grid { 1 } else { 0 },
+            if doc.guides.snap { 1 } else { 0 },
+            doc.guides.grid_size,
+            doc.guides.snap_mode,
+        ),
         "origin=top-left, y↓ (x,y = coin haut-gauche, pas le centre)".into(),
         "shapes=rect/ellipse x,y,w,h top-left+size (same bbox; fill:true fills; cx,cy,rx,ry alias OK)".into(),
         "align ex: top ellipse x=0.35 w=0.30; bottom ellipse same x,w; body rect same x,w, y between".into(),
@@ -4290,6 +4598,12 @@ pub struct CanvasDoc {
     pub layers: Vec<CanvasLayer>,
     #[serde(default)]
     pub active_layer_id: String,
+    /// Guides de construction partagés par l'UI et les agents.
+    #[serde(default)]
+    pub guides: CanvasGuides,
+    /// Scène sémantique source, quand le document a été composé via un profil.
+    #[serde(default)]
+    pub scene: Option<CanvasSceneSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4317,6 +4631,10 @@ pub struct CanvasGetResponse {
     pub layers: Vec<CanvasLayer>,
     #[serde(default)]
     pub active_layer_id: String,
+    #[serde(default)]
+    pub guides: CanvasGuides,
+    #[serde(default)]
+    pub scene: Option<CanvasSceneSpec>,
 }
 
 /// `canvas.seeing` — signal that a vision pass is reading the live canvas (not a mutation).
@@ -4344,6 +4662,42 @@ pub struct CanvasSetStyleResponse {
     pub doc: CanvasDoc,
     pub canvas_open: bool,
     pub pen: CanvasPenStyle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSetGuidesRequest {
+    pub session_id: String,
+    #[serde(default)]
+    pub show_grid: Option<bool>,
+    #[serde(default)]
+    pub snap: Option<bool>,
+    #[serde(default)]
+    pub grid_size: Option<f32>,
+    #[serde(default)]
+    pub snap_mode: Option<CanvasSnapMode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSetGuidesResponse {
+    pub doc: CanvasDoc,
+    pub canvas_open: bool,
+    pub guides: CanvasGuides,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasComposeRequest {
+    pub session_id: String,
+    #[serde(default)]
+    pub author_id: String,
+    pub scene: CanvasSceneSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasComposeResponse {
+    pub doc: CanvasDoc,
+    pub canvas_open: bool,
+    pub scene: CanvasSceneSpec,
+    pub applied_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4410,6 +4764,10 @@ pub struct CanvasImportResponse {
     #[serde(default)]
     pub active_layer_id: String,
     pub canvas_aspect: CanvasAspect,
+    #[serde(default)]
+    pub guides: CanvasGuides,
+    #[serde(default)]
+    pub scene: Option<CanvasSceneSpec>,
 }
 
 /// Pièce jointe d'un message de session (ex. référence agent en fond).
@@ -5576,7 +5934,10 @@ mod media_option_tests {
 #[cfg(test)]
 mod chat_session_room_tests {
     use super::{
-        AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState, CanvasAspect,
+        compile_canvas_scene, AgentCreateRequest, AgentGoal, AgentInfo, AgentKind, AgentState,
+        CanvasAspect, CanvasGuides, CanvasOpBody, CanvasPoint, CanvasSceneElement,
+        CanvasSceneGeometry, CanvasSceneProfile, CanvasSceneRelation, CanvasSceneSpec,
+        CanvasSnapMode,
         ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
         ChatSessionMode, CognitiveMode,
     };
@@ -5921,9 +6282,107 @@ mod chat_session_room_tests {
         assert!(digest.contains("origin=top-left"));
         assert!(digest.contains("pas le centre"));
         assert!(digest.contains("align ex:"));
-        assert!(digest.contains("snap_step=0.01"));
+        assert!(digest.contains("guides=grid:0 snap:0 step=0.010 mode=Grid"));
         assert!(digest.contains("last_seq=2"));
         assert!(digest.contains("last_bbox="));
+    }
+
+    #[test]
+    fn compile_canvas_scene_preserves_profiles_layers_and_geometry() {
+        let scene = CanvasSceneSpec {
+            profile: CanvasSceneProfile::Diagram,
+            subject: "architecture".into(),
+            reference: Some("attached-reference.png".into()),
+            view: Some("front".into()),
+            elements: vec![
+                CanvasSceneElement {
+                    id: "service".into(),
+                    role: "node".into(),
+                    layer: Some("components".into()),
+                    color: Some("#3EE0C4".into()),
+                    width: Some(0.006),
+                    fill: true,
+                    opacity: 0.9,
+                    dash: vec![],
+                    geometry: CanvasSceneGeometry::Rect {
+                        x: 0.2,
+                        y: 0.3,
+                        w: 0.25,
+                        h: 0.12,
+                        rotation: 0.0,
+                    },
+                },
+                CanvasSceneElement {
+                    id: "edge".into(),
+                    role: "connector".into(),
+                    layer: Some("edges".into()),
+                    color: Some("#FFFFFF".into()),
+                    width: Some(0.003),
+                    fill: false,
+                    opacity: 1.0,
+                    dash: vec![],
+                    geometry: CanvasSceneGeometry::Line {
+                        p0: CanvasPoint { x: 0.45, y: 0.36 },
+                        p1: CanvasPoint { x: 0.7, y: 0.36 },
+                    },
+                },
+            ],
+            relations: vec![CanvasSceneRelation {
+                from: "service".into(),
+                relation: "depends_on".into(),
+                to: "edge".into(),
+            }],
+            guides: Some(CanvasGuides {
+                show_grid: true,
+                snap: true,
+                grid_size: 0.025,
+                snap_mode: CanvasSnapMode::GridAndAnchors,
+            }),
+            ..Default::default()
+        };
+        let compiled = compile_canvas_scene(&scene).expect("scene compiles");
+        assert_eq!(compiled.len(), 2);
+        assert_eq!(compiled[0].0.as_deref(), Some("components"));
+        assert_eq!(compiled[1].0.as_deref(), Some("edges"));
+        match &compiled[0].1 {
+            CanvasOpBody::Rect { color, fill, opacity, .. } => {
+                assert_eq!(color, "#3EE0C4");
+                assert!(*fill);
+                assert!((*opacity - 0.9).abs() < 0.001);
+            }
+            _ => panic!("expected rectangle"),
+        }
+    }
+
+    #[test]
+    fn compile_canvas_scene_rejects_duplicate_ids_and_unknown_versions() {
+        let base = CanvasSceneSpec {
+            elements: vec![CanvasSceneElement {
+                id: "same".into(),
+                role: String::new(),
+                layer: None,
+                color: None,
+                width: None,
+                fill: false,
+                opacity: 1.0,
+                dash: vec![],
+                geometry: CanvasSceneGeometry::Line {
+                    p0: CanvasPoint { x: 0.1, y: 0.1 },
+                    p1: CanvasPoint { x: 0.2, y: 0.2 },
+                },
+            }],
+            ..Default::default()
+        };
+        let mut duplicate = base.clone();
+        duplicate.elements.push(duplicate.elements[0].clone());
+        assert!(compile_canvas_scene(&duplicate)
+            .unwrap_err()
+            .contains("ids"));
+        let mut unsupported = base;
+        unsupported.version = 2;
+        assert!(compile_canvas_scene(&unsupported)
+            .unwrap_err()
+            .contains("version"));
     }
 
     #[test]

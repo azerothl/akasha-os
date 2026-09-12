@@ -1773,6 +1773,8 @@ async fn main() {
                                             canvas_seeing: seeing,
                                             layers: doc.layers.clone(),
                                             active_layer_id: doc.active_layer_id.clone(),
+                                            guides: doc.guides.clone(),
+                                            scene: doc.scene.clone(),
                                         },
                                     )
                                     .await;
@@ -1920,6 +1922,104 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("canvas.set_guides", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasSetGuidesRequest>() {
+                    Ok(req) => {
+                        let apply_lock = s.canvas_apply_lock(&req.session_id);
+                        let result = {
+                            let _guard = apply_lock.lock().unwrap();
+                            s.sessions.lock().unwrap().canvas_set_guides(
+                                &req.session_id,
+                                req.show_grid,
+                                req.snap,
+                                req.grid_size,
+                                req.snap_mode,
+                            )
+                        };
+                        match result {
+                            Ok((meta, doc)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasSetGuidesResponse {
+                                            doc: doc.clone(),
+                                            canvas_open: meta.canvas_open,
+                                            guides: doc.guides,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("canvas.compose", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<CanvasComposeRequest>() {
+                    Ok(req) => {
+                        let author = if req.author_id.trim().is_empty() {
+                            "human"
+                        } else {
+                            req.author_id.as_str()
+                        };
+                        let apply_lock = s.canvas_apply_lock(&req.session_id);
+                        let result = {
+                            let _guard = apply_lock.lock().unwrap();
+                            s.sessions.lock().unwrap().canvas_compose(
+                                &req.session_id,
+                                author,
+                                req.scene.clone(),
+                            )
+                        };
+                        match result {
+                            Ok((meta, doc, applied_count)) => {
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &CanvasComposeResponse {
+                                            doc,
+                                            canvas_open: meta.canvas_open,
+                                            scene: req.scene,
+                                            applied_count,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("canvas.edit", move |ctx| {
             let s = s.clone();
             async move {
@@ -1951,6 +2051,8 @@ async fn main() {
                                             "layers": doc.layers,
                                             "active_layer_id": doc.active_layer_id,
                                             "pen": doc.pen,
+                                            "guides": doc.guides,
+                                            "scene": doc.scene,
                                         }),
                                     )
                                     .await;
@@ -2089,6 +2191,8 @@ async fn main() {
                                             layers: doc.layers,
                                             active_layer_id: doc.active_layer_id,
                                             canvas_aspect: meta.canvas_aspect,
+                                            guides: doc.guides,
+                                            scene: doc.scene,
                                         },
                                     )
                                     .await;
