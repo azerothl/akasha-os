@@ -1019,13 +1019,13 @@ pub fn ui_canvas_toolbar(
                 ),
                 (CanvasTool::Text, CanvasToolIcon::Text, t.canvas_tool_text),
             ] {
-                if icons::toolbar_selectable(ui, state.tool == tool, icon, tip) {
-                    if state.tool != tool {
-                        if let Some(commit) = commit_freehand_draft(state) {
-                            action = Some(commit);
-                        }
-                        state.tool = tool;
+                if icons::toolbar_selectable(ui, state.tool == tool, icon, tip)
+                    && state.tool != tool
+                {
+                    if let Some(commit) = commit_freehand_draft(state) {
+                        action = Some(commit);
                     }
+                    state.tool = tool;
                 }
             }
         });

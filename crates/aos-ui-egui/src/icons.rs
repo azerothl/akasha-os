@@ -2042,14 +2042,14 @@ fn paint_nav_tab(ui: &mut Ui, rect: Rect, icon: NavTabIcon, color: Color32) {
         NavTabIcon::Create => {
             // Sparkle-first wand: the star is the readable bit, not the stem.
             let star = c + Vec2::new(w * 0.16, -w * 0.18);
-            paint_star_4(&painter, star, w * 0.22, stroke);
+            paint_star_4(painter, star, w * 0.22, stroke);
             let d = w * 0.09;
             painter.line_segment([star + Vec2::new(-d, -d), star + Vec2::new(d, d)], stroke);
             painter.line_segment([star + Vec2::new(-d, d), star + Vec2::new(d, -d)], stroke);
             let grip = c + Vec2::new(-w * 0.22, w * 0.22);
             painter.line_segment([grip, star + Vec2::new(-w * 0.08, w * 0.08)], stroke);
             paint_star_4(
-                &painter,
+                painter,
                 c + Vec2::new(-w * 0.28, -w * 0.28),
                 w * 0.08,
                 stroke,

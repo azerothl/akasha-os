@@ -930,7 +930,7 @@ fn collapse_paint_spaces(text: &str) -> String {
 pub fn format_salon_json_for_display(text: &str) -> String {
     let work = map_markdown_fences(
         text,
-        |prose| pretty_format_embedded_json_objects(prose),
+        pretty_format_embedded_json_objects,
         |lang, body, raw| {
             if is_json_fence_lang(lang) {
                 let mut out = pretty_json_text(body);

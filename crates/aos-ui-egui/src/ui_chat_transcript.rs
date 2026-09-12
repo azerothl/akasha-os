@@ -258,7 +258,7 @@ impl UiApp {
                                         self.agents
                                             .iter()
                                             .find(|a| a.agent_id == sid)
-                                            .map(|a| chat_room::agent_avatar_id(a))
+                                            .map(chat_room::agent_avatar_id)
                                     })
                                     .or_else(|| {
                                         speaker_id.as_deref().and_then(|sid| {
