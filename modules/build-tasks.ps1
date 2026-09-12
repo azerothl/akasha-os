@@ -40,9 +40,23 @@ Write-Host "  wasm: $wasmSrc -> $wasmDst"
 
 $hash = (Get-FileHash -Algorithm SHA256 $wasmDst).Hash.ToLower()
 
+$uiSrc = Join-OsPath $root modules tasks ui index.html
+if (-not (Test-Path $uiSrc)) {
+    throw "UI source missing: $uiSrc"
+}
+$uiRaw = Get-Content $uiSrc -Raw -Encoding UTF8
+$uiDoc = $uiRaw | ConvertFrom-Json
+if ($uiDoc.type -ne "declarative_ui") {
+    throw "UI source must declare type: declarative_ui"
+}
+if (-not $uiDoc.root) {
+    throw "UI source missing declarative_ui root widget tree"
+}
+Write-Host "== validated declarative UI: $uiSrc =="
+
 $manifest = @"
 name: tasks
-version: 1.0.0
+version: 1.0.1
 hash: $hash
 permissions:
   required_caps:
@@ -86,10 +100,6 @@ min_os_api: 1
 "@
 [System.IO.File]::WriteAllText((Join-OsPath $pkg manifest.yaml), $manifest)
 
-$uiSrc = Join-OsPath $root modules tasks ui index.html
-if (-not (Test-Path $uiSrc)) {
-    throw "UI source missing: $uiSrc"
-}
 Copy-Item $uiSrc (Join-OsPath $pkg ui index.html) -Force
 
 $share = Join-OsPath $root share modules tasks.aospkg

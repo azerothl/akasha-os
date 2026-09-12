@@ -1143,6 +1143,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     let raw = e.to_string();
                     let _ = evt_tx.send(Evt::Error(if name == "create" {
                         format!("__create_install_failed__:{raw}")
+                    } else if name == "tasks" {
+                        format!("__tasks_open_failed__:{raw}")
                     } else {
                         raw
                     }));

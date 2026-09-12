@@ -142,6 +142,22 @@ mod tests {
     }
 
     #[test]
+    fn shipped_declarative_ui_has_root_widget_tree() {
+        use crate::decl_ui::DeclUiDocument;
+
+        let path = workspace_root().join("share/modules/tasks.aospkg/ui/index.html");
+        let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let doc = DeclUiDocument::parse_json(&raw)
+            .unwrap_or_else(|e| panic!("tasks shipped ui must parse: {e}"));
+        assert_eq!(doc.doc_type, "declarative_ui");
+        assert_eq!(doc.root.kind, "column");
+        assert!(
+            doc.root.children.as_ref().is_some_and(|c| !c.is_empty()),
+            "tasks ui must ship interactive widgets"
+        );
+    }
+
+    #[test]
     fn wasm_source_documents_same_store_path() {
         let lib_rs = workspace_root().join("modules/tasks/src/lib.rs");
         let raw = std::fs::read_to_string(&lib_rs)

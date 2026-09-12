@@ -13,7 +13,7 @@ entries:
       - mem.write:module:notes
       - mem.query:module:notes
   - name: tasks
-    version: "1.0.0"
+    version: "1.0.1"
     kind: module
     path: share/modules/tasks.aospkg
     hash: sha256:530c32342d2cc16efc8e3eafb27a0498f9a1f2bdef468fa79662736d989bb7af

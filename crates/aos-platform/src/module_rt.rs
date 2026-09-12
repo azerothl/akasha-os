@@ -2115,6 +2115,33 @@ min_os_api: 1
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    fn tasks_test_caps() -> Vec<String> {
+        vec![
+            "fs.read:/documents/tasks/**".into(),
+            "fs.write:/documents/tasks/**".into(),
+        ]
+    }
+
+    #[test]
+    fn tasks_package_validates_at_install() {
+        let share =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/modules/tasks.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip tasks test: run modules/build-tasks.sh first");
+            return;
+        }
+        let base = tmpbase("tasks");
+        let caps = tasks_test_caps();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        let info = rt.install(&share, Some(caps)).expect("tasks install");
+        assert_eq!(info.name, "tasks");
+        let ui = rt.load_ui("tasks").expect("load tasks ui");
+        assert_eq!(ui.document.doc_type, "declarative_ui");
+        assert_eq!(ui.document.root.kind, "column");
+        assert_eq!(ui.document.chrome_title("fr"), "Tâches");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn create_package_validates_at_install() {
         let share =
