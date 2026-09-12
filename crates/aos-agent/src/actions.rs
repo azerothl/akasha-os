@@ -527,7 +527,14 @@ fn parse_action_clean(text: &str) -> Option<AgentAction> {
 }
 
 /// Clés réservées du wrapper d'action — tout le reste peut être un arg aplati.
-const ACTION_WRAPPER_KEYS: &[&str] = &["action", "args", "thought", "thinking", "reasoning"];
+const ACTION_WRAPPER_KEYS: &[&str] = &[
+    "action",
+    "args",
+    "action_input",
+    "thought",
+    "thinking",
+    "reasoning",
+];
 
 /// Parse un objet JSON en `AgentAction`, en remontant les champs frères dans `args`.
 ///
@@ -554,13 +561,25 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
         .unwrap_or("")
         .to_string();
 
+    let action_input = obj
+        .get("action_input")
+        .and_then(|value| value.as_object())
+        .cloned();
     let mut args = match obj.get("args") {
         Some(a) if a.is_object() => a.clone(),
         Some(a) if !a.is_null() => serde_json::json!({ "value": a.clone() }),
-        _ => serde_json::json!({}),
+        _ => action_input
+            .clone()
+            .map(serde_json::Value::Object)
+            .unwrap_or_else(|| serde_json::json!({})),
     };
 
     if let Some(map) = args.as_object_mut() {
+        if let Some(input) = action_input {
+            for (k, v) in input {
+                map.entry(k).or_insert(v);
+            }
+        }
         for (k, v) in obj {
             if ACTION_WRAPPER_KEYS.contains(&k.as_str()) {
                 continue;
@@ -728,6 +747,36 @@ mod tests {
         );
         assert_eq!(a.args["tools"], serde_json::json!(["canvas.get"]));
         assert_eq!(a.args["skills"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn parse_action_input_wrapper_as_tool_args() {
+        let text = r#"{
+  "action": "canvas.path",
+  "action_input": {
+    "session_id": "sess-1",
+    "points": [{"x": 0.1, "y": 0.2}],
+    "fill": true
+  }
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.action, "canvas.path");
+        assert_eq!(a.args["session_id"], "sess-1");
+        assert_eq!(a.args["points"][0]["x"], 0.1);
+        assert_eq!(a.args["fill"], true);
+        assert!(a.args.get("action_input").is_none());
+    }
+
+    #[test]
+    fn nested_args_take_precedence_over_action_input_wrapper() {
+        let text = r##"{
+  "action": "canvas.set_style",
+  "args": {"color": "#111111"},
+  "action_input": {"color": "#222222", "width": 0.03}
+}"##;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.args["color"], "#111111");
+        assert_eq!(a.args["width"], 0.03);
     }
 
     #[test]
