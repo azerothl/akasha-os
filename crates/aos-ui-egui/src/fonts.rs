@@ -29,7 +29,9 @@ fn default_fonts() -> FontDefinitions {
 }
 
 fn inject_bundled_font(fonts: &mut FontDefinitions, key: &str, data: FontData) {
-    fonts.font_data.insert(key.to_owned(), std::sync::Arc::new(data));
+    fonts
+        .font_data
+        .insert(key.to_owned(), std::sync::Arc::new(data));
     if let Some(prop) = fonts.families.get_mut(&FontFamily::Proportional) {
         prop.retain(|name| name != key);
         prop.insert(0, key.to_owned());

@@ -463,7 +463,23 @@ fn update_roster_from_request(spec: &mut AgentSpec, req: &AgentRosterUpdateReque
             Some(model.clone())
         };
     }
+    if req.avatar.is_some() {
+        spec.avatar = req.avatar.clone();
+    }
+    if req.color.is_some() {
+        spec.color = req.color.clone().and_then(|c| normalize_agent_color(&c));
+    }
     apply_tool_caps(spec);
+}
+
+fn normalize_agent_color(raw: &str) -> Option<String> {
+    let t = raw.trim();
+    let hex = t.strip_prefix('#').unwrap_or(t);
+    if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(format!("#{hex}"))
+    } else {
+        None
+    }
 }
 
 fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
@@ -492,6 +508,8 @@ fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
         display_name: spec.display_name.clone(),
         persona_id: spec.persona_id.clone(),
         origin: spec.origin.clone(),
+        avatar: spec.avatar.clone(),
+        color: spec.color.clone(),
         deep_plan: None,
         cognitive_mode: spec.cognitive_mode,
     }
@@ -736,6 +754,8 @@ async fn spawn_worker(
             display_name: spec.display_name.clone(),
             persona_id: spec.persona_id.clone(),
             origin: spec.origin.clone(),
+            avatar: spec.avatar.clone(),
+            color: spec.color.clone(),
             deep_plan: None,
             cognitive_mode: spec.cognitive_mode,
         };

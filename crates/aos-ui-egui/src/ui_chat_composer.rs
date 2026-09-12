@@ -5,6 +5,7 @@ use crate::cmd::Cmd;
 use crate::composer_layout::{
     chat_composer_input_height, composer_enter_action, composer_field_width,
     send_button_reserved_width, stop_button_reserved_width, ComposerEnterAction,
+    COMPOSER_FRAME_PAD_V, COMPOSER_PILL_H, COMPOSER_SEND_CAP_MIN_W, COMPOSER_ZONE_GAP,
 };
 use crate::slash::{slash_completions, slash_insert_text};
 use crate::{chat_media, chat_room, i18n, icons, os_open, UiApp};
@@ -20,6 +21,8 @@ pub(crate) struct ChatComposerContext<'a> {
     pub(crate) show_vision_banner: bool,
     pub(crate) chat_width: f32,
 }
+
+const COMPOSER_MIN_FIELD: f32 = 80.0;
 
 impl UiApp {
     pub(crate) fn ui_chat_composer(&mut self, ui: &mut egui::Ui, context: ChatComposerContext<'_>) {
@@ -69,7 +72,7 @@ impl UiApp {
                 };
                 let show_stop =
                     self.chat_state.runtime.pending && self.chat_state.active_session.is_some();
-                let item_gap = ui.spacing().item_spacing.x;
+                let item_gap = ui.spacing().item_spacing.x.max(4.0);
                 let send_w = send_button_reserved_width(ui, &t);
                 let stop_w = if show_stop {
                     stop_button_reserved_width(ui, &t)
@@ -83,90 +86,296 @@ impl UiApp {
                 let mut send_clicked = false;
                 let mut stop_clicked = false;
                 let mut input_response: Option<egui::Response> = None;
-
-                let mut run_attach_menu = |ui: &mut egui::Ui| {
-                    icons::attach_menu(ui, "chat_attach", t.chat_attach_image, |ui| {
-                        if self.chat_state.composer.last_session_image.is_some()
-                            && ui.button(t.chat_last_session_image).clicked()
-                        {
-                            reuse_last_image = true;
-                        }
-                        if ui.button(t.chat_attach_image).clicked() {
-                            attach_from_menu = true;
-                        }
-                        if ui.button(t.chat_attach_document).clicked() {
-                            attach_document_from_menu = true;
-                        }
-                    });
-                };
+                let has_last_image = self.chat_state.composer.last_session_image.is_some();
 
                 let row_w = ui.available_width();
                 let input_h = chat_composer_input_height(&self.chat_state.composer.input);
+                let content_h = input_h + COMPOSER_ZONE_GAP + COMPOSER_PILL_H;
+                let frame_h = content_h + COMPOSER_FRAME_PAD_V;
+                // Content-column pad only — Send/Stop are full-height end-caps (Exemple 2).
+                let frame_pad_l = 8.0_f32;
+                let content_pad_v = COMPOSER_FRAME_PAD_V * 0.5;
+                let inner_w = (row_w - frame_pad_l).max(0.0);
                 let field_w = composer_field_width(
-                    row_w,
+                    inner_w,
                     send_w,
                     icons::ATTACH_BTN_W,
                     stop_w,
                     item_gap,
                     show_stop,
                 );
+                let send_cap_w = send_w.max(COMPOSER_SEND_CAP_MIN_W);
+                let colors = crate::theme::button_colors(ui);
+                let model_id = self.status_model_name();
+                let model_human = crate::models_page::model_human_label(
+                    &model_id,
+                    &self.models_ui.model_infos,
+                    t.status_model_default,
+                );
+                let model_short = crate::agent_panel::truncate(&model_human, 16);
+                let model_hover = format!("{} — {}", t.status_model_label, model_id);
+                let pill_radius = (COMPOSER_PILL_H * 0.5) as u8;
+                let send_cap_radius = egui::CornerRadius {
+                    nw: 0,
+                    ne: crate::theme::RADIUS_MD,
+                    sw: 0,
+                    se: crate::theme::RADIUS_MD,
+                };
 
+                // Prefer the measured frame; never clip the pill under a short reserve.
+                let frame_slot_h = frame_h.max(ui.available_height().min(frame_h + 8.0));
                 ui.allocate_ui_with_layout(
-                    egui::vec2(row_w, input_h),
-                    egui::Layout::right_to_left(egui::Align::Center),
+                    egui::vec2(row_w, frame_slot_h),
+                    egui::Layout::top_down(egui::Align::Min),
                     |ui| {
-                        if show_stop {
-                            if room_mode {
-                                if ui
-                                    .add_sized(
-                                        egui::vec2(stop_w, input_h),
-                                        egui::Button::new(t.chat_stop),
-                                    )
-                                    .clicked()
-                                {
-                                    if let Some(sid) = self.chat_state.active_session.clone() {
-                                        let _ = self
-                                            .cmd_tx
-                                            .send(Cmd::RoomTurnCancel { session_id: sid });
-                                    }
-                                }
-                            } else if ui
-                                .add_sized(
-                                    egui::vec2(stop_w, input_h),
-                                    egui::Button::new(t.chat_stop),
-                                )
-                                .clicked()
-                            {
-                                stop_clicked = true;
-                            }
-                        }
-                        let send_btn = ui
-                            .add_sized(
-                                egui::vec2(send_w, input_h.max(44.0)),
-                                egui::Button::new(t.agent_send)
-                                    .corner_radius(crate::theme::RADIUS_MD)
-                                    // Surchargable : accent du thème courant, pas SIGNAL en dur.
-                                    .fill(crate::theme::button_colors(ui).accent),
-                            )
-                            .on_hover_text(format!("{} (Enter)", t.tip_send));
-                        send_clicked |= send_btn.clicked();
+                        egui::Frame::NONE
+                            .fill(ui.visuals().faint_bg_color)
+                            .stroke(egui::Stroke::new(
+                                1.0_f32,
+                                ui.visuals().widgets.noninteractive.bg_stroke.color,
+                            ))
+                            .corner_radius(crate::theme::RADIUS_MD)
+                            // No vertical inset: end-cap height == frame inner height.
+                            .inner_margin(egui::Margin {
+                                left: frame_pad_l as i8,
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                            })
+                            .show(ui, |ui| {
+                                // Exact match to the allocated slot so Send cannot outgrow the stroke.
+                                let cap_h = frame_slot_h;
+                                ui.set_min_height(cap_h);
+                                ui.set_max_width(inner_w);
 
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(icons::ATTACH_BTN_W, input_h),
-                            egui::Layout::left_to_right(egui::Align::Center),
-                            |ui| {
-                                run_attach_menu(ui);
-                            },
-                        );
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(inner_w, cap_h),
+                                    egui::Layout::left_to_right(egui::Align::Min),
+                                    |ui| {
+                                        let end_w = send_cap_w
+                                            + if show_stop {
+                                                stop_w + item_gap
+                                            } else {
+                                                0.0
+                                            };
+                                        let content_w =
+                                            (ui.available_width() - end_w - item_gap).max(64.0);
 
-                        let r = ui.add_sized(
-                            egui::vec2(field_w, input_h),
-                            egui::TextEdit::multiline(&mut self.chat_state.composer.input)
-                                .id_salt("chat_input")
-                                .desired_rows(2)
-                                .hint_text(&hint),
-                        );
-                        input_response = Some(r);
+                                        // Content: attach + field on top, model pill below.
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(content_w, cap_h),
+                                            egui::Layout::top_down(egui::Align::Min),
+                                            |ui| {
+                                                // Height math is exact; default item_spacing would
+                                                // push the pill under the frame stroke.
+                                                ui.spacing_mut().item_spacing.y = 0.0;
+                                                ui.add_space(content_pad_v);
+                                                ui.horizontal(|ui| {
+                                                    ui.allocate_ui_with_layout(
+                                                        egui::vec2(icons::ATTACH_BTN_W, input_h),
+                                                        egui::Layout::left_to_right(
+                                                            egui::Align::Center,
+                                                        ),
+                                                        |ui| {
+                                                            icons::attach_menu(
+                                                                ui,
+                                                                "chat_attach",
+                                                                t.chat_attach_image,
+                                                                |ui| {
+                                                                    if has_last_image
+                                                                        && ui
+                                                                            .button(
+                                                                                t.chat_last_session_image,
+                                                                            )
+                                                                            .clicked()
+                                                                    {
+                                                                        reuse_last_image = true;
+                                                                    }
+                                                                    if ui
+                                                                        .button(t.chat_attach_image)
+                                                                        .clicked()
+                                                                    {
+                                                                        attach_from_menu = true;
+                                                                    }
+                                                                    if ui
+                                                                        .button(
+                                                                            t.chat_attach_document,
+                                                                        )
+                                                                        .clicked()
+                                                                    {
+                                                                        attach_document_from_menu =
+                                                                            true;
+                                                                    }
+                                                                },
+                                                            );
+                                                        },
+                                                    );
+                                                    let field_avail = (ui.available_width()
+                                                        - item_gap)
+                                                        .max(COMPOSER_MIN_FIELD);
+                                                    let r = ui.add_sized(
+                                                        egui::vec2(
+                                                            field_w
+                                                                .min(field_avail)
+                                                                .max(COMPOSER_MIN_FIELD),
+                                                            input_h,
+                                                        ),
+                                                        egui::TextEdit::multiline(
+                                                            &mut self.chat_state.composer.input,
+                                                        )
+                                                        .id_salt("chat_input")
+                                                        .frame(false)
+                                                        .desired_rows(2)
+                                                        .hint_text(&hint),
+                                                    );
+                                                    input_response = Some(r);
+                                                });
+
+                                                ui.add_space(COMPOSER_ZONE_GAP);
+
+                                                // Pill indented under the text field; fixed slot.
+                                                ui.allocate_ui_with_layout(
+                                                    egui::vec2(
+                                                        ui.available_width(),
+                                                        COMPOSER_PILL_H,
+                                                    ),
+                                                    egui::Layout::left_to_right(
+                                                        egui::Align::Center,
+                                                    ),
+                                                    |ui| {
+                                                        ui.add_space(
+                                                            icons::ATTACH_BTN_W + item_gap,
+                                                        );
+                                                        let pill_max =
+                                                            (ui.available_width() - 4.0).max(48.0);
+                                                        let painted = egui::Frame::NONE
+                                                            .fill(ui.visuals().extreme_bg_color)
+                                                            .stroke(egui::Stroke::new(
+                                                                1.0_f32,
+                                                                ui.visuals()
+                                                                    .widgets
+                                                                    .noninteractive
+                                                                    .bg_stroke
+                                                                    .color,
+                                                            ))
+                                                            .corner_radius(pill_radius)
+                                                            .inner_margin(
+                                                                egui::Margin::symmetric(10, 2),
+                                                            )
+                                                            .show(ui, |ui| {
+                                                                ui.set_max_width(pill_max);
+                                                                ui.set_height(
+                                                                    COMPOSER_PILL_H - 4.0,
+                                                                );
+                                                                ui.horizontal_centered(|ui| {
+                                                                    ui.add(
+                                                                        egui::Label::new(
+                                                                            egui::RichText::new(
+                                                                                model_short
+                                                                                    .as_str(),
+                                                                            )
+                                                                            .small()
+                                                                            .color(
+                                                                                ui.visuals()
+                                                                                    .text_color(),
+                                                                            ),
+                                                                        )
+                                                                        .truncate(),
+                                                                    );
+                                                                    icons::dropdown_chevron(ui);
+                                                                });
+                                                            })
+                                                            .response
+                                                            .on_hover_text(&model_hover);
+                                                        let model_resp = ui
+                                                            .interact(
+                                                                painted.rect,
+                                                                ui.id()
+                                                                    .with("composer_model_chip"),
+                                                                egui::Sense::click(),
+                                                            )
+                                                            .union(painted);
+                                                        self.ui_session_model_picker(
+                                                            ui,
+                                                            &t,
+                                                            &model_resp,
+                                                            "composer_model_picker",
+                                                            true,
+                                                        );
+                                                    },
+                                                );
+                                                ui.add_space(content_pad_v);
+                                            },
+                                        );
+
+                                        if show_stop {
+                                            let stop_btn = ui.add_sized(
+                                                egui::vec2(stop_w, cap_h),
+                                                egui::Button::new(t.chat_stop)
+                                                    .corner_radius(crate::theme::RADIUS_SM),
+                                            );
+                                            if stop_btn.clicked() {
+                                                stop_clicked = true;
+                                            }
+                                        }
+
+                                        // Full-height Send end-cap (Exemple 2).
+                                        let (cap_rect, cap_resp) = ui.allocate_exact_size(
+                                            egui::vec2(send_cap_w, cap_h),
+                                            egui::Sense::click(),
+                                        );
+                                        if ui.is_rect_visible(cap_rect) {
+                                            let fill = if cap_resp.hovered() {
+                                                colors.accent.gamma_multiply(1.12)
+                                            } else {
+                                                colors.accent
+                                            };
+                                            ui.painter().rect_filled(
+                                                cap_rect,
+                                                send_cap_radius,
+                                                fill,
+                                            );
+                                            let galley = ui.painter().layout_no_wrap(
+                                                t.agent_send.to_owned(),
+                                                egui::TextStyle::Button.resolve(ui.style()),
+                                                egui::Color32::WHITE,
+                                            );
+                                            let arrow_h = 10.0_f32;
+                                            let stack_h = galley.size().y + 4.0 + arrow_h;
+                                            let top =
+                                                cap_rect.center().y - stack_h * 0.5;
+                                            let label_pos = egui::pos2(
+                                                cap_rect.center().x - galley.size().x * 0.5,
+                                                top,
+                                            );
+                                            ui.painter().galley(
+                                                label_pos,
+                                                galley,
+                                                egui::Color32::WHITE,
+                                            );
+                                            let arrow_rect = egui::Rect::from_center_size(
+                                                egui::pos2(
+                                                    cap_rect.center().x,
+                                                    top + stack_h - arrow_h * 0.5,
+                                                ),
+                                                egui::vec2(20.0, arrow_h),
+                                            );
+                                            ui.allocate_new_ui(
+                                                egui::UiBuilder::new().max_rect(arrow_rect),
+                                                |ui| {
+                                                    icons::send_arrow(
+                                                        ui,
+                                                        egui::Color32::WHITE,
+                                                    );
+                                                },
+                                            );
+                                        }
+                                        send_clicked |= cap_resp
+                                            .on_hover_text(format!("{} (Enter)", t.tip_send))
+                                            .clicked();
+                                    },
+                                );
+                            });
                     },
                 );
 
@@ -196,7 +405,13 @@ impl UiApp {
                 }
 
                 if stop_clicked {
-                    self.cancel_pending_turn();
+                    if room_mode {
+                        if let Some(sid) = self.chat_state.active_session.clone() {
+                            let _ = self.cmd_tx.send(Cmd::RoomTurnCancel { session_id: sid });
+                        }
+                    } else {
+                        self.cancel_pending_turn();
+                    }
                 }
 
                 if let Some(r) = input_response {

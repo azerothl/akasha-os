@@ -21,11 +21,11 @@ impl UiApp {
             |ui| {
                 ui.set_width(side_w);
 
-                // Fixed header chrome — search, archived toggle, and + New stay outside the list.
-                ui.heading(t.tab_chat);
+                // Overlay header — search, archived toggle, and + New stay outside the list.
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
                     ui.add_sized(
-                        egui::vec2((side_w - 44.0).max(80.0), theme::CONTROL_MIN_H_COMFORTABLE),
+                        egui::vec2((side_w - 72.0).max(80.0), theme::CONTROL_MIN_H_COMFORTABLE),
                         egui::TextEdit::singleline(&mut self.chat_state.sidebar.search)
                             .hint_text(t.session_search),
                     );
@@ -39,51 +39,24 @@ impl UiApp {
                             let _ = self.cmd_tx.send(Cmd::SessionListArchived);
                         }
                     }
+                    if icons::plus_button(ui)
+                        .on_hover_text(t.session_new)
+                        .clicked()
+                    {
+                        let n = self.chat_state.sessions.len() + 1;
+                        self.request_session_create(Some(format!("Session {n}")));
+                    }
                 });
-                if ui.button(t.session_new).clicked() {
-                    let n = self.chat_state.sessions.len() + 1;
-                    self.request_session_create(Some(format!("Session {n}")));
-                }
-                // Barre d'actions de la session active, sous + New : une ligne
-                // enroulée de petits boutons — jamais de chevauchement avec la
-                // liste, toujours accessible même en sidebar étroite.
-                if self.chat_state.active_session.is_some() {
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.small_button(t.sidebar_delete).clicked() {
-                            if let Some(id) = self.chat_state.active_session.clone() {
-                                self.chat_state.sidebar.delete_confirm = Some(id);
-                            }
-                        }
-                        if ui.small_button(t.session_export).clicked() {
-                            if let Some(id) = self.chat_state.active_session.clone() {
-                                let _ = self.cmd_tx.send(Cmd::SessionExport { id });
-                            }
-                        }
-                        if ui.small_button(t.sidebar_rename).clicked() {
-                            if let Some(id) = self.chat_state.active_session.clone() {
-                                let title = self
-                                    .chat_state
-                                    .sessions
-                                    .iter()
-                                    .find(|s| s.id == id)
-                                    .map(|s| s.title.clone())
-                                    .unwrap_or_default();
-                                self.chat_state.sidebar.rename = title;
-                                self.chat_state.sidebar.rename_open = true;
-                            }
-                        }
-                    });
-                }
 
                 // Partage vertical explicite : fermé, la liste prend tout
                 // moins 64px ; ouvert, ~45% liste / ~55% outils (min 120px
                 // chacun), chaque zone scrolle en interne.
                 let avail = ui.available_height();
                 let (sessions_h, tools_max) = if self.chat_state.sidebar.tools_open {
-                    let sh = (avail * 0.45).max(120.0);
-                    (sh, (avail - sh - 48.0).max(120.0))
+                    let tools = (avail * 0.32).clamp(100.0, 160.0);
+                    ((avail - tools - 36.0).max(120.0), tools)
                 } else {
-                    ((avail - 64.0).max(120.0), 0.0)
+                    ((avail - 36.0).max(120.0), 0.0)
                 };
                 egui::ScrollArea::vertical()
                     .id_salt("chat_sessions")
@@ -127,45 +100,87 @@ impl UiApp {
                                 }
                                 crate::session_nav::SessionGroup::Older => t.session_older,
                             };
-                            ui.add_space(4.0);
-                            ui.weak(label);
+                            ui.add_space(6.0);
+                            ui.label(
+                                egui::RichText::new(label)
+                                    .small()
+                                    .color(ui.visuals().weak_text_color()),
+                            );
                             for s in group_sessions {
                                 let s = s.clone();
                                 let selected = self.chat_state.active_session.as_deref()
                                     == Some(s.id.as_str());
                                 let unread = self.chat_state.session_chat.is_unread(&s.id);
-                                let row = ui.horizontal(|ui| {
-                                    if s.pinned {
-                                        icons::pin_indicator(ui);
+                                let row_h = 32.0;
+                                let row_w = ui.available_width();
+                                let (rect, response) = ui.allocate_exact_size(
+                                    egui::vec2(row_w, row_h),
+                                    egui::Sense::click(),
+                                );
+                                if ui.is_rect_visible(rect) {
+                                    if selected {
+                                        ui.painter().rect_filled(
+                                            rect,
+                                            theme::RADIUS_SM as f32,
+                                            ui.visuals().faint_bg_color,
+                                        );
+                                    } else if response.hovered() {
+                                        ui.painter().rect_filled(
+                                            rect,
+                                            theme::RADIUS_SM as f32,
+                                            ui.visuals().widgets.hovered.bg_fill,
+                                        );
                                     }
-                                    if unread {
-                                        let t = i18n::strings(&self.prefs.language);
-                                        icons::status_dot(
-                                            ui,
-                                            crate::theme::button_colors(ui).accent,
-                                        )
-                                        .on_hover_text(t.session_unread_reply);
-                                    }
-                                    // Titre tronqué + tooltip complet : les longs
-                                    // titres débordaient sur le compteur.
-                                    let short =
-                                        agent_panel::truncate(&s.title, 26);
-                                    let title = ui
-                                        .selectable_label(selected, short)
-                                        .on_hover_text(&s.title);
-                                    ui.label(
-                                        egui::RichText::new(format!("({})", s.message_count))
-                                            .weak(),
+                                    ui.allocate_new_ui(
+                                        egui::UiBuilder::new().max_rect(rect),
+                                        |ui| {
+                                            ui.horizontal(|ui| {
+                                                ui.add_space(6.0);
+                                                ui.spacing_mut().item_spacing.x = 4.0;
+                                                if s.pinned {
+                                                    icons::pin_indicator(ui);
+                                                }
+                                                if unread {
+                                                    let tip = i18n::strings(&self.prefs.language);
+                                                    icons::status_dot(
+                                                        ui,
+                                                        crate::theme::button_colors(ui).accent,
+                                                    )
+                                                    .on_hover_text(tip.session_unread_reply);
+                                                }
+                                                let short = agent_panel::truncate(&s.title, 28);
+                                                let color = if selected {
+                                                    ui.visuals().strong_text_color()
+                                                } else {
+                                                    ui.visuals().text_color()
+                                                };
+                                                ui.label(egui::RichText::new(short).color(color));
+                                                ui.with_layout(
+                                                    egui::Layout::right_to_left(
+                                                        egui::Align::Center,
+                                                    ),
+                                                    |ui| {
+                                                        ui.add_space(8.0);
+                                                        ui.label(
+                                                            egui::RichText::new(format!(
+                                                                "{}",
+                                                                s.message_count
+                                                            ))
+                                                            .small()
+                                                            .weak(),
+                                                        );
+                                                    },
+                                                );
+                                            });
+                                        },
                                     );
-                                    if s.archived {
-                                        ui.weak(t.session_archived);
-                                    }
-                                    title
-                                });
-                                if row.inner.clicked() || row.response.clicked() {
-                                    self.request_session_select(s.id.clone());
                                 }
-                                row.response.context_menu(|ui| {
+                                let response = response.on_hover_text(&s.title);
+                                if response.clicked() {
+                                    self.request_session_select(s.id.clone());
+                                    self.chat_state.sidebar.picker_open = false;
+                                }
+                                response.context_menu(|ui| {
                                     if ui
                                         .button(if s.pinned {
                                             t.session_unpin
@@ -180,19 +195,10 @@ impl UiApp {
                                         });
                                         ui.close_menu();
                                     }
-                                    if s.archived {
-                                        if ui.button(t.session_restore).clicked() {
-                                            let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
-                                                id: s.id.clone(),
-                                                archived: false,
-                                            });
-                                            ui.close_menu();
-                                        }
-                                    } else if ui.button(t.session_archive).clicked() {
-                                        let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
-                                            id: s.id.clone(),
-                                            archived: true,
-                                        });
+                                    if ui.button(t.sidebar_rename).clicked() {
+                                        self.chat_state.sidebar.rename = s.title.clone();
+                                        self.chat_state.sidebar.rename_open = true;
+                                        self.chat_state.sidebar.picker_open = true;
                                         ui.close_menu();
                                     }
                                     if ui.button(t.session_export).clicked() {
@@ -201,10 +207,24 @@ impl UiApp {
                                             .send(Cmd::SessionExport { id: s.id.clone() });
                                         ui.close_menu();
                                     }
-                                    if s.archived
-                                        && ui.button(t.session_delete_permanently).clicked()
-                                    {
-                                        self.chat_state.sidebar.delete_confirm = Some(s.id.clone());
+                                    if s.archived {
+                                        if ui.button(t.session_restore).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                                id: s.id.clone(),
+                                                archived: false,
+                                            });
+                                            ui.close_menu();
+                                        }
+                                        if ui.button(t.session_delete_permanently).clicked() {
+                                            self.chat_state.sidebar.delete_confirm =
+                                                Some(s.id.clone());
+                                            ui.close_menu();
+                                        }
+                                    } else if ui.button(t.session_archive).clicked() {
+                                        let _ = self.cmd_tx.send(Cmd::SessionSetArchived {
+                                            id: s.id.clone(),
+                                            archived: true,
+                                        });
                                         ui.close_menu();
                                     }
                                 });
@@ -215,8 +235,7 @@ impl UiApp {
                 // Tiroir à état explicite (pas de CollapsingHeader) : le bouton
                 // reste visible, le corps ouvert est borné en scroll interne.
                 let tools_open = self.chat_state.sidebar.tools_open;
-                if icons::labeled_checkbox_selectable(ui, tools_open, t.sidebar_web_files)
-                    .clicked()
+                if icons::labeled_checkbox_selectable(ui, tools_open, t.sidebar_web_files).clicked()
                 {
                     self.chat_state.sidebar.tools_open = !tools_open;
                 }

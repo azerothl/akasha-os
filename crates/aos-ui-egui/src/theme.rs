@@ -250,7 +250,11 @@ pub fn add_form_field(ui: &mut egui::Ui, width: f32, edit: egui::TextEdit<'_>) -
     } else {
         mix(PAPER, VOID, 0.42)
     };
-    let fill = mix(visuals.window_fill, PAPER, if visuals.dark_mode { 0.08 } else { 0.04 });
+    let fill = mix(
+        visuals.window_fill,
+        PAPER,
+        if visuals.dark_mode { 0.08 } else { 0.04 },
+    );
     egui::Frame::new()
         .fill(fill)
         .stroke(egui::Stroke::new(1.0_f32, border))

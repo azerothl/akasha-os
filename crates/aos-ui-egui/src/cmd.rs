@@ -177,6 +177,9 @@ pub(crate) enum Cmd {
         join_active_room: bool,
         /// Agents-tab library entry: persist roster spec only, never spawn a worker.
         library: bool,
+        avatar: String,
+        /// Accent `#RRGGBB` or empty for auto hash color.
+        color: String,
     },
     AgentKill {
         id: String,
@@ -225,6 +228,8 @@ pub(crate) enum Cmd {
         tools: Vec<String>,
         mcp_servers: Vec<String>,
         model_id: Option<String>,
+        avatar: Option<String>,
+        color: Option<String>,
     },
     Troubleshoot,
     Audit {

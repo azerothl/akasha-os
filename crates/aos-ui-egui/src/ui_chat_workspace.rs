@@ -109,6 +109,7 @@ impl UiApp {
                                                 .with_cross_justify(true),
                                             |ui| {
                                                 if let Some(ref sid) = active_sid {
+                                                    self.ui_canvas_tools_above_surface(ui, t, sid);
                                                     let aspect_action =
                                                         chat_canvas::ui_canvas_aspect_row(
                                                             ui,
@@ -167,6 +168,7 @@ impl UiApp {
                                             .with_cross_justify(true),
                                         |ui| {
                                             if let Some(ref sid) = active_sid {
+                                                self.ui_canvas_tools_above_surface(ui, t, sid);
                                                 let aspect_action =
                                                     chat_canvas::ui_canvas_aspect_row(
                                                         ui,

@@ -4,7 +4,22 @@ use crate::i18n::UiStrings;
 use eframe::egui;
 
 pub(crate) const COMPOSER_MIN_INPUT_W: f32 = 140.0;
+/// Minimum height of the multiline field (one visual line).
 pub(crate) const COMPOSER_INPUT_ROW_H: f32 = 44.0;
+/// Model selector pill under the field.
+pub(crate) const COMPOSER_PILL_H: f32 = 26.0;
+/// Legacy alias — pill row height used in height math.
+pub(crate) const COMPOSER_ACTION_ROW_H: f32 = COMPOSER_PILL_H;
+/// Gap between the text field and the model pill.
+pub(crate) const COMPOSER_ZONE_GAP: f32 = 4.0;
+/// Total vertical padding inside the content column (split top/bottom; end-cap is full-height).
+pub(crate) const COMPOSER_FRAME_PAD_V: f32 = 12.0;
+/// Minimum width of the full-height Send end-cap (Exemple 2).
+pub(crate) const COMPOSER_SEND_CAP_MIN_W: f32 = 76.0;
+/// Below this width, truncate the model pill more aggressively.
+pub(crate) const COMPOSER_NARROW_W: f32 = 420.0;
+/// Reserved width for the model pill before egui measures it.
+pub(crate) const COMPOSER_MODEL_CHIP_W: f32 = 120.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ComposerEnterAction {
@@ -90,7 +105,7 @@ pub(crate) fn estimate_composer_buttons_w(send: &str, show_stop: bool, stop: &st
     const CHAR_W: f32 = 8.5;
     const BTN_PAD: f32 = 20.0;
     const ITEM_GAP: f32 = 4.0;
-    let mut width = send.len() as f32 * CHAR_W + BTN_PAD;
+    let mut width = (send.len() as f32 * CHAR_W + BTN_PAD).max(COMPOSER_SEND_CAP_MIN_W);
     if show_stop {
         width += ITEM_GAP + stop.len() as f32 * CHAR_W + BTN_PAD;
     }
@@ -108,7 +123,7 @@ fn ui_button_width(ui: &egui::Ui, label: &str) -> f32 {
 pub(crate) fn send_button_reserved_width(ui: &egui::Ui, strings: &UiStrings) -> f32 {
     let measured = ui_button_width(ui, strings.agent_send);
     let french_floor = estimate_composer_buttons_w("Envoyer", false, "");
-    measured.max(french_floor)
+    measured.max(french_floor).max(COMPOSER_SEND_CAP_MIN_W)
 }
 
 pub(crate) fn stop_button_reserved_width(ui: &egui::Ui, strings: &UiStrings) -> f32 {
@@ -117,7 +132,7 @@ pub(crate) fn stop_button_reserved_width(ui: &egui::Ui, strings: &UiStrings) -> 
     measured.max(french_floor)
 }
 
-/// Field width after reserving fixed send, stop, paperclip, and gap chrome.
+/// Field/content width after attach + end-cap (Send, optional Stop).
 pub(crate) fn composer_field_width(
     row_w: f32,
     send_w: f32,
@@ -126,17 +141,38 @@ pub(crate) fn composer_field_width(
     gap: f32,
     show_stop: bool,
 ) -> f32 {
-    let gaps = if show_stop { gap * 3.0 } else { gap * 2.0 };
-    let chrome = send_w + attach_w + gaps + if show_stop { stop_w } else { 0.0 };
-    (row_w - chrome).max(0.0)
+    let end = send_w.max(COMPOSER_SEND_CAP_MIN_W)
+        + if show_stop {
+            stop_w + gap
+        } else {
+            0.0
+        };
+    (row_w - attach_w - gap - end - gap).max(0.0)
 }
 
+/// True when the composer is too narrow for a comfortable field + end-cap.
 #[cfg(test)]
 pub(crate) fn chat_composer_wraps(available_w: f32, attach_w: f32, buttons_w: f32) -> bool {
-    available_w - attach_w - buttons_w < COMPOSER_MIN_INPUT_W
+    available_w < COMPOSER_NARROW_W
+        || available_w - attach_w - buttons_w - COMPOSER_MODEL_CHIP_W < 24.0
 }
 
-/// Vertical space for the fixed send row and optional stacks growing upward.
+/// Base frame height: field + pill + padding (single horizontal bar).
+pub(crate) fn composer_frame_base_height() -> f32 {
+    COMPOSER_INPUT_ROW_H + COMPOSER_ZONE_GAP + COMPOSER_PILL_H + COMPOSER_FRAME_PAD_V
+}
+
+/// End-cap layout never stacks Send onto a second row.
+#[allow(dead_code)]
+pub(crate) fn composer_action_row_count(
+    _available_w: f32,
+    _show_stop: bool,
+    _buttons_w: f32,
+) -> usize {
+    1
+}
+
+/// Vertical space for the composer frame and optional stacks growing upward.
 pub(crate) fn chat_composer_reserve_height(
     chat_w: f32,
     ask_queue_len: usize,
@@ -149,7 +185,8 @@ pub(crate) fn chat_composer_reserve_height(
     const CHIP_W: f32 = 48.0;
     const CHIP_ROW_H: f32 = 36.0;
 
-    let mut height = COMPOSER_INPUT_ROW_H;
+    let mut height = composer_frame_base_height();
+    let _ = chat_w;
     if ask_queue_len > 1 {
         height += ASK_QUEUE_H;
     }
@@ -165,11 +202,10 @@ pub(crate) fn chat_composer_reserve_height(
     height
 }
 
-/// Height of the multiline composer, capped at five visible lines.  The first
-/// line keeps the 44 px minimum target from the original single-line control.
+/// Height of the multiline composer field, capped at five visible lines.
 pub(crate) fn chat_composer_input_height(input: &str) -> f32 {
     let lines = input.lines().count().clamp(1, 5) as f32;
-    (44.0 + (lines - 1.0) * 22.0).min(132.0)
+    (COMPOSER_INPUT_ROW_H + (lines - 1.0) * 22.0).min(132.0)
 }
 
 #[cfg(test)]

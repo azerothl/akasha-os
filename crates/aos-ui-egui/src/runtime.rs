@@ -1817,6 +1817,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             origin,
             join_active_room,
             library,
+            avatar,
+            color,
         } => {
             let name = display_name.trim().to_string();
             if name.is_empty() {
@@ -1834,6 +1836,18 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             };
             req.display_name = Some(name.clone());
             req.origin = Some(origin.clone());
+            let avatar = avatar.trim();
+            req.avatar = if avatar.is_empty() {
+                None
+            } else {
+                Some(avatar.to_string())
+            };
+            let color = color.trim();
+            req.color = if color.is_empty() {
+                None
+            } else {
+                Some(color.to_string())
+            };
             if library {
                 let role = task.trim();
                 req.system_prompt = if system_prompt.is_some() {
@@ -2041,6 +2055,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             tools,
             mcp_servers,
             model_id,
+            avatar,
+            color,
         } => {
             match bus
                 .call::<AgentRosterUpdateRequest, AgentSpecResponse>(
@@ -2054,6 +2070,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         tools,
                         mcp_servers,
                         model_id,
+                        avatar,
+                        color,
                     },
                     vec![],
                 )

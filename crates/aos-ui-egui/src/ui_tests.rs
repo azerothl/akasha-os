@@ -587,6 +587,8 @@ mod canvas_completion_tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         }
     }
 
@@ -661,8 +663,8 @@ mod layout_tests {
     use super::*;
     use crate::chat_bubble::ChatBubbleKind;
     use crate::composer_layout::{
-        bounded_chat_workspace_width, chat_canvas_layout, chat_composer_reserve_height,
-        chat_sessions_split, composer_field_width, ChatCanvasLayout,
+        self as composer_layout, bounded_chat_workspace_width, chat_canvas_layout,
+        chat_composer_reserve_height, chat_sessions_split, composer_field_width, ChatCanvasLayout,
     };
 
     #[test]
@@ -704,12 +706,24 @@ mod layout_tests {
     }
 
     #[test]
-    fn session_toggle_reserve_fits_fr_canvas_label() {
+    fn session_picker_stays_inside_the_window() {
+        let size = crate::ui_chat::session_picker_max_size(1600.0, 900.0);
+        assert!(size.x <= 280.0);
+        assert!(size.y <= 460.0);
+        assert!(size.y <= 900.0 * 0.58 + 0.01);
+        let small = crate::ui_chat::session_picker_max_size(800.0, 500.0);
+        assert!(small.x <= 800.0);
+        assert!(small.y <= 500.0);
+        assert!(small.y <= 460.0);
+    }
+
+    #[test]
+    fn session_toggle_reserve_fits_icon_chrome() {
         let fr = i18n::strings("fr");
         let w = session_toggle_reserve_width(&fr, true, false);
         assert!(
-            w >= estimate_label_chip_w(fr.session_toggle_canvas) + 40.0,
-            "reserve {w} should fit full Canvas label"
+            w >= icons::SESSION_ICON_SZ * 5.0,
+            "reserve {w} should fit icon session chrome"
         );
     }
 
@@ -721,28 +735,60 @@ mod layout_tests {
     }
 
     #[test]
-    fn composer_field_width_reserves_fr_envoyer() {
+    fn composer_field_width_reserves_attach_and_send() {
         let fr = i18n::strings("fr");
         let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
         let field = composer_field_width(420.0, send_w, icons::ATTACH_BTN_W, 0.0, 4.0, false);
-        assert!(field > 80.0);
+        let send_reserved = send_w.max(composer_layout::COMPOSER_SEND_CAP_MIN_W);
+        let expected = 420.0 - icons::ATTACH_BTN_W - 4.0 - send_reserved - 4.0;
+        assert!(
+            (field - expected).abs() < 0.01,
+            "field={field} expected={expected} (attach + send end-cap reserved)"
+        );
         assert!(send_w >= estimate_composer_buttons_w("Envoyer", false, ""));
+        assert!(send_reserved >= composer_layout::COMPOSER_SEND_CAP_MIN_W);
     }
 
     #[test]
-    fn composer_field_width_at_900_central_pane() {
+    fn composer_field_width_at_narrow_detail_pane() {
         let fr = i18n::strings("fr");
         let send_w = estimate_composer_buttons_w(fr.agent_send, false, "");
         let stop_w = estimate_composer_buttons_w("Stop", false, "");
-        let field = composer_field_width(580.0, send_w, icons::ATTACH_BTN_W, stop_w, 4.0, true);
-        assert!(field > 200.0);
-        assert!(field + send_w + stop_w + icons::ATTACH_BTN_W + 12.0 <= 580.0 + 0.01);
+        let gap = 4.0;
+        let field = composer_field_width(280.0, send_w, icons::ATTACH_BTN_W, stop_w, gap, true);
+        let send_reserved = send_w.max(composer_layout::COMPOSER_SEND_CAP_MIN_W);
+        let used = field + icons::ATTACH_BTN_W + gap + send_reserved + stop_w + gap + gap;
+        assert!(field > 40.0, "narrow pane still keeps a usable field ({field})");
+        assert!(
+            used <= 280.0 + 0.01,
+            "attach+field+send+stop must fit in 280: used={used}"
+        );
     }
 
     #[test]
-    fn composer_reserve_height_is_single_row() {
-        let h = chat_composer_reserve_height(400.0, 0, 0, 0, false);
-        assert!((h - COMPOSER_INPUT_ROW_H).abs() < 0.01);
+    fn composer_reserve_height_includes_action_strip() {
+        let h = chat_composer_reserve_height(900.0, 0, 0, 0, false);
+        let expected = composer_layout::composer_frame_base_height();
+        assert!(
+            (h - expected).abs() < 0.01,
+            "wide pane should reserve field + model pill: got {h}, expected {expected}"
+        );
+        let narrow = chat_composer_reserve_height(300.0, 0, 0, 0, false);
+        assert!(
+            (narrow - expected).abs() < 0.01,
+            "end-cap layout keeps a single-row reserve on narrow panes: got {narrow}, expected {expected}"
+        );
+        // End-cap height == frame height: content column pad is inside that budget
+        // (pad/2 + field + gap + pill + pad/2), with no extra item_spacing.
+        let stacked = composer_layout::COMPOSER_FRAME_PAD_V * 0.5
+            + composer_layout::COMPOSER_INPUT_ROW_H
+            + composer_layout::COMPOSER_ZONE_GAP
+            + composer_layout::COMPOSER_PILL_H
+            + composer_layout::COMPOSER_FRAME_PAD_V * 0.5;
+        assert!(
+            (stacked - expected).abs() < 0.01,
+            "content column must equal frame base height for flush Send end-cap: {stacked} vs {expected}"
+        );
     }
 
     #[test]

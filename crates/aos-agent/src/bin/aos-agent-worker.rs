@@ -2711,6 +2711,8 @@ async fn spawn_child(
         gate_mode: parent.gate_mode.clone(),
         origin: None,
         cognitive_mode: aos_proto::CognitiveMode::Normal,
+        avatar: None,
+        color: None,
     };
     match bus
         .call::<AgentCreateRequest, AgentCreateResponse>("agent.create", &req, vec![])
@@ -4888,6 +4890,8 @@ mod tests {
             gate_mode: "autonomous".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         assert!(require_canvas_plan(AssessResult::simple("short goal"), &spec).is_complex());
         let non_canvas = AgentSpec {
@@ -4960,6 +4964,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let child_goal =
             canvas_child_goal_statement(&parent, "Une maison = toit + murs + porte + fenêtre");
@@ -4992,6 +4998,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let child_goal = canvas_child_goal_statement(&parent, "résumer les sources A et B");
         assert_eq!(child_goal, "résumer les sources A et B");

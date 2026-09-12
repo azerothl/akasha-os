@@ -483,6 +483,8 @@ pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
         display_name: spec.display_name.clone(),
         persona_id: spec.persona_id.clone(),
         origin: spec.origin.clone(),
+        avatar: spec.avatar.clone(),
+        color: spec.color.clone(),
         deep_plan: None,
         cognitive_mode: spec.cognitive_mode,
     })
@@ -624,6 +626,8 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let md = export_trace_markdown(&trace, Some(&info), "en", None);
         assert!(md.contains("# Agent agent-7"));
@@ -716,6 +720,8 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let md_en = export_trace_markdown(&trace, Some(&info), "en", None);
         assert!(md_en.contains("**Fail reason:** Couldn't draw."));
@@ -768,6 +774,8 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let md_en = export_trace_markdown(&trace, Some(&info), "en", None);
         assert!(!md_en.contains("**Fail reason:**"));
@@ -812,6 +820,8 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let ops = vec![aos_proto::CanvasOp {
             seq: 1,

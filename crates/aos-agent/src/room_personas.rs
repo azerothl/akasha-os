@@ -78,7 +78,18 @@ pub fn persona_create_request(
         max_subagents: 0,
         timeout_secs: 300,
     });
+    req.avatar = Some(persona_default_avatar(persona.id).to_string());
     req
+}
+
+pub fn persona_default_avatar(id: &str) -> &'static str {
+    match id {
+        "researcher" => "clay:pebble/curious/thinking",
+        "critic" => "clay:hexagon/angry/alert",
+        "coder" => "clay:squircle/attentive/idle",
+        "planner" => "clay:capsule/proud/idle",
+        _ => "clay:circle/happy/idle",
+    }
 }
 
 pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> AgentSpec {
@@ -107,6 +118,8 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         optimize_prompt: req.optimize_prompt,
         gate_mode: req.gate_mode.clone(),
         origin: req.origin.clone(),
+        avatar: req.avatar.clone(),
+        color: req.color.clone(),
         cognitive_mode: req.cognitive_mode,
     }
 }

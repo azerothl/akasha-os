@@ -280,6 +280,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let tools = vec![ToolDesc {
             name: "notes.create".into(),
@@ -329,6 +331,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let tools = vec![ToolDesc {
             name: "canvas.stroke".into(),
@@ -375,6 +379,8 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            avatar: None,
+            color: None,
         };
         let tools = vec![ToolDesc {
             name: "device.camera.capture".into(),

@@ -23,6 +23,8 @@ mod canvas_paint;
 mod chat_ask;
 mod chat_bubble;
 mod chat_canvas;
+mod chat_code;
+mod clay_avatar;
 mod chat_composer_state;
 mod chat_controller;
 mod chat_delegate;
@@ -138,7 +140,7 @@ use chat_delegate::{
 };
 use cmd::{ChatLine, Cmd, Evt, NoticeSeverity};
 #[cfg(test)]
-use composer_layout::{chat_composer_wraps, COMPOSER_INPUT_ROW_H};
+use composer_layout::chat_composer_wraps;
 use composer_layout::{estimate_composer_buttons_w, COMPOSER_MIN_INPUT_W};
 use eframe::egui;
 use egui_commonmark::CommonMarkCache;
@@ -459,7 +461,7 @@ fn preview_min_inner_size() -> [f32; 2] {
     [preview_min_inner_width(&fr), 600.0]
 }
 
-const LEFT_NAV_W: f32 = 88.0;
+const LEFT_NAV_W: f32 = 56.0;
 const CHAT_SIDE_MIN_W: f32 = 120.0;
 const CHAT_SPLIT_GAP: f32 = 8.0;
 const CHAT_MAIN_MARGIN: f32 = 16.0;
@@ -477,29 +479,12 @@ fn session_toggle_reserve_width(
     canvas_open: bool,
     tuck_secondary: bool,
 ) -> f32 {
-    let mut w = estimate_label_chip_w(t.session_toggle_salon)
-        + 6.0
-        + estimate_label_chip_w(t.session_toggle_canvas)
-        + 6.0
-        + icons::SESSION_ICON_SZ;
-    if tuck_secondary {
-        w += 6.0 + icons::SESSION_ICON_SZ;
-    } else {
-        w += 6.0 + estimate_label_chip_w(t.session_toggle_deep);
-        if canvas_open {
-            w += 6.0 + estimate_label_chip_w(t.session_focus);
-        }
+    let mut w = icons::SESSION_ICON_SZ * 4.0 + 18.0;
+    if canvas_open && !tuck_secondary {
+        w += icons::SESSION_ICON_SZ + 6.0;
     }
+    let _ = t;
     w
-}
-
-fn session_toggle_chip(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
-    // Taille naturelle au contenu : l'ancienne largeur forcée par estimation
-    // (octets, pas glyphes) faisait déborder le texte sur les voisins.
-    ui.add(egui::SelectableLabel::new(
-        selected,
-        egui::RichText::new(label),
-    ))
 }
 
 fn composer_row_reserved_width(t: &i18n::UiStrings, show_stop: bool) -> f32 {
@@ -557,6 +542,7 @@ struct UiApp {
     decl_md_cache: CommonMarkCache,
     image_generating: Option<media_image_defaults::ImageGenUiState>,
     show_go_to_palette: bool,
+    nav_more_open: bool,
     spotlight_query: String,
     toasts: ui_primitives::Toasts,
     /// S7.1 : brouillons du composer par session + flush debouncé (3 s).
@@ -764,10 +750,10 @@ impl UiApp {
         if prefs.language.is_empty() {
             prefs.language = onboarding.language.clone();
         }
-        let show_onboarding = !onboarding.completed
-            && ui_screenshot::screenshot_dir_from_env().is_none();
-        let screenshot = ui_screenshot::screenshot_dir_from_env()
-            .map(ui_screenshot::UiScreenshotHarness::new);
+        let show_onboarding =
+            !onboarding.completed && ui_screenshot::screenshot_dir_from_env().is_none();
+        let screenshot =
+            ui_screenshot::screenshot_dir_from_env().map(ui_screenshot::UiScreenshotHarness::new);
         if screenshot.is_some() {
             prefs.language = "fr".into();
         }
@@ -857,6 +843,7 @@ impl UiApp {
             decl_md_cache: CommonMarkCache::default(),
             image_generating: None,
             show_go_to_palette: false,
+            nav_more_open: false,
             spotlight_query: String::new(),
             toasts: ui_primitives::Toasts::default(),
             drafts: composer_drafts::load_drafts(),
@@ -1021,6 +1008,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             origin: "form".into(),
             join_active_room: false,
             library: false,
+            avatar: String::new(),
+            color: String::new(),
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
@@ -1273,6 +1262,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     origin: "slash".into(),
                     join_active_room: false,
                     library: false,
+                    avatar: String::new(),
+                    color: String::new(),
                 });
                 // Rester dans le chat — carte via Evt::AgentSpawned
             }
@@ -1832,7 +1823,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
-    fn status_model_name(&self) -> String {
+    pub(crate) fn status_model_name(&self) -> String {
         // The status bar describes the active chat context, not merely the
         // first model reporting live metrics.  The latter can be a media
         // worker (for example sd-v1-5) while the chat picker is on an
@@ -1862,8 +1853,14 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
     }
 
     fn ui_nav_rail(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        ui.spacing_mut().item_spacing.y = 2.0;
         let mut primary: Vec<(Tab, icons::NavTabIcon, &str, &str)> = vec![
-            (Tab::Chat, icons::NavTabIcon::Chat, t.tab_chat, t.tab_hint_chat),
+            (
+                Tab::Chat,
+                icons::NavTabIcon::Chat,
+                t.tab_chat,
+                t.tab_hint_chat,
+            ),
             (
                 Tab::Agents,
                 icons::NavTabIcon::Agents,
@@ -1885,148 +1882,205 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             t.tab_memory,
             t.tab_hint_memory,
         ));
-        let icon_only = self.prefs.ui_density == prefs::UiDensity::Compact
-            || self.prefs.ui_presentation == prefs::UiPresentationMode::Rail;
         for (tab, icon, label, hint) in primary {
-            if icons::nav_rail_tab_button(ui, self.tab == tab, icon, label, icon_only)
-                .on_hover_text(hint)
+            if icons::nav_rail_tab_button(ui, self.tab == tab, icon, label, true)
+                .on_hover_text(format!("{label} — {hint}"))
                 .clicked()
             {
+                self.nav_more_open = false;
                 self.on_tab_open(tab);
             }
         }
 
-        if self.prefs.ui_presentation == prefs::UiPresentationMode::Rail {
-            ui.separator();
-            if ui
-                .add_sized(
-                    egui::vec2(
-                        ui.available_width().max(1.0),
-                        theme::CONTROL_MIN_H_COMFORTABLE,
-                    ),
-                    icons::MenuButton,
-                )
-                .on_hover_text(t.presentation_menu_hint)
+        let remain = ui.available_size();
+        ui.allocate_ui_with_layout(remain, egui::Layout::bottom_up(egui::Align::Center), |ui| {
+            let more_selected = self.nav_more_open || nav::is_overflow_tab(&self.tab);
+            let more = icons::nav_rail_tab_button(
+                ui,
+                more_selected,
+                icons::NavTabIcon::More,
+                t.nav_more,
+                true,
+            )
+            .on_hover_text(t.nav_more);
+            if more.clicked() {
+                self.nav_more_open = !self.nav_more_open;
+            }
+            if self.nav_more_open {
+                self.show_nav_more_popup(ui, t, more.rect);
+            }
+        });
+    }
+
+    fn show_nav_more_popup(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings, anchor: egui::Rect) {
+        let pos = anchor.right_bottom() + egui::vec2(8.0, -anchor.height());
+        let popup_id = egui::Id::new("aos_nav_more_popup");
+        let inner = egui::Area::new(popup_id)
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos)
+            .constrain(true)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style())
+                    .inner_margin(egui::Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.set_min_width(220.0);
+                        ui.set_max_width(260.0);
+                        ui.spacing_mut().item_spacing.y = 1.0;
+                        self.ui_nav_more_contents(ui, t);
+                    });
+            });
+        let popup_rect = inner.response.rect;
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.nav_more_open = false;
+        }
+        if ui.input(|i| i.pointer.any_click()) {
+            if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+                if !popup_rect.expand(4.0).contains(p) && !anchor.expand(2.0).contains(p) {
+                    self.nav_more_open = false;
+                }
+            }
+        }
+    }
+
+    fn overflow_icon_for(tab: &Tab) -> icons::OverflowNavIcon {
+        match tab {
+            Tab::Notes => icons::OverflowNavIcon::Notes,
+            Tab::Library => icons::OverflowNavIcon::Library,
+            Tab::Files => icons::OverflowNavIcon::Files,
+            Tab::Models => icons::OverflowNavIcon::Models,
+            Tab::Providers => icons::OverflowNavIcon::Providers,
+            Tab::Settings => icons::OverflowNavIcon::Settings,
+            Tab::Caps => icons::OverflowNavIcon::Caps,
+            Tab::Audit => icons::OverflowNavIcon::Audit,
+            Tab::Scenarios => icons::OverflowNavIcon::Scenarios,
+            Tab::Feedback => icons::OverflowNavIcon::Feedback,
+            Tab::Module(name) if name == aos_proto::TASKS_MODULE_NAME => {
+                icons::OverflowNavIcon::Tasks
+            }
+            Tab::Chat | Tab::Agents | Tab::Memory | Tab::Module(_) => {
+                icons::OverflowNavIcon::Module
+            }
+        }
+    }
+
+    fn open_overflow_tab(&mut self, tab: Tab) {
+        self.nav_more_open = false;
+        match tab {
+            Tab::Module(name) => self.open_module_tab(name),
+            other => self.on_tab_open(other),
+        }
+    }
+
+    fn ui_nav_more_contents(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
+        let lang = self.prefs.language.clone();
+        ui.add_space(2.0);
+        ui.weak(nav::NavGroup::Daily.label(&lang));
+        let mut daily: Vec<(Tab, &str, &str)> = vec![
+            (Tab::Notes, t.tab_notes, t.tab_hint_notes),
+            (Tab::Library, t.tab_library, t.tab_hint_library),
+        ];
+        if self.tasks_module_installed() {
+            daily.push((self.tasks_tab(), t.tab_tasks, t.tab_hint_tasks));
+        }
+        daily.extend([
+            (Tab::Files, t.tab_files, t.tab_hint_files),
+            (Tab::Models, t.tab_models, t.tab_hint_models),
+        ]);
+        for (tab, label, hint) in daily {
+            let icon = Self::overflow_icon_for(&tab);
+            if icons::nav_more_row(ui, self.tab_is_selected(&tab), icon, label)
+                .on_hover_text(hint)
                 .clicked()
             {
-                self.show_go_to_palette = true;
-                self.spotlight_query.clear();
+                self.open_overflow_tab(tab);
             }
-            return;
         }
-
+        if icons::nav_more_row(
+            ui,
+            self.research_ui.documents_list.open,
+            icons::OverflowNavIcon::Documents,
+            t.nav_documents,
+        )
+        .on_hover_text(t.documents_list_title)
+        .clicked()
+        {
+            self.nav_more_open = false;
+            self.research_ui.open_documents_list();
+        }
+        ui.add_space(4.0);
         ui.separator();
-        let more_open = nav::is_overflow_tab(&self.tab);
-        egui::CollapsingHeader::new(t.nav_more)
-            .default_open(more_open)
-            .open(if more_open { Some(true) } else { None })
-            .show(ui, |ui| {
-                // P1: 3 niveaux — Quotidien / Système / Admin. Le rail garde
-                // Chat/Agents/Create/Memory, More ne duplique jamais le rail.
-                let lang = self.prefs.language.clone();
-                ui.weak(nav::NavGroup::Daily.label(&lang));
-                let mut daily: Vec<(Tab, &str, &str)> = vec![
-                    (Tab::Notes, t.tab_notes, t.tab_hint_notes),
-                    (Tab::Library, t.tab_library, t.tab_hint_library),
-                ];
-                if self.tasks_module_installed() {
-                    daily.push((self.tasks_tab(), t.tab_tasks, t.tab_hint_tasks));
-                }
-                daily.extend([
-                    (Tab::Files, t.tab_files, t.tab_hint_files),
-                    (Tab::Models, t.tab_models, t.tab_hint_models),
-                ]);
-                for (tab, label, hint) in daily {
-                    if ui
-                        .selectable_label(self.tab_is_selected(&tab), label)
-                        .on_hover_text(hint)
-                        .clicked()
-                    {
-                        match &tab {
-                            Tab::Module(name) => self.open_module_tab(name.clone()),
-                            other => self.on_tab_open(other.clone()),
-                        }
-                    }
-                }
-                // Documents reste un overlay (research_ui), pas un Tab :
-                // présenté comme action, pas comme destination, pour éviter
-                // la confusion relevée en audit.
-                if ui
-                    .selectable_label(self.research_ui.documents_list.open, t.nav_documents)
-                    .on_hover_text(t.documents_list_title)
-                    .clicked()
+        ui.weak(nav::NavGroup::System.label(&lang));
+        for (tab, label, hint) in [
+            (Tab::Providers, t.tab_providers, t.tab_hint_providers),
+            (Tab::Settings, t.tab_settings, t.tab_hint_settings),
+        ] {
+            let icon = Self::overflow_icon_for(&tab);
+            if icons::nav_more_row(ui, self.tab == tab, icon, label)
+                .on_hover_text(hint)
+                .clicked()
+            {
+                self.open_overflow_tab(tab);
+            }
+        }
+        ui.add_space(4.0);
+        ui.separator();
+        ui.weak(nav::NavGroup::Admin.label(&lang));
+        for (tab, label, hint) in [
+            (Tab::Caps, t.tab_caps, t.tab_hint_caps),
+            (Tab::Audit, t.tab_audit, t.tab_hint_audit),
+        ] {
+            let icon = Self::overflow_icon_for(&tab);
+            if icons::nav_more_row(ui, self.tab == tab, icon, label)
+                .on_hover_text(hint)
+                .clicked()
+            {
+                self.open_overflow_tab(tab);
+            }
+        }
+        ui.weak(t.nav_tester);
+        for (tab, label, hint) in [
+            (Tab::Scenarios, t.tab_scenarios, t.tab_hint_scenarios),
+            (Tab::Feedback, t.tab_feedback, t.tab_hint_feedback),
+        ] {
+            let icon = Self::overflow_icon_for(&tab);
+            if icons::nav_more_row(ui, self.tab == tab, icon, label)
+                .on_hover_text(hint)
+                .clicked()
+            {
+                self.open_overflow_tab(tab);
+            }
+        }
+        let decl_mods: Vec<(String, String)> = self
+            .settings_ui
+            .installed_modules
+            .iter()
+            .filter(|m| aos_proto::decl_ui::sidebar_decl_ui_module(&m.name, m.ui_mode.as_deref()))
+            .map(|m| {
+                (
+                    m.name.clone(),
+                    m.ui_title.clone().unwrap_or_else(|| m.name.clone()),
+                )
+            })
+            .collect();
+        if !decl_mods.is_empty() {
+            ui.add_space(4.0);
+            ui.separator();
+            ui.weak(t.nav_modules);
+            for (name, label) in decl_mods {
+                let tab = Tab::Module(name.clone());
+                if icons::nav_more_row(
+                    ui,
+                    self.tab_is_selected(&tab),
+                    icons::OverflowNavIcon::Module,
+                    &label,
+                )
+                .clicked()
                 {
-                    self.research_ui.open_documents_list();
+                    self.nav_more_open = false;
+                    self.open_module_tab(name);
                 }
-                ui.separator();
-                ui.weak(nav::NavGroup::System.label(&lang));
-                for (tab, label, hint) in [
-                    (Tab::Providers, t.tab_providers, t.tab_hint_providers),
-                    (Tab::Settings, t.tab_settings, t.tab_hint_settings),
-                ] {
-                    if ui
-                        .selectable_label(self.tab == tab, label)
-                        .on_hover_text(hint)
-                        .clicked()
-                    {
-                        self.on_tab_open(tab);
-                    }
-                }
-                ui.separator();
-                ui.weak(nav::NavGroup::Admin.label(&lang));
-                for (tab, label, hint) in [
-                    (Tab::Caps, t.tab_caps, t.tab_hint_caps),
-                    (Tab::Audit, t.tab_audit, t.tab_hint_audit),
-                ] {
-                    if ui
-                        .selectable_label(self.tab == tab, label)
-                        .on_hover_text(hint)
-                        .clicked()
-                    {
-                        self.on_tab_open(tab);
-                    }
-                }
-                ui.weak(t.nav_tester);
-                for (tab, label, hint) in [
-                    (Tab::Scenarios, t.tab_scenarios, t.tab_hint_scenarios),
-                    (Tab::Feedback, t.tab_feedback, t.tab_hint_feedback),
-                ] {
-                    if ui
-                        .selectable_label(self.tab == tab, label)
-                        .on_hover_text(hint)
-                        .clicked()
-                    {
-                        self.on_tab_open(tab);
-                    }
-                }
-                let decl_mods: Vec<(String, String)> = self
-                    .settings_ui
-                    .installed_modules
-                    .iter()
-                    .filter(|m| {
-                        aos_proto::decl_ui::sidebar_decl_ui_module(&m.name, m.ui_mode.as_deref())
-                    })
-                    .map(|m| {
-                        (
-                            m.name.clone(),
-                            m.ui_title.clone().unwrap_or_else(|| m.name.clone()),
-                        )
-                    })
-                    .collect();
-                if !decl_mods.is_empty() {
-                    ui.separator();
-                    ui.weak(t.nav_modules);
-                    for (name, label) in decl_mods {
-                        let tab = Tab::Module(name.clone());
-                        if ui
-                            .selectable_label(self.tab_is_selected(&tab), &label)
-                            .clicked()
-                        {
-                            self.open_module_tab(name);
-                        }
-                    }
-                }
-            });
+            }
+        }
     }
 
     fn start_update_download(&mut self) {
@@ -2072,31 +2126,13 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
-    fn status_resources_summary(&self, t: &i18n::UiStrings, compact: bool) -> String {
-        let gate_ask = !self
-            .prefs
-            .agent_gate_mode
-            .eq_ignore_ascii_case("autonomous");
-        let gate_short = if gate_ask {
-            if compact {
-                "?"
-            } else {
-                t.status_gate_ask
-            }
-        } else if compact {
-            "✓"
-        } else {
-            t.status_gate_autonomous
-        };
-        let caps_short = if self.security_ui.caps.is_empty() {
-            "—".to_string()
-        } else if compact {
-            self.security_ui.caps.len().to_string()
-        } else {
-            t.status_caps_count
-                .replace("{n}", &self.security_ui.caps.len().to_string())
-        };
-        format!("{caps_short} · {gate_short}")
+    fn toggle_network_mode(&mut self) {
+        self.network_online = !self.network_online;
+        self.prefs.network_online = self.network_online;
+        save_preferences(&self.prefs);
+        let _ = self.cmd_tx.send(Cmd::NetSetMode {
+            online: self.network_online,
+        });
     }
 
     fn ui_status_network_menu(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
@@ -2113,12 +2149,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             })
             .clicked()
         {
-            self.network_online = !self.network_online;
-            self.prefs.network_online = self.network_online;
-            save_preferences(&self.prefs);
-            let _ = self.cmd_tx.send(Cmd::NetSetMode {
-                online: self.network_online,
-            });
+            self.toggle_network_mode();
             ui.close_menu();
         }
     }
@@ -2179,9 +2210,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             format!("≈{total} tok")
         };
         let tok_tip = if self.prefs.language == "fr" {
-            format!(
-                "Estimation ≈ (transcript {transcript_tok} + agents {agent_tok} sur {agent_n})"
-            )
+            format!("Estimation ≈ (transcript {transcript_tok} + agents {agent_tok} sur {agent_n})")
         } else {
             format!(
                 "Rough estimate ≈ (transcript {transcript_tok} + agents {agent_tok} over {agent_n})"
@@ -2216,22 +2245,38 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn status_clock_label(ui: &mut egui::Ui, text: impl Into<egui::RichText>) -> egui::Response {
+        ui.add(egui::Label::new(text.into().small()).sense(egui::Sense::click()))
+    }
+
     fn ui_status_bar(&mut self, ui: &mut egui::Ui, t: &i18n::UiStrings) {
-        // Three visible segments — Connexion · Modèle · Ressources — plus
-        // language and an overflow menu for tokens, cloud, version, updates.
-        let compact = ui.available_width() < 900.0;
+        // Clock: Network · Model · Caps. RAM / gate stay in the overflow.
         ui.horizontal(|ui| {
+            let tc = crate::theme::button_colors(ui);
             let net_label = if self.network_online {
                 t.status_network_on
             } else {
                 t.status_network_off
             };
-            let conn = ui
-                .small_button(format!("{} · {}", t.status_connection_label, net_label))
-                .on_hover_text(t.status_network_hover);
+            let net_color = if self.network_online {
+                ui.visuals().weak_text_color()
+            } else {
+                tc.danger
+            };
+            let net_tip = if self.network_online {
+                format!("{}\n{}", t.status_network_hint_on, t.status_network_disable)
+            } else {
+                format!("{}\n{}", t.status_network_hint_off, t.status_network_enable)
+            };
+            let conn =
+                Self::status_clock_label(ui, egui::RichText::new(net_label).color(net_color))
+                    .on_hover_text(net_tip);
+            if conn.clicked() {
+                self.toggle_network_mode();
+            }
             conn.context_menu(|ui| self.ui_status_network_menu(ui, t));
 
-            ui.separator();
+            ui.weak(egui::RichText::new("·").small());
 
             let model_id = self.status_model_name();
             let model_human = crate::models_page::model_human_label(
@@ -2239,26 +2284,25 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 &self.models_ui.model_infos,
                 t.status_model_default,
             );
-            let model_display = if compact {
-                agent_panel::truncate(&model_human, 18)
+            let model_display = agent_panel::truncate(&model_human, 28);
+            let model_resp = Self::status_clock_label(ui, egui::RichText::new(model_display))
+                .on_hover_text(&model_id);
+            self.ui_session_model_picker(ui, t, &model_resp, "status_model_picker", true);
+
+            ui.weak(egui::RichText::new("·").small());
+
+            let caps_n = self.security_ui.caps.len();
+            let caps_label = if caps_n == 0 {
+                format!("{}: —", t.status_caps_label)
             } else {
-                model_human
+                t.status_caps_clock.replace("{n}", &caps_n.to_string())
             };
-            if ui
-                .small_button(format!("{} · {}", t.status_model_label, model_display))
-                .on_hover_text(model_id)
+            if Self::status_clock_label(ui, egui::RichText::new(caps_label))
+                .on_hover_text(t.status_open_caps)
                 .clicked()
             {
-                self.on_tab_open(Tab::Models);
+                self.on_tab_open(Tab::Caps);
             }
-
-            ui.separator();
-
-            let res_summary = self.status_resources_summary(t, compact);
-            let res = ui
-                .small_button(format!("{} · {}", t.status_resources_label, res_summary))
-                .on_hover_text(t.status_overflow_menu);
-            res.context_menu(|ui| self.ui_status_resources_overflow(ui, t));
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 icons::overflow_menu(ui, "status_overflow", t.status_overflow_menu, |ui| {
@@ -2269,13 +2313,23 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 } else {
                     t.status_lang_fr
                 };
-                if ui.small_button(lang_btn).clicked() {
+                if Self::status_clock_label(ui, egui::RichText::new(lang_btn)).clicked() {
                     self.prefs.language = if self.prefs.language.eq_ignore_ascii_case("en") {
                         "fr".into()
                     } else {
                         "en".into()
                     };
                     save_preferences(&self.prefs);
+                }
+                if !self.status.is_empty() {
+                    let history: Vec<String> = self.status_history.iter().cloned().collect();
+                    let tip = if history.is_empty() {
+                        self.status.clone()
+                    } else {
+                        format!("History:\n- {}", history.join("\n- "))
+                    };
+                    ui.weak(egui::RichText::new(agent_panel::truncate(&self.status, 42)).small())
+                        .on_hover_text(tip);
                 }
             });
         });
@@ -3408,82 +3462,13 @@ impl eframe::App for UiApp {
             prefs::UiPresentationMode::Classic | prefs::UiPresentationMode::Rail
         );
         if show_sidebar {
-            let rail_mode = self.prefs.ui_presentation == prefs::UiPresentationMode::Rail;
-            let sidebar_panel = egui::SidePanel::left("tabs")
-                .default_width(if rail_mode {
-                    64.0
-                } else {
-                    self.prefs
-                        .ui_layout
-                        .chat_sidebar_width
-                        .clamp(self.prefs.ui_density.rail_width().max(88.0), 220.0)
-                })
-                .min_width(if rail_mode {
-                    56.0
-                } else {
-                    self.prefs.ui_density.rail_width().max(88.0)
-                })
-                .max_width(if rail_mode { 72.0 } else { 220.0 })
-                .resizable(!rail_mode)
+            egui::SidePanel::left("tabs")
+                .exact_width(LEFT_NAV_W)
+                .resizable(false)
                 .show(ctx, |ui| {
-                    overflow_scroll(ui, "nav_sidebar", |ui| {
-                        ui.heading(
-                            if rail_mode || self.prefs.ui_density == prefs::UiDensity::Compact {
-                                "A"
-                            } else {
-                                "Akasha"
-                            },
-                        );
-                        self.ui_nav_rail(ui, &t);
-                        if !rail_mode {
-                            if let Some(m) = &self.metrics {
-                                ui.separator();
-                                ui.heading(if self.prefs.ui_density == prefs::UiDensity::Compact {
-                                    "RAM / CPU"
-                                } else {
-                                    t.resources_heading
-                                });
-                                if self.prefs.ui_density != prefs::UiDensity::Compact {
-                                    let ratio = m.ram_used as f32 / m.ram_total.max(1) as f32;
-                                    ui.add(egui::ProgressBar::new(ratio).text(format!(
-                                        "{} {:.1}/{:.1} GiB",
-                                        t.metrics_ram,
-                                        m.ram_used as f64 / (1 << 30) as f64,
-                                        m.ram_total as f64 / (1 << 30) as f64
-                                    )));
-                                } else {
-                                    ui.label(format!(
-                                        "RAM {:.0}%",
-                                        100.0 * m.ram_used as f32 / m.ram_total.max(1) as f32
-                                    ));
-                                }
-                                ui.label(format!("CPU {:.0}%", m.cpu_percent));
-                                if self.prefs.ui_density != prefs::UiDensity::Compact {
-                                    ui.label(format!(
-                                        "{}: {}",
-                                        t.metrics_live,
-                                        m.live_inferences()
-                                    ));
-                                }
-                                // Keep technical model details progressive: the rail shows
-                                // only a compact resource summary and Models owns the list.
-                                ui.label(format!("{}: {}", t.tab_models, m.models.len()));
-                                if ui
-                                    .button(t.tab_models)
-                                    .on_hover_text(t.tab_hint_models)
-                                    .clicked()
-                                {
-                                    self.on_tab_open(Tab::Models);
-                                }
-                            }
-                        }
-                    });
+                    ui.add_space(8.0);
+                    self.ui_nav_rail(ui, &t);
                 });
-            let sidebar_width = sidebar_panel.response.rect.width();
-            if (sidebar_width - self.prefs.ui_layout.chat_sidebar_width).abs() > 1.0 {
-                self.prefs.ui_layout.chat_sidebar_width = sidebar_width;
-                save_preferences(&self.prefs);
-            }
         }
 
         if show_sidebar {
@@ -3493,19 +3478,12 @@ impl eframe::App for UiApp {
                     let r = ui.max_rect();
                     ui.painter().line_segment(
                         [r.left_top(), r.right_top()],
-                        egui::Stroke::new(1.0_f32, theme::ICE_TRACK),
+                        egui::Stroke::new(
+                            1.0_f32,
+                            ui.visuals().widgets.noninteractive.bg_stroke.color,
+                        ),
                     );
                     self.ui_status_bar(ui, &t);
-                    if !self.status.is_empty() {
-                        ui.separator();
-                        let history: Vec<String> = self.status_history.iter().cloned().collect();
-                        let tip = if history.is_empty() {
-                            String::new()
-                        } else {
-                            format!("History:\n- {}", history.join("\n- "))
-                        };
-                        ui.weak(&self.status).on_hover_text(tip);
-                    }
                 });
         }
 

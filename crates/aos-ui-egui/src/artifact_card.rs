@@ -7,6 +7,7 @@ use eframe::egui;
 use crate::cmd::Cmd;
 use crate::decl_ui;
 use crate::i18n::UiStrings;
+use crate::icons;
 use crate::os_open::{aos_home, open_os_folder};
 use crate::research_document;
 use crate::{Tab, UiApp};
@@ -64,6 +65,16 @@ pub fn type_label(t: &UiStrings, kind: ArtifactKind) -> &'static str {
     }
 }
 
+fn short_artifact_path(path: &str) -> String {
+    let norm = path.replace('\\', "/");
+    let parts: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.len() <= 2 {
+        parts.join("/")
+    } else {
+        format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
+    }
+}
+
 pub fn render_artifact_card(
     ui: &mut egui::Ui,
     t: &UiStrings,
@@ -71,19 +82,46 @@ pub fn render_artifact_card(
 ) -> ArtifactCardAction {
     let mut action = ArtifactCardAction::None;
     let type_label = type_label(t, target.kind);
-    let card = egui::Frame::group(ui.style())
-        .fill(ui.visuals().widgets.inactive.bg_fill)
-        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
-        .inner_margin(egui::Margin::symmetric(10, 8))
+    let accent = crate::theme::button_colors(ui).accent;
+    let glyph = match target.kind {
+        ArtifactKind::Note => icons::OverflowNavIcon::Notes,
+        ArtifactKind::Document => icons::OverflowNavIcon::Documents,
+        ArtifactKind::Image => icons::OverflowNavIcon::Files,
+    };
+    let max_w = ui.available_width().min(340.0);
+    let card = egui::Frame::NONE
+        .fill(ui.visuals().faint_bg_color)
+        .stroke(egui::Stroke::new(
+            1.0_f32,
+            ui.visuals().widgets.noninteractive.bg_stroke.color,
+        ))
+        .inner_margin(egui::Margin::symmetric(12, 8))
+        .corner_radius(crate::theme::RADIUS_MD)
         .show(ui, |ui| {
-            ui.set_min_width(ui.available_width().min(280.0));
-            let title = if target.title.is_empty() {
-                type_label
-            } else {
-                target.title.as_str()
-            };
-            ui.label(egui::RichText::new(title).strong());
-            ui.weak(type_label);
+            ui.set_min_width(max_w.min(280.0));
+            ui.set_max_width(max_w);
+            ui.horizontal(|ui| {
+                icons::overflow_glyph(ui, glyph, accent, 18.0);
+                ui.add_space(8.0);
+                ui.vertical(|ui| {
+                    ui.colored_label(
+                        accent,
+                        egui::RichText::new(type_label.to_uppercase())
+                            .small()
+                            .strong(),
+                    );
+                    let title = if target.title.is_empty() {
+                        type_label
+                    } else {
+                        target.title.as_str()
+                    };
+                    ui.label(egui::RichText::new(title).strong());
+                    let path = short_artifact_path(&target.path);
+                    if !path.is_empty() {
+                        ui.weak(egui::RichText::new(path).small());
+                    }
+                });
+            });
         });
     if card.response.interact(egui::Sense::click()).clicked() {
         action = ArtifactCardAction::Open(target.clone());

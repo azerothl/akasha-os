@@ -2,7 +2,7 @@
 
 use crate::i18n::UiStrings;
 use eframe::egui;
-use egui_commonmark::CommonMarkViewer;
+use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ChatBubbleKind {
@@ -63,16 +63,17 @@ pub(crate) fn chat_bubble_colors(
     };
     match kind {
         ChatBubbleKind::User => {
-            let fill = mix(v.panel_fill, tc.accent, 0.14);
+            let fill = mix(v.panel_fill, tc.accent, 0.10);
+            let stroke = mix(v.panel_fill, tc.accent, 0.22);
             let role = if v.dark_mode {
                 tc.accent
             } else {
                 mix(tc.accent, text, 0.45)
             };
-            (fill, tc.accent, role)
+            (fill, stroke, role)
         }
         ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => {
-            (v.faint_bg_color, weak, v.strong_text_color())
+            (v.panel_fill, v.panel_fill, v.strong_text_color())
         }
         ChatBubbleKind::System => (v.extreme_bg_color, weak, weak),
     }
@@ -129,7 +130,41 @@ fn chat_bubble_colors_static(
 
 pub(crate) fn chat_markdown_viewer(ui: &egui::Ui) -> CommonMarkViewer<'static> {
     let width = ui.available_width().max(1.0) as usize;
-    CommonMarkViewer::new().default_width(Some(width))
+    CommonMarkViewer::new()
+        .default_width(Some(width))
+        .max_image_width(Some(width))
+        .syntax_theme_dark("base16-ocean.dark")
+        .syntax_theme_light("base16-ocean.light")
+}
+
+/// Paint chat markdown with list indent; fences use syntect directly
+/// (egui_commonmark only looks up languages as *file extensions*).
+pub(crate) fn show_chat_markdown(ui: &mut egui::Ui, cache: &mut CommonMarkCache, md: &str) {
+    ui.spacing_mut().indent = ui.spacing().indent.max(22.0);
+    crate::chat_room::for_each_markdown_part(md, |prose, fence| {
+        if let Some((lang, body)) = fence {
+            crate::chat_code::show_code_fence(ui, lang, body);
+        } else if !prose.trim().is_empty() {
+            chat_markdown_viewer(ui).show(ui, cache, prose);
+        }
+    });
+}
+
+/// Quiet duration / token line for assistant and agent replies.
+pub(crate) fn reply_meta_line(duration_ms: u64, text: &str, exact_tokens: u64) -> String {
+    let mut parts = Vec::new();
+    if duration_ms > 0 {
+        parts.push(crate::agent_panel::fmt_ms(duration_ms));
+    }
+    if exact_tokens > 0 {
+        parts.push(format!("{exact_tokens} tok"));
+    } else {
+        let approx = (text.chars().count() as u64) / 4;
+        if approx > 0 {
+            parts.push(format!("≈{approx} tok"));
+        }
+    }
+    parts.join(" · ")
 }
 
 pub(crate) fn chat_bubble_max_width(available_w: f32, kind: ChatBubbleKind) -> f32 {
@@ -137,23 +172,25 @@ pub(crate) fn chat_bubble_max_width(available_w: f32, kind: ChatBubbleKind) -> f
         return 0.0;
     }
     let fraction = match kind {
-        ChatBubbleKind::User => 0.88,
-        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.96,
-        ChatBubbleKind::System => 0.92,
+        ChatBubbleKind::User => 0.72,
+        ChatBubbleKind::Assistant | ChatBubbleKind::RoomSpeaker => 0.92,
+        ChatBubbleKind::System => 0.88,
     };
     let width = (available_w * fraction).min(available_w);
     width.max(available_w.min(48.0))
 }
 
-/// Role-colored frame. User messages sit right; all other roles sit left.
+/// Role-colored frame. User messages sit right; assistant acks are unframed
+/// body copy; cards (agents, grants, artifacts) supply their own chrome.
 /// Largeur contenu : `max_w` est un plafond, jamais une largeur forcée —
 /// un "ok" ne s'étire plus à 88% de la vue.
 pub(crate) fn chat_message_frame(
     ui: &mut egui::Ui,
     kind: ChatBubbleKind,
     color_override: Option<(egui::Color32, egui::Color32)>,
+    speaker_rail: Option<egui::Color32>,
     add_contents: impl FnOnce(&mut egui::Ui),
-) {
+) -> egui::Response {
     let (fill, stroke) = color_override.unwrap_or_else(|| {
         let (fill, stroke, _) = chat_bubble_colors(ui, kind);
         (fill, stroke)
@@ -164,19 +201,52 @@ pub(crate) fn chat_message_frame(
         _ => egui::Layout::left_to_right(egui::Align::Min),
     };
 
-    ui.with_layout(layout, |ui| {
-        ui.set_max_width(max_w);
-        egui::Frame::NONE
-            .fill(fill)
-            .stroke(egui::Stroke::new(1.0_f32, stroke))
-            .corner_radius(crate::theme::RADIUS_MD)
-            .inner_margin(egui::Margin::symmetric(10, 8))
-            .show(ui, |ui| {
-                ui.set_max_width((max_w - 8.0).max(1.0));
-                ui.with_layout(egui::Layout::top_down(egui::Align::Min), add_contents);
-            });
+    let framed = matches!(kind, ChatBubbleKind::User | ChatBubbleKind::System);
+    let rail_w = if speaker_rail.is_some() { 14.0 } else { 0.0 };
+    let response = ui
+        .with_layout(layout, |ui| {
+            ui.set_max_width(max_w);
+            if framed {
+                egui::Frame::NONE
+                    .fill(fill)
+                    .stroke(egui::Stroke::new(1.0_f32, stroke))
+                    .corner_radius(crate::theme::RADIUS_MD)
+                    .inner_margin(egui::Margin::symmetric(12, 8))
+                    .show(ui, |ui| {
+                        ui.set_max_width((max_w - 8.0).max(1.0));
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Min), add_contents);
+                    })
+                    .response
+            } else {
+                let inner = ui.horizontal(|ui| {
+                    if speaker_rail.is_some() {
+                        ui.add_space(rail_w);
+                    }
+                    ui.vertical(|ui| {
+                        ui.set_max_width((max_w - rail_w).max(1.0));
+                        add_contents(ui);
+                    });
+                });
+                if let Some(color) = speaker_rail {
+                    let r = inner.response.rect;
+                    if r.height() > 6.0 {
+                        let bar = egui::Rect::from_min_max(
+                            egui::pos2(r.left(), r.top() + 1.0),
+                            egui::pos2(r.left() + 4.0, r.bottom() - 1.0),
+                        );
+                        ui.painter().rect_filled(bar, 2.0, color);
+                    }
+                }
+                inner.response
+            }
+        })
+        .inner;
+    ui.add_space(if matches!(kind, ChatBubbleKind::User) {
+        10.0
+    } else {
+        8.0
     });
-    ui.add_space(6.0);
+    response
 }
 
 #[cfg(test)]
@@ -188,5 +258,15 @@ mod tests {
         let (user_fill, _, _) = chat_bubble_colors_legacy(ChatBubbleKind::User, true);
         let (asst_fill, _, _) = chat_bubble_colors_legacy(ChatBubbleKind::Assistant, true);
         assert_ne!(user_fill, asst_fill);
+    }
+
+    #[test]
+    fn reply_meta_line_includes_duration_and_approx_tokens() {
+        let line = reply_meta_line(3_200, "abcdefghij", 0);
+        assert!(line.contains("s"));
+        assert!(line.contains("tok"));
+        assert!(line.contains('≈'));
+        let exact = reply_meta_line(0, "abcdefghij", 42);
+        assert_eq!(exact, "42 tok");
     }
 }
