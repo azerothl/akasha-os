@@ -1919,6 +1919,39 @@ mod tests {
     }
 
     #[test]
+    fn v2_query_respects_namespace_boundary() {
+        let (mut s, dir) = store();
+        let source = MemorySourceRef {
+            source_type: "test".into(),
+            source_id: "namespace-boundary".into(),
+            excerpt: None,
+            uri: None,
+        };
+        let make = |namespace: &str, content: &str| MemObjectCreateRequest {
+            namespace: namespace.into(),
+            kind: MemoryObjectKind::Claim,
+            title: content.into(),
+            content: content.into(),
+            status: MemoryObjectStatus::Accepted,
+            confidence: 0.9,
+            importance: 0.5,
+            temporal: Default::default(),
+            source_refs: vec![source.clone()],
+            visibility: "private".into(),
+            metadata: serde_json::json!({}),
+            decision: None,
+            idempotency_key: None,
+        };
+        let alpha = s.object_create(make("synthetic:alpha", "alpha confidential fact"), v(0.9)).unwrap();
+        let beta = s.object_create(make("synthetic:beta", "beta confidential fact"), v(0.1)).unwrap();
+        let alpha_hits = s.object_query(&v(0.9), 8, Some("synthetic:alpha"));
+        assert!(alpha_hits.iter().any(|object| object.id == alpha.id));
+        assert!(alpha_hits.iter().all(|object| object.namespace == "synthetic:alpha"));
+        assert!(!alpha_hits.iter().any(|object| object.id == beta.id));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn v2_shadow_reports_overlap_and_mind_palace_navigation() {
         let (mut s, dir) = store();
         s.v2_enabled = true;

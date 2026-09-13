@@ -5733,6 +5733,10 @@ pub struct MemContextRequest {
     /// Session chat active (`session:<id>`).
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Namespace mémoire optionnel pour les appels bornés. Absent = portée
+    /// historique globale, afin de préserver les clients existants.
+    #[serde(default)]
+    pub namespace: Option<String>,
     pub query: String,
     #[serde(default = "default_k")]
     pub k: usize,
@@ -5765,6 +5769,26 @@ pub struct MemContextResponse {
     /// V1/V2 comparison when shadow mode is enabled; absent in normal mode.
     #[serde(default)]
     pub shadow: Option<MemShadowComparison>,
+}
+
+#[cfg(test)]
+mod mem_context_tests {
+    use super::MemContextRequest;
+
+    #[test]
+    fn namespace_is_additive_and_defaults_to_global_scope() {
+        let legacy: MemContextRequest = serde_json::from_str(
+            r#"{"query":"récupère le contexte","k":5,"product_k":0,"user_doc_k":0}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.namespace, None);
+
+        let bounded: MemContextRequest = serde_json::from_str(
+            r#"{"namespace":"synthetic:alpha","query":"récupère le contexte"}"#,
+        )
+        .unwrap();
+        assert_eq!(bounded.namespace.as_deref(), Some("synthetic:alpha"));
+    }
 }
 
 /// User document library — list manifest entries.

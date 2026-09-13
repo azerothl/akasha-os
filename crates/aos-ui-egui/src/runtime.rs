@@ -516,6 +516,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     "mem.context",
                     &MemContextRequest {
                         session_id: Some(session_id.clone()),
+                        namespace: None,
                         query: user_content.clone(),
                         k: 5,
                         product_k: 4,

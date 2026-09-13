@@ -388,6 +388,7 @@ async fn main() {
                     Ok(req) => {
                         let emb = s.embed_text(&req.query).unwrap_or_default();
                         let sess_ns = req.session_id.as_ref().map(|id| format!("session:{id}"));
+                        let memory_ns = req.namespace.as_deref();
                         let product_k = if req.product_k == 0 { 4 } else { req.product_k };
                         let user_doc_k = if req.user_doc_k == 0 {
                             3
@@ -401,18 +402,21 @@ async fn main() {
                             } else {
                                 Vec::new()
                             };
-                            let user_hits = mem.context_user_hits(&emb, req.k);
+                            let user_hits = match memory_ns {
+                                Some(namespace) => mem.episodic_query(&emb, req.k, Some(namespace)),
+                                None => mem.context_user_hits(&emb, req.k),
+                            };
                             let product_hits =
                                 aos_platform::product_rag::recall(&mem, &emb, product_k);
                             let user_doc_hits =
                                 aos_platform::user_docs::recall(&mem, &emb, user_doc_k);
                             let shadow = if mem.memory_v2_shadow_enabled() {
-                                Some(mem.shadow_compare(&emb, req.k, None))
+                                Some(mem.shadow_compare(&emb, req.k, memory_ns))
                             } else {
                                 None
                             };
                             let objects = if mem.memory_v2_enabled() {
-                                mem.object_query(&emb, req.k, None)
+                                mem.object_query(&emb, req.k, memory_ns)
                             } else {
                                 Vec::new()
                             };

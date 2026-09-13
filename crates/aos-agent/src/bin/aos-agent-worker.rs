@@ -3489,6 +3489,7 @@ async fn invoke_native(
                     "mem.context",
                     &MemContextRequest {
                         session_id: None,
+                        namespace: None,
                         query,
                         k: 5,
                         product_k: 4,
@@ -4484,6 +4485,7 @@ async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: u
             "mem.context",
             &MemContextRequest {
                 session_id: None,
+                namespace: None,
                 query: query.to_string(),
                 k,
                 product_k: 4,

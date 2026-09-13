@@ -9,6 +9,14 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "namespace": {
+          "default": null,
+          "description": "Namespace mémoire optionnel pour les appels bornés. Absent = portée historique globale, afin de préserver les clients existants.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "product_k": {
           "default": 0,
           "description": "Top-k product-doc RAG hits (`product:docs`). 0 = default (4).",

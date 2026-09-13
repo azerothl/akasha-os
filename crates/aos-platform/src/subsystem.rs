@@ -755,18 +755,20 @@ impl HostServices for PlatformSubsystem {
                 let k = args["k"].as_u64().unwrap_or(5) as usize;
                 let product_k = args["product_k"].as_u64().unwrap_or(4) as usize;
                 let user_doc_k = args["user_doc_k"].as_u64().unwrap_or(3) as usize;
+                let namespace = args["namespace"].as_str();
+                if let Some(ns) = namespace { Self::require_cap(ctx, "mem.query", ns)?; }
                 let emb = self.embed_text(query).unwrap_or_default();
                 let (hits, product_hits, user_doc_hits, objects, object_relations, shadow) = {
                     let mut mem = self.mem.lock().unwrap();
-                    let hits = mem.episodic_query(&emb, k, None);
+                    let hits = mem.episodic_query(&emb, k, namespace);
                     let product_hits = crate::product_rag::recall(&mem, &emb, product_k);
                     let user_doc_hits = crate::user_docs::recall(&mem, &emb, user_doc_k);
                     let shadow = if mem.memory_v2_shadow_enabled() {
-                        Some(mem.shadow_compare(&emb, k, None))
+                        Some(mem.shadow_compare(&emb, k, namespace))
                     } else {
                         None
                     };
-                    let objects = if mem.memory_v2_enabled() { mem.object_query(&emb, k, None) } else { Vec::new() };
+                    let objects = if mem.memory_v2_enabled() { mem.object_query(&emb, k, namespace) } else { Vec::new() };
                     let ids = objects.iter().map(|object| object.id).collect::<std::collections::HashSet<_>>();
                     let object_relations = mem.object_relations_for(&ids);
                     (hits, product_hits, user_doc_hits, objects, object_relations, shadow)
@@ -1445,6 +1447,7 @@ impl HostServices for PlatformSubsystem {
 #[cfg(test)]
 mod canvas_seeing_tests {
     use super::PlatformSubsystem;
+    use crate::module_rt::{HostCallCtx, HostServices};
     use crate::subsystem::PlatformConfig;
     use std::path::PathBuf;
 
@@ -1491,5 +1494,40 @@ mod canvas_seeing_tests {
         assert!(sub.canvas_seeing_active(sid));
         sub.canvas_seeing_set(sid, false);
         assert!(!sub.canvas_seeing_active(sid));
+    }
+
+    #[tokio::test]
+    async fn memory_context_namespace_requires_matching_capability() {
+        let mut config = test_config();
+        config.memory_v2 = true;
+        let sub = PlatformSubsystem::open(&config).expect("platform open");
+        let ctx = HostCallCtx {
+            module: "benchmark".into(),
+            module_dir: PathBuf::from(temp_path("module")),
+            granted_caps: vec!["mem.query:user:default".into()],
+            actor: "agent:benchmark".into(),
+            trace_id: "memory-v2-cap-test".into(),
+        };
+        let denied = sub.call(
+            &ctx,
+            "mem.context",
+            serde_json::json!({
+                "namespace": "synthetic:validation:atlas",
+                "query": "contexte",
+                "k": 1,
+            }),
+        );
+        assert!(denied.is_err(), "un namespace hors capability ne doit pas fuiter");
+
+        let allowed = sub.call(
+            &ctx,
+            "mem.context",
+            serde_json::json!({
+                "namespace": "user:default",
+                "query": "contexte",
+                "k": 1,
+            }),
+        );
+        assert!(allowed.is_ok(), "le namespace explicitement accordé doit rester lisible");
     }
 }
