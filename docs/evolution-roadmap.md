@@ -2,12 +2,12 @@
 
 **Language:** English | [Français](fr/plan-evolutions.md)
 
-> Date: 19/08/2026  
+> Date: 13/09/2026  
 > Status: prioritization layer (not a new P6 phase number)  
 > Derived from: [competitive-landscape.md](competitive-landscape.md)  
 > Relates to: [development-plan.md](development-plan.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [vision.md](vision.md)
 
-This document proposes **product evolutions (E1–E19)** after the August 2026 competitive survey. It does **not** replace P0–P5 / PV / PC. Close the PC cohort gate first; then schedule E* work on top of remaining P5 / PV deliverables. Preview increments (P03–P09) already ship E* on the host without waiting for that cohort gate.
+This document proposes **product evolutions (E1–E22)** after the August 2026 competitive survey. It does **not** replace P0–P5 / PV / PC. Close the PC cohort gate first; then schedule E* work on top of remaining P5 / PV deliverables. Preview increments (P03–P09) already ship E* on the host without waiting for that cohort gate.
 
 ---
 
@@ -87,6 +87,54 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | **E19** | **Extensible local media** (extra image models + closed sd.cpp / Piper options + chat media plugins) | 0.8 hard-coded SD 1.5 at 512² / 20 steps and two Piper voices | **Preview 0.9.0** ✅ — [phase-preview-09.md](phases/phase-preview-09.md); closed JSON schema; Flux2/Ideogram4/extra Piper; Image studio + in-chat TTS card; **not** video; **not** img2img as a first-class intent |
 | **E20** | **Local decode levers** (KV Q8, `llama_state_*` prefix cache, prompt-lookup speculative on C1) | Chat/agent TTFT + tok/s without adopting vLLM | **Preview 0.11.0** ✅ — [phase-preview-11.md](phases/phase-preview-11.md); C1 only; batch N>1 unchanged; no second draft GGUF |
 | **E21** | **Placement bandwidth + semantic prefix anchors** (FreeToken-inspired, not a dependency) | MoE/edge papers stress transfer vs compute; agent edits invalidate KV at arbitrary tokens | **Preview 0.11.0** ✅ — [phase-preview-11.md](phases/phase-preview-11.md) §E21; measured RAM + `nvidia-smi`/PCIe estimates in `hardware.json` → `HardwareProfile`; E20 prefix snaps to turn/tool/think markers; **MoE per-expert LRU out of scope** — see [moe-expert-offload.md](moe-expert-offload.md) |
+| **E22** | **Instincts** — atomic learned procedures with confidence, scoped injection, human promote-to-skill | Hermes / ECC continuous-learning; Preview `skill.pass` only clusters **user asks** into a full skill card | **Planned** (next Preview increment after current host work; not a P6). Extends 0.15 `skill.pass`; does **not** replace it. See §E22 below. |
+
+---
+
+## E22 — Instincts (planned)
+
+Same product family as the Preview **0.15 morning skill offer**, not a second learning product.
+
+| Layer already shipped | What it captures | What it produces | When it fires |
+|-----------------------|------------------|------------------|---------------|
+| **E14** (0.5.0) | Facts about the user | Long-term memory graph | Opt-in post-turn extract |
+| **`skill.pass`** (0.15) | Repeated **user asks** (≥3 similar messages, Jaccard / domain buckets) | One morning card: Create \| Later — **never auto-creates** a `SKILL.md` | Nightly 02:00–04:00 local; surface after 05:00 |
+| **E22** (planned) | Repeated **agent procedures** + human corrections | Atomic instincts (trigger + action + confidence), injected into the **same** conversation once context is high; optional promote into the existing skill card | **Primary: in-session on context pressure** (and steer). Nightly `skill.pass` stays a catch-up only. |
+
+`skill.pass` answers “you keep asking for the weather — want a skill?”. E22 answers “the last three times you steered the agent off classes toward hooks — apply that next time, without writing a whole recipe.” A skill remains a **named, inspectable recipe** the human owns. An instinct is a **small, revocable prompt hint**, not executable policy.
+
+### When (timing is the product)
+
+The 0.15 night window (02:00–04:00, card after 05:00) is too late for the sitting that produced the pattern: by morning the thread may be compacted, archived, or abandoned. Agents already **silently drop** working memory in `context_budget::compact_after_prompt_overflow` — that is exactly when repeated corrections disappear.
+
+**Primary — during the conversation, when context is high:**
+
+1. Cheap heuristic on the current thread (same Jaccard / steer counts as `skill.pass`, no extra LLM by default).
+2. Fire when estimated prompt tokens cross a soft fraction of `prompt_budget` (Preview ~7.6k of ~9.2k n_ctx), or immediately **before** overflow compaction.
+3. Surface the existing Create | Later card **in this chat**, not tomorrow morning. If the user Creates, the rest of the session (and later ones) can use the skill instead of replaying the long transcript.
+4. Optionally inject a bounded instinct for the remainder of this run even if they pick Later — same budget cap (small N, confidence floor).
+
+**Secondary — nightly catch-up:** keep the 02:00–04:00 job for machines that slept through pressure, and for clustering that only becomes visible across several short sittings. Do not wait for night when the threshold already hit today.
+
+Do not run a second model pass on every user turn: that would *cause* overflow. Heuristic first; optional small extract only on the pressure/compaction edge, once per session unless the user steers again.
+
+**Do (Akasha-shaped):**
+
+- Reuse the in-thread card for instinct → skill promotion (`skill.pass.create` / Later). Never auto-write `var/skills/`.
+- Observe **agent traces** and **user steer/corrections**, not only user-message token overlap (`crates/aos-platform/src/skill_pass.rs`).
+- Cap how many instincts enter a turn (small N, confidence floor, agent/salon/global scope — single-user OS, not git-remote project IDs).
+- Keep observations local; instincts are unreviewed context until the human promotes them.
+- Decay confidence on contradiction; prune stale instincts.
+
+**Do not:**
+
+- Fine-tune local GGUF weights under this ID.
+- Copy ECC Claude Code / Cursor hooks or `ecc-homunculus`.
+- Dump unbounded learned text into the system prompt.
+- Treat instincts as capabilities or as a substitute for `aos-capkd`.
+- Wait until tomorrow to offer a skill whose evidence is in the live thread.
+
+Schedule against a Preview increment after the in-flight host work (memory-v2 / PC), not as a new P6 gate.
 
 ---
 
@@ -110,6 +158,7 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 - Default to a hosted image/TTS API instead of a Placement-managed local backend → E16 is local-first; remote is a later routed option.
 - Put always-on microphone / STT / 24/7 voice in the OS core → sibling.
 - Let agents pass raw sd.cpp / Piper argv → closed option schema (**E19**).
+- Auto-create skills or inject unbounded “learned” text from session traces → extend **`skill.pass`** as **E22** (human Create, confidence budget).
 
 ---
 
@@ -118,7 +167,7 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | Layer | Role |
 |-------|------|
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
-| **E1–E20** | Prioritization after competitive analysis; Preview increments P03–P11 ship E* without waiting for the PC cohort gate |
+| **E1–E22** | Prioritization after competitive analysis; Preview increments P03–P11 ship E* without waiting for the PC cohort gate; **E22** is planned for a later Preview increment |
 
 Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** shipped in Preview **0.10.0** (P10). **E20 local decode** shipped in Preview **0.11.0** (P11). Then PC cohort close + Horizon C / PV.4+ when scheduled.
 

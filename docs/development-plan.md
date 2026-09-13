@@ -579,7 +579,7 @@ multi-GPU, and apply general polish. **Output: Agent OS v1.0.**
 These phases sit **on top of** the PC host stack. They do **not** replace
 P0–P5 / PV / PC and they are **not** a P6 gate. Detail lives in
 `docs/phases/phase-preview-0n.md` (French mirrors under `docs/fr/phases/`).
-Catalogue of what shipped: [FEATURES.md](FEATURES.md). Priorities: E1–E19 in
+Catalogue of what shipped: [FEATURES.md](FEATURES.md). Priorities: E1–E22 in
 [evolution-roadmap.md](evolution-roadmap.md).
 
 ### P03 — Preview 0.3.0 (E1–E5) — done
@@ -822,7 +822,7 @@ priorities on the host without waiting for remaining P5.2 / PV.4 / PC cohort.
 - `docs/STATUS.md` — delivered-phase summary
 - `docs/vision.md` — framing and open directions
 - `docs/competitive-landscape.md` — agentic OS / runtime survey (August 2026)
-- `docs/evolution-roadmap.md` — post-landscape priorities E1–E19 (not a P6 gate)
+- `docs/evolution-roadmap.md` — post-landscape priorities E1–E22 (not a P6 gate)
 - `docs/phases/phase-preview-03.md` … `phase-preview-09.md` — Preview increment plans
 - (published ADRs): `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1), `adr/0006-license-split.md` (host AGPL+CLA vs guest Apache/MIT)
 
