@@ -1093,9 +1093,15 @@ impl ChatSessionStore {
                         }
                     }
                     ChatAttachment::SkillOffer {
-                        label_en, label_fr, ..
+                        label_en,
+                        label_fr,
+                        examples,
+                        ..
                     } => {
                         out.push_str(&format!("_skill offer: {label_en} / {label_fr}_\n\n"));
+                        for example in examples.iter().take(2) {
+                            out.push_str(&format!("_ex: {example}_\n\n"));
+                        }
                     }
                     _ => {}
                 }

@@ -47,6 +47,7 @@ pub fn render_skill_offer_card(
         label_en,
         label_fr,
         hit_count,
+        examples,
         state,
     } = att
     else {
@@ -66,6 +67,17 @@ pub fn render_skill_offer_card(
         .show(ui, |ui| {
             ui.label(egui::RichText::new(title).strong());
             ui.add_space(4.0);
+            for example in examples.iter().take(2) {
+                let quoted = if lang.starts_with("fr") {
+                    format!("Ex. « {} »", example.trim())
+                } else {
+                    format!("e.g. “{}”", example.trim())
+                };
+                ui.label(egui::RichText::new(quoted).weak().italics());
+            }
+            if !examples.is_empty() {
+                ui.add_space(4.0);
+            }
             let evidence = if lang.starts_with("fr") {
                 format!(
                     "Repérée dans {} demande{} récente{}.",
@@ -132,8 +144,14 @@ mod tests {
 
     #[test]
     fn label_for_lang_respects_pref() {
-        assert_eq!(label_for_lang("weather", "météo", "en"), "weather");
-        assert_eq!(label_for_lang("weather", "météo", "fr"), "météo");
+        assert_eq!(
+            label_for_lang("weather checks", "consultations météo", "en"),
+            "weather checks"
+        );
+        assert_eq!(
+            label_for_lang("weather checks", "consultations météo", "fr"),
+            "consultations météo"
+        );
     }
 
     #[test]
@@ -174,6 +192,7 @@ mod tests {
                 label_en: "create".into(),
                 label_fr: "crée".into(),
                 hit_count: 3,
+                examples: vec![],
                 state: "pending".into(),
             }],
             speaker_id: None,
@@ -192,9 +211,10 @@ mod tests {
             text: String::new(),
             attachments: vec![ChatAttachment::SkillOffer {
                 pattern_id: pattern_id.into(),
-                label_en: "weather".into(),
-                label_fr: "météo".into(),
+                label_en: "weather checks".into(),
+                label_fr: "consultations météo".into(),
                 hit_count: 3,
+                examples: vec!["Quelle est la météo à Paris ?".into()],
                 state: state.into(),
             }],
             speaker_id: None,

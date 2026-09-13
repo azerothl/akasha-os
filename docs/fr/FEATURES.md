@@ -62,7 +62,7 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 - **Planifications Chat** : en cours / pause (Reprendre | Arrêter) / arrêt sans quitter la session
 - **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, listé sous Plus → Documents
 - **Bibliothèque utilisateur** : pdf/txt/md consultatifs (état vide + ligne)
-- **Offre skill du matin** : le titre nomme le besoin ; invite atténuée ; Créer | Plus tard — jamais de création auto
+- **Offre skill du matin** : le titre nomme le besoin (pas un mot opaque) ; exemples de demandes ; invite atténuée ; Créer | Plus tard — jamais de création auto
 
 ### Nouveautés 0.14.0
 

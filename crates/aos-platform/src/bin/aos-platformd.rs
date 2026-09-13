@@ -762,6 +762,7 @@ async fn main() {
                                     label_en: c.label_en.clone(),
                                     label_fr: c.label_fr.clone(),
                                     hit_count: c.hit_count,
+                                    examples: c.examples.clone(),
                                 });
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &offer).await;
                     }
