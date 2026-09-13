@@ -12,11 +12,24 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 LAN discovery listen/ad fixes. See 0.17.0 for rich Create module workspace
 (split-pane, presets, layers, prompt assist), painted UI chrome (SVG icons,
 interface font, Settings/rail/status strip), DeclUI fixes — on top of 0.16.2
-USB I/O. Host also has **P18 / E22** instincts in-session (extends `skill.pass`).
+USB I/O. Host also has **P18 / E22** instincts in-session (extends `skill.pass`)
+and **P19 / E23** runtime health plane (canary + SLO/EWMA + residual IF).
 Not a bootable OS. Cohort gate still open
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path). **Next:**
 PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
 documented 2-GPU run.
+
+## P19 — E23 runtime health plane — done
+
+| # | Item | Status |
+|---|------|--------|
+| P19.1 | `HealthSnapshot` + `health.snapshot` / `health.canary` | done |
+| P19.2 | `notes.delete` + canary `__aos_canary__` | done |
+| P19.3 | platformd health loop (EWMA, canary, Isolation Forest, embed clusters) | done |
+| P19.4 | Audit / status / Troubleshoot surfaces | done |
+| P19.5 | Docs EN/FR | done |
+
+Detail: [phases/phase-preview-19.md](phases/phase-preview-19.md).
 
 ## P18 — E22 instincts in-session — done
 

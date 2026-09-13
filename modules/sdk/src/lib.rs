@@ -93,6 +93,14 @@ pub fn fs_list(prefix: &str) -> Result<Vec<String>, String> {
         .unwrap_or_default())
 }
 
+/// `fs.delete` → version tombstone (nécessite `fs.write` sur le chemin).
+pub fn fs_delete(path: &str) -> Result<u64, String> {
+    let r = call("fs.delete", &serde_json::json!({"path": path}))?;
+    r["version"]
+        .as_u64()
+        .ok_or_else(|| "fs.delete: réponse invalide".into())
+}
+
 /// `mem.episodic_write` → id du souvenir.
 pub fn mem_write(namespace: &str, text: &str, metadata: serde_json::Value) -> Result<u64, String> {
     let r = call(

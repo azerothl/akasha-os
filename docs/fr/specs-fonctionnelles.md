@@ -258,6 +258,7 @@ Package unique exposant :
 | F-OBS-02 | Métriques d'inférence et de placement de modèles | Must |
 | F-OBS-03 | Vue administrateur : politiques globales, quotas, modèles par défaut | Must |
 | F-OBS-04 | Export d'audit pour analyse externe | Should |
+| F-OBS-05 | Plan de santé runtime : canary éphémère, SLO/EWMA, score d'anomalie résiduel (warning), clusters stderr (`health.snapshot`) | Should |
 
 ---
 

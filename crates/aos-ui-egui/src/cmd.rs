@@ -7,9 +7,9 @@ use aos_proto::McpServerInfo;
 use aos_proto::{
     AgentInfo, AgentTrace, AuditEvent, CanvasOp, CanvasOpBody, CanvasPenStyle, CapInfo,
     ChatAttachment, ChatRoomMember, ChatSessionMeta, ChatSessionMode, DataClass, DocumentRef,
-    FeedbackSubmitRequest, FeedbackSubmitResponse, FsEntry, MemHit, ModelInfo, ModuleCatalogue,
-    ModuleInfo, PendingConfirmation, ProviderRecord, SkillInfo, SkillPassPendingOffer,
-    SystemMetrics, WebSearchHit,
+    FeedbackSubmitRequest, FeedbackSubmitResponse, FsEntry, HealthSnapshot, MemHit, ModelInfo,
+    ModuleCatalogue, ModuleInfo, PendingConfirmation, ProviderRecord, SkillInfo,
+    SkillPassPendingOffer, SystemMetrics, WebSearchHit,
 };
 
 #[allow(clippy::large_enum_variant)] // Boxing command payloads would complicate every UI dispatch site.
@@ -596,6 +596,8 @@ pub(crate) enum Evt {
     Status(String),
     ChatSystem(String),
     Metrics(SystemMetrics),
+    /// E23 runtime health plane snapshot.
+    Health(HealthSnapshot),
     Agents(Vec<AgentInfo>),
     AgentSpecLoaded {
         spec: aos_proto::AgentSpec,

@@ -425,6 +425,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Area | What you get |
 |------|----------------|
 | Audit | Append-only hashed journal; Audit tab; kill `aos-auditd` → supervisor restarts it |
+| Runtime health (E23) | Ephemeral canary + SLO/EWMA + residual anomaly warning + stderr clusters (`health.snapshot`); Audit Health panel; Troubleshoot consumes the same snapshot |
 | Caps | Caps tab: `cap.list` by holder; revoke (audited) |
 | Confirmation | Blocking banner for sensitive actions; timeout = deny (fail-closed) |
 | Feedback | Local `var/feedback/` + optional GitHub issue (security reports stay local) |

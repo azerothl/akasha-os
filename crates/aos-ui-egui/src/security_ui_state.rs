@@ -27,6 +27,10 @@ pub(crate) struct SecurityUiState {
     pub(crate) audit_restarts: Vec<DaemonRestart>,
     /// Queues stderr des daemons (daemon.stderr.log).
     pub(crate) audit_logs: Vec<(String, Vec<String>)>,
+    /// E23 runtime health snapshot (`health.snapshot`).
+    pub(crate) health: Option<aos_proto::HealthSnapshot>,
+    /// Previous canary_ok — detect ok→fail for status bar.
+    pub(crate) health_canary_was_ok: Option<bool>,
 }
 
 impl SecurityUiState {
