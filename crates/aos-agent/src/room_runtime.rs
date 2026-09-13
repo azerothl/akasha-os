@@ -12,7 +12,8 @@ use crate::canvas_scene::{
     refresh_canvas_scene_after_op, resolve_resident_vision_model, session_model_has_vision,
 };
 use crate::context_budget::{
-    compact_after_prompt_overflow, enforce_prompt_budget, is_prompt_too_long_error, prompt_budget,
+    compact_after_prompt_overflow, enforce_prompt_budget, estimate_messages_tokens,
+    is_prompt_too_long_error, prompt_budget, soft_pressure_threshold, AGENT_GEN_TOKENS,
     DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
 use crate::device_tools::capture_png_path_from_tool_result;
@@ -849,6 +850,31 @@ pub async fn execute_room_turn(
     );
     let mut messages = format_transcript_messages(&session, &system);
     append_room_turn_nudge(&mut messages, display_name);
+
+    // E22: in-session skill consider under room context pressure.
+    {
+        let pairs: Vec<(String, String)> = messages
+            .iter()
+            .map(|m| (m.role.clone(), m.content.clone()))
+            .collect();
+        let tokens = estimate_messages_tokens(&pairs);
+        let thresh = soft_pressure_threshold(DEFAULT_N_CTX_HINT, AGENT_GEN_TOKENS);
+        if tokens >= thresh {
+            let _ = bus
+                .call::<aos_proto::SkillPassConsiderRequest, aos_proto::SkillPassConsiderResponse>(
+                    "skill.pass.consider",
+                    &aos_proto::SkillPassConsiderRequest {
+                        session_id: req.session_id.clone(),
+                        tz_offset_minutes: None,
+                        reason: "pressure".into(),
+                        steer_texts: vec![],
+                        estimated_tokens: Some(tokens as u64),
+                    },
+                    vec![],
+                )
+                .await;
+        }
+    }
 
     let model_id = spec.model_id.clone().or(session.meta.model_id.clone());
     let images = room_images_from_session(&session);

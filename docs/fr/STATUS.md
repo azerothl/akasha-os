@@ -12,10 +12,23 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 correctifs écoute/annonce découverte LAN. Voir 0.17.0 pour l'espace Create enrichi
 (volet scindé, presets, calques, assist prompt), chrome UI peint (icônes SVG,
 police interface, bande statut/rail/Paramètres), correctifs DeclUI — par-dessus
-l’I/O USB 0.16.2. Pas un OS bootable. Gate cohorte encore ouverte
+l’I/O USB 0.16.2. L’hôte inclut aussi **P18 / E22** instincts en session
+(étend `skill.pass`). Pas un OS bootable. Gate cohorte encore ouverte
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
 **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ; E9
 hard-green après un run 2 GPU documenté.
+
+## P18 — E22 instincts en session — fait
+
+| # | Élément | État |
+|---|---------|------|
+| P18.1 | `surface_now` live + saut du gate 05:00 | fait |
+| P18.2 | `skill.pass.consider` (session + steers, fire-once) | fait |
+| P18.3 | Hooks UI / worker / salon sous pression | fait |
+| P18.4 | Store instincts + inject borné + promote Créer | fait |
+| P18.5 | Pref `instincts_in_session` + docs EN/FR | fait |
+
+Détail : [phases/phase-preview-18.md](phases/phase-preview-18.md).
 
 ## P17.2 — Preview 0.17.2 (installation Create + Plus tard/registre + LAN) — fait
 

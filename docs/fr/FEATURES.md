@@ -64,6 +64,12 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 - **Bibliothèque utilisateur** : pdf/txt/md consultatifs (état vide + ligne)
 - **Offre skill du matin** : le titre nomme le besoin (pas un mot opaque) ; exemples de demandes ; invite atténuée ; Créer | Plus tard — jamais de création auto
 
+### E22 / P18 — Instincts en session (étend le `skill.pass` 0.15)
+
+- **Offre skill live** : quand le fil approche le budget prompt (~75 %) ou après ≥2 steers, `skill.pass.consider` peut afficher Créer | Plus tard **dans ce chat** (une fois par session) ; la passe nocturne reste un rattrapage
+- **Instincts bornés** : jusqu’à 3 indices à haute confiance dans le prompt système agent ; Créer promeut en skill réelle et retire l’instinct — n’écrit jamais `var/skills/` automatiquement
+- **Paramètres** : « Proposer des skills quand le contexte est élevé » (`instincts_in_session`, défaut activé)
+
 ### Nouveautés 0.14.0
 
 - **Agents personnalisés** : le libellé conversation / thread est le Nom de la page Agents ; le sélecteur salon liste les personas du roster et les agents Task/personnalisés sans lignes persona en double

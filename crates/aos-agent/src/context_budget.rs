@@ -21,9 +21,17 @@ pub const MAX_NOOP_STREAK: u32 = 3;
 /// Même action en échec répété avant fail.
 pub const MAX_SAME_FAIL_STREAK: u32 = 3;
 
+/// Soft fraction of `prompt_budget` that triggers E22 in-session skill consider.
+pub const CONTEXT_PRESSURE_FRACTION: f32 = 0.75;
+
 /// Budget soft dérivé de n_ctx et de la réserve de génération.
 pub fn prompt_budget(n_ctx: usize, max_gen: u32) -> usize {
     n_ctx.saturating_sub(max_gen as usize + GEN_SAFETY_TOKENS)
+}
+
+/// Token count at which the UI/worker should fire `skill.pass.consider`.
+pub fn soft_pressure_threshold(n_ctx: usize, max_gen: u32) -> usize {
+    ((prompt_budget(n_ctx, max_gen) as f32) * CONTEXT_PRESSURE_FRACTION) as usize
 }
 
 /// Budget après overflow (plus serré).
@@ -442,6 +450,15 @@ mod tests {
     fn budget_tracks_ctx_and_gen() {
         assert_eq!(prompt_budget(9216, 1536), 9216 - 1536 - 64);
         assert!(retry_prompt_budget(9216, 2048) < prompt_budget(9216, 2048));
+    }
+
+    #[test]
+    fn soft_pressure_is_seventy_five_percent_of_budget() {
+        let budget = prompt_budget(DEFAULT_N_CTX_HINT, AGENT_GEN_TOKENS);
+        let soft = soft_pressure_threshold(DEFAULT_N_CTX_HINT, AGENT_GEN_TOKENS);
+        assert_eq!(soft, ((budget as f32) * CONTEXT_PRESSURE_FRACTION) as usize);
+        assert!(soft < budget);
+        assert!(soft > budget / 2);
     }
 
     #[test]

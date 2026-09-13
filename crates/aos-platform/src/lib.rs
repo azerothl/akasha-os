@@ -36,6 +36,7 @@ pub mod product_rag;
 pub mod secrets;
 pub mod skill;
 pub mod skill_pass;
+pub mod instincts;
 pub mod storage;
 pub mod subsystem;
 pub mod supervisor;

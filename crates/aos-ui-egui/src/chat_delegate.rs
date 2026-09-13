@@ -669,6 +669,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     tools: Vec<String>,
     prose: String,
     auto_remember: bool,
+    instincts_in_session: bool,
     model_id: Option<String>,
     max_steps: u32,
     canvas_aspect: aos_proto::CanvasAspect,
@@ -791,9 +792,19 @@ pub(crate) async fn spawn_chat_delegate_agent(
                 evt_tx.clone(),
                 auto_remember,
                 sid.clone(),
-                user_text,
+                user_text.clone(),
                 prose.clone(),
                 model_id,
+            );
+            crate::runtime::maybe_spawn_skill_consider(
+                bus.clone(),
+                evt_tx.clone(),
+                instincts_in_session,
+                sid.clone(),
+                &[],
+                &user_text,
+                &prose,
+                "pressure",
             );
             let _ = evt_tx.send(Evt::AgentSpawned {
                 session_id: sid.clone(),

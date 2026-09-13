@@ -183,6 +183,9 @@ pub struct Preferences {
     /// E14 : extraire automatiquement des faits durables après chaque tour de chat.
     #[serde(default = "default_auto_remember_chat")]
     pub auto_remember_chat: bool,
+    /// E22 : propose skills/instincts in-session when context pressure is high.
+    #[serde(default = "default_instincts_in_session")]
+    pub instincts_in_session: bool,
     /// Download a newer Release into `var/updates/` when detected (apply on next launch).
     #[serde(default)]
     pub auto_download_updates: bool,
@@ -333,6 +336,10 @@ fn default_browse_chars() -> usize {
 fn default_auto_remember_chat() -> bool {
     true
 }
+
+fn default_instincts_in_session() -> bool {
+    true
+}
 fn default_image_size() -> u32 {
     512
 }
@@ -409,6 +416,7 @@ impl Default for Preferences {
             theme: default_theme(),
             network_online: false,
             auto_remember_chat: default_auto_remember_chat(),
+            instincts_in_session: default_instincts_in_session(),
             auto_download_updates: false,
             default_agent_model: None,
             default_max_steps: default_max_steps(),

@@ -757,13 +757,7 @@ async fn main() {
                         let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
                         let offer =
                             aos_platform::skill_pass::pending_surface_offer(&state, now, offset)
-                                .map(|c| SkillPassPendingOffer {
-                                    pattern_id: c.pattern_id.clone(),
-                                    label_en: c.label_en.clone(),
-                                    label_fr: c.label_fr.clone(),
-                                    hit_count: c.hit_count,
-                                    examples: c.examples.clone(),
-                                });
+                                .map(aos_platform::skill_pass::candidate_to_pending_offer);
                         let _ = ctx.respond(aos_ipc::msg::Status::Ok, &offer).await;
                     }
                     Err(_) => {
@@ -842,7 +836,13 @@ async fn main() {
                         };
                         match create_result {
                             Ok(info) => {
-                                aos_platform::skill_pass::mark_created(&mut state, &req.pattern_id);
+                                let now = sweep_now_ms();
+                                aos_platform::skill_pass::mark_created_and_promote(
+                                    &mut state,
+                                    &skills_dir,
+                                    &req.pattern_id,
+                                    now,
+                                );
                                 let _ = state.save(&skills_dir);
                                 s.audit(AuditAppendRequest {
                                     trace_id: String::new(),
@@ -869,6 +869,82 @@ async fn main() {
                             .await;
                     }
                 }
+            }
+        });
+    }
+
+    // --- skill.pass.consider — in-session pressure / steer (E22) ---
+    {
+        let s = sub.clone();
+        svc.on("skill.pass.consider", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<SkillPassConsiderRequest>() {
+                    Ok(req) => match run_skill_pass_consider(&s, req).await {
+                        Ok(resp) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("instinct.active", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<InstinctActiveRequest>() {
+                    Ok(req) => {
+                        let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+                        let store = aos_platform::instincts::InstinctStore::load(&skills_dir);
+                        let max = req.max.unwrap_or(3) as usize;
+                        let min_c = req
+                            .min_confidence
+                            .unwrap_or(aos_platform::instincts::MIN_INJECT_CONFIDENCE);
+                        let instincts =
+                            aos_platform::instincts::active_for_inject(&store, max, min_c);
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &InstinctActiveResponse { instincts },
+                            )
+                            .await;
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("instinct.list", move |ctx| {
+            let s = s.clone();
+            async move {
+                let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+                let store = aos_platform::instincts::InstinctStore::load(&skills_dir);
+                let _ = ctx
+                    .respond(
+                        aos_ipc::msg::Status::Ok,
+                        &InstinctListResponse {
+                            instincts: store.instincts,
+                        },
+                    )
+                    .await;
             }
         });
     }
@@ -4621,7 +4697,7 @@ async fn main() {
                         end_hour_exclusive: Some(aos_platform::skill_pass::NIGHT_PASS_HOUR_END),
                     },
                 ) {
-                    eprintln!("[aos-platformd] skill pass : démarrage nuit {skill_day_key}");
+                    eprintln!("[aos-platformd] skill pass : rattrapage nuit {skill_day_key}");
                     let req = SkillPassRequest {
                         tz_offset_minutes: Some(offset),
                         force: false,
@@ -5146,6 +5222,7 @@ async fn run_mem_sweep(
 }
 
 /// Nightly scan of recent chats for repeatable skill patterns (heuristic; no chat output).
+/// Catch-up only after E22 — primary surfacing is `skill.pass.consider` under context pressure.
 async fn run_skill_pass(
     s: &PlatformSubsystem,
     req: SkillPassRequest,
@@ -5188,7 +5265,12 @@ async fn run_skill_pass(
     let existing = aos_platform::skill_pass::existing_skill_names(&s.skills.lock().unwrap());
     let created: std::collections::HashSet<String> =
         state.created_pattern_ids.iter().cloned().collect();
-    let best = aos_platform::skill_pass::pick_best_candidate(&candidates, &existing, &created);
+    let mut best = aos_platform::skill_pass::pick_best_candidate(&candidates, &existing, &created);
+    if let Some(ref mut cand) = best {
+        // Nightly catch-up: morning gate still applies.
+        cand.surface_now = false;
+        cand.source_session_id = None;
+    }
 
     // Internal only — never posted to chat.
     let _analysis = aos_platform::skill_pass::analysis_summary(&candidates);
@@ -5208,6 +5290,7 @@ async fn run_skill_pass(
             "candidates_found": candidates.len(),
             "pending_pattern_id": best.as_ref().map(|c| &c.pattern_id),
             "messages_scanned": messages.len(),
+            "catch_up": true,
         }),
     });
 
@@ -5216,6 +5299,76 @@ async fn run_skill_pass(
         candidates_found: candidates.len(),
         pending_pattern_id: best.map(|c| c.pattern_id),
         last_pass_ms: now,
+    })
+}
+
+async fn run_skill_pass_consider(
+    s: &PlatformSubsystem,
+    req: SkillPassConsiderRequest,
+) -> Result<SkillPassConsiderResponse, String> {
+    if req.session_id.trim().is_empty() {
+        return Err("skill.pass.consider: session_id requis".into());
+    }
+    let offset = req
+        .tz_offset_minutes
+        .unwrap_or_else(aos_platform::mem_sweep::system_tz_offset_minutes);
+    let now = sweep_now_ms();
+    let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
+    let mut state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
+
+    let session_pair = s.sessions.lock().unwrap().get(&req.session_id).ok();
+    let session_messages = session_pair.as_ref().map(|(_, msgs)| msgs.as_slice());
+
+    let sessions = s
+        .sessions
+        .lock()
+        .unwrap()
+        .list(true)
+        .map_err(|e| e.to_string())?;
+    let mut loaded = Vec::new();
+    for meta in sessions {
+        if let Ok(pair) = s.sessions.lock().unwrap().get(&meta.id) {
+            loaded.push(pair);
+        }
+    }
+
+    let result = {
+        let skills = s.skills.lock().unwrap();
+        aos_platform::skill_pass::run_consider_pass(
+            &mut state,
+            &skills_dir,
+            &skills,
+            &req.session_id,
+            session_messages,
+            &loaded,
+            &req.steer_texts,
+            now,
+            offset,
+        )?
+    };
+
+    s.audit(AuditAppendRequest {
+        trace_id: format!("skill-consider-{}", req.session_id),
+        actor: "service:platformd".into(),
+        action: "skill.pass.consider".into(),
+        target: req.session_id.clone(),
+        detail: serde_json::json!({
+            "reason": req.reason,
+            "estimated_tokens": req.estimated_tokens,
+            "candidates_found": result.candidates_found,
+            "pending_pattern_id": result.pending_pattern_id,
+            "skipped_already_offered": result.skipped_already_offered,
+            "instincts_upserted": result.instincts_upserted,
+        }),
+    });
+
+    Ok(SkillPassConsiderResponse {
+        local_day_key: result.local_day_key,
+        candidates_found: result.candidates_found,
+        pending_pattern_id: result.pending_pattern_id,
+        skipped_already_offered: result.skipped_already_offered,
+        offer: result.offer,
+        instincts_upserted: result.instincts_upserted,
     })
 }
 
