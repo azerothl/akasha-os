@@ -85,6 +85,108 @@ impl UiApp {
                 }
             });
         }
+        if self.memory_ui.v2_available {
+            ui.separator();
+            ui.heading(t.memory_decision_log);
+            let decisions: Vec<_> = self
+                .memory_ui
+                .objects
+                .iter()
+                .filter(|object| {
+                    matches!(&object.kind, aos_proto::MemoryObjectKind::Decision)
+                })
+                .take(32)
+                .collect();
+            if decisions.is_empty() {
+                ui.weak(t.memory_decision_empty);
+            }
+            for object in decisions {
+                ui.horizontal_wrapped(|ui| {
+                    let label = if object.title.trim().is_empty() {
+                        object.content.trim()
+                    } else {
+                        object.title.trim()
+                    };
+                    ui.strong(label);
+                    ui.weak(format!(
+                        "#{} · {:?} · {} · {}",
+                        object.id,
+                        object.status,
+                        t.memory_decision_confidence
+                            .replace("{:.0}", &format!("{:.0}", object.confidence * 100.0)),
+                        t.memory_decision_sources
+                            .replace("{}", &object.source_refs.len().to_string())
+                    ));
+                });
+                if let Some(decision) = object.decision.as_ref() {
+                    if let Some(selected) = decision.selected_option.as_deref() {
+                        ui.label(t.memory_decision_selected.replace("{}", selected));
+                    }
+                    if let Some(rationale) = decision.rationale.as_deref() {
+                        if !rationale.trim().is_empty() {
+                            ui.weak(t.memory_decision_rationale.replace("{}", rationale.trim()));
+                        }
+                    }
+                }
+                ui.add_space(6.0);
+            }
+
+            ui.separator();
+            ui.heading(t.memory_mind_palace);
+            ui.horizontal(|ui| {
+                theme::add_form_field(
+                    ui,
+                    300.0,
+                    egui::TextEdit::singleline(&mut self.memory_ui.palace_namespace)
+                        .hint_text(t.memory_mind_palace_namespace),
+                );
+                theme::add_form_field(
+                    ui,
+                    220.0,
+                    egui::TextEdit::singleline(&mut self.memory_ui.palace_project)
+                        .hint_text("project (metadata)"),
+                );
+                if ui.button(t.memory_mind_palace_explore).clicked() {
+                    let namespace = self.memory_ui.palace_namespace.trim().to_string();
+                    let project = self.memory_ui.palace_project.trim().to_string();
+                    let _ = self.cmd_tx.send(Cmd::MemMindPalace {
+                        namespace: (!namespace.is_empty()).then_some(namespace),
+                        project: (!project.is_empty()).then_some(project),
+                        root_id: None,
+                    });
+                }
+            });
+            if let Some(palace) = self.memory_ui.palace.as_ref() {
+                ui.weak(
+                    t.memory_mind_palace_summary
+                        .replacen("{}", &palace.objects.len().to_string(), 1)
+                        .replacen("{}", &palace.relations.len().to_string(), 1),
+                );
+                if palace.objects.is_empty() {
+                    ui.weak(t.memory_mind_palace_empty);
+                } else {
+                    overflow_scroll_h(ui, "memory_mind_palace", 220.0, |ui| {
+                        for object in palace.objects.iter().take(64) {
+                            ui.horizontal_wrapped(|ui| {
+                                let label = if object.title.trim().is_empty() {
+                                    object.content.trim()
+                                } else {
+                                    object.title.trim()
+                                };
+                                ui.strong(label);
+                                ui.weak(format!(
+                                    "#{} · {:?} · {:?} · {} source(s)",
+                                    object.id,
+                                    object.kind,
+                                    object.status,
+                                    object.source_refs.len()
+                                ));
+                            });
+                        }
+                    });
+                }
+            }
+        }
         ui.separator();
         let mut edit_req: Option<(u64, String)> = None;
         let mut delete_id: Option<u64> = None;

@@ -1151,6 +1151,10 @@ bus: "{BUS_ADDR}"
 audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
+# Memory V2 cognitive graph (default Preview).
+memory_v2: true
+# V1/V2 comparison without changing reads.
+memory_v2_shadow: false
 modules_dir: var/modules
 sessions_dir: var/sessions
 secrets_file: var/secrets/keys.yaml

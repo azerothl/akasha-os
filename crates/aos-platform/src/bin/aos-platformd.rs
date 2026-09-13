@@ -388,25 +388,50 @@ async fn main() {
                     Ok(req) => {
                         let emb = s.embed_text(&req.query).unwrap_or_default();
                         let sess_ns = req.session_id.as_ref().map(|id| format!("session:{id}"));
+                        let memory_ns = req.namespace.as_deref();
                         let product_k = if req.product_k == 0 { 4 } else { req.product_k };
                         let user_doc_k = if req.user_doc_k == 0 {
                             3
                         } else {
                             req.user_doc_k
                         };
-                        let (session_hits, user_hits, product_hits, user_doc_hits) = {
-                            let mem = s.mem.lock().unwrap();
+                        let (session_hits, user_hits, product_hits, user_doc_hits, objects, object_relations, memory_warnings, shadow) = {
+                            let mut mem = s.mem.lock().unwrap();
                             let session_hits = if let Some(ref ns) = sess_ns {
                                 mem.episodic_query(&emb, req.k, Some(ns))
                             } else {
                                 Vec::new()
                             };
-                            let user_hits = mem.context_user_hits(&emb, req.k);
+                            let user_hits = match memory_ns {
+                                Some(namespace) => mem.episodic_query(&emb, req.k, Some(namespace)),
+                                None => mem.context_user_hits(&emb, req.k),
+                            };
                             let product_hits =
                                 aos_platform::product_rag::recall(&mem, &emb, product_k);
                             let user_doc_hits =
                                 aos_platform::user_docs::recall(&mem, &emb, user_doc_k);
-                            (session_hits, user_hits, product_hits, user_doc_hits)
+                            let shadow = if mem.memory_v2_shadow_enabled() {
+                                Some(mem.shadow_compare(&emb, req.k, memory_ns))
+                            } else {
+                                None
+                            };
+                            let objects = if mem.memory_v2_enabled() {
+                                mem.object_query(&emb, req.k, memory_ns)
+                            } else {
+                                Vec::new()
+                            };
+                            let ids = objects.iter().map(|object| object.id).collect::<std::collections::HashSet<_>>();
+                            let object_relations = mem.object_relations_for(&ids);
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            let memory_warnings = objects
+                                .iter()
+                                .filter(|object| object.temporal.valid_to.is_some_and(|to| to < now))
+                                .map(|object| format!("objet mémoire {} expiré ou à revalider", object.id))
+                                .collect();
+                            (session_hits, user_hits, product_hits, user_doc_hits, objects, object_relations, memory_warnings, shadow)
                         };
                         let mut prompt_block = String::new();
                         let product_block =
@@ -443,6 +468,12 @@ async fn main() {
                                 prompt_block.push_str(&structured);
                             }
                         }
+                        if !objects.is_empty() {
+                            prompt_block.push_str("Mémoire cognitive:\n");
+                            for object in &objects {
+                                prompt_block.push_str(&format!("- [{}::{:?}] {}\n", object.id, object.kind, object.content));
+                            }
+                        }
                         let _ = ctx
                             .respond(
                                 aos_ipc::msg::Status::Ok,
@@ -452,6 +483,10 @@ async fn main() {
                                     product_hits,
                                     user_doc_hits,
                                     prompt_block,
+                                    objects,
+                                    object_relations,
+                                    memory_warnings,
+                                    shadow,
                                 },
                             )
                             .await;
@@ -972,6 +1007,322 @@ async fn main() {
                             .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
                             .await;
                     }
+                }
+            }
+        });
+    }
+
+    // --- Memory V2 semantic objects / graph (feature flag AOS_MEMORY_V2) ---
+    {
+        let s = sub.clone();
+        svc.on("mem.object.create", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemObjectCreateRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let s2 = s.clone();
+                        let r = tokio::task::spawn_blocking(move || {
+                            let embedding = s2.embed_text(&req.content).unwrap_or_default();
+                            s2.mem.lock().unwrap().object_create(req, embedding)
+                        }).await.unwrap_or_else(|e| Err(e.to_string()));
+                        match r {
+                            Ok(object) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
+                            Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.object.get", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemObjectGetRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let result = { s.mem.lock().unwrap().object_get(req.id) };
+                        match result {
+                            Some(object) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
+                            None => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "objet mémoire inconnu").await; }
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.object.list", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemObjectListRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let objects = s.mem.lock().unwrap().object_list(&req);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &objects).await;
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.object.update", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemObjectUpdateRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let new_embedding = req
+                            .content
+                            .as_deref()
+                            .and_then(|content| s.embed_text(content).ok());
+                        let result = {
+                            let mut mem = s.mem.lock().unwrap();
+                            let result = mem.object_update(req);
+                            if result.is_ok() {
+                                if let Some(embedding) = new_embedding {
+                                    let id = result.as_ref().map(|object| object.id).unwrap_or(0);
+                                    let _ = mem.object_set_embedding(id, embedding);
+                                    mem.object_get(id).ok_or_else(|| "objet mémoire inconnu".to_string())
+                                } else {
+                                    result
+                                }
+                            } else {
+                                result
+                            }
+                        };
+                        match result {
+                            Ok(object) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
+                            Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.object.relate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemObjectRelateRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let exists = {
+                            let mem = s.mem.lock().unwrap();
+                            mem.object_get(req.from).is_some() && mem.object_get(req.to).is_some()
+                        };
+                        if exists {
+                            let result = s.mem.lock().unwrap().relate_v2(req.from, req.kind, req.to, req.confidence, req.source_refs);
+                            match result {
+                                Ok(relation) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &relation).await; }
+                                Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                            }
+                        } else {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "objet mémoire inconnu pour relation").await;
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.graph.query", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemGraphQueryRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let response = s.mem.lock().unwrap().graph_query(&req);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.timeline", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemTimelineRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let response = s.mem.lock().unwrap().timeline(&req);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.explain", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemExplainRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let response = s.mem.lock().unwrap().explain(&req);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.revalidate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemRevalidateRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let result = { s.mem.lock().unwrap().object_revalidate(req) };
+                        match result {
+                            Ok(object) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
+                            Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.decision.get", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemObjectGetRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let result = { s.mem.lock().unwrap().object_get(req.id) };
+                        match result {
+                            Some(object) if object.kind == MemoryObjectKind::Decision => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
+                            Some(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "l'objet n'est pas une décision").await; }
+                            None => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "décision inconnue").await; }
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.narrative.generate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemNarrativeRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let result = { s.mem.lock().unwrap().narrative_generate(&req) };
+                        match result {
+                            Ok(object) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
+                            Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                        }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.shadow.metrics", move |ctx| {
+            let s = s.clone();
+            async move {
+                let metrics = {
+                    let mem = s.mem.lock().unwrap();
+                    mem.memory_v2_shadow_enabled().then(|| mem.shadow_metrics())
+                };
+                let Some(metrics) = metrics else {
+                    let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 shadow désactivé (AOS_MEMORY_V2_SHADOW=1)").await;
+                    return;
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &metrics).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.migration.status", move |ctx| {
+            let s = s.clone();
+            async move {
+                let report = {
+                    let mem = s.mem.lock().unwrap();
+                    (mem.memory_v2_enabled() || mem.memory_v2_shadow_enabled()).then(|| mem.migration_report())
+                };
+                let Some(report) = report else {
+                    let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1 ou AOS_MEMORY_V2_SHADOW=1)").await;
+                    return;
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &report).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.mind_palace.query", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemMindPalaceRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let response = s.mem.lock().unwrap().mind_palace_query(&req);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
                 }
             }
         });
@@ -4240,6 +4591,22 @@ async fn main() {
                         Err(e) => eprintln!("[aos-platformd] mem sweep erreur : {e}"),
                     }
                 }
+                let scheduled_narratives = {
+                    let mut mem = s.mem.lock().unwrap();
+                    if mem.memory_v2_enabled() {
+                        mem.generate_scheduled_narratives(now, offset)
+                    } else {
+                        Ok(Vec::new())
+                    }
+                };
+                match scheduled_narratives {
+                    Ok(objects) if !objects.is_empty() => eprintln!(
+                        "[aos-platformd] narrations mémoire : {} période(s) générée(s)",
+                        objects.len()
+                    ),
+                    Ok(_) => {}
+                    Err(e) => eprintln!("[aos-platformd] narrations mémoire erreur : {e}"),
+                }
                 let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
                 let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
                 let skill_day_key = aos_platform::skill_pass::local_day_key(now, offset);
@@ -4483,6 +4850,56 @@ async fn run_mem_extract(
             let mut mem = s.mem.lock().unwrap();
             aos_platform::mem_sweep::persist_classified_fact(&mut mem, &text, metadata, emb)
         };
+        // V2 keeps the legacy episodic write above for compatibility, then
+        // adds a typed object when the extractor supplied semantic data.
+        if s.mem.lock().unwrap().memory_v2_enabled()
+            && (fact.kind.is_some() || fact.decision.is_some())
+        {
+            let kind = fact
+                .kind
+                .clone()
+                .unwrap_or(MemoryObjectKind::Decision);
+            let status = match kind {
+                MemoryObjectKind::Decision
+                | MemoryObjectKind::Goal
+                | MemoryObjectKind::Problem
+                | MemoryObjectKind::Preference => MemoryObjectStatus::Candidate,
+                _ => MemoryObjectStatus::Accepted,
+            };
+            let source = MemorySourceRef {
+                source_type: "chat".into(),
+                source_id: session_meta.clone(),
+                excerpt: Some(text.clone()),
+                uri: None,
+            };
+            let semantic_req = MemObjectCreateRequest {
+                namespace: "user:default".into(),
+                kind,
+                title: String::new(),
+                content: text.clone(),
+                status,
+                confidence: 0.75,
+                importance: 0.6,
+                temporal: MemoryTemporal {
+                    observed_at: Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0)),
+                    ..Default::default()
+                },
+                source_refs: vec![source],
+                visibility: "private".into(),
+                metadata: serde_json::json!({"source":"chat", "session_id": session_meta}),
+                decision: fact.decision.clone(),
+                idempotency_key: Some(format!("chat:{}:{}", session_meta, text)),
+            };
+            let semantic_embedding = s.embed_text(&text).unwrap_or_default();
+            let _ = s
+                .mem
+                .lock()
+                .unwrap()
+                .object_create(semantic_req, semantic_embedding);
+        }
         let (outcome_kind, id, auto) = match persisted.kind {
             aos_platform::mem_sweep::PersistFactKind::Stored => {
                 stored += 1;

@@ -2,12 +2,12 @@
 
 **Langue :** [English](../evolution-roadmap.md) | Français
 
-> Date : 19/08/2026  
+> Date : 13/09/2026  
 > Statut : couche de priorisation (pas un nouveau numéro de phase P6)  
 > Dérivé de : [paysage-concurrentiel.md](paysage-concurrentiel.md)  
 > Lié à : [plan-developpement-phases.md](plan-developpement-phases.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [reflexion-agent-os.md](reflexion-agent-os.md)
 
-Ce document propose des **évolutions produit (E1–E19)** après l’enquête concurrentielle d’août 2026. Il **ne remplace pas** P0–P5 / PV / PC. Fermer d’abord la gate cohort PC ; ensuite planifier le travail E* au-dessus des livrables P5 / PV restants. Les incréments Preview (P03–P09) livrent déjà des E* sur l’hôte sans attendre cette gate cohorte.
+Ce document propose des **évolutions produit (E1–E22)** après l’enquête concurrentielle d’août 2026. Il **ne remplace pas** P0–P5 / PV / PC. Fermer d’abord la gate cohort PC ; ensuite planifier le travail E* au-dessus des livrables P5 / PV restants. Les incréments Preview (P03–P09) livrent déjà des E* sur l’hôte sans attendre cette gate cohorte.
 
 ---
 
@@ -87,6 +87,54 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E19** | **Média local extensible** (autres modèles d’image + options sd.cpp / Piper fermées + plugins chat) | 0.8 figeait SD 1.5 en 512² / 20 steps et deux voix Piper | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; schéma JSON fermé ; Flux2/Ideogram4/Piper extra ; studio Image + carte TTS ; **pas** de vidéo ; **pas** d’img2img en intent de première classe |
 | **E20** | **Leviers de decode local** (KV Q8, prefix cache `llama_state_*`, speculative prompt-lookup en C1) | TTFT / tok/s chat+agents sans adopter vLLM | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) ; C1 seulement ; batch N>1 inchangé ; pas de second GGUF draft |
 | **E21** | **Bande passante Placement + ancres sémantiques de préfixe** (inspiré FreeToken, pas une dépendance) | Les papiers MoE/edge insistent sur transfert vs calcul ; les edits d’agent invalident le KV à des offsets arbitraires | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) §E21 ; RAM mesurée + estimations `nvidia-smi`/PCIe dans `hardware.json` → `HardwareProfile` ; préfixe E20 ancré aux marqueurs tour/outil/pensée ; **LRU par expert MoE hors scope** — voir [moe-expert-offload.md](moe-expert-offload.md) |
+| **E22** | **Instincts** — procédures apprises atomiques, confiance, injection bornée, promotion humaine vers skill | Hermes / ECC continuous-learning ; le `skill.pass` Preview ne clusterise que les **demandes utilisateur** en carte skill | **Prévu** (prochain incrément Preview après le travail hôte en cours ; pas un P6). Étend le `skill.pass` 0.15 ; **ne le remplace pas**. Voir §E22 ci-dessous. |
+
+---
+
+## E22 — Instincts (prévu)
+
+Même famille produit que l’**offre de skill du matin** (Preview 0.15), pas un second produit d’apprentissage.
+
+| Couche déjà livrée | Ce qu’elle capture | Ce qu’elle produit | Quand ça tourne |
+|---------------------|-------------------|--------------------|-----------------|
+| **E14** (0.5.0) | Faits sur l’utilisateur | Graphe mémoire long terme | Extract post-tour opt-in |
+| **`skill.pass`** (0.15) | **Demandes utilisateur** répétées (≥3 messages proches, Jaccard / seaux de domaine) | Une carte du matin : Créer \| Plus tard — **jamais** d’auto-création de `SKILL.md` | Nuit 02:00–04:00 locale ; surface après 05:00 |
+| **E22** (prévu) | **Procédures d’agent** répétées + corrections / steer humains | Instincts atomiques (déclencheur + action + confiance), injectés dans **cette** conversation dès que le contexte est élevé ; promotion optionnelle vers la carte skill existante | **Primaire : en session, sous pression de contexte** (et steer). Le `skill.pass` nocturne reste un rattrapage. |
+
+`skill.pass` répond à « tu redemandes la météo — tu veux une skill ? ». E22 répond à « les trois dernières fois tu as recadré l’agent (hooks plutôt que classes) — applique ça la prochaine fois, sans écrire toute une recette ». Une skill reste une **recette nommée**, inspectable, que l’humain possède. Un instinct est un **indice de prompt petit et révocable**, pas une politique exécutable.
+
+### Quand (le timing *est* le produit)
+
+La fenêtre 0.15 (02:00–04:00, carte après 05:00) arrive trop tard pour la séance qui a produit le motif : au matin le fil peut être compacté, archivé ou abandonné. Les agents **jettent déjà** la working memory dans `context_budget::compact_after_prompt_overflow` — c’est exactement là que les recadrages répétés disparaissent.
+
+**Primaire — pendant la conversation, quand le contexte est élevé :**
+
+1. Heuristique pas chère sur le fil courant (mêmes Jaccard / comptes de steer que `skill.pass`, pas de LLM extra par défaut).
+2. Déclencher quand les tokens de prompt estimés dépassent une fraction molle de `prompt_budget` (Preview ~7,6k sur ~9,2k n_ctx), ou **juste avant** la compaction overflow.
+3. Afficher la carte Créer | Plus tard **dans ce chat**, pas demain matin. Si l’humain Crée, le reste de la séance (et les suivantes) peut utiliser la skill au lieu de rejouer le long transcript.
+4. Optionnel : injecter un instinct borné pour la fin de ce run même s’il choisit Plus tard — même plafond (petit N, seuil de confiance).
+
+**Secondaire — rattrapage nocturne :** garder le job 02:00–04:00 pour les machines éteintes pendant la pression, et pour un clustering qui n’apparaît qu’après plusieurs séances courtes. Ne pas attendre la nuit si le seuil a déjà été atteint aujourd’hui.
+
+Ne pas lancer un second passage modèle à chaque tour user : ça *provoquerait* l’overflow. Heuristique d’abord ; extract optionnel seulement sur le bord pression/compaction, une fois par session sauf nouveau steer.
+
+**Faire (forme Akasha) :**
+
+- Réutiliser la carte **dans le fil** pour instinct → skill (`skill.pass.create` / Plus tard). Ne jamais écrire `var/skills/` tout seul.
+- Observer les **traces d’agent** et les **corrections / steer**, pas seulement le recouvrement de tokens des messages user (`crates/aos-platform/src/skill_pass.rs`).
+- Borner le nombre d’instincts par tour (petit N, seuil de confiance, portée agent / salon / global — OS mono-utilisateur, pas d’ID git-remote).
+- Garder les observations locales ; un instinct reste du contexte non relu tant que l’humain ne le promeut pas.
+- Décroissance de confiance si contradiction ; prune des instincts périmés.
+
+**Ne pas :**
+
+- Fine-tuner les poids GGUF sous cet ID.
+- Copier les hooks Claude Code / Cursor d’ECC ni `ecc-homunculus`.
+- Vider un texte « appris » non borné dans le prompt système.
+- Traiter les instincts comme des caps ou un substitut à `aos-capkd`.
+- Attendre demain pour proposer une skill dont la preuve est dans le fil live.
+
+À planifier sur un incrément Preview après le travail hôte en cours (memory-v2 / PC), pas comme une gate P6.
 
 ---
 
@@ -110,6 +158,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 - Faire d’une API image/TTS hébergée le chemin par défaut au lieu d’un backend local géré par le Placement → E16 est local-first ; le distant est une option routée plus tard.
 - Mettre un micro always-on / STT / voix 24/7 dans le cœur OS → sibling.
 - Laisser un agent passer de l’argv sd.cpp / Piper brut → schéma d’options fermé (**E19**).
+- Auto-créer des skills ou injecter un texte « appris » non borné depuis les traces → étendre **`skill.pass`** en **E22** (Créer humain, budget de confiance).
 
 ---
 
@@ -118,7 +167,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | Couche | Rôle |
 |--------|------|
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
-| **E1–E20** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC |
+| **E1–E22** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC ; **E22** est prévu pour un incrément Preview ultérieur |
 
 Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9** livrés en **0.10.0**. **E20 decode local** livré en Preview **0.11.0** (P11). Puis fermeture cohort PC + Horizon C / PV.4+.
 

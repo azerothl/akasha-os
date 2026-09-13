@@ -3489,6 +3489,7 @@ async fn invoke_native(
                     "mem.context",
                     &MemContextRequest {
                         session_id: None,
+                        namespace: None,
                         query,
                         k: 5,
                         product_k: 4,
@@ -3499,6 +3500,31 @@ async fn invoke_native(
                 .await
             {
                 Ok(r) => r.prompt_block,
+                Err(e) => format!("err: {e}"),
+            }
+        }
+        service if matches!(
+            service,
+            "mem.object.create"
+                | "mem.object.get"
+                | "mem.object.list"
+                | "mem.object.update"
+                | "mem.object.relate"
+                | "mem.graph.query"
+                | "mem.timeline"
+                | "mem.explain"
+                | "mem.revalidate"
+                | "mem.decision.get"
+                | "mem.narrative.generate"
+                | "mem.mind_palace.query"
+                | "mem.shadow.metrics"
+                | "mem.migration.status"
+        ) => {
+            match bus
+                .call::<serde_json::Value, serde_json::Value>(service, &args, vec![])
+                .await
+            {
+                Ok(value) => serde_json::to_string(&value).unwrap_or_default(),
                 Err(e) => format!("err: {e}"),
             }
         }
@@ -4459,6 +4485,7 @@ async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: u
             "mem.context",
             &MemContextRequest {
                 session_id: None,
+                namespace: None,
                 query: query.to_string(),
                 k,
                 product_k: 4,

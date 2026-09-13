@@ -4,7 +4,7 @@
 //! outil + parse JSON du modèle. La persistance passe par
 //! [`crate::memory::MemoryStore::episodic_write_auto_link`].
 
-use aos_proto::{MemExtractOutcome, MemExtractOutcomeKind, MemExtractedFact};
+use aos_proto::{MemoryDecision, MemoryObjectKind, MemExtractOutcome, MemExtractOutcomeKind, MemExtractedFact};
 
 pub use aos_proto::mem_extract::{
     is_draw_or_canvas_request, is_human_memory_fact, looks_like_ephemeral_fact,
@@ -54,6 +54,8 @@ fn fact_from_value(v: serde_json::Value) -> Option<MemExtractedFact> {
                 Some(MemExtractedFact {
                     text,
                     supersedes_hint: None,
+                    kind: None,
+                    decision: None,
                 })
             }
         }
@@ -67,11 +69,38 @@ fn fact_from_value(v: serde_json::Value) -> Option<MemExtractedFact> {
                 .and_then(|x| x.as_str())
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty());
+            let kind = map
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .and_then(parse_object_kind);
+            let decision = map
+                .get("decision")
+                .cloned()
+                .or_else(|| if kind == Some(MemoryObjectKind::Decision) { Some(serde_json::Value::Object(map.clone())) } else { None })
+                .and_then(|value| serde_json::from_value::<MemoryDecision>(value).ok())
+                .filter(|decision| !decision.question.trim().is_empty());
             Some(MemExtractedFact {
                 text,
                 supersedes_hint,
+                kind,
+                decision,
             })
         }
+        _ => None,
+    }
+}
+
+fn parse_object_kind(value: &str) -> Option<MemoryObjectKind> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "document" => Some(MemoryObjectKind::Document),
+        "event" => Some(MemoryObjectKind::Event),
+        "entity" => Some(MemoryObjectKind::Entity),
+        "claim" => Some(MemoryObjectKind::Claim),
+        "decision" => Some(MemoryObjectKind::Decision),
+        "goal" => Some(MemoryObjectKind::Goal),
+        "problem" => Some(MemoryObjectKind::Problem),
+        "preference" => Some(MemoryObjectKind::Preference),
+        "narrative" => Some(MemoryObjectKind::Narrative),
         _ => None,
     }
 }
@@ -301,6 +330,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_typed_decision() {
+        let raw = r#"{"facts":[{"text":"Choisir Rust pour le moteur","kind":"decision","decision":{"question":"Quel langage ?","options":["Rust","Go"],"selected_option":"Rust","rationale":"Sécurité mémoire","participants":["user"],"consequences":["Développer avec Cargo"]}}]}"#;
+        let facts = parse_extract_json(raw).unwrap();
+        assert_eq!(facts[0].kind, Some(MemoryObjectKind::Decision));
+        assert_eq!(facts[0].decision.as_ref().unwrap().selected_option.as_deref(), Some("Rust"));
+    }
+
+    #[test]
     fn parse_max_five() {
         let facts_json: String = (0..8)
             .map(|i| format!(r#"{{"text":"fait {i}"}}"#))
@@ -329,10 +366,14 @@ mod tests {
             MemExtractedFact {
                 text: "L'utilisateur préfère le français".into(),
                 supersedes_hint: None,
+                kind: None,
+                decision: None,
             },
             MemExtractedFact {
                 text: "api_key sk-abcdefghijklmnopqrstuvwxyz".into(),
                 supersedes_hint: None,
+                kind: None,
+                decision: None,
             },
         ];
         let out = classify_candidates(&facts);
@@ -346,14 +387,20 @@ mod tests {
             MemExtractedFact {
                 text: "L'utilisateur veut dessiner une maison sur le canvas".into(),
                 supersedes_hint: None,
+                kind: None,
+                decision: None,
             },
             MemExtractedFact {
                 text: "L'utilisateur s'appelle Alice".into(),
                 supersedes_hint: None,
+                kind: None,
+                decision: None,
             },
             MemExtractedFact {
                 text: "L'utilisateur aime dessiner à l'aquarelle".into(),
                 supersedes_hint: None,
+                kind: None,
+                decision: None,
             },
         ];
         let out = classify_candidates(&facts);
@@ -367,6 +414,8 @@ mod tests {
         let facts = vec![MemExtractedFact {
             text: "✓ `canvas.stroke` → session".into(),
             supersedes_hint: None,
+            kind: None,
+            decision: None,
         }];
         let out = classify_candidates(&facts);
         assert_eq!(out[0].kind, MemExtractOutcomeKind::FilteredTrace);

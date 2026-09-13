@@ -411,7 +411,7 @@ Exploiter pleinement le GPU/NPU comme citoyen de première classe du scheduler, 
 Ces phases s’empilent **sur** la stack hôte PC. Elles **ne remplacent pas**
 P0–P5 / PV / PC et **ne sont pas** une gate P6. Détail :
 `docs/fr/phases/phase-preview-0n.md`. Catalogue livré : [FEATURES.md](FEATURES.md).
-Priorités : E1–E19 dans [plan-evolutions.md](plan-evolutions.md).
+Priorités : E1–E22 dans [plan-evolutions.md](plan-evolutions.md).
 
 ### P03 — Preview 0.3.0 (E1–E5) — fait
 
@@ -633,6 +633,6 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 - `STATUS.md` — résumé des phases livrées
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
 - `paysage-concurrentiel.md` — enquête OS / runtimes agentiques (août 2026)
-- `plan-evolutions.md` — priorités post-paysage E1–E19 (pas une gate P6)
+- `plan-evolutions.md` — priorités post-paysage E1–E22 (pas une gate P6)
 - `phases/phase-preview-03.md` … `phase-preview-09.md` — plans d’incréments Preview
 - (ADRs publiés) : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1), `adr/0006-license-split.md` (hôte AGPL+CLA vs guest Apache/MIT)

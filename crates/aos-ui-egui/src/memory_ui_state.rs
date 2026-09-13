@@ -1,12 +1,17 @@
 //! Mutable state owned by the Memory panel.
 
-use aos_proto::MemHit;
+use aos_proto::{MemHit, MemMindPalaceResponse, MemoryObject};
 
 #[derive(Debug)]
 pub(crate) struct MemoryUiState {
     pub(crate) query: String,
     pub(crate) note: String,
     pub(crate) hits: Vec<MemHit>,
+    pub(crate) objects: Vec<MemoryObject>,
+    pub(crate) v2_available: bool,
+    pub(crate) palace_namespace: String,
+    pub(crate) palace_project: String,
+    pub(crate) palace: Option<MemMindPalaceResponse>,
     pub(crate) show_superseded: bool,
     pub(crate) sweep_last_pass_ms: u64,
     pub(crate) sweep_last_pass_label: String,
@@ -20,6 +25,11 @@ impl Default for MemoryUiState {
             query: String::new(),
             note: String::new(),
             hits: Vec::new(),
+            objects: Vec::new(),
+            v2_available: false,
+            palace_namespace: String::new(),
+            palace_project: String::new(),
+            palace: None,
             show_superseded: true,
             sweep_last_pass_ms: 0,
             sweep_last_pass_label: String::new(),
@@ -32,6 +42,15 @@ impl Default for MemoryUiState {
 impl MemoryUiState {
     pub(crate) fn set_hits(&mut self, hits: Vec<MemHit>) {
         self.hits = hits;
+    }
+
+    pub(crate) fn set_objects(&mut self, objects: Vec<MemoryObject>) {
+        self.objects = objects;
+        self.v2_available = true;
+    }
+
+    pub(crate) fn set_palace(&mut self, palace: MemMindPalaceResponse) {
+        self.palace = Some(palace);
     }
 
     pub(crate) fn apply_sweep_status(&mut self, last_pass_ms: u64, last_pass_label: String) {
