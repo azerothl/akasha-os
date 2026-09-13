@@ -3502,6 +3502,28 @@ async fn invoke_native(
                 Err(e) => format!("err: {e}"),
             }
         }
+        service if matches!(
+            service,
+            "mem.object.create"
+                | "mem.object.get"
+                | "mem.object.list"
+                | "mem.object.update"
+                | "mem.object.relate"
+                | "mem.graph.query"
+                | "mem.timeline"
+                | "mem.explain"
+                | "mem.revalidate"
+                | "mem.decision.get"
+                | "mem.narrative.generate"
+        ) => {
+            match bus
+                .call::<serde_json::Value, serde_json::Value>(service, &args, vec![])
+                .await
+            {
+                Ok(value) => serde_json::to_string(&value).unwrap_or_default(),
+                Err(e) => format!("err: {e}"),
+            }
+        }
         "web.search" => {
             let query = args
                 .get("query")
