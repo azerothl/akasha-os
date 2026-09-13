@@ -4,6 +4,7 @@ pub mod audit;
 pub mod device;
 pub mod device_usb;
 pub mod fs;
+pub mod health;
 pub mod helpers;
 pub mod host_folder;
 
@@ -17,4 +18,5 @@ pub fn register_audit_and_fs(svc: &mut BusService, sub: &Arc<PlatformSubsystem>)
     device_usb::register(svc, sub.clone());
     host_folder::register(svc, sub.clone());
     fs::register(svc, sub.clone());
+    health::register(svc, sub.clone());
 }

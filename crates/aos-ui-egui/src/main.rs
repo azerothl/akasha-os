@@ -2797,6 +2797,19 @@ impl eframe::App for UiApp {
                 }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
                 Evt::Metrics(m) => self.metrics = Some(m),
+                Evt::Health(h) => {
+                    let prev = self.security_ui.health_canary_was_ok;
+                    if prev == Some(true) && !h.canary_ok {
+                        let fr = self.prefs.language == "fr";
+                        self.push_status(if fr {
+                            "canary: échec".into()
+                        } else {
+                            "canary: failed".into()
+                        });
+                    }
+                    self.security_ui.health_canary_was_ok = Some(h.canary_ok);
+                    self.security_ui.health = Some(h);
+                }
                 Evt::AgentSpawned {
                     session_id,
                     agent_id,

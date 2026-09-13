@@ -13,10 +13,23 @@ correctifs écoute/annonce découverte LAN. Voir 0.17.0 pour l'espace Create enr
 (volet scindé, presets, calques, assist prompt), chrome UI peint (icônes SVG,
 police interface, bande statut/rail/Paramètres), correctifs DeclUI — par-dessus
 l’I/O USB 0.16.2. L’hôte inclut aussi **P18 / E22** instincts en session
-(étend `skill.pass`). Pas un OS bootable. Gate cohorte encore ouverte
+(étend `skill.pass`) et **P19 / E23** plan de santé runtime (canary + SLO/EWMA +
+IF résiduel). Pas un OS bootable. Gate cohorte encore ouverte
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
 **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ; E9
 hard-green après un run 2 GPU documenté.
+
+## P19 — E23 plan de santé runtime — fait
+
+| # | Élément | État |
+|---|---------|------|
+| P19.1 | `HealthSnapshot` + `health.snapshot` / `health.canary` | fait |
+| P19.2 | `notes.delete` + canary `__aos_canary__` | fait |
+| P19.3 | boucle santé platformd (EWMA, canary, Isolation Forest, clusters embed) | fait |
+| P19.4 | surfaces Audit / statut / Dépannage | fait |
+| P19.5 | Docs EN/FR | fait |
+
+Détail : [phases/phase-preview-19.md](phases/phase-preview-19.md).
 
 ## P18 — E22 instincts en session — fait
 

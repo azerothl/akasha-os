@@ -3,7 +3,9 @@
 use crate::cmd::Evt;
 use crate::os_open::aos_home;
 use aos_ipc::BusClient;
-use aos_proto::{AgentInfo, AgentState, FeedbackSubmitRequest, FeedbackSubmitResponse, ModelInfo};
+use aos_proto::{
+    AgentInfo, AgentState, FeedbackSubmitRequest, FeedbackSubmitResponse, HealthSnapshot, ModelInfo,
+};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -140,6 +142,39 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
         Err(e) => {
             findings.push(format!("module.list inaccessible : {e}"));
             svc.push_str(&format!("- module.list ERREUR : {e}\n"));
+        }
+    }
+    match bus
+        .call::<(), HealthSnapshot>("health.snapshot", &(), vec![])
+        .await
+    {
+        Ok(h) => {
+            svc.push_str(&format!(
+                "- health canary : {} · steps {} · SLO breaches {} · anomaly {:.2}{}\n",
+                if h.canary_ok { "ok" } else { "FAILED" },
+                h.steps.len(),
+                h.slo.breaches.len(),
+                h.anomaly.score,
+                if h.anomaly.fitted { "" } else { " (not fitted)" }
+            ));
+            if !h.canary_ok {
+                findings.push("health canary failed".into());
+                for step in h.steps.iter().filter(|s| !s.ok) {
+                    findings.push(format!(
+                        "canary step {} : {}",
+                        step.name,
+                        step.error.as_deref().unwrap_or("failed")
+                    ));
+                }
+            }
+            for b in &h.slo.breaches {
+                findings.push(format!("SLO breach: {b}"));
+            }
+            let _ = evt_tx.send(Evt::Health(h));
+        }
+        Err(e) => {
+            findings.push(format!("health.snapshot inaccessible : {e}"));
+            svc.push_str(&format!("- health.snapshot ERREUR : {e}\n"));
         }
     }
     sections.push(svc);

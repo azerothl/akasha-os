@@ -172,6 +172,14 @@ pub fn upsert_graph_node(
     graph.notes.insert(slug.to_string(), node);
 }
 
+/// Retire un nœud et les arêtes sortantes qui le ciblaient.
+pub fn remove_graph_node(graph: &mut NoteGraph, slug: &str) {
+    graph.notes.remove(slug);
+    for node in graph.notes.values_mut() {
+        node.outgoing.retain(|t| t != slug);
+    }
+}
+
 /// Backlinks : slug → nœuds qui pointent vers lui.
 pub fn incoming_for(graph: &NoteGraph, slug: &str) -> Vec<LinkRef> {
     let mut refs = Vec::new();
@@ -447,5 +455,29 @@ mod tests {
             .find(|h| h["metadata"]["path"] == "/documents/notes/a.md")
             .unwrap();
         assert_eq!(a["id"], 5);
+    }
+
+    #[test]
+    fn remove_graph_node_clears_backlinks() {
+        let mut g = NoteGraph::default();
+        upsert_graph_node(
+            &mut g,
+            "a",
+            "A",
+            "/documents/notes/a.md",
+            &["B".into()],
+            Some(1),
+        );
+        upsert_graph_node(
+            &mut g,
+            "b",
+            "B",
+            "/documents/notes/b.md",
+            &[],
+            Some(2),
+        );
+        remove_graph_node(&mut g, "b");
+        assert!(!g.notes.contains_key("b"));
+        assert!(!g.notes["a"].outgoing.iter().any(|t| t == "b"));
     }
 }

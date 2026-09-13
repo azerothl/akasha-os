@@ -95,6 +95,14 @@ tools:
       type: object
       properties:
         notes: { type: array }
+  - name: notes.delete
+    description: Delete a note (file + memory + graph); idempotent if missing
+    input_schema:
+      type: object
+      properties:
+        title: { type: string }
+        path: { type: string }
+        slug: { type: string }
   - name: notes.read
     description: Read a note by title, path or slug (includes links)
     input_schema:

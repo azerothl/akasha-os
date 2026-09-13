@@ -4,8 +4,8 @@
 //! - Lignes : horodatage, badge acteur, action, cible, détail JSON extensible.
 //! - Marqueurs de trous temporels (arrêt possible, heuristique documentée).
 //! - Intégrité : `audit.verify` (détection d'altération).
-//! - Santé : redémarrages watchdog (`var/run/daemon_restarts.log`, écrit par
-//!   `aos-session`) + queues stderr des daemons.
+//! - Santé : plan E23 (`health.snapshot`) + redémarrages watchdog
+//!   (`var/run/daemon_restarts.log`) + queues stderr des daemons.
 
 use crate::cmd::Cmd;
 use crate::ui_format::{format_local_datetime, local_tz_offset_minutes};
@@ -361,14 +361,105 @@ impl UiApp {
             }
         });
 
-        // Santé : redémarrages watchdog + stderr daemons.
+        // Santé : plan E23 + redémarrages watchdog + stderr daemons.
         egui::CollapsingHeader::new(if fr {
-            "Santé (crashs/redémarrages)"
+            "Santé (runtime)"
         } else {
-            "Health (crashes/restarts)"
+            "Health (runtime)"
         })
-        .default_open(!self.security_ui.audit_restarts.is_empty())
+        .default_open(true)
         .show(ui, |ui| {
+            if let Some(h) = &self.security_ui.health {
+                ui.horizontal(|ui| {
+                    if h.canary_ok {
+                        ui.colored_label(crate::theme::button_colors(ui).success, if fr {
+                            "canary OK"
+                        } else {
+                            "canary OK"
+                        });
+                    } else {
+                        ui.colored_label(crate::theme::button_colors(ui).danger, if fr {
+                            "canary ÉCHEC"
+                        } else {
+                            "canary FAILED"
+                        });
+                    }
+                    if h.at_ms > 0 {
+                        ui.weak(format_local_datetime(h.at_ms, tz));
+                    }
+                });
+                for step in &h.steps {
+                    ui.horizontal(|ui| {
+                        if step.ok {
+                            ui.colored_label(crate::theme::button_colors(ui).success, "·");
+                        } else {
+                            ui.colored_label(crate::theme::button_colors(ui).danger, "!");
+                        }
+                        ui.monospace(format!(
+                            "{} — {:.0} ms{}",
+                            step.name,
+                            step.latency_ms,
+                            step.error
+                                .as_ref()
+                                .map(|e| format!(" — {e}"))
+                                .unwrap_or_default()
+                        ));
+                    });
+                }
+                ui.separator();
+                ui.label(if fr { "SLO (EWMA)" } else { "SLO (EWMA)" });
+                if let Some(ttft) = h.slo.ttft_ewma_ms {
+                    ui.monospace(format!("TTFT EWMA: {ttft:.0} ms (NFR-01 < 2000)"));
+                }
+                if let Some(tok) = h.slo.tok_s_ewma {
+                    ui.monospace(format!("tok/s EWMA: {tok:.2}"));
+                }
+                if let Some(rtt) = h.slo.bus_rtt_ewma_ms {
+                    ui.monospace(format!("bus RTT EWMA: {rtt:.1} ms"));
+                }
+                ui.monospace(format!(
+                    "VRAM unload: {} B · restarts 1h: {}",
+                    h.slo.vram_unloaded_bytes, h.slo.restarts_1h
+                ));
+                for b in &h.slo.breaches {
+                    ui.colored_label(crate::theme::button_colors(ui).warning, format!("breach: {b}"));
+                }
+                if h.anomaly.fitted {
+                    let tone = if h.anomaly.score > h.anomaly.threshold {
+                        crate::theme::button_colors(ui).warning
+                    } else {
+                        crate::theme::button_colors(ui).success
+                    };
+                    ui.colored_label(
+                        tone,
+                        format!(
+                            "anomaly score {:.2} (threshold {:.2})",
+                            h.anomaly.score, h.anomaly.threshold
+                        ),
+                    );
+                    if !h.anomaly.contributing.is_empty() {
+                        ui.weak(format!("contributing: {}", h.anomaly.contributing.join(", ")));
+                    }
+                }
+                if !h.clusters.is_empty() {
+                    ui.separator();
+                    ui.label(if fr {
+                        "Clusters stderr"
+                    } else {
+                        "Stderr clusters"
+                    });
+                    for c in &h.clusters {
+                        ui.monospace(format!("{}×{} — {}", c.count, c.label, c.sample));
+                    }
+                }
+            } else {
+                ui.weak(if fr {
+                    "Pas encore de snapshot health (attente du premier tick)."
+                } else {
+                    "No health snapshot yet (waiting for first tick)."
+                });
+            }
+            ui.separator();
             if self.security_ui.audit_restarts.is_empty() {
                 ui.weak(if fr {
                     "Aucun redémarrage watchdog enregistré."

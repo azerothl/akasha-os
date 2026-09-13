@@ -258,6 +258,7 @@ Single package exposing:
 | F-OBS-02 | Inference and model placement metrics | Must |
 | F-OBS-03 | Administrator view: global policies, quotas, default models | Must |
 | F-OBS-04 | Audit export for external analysis | Should |
+| F-OBS-05 | Runtime health plane: ephemeral canary, SLO/EWMA, residual anomaly score (warning), stderr clusters (`health.snapshot`) | Should |
 
 ---
 

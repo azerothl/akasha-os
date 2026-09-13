@@ -7,7 +7,7 @@
 > Dérivé de : [paysage-concurrentiel.md](paysage-concurrentiel.md)  
 > Lié à : [plan-developpement-phases.md](plan-developpement-phases.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [reflexion-agent-os.md](reflexion-agent-os.md)
 
-Ce document propose des **évolutions produit (E1–E22)** après l’enquête concurrentielle d’août 2026. Il **ne remplace pas** P0–P5 / PV / PC. Fermer d’abord la gate cohort PC ; ensuite planifier le travail E* au-dessus des livrables P5 / PV restants. Les incréments Preview (P03–P09) livrent déjà des E* sur l’hôte sans attendre cette gate cohorte.
+Ce document propose des **évolutions produit (E1–E23)** après l’enquête concurrentielle d’août 2026. Il **ne remplace pas** P0–P5 / PV / PC. Fermer d’abord la gate cohort PC ; ensuite planifier le travail E* au-dessus des livrables P5 / PV restants. Les incréments Preview (P03–P09) livrent déjà des E* sur l’hôte sans attendre cette gate cohorte.
 
 ---
 
@@ -88,6 +88,7 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E20** | **Leviers de decode local** (KV Q8, prefix cache `llama_state_*`, speculative prompt-lookup en C1) | TTFT / tok/s chat+agents sans adopter vLLM | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) ; C1 seulement ; batch N>1 inchangé ; pas de second GGUF draft |
 | **E21** | **Bande passante Placement + ancres sémantiques de préfixe** (inspiré FreeToken, pas une dépendance) | Les papiers MoE/edge insistent sur transfert vs calcul ; les edits d’agent invalident le KV à des offsets arbitraires | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) §E21 ; RAM mesurée + estimations `nvidia-smi`/PCIe dans `hardware.json` → `HardwareProfile` ; préfixe E20 ancré aux marqueurs tour/outil/pensée ; **LRU par expert MoE hors scope** — voir [moe-expert-offload.md](moe-expert-offload.md) |
 | **E22** | **Instincts** — procédures apprises atomiques, confiance, injection bornée, promotion humaine vers skill | Hermes / ECC continuous-learning ; le `skill.pass` Preview ne clusterise que les **demandes utilisateur** en carte skill | **P18** ✅ — [phases/phase-preview-18.md](phases/phase-preview-18.md). Étend le `skill.pass` 0.15 ; **ne le remplace pas**. Voir §E22 ci-dessous. |
+| **E23** | **Plan de santé runtime** — canary éphémère, SLO/EWMA, Isolation Forest résiduel, clusters stderr | Les watchdogs ne voient que la mort de process ; le « vivant mais faux » (AK-001) demande contrats + dérive, sans second GGUF always-on | **P19** ✅ — [phases/phase-preview-19.md](phases/phase-preview-19.md). Voir §E23 ci-dessous. |
 
 ---
 
@@ -138,6 +139,26 @@ Ne pas lancer un second passage modèle à chaque tour user : ça *provoquerait*
 
 ---
 
+## E23 — Plan de santé runtime (P19)
+
+Quatre couches ; **pas de second LLM always-on**. Budget cible &lt; 256 Mio RAM, 0 VRAM extra.
+
+| Couche | Quoi | Juge ? |
+|--------|------|--------|
+| 0 | Watchdogs session existants + healthcheck boot `lookup` | Mort de process / enregistrement d’intent |
+| 1 | Canary éphémère toutes les 5 min (`model.list` / `agent.list` / `module.list` / `mem.stats` / `notes.*` create+delete / tiny infer si idle) | **Oui** — contrats |
+| 2 | SLO EWMA sur TTFT / tok/s / RTT bus / VRAM unload / restarts (15 s) | **Oui** — breaches NFR |
+| 3 | Isolation Forest sur résidus (`extended-isolation-forest`) | **Warning seulement** — ne bascule jamais `canary_ok` |
+| 4 | Clusters cosine stderr via `embedded-embed` déjà chargé | Affichage seulement |
+
+Intents : `health.snapshot`, `health.canary`. UI : onglet Audit + barre de statut + Dépannage. Le healthcheck boot reste lookup-only (pas d’infer au lancement). Baseline invalidée si `VERSION` Preview change.
+
+**Ne pas :** dédier un GGUF critique 1–3B ; traiter l’Isolation Forest comme juge de contrat ; écrire mémoire utilisateur / GitHub depuis le canary.
+
+À planifier sur Preview **P19**. Voir [phases/phase-preview-19.md](phases/phase-preview-19.md).
+
+---
+
 ## Horizon C — Long terme (produit bare-metal)
 
 | ID | Évolution | Motivation |
@@ -159,6 +180,7 @@ Ne pas lancer un second passage modèle à chaque tour user : ça *provoquerait*
 - Mettre un micro always-on / STT / voix 24/7 dans le cœur OS → sibling.
 - Laisser un agent passer de l’argv sd.cpp / Piper brut → schéma d’options fermé (**E19**).
 - Auto-créer des skills ou injecter un texte « appris » non borné depuis les traces → étendre **`skill.pass`** en **E22** (Créer humain, budget de confiance).
+- Faire tourner un second GGUF always-on pour « vérifier que l’app marche » → **E23** canary + EWMA + Isolation Forest résiduel à la place.
 
 ---
 
@@ -167,7 +189,7 @@ Ne pas lancer un second passage modèle à chaque tour user : ça *provoquerait*
 | Couche | Rôle |
 |--------|------|
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
-| **E1–E22** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC ; **E22** est livré en **P18** |
+| **E1–E23** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC ; **E22** est livré en **P18** ; **E23** en **P19** |
 
 Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9** livrés en **0.10.0**. **E20 decode local** livré en Preview **0.11.0** (P11). Puis fermeture cohort PC + Horizon C / PV.4+.
 

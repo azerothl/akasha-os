@@ -1646,10 +1646,10 @@ async fn main() {
                                 match &rep.event {
                                     AgentOutputEvent::Token { text } => {
                                         entry.info.last_output.push_str(text);
-                                        if entry.info.last_output.len() > 4000 {
-                                            let cut = entry.info.last_output.len() - 4000;
-                                            entry.info.last_output.drain(..cut);
-                                        }
+                                        trim_last_output_bytes(
+                                            &mut entry.info.last_output,
+                                            4000,
+                                        );
                                     }
                                     AgentOutputEvent::StateChanged { state } => {
                                         let prev = entry.info.state.clone();
@@ -2851,6 +2851,17 @@ fn agent_done_chat_message(_agent_id: &str, info: &AgentInfo, last_output: &str)
     }
 }
 
+/// Keep the trailing `max_bytes` of `s`, cutting only on a UTF-8 char boundary.
+/// Byte-based `drain(..len-max)` panics mid-grapheme (accents, emoji, CJK).
+/// Uses `ceil` so a mid-char cut removes the whole char and never exceeds `max_bytes`.
+fn trim_last_output_bytes(s: &mut String, max_bytes: usize) {
+    if s.len() <= max_bytes {
+        return;
+    }
+    let cut = s.ceil_char_boundary(s.len() - max_bytes);
+    s.drain(..cut);
+}
+
 fn kill_pid(pid: u32) {
     #[cfg(windows)]
     {
@@ -2868,7 +2879,7 @@ fn kill_pid(pid: u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::unexpected_child_exit_terminal;
+    use super::{trim_last_output_bytes, unexpected_child_exit_terminal};
     use aos_proto::AgentState;
 
     #[test]
@@ -2882,5 +2893,18 @@ mod tests {
         assert_eq!(state, AgentState::Failed);
         assert!(!ok);
         assert_eq!(result, "partial output");
+    }
+
+    #[test]
+    fn trim_last_output_does_not_panic_on_multibyte_boundary() {
+        // "é" is 2 bytes; trailing ASCII makes len()-4000 land mid-character.
+        let mut s = "é".repeat(2000);
+        s.push('x'); // 4001 bytes; excess=1 splits the first "é"
+        let naive = s.len() - 4000;
+        assert!(!s.is_char_boundary(naive));
+        trim_last_output_bytes(&mut s, 4000);
+        assert!(s.len() <= 4000);
+        assert!(!s.is_empty());
+        assert!(s.is_char_boundary(0));
     }
 }

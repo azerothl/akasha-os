@@ -4632,6 +4632,17 @@ async fn main() {
     }
 
     eprintln!("[aos-platformd] prêt");
+    // E23 health plane — SLO + canary; must not block serve.
+    {
+        let home = std::env::var("AOS_HOME").unwrap_or_else(|_| ".".into());
+        let version = std::env::var("AOS_PREVIEW_VERSION")
+            .or_else(|_| std::fs::read_to_string(std::path::Path::new(&home).join("VERSION")))
+            .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into())
+            .trim()
+            .to_string();
+        let rt = aos_platform::health::spawn_health_loop(sub.clone(), home.into(), version);
+        sub.set_health(rt);
+    }
     // One maintenance heartbeat dispatches persistent, once-per-local-day jobs.
     // Each job may be caught up on the next heartbeat after downtime.
     {

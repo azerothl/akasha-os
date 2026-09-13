@@ -92,6 +92,12 @@ pub(crate) async fn runtime_main(
                 {
                     let _ = evt_tx.send(Evt::Metrics(m));
                 }
+                if let Ok(h) = bus
+                    .call::<(), aos_proto::HealthSnapshot>("health.snapshot", &(), vec![])
+                    .await
+                {
+                    let _ = evt_tx.send(Evt::Health(h));
+                }
                 if let Ok(a) = bus
                     .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
                     .await

@@ -7,7 +7,7 @@
 > Derived from: [competitive-landscape.md](competitive-landscape.md)  
 > Relates to: [development-plan.md](development-plan.md), [FEATURES.md](FEATURES.md), [STATUS.md](STATUS.md), [vision.md](vision.md)
 
-This document proposes **product evolutions (E1–E22)** after the August 2026 competitive survey. It does **not** replace P0–P5 / PV / PC. Close the PC cohort gate first; then schedule E* work on top of remaining P5 / PV deliverables. Preview increments (P03–P09) already ship E* on the host without waiting for that cohort gate.
+This document proposes **product evolutions (E1–E23)** after the August 2026 competitive survey. It does **not** replace P0–P5 / PV / PC. Close the PC cohort gate first; then schedule E* work on top of remaining P5 / PV deliverables. Preview increments (P03–P09) already ship E* on the host without waiting for that cohort gate.
 
 ---
 
@@ -88,6 +88,7 @@ E8 schema export + HTTP↔bus contract, E7 OS keyring, E10 signed local catalogu
 | **E20** | **Local decode levers** (KV Q8, `llama_state_*` prefix cache, prompt-lookup speculative on C1) | Chat/agent TTFT + tok/s without adopting vLLM | **Preview 0.11.0** ✅ — [phase-preview-11.md](phases/phase-preview-11.md); C1 only; batch N>1 unchanged; no second draft GGUF |
 | **E21** | **Placement bandwidth + semantic prefix anchors** (FreeToken-inspired, not a dependency) | MoE/edge papers stress transfer vs compute; agent edits invalidate KV at arbitrary tokens | **Preview 0.11.0** ✅ — [phase-preview-11.md](phases/phase-preview-11.md) §E21; measured RAM + `nvidia-smi`/PCIe estimates in `hardware.json` → `HardwareProfile`; E20 prefix snaps to turn/tool/think markers; **MoE per-expert LRU out of scope** — see [moe-expert-offload.md](moe-expert-offload.md) |
 | **E22** | **Instincts** — atomic learned procedures with confidence, scoped injection, human promote-to-skill | Hermes / ECC continuous-learning; Preview `skill.pass` only clusters **user asks** into a full skill card | **P18** ✅ — [phase-preview-18.md](phases/phase-preview-18.md). Extends 0.15 `skill.pass`; does **not** replace it. See §E22 below. |
+| **E23** | **Runtime health plane** — ephemeral canary, SLO/EWMA, Isolation Forest residual, stderr clusters | Watchdogs cover process death only; “alive but wrong” (AK-001) needs contracts + drift signals without a second always-on GGUF | **P19** ✅ — [phase-preview-19.md](phases/phase-preview-19.md). See §E23 below. |
 
 ---
 
@@ -138,6 +139,26 @@ Schedule against Preview **P18** (not a new P6 gate). Host implementation is don
 
 ---
 
+## E23 — Runtime health plane (P19)
+
+Four layers; **no second always-on LLM**. Budget target &lt; 256 MiB RAM, 0 extra VRAM.
+
+| Layer | What | Judge? |
+|-------|------|--------|
+| 0 | Existing session watchdogs + boot `lookup` healthcheck | Process death / intent registration |
+| 1 | Ephemeral canary every 5 min (`model.list` / `agent.list` / `module.list` / `mem.stats` / `notes.*` create+delete / tiny infer if idle) | **Yes** — contracts |
+| 2 | EWMA SLO on TTFT / tok/s / bus RTT / VRAM-unload / restarts (15 s) | **Yes** — NFR breaches |
+| 3 | Isolation Forest on residuals (`extended-isolation-forest`) | **Warning only** — never flips `canary_ok` |
+| 4 | Cosine clusters of stderr via already-loaded `embedded-embed` | Display only |
+
+Intents: `health.snapshot`, `health.canary`. UI: Audit tab + status bar + Troubleshoot. Boot healthcheck stays lookup-only (no infer at launch). Baseline invalidated on Preview `VERSION` change.
+
+**Do not:** dedicate a 1–3B critic GGUF; use Isolation Forest as a contract judge; write user memory / GitHub from the canary.
+
+Schedule against Preview **P19**. See [phase-preview-19.md](phases/phase-preview-19.md).
+
+---
+
 ## Horizon C — Long term (bare-metal product)
 
 | ID | Evolution | Motivation |
@@ -159,6 +180,7 @@ Schedule against Preview **P18** (not a new P6 gate). Host implementation is don
 - Put always-on microphone / STT / 24/7 voice in the OS core → sibling.
 - Let agents pass raw sd.cpp / Piper argv → closed option schema (**E19**).
 - Auto-create skills or inject unbounded “learned” text from session traces → extend **`skill.pass`** as **E22** (human Create, confidence budget).
+- Run a second always-on GGUF to “verify the app works” → **E23** canary + EWMA + residual Isolation Forest instead.
 
 ---
 
@@ -167,7 +189,7 @@ Schedule against Preview **P18** (not a new P6 gate). Host implementation is don
 | Layer | Role |
 |-------|------|
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
-| **E1–E22** | Prioritization after competitive analysis; Preview increments P03–P11 ship E* without waiting for the PC cohort gate; **E22** ships as **P18** |
+| **E1–E23** | Prioritization after competitive analysis; Preview increments P03–P11 ship E* without waiting for the PC cohort gate; **E22** ships as **P18**; **E23** as **P19** |
 
 Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** shipped in Preview **0.10.0** (P10). **E20 local decode** shipped in Preview **0.11.0** (P11). Then PC cohort close + Horizon C / PV.4+ when scheduled.
 

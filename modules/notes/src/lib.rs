@@ -2,7 +2,7 @@
 //! Module « notes » — module de référence double-surface (P2.6).
 //!
 //! Outils exposés aux agents et à l'UI humaine via `module.invoke` :
-//! - `notes.create` / `notes.update` / `notes.list` / `notes.read`
+//! - `notes.create` / `notes.update` / `notes.list` / `notes.read` / `notes.delete`
 //! - `notes.search` / `notes.links` / `notes.related`
 //!
 //! Stockage : markdown sous `/documents/notes/` + graphe `.graph.json`
@@ -12,9 +12,9 @@ mod core;
 
 use core::{
     dedup_hits_by_path, excerpt_of, format_note_file, incoming_for, is_note_path, merge_related,
-    note_path, outgoing_refs, parse_wikilinks, slug_from_path, slugify, split_title_body,
-    upsert_graph_node, walk_neighbors, NoteGraph, NoteSummary, RelatedHit, GRAPH_PATH, MEM_NS,
-    NOTES_DIR,
+    note_path, outgoing_refs, parse_wikilinks, remove_graph_node, slug_from_path, slugify,
+    split_title_body, upsert_graph_node, walk_neighbors, NoteGraph, NoteSummary, RelatedHit,
+    GRAPH_PATH, MEM_NS, NOTES_DIR,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -25,6 +25,7 @@ fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, Str
         "notes.update" => update(args),
         "notes.list" => list(),
         "notes.read" => read(args),
+        "notes.delete" => delete(args),
         "notes.search" => search(args),
         "notes.links" => links(args),
         "notes.related" => related(args),
@@ -150,6 +151,40 @@ fn list() -> Result<serde_json::Value, String> {
     }
     notes.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
     aos_module_sdk::json_ok(&serde_json::json!({ "notes": notes }))
+}
+
+#[derive(Deserialize)]
+struct DeleteArgs {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    slug: Option<String>,
+}
+
+/// Delete a note (file + episodic mem by path + graph node). Idempotent if missing.
+fn delete(args: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let a: DeleteArgs = aos_module_sdk::parse_args(args)?;
+    let (title, path, slug) =
+        resolve_identity(a.title.as_deref(), a.path.as_deref(), a.slug.as_deref())?;
+    let _ = aos_module_sdk::mem_delete_by_path(MEM_NS, &path);
+    let deleted_file = match aos_module_sdk::fs_delete(&path) {
+        Ok(_) => true,
+        Err(e) if e.contains("NotFound") || e.contains("introuvable") || e.contains("not found") => {
+            false
+        }
+        Err(e) => return Err(e),
+    };
+    let mut graph = load_graph().unwrap_or_default();
+    remove_graph_node(&mut graph, &slug);
+    let _ = save_graph(&graph);
+    aos_module_sdk::json_ok(&serde_json::json!({
+        "title": title,
+        "path": path,
+        "slug": slug,
+        "deleted": deleted_file,
+    }))
 }
 
 #[derive(Deserialize)]

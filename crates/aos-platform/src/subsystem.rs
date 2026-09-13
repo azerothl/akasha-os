@@ -152,6 +152,8 @@ pub struct PlatformSubsystem {
     pub supervisor: Arc<crate::supervisor::Supervisor>,
     /// Client bus : forwarding audit → `aos-auditd` et checks → `aos-capkd`.
     bus: Mutex<Option<Arc<aos_ipc::BusClient>>>,
+    /// Runtime health plane (E23) — set after `spawn_health_loop`.
+    pub health: Mutex<Option<Arc<crate::health::HealthRuntime>>>,
     /// Mutex par session pour sérialiser `canvas.apply` (évite interleaving JSON).
     canvas_apply_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// Sessions où un modèle vision lit le canvas en direct (refcount).
@@ -258,6 +260,7 @@ impl PlatformSubsystem {
             granted_caps: Mutex::new(std::collections::HashMap::new()),
             supervisor: crate::supervisor::Supervisor::new(),
             bus: Mutex::new(None),
+            health: Mutex::new(None),
             canvas_apply_locks: Mutex::new(HashMap::new()),
             canvas_seeing: Mutex::new(HashMap::new()),
             extra_catalogue: Mutex::new(extra),
@@ -280,6 +283,14 @@ impl PlatformSubsystem {
 
     pub fn bus(&self) -> Option<Arc<aos_ipc::BusClient>> {
         self.bus.lock().unwrap().clone()
+    }
+
+    pub fn set_health(&self, rt: Arc<crate::health::HealthRuntime>) {
+        *self.health.lock().unwrap() = Some(rt);
+    }
+
+    pub fn health(&self) -> Option<Arc<crate::health::HealthRuntime>> {
+        self.health.lock().unwrap().clone()
     }
 
     /// Bundled + opt-in extra catalogue for Settings / `module.catalogue`.
@@ -635,6 +646,25 @@ impl HostServices for PlatformSubsystem {
                 let prefix = args["prefix"].as_str().unwrap_or("/");
                 let entries = self.fs.lock().unwrap().list(prefix, &ctx.granted_caps);
                 Ok(serde_json::json!({"entries": entries}))
+            }
+            "fs.delete" => {
+                let path = args["path"].as_str().unwrap_or("");
+                // Same cap as writes — StorageFs::delete checks fs.write.
+                Self::require_cap(ctx, "fs.write", path)?;
+                let version = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .delete(path, &format!("module:{}", ctx.module), &ctx.granted_caps)
+                    .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "fs.delete".into(),
+                    target: path.into(),
+                    detail: serde_json::json!({"on_behalf_of": ctx.actor, "version": version}),
+                });
+                Ok(serde_json::json!({"version": version}))
             }
             "mem.episodic_write" => {
                 let ns = args["namespace"].as_str().unwrap_or("");

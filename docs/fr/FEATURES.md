@@ -426,6 +426,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Domaine | Contenu |
 |---------|---------|
 | Audit | Journal append-only hashé ; onglet Audit ; tuer `aos-auditd` → le superviseur le relance |
+| Santé runtime (E23) | Canary éphémère + SLO/EWMA + warning d'anomalie résiduelle + clusters stderr (`health.snapshot`) ; panneau Santé Audit ; le Dépannage consomme le même snapshot |
 | Caps | Onglet Caps : `cap.list` par détenteur ; révocation (audité) |
 | Confirmation | Bandeau bloquant pour les actions sensibles ; timeout = refus (fail-closed) |
 | Retour | Copie locale `var/feedback/` + issue GitHub optionnelle (security reste local) |

@@ -1449,7 +1449,7 @@ Audit.append(infer_started/finished)
 | Modules and applications | F-MOD-01 → 06 | §7 Module system (7.1 Components/Registry, 7.2 Format, 7.3 Manifesto, 7.4 Sandbox), §11.4 Module API | Covered |
 | User interface | F-UI-01 → 08 | §8 UI subsystem (8.1 Components, 8.2 Perf constraints, 8.3 Accessibility) | Covered |
 | Security / privacy / trust | F-SEC-01 → 08 | §9 Security (9.1 Trust boundaries, 9.2 Secrets, 9.3 Audit, 9.4 Policies + confirmation, 9.5 Network Egress) | Covered |
-| Observability / administration | F-OBS-01 → 04 | §9.3 Audit, §11.5 API Admin, §13 Metrics, Metrics Exporter (§3.1) | Covered |
+| Observability / administration | F-OBS-01 → 05 | §9.3 Audit, §11.5 API Admin, §13 Metrics, Metrics Exporter (§3.1), E23 `health.*` | Covered |
 | NFR (performance, reliability, scalability, security, privacy, UX, extensibility, observability, portability) | NFR-01 → 10 | §13 Metrics and SLO, §14 Stack (portability note), §7.4 Sandbox (NFR-05), §9.4/9.5 (NFR-06) | Covered |
 
 ### Assumed deviations (outside v1 scope, voluntarily not covered technically)

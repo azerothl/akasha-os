@@ -1179,6 +1179,9 @@ pub fn probe_args_for_tool(tool: &str) -> serde_json::Value {
             "query": "__probe__"
         }),
         "notes.list" => serde_json::json!({}),
+        "notes.delete" => serde_json::json!({
+            "title": "__probe__"
+        }),
         "tasks.list" => serde_json::json!({}),
         "tasks.create" => serde_json::json!({"title": ""}),
         "tasks.update" | "tasks.complete" => serde_json::json!({"id": "__probe_nonexistent__"}),
@@ -2065,6 +2068,7 @@ min_os_api: 1
                     "fs.read" => Ok(serde_json::json!({"content": ""})),
                     "fs.write" => Ok(serde_json::json!({"version": 1u64})),
                     "fs.list" => Ok(serde_json::json!({"entries": []})),
+                    "fs.delete" => Ok(serde_json::json!({"version": 1u64})),
                     "mem.episodic_write" => Ok(serde_json::json!({"id": 1u64})),
                     "mem.episodic_query" => Ok(serde_json::json!({"hits": []})),
                     "mem.episodic_delete" => Ok(serde_json::json!({"count": 0})),
@@ -2093,6 +2097,7 @@ min_os_api: 1
             "notes.create",
             "notes.list",
             "notes.read",
+            "notes.delete",
             "notes.search",
             "notes.update",
             "notes.links",

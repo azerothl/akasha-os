@@ -935,6 +935,119 @@ impl SystemMetrics {
 }
 
 // ---------------------------------------------------------------------------
+// Health plane (E23 / F-OBS runtime) — `health.snapshot`, `health.canary`
+// ---------------------------------------------------------------------------
+
+/// One step of the ephemeral canary walk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCanaryStep {
+    pub name: String,
+    pub ok: bool,
+    pub latency_ms: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Rolling SLO / EWMA surface (NFR-01 TTFT, bus RTT, VRAM unload, restarts).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HealthSlo {
+    #[serde(default)]
+    pub ttft_ewma_ms: Option<f64>,
+    #[serde(default)]
+    pub tok_s_ewma: Option<f64>,
+    #[serde(default)]
+    pub bus_rtt_ewma_ms: Option<f64>,
+    #[serde(default)]
+    pub vram_unloaded_bytes: u64,
+    #[serde(default)]
+    pub restarts_1h: u32,
+    #[serde(default)]
+    pub breaches: Vec<String>,
+}
+
+/// Isolation Forest residual score — warning only, never overrides canary_ok.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HealthAnomaly {
+    #[serde(default)]
+    pub score: f64,
+    #[serde(default)]
+    pub threshold: f64,
+    #[serde(default)]
+    pub fitted: bool,
+    #[serde(default)]
+    pub contributing: Vec<String>,
+}
+
+/// Cosine cluster of recent stderr / restart lines (reuses embedded-embed).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCluster {
+    pub label: String,
+    pub count: u32,
+    pub sample: String,
+}
+
+/// Aggregated runtime health (`health.snapshot` / `health.canary`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HealthSnapshot {
+    #[serde(default)]
+    pub at_ms: u64,
+    #[serde(default)]
+    pub canary_ok: bool,
+    #[serde(default)]
+    pub steps: Vec<HealthCanaryStep>,
+    #[serde(default)]
+    pub slo: HealthSlo,
+    #[serde(default)]
+    pub anomaly: HealthAnomaly,
+    #[serde(default)]
+    pub clusters: Vec<HealthCluster>,
+}
+
+#[cfg(test)]
+mod health_snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn health_snapshot_roundtrip() {
+        let snap = HealthSnapshot {
+            at_ms: 42,
+            canary_ok: true,
+            steps: vec![HealthCanaryStep {
+                name: "model.list".into(),
+                ok: true,
+                latency_ms: 12.5,
+                error: None,
+            }],
+            slo: HealthSlo {
+                ttft_ewma_ms: Some(80.0),
+                tok_s_ewma: Some(40.0),
+                bus_rtt_ewma_ms: Some(3.0),
+                vram_unloaded_bytes: 0,
+                restarts_1h: 0,
+                breaches: vec![],
+            },
+            anomaly: HealthAnomaly {
+                score: 0.2,
+                threshold: 0.55,
+                fitted: true,
+                contributing: vec![],
+            },
+            clusters: vec![HealthCluster {
+                label: "cluster-0".into(),
+                count: 2,
+                sample: "restart:aos-modeld".into(),
+            }],
+        };
+        let bytes = serde_json::to_vec(&snap).expect("ser");
+        let back: HealthSnapshot = serde_json::from_slice(&bytes).expect("de");
+        assert_eq!(back.at_ms, 42);
+        assert!(back.canary_ok);
+        assert_eq!(back.steps.len(), 1);
+        assert_eq!(back.clusters[0].count, 2);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Agent API (§11.2)
 // ---------------------------------------------------------------------------
 

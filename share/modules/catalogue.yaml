@@ -6,7 +6,7 @@ entries:
     version: "1.1.0"
     kind: module
     path: share/modules/notes.aospkg
-    hash: sha256:c8a79724177c586e1cd8b23631f950f28f24d5e6a4ab25c3b46df39abee79205
+    hash: sha256:7e6fd20eb4036bc264d59e81f48343785506bdc3e9d612c33d40d38f29c902ca
     attested_caps:
       - fs.read:/documents/notes/**
       - fs.write:/documents/notes/**

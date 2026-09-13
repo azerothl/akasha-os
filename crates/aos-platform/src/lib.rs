@@ -21,6 +21,7 @@ mod device_usb_host;
 pub mod extract;
 pub mod feedback;
 pub mod files_gen;
+pub mod health;
 pub mod host_folder;
 pub mod intents;
 pub mod maintenance;
