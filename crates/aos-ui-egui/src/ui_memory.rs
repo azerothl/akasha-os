@@ -85,6 +85,52 @@ impl UiApp {
                 }
             });
         }
+        if self.memory_ui.v2_available {
+            ui.separator();
+            ui.heading(t.memory_decision_log);
+            let decisions: Vec<_> = self
+                .memory_ui
+                .objects
+                .iter()
+                .filter(|object| {
+                    matches!(&object.kind, aos_proto::MemoryObjectKind::Decision)
+                })
+                .take(32)
+                .collect();
+            if decisions.is_empty() {
+                ui.weak(t.memory_decision_empty);
+            }
+            for object in decisions {
+                ui.horizontal_wrapped(|ui| {
+                    let label = if object.title.trim().is_empty() {
+                        object.content.trim()
+                    } else {
+                        object.title.trim()
+                    };
+                    ui.strong(label);
+                    ui.weak(format!(
+                        "#{} · {:?} · {} · {}",
+                        object.id,
+                        object.status,
+                        t.memory_decision_confidence
+                            .replace("{:.0}", &format!("{:.0}", object.confidence * 100.0)),
+                        t.memory_decision_sources
+                            .replace("{}", &object.source_refs.len().to_string())
+                    ));
+                });
+                if let Some(decision) = object.decision.as_ref() {
+                    if let Some(selected) = decision.selected_option.as_deref() {
+                        ui.label(t.memory_decision_selected.replace("{}", selected));
+                    }
+                    if let Some(rationale) = decision.rationale.as_deref() {
+                        if !rationale.trim().is_empty() {
+                            ui.weak(t.memory_decision_rationale.replace("{}", rationale.trim()));
+                        }
+                    }
+                }
+                ui.add_space(6.0);
+            }
+        }
         ui.separator();
         let mut edit_req: Option<(u64, String)> = None;
         let mut delete_id: Option<u64> = None;

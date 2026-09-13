@@ -37,7 +37,8 @@ use aos_proto::{
     LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse, LoadRequest, LoadResponse,
     McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse, MediaImageGenerateRequest,
     MediaImageUpscaleRequest, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
-    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemRememberResponse,
+    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemObjectListRequest,
+    MemRememberResponse, MemoryObject,
     MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
     MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest, NetFetchRequest, NetFetchResponse,
@@ -123,6 +124,25 @@ pub(crate) async fn runtime_main(
             handle_cmd(bus, evt_tx, egui_ctx.clone(), cmd).await;
             egui_ctx.request_repaint();
         });
+    }
+}
+
+async fn refresh_memory_objects(bus: &BusClient, evt_tx: &Sender<Evt>) {
+    let result = bus
+        .call::<MemObjectListRequest, Vec<MemoryObject>>(
+            "mem.object.list",
+            &MemObjectListRequest {
+                namespace: Some("user:default".into()),
+                kind: None,
+                status: None,
+                limit: 128,
+                include_archived: false,
+            },
+            vec![],
+        )
+        .await;
+    if let Ok(objects) = result {
+        let _ = evt_tx.send(Evt::MemObjects(objects));
     }
 }
 
@@ -779,6 +799,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     {
                         let _ = evt_tx.send(Evt::MemHits(hits));
                     }
+                    refresh_memory_objects(&bus, &evt_tx).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -799,6 +820,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             {
                 Ok(hits) => {
                     let _ = evt_tx.send(Evt::MemHits(hits));
+                    refresh_memory_objects(&bus, &evt_tx).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -918,6 +940,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     {
                         let _ = evt_tx.send(Evt::MemHits(hits));
                     }
+                    refresh_memory_objects(&bus, &evt_tx).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -939,6 +962,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 Ok(n) => {
                     let _ = evt_tx.send(Evt::Status(format!("mémoire utilisateur effacée ({n})")));
                     let _ = evt_tx.send(Evt::MemHits(Vec::new()));
+                    refresh_memory_objects(&bus, &evt_tx).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -978,6 +1002,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     {
                         let _ = evt_tx.send(Evt::MemHits(hits));
                     }
+                    refresh_memory_objects(&bus, &evt_tx).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
@@ -1014,6 +1039,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     {
                         let _ = evt_tx.send(Evt::MemHits(hits));
                     }
+                    refresh_memory_objects(&bus, &evt_tx).await;
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));

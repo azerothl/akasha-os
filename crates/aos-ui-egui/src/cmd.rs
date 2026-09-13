@@ -664,6 +664,7 @@ pub(crate) enum Evt {
         session_id: String,
     },
     MemHits(Vec<MemHit>),
+    MemObjects(Vec<aos_proto::MemoryObject>),
     MemExtracted {
         n: usize,
     },
