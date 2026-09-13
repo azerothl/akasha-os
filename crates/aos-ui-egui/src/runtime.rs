@@ -38,7 +38,7 @@ use aos_proto::{
     McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse, MediaImageGenerateRequest,
     MediaImageUpscaleRequest, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
     MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemObjectListRequest,
-    MemRememberResponse, MemoryObject,
+    MemMindPalaceRequest, MemMindPalaceResponse, MemRememberResponse, MemoryObject,
     MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
     MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest, NetFetchRequest, NetFetchResponse,
@@ -821,6 +821,28 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 Ok(hits) => {
                     let _ = evt_tx.send(Evt::MemHits(hits));
                     refresh_memory_objects(&bus, &evt_tx).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::MemMindPalace { namespace, root_id } => {
+            let request = MemMindPalaceRequest {
+                namespace: namespace.filter(|value| !value.trim().is_empty()),
+                root_id,
+                limit: 64,
+            };
+            match bus
+                .call::<MemMindPalaceRequest, MemMindPalaceResponse>(
+                    "mem.mind_palace.query",
+                    &request,
+                    vec![],
+                )
+                .await
+            {
+                Ok(palace) => {
+                    let _ = evt_tx.send(Evt::MemPalace(palace));
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));

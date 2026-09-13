@@ -74,6 +74,10 @@ pub(crate) enum Cmd {
     MemList {
         include_superseded: bool,
     },
+    MemMindPalace {
+        namespace: Option<String>,
+        root_id: Option<u64>,
+    },
     MemSweepStatus,
     MemDelete {
         id: u64,
@@ -665,6 +669,7 @@ pub(crate) enum Evt {
     },
     MemHits(Vec<MemHit>),
     MemObjects(Vec<aos_proto::MemoryObject>),
+    MemPalace(aos_proto::MemMindPalaceResponse),
     MemExtracted {
         n: usize,
     },

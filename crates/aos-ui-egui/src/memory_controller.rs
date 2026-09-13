@@ -2,7 +2,7 @@
 
 use crate::cmd::Cmd;
 use crate::{i18n, UiApp};
-use aos_proto::{MemHit, MemoryObject};
+use aos_proto::{MemHit, MemMindPalaceResponse, MemoryObject};
 
 impl UiApp {
     pub(crate) fn on_mem_hits(&mut self, hits: Vec<MemHit>) {
@@ -11,6 +11,10 @@ impl UiApp {
 
     pub(crate) fn on_mem_objects(&mut self, objects: Vec<MemoryObject>) {
         self.memory_ui.set_objects(objects);
+    }
+
+    pub(crate) fn on_mem_palace(&mut self, palace: MemMindPalaceResponse) {
+        self.memory_ui.set_palace(palace);
     }
 
     pub(crate) fn on_mem_sweep_status(&mut self, last_pass_ms: u64, last_pass_label: String) {

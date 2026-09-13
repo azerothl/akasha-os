@@ -2930,6 +2930,7 @@ impl eframe::App for UiApp {
                 }
                 Evt::MemHits(h) => self.on_mem_hits(h),
                 Evt::MemObjects(objects) => self.on_mem_objects(objects),
+                Evt::MemPalace(palace) => self.on_mem_palace(palace),
                 Evt::SecretList { names, encrypted } => {
                     self.on_secret_list(names, encrypted);
                 }
