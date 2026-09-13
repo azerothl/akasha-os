@@ -450,7 +450,7 @@ impl MemoryStore {
             let _ = writeln!(f, "{}", serde_json::to_string(&entry).unwrap_or_default());
         }
         self.episodic.insert(id, entry);
-        if self.v2_enabled {
+        if self.v2_enabled || self.shadow_enabled {
             let _ = self.sync_legacy_object(id);
         }
         id
