@@ -2277,6 +2277,66 @@ pub struct MemNarrativeRequest {
     pub persist: bool,
 }
 
+/// Aggregated comparison metrics collected while Memory V2 runs in shadow mode.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct MemShadowMetrics {
+    #[serde(default)]
+    pub comparisons: u64,
+    #[serde(default)]
+    pub v1_hits: u64,
+    #[serde(default)]
+    pub v2_hits: u64,
+    #[serde(default)]
+    pub overlap_hits: u64,
+    #[serde(default)]
+    pub total_v1_latency_us: u64,
+    #[serde(default)]
+    pub total_v2_latency_us: u64,
+    #[serde(default)]
+    pub last_comparison_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemShadowComparison {
+    pub v1_ids: Vec<u64>,
+    pub v2_ids: Vec<u64>,
+    pub overlap_ids: Vec<u64>,
+    pub v1_latency_us: u64,
+    pub v2_latency_us: u64,
+    pub metrics: MemShadowMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemMigrationReport {
+    pub legacy_objects: usize,
+    pub v2_objects: usize,
+    pub migrated_objects: usize,
+    pub legacy_relations: usize,
+    pub v2_relations: usize,
+    pub projection_ready: bool,
+    #[serde(default)]
+    pub sample_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemMindPalaceRequest {
+    #[serde(default)]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub root_id: Option<u64>,
+    #[serde(default = "default_mind_palace_limit")]
+    pub limit: usize,
+}
+
+fn default_mind_palace_limit() -> usize { 64 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemMindPalaceResponse {
+    pub objects: Vec<MemoryObject>,
+    pub relations: Vec<MemoryRelationV2>,
+    pub truncated: bool,
+}
+
 /// `mem.working_set` / `mem.working_get`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemWorkingRequest {
@@ -5702,6 +5762,9 @@ pub struct MemContextResponse {
     pub object_relations: Vec<MemoryRelationV2>,
     #[serde(default)]
     pub memory_warnings: Vec<String>,
+    /// V1/V2 comparison when shadow mode is enabled; absent in normal mode.
+    #[serde(default)]
+    pub shadow: Option<MemShadowComparison>,
 }
 
 /// User document library — list manifest entries.

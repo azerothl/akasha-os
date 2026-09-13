@@ -164,6 +164,27 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec!["mem.query:*".into()],
         },
         ToolDesc {
+            name: "mem.mind_palace.query".into(),
+            description: "Naviguer dans les objets cognitifs par projet et relations".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{"namespace":{"type":"string"},"root_id":{"type":"integer"},"limit":{"type":"integer"}}}),
+            backend: ToolBackend::Native,
+            required_caps: vec!["mem.query:*".into()],
+        },
+        ToolDesc {
+            name: "mem.shadow.metrics".into(),
+            description: "Lire les métriques de comparaison Memory V1/V2".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{}}),
+            backend: ToolBackend::Native,
+            required_caps: vec!["mem.query:*".into()],
+        },
+        ToolDesc {
+            name: "mem.migration.status".into(),
+            description: "Vérifier l'état de migration des projections Memory V2".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{}}),
+            backend: ToolBackend::Native,
+            required_caps: vec!["mem.query:*".into()],
+        },
+        ToolDesc {
             name: "web.search".into(),
             description: "Recherche web (auto: Brave→SearXNG→DDG→Bing)".into(),
             input_schema: serde_json::json!({

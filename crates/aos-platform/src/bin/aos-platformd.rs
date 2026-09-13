@@ -394,8 +394,8 @@ async fn main() {
                         } else {
                             req.user_doc_k
                         };
-                        let (session_hits, user_hits, product_hits, user_doc_hits, objects, object_relations, memory_warnings) = {
-                            let mem = s.mem.lock().unwrap();
+                        let (session_hits, user_hits, product_hits, user_doc_hits, objects, object_relations, memory_warnings, shadow) = {
+                            let mut mem = s.mem.lock().unwrap();
                             let session_hits = if let Some(ref ns) = sess_ns {
                                 mem.episodic_query(&emb, req.k, Some(ns))
                             } else {
@@ -406,6 +406,11 @@ async fn main() {
                                 aos_platform::product_rag::recall(&mem, &emb, product_k);
                             let user_doc_hits =
                                 aos_platform::user_docs::recall(&mem, &emb, user_doc_k);
+                            let shadow = if mem.memory_v2_shadow_enabled() {
+                                Some(mem.shadow_compare(&emb, req.k, None))
+                            } else {
+                                None
+                            };
                             let objects = if mem.memory_v2_enabled() {
                                 mem.object_query(&emb, req.k, None)
                             } else {
@@ -422,7 +427,7 @@ async fn main() {
                                 .filter(|object| object.temporal.valid_to.is_some_and(|to| to < now))
                                 .map(|object| format!("objet mémoire {} expiré ou à revalider", object.id))
                                 .collect();
-                            (session_hits, user_hits, product_hits, user_doc_hits, objects, object_relations, memory_warnings)
+                            (session_hits, user_hits, product_hits, user_doc_hits, objects, object_relations, memory_warnings, shadow)
                         };
                         let mut prompt_block = String::new();
                         let product_block =
@@ -477,6 +482,7 @@ async fn main() {
                                     objects,
                                     object_relations,
                                     memory_warnings,
+                                    shadow,
                                 },
                             )
                             .await;
@@ -1258,6 +1264,59 @@ async fn main() {
                             Ok(object) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &object).await; }
                             Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
                         }
+                    }
+                    Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.shadow.metrics", move |ctx| {
+            let s = s.clone();
+            async move {
+                let metrics = {
+                    let mem = s.mem.lock().unwrap();
+                    mem.memory_v2_shadow_enabled().then(|| mem.shadow_metrics())
+                };
+                let Some(metrics) = metrics else {
+                    let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 shadow désactivé (AOS_MEMORY_V2_SHADOW=1)").await;
+                    return;
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &metrics).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.migration.status", move |ctx| {
+            let s = s.clone();
+            async move {
+                let report = {
+                    let mem = s.mem.lock().unwrap();
+                    (mem.memory_v2_enabled() || mem.memory_v2_shadow_enabled()).then(|| mem.migration_report())
+                };
+                let Some(report) = report else {
+                    let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1 ou AOS_MEMORY_V2_SHADOW=1)").await;
+                    return;
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &report).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("mem.mind_palace.query", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<MemMindPalaceRequest>() {
+                    Ok(req) => {
+                        if !s.mem.lock().unwrap().memory_v2_enabled() {
+                            let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "Memory V2 désactivée (AOS_MEMORY_V2=1)").await;
+                            return;
+                        }
+                        let response = s.mem.lock().unwrap().mind_palace_query(&req);
+                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &response).await;
                     }
                     Err(_) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await; }
                 }

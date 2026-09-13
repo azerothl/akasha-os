@@ -16,9 +16,11 @@
 //! peuvent étendre d'un hop `similar`.
 
 use aos_proto::{
-    MemExplainRequest, MemGraphResponse, MemGraphQueryRequest, MemNarrativeRequest,
+    MemExplainRequest, MemGraphResponse, MemGraphQueryRequest, MemMindPalaceRequest,
+    MemMindPalaceResponse, MemMigrationReport, MemNarrativeRequest,
     MemObjectCreateRequest, MemObjectListRequest, MemObjectUpdateRequest, MemRevalidateRequest,
-    MemTimelineRequest, MemTimelineResponse, MemoryObject, MemoryObjectKind, MemoryObjectStatus,
+    MemShadowComparison, MemShadowMetrics, MemTimelineRequest, MemTimelineResponse, MemoryObject,
+    MemoryObjectKind, MemoryObjectStatus,
     MemoryRelationKind, MemoryRelationV2, MemorySourceRef, MemExplanation, MemHit, MemRelation,
     MemRelationKind,
 };
@@ -158,6 +160,9 @@ pub struct MemoryStore {
     relations_v2: Vec<MemoryRelationV2>,
     /// Runtime rollout switch. Set `AOS_MEMORY_V2=1` to expose V2 bus APIs.
     v2_enabled: bool,
+    /// Shadow rollout switch. Builds and compares V2 without changing reads.
+    shadow_enabled: bool,
+    shadow_metrics: MemShadowMetrics,
     next_id: u64,
 }
 
@@ -167,6 +172,14 @@ impl MemoryStore {
     }
 
     pub fn open_with_v2(dir: impl AsRef<Path>, v2_enabled: bool) -> std::io::Result<Self> {
+        Self::open_with_modes(dir, v2_enabled, false)
+    }
+
+    pub fn open_with_modes(
+        dir: impl AsRef<Path>,
+        v2_enabled: bool,
+        shadow_enabled: bool,
+    ) -> std::io::Result<Self> {
         let dir = dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&dir)?;
         let mut store = Self {
@@ -179,6 +192,8 @@ impl MemoryStore {
             objects: HashMap::new(),
             relations_v2: Vec::new(),
             v2_enabled,
+            shadow_enabled,
+            shadow_metrics: MemShadowMetrics::default(),
             next_id: 1,
         };
         store.replay()?;
@@ -186,7 +201,8 @@ impl MemoryStore {
         store.replay_objects()?;
         store.replay_relations_v2()?;
         store.replay_shared()?;
-        if store.v2_enabled {
+        store.replay_shadow_metrics()?;
+        if store.v2_enabled || store.shadow_enabled {
             store.migrate_legacy_objects()?;
         }
         Ok(store)
@@ -214,6 +230,10 @@ impl MemoryStore {
 
     fn shared_path(&self) -> PathBuf {
         self.dir.join("shared.json")
+    }
+
+    fn shadow_metrics_path(&self) -> PathBuf {
+        self.dir.join("shadow-metrics.json")
     }
 
     fn replay(&mut self) -> std::io::Result<()> {
@@ -297,6 +317,16 @@ impl MemoryStore {
                 &std::fs::read_to_string(path)?,
             ) {
                 self.shared = value;
+            }
+        }
+        Ok(())
+    }
+
+    fn replay_shadow_metrics(&mut self) -> std::io::Result<()> {
+        let path = self.shadow_metrics_path();
+        if path.exists() {
+            if let Ok(metrics) = serde_json::from_str(&std::fs::read_to_string(path)?) {
+                self.shadow_metrics = metrics;
             }
         }
         Ok(())
@@ -774,6 +804,74 @@ impl MemoryStore {
         self.v2_enabled
     }
 
+    pub fn memory_v2_shadow_enabled(&self) -> bool {
+        self.shadow_enabled
+    }
+
+    pub fn shadow_metrics(&self) -> MemShadowMetrics {
+        self.shadow_metrics.clone()
+    }
+
+    fn persist_shadow_metrics(&self) {
+        if let Ok(value) = serde_json::to_vec_pretty(&self.shadow_metrics) {
+            let tmp = self.shadow_metrics_path().with_extension("json.tmp");
+            if std::fs::write(&tmp, value).is_ok() {
+                let _ = std::fs::rename(tmp, self.shadow_metrics_path());
+            }
+        }
+    }
+
+    /// Compare legacy and V2 retrieval while leaving the active V1 result untouched.
+    pub fn shadow_compare(
+        &mut self,
+        query_vector: &[f32],
+        k: usize,
+        namespace: Option<&str>,
+    ) -> MemShadowComparison {
+        let v1_start = std::time::Instant::now();
+        let v1 = self.episodic_query(query_vector, k, namespace);
+        let v1_latency_us = v1_start.elapsed().as_micros() as u64;
+        let v2_start = std::time::Instant::now();
+        let v2 = self.object_query(query_vector, k, namespace);
+        let v2_latency_us = v2_start.elapsed().as_micros() as u64;
+        let v1_ids: Vec<u64> = v1.iter().map(|hit| hit.id).collect();
+        let v2_ids: Vec<u64> = v2.iter().map(|object| object.id).collect();
+        let overlap_ids: Vec<u64> = v1_ids
+            .iter()
+            .copied()
+            .filter(|id| v2_ids.contains(id))
+            .collect();
+        self.shadow_metrics.comparisons += 1;
+        self.shadow_metrics.v1_hits += v1_ids.len() as u64;
+        self.shadow_metrics.v2_hits += v2_ids.len() as u64;
+        self.shadow_metrics.overlap_hits += overlap_ids.len() as u64;
+        self.shadow_metrics.total_v1_latency_us += v1_latency_us;
+        self.shadow_metrics.total_v2_latency_us += v2_latency_us;
+        self.shadow_metrics.last_comparison_at = Some(now_ms());
+        self.persist_shadow_metrics();
+        MemShadowComparison { v1_ids, v2_ids, overlap_ids, v1_latency_us, v2_latency_us, metrics: self.shadow_metrics.clone() }
+    }
+
+    pub fn migration_report(&self) -> MemMigrationReport {
+        let mut sample_ids: Vec<u64> = self
+            .episodic
+            .keys()
+            .filter(|id| self.objects.contains_key(id))
+            .copied()
+            .collect();
+        sample_ids.sort_unstable();
+        sample_ids.truncate(16);
+        MemMigrationReport {
+            legacy_objects: self.episodic.len(),
+            v2_objects: self.objects.len(),
+            migrated_objects: self.episodic.keys().filter(|id| self.objects.contains_key(id)).count(),
+            legacy_relations: self.relations.len(),
+            v2_relations: self.relations_v2.len(),
+            projection_ready: self.episodic.keys().all(|id| self.objects.contains_key(id)),
+            sample_ids,
+        }
+    }
+
     fn persist_object(&self, object: &MemoryObject) -> std::io::Result<()> {
         use std::io::Write;
         let mut f = std::fs::OpenOptions::new()
@@ -1056,6 +1154,42 @@ impl MemoryStore {
             .cloned()
             .take(256)
             .collect()
+    }
+
+    /// Bounded cognitive navigation: a namespace view or a root object plus one hop.
+    pub fn mind_palace_query(&self, req: &MemMindPalaceRequest) -> MemMindPalaceResponse {
+        let limit = req.limit.clamp(1, 128);
+        let mut ids = HashSet::new();
+        if let Some(root_id) = req.root_id {
+            ids.insert(root_id);
+            for relation in &self.relations_v2 {
+                if relation.from == root_id {
+                    ids.insert(relation.to);
+                } else if relation.to == root_id {
+                    ids.insert(relation.from);
+                }
+            }
+        }
+        let mut objects: Vec<MemoryObject> = self
+            .objects
+            .values()
+            .filter(|object| req.namespace.as_deref().map_or(true, |ns| object.namespace == ns))
+            .filter(|object| ids.is_empty() || ids.contains(&object.id))
+            .filter(|object| !matches!(object.status, MemoryObjectStatus::Rejected | MemoryObjectStatus::Archived))
+            .cloned()
+            .collect();
+        objects.sort_by(|a, b| b.importance.partial_cmp(&a.importance).unwrap_or(std::cmp::Ordering::Equal).then_with(|| b.updated_at.cmp(&a.updated_at)));
+        let truncated = objects.len() > limit;
+        objects.truncate(limit);
+        let selected: HashSet<u64> = objects.iter().map(|object| object.id).collect();
+        let relations = self
+            .relations_v2
+            .iter()
+            .filter(|relation| selected.contains(&relation.from) && selected.contains(&relation.to))
+            .cloned()
+            .take(256)
+            .collect();
+        MemMindPalaceResponse { objects, relations, truncated }
     }
 
     pub fn object_update(&mut self, req: MemObjectUpdateRequest) -> Result<MemoryObject, String> {
@@ -1425,9 +1559,16 @@ pub fn memory_v2_env_enabled() -> bool {
         .unwrap_or(false)
 }
 
+pub fn memory_v2_shadow_env_enabled() -> bool {
+    std::env::var("AOS_MEMORY_V2_SHADOW")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aos_proto::MemoryDecision;
 
     fn store() -> (MemoryStore, PathBuf) {
         use std::sync::atomic::{AtomicU64, Ordering};
@@ -1775,5 +1916,35 @@ mod tests {
         assert_eq!(object.status, MemoryObjectStatus::Accepted);
         assert!(!object.source_refs.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v2_shadow_reports_overlap_and_mind_palace_navigation() {
+        let (mut s, dir) = store();
+        s.v2_enabled = true;
+        s.shadow_enabled = true;
+        let legacy = s.episodic_write(
+            "project:akasha",
+            "legacy project context",
+            serde_json::json!({}),
+            v(0.7),
+            false,
+        );
+        s.migrate_legacy_objects().unwrap();
+        let source = MemorySourceRef { source_type: "test".into(), source_id: "shadow".into(), excerpt: None, uri: None };
+        let object = s.object_create(MemObjectCreateRequest {
+            namespace: "project:akasha".into(), kind: MemoryObjectKind::Decision, title: "Choix moteur".into(), content: "Utiliser Rust".into(),
+            status: MemoryObjectStatus::Accepted, confidence: 0.9, importance: 0.9, temporal: Default::default(), source_refs: vec![source.clone()],
+            visibility: "private".into(), metadata: serde_json::json!({}), decision: Some(MemoryDecision { question: "Quel moteur ?".into(), options: vec!["Rust".into()], selected_option: Some("Rust".into()), rationale: Some("Sécurité".into()), participants: vec![], consequences: vec![], review_at: None }), idempotency_key: None,
+        }, v(0.7)).unwrap();
+        let comparison = s.shadow_compare(&v(0.7), 4, Some("project:akasha"));
+        assert!(comparison.overlap_ids.contains(&legacy));
+        assert_eq!(s.shadow_metrics().comparisons, 1);
+        let palace = s.mind_palace_query(&MemMindPalaceRequest { namespace: Some("project:akasha".into()), root_id: None, limit: 64 });
+        assert_eq!(palace.objects.len(), 2);
+        assert!(palace.objects.iter().any(|candidate| candidate.id == object.id));
+        let report = s.migration_report();
+        assert!(report.projection_ready);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

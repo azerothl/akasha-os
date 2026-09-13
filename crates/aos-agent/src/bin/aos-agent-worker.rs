@@ -3515,6 +3515,9 @@ async fn invoke_native(
                 | "mem.revalidate"
                 | "mem.decision.get"
                 | "mem.narrative.generate"
+                | "mem.mind_palace.query"
+                | "mem.shadow.metrics"
+                | "mem.migration.status"
         ) => {
             match bus
                 .call::<serde_json::Value, serde_json::Value>(service, &args, vec![])

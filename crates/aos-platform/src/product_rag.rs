@@ -403,6 +403,7 @@ mod tests {
                 .to_string(),
             net_mode: "online".into(),
             memory_v2: false,
+            memory_v2_shadow: false,
         }
     }
 

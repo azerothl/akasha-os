@@ -127,6 +127,107 @@
           ],
           "type": "string"
         },
+        "MemShadowComparison": {
+          "properties": {
+            "metrics": {
+              "$ref": "#/definitions/MemShadowMetrics"
+            },
+            "overlap_ids": {
+              "items": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "v1_ids": {
+              "items": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "v1_latency_us": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "v2_ids": {
+              "items": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "v2_latency_us": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "metrics",
+            "overlap_ids",
+            "v1_ids",
+            "v1_latency_us",
+            "v2_ids",
+            "v2_latency_us"
+          ],
+          "type": "object"
+        },
+        "MemShadowMetrics": {
+          "description": "Aggregated comparison metrics collected while Memory V2 runs in shadow mode.",
+          "properties": {
+            "comparisons": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "last_comparison_at": {
+              "default": null,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "overlap_hits": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "total_v1_latency_us": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "total_v2_latency_us": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "v1_hits": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "v2_hits": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
         "MemoryDecision": {
           "description": "Structured payload specific to a decision object.",
           "properties": {
@@ -501,6 +602,18 @@
             "$ref": "#/definitions/MemHit"
           },
           "type": "array"
+        },
+        "shadow": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemShadowComparison"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "V1/V2 comparison when shadow mode is enabled; absent in normal mode."
         },
         "user_doc_hits": {
           "default": [],
@@ -2068,6 +2181,450 @@
       "title": "MemListRequest",
       "type": "object"
     },
+    "MemMigrationReport": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "legacy_objects": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "legacy_relations": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "migrated_objects": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "projection_ready": {
+          "type": "boolean"
+        },
+        "sample_ids": {
+          "default": [],
+          "items": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "v2_objects": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "v2_relations": {
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "legacy_objects",
+        "legacy_relations",
+        "migrated_objects",
+        "projection_ready",
+        "v2_objects",
+        "v2_relations"
+      ],
+      "title": "MemMigrationReport",
+      "type": "object"
+    },
+    "MemMindPalaceRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "limit": {
+          "default": 64,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "namespace": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_id": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "MemMindPalaceRequest",
+      "type": "object"
+    },
+    "MemMindPalaceResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObject": {
+          "description": "Canonical Memory V2 object. `embedding` is persisted for local index rebuilds but omitted from normal wire responses when empty.",
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryDecision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "embedding": {
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "freshness": {
+              "default": 1.0,
+              "format": "float",
+              "type": "number"
+            },
+            "id": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "importance": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            "last_used_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "metadata": {
+              "default": null
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "schema_version": {
+              "default": 2,
+              "description": "Version du format du journal canonique JSONL.",
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "status": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryObjectStatus"
+                }
+              ],
+              "default": "candidate"
+            },
+            "temporal": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryTemporal"
+                }
+              ],
+              "default": {}
+            },
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "updated_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "visibility": {
+              "default": "private",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "kind",
+            "namespace"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationV2": {
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryRelationKind"
+            },
+            "metadata": {
+              "default": null
+            },
+            "schema_version": {
+              "default": 2,
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "objects": {
+          "items": {
+            "$ref": "#/definitions/MemoryObject"
+          },
+          "type": "array"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/definitions/MemoryRelationV2"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "objects",
+        "relations",
+        "truncated"
+      ],
+      "title": "MemMindPalaceResponse",
+      "type": "object"
+    },
     "MemNarrativeRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -2979,6 +3536,164 @@
         "id"
       ],
       "title": "MemRevalidateRequest",
+      "type": "object"
+    },
+    "MemShadowComparison": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemShadowMetrics": {
+          "description": "Aggregated comparison metrics collected while Memory V2 runs in shadow mode.",
+          "properties": {
+            "comparisons": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "last_comparison_at": {
+              "default": null,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "overlap_hits": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "total_v1_latency_us": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "total_v2_latency_us": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "v1_hits": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "v2_hits": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "metrics": {
+          "$ref": "#/definitions/MemShadowMetrics"
+        },
+        "overlap_ids": {
+          "items": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "v1_ids": {
+          "items": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "v1_latency_us": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "v2_ids": {
+          "items": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "v2_latency_us": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "metrics",
+        "overlap_ids",
+        "v1_ids",
+        "v1_latency_us",
+        "v2_ids",
+        "v2_latency_us"
+      ],
+      "title": "MemShadowComparison",
+      "type": "object"
+    },
+    "MemShadowMetrics": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Aggregated comparison metrics collected while Memory V2 runs in shadow mode.",
+      "properties": {
+        "comparisons": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "last_comparison_at": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "overlap_hits": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "total_v1_latency_us": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "total_v2_latency_us": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "v1_hits": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "v2_hits": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "title": "MemShadowMetrics",
       "type": "object"
     },
     "MemSharedReadRequest": {
@@ -4153,5 +4868,5 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "description": "JSON Schema (draft-07) for mem.* bus payloads, including E6 relations and E14 mem.extract. Canonical wire format remains CBOR on the OS intent bus.",
   "title": "Akasha OS aos-proto memory intents",
-  "version": "0.7.0"
+  "version": "0.8.0"
 }

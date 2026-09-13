@@ -20,7 +20,9 @@ use crate::{
     MemTimelineRequest, MemTimelineResponse, MemUnrelateRequest, MemUpdateRequest,
     MemUserRecallRequest, MemUserRememberRequest, MemWorkingRequest, MemoryObject,
     MemoryObjectKind, MemoryObjectStatus, MemoryRelationKind, MemoryRelationV2, MemorySourceRef,
-    MemoryTemporal, SecretGetRequest, SecretListRequest, SecretListResponse, SecretSetRequest,
+    MemoryTemporal, MemMindPalaceRequest, MemMindPalaceResponse, MemMigrationReport,
+    MemShadowComparison, MemShadowMetrics, SecretGetRequest, SecretListRequest, SecretListResponse,
+    SecretSetRequest,
 };
 
 const SCHEMA_META: &str = "http://json-schema.org/draft-07/schema#";
@@ -73,7 +75,7 @@ pub fn memory_schema_document() -> Value {
         "$schema": SCHEMA_META,
         "title": "Akasha OS aos-proto memory intents",
         "description": "JSON Schema (draft-07) for mem.* bus payloads, including E6 relations and E14 mem.extract. Canonical wire format remains CBOR on the OS intent bus.",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "$defs": defs(&[
             ("MemContextRequest", schema_of::<MemContextRequest>()),
             ("MemContextResponse", schema_of::<MemContextResponse>()),
@@ -92,6 +94,9 @@ pub fn memory_schema_document() -> Value {
             ("MemHit", schema_of::<MemHit>()),
             ("MemListRequest", schema_of::<MemListRequest>()),
             ("MemNarrativeRequest", schema_of::<MemNarrativeRequest>()),
+            ("MemMindPalaceRequest", schema_of::<MemMindPalaceRequest>()),
+            ("MemMindPalaceResponse", schema_of::<MemMindPalaceResponse>()),
+            ("MemMigrationReport", schema_of::<MemMigrationReport>()),
             ("MemNeighborsRequest", schema_of::<MemNeighborsRequest>()),
             ("MemObjectCreateRequest", schema_of::<MemObjectCreateRequest>()),
             ("MemObjectGetRequest", schema_of::<MemObjectGetRequest>()),
@@ -99,6 +104,8 @@ pub fn memory_schema_document() -> Value {
             ("MemObjectRelateRequest", schema_of::<MemObjectRelateRequest>()),
             ("MemObjectUpdateRequest", schema_of::<MemObjectUpdateRequest>()),
             ("MemRevalidateRequest", schema_of::<MemRevalidateRequest>()),
+            ("MemShadowComparison", schema_of::<MemShadowComparison>()),
+            ("MemShadowMetrics", schema_of::<MemShadowMetrics>()),
             ("MemRelateRequest", schema_of::<MemRelateRequest>()),
             ("MemRelation", schema_of::<MemRelation>()),
             ("MemRelationKind", schema_of::<MemRelationKind>()),

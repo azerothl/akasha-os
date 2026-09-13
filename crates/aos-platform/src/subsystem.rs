@@ -64,6 +64,9 @@ pub struct PlatformConfig {
     /// Active les APIs Memory V2 et la projection cognitive.
     #[serde(default)]
     pub memory_v2: bool,
+    /// Construit la projection V2 et mesure V1/V2 sans changer les lectures.
+    #[serde(default)]
+    pub memory_v2_shadow: bool,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -161,9 +164,10 @@ impl PlatformSubsystem {
     pub fn open(config: &PlatformConfig) -> Result<Arc<Self>, String> {
         let audit = AuditJournal::open(&config.audit_dir).map_err(|e| e.to_string())?;
         let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
-        let mem = MemoryStore::open_with_v2(
+        let mem = MemoryStore::open_with_modes(
             &config.memory_dir,
             config.memory_v2 || crate::memory::memory_v2_env_enabled(),
+            config.memory_v2_shadow || crate::memory::memory_v2_shadow_env_enabled(),
         )
         .map_err(|e| e.to_string())?;
         let sessions = ChatSessionStore::open(&config.sessions_dir).map_err(|e| e.to_string())?;
@@ -752,15 +756,20 @@ impl HostServices for PlatformSubsystem {
                 let product_k = args["product_k"].as_u64().unwrap_or(4) as usize;
                 let user_doc_k = args["user_doc_k"].as_u64().unwrap_or(3) as usize;
                 let emb = self.embed_text(query).unwrap_or_default();
-                let (hits, product_hits, user_doc_hits, objects, object_relations) = {
-                    let mem = self.mem.lock().unwrap();
+                let (hits, product_hits, user_doc_hits, objects, object_relations, shadow) = {
+                    let mut mem = self.mem.lock().unwrap();
                     let hits = mem.episodic_query(&emb, k, None);
                     let product_hits = crate::product_rag::recall(&mem, &emb, product_k);
                     let user_doc_hits = crate::user_docs::recall(&mem, &emb, user_doc_k);
+                    let shadow = if mem.memory_v2_shadow_enabled() {
+                        Some(mem.shadow_compare(&emb, k, None))
+                    } else {
+                        None
+                    };
                     let objects = if mem.memory_v2_enabled() { mem.object_query(&emb, k, None) } else { Vec::new() };
                     let ids = objects.iter().map(|object| object.id).collect::<std::collections::HashSet<_>>();
                     let object_relations = mem.object_relations_for(&ids);
-                    (hits, product_hits, user_doc_hits, objects, object_relations)
+                    (hits, product_hits, user_doc_hits, objects, object_relations, shadow)
                 };
                 let mut prompt_block = crate::product_rag::format_prompt_block(&product_hits);
                 let user_doc_block = crate::user_docs::format_prompt_block(&user_doc_hits);
@@ -781,6 +790,7 @@ impl HostServices for PlatformSubsystem {
                     "user_doc_hits": user_doc_hits,
                     "objects": objects,
                     "object_relations": object_relations,
+                    "shadow": shadow,
                 }))
             }
             "mem.object.create" => {
@@ -950,6 +960,37 @@ impl HostServices for PlatformSubsystem {
                     });
                 }
                 Ok(serde_json::to_value(object).unwrap_or_default())
+            }
+            "mem.shadow.metrics" => {
+                let metrics = {
+                    let mem = self.mem.lock().unwrap();
+                    if !mem.memory_v2_shadow_enabled() {
+                        return Err("Memory V2 shadow désactivé (AOS_MEMORY_V2_SHADOW=1)".into());
+                    }
+                    mem.shadow_metrics()
+                };
+                Ok(serde_json::to_value(metrics).unwrap_or_default())
+            }
+            "mem.migration.status" => {
+                let report = {
+                    let mem = self.mem.lock().unwrap();
+                    if !mem.memory_v2_enabled() && !mem.memory_v2_shadow_enabled() {
+                        return Err("Memory V2 désactivée (AOS_MEMORY_V2=1 ou AOS_MEMORY_V2_SHADOW=1)".into());
+                    }
+                    mem.migration_report()
+                };
+                Ok(serde_json::to_value(report).unwrap_or_default())
+            }
+            "mem.mind_palace.query" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemMindPalaceRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.mind_palace.query: {e}"))?;
+                if let Some(namespace) = req.namespace.as_deref() {
+                    Self::require_cap(ctx, "mem.query", namespace)?;
+                }
+                Ok(serde_json::to_value(self.mem.lock().unwrap().mind_palace_query(&req)).unwrap_or_default())
             }
             "web.search" => {
                 // Cap réseau requise
@@ -1434,6 +1475,7 @@ mod canvas_seeing_tests {
                 .to_string(),
             net_mode: "online".into(),
             memory_v2: false,
+            memory_v2_shadow: false,
         }
     }
 
