@@ -5348,6 +5348,9 @@ pub enum ChatAttachment {
         /// Number of recent user requests grouped into this suggestion.
         #[serde(default)]
         hit_count: u32,
+        /// Short example user asks that triggered the suggestion.
+        #[serde(default)]
+        examples: Vec<String>,
         /// `pending` | `created` | `dismissed`
         #[serde(default = "default_skill_offer_state")]
         state: String,
@@ -5997,6 +6000,9 @@ pub struct SkillPassPendingOffer {
     pub label_fr: String,
     #[serde(default)]
     pub hit_count: u32,
+    /// Short example user asks shown on the morning card.
+    #[serde(default)]
+    pub examples: Vec<String>,
 }
 
 /// `skill.pass.dismiss` — Later on the morning card.

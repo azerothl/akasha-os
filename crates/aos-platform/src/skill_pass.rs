@@ -37,6 +37,9 @@ pub struct SkillPassCandidate {
     pub tools: Vec<String>,
     #[serde(default)]
     pub hit_count: u32,
+    /// Short example user asks shown on the morning card (not the draft body).
+    #[serde(default)]
+    pub examples: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -434,12 +437,13 @@ fn looks_french(texts: &[String]) -> bool {
 
 fn infer_labels(messages: &[String]) -> (String, String) {
     let joined = messages.join(" ").to_lowercase();
+    let french = looks_french(messages);
     if joined.contains("météo")
         || joined.contains("meteo")
         || joined.contains("weather")
         || joined.contains("forecast")
     {
-        return ("weather".into(), "météo".into());
+        return ("weather checks".into(), "consultations météo".into());
     }
     if joined.contains("calcul")
         || joined.contains("math")
@@ -447,7 +451,7 @@ fn infer_labels(messages: &[String]) -> (String, String) {
         || joined.contains("equation")
         || joined.contains("arithm")
     {
-        return ("calculations".into(), "calculs".into());
+        return ("calculations help".into(), "aide aux calculs".into());
     }
     if joined.contains("note") || joined.contains("notes") {
         return ("note management".into(), "gestion des notes".into());
@@ -476,10 +480,14 @@ fn infer_labels(messages: &[String]) -> (String, String) {
                 "développement de modules".into(),
             )
         } else {
-            ("modules".into(), "modules".into())
+            ("module questions".into(), "questions sur les modules".into())
         };
     }
-    // Fallback: most frequent significant token.
+    need_phrase_from_tokens(messages, french)
+}
+
+/// Build a short need phrase from top tokens — never a lone opaque word.
+fn need_phrase_from_tokens(messages: &[String], french: bool) -> (String, String) {
     let mut freq: HashMap<String, usize> = HashMap::new();
     for msg in messages {
         for tok in tokenize(msg) {
@@ -488,21 +496,68 @@ fn infer_labels(messages: &[String]) -> (String, String) {
     }
     let mut ranked: Vec<_> = freq.into_iter().collect();
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    let word = ranked
-        .first()
+    let words: Vec<&str> = ranked
+        .iter()
+        .take(3)
         .map(|(w, _)| w.as_str())
-        .unwrap_or("requests");
-    let en = word.to_string();
-    let fr = if looks_french(messages) {
-        match word {
-            "weather" => "météo".into(),
-            "calculation" | "calculations" => "calculs".into(),
-            other => other.to_string(),
-        }
+        .collect();
+    if words.is_empty() {
+        return (
+            "recurring requests".into(),
+            "demandes récurrentes".into(),
+        );
+    }
+    if words.len() == 1 {
+        let w = words[0];
+        let en = format!("{w} requests");
+        let fr = if french {
+            format!("demandes liées à « {w} »")
+        } else {
+            en.clone()
+        };
+        return (en, fr);
+    }
+    let topic = words.join(" ");
+    let en = format!("{topic} requests");
+    let fr = if french {
+        format!("demandes sur {topic}")
     } else {
         en.clone()
     };
     (en, fr)
+}
+
+fn pick_card_examples(messages: &[String], limit: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for msg in messages {
+        let trimmed = msg.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let key = normalize_signature(trimmed);
+        if !seen.insert(key) {
+            continue;
+        }
+        out.push(truncate_example(trimmed, 96));
+        if out.len() >= limit {
+            break;
+        }
+    }
+    out
+}
+
+fn truncate_example(text: &str, max_chars: usize) -> String {
+    let trimmed = text.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let mut out: String = trimmed.chars().take(max_chars.saturating_sub(1)).collect();
+    while out.ends_with(|c: char| c.is_whitespace() || c == ',') {
+        out.pop();
+    }
+    out.push('…');
+    out
 }
 
 fn slugify_label(label_en: &str) -> String {
@@ -581,25 +636,21 @@ fn build_candidate(cluster: &MessageCluster) -> SkillPassCandidate {
     let skill_name = slugify_label(&label_en);
     let pattern_id = stable_pattern_id(&cluster.messages);
     let tools = infer_tools(&cluster.messages);
-    let examples: Vec<String> = cluster
-        .messages
-        .iter()
-        .take(3)
-        .map(|m| format!("- {m}"))
-        .collect();
-    let description_en = format!("Help with {label_en} requests");
+    let examples = pick_card_examples(&cluster.messages, 2);
+    let example_lines: Vec<String> = examples.iter().map(|m| format!("- {m}")).collect();
+    let description_en = format!("Reusable help for: {label_en}");
     let body = format!(
         "# {label_en}\n\n\
 When the user asks about {label_en}, follow a repeatable workflow.\n\n\
 ## Goal\n\
-Handle recurring {label_en} requests consistently.\n\n\
+Handle recurring {label_en} consistently.\n\n\
 ## Examples from recent chats\n\
 {examples}\n\n\
 ## Steps\n\
 1. Confirm what the user needs.\n\
 2. Use the listed tools when appropriate.\n\
 3. Keep answers concise and actionable.\n",
-        examples = examples.join("\n")
+        examples = example_lines.join("\n")
     );
     SkillPassCandidate {
         pattern_id,
@@ -611,6 +662,7 @@ Handle recurring {label_en} requests consistently.\n\n\
         body,
         tools,
         hit_count: cluster.messages.len() as u32,
+        examples,
     }
 }
 
@@ -668,7 +720,15 @@ pub fn pick_best_candidate(
 
 fn candidate_label_is_actionable(candidate: &SkillPassCandidate) -> bool {
     let label = candidate.label_en.trim().to_lowercase();
-    !label.is_empty() && !GENERIC_ACTION_LABELS.contains(&label.as_str())
+    if label.is_empty() || GENERIC_ACTION_LABELS.contains(&label.as_str()) {
+        return false;
+    }
+    // Reject opaque single-token topics (e.g. "agentic") — the card must name a need.
+    let token_count = label
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .count();
+    token_count >= 2
 }
 
 /// Card copy for the chat thread — human label only, no draft body or analysis.
@@ -801,10 +861,12 @@ mod tests {
         let candidates = find_pattern_candidates(&msgs_weather_fr(), MIN_PATTERN_HITS);
         assert!(!candidates.is_empty());
         let best = &candidates[0];
-        assert_eq!(best.label_fr, "météo");
-        assert_eq!(best.label_en, "weather");
+        assert_eq!(best.label_fr, "consultations météo");
+        assert_eq!(best.label_en, "weather checks");
         assert!(best.hit_count >= 3);
         assert!(!best.body.is_empty());
+        assert!(!best.examples.is_empty());
+        assert!(best.examples[0].contains("météo") || best.examples[0].contains("Météo"));
     }
 
     #[test]
@@ -836,6 +898,50 @@ mod tests {
         assert_eq!(best.label_en, "note management");
         assert_eq!(best.label_fr, "gestion des notes");
         assert_eq!(best.hit_count, 3);
+    }
+
+    #[test]
+    fn fallback_label_names_the_need_not_a_lone_token() {
+        let messages = vec![
+            "what is the state of agentic apps today?".into(),
+            "state of agentic apps survey please".into(),
+            "agentic apps state of the art overview".into(),
+        ];
+        let candidates = find_pattern_candidates(&messages, MIN_PATTERN_HITS);
+        let best = candidates.first().expect("agentic cluster");
+        assert!(
+            best.label_en.split_whitespace().count() >= 2,
+            "expected multi-word need, got {:?}",
+            best.label_en
+        );
+        assert_ne!(best.label_en, "agentic");
+        assert_ne!(best.label_fr, "agentic");
+        assert!(
+            best.label_en.contains("agentic") || best.label_fr.contains("agentic"),
+            "topic should remain visible: en={} fr={}",
+            best.label_en,
+            best.label_fr
+        );
+        assert!(!best.examples.is_empty());
+        assert!(candidate_label_is_actionable(best));
+    }
+
+    #[test]
+    fn opaque_single_word_label_is_not_surfaced() {
+        let now = 86_400_000u64 * 2 + 6 * 3_600_000;
+        let mut candidate = build_candidate(&MessageCluster {
+            messages: msgs_weather_fr(),
+            tokens: tokenize("météo paris lyon marseille"),
+        });
+        candidate.label_en = "agentic".into();
+        candidate.label_fr = "agentic".into();
+        candidate.skill_name = "user-agentic".into();
+        let state = SkillPassState {
+            last_pass_local_day_key: local_day_key(now, 0),
+            pending: Some(candidate),
+            ..Default::default()
+        };
+        assert!(pending_surface_offer(&state, now, 0).is_none());
     }
 
     #[test]

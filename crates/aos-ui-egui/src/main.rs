@@ -1391,6 +1391,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             label_en: offer.label_en.clone(),
             label_fr: offer.label_fr.clone(),
             hit_count: offer.hit_count,
+            examples: offer.examples.clone(),
             state: "pending".into(),
         };
         self.chat.push(ChatLine {
