@@ -60,13 +60,25 @@ explicitement sémantiques.
 
 Le corpus est volontairement déterministe afin de comparer les résultats V1/V2
 et les exécutions avec différents modèles d'embeddings. Il sert de validation
-de pipeline ; la décision d'activer automatiquement Memory V2 doit encore être
-prise sur un corpus anonymisé construit à partir de cas réels.
+de pipeline ; la décision d'activer automatiquement les narrations doit encore
+être prise sur un corpus anonymisé construit à partir de cas réels.
+
+## Memory V2 dans Preview
+
+Memory V2 est maintenant le mode de lecture par défaut de Preview. Le heartbeat
+de `aos-platformd` génère, au plus une fois par namespace et par période, les
+narrations de la dernière semaine, du dernier mois et de la dernière année
+complète. Les clés sont persistées dans `narrative_state.json` et les créations
+portent une clé d'idempotence stable.
+
+Pour tester le chemin de comparaison sans changer les lectures actives, activer
+`AOS_MEMORY_V2_SHADOW=1`. Pour un retour temporaire vers les lectures V1,
+définir `AOS_MEMORY_V2=0` (la configuration Preview reste à `memory_v2: true`).
 
 ## Exécution complète sur Preview
 
-Après avoir démarré `aos-platformd` avec `AOS_MEMORY_V2=1` et
-`AOS_MEMORY_V2_SHADOW=1`, une exécution complète (ingestion V2, relations,
+Après avoir démarré `aos-platformd` avec la configuration Preview et, si
+nécessaire, `AOS_MEMORY_V2_SHADOW=1`, une exécution complète (ingestion V2, relations,
 rejeu idempotent, écritures V1, appels API, puis rapport) se lance ainsi :
 
 ```powershell

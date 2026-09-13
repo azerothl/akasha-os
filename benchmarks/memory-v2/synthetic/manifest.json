@@ -29,6 +29,7 @@
   },
   "validation_targets": {
     "top5_recall_min": 0.9,
+    "llm_recall_min": 0.85,
     "duplicate_on_replay": 0,
     "unauthorized_evidence": 0,
     "contradiction_without_history_loss": 0
