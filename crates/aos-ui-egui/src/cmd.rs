@@ -26,6 +26,8 @@ pub(crate) enum Cmd {
         documents: Vec<DocumentRef>,
         /// E14 : déclencher mem.extract après le tour (Settings, défaut ON).
         auto_remember: bool,
+        /// E22 : in-session skill/instinct consider under context pressure.
+        instincts_in_session: bool,
         max_steps: u32,
         routing: String,
         /// Prefs UI language (`fr` / `en`) for product-doc injection.
@@ -93,6 +95,11 @@ pub(crate) enum Cmd {
         text: String,
     },
     SkillPassPending,
+    SkillPassConsider {
+        session_id: String,
+        reason: String,
+        estimated_tokens: u64,
+    },
     SkillPassCreate {
         pattern_id: String,
     },
@@ -858,6 +865,7 @@ pub(crate) struct ChatRetryTurn {
     pub(crate) images: Vec<String>,
     pub(crate) documents: Vec<DocumentRef>,
     pub(crate) auto_remember: bool,
+    pub(crate) instincts_in_session: bool,
     pub(crate) max_steps: u32,
     pub(crate) routing: String,
     pub(crate) language: String,
@@ -876,6 +884,7 @@ impl ChatRetryTurn {
             images: self.images.clone(),
             documents: self.documents.clone(),
             auto_remember: self.auto_remember,
+            instincts_in_session: self.instincts_in_session,
             max_steps: self.max_steps,
             routing: self.routing.clone(),
             language: self.language.clone(),

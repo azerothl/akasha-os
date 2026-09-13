@@ -12,10 +12,23 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 LAN discovery listen/ad fixes. See 0.17.0 for rich Create module workspace
 (split-pane, presets, layers, prompt assist), painted UI chrome (SVG icons,
 interface font, Settings/rail/status strip), DeclUI fixes — on top of 0.16.2
-USB I/O. Not a bootable OS. Cohort gate still open
+USB I/O. Host also has **P18 / E22** instincts in-session (extends `skill.pass`).
+Not a bootable OS. Cohort gate still open
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path). **Next:**
 PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
 documented 2-GPU run.
+
+## P18 — E22 instincts in-session — done
+
+| # | Item | Status |
+|---|------|--------|
+| P18.1 | Live `surface_now` + morning-hour gate skip | done |
+| P18.2 | `skill.pass.consider` (session + steers, fire-once) | done |
+| P18.3 | UI / worker / room pressure hooks | done |
+| P18.4 | Instinct store + bounded prompt inject + Create promote | done |
+| P18.5 | Pref `instincts_in_session` + docs EN/FR | done |
+
+Detail: [phases/phase-preview-18.md](phases/phase-preview-18.md).
 
 ## P17.2 — Preview 0.17.2 (Create install + Later/registry + LAN) — done
 

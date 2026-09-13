@@ -1,20 +1,24 @@
-//! Nightly skill-pattern pass (Preview 0.15) — scan recent chats, persist candidates,
-//! surface at most one human card in the Chat thread the next morning.
+//! Nightly skill-pattern pass (Preview 0.15) + in-session consider (E22).
+//! Scan recent chats, persist candidates, surface at most one human card
+//! (morning catch-up or live under context pressure).
 
 use crate::extract::should_skip_mem_extract_turn;
+use crate::instincts::{self, InstinctStore};
 use crate::skill::{SkillError, SkillStore};
-use aos_proto::{ChatSessionMessage, ChatSessionMeta, SkillCreateRequest};
+use aos_proto::{ChatSessionMessage, ChatSessionMeta, SkillCreateRequest, SkillPassPendingOffer};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Minimum repeated user asks before suggesting a skill.
 pub const MIN_PATTERN_HITS: usize = 3;
-/// Night window [start, end) in local hours — one pass per calendar day.
+/// Night window [start, end) in local hours — catch-up only (E22).
 pub const NIGHT_PASS_HOUR_START: i32 = 2;
 pub const NIGHT_PASS_HOUR_END: i32 = 4;
-/// Earliest local hour to surface the morning card.
+/// Earliest local hour to surface the morning (catch-up) card.
 pub const MORNING_SURFACE_HOUR: i32 = 5;
+/// Soft context-pressure fraction of `prompt_budget` (aligned with aos-agent).
+pub const CONTEXT_PRESSURE_FRACTION: f32 = 0.75;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkillPassDismissRecord {
@@ -40,6 +44,11 @@ pub struct SkillPassCandidate {
     /// Short example user asks shown on the morning card (not the draft body).
     #[serde(default)]
     pub examples: Vec<String>,
+    /// E22: surface immediately in the live thread (ignore morning hour).
+    #[serde(default)]
+    pub surface_now: bool,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -52,6 +61,9 @@ pub struct SkillPassState {
     pub dismissed: Option<SkillPassDismissRecord>,
     #[serde(default)]
     pub created_pattern_ids: Vec<String>,
+    /// Sessions that already received an in-session offer (anti-spam).
+    #[serde(default)]
+    pub offered_session_ids: Vec<String>,
 }
 
 impl SkillPassState {
@@ -129,6 +141,13 @@ pub fn collect_user_messages(
             if should_skip_user_message(text) {
                 continue;
             }
+            if text.starts_with("[steer]") || text.starts_with("[Steer]") {
+                let n = normalize_steer_text(text);
+                if n.len() >= 8 {
+                    out.push(n);
+                }
+                continue;
+            }
             out.push(text.to_string());
         }
     }
@@ -140,6 +159,10 @@ fn should_skip_user_message(text: &str) -> bool {
     if t.is_empty() || t.len() < 8 {
         return true;
     }
+    // Keep steers — they are corrections / procedure hints (E22).
+    if t.starts_with("[steer]") {
+        return false;
+    }
     if t.starts_with('/') {
         return true;
     }
@@ -147,6 +170,72 @@ fn should_skip_user_message(text: &str) -> bool {
         return true;
     }
     false
+}
+
+/// Normalize a steer line for clustering (strip `[steer]` prefix).
+pub fn normalize_steer_text(text: &str) -> String {
+    let t = text.trim();
+    let stripped = t
+        .strip_prefix("[steer]")
+        .or_else(|| t.strip_prefix("[Steer]"))
+        .unwrap_or(t)
+        .trim();
+    stripped.to_string()
+}
+
+/// Collect messages from a single session (user/human + steers).
+pub fn collect_session_messages(
+    messages: &[ChatSessionMessage],
+    extra_steers: &[String],
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for m in messages {
+        let role = m.role.to_ascii_lowercase();
+        if role != "user" && role != "human" {
+            continue;
+        }
+        let text = m.content.trim();
+        if should_skip_user_message(text) {
+            continue;
+        }
+        if text.starts_with("[steer]") {
+            let n = normalize_steer_text(text);
+            if n.len() >= 8 {
+                out.push(n);
+            }
+            continue;
+        }
+        out.push(text.to_string());
+    }
+    for s in extra_steers {
+        let n = normalize_steer_text(s);
+        if n.len() >= 8 {
+            out.push(n);
+        }
+    }
+    out
+}
+
+/// Soft pressure threshold (75% of typical Preview prompt budget).
+pub fn soft_pressure_token_threshold() -> usize {
+    // Mirror aos_agent::context_budget::DEFAULT_N_CTX_HINT / AGENT_GEN_TOKENS without depending on aos-agent.
+    const N_CTX: usize = 9216;
+    const GEN: usize = 1536;
+    const SAFETY: usize = 64;
+    let budget = N_CTX.saturating_sub(GEN + SAFETY);
+    ((budget as f32) * CONTEXT_PRESSURE_FRACTION) as usize
+}
+
+pub fn estimate_text_tokens(text: &str) -> usize {
+    text.chars().count().div_ceil(3).max(1)
+}
+
+pub fn estimate_session_tokens(messages: &[ChatSessionMessage]) -> usize {
+    let body: usize = messages
+        .iter()
+        .map(|m| estimate_text_tokens(&m.role) + estimate_text_tokens(&m.content) + 4)
+        .sum();
+    body.saturating_add(64)
 }
 
 const STOP_WORDS: &[&str] = &[
@@ -663,6 +752,8 @@ Handle recurring {label_en} consistently.\n\n\
         tools,
         hit_count: cluster.messages.len() as u32,
         examples,
+        surface_now: false,
+        source_session_id: None,
     }
 }
 
@@ -757,10 +848,11 @@ pub fn pending_surface_offer(
         return None;
     }
     let today = local_day_key(now_ms, offset_minutes);
-    if state.last_pass_local_day_key != today {
+    if state.last_pass_local_day_key != today && !candidate.surface_now {
         return None;
     }
-    if !past_morning_surface_hour(now_ms, offset_minutes) {
+    // Morning catch-up still waits until 05:00; in-session (surface_now) does not.
+    if !candidate.surface_now && !past_morning_surface_hour(now_ms, offset_minutes) {
         return None;
     }
     if state
@@ -774,6 +866,115 @@ pub fn pending_surface_offer(
         return None;
     }
     Some(candidate)
+}
+
+pub fn candidate_to_pending_offer(c: &SkillPassCandidate) -> SkillPassPendingOffer {
+    SkillPassPendingOffer {
+        pattern_id: c.pattern_id.clone(),
+        label_en: c.label_en.clone(),
+        label_fr: c.label_fr.clone(),
+        hit_count: c.hit_count,
+        examples: c.examples.clone(),
+        surface_now: c.surface_now,
+        source_session_id: c.source_session_id.clone(),
+    }
+}
+
+/// Result of an in-session consider pass (E22).
+#[derive(Debug, Clone)]
+pub struct ConsiderResult {
+    pub local_day_key: String,
+    pub candidates_found: usize,
+    pub pending_pattern_id: Option<String>,
+    pub skipped_already_offered: bool,
+    pub offer: Option<SkillPassPendingOffer>,
+    pub instincts_upserted: u32,
+}
+
+/// In-session heuristic scan — prefer current session, fall back to 14-day lookback.
+pub fn run_consider_pass(
+    state: &mut SkillPassState,
+    skills_dir: &Path,
+    skill_store: &SkillStore,
+    session_id: &str,
+    session_messages: Option<&[ChatSessionMessage]>,
+    all_sessions: &[(ChatSessionMeta, Vec<ChatSessionMessage>)],
+    extra_steers: &[String],
+    now_ms: u64,
+    offset_minutes: i32,
+) -> Result<ConsiderResult, String> {
+    let day_key = local_day_key(now_ms, offset_minutes);
+    if state
+        .offered_session_ids
+        .iter()
+        .any(|id| id == session_id)
+    {
+        return Ok(ConsiderResult {
+            local_day_key: day_key,
+            candidates_found: 0,
+            pending_pattern_id: state.pending.as_ref().map(|c| c.pattern_id.clone()),
+            skipped_already_offered: true,
+            offer: pending_surface_offer(state, now_ms, offset_minutes)
+                .map(candidate_to_pending_offer),
+            instincts_upserted: 0,
+        });
+    }
+
+    let mut messages = if let Some(msgs) = session_messages {
+        collect_session_messages(msgs, extra_steers)
+    } else {
+        collect_session_messages(&[], extra_steers)
+    };
+
+    let mut candidates = find_pattern_candidates(&messages, MIN_PATTERN_HITS);
+    if candidates.is_empty() {
+        let lookback_ms = 14u64 * 86_400_000;
+        let since_ms = now_ms.saturating_sub(lookback_ms);
+        messages = collect_user_messages(all_sessions, since_ms, now_ms);
+        for s in extra_steers {
+            let n = normalize_steer_text(s);
+            if n.len() >= 8 {
+                messages.push(n);
+            }
+        }
+        candidates = find_pattern_candidates(&messages, MIN_PATTERN_HITS);
+    }
+
+    let existing = existing_skill_names(skill_store);
+    let created: HashSet<String> = state.created_pattern_ids.iter().cloned().collect();
+    let mut best = pick_best_candidate(&candidates, &existing, &created);
+
+    let mut instincts_upserted = 0u32;
+    if let Some(ref mut cand) = best {
+        cand.surface_now = true;
+        cand.source_session_id = Some(session_id.to_string());
+        let mut store = InstinctStore::load(skills_dir);
+        instincts_upserted = instincts::upsert_from_candidate(&mut store, cand, now_ms);
+        let _ = store.save(skills_dir);
+    }
+
+    // Always mark session offered so we do not re-scan every turn under pressure.
+    if !state.offered_session_ids.iter().any(|id| id == session_id) {
+        state.offered_session_ids.push(session_id.to_string());
+    }
+
+    if best.is_some() {
+        state.pending = best.clone();
+        state.last_pass_ms = now_ms;
+        state.last_pass_local_day_key = day_key.clone();
+    }
+    state.save(skills_dir)?;
+
+    let offer = pending_surface_offer(state, now_ms, offset_minutes).map(candidate_to_pending_offer);
+
+    Ok(ConsiderResult {
+        local_day_key: day_key,
+        candidates_found: candidates.len(),
+        pending_pattern_id: best.map(|c| c.pattern_id),
+        skipped_already_offered: false,
+        offer,
+        instincts_upserted,
+    })
 }
 
 pub fn dismiss_for_today(
@@ -799,6 +1000,19 @@ pub fn mark_created(state: &mut SkillPassState, pattern_id: &str) {
     {
         state.pending = None;
     }
+}
+
+/// After Create: mark skill created and promote/remove matching instinct.
+pub fn mark_created_and_promote(
+    state: &mut SkillPassState,
+    skills_dir: &Path,
+    pattern_id: &str,
+    now_ms: u64,
+) {
+    mark_created(state, pattern_id);
+    let mut store = InstinctStore::load(skills_dir);
+    instincts::mark_promoted(&mut store, pattern_id, now_ms);
+    let _ = store.save(skills_dir);
 }
 
 pub fn candidate_to_create_request(
@@ -1016,6 +1230,147 @@ mod tests {
     }
 
     #[test]
+    fn soft_pressure_threshold_is_seventy_five_percent() {
+        const N_CTX: usize = 9216;
+        const GEN: usize = 1536;
+        const SAFETY: usize = 64;
+        let budget = N_CTX.saturating_sub(GEN + SAFETY);
+        let expected = ((budget as f32) * CONTEXT_PRESSURE_FRACTION) as usize;
+        assert_eq!(soft_pressure_token_threshold(), expected);
+        assert!(expected > 5_000);
+        assert!(expected < budget);
+    }
+
+    #[test]
+    fn night_and_live_same_pattern_no_double_pending() {
+        let offset = 0;
+        let now = 86_400_000u64 * 5 + 10 * 3_600_000; // mid-morning
+        let mut candidate = build_candidate(&MessageCluster {
+            messages: msgs_weather_fr(),
+            tokens: tokenize("météo paris lyon marseille"),
+        });
+        let pattern_id = candidate.pattern_id.clone();
+        candidate.surface_now = true;
+        candidate.source_session_id = Some("sess-live".into());
+        let mut state = SkillPassState {
+            last_pass_local_day_key: local_day_key(now, offset),
+            pending: Some(candidate.clone()),
+            offered_session_ids: vec!["sess-live".into()],
+            ..Default::default()
+        };
+        assert!(pending_surface_offer(&state, now, offset).is_some());
+        // Morning catch-up for the same pattern: already pending / offered — dismiss then night
+        // candidate with same id must not re-open after created.
+        mark_created(&mut state, &pattern_id);
+        assert!(state.pending.is_none());
+        assert!(state.created_pattern_ids.contains(&pattern_id));
+        let mut night = candidate;
+        night.surface_now = false;
+        night.source_session_id = None;
+        state.pending = Some(night);
+        // created_ids blocks surface
+        assert!(pending_surface_offer(&state, now, offset).is_none());
+    }
+
+    #[test]
+    fn surface_now_ignores_morning_hour() {
+        let offset = 0;
+        // 03:00 local — before MORNING_SURFACE_HOUR
+        let now = 86_400_000u64 * 2 + 3 * 3_600_000;
+        let mut candidate = build_candidate(&MessageCluster {
+            messages: msgs_weather_fr(),
+            tokens: tokenize("météo paris lyon marseille"),
+        });
+        candidate.surface_now = true;
+        candidate.source_session_id = Some("sess-live".into());
+        let state = SkillPassState {
+            last_pass_local_day_key: local_day_key(now, offset),
+            pending: Some(candidate),
+            ..Default::default()
+        };
+        assert!(pending_surface_offer(&state, now, offset).is_some());
+    }
+
+    #[test]
+    fn consider_fire_once_per_session() {
+        let dir =
+            std::env::temp_dir().join(format!("aos-skill-consider-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = SkillStore::open(&dir).unwrap();
+        let mut state = SkillPassState::default();
+        let now = 86_400_000u64 * 3 + 14 * 3_600_000;
+        let msgs: Vec<ChatSessionMessage> = msgs_weather_fr()
+            .into_iter()
+            .enumerate()
+            .map(|(i, content)| ChatSessionMessage {
+                role: "user".into(),
+                content,
+                ts_ms: now - 1000 + i as u64,
+                attachments: vec![],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            })
+            .collect();
+        let first = run_consider_pass(
+            &mut state,
+            &dir,
+            &store,
+            "sess-a",
+            Some(&msgs),
+            &[],
+            &[],
+            now,
+            0,
+        )
+        .unwrap();
+        assert!(!first.skipped_already_offered);
+        assert!(first.offer.is_some() || first.candidates_found > 0 || first.pending_pattern_id.is_some());
+        let second = run_consider_pass(
+            &mut state,
+            &dir,
+            &store,
+            "sess-a",
+            Some(&msgs),
+            &[],
+            &[],
+            now + 1,
+            0,
+        )
+        .unwrap();
+        assert!(second.skipped_already_offered);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn steers_are_collected_for_clustering() {
+        let messages = vec![
+            ChatSessionMessage {
+                role: "user".into(),
+                content: "[steer] use hooks not classes for React".into(),
+                ts_ms: 1,
+                attachments: vec![],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            },
+            ChatSessionMessage {
+                role: "user".into(),
+                content: "[steer] prefer hooks over class components".into(),
+                ts_ms: 2,
+                attachments: vec![],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            },
+        ];
+        let collected = collect_session_messages(&messages, &["[steer] hooks not classes".into()]);
+        assert_eq!(collected.len(), 3);
+        assert!(!collected[0].starts_with("[steer]"));
+    }
+
+    #[test]
     fn create_skill_from_candidate_idempotent_when_exists() {
         let dir = std::env::temp_dir().join(format!("aos-skill-pass-idem-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1077,6 +1432,7 @@ mod tests {
             pending: None,
             dismissed: None,
             created_pattern_ids: vec!["pat-abc".into()],
+            offered_session_ids: vec![],
         };
         state.save(&dir).unwrap();
         assert_eq!(SkillPassState::load(&dir), state);

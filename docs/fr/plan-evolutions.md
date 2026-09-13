@@ -87,19 +87,19 @@ Export schémas E8 + contrat HTTP↔bus, keyring OS E7, catalogue local signé E
 | **E19** | **Média local extensible** (autres modèles d’image + options sd.cpp / Piper fermées + plugins chat) | 0.8 figeait SD 1.5 en 512² / 20 steps et deux voix Piper | **Preview 0.9.0** ✅ — [phases/phase-preview-09.md](phases/phase-preview-09.md) ; schéma JSON fermé ; Flux2/Ideogram4/Piper extra ; studio Image + carte TTS ; **pas** de vidéo ; **pas** d’img2img en intent de première classe |
 | **E20** | **Leviers de decode local** (KV Q8, prefix cache `llama_state_*`, speculative prompt-lookup en C1) | TTFT / tok/s chat+agents sans adopter vLLM | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) ; C1 seulement ; batch N>1 inchangé ; pas de second GGUF draft |
 | **E21** | **Bande passante Placement + ancres sémantiques de préfixe** (inspiré FreeToken, pas une dépendance) | Les papiers MoE/edge insistent sur transfert vs calcul ; les edits d’agent invalident le KV à des offsets arbitraires | **Preview 0.11.0** ✅ — [phases/phase-preview-11.md](phases/phase-preview-11.md) §E21 ; RAM mesurée + estimations `nvidia-smi`/PCIe dans `hardware.json` → `HardwareProfile` ; préfixe E20 ancré aux marqueurs tour/outil/pensée ; **LRU par expert MoE hors scope** — voir [moe-expert-offload.md](moe-expert-offload.md) |
-| **E22** | **Instincts** — procédures apprises atomiques, confiance, injection bornée, promotion humaine vers skill | Hermes / ECC continuous-learning ; le `skill.pass` Preview ne clusterise que les **demandes utilisateur** en carte skill | **Prévu** (prochain incrément Preview après le travail hôte en cours ; pas un P6). Étend le `skill.pass` 0.15 ; **ne le remplace pas**. Voir §E22 ci-dessous. |
+| **E22** | **Instincts** — procédures apprises atomiques, confiance, injection bornée, promotion humaine vers skill | Hermes / ECC continuous-learning ; le `skill.pass` Preview ne clusterise que les **demandes utilisateur** en carte skill | **P18** ✅ — [phases/phase-preview-18.md](phases/phase-preview-18.md). Étend le `skill.pass` 0.15 ; **ne le remplace pas**. Voir §E22 ci-dessous. |
 
 ---
 
-## E22 — Instincts (prévu)
+## E22 — Instincts (P18)
 
 Même famille produit que l’**offre de skill du matin** (Preview 0.15), pas un second produit d’apprentissage.
 
 | Couche déjà livrée | Ce qu’elle capture | Ce qu’elle produit | Quand ça tourne |
 |---------------------|-------------------|--------------------|-----------------|
 | **E14** (0.5.0) | Faits sur l’utilisateur | Graphe mémoire long terme | Extract post-tour opt-in |
-| **`skill.pass`** (0.15) | **Demandes utilisateur** répétées (≥3 messages proches, Jaccard / seaux de domaine) | Une carte du matin : Créer \| Plus tard — **jamais** d’auto-création de `SKILL.md` | Nuit 02:00–04:00 locale ; surface après 05:00 |
-| **E22** (prévu) | **Procédures d’agent** répétées + corrections / steer humains | Instincts atomiques (déclencheur + action + confiance), injectés dans **cette** conversation dès que le contexte est élevé ; promotion optionnelle vers la carte skill existante | **Primaire : en session, sous pression de contexte** (et steer). Le `skill.pass` nocturne reste un rattrapage. |
+| **`skill.pass`** (0.15) | **Demandes utilisateur** répétées (≥3 messages proches, Jaccard / seaux de domaine) | Une carte du matin : Créer \| Plus tard — **jamais** d’auto-création de `SKILL.md` | Nuit 02:00–04:00 locale ; surface après 05:00 (**rattrapage**) |
+| **E22** (P18) | **Procédures d’agent** répétées + corrections / steer humains | Instincts atomiques (déclencheur + action + confiance), injectés dans **cette** conversation dès que le contexte est élevé ; promotion optionnelle vers la carte skill existante | **Primaire : en session, sous pression de contexte** (et steer). Le `skill.pass` nocturne reste un rattrapage. |
 
 `skill.pass` répond à « tu redemandes la météo — tu veux une skill ? ». E22 répond à « les trois dernières fois tu as recadré l’agent (hooks plutôt que classes) — applique ça la prochaine fois, sans écrire toute une recette ». Une skill reste une **recette nommée**, inspectable, que l’humain possède. Un instinct est un **indice de prompt petit et révocable**, pas une politique exécutable.
 
@@ -134,7 +134,7 @@ Ne pas lancer un second passage modèle à chaque tour user : ça *provoquerait*
 - Traiter les instincts comme des caps ou un substitut à `aos-capkd`.
 - Attendre demain pour proposer une skill dont la preuve est dans le fil live.
 
-À planifier sur un incrément Preview après le travail hôte en cours (memory-v2 / PC), pas comme une gate P6.
+À planifier sur Preview **P18** (pas une nouvelle gate P6). Implémentation hôte livrée ; voir [phases/phase-preview-18.md](phases/phase-preview-18.md).
 
 ---
 
@@ -167,7 +167,7 @@ Ne pas lancer un second passage modèle à chaque tour user : ça *provoquerait*
 | Couche | Rôle |
 |--------|------|
 | **P0–P5 / PV / PC** | Gates exécutables ([plan-developpement-phases.md](plan-developpement-phases.md), [STATUS.md](STATUS.md)) |
-| **E1–E22** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC ; **E22** est prévu pour un incrément Preview ultérieur |
+| **E1–E22** | Priorisation après analyse concurrentielle ; les incréments Preview P03–P11 livrent des E* sans attendre la gate cohort PC ; **E22** est livré en **P18** |
 
 Ne **pas** inventer un numéro P6 tant que PC n’est pas fermé et que STATUS n’est pas à jour. E1–E5 livrés en Preview **0.3.0** ; E6 / E7-lite / E10-lite en **0.4.0** ; **E14** en **0.5.0** ; E8 schémas + E7-keyring + E10 catalogue en **0.6.0** ; **E15** hôte d’UI de module déclarative livré en Preview **0.7.0**. **E16 + E17 + pack widgets E15 + onglet Providers F-MDL-04** livrés en Preview **0.8.0**. **E18 + E19** livrés en Preview **0.9.0**. **E7 TPM + E8 live + E9** livrés en **0.10.0**. **E20 decode local** livré en Preview **0.11.0** (P11). Puis fermeture cohort PC + Horizon C / PV.4+.
 

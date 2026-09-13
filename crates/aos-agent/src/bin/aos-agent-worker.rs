@@ -23,9 +23,10 @@ use aos_agent::canvas_scene::{
 };
 use aos_agent::context_budget::{
     choose_agent_max_tokens, clamp_spawn_brief, compact_after_prompt_overflow,
-    enforce_prompt_budget, is_infer_stall_error, is_prompt_too_long_error,
-    is_technical_vision_infer_error, prompt_budget, sanitize_assistant_for_memory, LoopGuard,
-    LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
+    enforce_prompt_budget, estimate_messages_tokens, is_infer_stall_error, is_prompt_too_long_error,
+    is_technical_vision_infer_error, prompt_budget, sanitize_assistant_for_memory,
+    soft_pressure_threshold, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES,
+    MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::device_tools::{capture_png_path_from_tool_result, invoke_device_tool};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
@@ -572,6 +573,14 @@ async fn main() {
     let mut last_canvas_visual = None;
     let mut final_canvas_visual_review_pending = false;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
+    let mut skill_consider_done = false;
+    let mut steer_count = 0u32;
+    let mut recent_steers: Vec<String> = Vec::new();
+    let session_key = spec
+        .session_id
+        .clone()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| format!("agent:{agent_id}"));
 
     while terminal.is_none() {
         // Pause / steer handling between steps
@@ -612,6 +621,11 @@ async fn main() {
 
         if let Some(d) = pending_steer.take() {
             shared.state.lock().await.push_user(&format!("[steer] {d}"));
+            steer_count = steer_count.saturating_add(1);
+            recent_steers.push(d.clone());
+            if recent_steers.len() > 8 {
+                recent_steers.remove(0);
+            }
             report(
                 &bus,
                 &agent_id,
@@ -620,6 +634,22 @@ async fn main() {
                 },
             )
             .await;
+            if steer_count >= 2 {
+                let tokens = {
+                    let st = shared.state.lock().await;
+                    estimate_messages_tokens(&st.working_memory) as u64
+                };
+                maybe_agent_skill_consider(
+                    &bus,
+                    &session_key,
+                    "steer",
+                    &recent_steers,
+                    tokens,
+                    &mut skill_consider_done,
+                )
+                .await;
+                install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+            }
             if is_child {
                 bootstrap_memory_recall(&bus, &shared, &agent_id, &d, "steer").await;
             } else {
@@ -759,6 +789,24 @@ async fn main() {
             choose_agent_max_tokens(&st.working_memory, &spec.goal.statement)
         };
         let budget = prompt_budget(n_ctx_hint, gen_tokens);
+        {
+            let tokens = {
+                let st = shared.state.lock().await;
+                estimate_messages_tokens(&st.working_memory)
+            };
+            let thresh = soft_pressure_threshold(n_ctx_hint, gen_tokens);
+            if tokens >= thresh {
+                maybe_agent_skill_consider(
+                    &bus,
+                    &session_key,
+                    "pressure",
+                    &recent_steers,
+                    tokens as u64,
+                    &mut skill_consider_done,
+                )
+                .await;
+            }
+        }
         {
             let mut st = shared.state.lock().await;
             if let Some(sum) = enforce_prompt_budget(&mut st.working_memory, budget, 6) {
@@ -907,6 +955,19 @@ async fn main() {
                                 .await;
                         }
                     }
+                    let tokens = {
+                        let st = shared.state.lock().await;
+                        estimate_messages_tokens(&st.working_memory) as u64
+                    };
+                    maybe_agent_skill_consider(
+                        &bus,
+                        &session_key,
+                        "overflow",
+                        &recent_steers,
+                        tokens,
+                        &mut skill_consider_done,
+                    )
+                    .await;
                 }
                 InferOutcome::Fatal(e)
                     if is_infer_stall_error(&e) && stall_retries < MAX_INFER_STALL_RETRIES =>
@@ -4158,11 +4219,13 @@ async fn install_system_prompt(
         .await
         .unwrap_or_default();
     let installed_modules = active_module_names(&module_list);
+    let instincts = fetch_active_instincts(bus).await;
     let mut system = compile_system_prompt(&PromptCompileInput {
         spec,
         skills,
         tools,
         doc_index: &spec.documents,
+        instincts: &instincts,
     });
     for hint in missing_module_hints(skills, &installed_modules) {
         system.push_str("\n\n");
@@ -4182,6 +4245,59 @@ async fn install_system_prompt(
         st.working_memory.insert(0, ("system".into(), system));
     } else {
         st.working_memory[0] = ("system".into(), system);
+    }
+}
+
+async fn fetch_active_instincts(bus: &BusClient) -> Vec<aos_proto::InstinctInfo> {
+    match bus
+        .call::<aos_proto::InstinctActiveRequest, aos_proto::InstinctActiveResponse>(
+            "instinct.active",
+            &aos_proto::InstinctActiveRequest {
+                max: Some(3),
+                min_confidence: Some(0.7),
+                session_id: None,
+            },
+            vec![],
+        )
+        .await
+    {
+        Ok(resp) => resp.instincts,
+        Err(_) => Vec::new(),
+    }
+}
+
+async fn maybe_agent_skill_consider(
+    bus: &BusClient,
+    session_key: &str,
+    reason: &str,
+    steer_texts: &[String],
+    estimated_tokens: u64,
+    already_done: &mut bool,
+) {
+    if *already_done || session_key.trim().is_empty() {
+        return;
+    }
+    let req = aos_proto::SkillPassConsiderRequest {
+        session_id: session_key.to_string(),
+        tz_offset_minutes: None,
+        reason: reason.to_string(),
+        steer_texts: steer_texts.to_vec(),
+        estimated_tokens: Some(estimated_tokens),
+    };
+    match bus
+        .call::<aos_proto::SkillPassConsiderRequest, aos_proto::SkillPassConsiderResponse>(
+            "skill.pass.consider",
+            &req,
+            vec![],
+        )
+        .await
+    {
+        Ok(_) => {
+            *already_done = true;
+        }
+        Err(_) => {
+            // Best-effort — platformd may be mid-boot.
+        }
     }
 }
 

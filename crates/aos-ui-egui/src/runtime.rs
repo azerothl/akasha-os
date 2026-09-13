@@ -200,6 +200,78 @@ pub(crate) fn maybe_spawn_mem_extract(
     });
 }
 
+fn estimate_chat_tokens(
+    history: &[(String, String)],
+    user_text: &str,
+    assistant_text: &str,
+) -> usize {
+    use aos_agent::context_budget::estimate_tokens;
+    let mut n = 64usize;
+    for (role, content) in history {
+        n = n
+            .saturating_add(estimate_tokens(role))
+            .saturating_add(estimate_tokens(content))
+            .saturating_add(4);
+    }
+    n.saturating_add(estimate_tokens("user"))
+        .saturating_add(estimate_tokens(user_text))
+        .saturating_add(estimate_tokens("assistant"))
+        .saturating_add(estimate_tokens(assistant_text))
+        .saturating_add(8)
+}
+
+/// E22 : fire-and-forget `skill.pass.consider` when context pressure is high.
+pub(crate) fn maybe_spawn_skill_consider(
+    bus: Arc<BusClient>,
+    evt_tx: Sender<Evt>,
+    enabled: bool,
+    session_id: String,
+    history: &[(String, String)],
+    user_text: &str,
+    assistant_text: &str,
+    reason: &str,
+) {
+    if !enabled || session_id.trim().is_empty() {
+        return;
+    }
+    let tokens = estimate_chat_tokens(history, user_text, assistant_text);
+    let threshold = aos_agent::context_budget::soft_pressure_threshold(
+        aos_agent::context_budget::DEFAULT_N_CTX_HINT,
+        aos_agent::context_budget::AGENT_GEN_TOKENS,
+    );
+    if reason != "steer" && reason != "overflow" && tokens < threshold {
+        return;
+    }
+    let reason = reason.to_string();
+    let offset = sweep_tz_offset_minutes();
+    tokio::spawn(async move {
+        let req = aos_proto::SkillPassConsiderRequest {
+            session_id,
+            tz_offset_minutes: Some(offset),
+            reason,
+            steer_texts: vec![],
+            estimated_tokens: Some(tokens as u64),
+        };
+        match bus
+            .call::<aos_proto::SkillPassConsiderRequest, aos_proto::SkillPassConsiderResponse>(
+                "skill.pass.consider",
+                &req,
+                vec![],
+            )
+            .await
+        {
+            Ok(resp) => {
+                if let Some(offer) = resp.offer {
+                    let _ = evt_tx.send(Evt::SkillPassPending(Some(offer)));
+                }
+            }
+            Err(e) => {
+                let _ = evt_tx.send(Evt::Status(format!("skill.pass.consider: {e}")));
+            }
+        }
+    });
+}
+
 fn push_evt(evt_tx: &Sender<Evt>, egui_ctx: &egui::Context, evt: Evt) {
     let _ = evt_tx.send(evt);
     egui_ctx.request_repaint();
@@ -470,6 +542,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             images,
             documents,
             auto_remember,
+            instincts_in_session,
             max_steps,
             routing,
             language,
@@ -546,6 +619,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 role: "system".into(),
                 content: system,
             }];
+            let history_for_consider = history.clone();
             messages.extend(history.into_iter().map(|(r, c)| ChatMessage {
                 role: r,
                 content: c,
@@ -684,6 +758,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                 tools,
                                 prose,
                                 auto_remember,
+                                instincts_in_session,
                                 model_id,
                                 max_steps,
                                 canvas_aspect,
@@ -717,6 +792,16 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             user_text.clone(),
                             display.clone(),
                             model_id.clone(),
+                        );
+                        maybe_spawn_skill_consider(
+                            bus.clone(),
+                            evt_tx.clone(),
+                            instincts_in_session,
+                            sid.clone(),
+                            &history_for_consider,
+                            &user_text,
+                            &display,
+                            "pressure",
                         );
                         let _ = evt_tx.send(Evt::Done {
                             text: display,
@@ -889,6 +974,36 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             {
                 Ok(offer) => {
                     let _ = evt_tx.send(Evt::SkillPassPending(offer));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SkillPassConsider {
+            session_id,
+            reason,
+            estimated_tokens,
+        } => {
+            let offset = sweep_tz_offset_minutes();
+            match bus
+                .call::<aos_proto::SkillPassConsiderRequest, aos_proto::SkillPassConsiderResponse>(
+                    "skill.pass.consider",
+                    &aos_proto::SkillPassConsiderRequest {
+                        session_id,
+                        tz_offset_minutes: Some(offset),
+                        reason,
+                        steer_texts: vec![],
+                        estimated_tokens: Some(estimated_tokens),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    if let Some(offer) = resp.offer {
+                        let _ = evt_tx.send(Evt::SkillPassPending(Some(offer)));
+                    }
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));

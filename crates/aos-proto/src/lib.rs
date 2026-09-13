@@ -5992,6 +5992,39 @@ pub struct SkillPassResponse {
     pub last_pass_ms: u64,
 }
 
+/// `skill.pass.consider` — in-session pressure / steer scan (E22). Surfaces Create|Later now.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct SkillPassConsiderRequest {
+    /// Chat session or `agent:<id>` key used for fire-once anti-spam.
+    pub session_id: String,
+    #[serde(default)]
+    pub tz_offset_minutes: Option<i32>,
+    /// `pressure` | `steer` | `overflow`
+    #[serde(default)]
+    pub reason: String,
+    /// Optional steer texts already observed this sitting (agent path).
+    #[serde(default)]
+    pub steer_texts: Vec<String>,
+    /// Caller-estimated prompt tokens (informational / audit).
+    #[serde(default)]
+    pub estimated_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct SkillPassConsiderResponse {
+    pub local_day_key: String,
+    pub candidates_found: usize,
+    pub pending_pattern_id: Option<String>,
+    /// True when this session was already offered earlier (skipped).
+    #[serde(default)]
+    pub skipped_already_offered: bool,
+    /// Pending card to show immediately in the live thread (if any).
+    #[serde(default)]
+    pub offer: Option<SkillPassPendingOffer>,
+    #[serde(default)]
+    pub instincts_upserted: u32,
+}
+
 /// `skill.pass.pending` — morning card offer with the evidence count used for it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct SkillPassPendingOffer {
@@ -6003,6 +6036,58 @@ pub struct SkillPassPendingOffer {
     /// Short example user asks shown on the morning card.
     #[serde(default)]
     pub examples: Vec<String>,
+    /// When true, surface immediately (E22 in-session); ignore morning hour gate.
+    #[serde(default)]
+    pub surface_now: bool,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
+}
+
+/// Atomic learned procedure (E22 instincts) — prompt hint, not a capability.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct InstinctInfo {
+    pub id: String,
+    pub trigger: String,
+    pub action: String,
+    #[serde(default)]
+    pub confidence: f32,
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    pub evidence_count: u32,
+    /// `agent` | `salon` | `global`
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
+    #[serde(default)]
+    pub updated_ms: u64,
+    #[serde(default)]
+    pub promoted: bool,
+}
+
+/// `instinct.active` — top instincts eligible for prompt injection.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct InstinctActiveRequest {
+    #[serde(default)]
+    pub max: Option<u32>,
+    #[serde(default)]
+    pub min_confidence: Option<f32>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct InstinctActiveResponse {
+    #[serde(default)]
+    pub instincts: Vec<InstinctInfo>,
+}
+
+/// `instinct.list` — all stored instincts (debug / Settings later).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct InstinctListResponse {
+    #[serde(default)]
+    pub instincts: Vec<InstinctInfo>,
 }
 
 /// `skill.pass.dismiss` — Later on the morning card.

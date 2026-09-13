@@ -64,6 +64,12 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 - **User library**: consultative pdf/txt/md (empty state + row)
 - **Morning skill offer**: title names the need (not a single opaque word); shows example asks; muted prompt; Create | Later — never auto-creates
 
+### E22 / P18 — Instincts in-session (extends 0.15 `skill.pass`)
+
+- **Live skill offer**: when the thread approaches the prompt budget (~75%) or after ≥2 steers, `skill.pass.consider` may surface Create | Later **in this chat** (once per session); nightly scan stays catch-up
+- **Bounded instincts**: up to 3 high-confidence hints in the agent system prompt; Create promotes to a real skill and clears the instinct — never auto-writes `var/skills/`
+- **Settings**: “Suggest skills when context is high” (`instincts_in_session`, default on)
+
 ### What's new in 0.14.0
 
 - **Custom agents**: conversation / thread label is the Agents-page Name; salon picker lists roster personas and Task/custom agents without duplicate persona rows

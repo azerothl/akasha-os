@@ -2,7 +2,7 @@
 
 use aos_proto::{
     format_preview_surface_brief, format_system_assistant_prompt, preview_version, AgentGoal,
-    AgentSpec, DocumentRef,
+    AgentSpec, DocumentRef, InstinctInfo,
 };
 
 use crate::skills::SkillDoc;
@@ -14,6 +14,8 @@ pub struct PromptCompileInput<'a> {
     pub skills: &'a [SkillDoc],
     pub tools: &'a [ToolDesc],
     pub doc_index: &'a [DocumentRef],
+    /// E22 learned instincts (bounded, already filtered by caller).
+    pub instincts: &'a [InstinctInfo],
 }
 
 /// Compile le prompt système multi-couches.
@@ -143,6 +145,22 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
             ));
         }
         parts.push(docs);
+    }
+
+    // 7b. Instincts (E22) — prompt hints only
+    if !input.instincts.is_empty() {
+        let mut block = String::from(
+            "## Instincts (learned preferences — not tools, not capabilities)\n\
+             Apply when the trigger matches. Prefer these over repeating long corrections.\n",
+        );
+        for i in input.instincts {
+            block.push_str(&format!(
+                "- When {}: {}\n",
+                i.trigger.trim(),
+                i.action.trim()
+            ));
+        }
+        parts.push(block);
     }
 
     // 8. Protocole d'actions
@@ -332,6 +350,7 @@ mod tests {
             skills: &[],
             tools: &tools,
             doc_index: &[],
+            instincts: &[],
         });
         assert!(out.contains("agent-1"));
         assert!(out.contains("écrire une note"));
@@ -348,6 +367,7 @@ mod tests {
             skills: &[],
             tools: &tools,
             doc_index: &[],
+            instincts: &[],
         });
         assert!(native.contains("Format d'outils du modèle courant"));
         assert!(native.contains("<|tool_call>call:nom.outil"));
@@ -394,6 +414,7 @@ mod tests {
             skills: &[],
             tools: &tools,
             doc_index: &[],
+            instincts: &[],
         });
         assert!(out.contains("sess-real"));
         assert!(out.contains("Canvas de session"));
@@ -442,6 +463,7 @@ mod tests {
             skills: &[],
             tools: &tools,
             doc_index: &[],
+            instincts: &[],
         });
         assert!(out.contains("sess-cam"));
         assert!(out.contains("Capture caméra"));

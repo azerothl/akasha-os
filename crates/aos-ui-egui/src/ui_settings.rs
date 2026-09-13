@@ -1061,6 +1061,19 @@ impl UiApp {
                             self.status = t.settings_saved.into();
                         }
                         ui.end_row();
+
+                        ui.label(t.settings_instincts_in_session);
+                        let mut instincts = self.prefs.instincts_in_session;
+                        if ui
+                            .checkbox(&mut instincts, t.settings_instincts_in_session)
+                            .on_hover_text(t.settings_instincts_in_session_hint)
+                            .changed()
+                        {
+                            self.prefs.instincts_in_session = instincts;
+                            save_preferences(&self.prefs);
+                            self.status = t.settings_saved.into();
+                        }
+                        ui.end_row();
                     });
             });
         }
