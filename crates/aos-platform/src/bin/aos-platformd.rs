@@ -4591,6 +4591,22 @@ async fn main() {
                         Err(e) => eprintln!("[aos-platformd] mem sweep erreur : {e}"),
                     }
                 }
+                let scheduled_narratives = {
+                    let mut mem = s.mem.lock().unwrap();
+                    if mem.memory_v2_enabled() {
+                        mem.generate_scheduled_narratives(now, offset)
+                    } else {
+                        Ok(Vec::new())
+                    }
+                };
+                match scheduled_narratives {
+                    Ok(objects) if !objects.is_empty() => eprintln!(
+                        "[aos-platformd] narrations mémoire : {} période(s) générée(s)",
+                        objects.len()
+                    ),
+                    Ok(_) => {}
+                    Err(e) => eprintln!("[aos-platformd] narrations mémoire erreur : {e}"),
+                }
                 let skills_dir = s.skills.lock().unwrap().dir().to_path_buf();
                 let state = aos_platform::skill_pass::SkillPassState::load(&skills_dir);
                 let skill_day_key = aos_platform::skill_pass::local_day_key(now, offset);

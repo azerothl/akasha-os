@@ -2244,6 +2244,16 @@
     "MemMindPalaceRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "goal_id": {
+          "default": null,
+          "description": "Convenience alias for navigating from a goal/objective root.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "limit": {
           "default": 64,
           "format": "uint",
@@ -2252,6 +2262,14 @@
         },
         "namespace": {
           "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project": {
+          "default": null,
+          "description": "Optional project metadata filter, independent from the storage namespace.",
           "type": [
             "string",
             "null"
@@ -2642,6 +2660,14 @@
           "minimum": 0.0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "idempotency_key": {
+          "default": null,
+          "description": "Stable key used by scheduled generation to make retries idempotent.",
+          "type": [
+            "string",
             "null"
           ]
         },

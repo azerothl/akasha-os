@@ -25,6 +25,7 @@ pub mod host_folder;
 pub mod intents;
 pub mod maintenance;
 pub mod mem_sweep;
+pub mod memory_narrative;
 pub mod memory;
 pub mod module_compile;
 pub mod module_rt;

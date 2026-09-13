@@ -2275,6 +2275,9 @@ pub struct MemNarrativeRequest {
     pub title: Option<String>,
     #[serde(default)]
     pub persist: bool,
+    /// Stable key used by scheduled generation to make retries idempotent.
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
 }
 
 /// Aggregated comparison metrics collected while Memory V2 runs in shadow mode.
@@ -2322,8 +2325,14 @@ pub struct MemMigrationReport {
 pub struct MemMindPalaceRequest {
     #[serde(default)]
     pub namespace: Option<String>,
+    /// Optional project metadata filter, independent from the storage namespace.
+    #[serde(default)]
+    pub project: Option<String>,
     #[serde(default)]
     pub root_id: Option<u64>,
+    /// Convenience alias for navigating from a goal/objective root.
+    #[serde(default)]
+    pub goal_id: Option<u64>,
     #[serde(default = "default_mind_palace_limit")]
     pub limit: usize,
 }

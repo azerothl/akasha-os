@@ -828,10 +828,12 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::MemMindPalace { namespace, root_id } => {
+        Cmd::MemMindPalace { namespace, project, root_id } => {
             let request = MemMindPalaceRequest {
                 namespace: namespace.filter(|value| !value.trim().is_empty()),
+                project: project.filter(|value| !value.trim().is_empty()),
                 root_id,
+                goal_id: None,
                 limit: 64,
             };
             match bus

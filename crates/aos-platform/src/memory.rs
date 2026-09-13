@@ -213,6 +213,19 @@ impl MemoryStore {
         &self.dir
     }
 
+    /// Namespaces represented in the V2 journal, used by periodic maintenance.
+    pub fn v2_namespaces(&self) -> Vec<String> {
+        let mut namespaces: Vec<String> = self
+            .objects
+            .values()
+            .map(|object| object.namespace.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        namespaces.sort();
+        namespaces
+    }
+
     fn journal_path(&self) -> PathBuf {
         self.dir.join("episodic.jsonl")
     }
@@ -1161,7 +1174,7 @@ impl MemoryStore {
     pub fn mind_palace_query(&self, req: &MemMindPalaceRequest) -> MemMindPalaceResponse {
         let limit = req.limit.clamp(1, 128);
         let mut ids = HashSet::new();
-        if let Some(root_id) = req.root_id {
+        if let Some(root_id) = req.goal_id.or(req.root_id) {
             ids.insert(root_id);
             for relation in &self.relations_v2 {
                 if relation.from == root_id {
@@ -1175,6 +1188,15 @@ impl MemoryStore {
             .objects
             .values()
             .filter(|object| req.namespace.as_deref().map_or(true, |ns| object.namespace == ns))
+            .filter(|object| {
+                req.project.as_deref().map_or(true, |project| {
+                    object
+                        .metadata
+                        .get("project")
+                        .and_then(|value| value.as_str())
+                        == Some(project)
+                })
+            })
             .filter(|object| ids.is_empty() || ids.contains(&object.id))
             .filter(|object| !matches!(object.status, MemoryObjectStatus::Rejected | MemoryObjectStatus::Archived))
             .cloned()
@@ -1383,12 +1405,59 @@ impl MemoryStore {
             visibility: "private".into(),
             metadata: serde_json::json!({"generated": true, "justification": "synthèse déterministe à partir des objets sélectionnés", "period_from": req.from_ms, "period_to": req.to_ms}),
             decision: None,
-            idempotency_key: None,
+            idempotency_key: req.idempotency_key.clone(),
         };
         if req.persist { self.object_create(create, Vec::new()) } else {
             let now = now_ms();
             Ok(MemoryObject { schema_version: 2, id: 0, kind: MemoryObjectKind::Narrative, namespace: create.namespace, title: create.title, content: create.content, status: create.status, created_at: now, updated_at: now, temporal: create.temporal, confidence: create.confidence, importance: create.importance, freshness: 1.0, last_used_at: None, source_refs: create.source_refs, visibility: create.visibility, metadata: create.metadata, decision: None, embedding: Vec::new() })
         }
+    }
+
+    /// Generate one narration per completed week, month and year. The state
+    /// file is updated after each namespace so a daemon restart safely resumes
+    /// without duplicating already completed periods.
+    pub fn generate_scheduled_narratives(
+        &mut self,
+        now_ms: u64,
+        offset_minutes: i32,
+    ) -> Result<Vec<MemoryObject>, String> {
+        if !self.v2_enabled {
+            return Ok(Vec::new());
+        }
+        let namespaces = self.v2_namespaces();
+        if namespaces.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut state = crate::memory_narrative::NarrativeScheduleState::load(&self.dir);
+        let mut generated = Vec::new();
+        for window in crate::memory_narrative::completed_windows(now_ms, offset_minutes) {
+            for namespace in &namespaces {
+                if state.last_key(window.cadence, namespace) == Some(window.key.as_str()) {
+                    continue;
+                }
+                let req = MemNarrativeRequest {
+                    namespace: Some(namespace.clone()),
+                    from_ms: Some(window.from_ms),
+                    to_ms: Some(window.to_ms.saturating_sub(1)),
+                    title: Some(format!("Mémoire {} — {}", window.cadence, window.key)),
+                    persist: true,
+                    idempotency_key: Some(format!(
+                        "scheduled-narrative:{namespace}:{}:{}",
+                        window.cadence, window.key
+                    )),
+                };
+                match self.narrative_generate(&req) {
+                    Ok(object) => generated.push(object),
+                    Err(error)
+                        if error.starts_with("aucun objet pour")
+                            || error.starts_with("aucun objet accepté") => {}
+                    Err(error) => return Err(error),
+                }
+                state.set_key(window.cadence, namespace, window.key.clone());
+                state.save(&self.dir)?;
+            }
+        }
+        Ok(generated)
     }
 
     /// Assemble un bloc bootstrap structuré (faits actifs + similar 1 hop).
@@ -1996,16 +2065,81 @@ mod tests {
         let object = s.object_create(MemObjectCreateRequest {
             namespace: "project:akasha".into(), kind: MemoryObjectKind::Decision, title: "Choix moteur".into(), content: "Utiliser Rust".into(),
             status: MemoryObjectStatus::Accepted, confidence: 0.9, importance: 0.9, temporal: Default::default(), source_refs: vec![source.clone()],
-            visibility: "private".into(), metadata: serde_json::json!({}), decision: Some(MemoryDecision { question: "Quel moteur ?".into(), options: vec!["Rust".into()], selected_option: Some("Rust".into()), rationale: Some("Sécurité".into()), participants: vec![], consequences: vec![], review_at: None }), idempotency_key: None,
+            visibility: "private".into(), metadata: serde_json::json!({"project": "akasha"}), decision: Some(MemoryDecision { question: "Quel moteur ?".into(), options: vec!["Rust".into()], selected_option: Some("Rust".into()), rationale: Some("Sécurité".into()), participants: vec![], consequences: vec![], review_at: None }), idempotency_key: None,
         }, v(0.7)).unwrap();
         let comparison = s.shadow_compare(&v(0.7), 4, Some("project:akasha"));
         assert!(comparison.overlap_ids.contains(&legacy));
         assert_eq!(s.shadow_metrics().comparisons, 1);
-        let palace = s.mind_palace_query(&MemMindPalaceRequest { namespace: Some("project:akasha".into()), root_id: None, limit: 64 });
+        let palace = s.mind_palace_query(&MemMindPalaceRequest {
+            namespace: Some("project:akasha".into()),
+            project: None,
+            root_id: None,
+            goal_id: None,
+            limit: 64,
+        });
         assert_eq!(palace.objects.len(), 2);
         assert!(palace.objects.iter().any(|candidate| candidate.id == object.id));
+        let project_palace = s.mind_palace_query(&MemMindPalaceRequest {
+            namespace: Some("project:akasha".into()),
+            project: Some("akasha".into()),
+            root_id: None,
+            goal_id: None,
+            limit: 64,
+        });
+        assert_eq!(project_palace.objects.len(), 1);
+        assert_eq!(project_palace.objects[0].id, object.id);
         let report = s.migration_report();
         assert!(report.projection_ready);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn scheduled_narratives_cover_completed_periods_once() {
+        let (mut s, dir) = store();
+        s.v2_enabled = true;
+        let now = now_ms();
+        let source = MemorySourceRef {
+            source_type: "test".into(),
+            source_id: "schedule".into(),
+            excerpt: Some("completed period".into()),
+            uri: None,
+        };
+        let mut object_ids = Vec::new();
+        for window in crate::memory_narrative::completed_windows(now, 0) {
+            let object = s
+                .object_create(
+                    MemObjectCreateRequest {
+                        namespace: "project:schedule".into(),
+                        kind: MemoryObjectKind::Event,
+                        title: format!("événement planifié {}", window.cadence),
+                        content: format!("événement de la période terminée {}", window.key),
+                        status: MemoryObjectStatus::Accepted,
+                        confidence: 0.9,
+                        importance: 0.7,
+                        temporal: aos_proto::MemoryTemporal {
+                            observed_at: Some(window.from_ms + 1),
+                            ..Default::default()
+                        },
+                        source_refs: vec![source.clone()],
+                        visibility: "private".into(),
+                        metadata: serde_json::json!({"project": "schedule"}),
+                        decision: None,
+                        idempotency_key: None,
+                    },
+                    Vec::new(),
+                )
+                .unwrap();
+            object_ids.push(object.id);
+        }
+        let first = s.generate_scheduled_narratives(now, 0).unwrap();
+        assert_eq!(first.len(), 3);
+        assert!(first.iter().all(|n| n.kind == MemoryObjectKind::Narrative));
+        assert!(s
+            .generate_scheduled_narratives(now, 0)
+            .unwrap()
+            .is_empty());
+        assert!(object_ids.iter().all(|id| s.object_get(*id).is_some()));
+        assert!(crate::memory_narrative::NarrativeScheduleState::path_for(&dir).exists());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -76,6 +76,7 @@ pub(crate) enum Cmd {
     },
     MemMindPalace {
         namespace: Option<String>,
+        project: Option<String>,
         root_id: Option<u64>,
     },
     MemSweepStatus,

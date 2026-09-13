@@ -140,10 +140,18 @@ impl UiApp {
                     egui::TextEdit::singleline(&mut self.memory_ui.palace_namespace)
                         .hint_text(t.memory_mind_palace_namespace),
                 );
+                theme::add_form_field(
+                    ui,
+                    220.0,
+                    egui::TextEdit::singleline(&mut self.memory_ui.palace_project)
+                        .hint_text("project (metadata)"),
+                );
                 if ui.button(t.memory_mind_palace_explore).clicked() {
                     let namespace = self.memory_ui.palace_namespace.trim().to_string();
+                    let project = self.memory_ui.palace_project.trim().to_string();
                     let _ = self.cmd_tx.send(Cmd::MemMindPalace {
                         namespace: (!namespace.is_empty()).then_some(namespace),
+                        project: (!project.is_empty()).then_some(project),
                         root_id: None,
                     });
                 }
