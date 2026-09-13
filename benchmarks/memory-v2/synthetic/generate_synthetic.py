@@ -114,11 +114,12 @@ def decision_payload(project_name: str, index: int, selected: str | None) -> dic
     }
 
 
-def build() -> tuple[list[dict], list[dict], list[dict], dict]:
+def build() -> tuple[list[dict], list[dict], list[dict], list[dict], dict]:
     rng = random.Random(SEED)
     objects: list[dict] = []
     relations: list[dict] = []
     queries: list[dict] = []
+    llm_cases: list[dict] = []
     counts: dict[str, int] = {}
 
     def add(obj: dict) -> None:
@@ -206,37 +207,49 @@ def build() -> tuple[list[dict], list[dict], list[dict], dict]:
         relate(new_claim, "contradicts", old_claim, slug)
 
         query_specs = [
-            ("decision_question", f"Quelle stratégie retenir pour le projet {name} ?", decision_ids[0]),
-            ("decision_choice", f"Quel choix a été retenu pour {name} ?", decision_ids[0]),
-            ("decision_project", f"Quelles décisions concernent {name} ?", decision_ids[0]),
-            ("goal", f"Quel est l'objectif principal de {name} ?", goal_ids[0]),
-            ("problem", f"Quel problème de capacité touche {name} ?", problem_ids[0]),
-            ("event", f"Quelle étape {name} a été réalisée récemment ?", f"{slug}-event-047"),
-            ("claim", f"Quelle mesure concerne la progression de {name} ?", f"{slug}-claim-005"),
-            ("preference", f"Quelle préférence d'outil existe pour {name} ?", f"{slug}-preference-000"),
-            ("temporal", f"Quels événements du projet {name} ont eu lieu en dernier ?", f"{slug}-event-047"),
-            ("contradiction", f"Quelle affirmation contredit la première mesure de {name} ?", new_claim),
-            ("candidate", f"Quelle préférence de {name} doit encore être confirmée ?", f"{slug}-preference-003"),
-            ("namespace_isolation", f"Donne les informations du projet {name} uniquement.", project_id),
-            ("graph", f"Quelles décisions soutiennent les objectifs de {name} ?", decision_ids[0]),
-            ("source", f"Quelle source justifie la décision {name} 1 ?", decision_ids[0]),
-            ("replay", f"Retrouve la décision {name} 1 après une réindexation.", decision_ids[0]),
-            ("narrative", f"Résume l'évolution de {name} sur la période.", decision_ids[0]),
+            ("decision_question", f"Quelle stratégie retenir pour le projet {name} ?", [decision_ids[0]], "mem.context", {"assertion": "top5"}),
+            ("decision_choice", f"Quel choix a été retenu pour {name} ?", [decision_ids[0]], "mem.context", {"assertion": "top5"}),
+            ("decision_project", f"Quelles décisions concernent {name} ?", [decision_ids[0]], "mem.context", {"assertion": "top5"}),
+            ("goal", f"Quel est l'objectif principal de {name} ?", [goal_ids[0]], "mem.context", {"assertion": "top5"}),
+            ("problem", f"Quel problème de capacité touche {name} ?", [problem_ids[0]], "mem.context", {"assertion": "top5"}),
+            ("event", f"Quelle étape {name} a été réalisée récemment ?", [f"{slug}-event-047"], "mem.context", {"assertion": "top5"}),
+            ("claim", f"Quelle mesure concerne la progression de {name} ?", [f"{slug}-claim-005"], "mem.context", {"assertion": "top5"}),
+            ("preference", f"Quelle préférence d'outil existe pour {name} ?", [f"{slug}-preference-000"], "mem.context", {"assertion": "top5"}),
+            ("temporal", f"Quels événements du projet {name} ont eu lieu en dernier ?", [f"{slug}-event-047"], "mem.timeline", {"assertion": "latest_observed"}),
+            ("contradiction", f"Quelle affirmation contredit la première mesure de {name} ?", [old_claim], "mem.graph.query", {"assertion": "relation_exists", "root_fixture_id": new_claim, "relation_kind": "contradicts"}),
+            ("candidate", f"Quelle préférence de {name} doit encore être confirmée ?", [f"{slug}-preference-003"], "mem.object.list", {"assertion": "contains", "kind": "preference", "status": "candidate"}),
+            ("namespace_isolation", f"Donne les informations du projet {name} uniquement.", [project_id], "mem.object.list", {"assertion": "namespace_only"}),
+            ("graph", f"Quelles décisions soutiennent les objectifs de {name} ?", decision_ids, "mem.graph.query", {"assertion": "relation_targets", "root_fixture_id": goal_ids[0], "relation_kind": "supports"}),
+            ("source", f"Quelle source justifie la décision {name} 1 ?", [decision_ids[0]], "mem.explain", {"assertion": "proof"}),
+            ("replay", f"Retrouve la décision {name} 1 après une réindexation.", [decision_ids[0]], "mem.object.list", {"assertion": "contains", "kind": "decision"}),
+            ("narrative", f"Résume l'évolution de {name} sur la période.", [decision_ids[0]], "mem.narrative.generate", {"assertion": "narrative_sources"}),
         ]
-        for query_index, (kind, query, expected) in enumerate(query_specs):
+        for query_index, (kind, query, expected, endpoint, assertion) in enumerate(query_specs):
             queries.append({
                 "query_id": f"{slug}-query-{query_index:03d}",
                 "namespace": namespace,
                 "query": query,
                 "scenario": kind,
-                "expected_fixture_ids": [expected],
+                "endpoint": endpoint,
+                "expected_fixture_ids": expected,
+                "assertion": assertion,
                 "max_rank": 5,
                 "must_not_include_namespaces": [f"{NAMESPACE_PREFIX}:{other[0]}" for other in PROJECTS if other[0] != slug],
             })
+        llm_cases.append({
+            "case_id": f"{slug}-llm-decision-choice",
+            "query_id": f"{slug}-query-001",
+            "expected_fixture_id": decision_ids[0],
+            "required_terms": [name, DECISION_OPTIONS[0]],
+            "require_memory_citation": True,
+        })
 
     rng.shuffle(objects)
     rng.shuffle(relations)
     rng.shuffle(queries)
+    endpoint_counts = {}
+    for query in queries:
+        endpoint_counts[query["endpoint"]] = endpoint_counts.get(query["endpoint"], 0) + 1
     manifest = {
         "dataset": "memory-v2-synthetic-2026-09",
         "seed": SEED,
@@ -249,14 +262,17 @@ def build() -> tuple[list[dict], list[dict], list[dict], dict]:
         "projects": len(PROJECTS),
         "objects_per_project": len(objects) // len(PROJECTS),
         "queries_per_project": 16,
+        "llm_case_count": len(llm_cases),
+        "query_endpoints": dict(sorted(endpoint_counts.items())),
         "validation_targets": {
             "top5_recall_min": 0.90,
+            "llm_recall_min": 0.85,
             "duplicate_on_replay": 0,
             "unauthorized_evidence": 0,
             "contradiction_without_history_loss": 0,
         },
     }
-    return objects, relations, queries, manifest
+    return objects, relations, queries, llm_cases, manifest
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -268,10 +284,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path(__file__).parent)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    objects, relations, queries, manifest = build()
+    objects, relations, queries, llm_cases, manifest = build()
     write_jsonl(args.output / "create_requests.jsonl", objects)
     write_jsonl(args.output / "relations.jsonl", relations)
     write_jsonl(args.output / "queries.jsonl", queries)
+    write_jsonl(args.output / "llm_cases.jsonl", llm_cases)
     (args.output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
 

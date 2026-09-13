@@ -18,6 +18,15 @@
   "projects": 12,
   "objects_per_project": 81,
   "queries_per_project": 16,
+  "llm_case_count": 12,
+  "query_endpoints": {
+    "mem.context": 96,
+    "mem.explain": 12,
+    "mem.graph.query": 24,
+    "mem.narrative.generate": 12,
+    "mem.object.list": 36,
+    "mem.timeline": 12
+  },
   "validation_targets": {
     "top5_recall_min": 0.9,
     "duplicate_on_replay": 0,
