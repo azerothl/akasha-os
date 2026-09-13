@@ -11,6 +11,11 @@ documents en une mémoire cognitive structurée. La mémoire doit pouvoir
 répondre à « pourquoi avons-nous pris cette décision ? », « comment ce projet
 a-t-il évolué ? » et « sur quelles preuves repose cette affirmation ? ».
 
+Dans Preview, Memory V2 est activée par défaut dans la configuration de
+`aos-platformd`. Un retour temporaire vers V1 reste possible avec
+`AOS_MEMORY_V2=0` (ou `memory_v2: false`) ; les endpoints et projections V1
+restent conservés pendant la migration.
+
 La mise en œuvre sera progressive et compatible avec les APIs `mem.*` déjà
 présentes. Elle ne nécessite pas de réécrire le kernel, le bus CBOR ou le
 runtime des agents.

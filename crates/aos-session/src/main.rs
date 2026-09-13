@@ -1151,8 +1151,8 @@ bus: "{BUS_ADDR}"
 audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
-# Memory V2 cognitive graph (set true to enable V2 bus APIs).
-memory_v2: false
+# Memory V2 cognitive graph (default Preview).
+memory_v2: true
 # V1/V2 comparison without changing reads.
 memory_v2_shadow: false
 modules_dir: var/modules

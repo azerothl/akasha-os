@@ -164,11 +164,10 @@ impl PlatformSubsystem {
     pub fn open(config: &PlatformConfig) -> Result<Arc<Self>, String> {
         let audit = AuditJournal::open(&config.audit_dir).map_err(|e| e.to_string())?;
         let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
-        let mem = MemoryStore::open_with_modes(
-            &config.memory_dir,
-            config.memory_v2 || crate::memory::memory_v2_env_enabled(),
-            config.memory_v2_shadow || crate::memory::memory_v2_shadow_env_enabled(),
-        )
+        let v2_enabled = crate::memory::memory_v2_env_override().unwrap_or(config.memory_v2);
+        let shadow_enabled = crate::memory::memory_v2_shadow_env_override()
+            .unwrap_or(config.memory_v2_shadow);
+        let mem = MemoryStore::open_with_modes(&config.memory_dir, v2_enabled, shadow_enabled)
         .map_err(|e| e.to_string())?;
         let sessions = ChatSessionStore::open(&config.sessions_dir).map_err(|e| e.to_string())?;
         #[cfg(feature = "embeddings")]

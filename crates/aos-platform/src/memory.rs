@@ -158,7 +158,8 @@ pub struct MemoryStore {
     objects: HashMap<u64, MemoryObject>,
     /// V2 graph edges, persisted independently from the legacy relation log.
     relations_v2: Vec<MemoryRelationV2>,
-    /// Runtime rollout switch. Set `AOS_MEMORY_V2=1` to expose V2 bus APIs.
+    /// Runtime rollout switch. Memory V2 is enabled by Preview config; the
+    /// `AOS_MEMORY_V2` override can force it on or off for rollback.
     v2_enabled: bool,
     /// Shadow rollout switch. Builds and compares V2 without changing reads.
     shadow_enabled: bool,
@@ -1554,21 +1555,48 @@ impl MemoryStore {
 }
 
 pub fn memory_v2_env_enabled() -> bool {
+    memory_v2_env_override() == Some(true)
+}
+
+/// Optional explicit rollout override. `0`/`false` is intentionally distinct
+/// from an unset variable so a configured Preview can be rolled back quickly.
+pub fn memory_v2_env_override() -> Option<bool> {
     std::env::var("AOS_MEMORY_V2")
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-        .unwrap_or(false)
+        .ok()
+        .and_then(|value| parse_memory_flag(&value))
 }
 
 pub fn memory_v2_shadow_env_enabled() -> bool {
+    memory_v2_shadow_env_override() == Some(true)
+}
+
+pub fn memory_v2_shadow_env_override() -> Option<bool> {
     std::env::var("AOS_MEMORY_V2_SHADOW")
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-        .unwrap_or(false)
+        .ok()
+        .and_then(|value| parse_memory_flag(&value))
+}
+
+fn parse_memory_flag(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use aos_proto::MemoryDecision;
+
+    #[test]
+    fn rollout_flags_accept_explicit_disable_and_enable_values() {
+        assert_eq!(parse_memory_flag("1"), Some(true));
+        assert_eq!(parse_memory_flag(" true "), Some(true));
+        assert_eq!(parse_memory_flag("0"), Some(false));
+        assert_eq!(parse_memory_flag("OFF"), Some(false));
+        assert_eq!(parse_memory_flag("unexpected"), None);
+    }
 
     fn store() -> (MemoryStore, PathBuf) {
         use std::sync::atomic::{AtomicU64, Ordering};
