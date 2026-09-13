@@ -1,0 +1,27 @@
+{
+  "dataset": "memory-v2-synthetic-2026-09",
+  "seed": 20260913,
+  "privacy": "synthetic-fictional-identifiers-only",
+  "namespace_prefix": "synthetic:validation",
+  "object_count": 972,
+  "relation_count": 540,
+  "query_count": 192,
+  "objects_by_kind": {
+    "claim": 192,
+    "decision": 96,
+    "entity": 12,
+    "event": 576,
+    "goal": 24,
+    "preference": 48,
+    "problem": 24
+  },
+  "projects": 12,
+  "objects_per_project": 81,
+  "queries_per_project": 16,
+  "validation_targets": {
+    "top5_recall_min": 0.9,
+    "duplicate_on_replay": 0,
+    "unauthorized_evidence": 0,
+    "contradiction_without_history_loss": 0
+  }
+}
