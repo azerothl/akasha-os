@@ -126,9 +126,365 @@
             "supersedes"
           ],
           "type": "string"
+        },
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObject": {
+          "description": "Canonical Memory V2 object. `embedding` is persisted for local index rebuilds but omitted from normal wire responses when empty.",
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryDecision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "embedding": {
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "freshness": {
+              "default": 1.0,
+              "format": "float",
+              "type": "number"
+            },
+            "id": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "importance": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            "last_used_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "metadata": {
+              "default": null
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "schema_version": {
+              "default": 2,
+              "description": "Version du format du journal canonique JSONL.",
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "status": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryObjectStatus"
+                }
+              ],
+              "default": "candidate"
+            },
+            "temporal": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryTemporal"
+                }
+              ],
+              "default": {}
+            },
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "updated_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "visibility": {
+              "default": "private",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "kind",
+            "namespace"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationV2": {
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryRelationKind"
+            },
+            "metadata": {
+              "default": null
+            },
+            "schema_version": {
+              "default": 2,
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
         }
       },
       "properties": {
+        "memory_warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "object_relations": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MemoryRelationV2"
+          },
+          "type": "array"
+        },
+        "objects": {
+          "default": [],
+          "description": "Relevant semantic objects when Memory V2 is enabled.",
+          "items": {
+            "$ref": "#/definitions/MemoryObject"
+          },
+          "type": "array"
+        },
         "product_hits": {
           "default": [],
           "description": "Extraíts docs Preview (FEATURES / STATUS / TESTER).",
@@ -277,6 +633,396 @@
         "text"
       ],
       "title": "MemEpisodicWriteRequest",
+      "type": "object"
+    },
+    "MemExplainRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MemExplainRequest",
+      "type": "object"
+    },
+    "MemExplanation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObject": {
+          "description": "Canonical Memory V2 object. `embedding` is persisted for local index rebuilds but omitted from normal wire responses when empty.",
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryDecision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "embedding": {
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "freshness": {
+              "default": 1.0,
+              "format": "float",
+              "type": "number"
+            },
+            "id": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "importance": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            "last_used_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "metadata": {
+              "default": null
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "schema_version": {
+              "default": 2,
+              "description": "Version du format du journal canonique JSONL.",
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "status": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryObjectStatus"
+                }
+              ],
+              "default": "candidate"
+            },
+            "temporal": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryTemporal"
+                }
+              ],
+              "default": {}
+            },
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "updated_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "visibility": {
+              "default": "private",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "kind",
+            "namespace"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationV2": {
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryRelationKind"
+            },
+            "metadata": {
+              "default": null
+            },
+            "schema_version": {
+              "default": 2,
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "freshness_warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "object": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObject"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/definitions/MemoryRelationV2"
+          },
+          "type": "array"
+        },
+        "supporting_sources": {
+          "items": {
+            "$ref": "#/definitions/MemorySourceRef"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "relations",
+        "supporting_sources"
+      ],
+      "title": "MemExplanation",
       "type": "object"
     },
     "MemExtractOutcome": {
@@ -503,6 +1249,28 @@
         "MemExtractedFact": {
           "description": "Un fait proposé par l'extracteur (avant filtre / persist).",
           "properties": {
+            "decision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryDecision"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Structured decision payload when the candidate is a decision."
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryObjectKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional semantic kind. Omitted values remain legacy claims."
+            },
             "supersedes_hint": {
               "default": null,
               "type": [
@@ -550,6 +1318,74 @@
             "supersedes"
           ],
           "type": "string"
+        },
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
         }
       },
       "properties": {
@@ -582,8 +1418,100 @@
     },
     "MemExtractedFact": {
       "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        }
+      },
       "description": "Un fait proposé par l'extracteur (avant filtre / persist).",
       "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Structured decision payload when the candidate is a decision."
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional semantic kind. Omitted values remain legacy claims."
+        },
         "supersedes_hint": {
           "default": null,
           "type": [
@@ -599,6 +1527,439 @@
         "text"
       ],
       "title": "MemExtractedFact",
+      "type": "object"
+    },
+    "MemGraphQueryRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "depth": {
+          "default": 2,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "max_nodes": {
+          "default": 64,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "relation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryRelationKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "root_id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "root_id"
+      ],
+      "title": "MemGraphQueryRequest",
+      "type": "object"
+    },
+    "MemGraphResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObject": {
+          "description": "Canonical Memory V2 object. `embedding` is persisted for local index rebuilds but omitted from normal wire responses when empty.",
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryDecision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "embedding": {
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "freshness": {
+              "default": 1.0,
+              "format": "float",
+              "type": "number"
+            },
+            "id": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "importance": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            "last_used_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "metadata": {
+              "default": null
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "schema_version": {
+              "default": 2,
+              "description": "Version du format du journal canonique JSONL.",
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "status": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryObjectStatus"
+                }
+              ],
+              "default": "candidate"
+            },
+            "temporal": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryTemporal"
+                }
+              ],
+              "default": {}
+            },
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "updated_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "visibility": {
+              "default": "private",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "kind",
+            "namespace"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        },
+        "MemoryRelationV2": {
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryRelationKind"
+            },
+            "metadata": {
+              "default": null
+            },
+            "schema_version": {
+              "default": 2,
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ],
+          "type": "object"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "nodes": {
+          "items": {
+            "$ref": "#/definitions/MemoryObject"
+          },
+          "type": "array"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/definitions/MemoryRelationV2"
+          },
+          "type": "array"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObject"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "nodes",
+        "relations",
+        "truncated"
+      ],
+      "title": "MemGraphResponse",
       "type": "object"
     },
     "MemHit": {
@@ -707,6 +2068,49 @@
       "title": "MemListRequest",
       "type": "object"
     },
+    "MemNarrativeRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "from_ms": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "namespace": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "persist": {
+          "default": false,
+          "type": "boolean"
+        },
+        "title": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to_ms": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "MemNarrativeRequest",
+      "type": "object"
+    },
     "MemNeighborsRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "definitions": {
@@ -743,6 +2147,642 @@
         "id"
       ],
       "title": "MemNeighborsRequest",
+      "type": "object"
+    },
+    "MemObjectCreateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "confidence": {
+          "default": 0.5,
+          "format": "float",
+          "type": "number"
+        },
+        "content": {
+          "type": "string"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "idempotency_key": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "importance": {
+          "default": 0.5,
+          "format": "float",
+          "type": "number"
+        },
+        "kind": {
+          "$ref": "#/definitions/MemoryObjectKind"
+        },
+        "metadata": {
+          "default": null
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MemorySourceRef"
+          },
+          "type": "array"
+        },
+        "status": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectStatus"
+            }
+          ],
+          "default": "candidate"
+        },
+        "temporal": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/MemoryTemporal"
+            }
+          ],
+          "default": {}
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "visibility": {
+          "default": "private",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "kind",
+        "namespace"
+      ],
+      "title": "MemObjectCreateRequest",
+      "type": "object"
+    },
+    "MemObjectGetRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MemObjectGetRequest",
+      "type": "object"
+    },
+    "MemObjectListRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "include_archived": {
+          "default": false,
+          "type": "boolean"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "limit": {
+          "default": 5,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "namespace": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "MemObjectListRequest",
+      "type": "object"
+    },
+    "MemObjectRelateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        }
+      },
+      "properties": {
+        "confidence": {
+          "default": 0.5,
+          "format": "float",
+          "type": "number"
+        },
+        "from": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/definitions/MemoryRelationKind"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MemorySourceRef"
+          },
+          "type": "array"
+        },
+        "to": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "kind",
+        "to"
+      ],
+      "title": "MemObjectRelateRequest",
+      "type": "object"
+    },
+    "MemObjectUpdateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "confidence": {
+          "default": null,
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "content": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryDecision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "importance": {
+          "default": null,
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "metadata": {
+          "default": null
+        },
+        "source_refs": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/MemorySourceRef"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "temporal": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryTemporal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MemObjectUpdateRequest",
       "type": "object"
     },
     "MemRelateRequest": {
@@ -883,6 +2923,62 @@
         "id"
       ],
       "title": "MemRememberResponse",
+      "type": "object"
+    },
+    "MemRevalidateRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        }
+      },
+      "properties": {
+        "confidence": {
+          "default": null,
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "valid_to": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MemRevalidateRequest",
       "type": "object"
     },
     "MemSharedReadRequest": {
@@ -1075,6 +3171,339 @@
       "title": "MemSweepStatus",
       "type": "object"
     },
+    "MemTimelineRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "from_ms": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "limit": {
+          "default": 100,
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "namespace": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject_id": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "to_ms": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "MemTimelineRequest",
+      "type": "object"
+    },
+    "MemTimelineResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObject": {
+          "description": "Canonical Memory V2 object. `embedding` is persisted for local index rebuilds but omitted from normal wire responses when empty.",
+          "properties": {
+            "confidence": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryDecision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "embedding": {
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "freshness": {
+              "default": 1.0,
+              "format": "float",
+              "type": "number"
+            },
+            "id": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "importance": {
+              "default": 0.5,
+              "format": "float",
+              "type": "number"
+            },
+            "kind": {
+              "$ref": "#/definitions/MemoryObjectKind"
+            },
+            "last_used_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "metadata": {
+              "default": null
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "schema_version": {
+              "default": 2,
+              "description": "Version du format du journal canonique JSONL.",
+              "format": "uint16",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "source_refs": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/MemorySourceRef"
+              },
+              "type": "array"
+            },
+            "status": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryObjectStatus"
+                }
+              ],
+              "default": "candidate"
+            },
+            "temporal": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/MemoryTemporal"
+                }
+              ],
+              "default": {}
+            },
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "updated_at": {
+              "default": 0,
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "visibility": {
+              "default": "private",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "kind",
+            "namespace"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "objects": {
+          "items": {
+            "$ref": "#/definitions/MemoryObject"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "objects",
+        "truncated"
+      ],
+      "title": "MemTimelineResponse",
+      "type": "object"
+    },
     "MemUnrelateRequest": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "definitions": {
@@ -1227,10 +3656,502 @@
       ],
       "title": "MemWorkingRequest",
       "type": "object"
+    },
+    "MemoryObject": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryDecision": {
+          "description": "Structured payload specific to a decision object.",
+          "properties": {
+            "consequences": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "options": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "participants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "review_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "selected_option": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "MemoryObjectKind": {
+          "description": "Semantic object kinds introduced by Memory V2.",
+          "enum": [
+            "document",
+            "event",
+            "entity",
+            "claim",
+            "decision",
+            "goal",
+            "problem",
+            "preference",
+            "narrative"
+          ],
+          "type": "string"
+        },
+        "MemoryObjectStatus": {
+          "description": "Lifecycle state of a Memory V2 object.",
+          "enum": [
+            "candidate",
+            "accepted",
+            "rejected",
+            "superseded",
+            "archived"
+          ],
+          "type": "string"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        },
+        "MemoryTemporal": {
+          "description": "Temporal validity and observation metadata for a memory object.",
+          "properties": {
+            "last_confirmed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "observed_at": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_from": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "valid_to": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "description": "Canonical Memory V2 object. `embedding` is persisted for local index rebuilds but omitted from normal wire responses when empty.",
+      "properties": {
+        "confidence": {
+          "default": 0.5,
+          "format": "float",
+          "type": "number"
+        },
+        "content": {
+          "type": "string"
+        },
+        "created_at": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MemoryDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "embedding": {
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "freshness": {
+          "default": 1.0,
+          "format": "float",
+          "type": "number"
+        },
+        "id": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "importance": {
+          "default": 0.5,
+          "format": "float",
+          "type": "number"
+        },
+        "kind": {
+          "$ref": "#/definitions/MemoryObjectKind"
+        },
+        "last_used_at": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "metadata": {
+          "default": null
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 2,
+          "description": "Version du format du journal canonique JSONL.",
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MemorySourceRef"
+          },
+          "type": "array"
+        },
+        "status": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/MemoryObjectStatus"
+            }
+          ],
+          "default": "candidate"
+        },
+        "temporal": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/MemoryTemporal"
+            }
+          ],
+          "default": {}
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "updated_at": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "visibility": {
+          "default": "private",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "kind",
+        "namespace"
+      ],
+      "title": "MemoryObject",
+      "type": "object"
+    },
+    "MemoryObjectKind": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Semantic object kinds introduced by Memory V2.",
+      "enum": [
+        "document",
+        "event",
+        "entity",
+        "claim",
+        "decision",
+        "goal",
+        "problem",
+        "preference",
+        "narrative"
+      ],
+      "title": "MemoryObjectKind",
+      "type": "string"
+    },
+    "MemoryObjectStatus": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Lifecycle state of a Memory V2 object.",
+      "enum": [
+        "candidate",
+        "accepted",
+        "rejected",
+        "superseded",
+        "archived"
+      ],
+      "title": "MemoryObjectStatus",
+      "type": "string"
+    },
+    "MemoryRelationKind": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+      "enum": [
+        "contains",
+        "mentions",
+        "about",
+        "involves",
+        "supports",
+        "contradicts",
+        "depends_on",
+        "part_of",
+        "derived_from",
+        "causes",
+        "targets",
+        "similar",
+        "updates",
+        "supersedes"
+      ],
+      "title": "MemoryRelationKind",
+      "type": "string"
+    },
+    "MemoryRelationV2": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {
+        "MemoryRelationKind": {
+          "description": "V2 relation kind. Existing V1 relations remain available unchanged.",
+          "enum": [
+            "contains",
+            "mentions",
+            "about",
+            "involves",
+            "supports",
+            "contradicts",
+            "depends_on",
+            "part_of",
+            "derived_from",
+            "causes",
+            "targets",
+            "similar",
+            "updates",
+            "supersedes"
+          ],
+          "type": "string"
+        },
+        "MemorySourceRef": {
+          "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+          "properties": {
+            "excerpt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "source_id",
+            "source_type"
+          ],
+          "type": "object"
+        }
+      },
+      "properties": {
+        "confidence": {
+          "default": 0.5,
+          "format": "float",
+          "type": "number"
+        },
+        "created_at": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "from": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/definitions/MemoryRelationKind"
+        },
+        "metadata": {
+          "default": null
+        },
+        "schema_version": {
+          "default": 2,
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MemorySourceRef"
+          },
+          "type": "array"
+        },
+        "to": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "kind",
+        "to"
+      ],
+      "title": "MemoryRelationV2",
+      "type": "object"
+    },
+    "MemorySourceRef": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "A source/evidence pointer. It deliberately stores references and excerpts, never hidden model reasoning.",
+      "properties": {
+        "excerpt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type"
+      ],
+      "title": "MemorySourceRef",
+      "type": "object"
+    },
+    "MemoryTemporal": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Temporal validity and observation metadata for a memory object.",
+      "properties": {
+        "last_confirmed_at": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "observed_at": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "valid_from": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "valid_to": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "MemoryTemporal",
+      "type": "object"
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",
   "description": "JSON Schema (draft-07) for mem.* bus payloads, including E6 relations and E14 mem.extract. Canonical wire format remains CBOR on the OS intent bus.",
   "title": "Akasha OS aos-proto memory intents",
-  "version": "0.6.0"
+  "version": "0.7.0"
 }

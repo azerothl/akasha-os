@@ -15,7 +15,13 @@
 //! `supersedes`. Les requêtes masquent les nœuds supersédés par défaut et
 //! peuvent étendre d'un hop `similar`.
 
-use aos_proto::{MemHit, MemRelation, MemRelationKind};
+use aos_proto::{
+    MemExplainRequest, MemGraphResponse, MemGraphQueryRequest, MemNarrativeRequest,
+    MemObjectCreateRequest, MemObjectListRequest, MemObjectUpdateRequest, MemRevalidateRequest,
+    MemTimelineRequest, MemTimelineResponse, MemoryObject, MemoryObjectKind, MemoryObjectStatus,
+    MemoryRelationKind, MemoryRelationV2, MemorySourceRef, MemExplanation, MemHit, MemRelation,
+    MemRelationKind,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -145,11 +151,22 @@ pub struct MemoryStore {
     shared: HashMap<String, serde_json::Value>,
     /// Arêtes typées.
     relations: Vec<MemRelation>,
+    /// Canonical semantic objects for Memory V2. Legacy episodic entries are
+    /// projected here on open, preserving their ids and vectors.
+    objects: HashMap<u64, MemoryObject>,
+    /// V2 graph edges, persisted independently from the legacy relation log.
+    relations_v2: Vec<MemoryRelationV2>,
+    /// Runtime rollout switch. Set `AOS_MEMORY_V2=1` to expose V2 bus APIs.
+    v2_enabled: bool,
     next_id: u64,
 }
 
 impl MemoryStore {
     pub fn open(dir: impl AsRef<Path>) -> std::io::Result<Self> {
+        Self::open_with_v2(dir, memory_v2_env_enabled())
+    }
+
+    pub fn open_with_v2(dir: impl AsRef<Path>, v2_enabled: bool) -> std::io::Result<Self> {
         let dir = dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&dir)?;
         let mut store = Self {
@@ -159,10 +176,19 @@ impl MemoryStore {
             index: BruteForceIndex::default(),
             shared: HashMap::new(),
             relations: Vec::new(),
+            objects: HashMap::new(),
+            relations_v2: Vec::new(),
+            v2_enabled,
             next_id: 1,
         };
         store.replay()?;
         store.replay_relations()?;
+        store.replay_objects()?;
+        store.replay_relations_v2()?;
+        store.replay_shared()?;
+        if store.v2_enabled {
+            store.migrate_legacy_objects()?;
+        }
         Ok(store)
     }
 
@@ -176,6 +202,18 @@ impl MemoryStore {
 
     fn relations_path(&self) -> PathBuf {
         self.dir.join("relations.jsonl")
+    }
+
+    fn objects_path(&self) -> PathBuf {
+        self.dir.join("objects-v2.jsonl")
+    }
+
+    fn relations_v2_path(&self) -> PathBuf {
+        self.dir.join("relations-v2.jsonl")
+    }
+
+    fn shared_path(&self) -> PathBuf {
+        self.dir.join("shared.json")
     }
 
     fn replay(&mut self) -> std::io::Result<()> {
@@ -210,6 +248,118 @@ impl MemoryStore {
                     self.relations.push(rel);
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn replay_objects(&mut self) -> std::io::Result<()> {
+        let path = self.objects_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        for line in std::fs::read_to_string(path)?.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(object) = serde_json::from_str::<MemoryObject>(line) {
+                self.next_id = self.next_id.max(object.id.saturating_add(1));
+                if !object.embedding.is_empty() {
+                    self.index.insert(object.id, &object.embedding);
+                }
+                self.objects.insert(object.id, object);
+            }
+        }
+        Ok(())
+    }
+
+    fn replay_relations_v2(&mut self) -> std::io::Result<()> {
+        let path = self.relations_v2_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        for line in std::fs::read_to_string(path)?.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(rel) = serde_json::from_str::<MemoryRelationV2>(line) {
+                if self.objects.contains_key(&rel.from) && self.objects.contains_key(&rel.to) {
+                    self.relations_v2.push(rel);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn replay_shared(&mut self) -> std::io::Result<()> {
+        let path = self.shared_path();
+        if path.exists() {
+            if let Ok(value) = serde_json::from_str::<HashMap<String, serde_json::Value>>(
+                &std::fs::read_to_string(path)?,
+            ) {
+                self.shared = value;
+            }
+        }
+        Ok(())
+    }
+
+    /// Project V1 facts/episodes into the V2 ontology without changing their
+    /// ids or deleting the original journal.
+    fn migrate_legacy_objects(&mut self) -> std::io::Result<()> {
+        let missing: Vec<EpisodicEntry> = self
+            .episodic
+            .values()
+            .filter(|entry| !self.objects.contains_key(&entry.id))
+            .cloned()
+            .collect();
+        for entry in missing {
+            let kind = match entry.kind {
+                MemoryKind::Episode => MemoryObjectKind::Event,
+                MemoryKind::Fact => MemoryObjectKind::Claim,
+            };
+            let source_refs = entry
+                .metadata
+                .get("source")
+                .and_then(|v| v.as_str())
+                .map(|source| vec![MemorySourceRef {
+                    source_type: source.to_string(),
+                    source_id: entry
+                        .metadata
+                        .get("session_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    excerpt: Some(entry.text.clone()),
+                    uri: None,
+                }])
+                .unwrap_or_else(|| vec![MemorySourceRef {
+                    source_type: "legacy_episodic".into(),
+                    source_id: entry.id.to_string(),
+                    excerpt: Some(entry.text.clone()),
+                    uri: None,
+                }]);
+            let object = MemoryObject {
+                schema_version: 2,
+                id: entry.id,
+                kind,
+                namespace: entry.namespace,
+                title: String::new(),
+                content: entry.text,
+                status: MemoryObjectStatus::Accepted,
+                created_at: entry.ts_ms,
+                updated_at: entry.ts_ms,
+                temporal: Default::default(),
+                confidence: 0.5,
+                importance: if entry.pinned { 1.0 } else { 0.5 },
+                freshness: 1.0,
+                last_used_at: None,
+                source_refs,
+                visibility: "private".into(),
+                metadata: entry.metadata,
+                decision: None,
+                embedding: entry.vector,
+            };
+            self.persist_object(&object)?;
+            self.objects.insert(object.id, object);
         }
         Ok(())
     }
@@ -270,6 +420,9 @@ impl MemoryStore {
             let _ = writeln!(f, "{}", serde_json::to_string(&entry).unwrap_or_default());
         }
         self.episodic.insert(id, entry);
+        if self.v2_enabled {
+            let _ = self.sync_legacy_object(id);
+        }
         id
     }
 
@@ -615,6 +768,494 @@ impl MemoryStore {
         &self.relations
     }
 
+    // --- Memory V2 semantic objects --------------------------------------
+
+    pub fn memory_v2_enabled(&self) -> bool {
+        self.v2_enabled
+    }
+
+    fn persist_object(&self, object: &MemoryObject) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.objects_path())?;
+        writeln!(f, "{}", serde_json::to_string(object).unwrap_or_default())
+    }
+
+    fn sync_legacy_object(&mut self, id: u64) -> std::io::Result<()> {
+        let Some(entry) = self.episodic.get(&id).cloned() else {
+            return Ok(());
+        };
+        let text = entry.text.clone();
+        let object = MemoryObject {
+            schema_version: 2,
+            id: entry.id,
+            kind: match entry.kind {
+                MemoryKind::Episode => MemoryObjectKind::Event,
+                MemoryKind::Fact => MemoryObjectKind::Claim,
+            },
+            namespace: entry.namespace,
+            title: String::new(),
+            content: text.clone(),
+            status: MemoryObjectStatus::Accepted,
+            created_at: entry.ts_ms,
+            updated_at: entry.ts_ms,
+            temporal: Default::default(),
+            confidence: 0.5,
+            importance: if entry.pinned { 1.0 } else { 0.5 },
+            freshness: 1.0,
+            last_used_at: None,
+            source_refs: vec![MemorySourceRef {
+                source_type: "legacy_episodic".into(),
+                source_id: entry.id.to_string(),
+                excerpt: Some(text),
+                uri: None,
+            }],
+            visibility: "private".into(),
+            metadata: entry.metadata,
+            decision: None,
+            embedding: entry.vector,
+        };
+        if !self.objects.contains_key(&id) {
+            self.persist_object(&object)?;
+        }
+        self.objects.insert(id, object);
+        Ok(())
+    }
+
+    fn compact_objects(&self) {
+        let mut lines = String::new();
+        let mut ids: Vec<_> = self.objects.keys().copied().collect();
+        ids.sort_unstable();
+        for id in ids {
+            if let Some(object) = self.objects.get(&id) {
+                if let Ok(line) = serde_json::to_string(object) {
+                    lines.push_str(&line);
+                    lines.push('\n');
+                }
+            }
+        }
+        let _ = std::fs::write(self.objects_path(), lines);
+    }
+
+    fn persist_relation_v2(&self, relation: &MemoryRelationV2) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.relations_v2_path())?;
+        writeln!(f, "{}", serde_json::to_string(relation).unwrap_or_default())
+    }
+
+    fn compact_relations_v2(&self) {
+        let mut lines = String::new();
+        for relation in &self.relations_v2 {
+            if let Ok(line) = serde_json::to_string(relation) {
+                lines.push_str(&line);
+                lines.push('\n');
+            }
+        }
+        let _ = std::fs::write(self.relations_v2_path(), lines);
+    }
+
+    fn persist_shared(&self) {
+        if let Ok(value) = serde_json::to_vec_pretty(&self.shared) {
+            let tmp = self.shared_path().with_extension("json.tmp");
+            if std::fs::write(&tmp, value).is_ok() {
+                let _ = std::fs::rename(tmp, self.shared_path());
+            }
+        }
+    }
+
+    fn validate_object(object: &MemoryObject) -> Result<(), String> {
+        if object.namespace.trim().is_empty() {
+            return Err("namespace mémoire requis".into());
+        }
+        if object.content.trim().is_empty() {
+            return Err("contenu mémoire requis".into());
+        }
+        if !(0.0..=1.0).contains(&object.confidence)
+            || !(0.0..=1.0).contains(&object.importance)
+            || !(0.0..=1.0).contains(&object.freshness)
+        {
+            return Err("confidence, importance et freshness doivent être entre 0 et 1".into());
+        }
+        if let (Some(from), Some(to)) = (object.temporal.valid_from, object.temporal.valid_to) {
+            if from > to {
+                return Err("valid_from doit précéder valid_to".into());
+            }
+        }
+        if object.status == MemoryObjectStatus::Accepted
+            && object.source_refs.is_empty()
+            && object
+                .decision
+                .as_ref()
+                .and_then(|d| d.rationale.as_ref())
+                .map_or(true, |rationale| rationale.trim().is_empty())
+            && object
+                .metadata
+                .get("justification")
+                .and_then(|value| value.as_str())
+                .map_or(true, |justification| justification.trim().is_empty())
+        {
+            return Err("un objet accepted doit avoir une source ou une justification".into());
+        }
+        Ok(())
+    }
+
+    pub fn object_create(
+        &mut self,
+        req: MemObjectCreateRequest,
+        embedding: Vec<f32>,
+    ) -> Result<MemoryObject, String> {
+        let content = req.content.trim().to_string();
+        if content.is_empty() {
+            return Err("contenu mémoire requis".into());
+        }
+        let idempotency_key = req.idempotency_key.clone();
+        if let Some(existing) = self.objects.values().find(|object| {
+            object.namespace == req.namespace
+                && object.kind == req.kind
+                && (idempotency_key.as_ref().map_or(false, |key| {
+                    object
+                        .metadata
+                        .get("_idempotency_key")
+                        .and_then(|value| value.as_str())
+                        == Some(key.as_str())
+                }) || (idempotency_key.is_none() && object.content.trim() == content))
+        }) {
+            return Ok(existing.clone());
+        }
+        let now = now_ms();
+        let mut metadata = req.metadata;
+        if metadata.is_null() {
+            metadata = serde_json::json!({});
+        }
+        if let Some(key) = idempotency_key {
+            if let Some(map) = metadata.as_object_mut() {
+                map.insert("_idempotency_key".into(), serde_json::Value::String(key));
+            }
+        }
+        let object = MemoryObject {
+            schema_version: 2,
+            id: self.next_id,
+            kind: req.kind,
+            namespace: req.namespace,
+            title: if req.title.trim().is_empty() {
+                content.chars().take(80).collect()
+            } else {
+                req.title
+            },
+            content,
+            status: req.status,
+            created_at: now,
+            updated_at: now,
+            temporal: req.temporal,
+            confidence: req.confidence.clamp(0.0, 1.0),
+            importance: req.importance.clamp(0.0, 1.0),
+            freshness: 1.0,
+            last_used_at: None,
+            source_refs: req.source_refs,
+            visibility: req.visibility,
+            metadata,
+            decision: req.decision,
+            embedding,
+        };
+        Self::validate_object(&object)?;
+        let nearest = if object.embedding.is_empty() {
+            None
+        } else {
+            self.index
+                .search(&object.embedding, 8)
+                .into_iter()
+                .filter_map(|(id, score)| {
+                    let previous = self.objects.get(&id)?;
+                    (previous.namespace == object.namespace && id != object.id && score >= 0.82)
+                        .then_some((id, score))
+                })
+                .next()
+        };
+        self.next_id = self.next_id.saturating_add(1);
+        if !object.embedding.is_empty() {
+            self.index.insert(object.id, &object.embedding);
+        }
+        self.persist_object(&object).map_err(|e| e.to_string())?;
+        self.objects.insert(object.id, object.clone());
+        if let Some((previous_id, score)) = nearest {
+            let _ = self.relate_v2(
+                object.id,
+                MemoryRelationKind::Updates,
+                previous_id,
+                score,
+                object.source_refs.clone(),
+            );
+        }
+        Ok(object)
+    }
+
+    pub fn object_get(&self, id: u64) -> Option<MemoryObject> {
+        self.objects.get(&id).cloned()
+    }
+
+    pub fn object_list(&self, req: &MemObjectListRequest) -> Vec<MemoryObject> {
+        let mut objects: Vec<_> = self
+            .objects
+            .values()
+            .filter(|object| req.namespace.as_deref().map_or(true, |ns| object.namespace == ns))
+            .filter(|object| req.kind.as_ref().map_or(true, |kind| &object.kind == kind))
+            .filter(|object| req.status.as_ref().map_or(true, |status| &object.status == status))
+            .filter(|object| req.include_archived || object.status != MemoryObjectStatus::Archived)
+            .cloned()
+            .collect();
+        objects.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| b.id.cmp(&a.id)));
+        objects.truncate(req.limit.clamp(1, 512));
+        objects
+    }
+
+    /// Semantic retrieval for the agent context. It combines cosine
+    /// similarity with confidence, importance and temporal freshness while
+    /// keeping rejected/archived objects out of the default context.
+    pub fn object_query(
+        &self,
+        query_vector: &[f32],
+        k: usize,
+        namespace: Option<&str>,
+    ) -> Vec<MemoryObject> {
+        let result_limit = k.clamp(1, 64);
+        let now = now_ms();
+        let mut scored: Vec<(f32, MemoryObject)> = self
+            .index
+            .search(query_vector, result_limit.saturating_mul(8))
+            .into_iter()
+            .filter_map(|(id, cosine_score)| {
+                let object = self.objects.get(&id)?;
+                if namespace.is_some_and(|ns| object.namespace != ns)
+                    || matches!(object.status, MemoryObjectStatus::Rejected | MemoryObjectStatus::Archived)
+                {
+                    return None;
+                }
+                let expired = object.temporal.valid_to.is_some_and(|to| to < now);
+                let freshness = if expired { object.freshness.min(0.2) } else { object.freshness };
+                let score = cosine_score * 0.65
+                    + object.confidence * 0.15
+                    + object.importance * 0.10
+                    + freshness * 0.10;
+                Some((score, object.clone()))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(result_limit);
+        scored.into_iter().map(|(_, object)| object).collect()
+    }
+
+    pub fn object_relations_for(&self, ids: &HashSet<u64>) -> Vec<MemoryRelationV2> {
+        self.relations_v2
+            .iter()
+            .filter(|relation| ids.contains(&relation.from) || ids.contains(&relation.to))
+            .cloned()
+            .take(256)
+            .collect()
+    }
+
+    pub fn object_update(&mut self, req: MemObjectUpdateRequest) -> Result<MemoryObject, String> {
+        let mut object = self
+            .objects
+            .get(&req.id)
+            .cloned()
+            .ok_or_else(|| format!("objet mémoire inconnu: {}", req.id))?;
+        if let Some(title) = req.title { object.title = title; }
+        if let Some(content) = req.content { object.content = content; }
+        if let Some(status) = req.status { object.status = status; }
+        if let Some(confidence) = req.confidence { object.confidence = confidence.clamp(0.0, 1.0); }
+        if let Some(importance) = req.importance { object.importance = importance.clamp(0.0, 1.0); }
+        if let Some(temporal) = req.temporal { object.temporal = temporal; }
+        if let Some(source_refs) = req.source_refs { object.source_refs = source_refs; }
+        if let Some(visibility) = req.visibility { object.visibility = visibility; }
+        if let Some(metadata) = req.metadata { object.metadata = metadata; }
+        if req.decision.is_some() { object.decision = req.decision; }
+        object.updated_at = now_ms();
+        if let Some(valid_to) = object.temporal.valid_to {
+            if valid_to <= object.updated_at && object.status == MemoryObjectStatus::Accepted {
+                object.freshness = 0.2;
+            }
+        }
+        Self::validate_object(&object)?;
+        self.objects.insert(object.id, object.clone());
+        self.compact_objects();
+        Ok(object)
+    }
+
+    pub fn object_set_embedding(&mut self, id: u64, embedding: Vec<f32>) -> Result<(), String> {
+        let object = self
+            .objects
+            .get_mut(&id)
+            .ok_or_else(|| format!("objet mémoire inconnu: {id}"))?;
+        object.embedding = embedding.clone();
+        if embedding.is_empty() {
+            self.index.remove(id);
+        } else {
+            self.index.insert(id, &embedding);
+        }
+        self.compact_objects();
+        Ok(())
+    }
+
+    pub fn object_revalidate(&mut self, req: MemRevalidateRequest) -> Result<MemoryObject, String> {
+        let mut object = self
+            .objects
+            .get(&req.id)
+            .cloned()
+            .ok_or_else(|| format!("objet mémoire inconnu: {}", req.id))?;
+        if let Some(confidence) = req.confidence { object.confidence = confidence.clamp(0.0, 1.0); }
+        if let Some(valid_to) = req.valid_to { object.temporal.valid_to = Some(valid_to); }
+        object.status = req.status.unwrap_or(MemoryObjectStatus::Accepted);
+        object.freshness = 1.0;
+        object.temporal.last_confirmed_at = Some(now_ms());
+        object.updated_at = now_ms();
+        Self::validate_object(&object)?;
+        self.objects.insert(object.id, object.clone());
+        self.compact_objects();
+        Ok(object)
+    }
+
+    pub fn relate_v2(
+        &mut self,
+        from: u64,
+        kind: MemoryRelationKind,
+        to: u64,
+        confidence: f32,
+        source_refs: Vec<MemorySourceRef>,
+    ) -> Result<MemoryRelationV2, String> {
+        if from == to {
+            return Err("relation reflexive interdite".into());
+        }
+        if !self.objects.contains_key(&from) || !self.objects.contains_key(&to) {
+            return Err("objet mémoire inconnu pour relation".into());
+        }
+        if let Some(existing) = self.relations_v2.iter().find(|relation| {
+            relation.from == from && relation.to == to && relation.kind == kind
+        }) {
+            return Ok(existing.clone());
+        }
+        let relation = MemoryRelationV2 {
+            schema_version: 2,
+            from,
+            kind,
+            to,
+            confidence: confidence.clamp(0.0, 1.0),
+            source_refs,
+            created_at: now_ms(),
+            metadata: serde_json::json!({}),
+        };
+        self.persist_relation_v2(&relation).map_err(|e| e.to_string())?;
+        self.relations_v2.push(relation.clone());
+        Ok(relation)
+    }
+
+    pub fn graph_query(&self, req: &MemGraphQueryRequest) -> MemGraphResponse {
+        let max_nodes = req.max_nodes.clamp(1, 512);
+        let max_depth = req.depth.min(8);
+        let mut seen = HashSet::new();
+        let mut frontier = vec![(req.root_id, 0usize)];
+        let mut nodes = Vec::new();
+        let mut relations = Vec::new();
+        while let Some((id, depth)) = frontier.pop() {
+            if !seen.insert(id) || nodes.len() >= max_nodes { continue; }
+            let Some(object) = self.objects.get(&id) else { continue; };
+            nodes.push(object.clone());
+            if depth >= max_depth { continue; }
+            for relation in &self.relations_v2 {
+                if req.relation.as_ref().map_or(false, |kind| &relation.kind != kind) { continue; }
+                let next = if relation.from == id { Some(relation.to) } else if relation.to == id { Some(relation.from) } else { None };
+                if let Some(next) = next {
+                    relations.push(relation.clone());
+                    frontier.push((next, depth + 1));
+                }
+            }
+        }
+        relations.sort_by_key(|relation| (relation.from, relation.to));
+        relations.dedup_by(|a, b| a.from == b.from && a.to == b.to && a.kind == b.kind);
+        MemGraphResponse {
+            root: self.objects.get(&req.root_id).cloned(),
+            nodes,
+            relations,
+            truncated: !frontier.is_empty(),
+        }
+    }
+
+    pub fn timeline(&self, req: &MemTimelineRequest) -> MemTimelineResponse {
+        let mut objects: Vec<_> = self.objects.values().filter(|object| {
+            if let Some(ns) = req.namespace.as_deref() { if object.namespace != ns { return false; } }
+            let timestamp = object.temporal.observed_at.unwrap_or(object.created_at);
+            if let Some(from) = req.from_ms { if timestamp < from { return false; } }
+            if let Some(to) = req.to_ms { if timestamp > to { return false; } }
+            if let Some(subject) = req.subject_id {
+                let related = self.relations_v2.iter().any(|relation| {
+                    (relation.from == object.id && relation.to == subject)
+                        || (relation.to == object.id && relation.from == subject)
+                });
+                if object.id != subject && !related { return false; }
+            }
+            true
+        }).cloned().collect();
+        objects.sort_by_key(|object| object.temporal.observed_at.unwrap_or(object.created_at));
+        let truncated = objects.len() > req.limit.clamp(1, 512);
+        objects.truncate(req.limit.clamp(1, 512));
+        MemTimelineResponse { objects, truncated }
+    }
+
+    pub fn explain(&self, req: &MemExplainRequest) -> MemExplanation {
+        let object = self.objects.get(&req.id).cloned();
+        let supporting_sources = object.as_ref().map(|o| o.source_refs.clone()).unwrap_or_default();
+        let relations = self
+            .relations_v2
+            .iter()
+            .filter(|relation| relation.from == req.id || relation.to == req.id)
+            .take(128)
+            .cloned()
+            .collect();
+        let freshness_warning = object.as_ref().and_then(|object| {
+            let expired = object.temporal.valid_to.map_or(false, |to| to < now_ms());
+            if expired || object.freshness < 0.35 { Some("souvenir ancien ou à revalider".into()) } else { None }
+        });
+        MemExplanation { object, supporting_sources, relations, freshness_warning }
+    }
+
+    pub fn narrative_generate(&mut self, req: &MemNarrativeRequest) -> Result<MemoryObject, String> {
+        let timeline = self.timeline(&MemTimelineRequest {
+            namespace: req.namespace.clone(), subject_id: None, from_ms: req.from_ms, to_ms: req.to_ms, limit: 32,
+        });
+        if timeline.objects.is_empty() { return Err("aucun objet pour générer la narration".into()); }
+        let title = req.title.clone().unwrap_or_else(|| "Synthèse mémoire".into());
+        let accepted: Vec<_> = timeline
+            .objects
+            .iter()
+            .filter(|object| object.status == MemoryObjectStatus::Accepted)
+            .collect();
+        if accepted.is_empty() { return Err("aucun objet accepté pour générer la narration".into()); }
+        let content = accepted.iter().map(|object| format!("- {}", object.content)).collect::<Vec<_>>().join("\n");
+        let create = MemObjectCreateRequest {
+            namespace: req.namespace.clone().unwrap_or_else(|| "user:default".into()),
+            kind: MemoryObjectKind::Narrative,
+            title,
+            content,
+            status: MemoryObjectStatus::Accepted,
+            confidence: 0.8,
+            importance: 0.6,
+            temporal: Default::default(),
+            source_refs: accepted.iter().flat_map(|o| o.source_refs.clone()).collect(),
+            visibility: "private".into(),
+            metadata: serde_json::json!({"generated": true, "justification": "synthèse déterministe à partir des objets sélectionnés", "period_from": req.from_ms, "period_to": req.to_ms}),
+            decision: None,
+            idempotency_key: None,
+        };
+        if req.persist { self.object_create(create, Vec::new()) } else {
+            let now = now_ms();
+            Ok(MemoryObject { schema_version: 2, id: 0, kind: MemoryObjectKind::Narrative, namespace: create.namespace, title: create.title, content: create.content, status: create.status, created_at: now, updated_at: now, temporal: create.temporal, confidence: create.confidence, importance: create.importance, freshness: 1.0, last_used_at: None, source_refs: create.source_refs, visibility: create.visibility, metadata: create.metadata, decision: None, embedding: Vec::new() })
+        }
+    }
+
     /// Assemble un bloc bootstrap structuré (faits actifs + similar 1 hop).
     pub fn bootstrap_block(&self, hits: &[MemHit]) -> String {
         if hits.is_empty() {
@@ -654,9 +1295,13 @@ impl MemoryStore {
             return false;
         }
         self.index.remove(id);
+        self.objects.remove(&id);
+        self.relations_v2.retain(|r| r.from != id && r.to != id);
         self.relations.retain(|r| r.from != id && r.to != id);
         self.compact_journal();
+        self.compact_objects();
         self.compact_relations();
+        self.compact_relations_v2();
         true
     }
 
@@ -679,11 +1324,15 @@ impl MemoryStore {
         for id in ids {
             self.episodic.remove(&id);
             self.index.remove(id);
+            self.objects.remove(&id);
+            self.relations_v2.retain(|r| r.from != id && r.to != id);
             self.relations.retain(|r| r.from != id && r.to != id);
         }
         if n > 0 {
             self.compact_journal();
+            self.compact_objects();
             self.compact_relations();
+            self.compact_relations_v2();
         }
         n
     }
@@ -718,6 +1367,7 @@ impl MemoryStore {
 
     pub fn shared_write(&mut self, name: &str, value: serde_json::Value) {
         self.shared.insert(name.into(), value);
+        self.persist_shared();
     }
 
     // --- export / wipe (F-MEM-05) ---
@@ -741,11 +1391,15 @@ impl MemoryStore {
         for id in &ids {
             self.episodic.remove(id);
             self.index.remove(*id);
+            self.objects.remove(id);
+            self.relations_v2.retain(|r| r.from != *id && r.to != *id);
             self.relations.retain(|r| r.from != *id && r.to != *id);
         }
         self.working.remove(namespace);
         self.compact_journal();
+        self.compact_objects();
         self.compact_relations();
+        self.compact_relations_v2();
         n
     }
 
@@ -763,6 +1417,12 @@ impl MemoryStore {
         ns.sort();
         (self.episodic.len(), ns, self.working.len())
     }
+}
+
+pub fn memory_v2_env_enabled() -> bool {
+    std::env::var("AOS_MEMORY_V2")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -973,6 +1633,147 @@ mod tests {
         let block2 = s.bootstrap_block(&active);
         assert!(block2.contains("neuf"));
         assert!(!block2.contains("vieux"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v2_object_create_is_idempotent_and_persistent() {
+        let (mut s, dir) = store();
+        let req = MemObjectCreateRequest {
+            namespace: "user:default".into(),
+            kind: MemoryObjectKind::Decision,
+            title: "Choix de langue".into(),
+            content: "Utiliser le français dans l'interface".into(),
+            status: MemoryObjectStatus::Accepted,
+            confidence: 0.9,
+            importance: 0.8,
+            temporal: Default::default(),
+            source_refs: vec![MemorySourceRef {
+                source_type: "chat".into(),
+                source_id: "session-1".into(),
+                excerpt: Some("je préfère le français".into()),
+                uri: None,
+            }],
+            visibility: "private".into(),
+            metadata: serde_json::json!({}),
+            decision: Some(aos_proto::MemoryDecision {
+                question: "Quelle langue utiliser ?".into(),
+                options: vec!["français".into(), "anglais".into()],
+                selected_option: Some("français".into()),
+                rationale: Some("Préférence explicite de l'utilisateur".into()),
+                participants: vec!["user".into()],
+                consequences: vec!["Répondre en français par défaut".into()],
+                review_at: None,
+            }),
+            idempotency_key: Some("decision-1".into()),
+        };
+        let first = s.object_create(req.clone(), v(0.7)).unwrap();
+        let second = s.object_create(req, v(0.7)).unwrap();
+        assert_eq!(first.id, second.id);
+        assert_eq!(s.object_list(&MemObjectListRequest { namespace: Some("user:default".into()), kind: None, status: None, limit: 10, include_archived: false }).len(), 1);
+        let s2 = MemoryStore::open(&dir).unwrap();
+        assert_eq!(s2.object_get(first.id).unwrap().kind, MemoryObjectKind::Decision);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v2_validation_and_contradictions_are_explicit() {
+        let (mut s, dir) = store();
+        let mut req = MemObjectCreateRequest {
+            namespace: "user:default".into(),
+            kind: MemoryObjectKind::Claim,
+            title: "état du projet".into(),
+            content: "Le projet est en phase alpha".into(),
+            status: MemoryObjectStatus::Accepted,
+            confidence: 0.8,
+            importance: 0.5,
+            temporal: Default::default(),
+            source_refs: Vec::new(),
+            visibility: "private".into(),
+            metadata: serde_json::json!({}),
+            decision: None,
+            idempotency_key: None,
+        };
+        assert!(s.object_create(req.clone(), Vec::new()).is_err());
+
+        req.source_refs.push(MemorySourceRef {
+            source_type: "test".into(),
+            source_id: "fixture".into(),
+            excerpt: None,
+            uri: None,
+        });
+        let first = s.object_create(req.clone(), Vec::new()).unwrap();
+        req.content = "Le projet est passé en phase bêta".into();
+        let second = s.object_create(req, Vec::new()).unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(s.object_list(&MemObjectListRequest {
+            namespace: Some("user:default".into()),
+            kind: Some(MemoryObjectKind::Claim),
+            status: None,
+            limit: 10,
+            include_archived: false,
+        }).len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v2_graph_explain_timeline_and_shared_roundtrip() {
+        let (mut s, dir) = store();
+        let source = MemorySourceRef { source_type: "test".into(), source_id: "fixture".into(), excerpt: Some("evidence".into()), uri: None };
+        let make = |content: &str| MemObjectCreateRequest {
+            namespace: "project:akasha".into(), kind: MemoryObjectKind::Event, title: content.into(), content: content.into(),
+            status: MemoryObjectStatus::Accepted, confidence: 0.8, importance: 0.6, temporal: Default::default(),
+            source_refs: vec![source.clone()], visibility: "private".into(), metadata: serde_json::json!({}), decision: None, idempotency_key: None,
+        };
+        let a = s.object_create(make("début du projet"), v(0.8)).unwrap();
+        let b = s.object_create(make("première décision"), v(0.7)).unwrap();
+        s.relate_v2(a.id, MemoryRelationKind::Causes, b.id, 0.9, vec![source]).unwrap();
+        let graph = s.graph_query(&MemGraphQueryRequest { root_id: a.id, depth: 2, max_nodes: 4, relation: None });
+        assert_eq!(graph.nodes.len(), 2);
+        assert!(graph.relations.len() >= 1);
+        assert!(graph.relations.iter().any(|r| r.kind == MemoryRelationKind::Causes));
+        assert_eq!(s.explain(&MemExplainRequest { id: b.id }).supporting_sources.len(), 1);
+        assert_eq!(s.timeline(&MemTimelineRequest { namespace: Some("project:akasha".into()), subject_id: None, from_ms: None, to_ms: None, limit: 10 }).objects.len(), 2);
+        s.shared_write("project:akasha", serde_json::json!({"owner":"user"}));
+        let s2 = MemoryStore::open(&dir).unwrap();
+        assert_eq!(s2.shared_read("project:akasha").unwrap()["owner"], "user");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v2_revalidation_restores_freshness() {
+        let (mut s, dir) = store();
+        let object = s.object_create(MemObjectCreateRequest {
+            namespace: "user:default".into(), kind: MemoryObjectKind::Claim, title: "fait".into(), content: "un fait".into(),
+            status: MemoryObjectStatus::Accepted, confidence: 0.5, importance: 0.5, temporal: aos_proto::MemoryTemporal { valid_from: None, valid_to: Some(1), observed_at: None, last_confirmed_at: None },
+            source_refs: vec![MemorySourceRef { source_type: "test".into(), source_id: "1".into(), excerpt: None, uri: None }], visibility: "private".into(), metadata: serde_json::json!({}), decision: None, idempotency_key: None,
+        }, v(0.4)).unwrap();
+        let updated = s.object_revalidate(MemRevalidateRequest { id: object.id, confidence: Some(0.95), valid_to: None, status: None }).unwrap();
+        assert_eq!(updated.confidence, 0.95);
+        assert_eq!(updated.freshness, 1.0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v2_open_migrates_existing_legacy_entries() {
+        let (_unused, dir) = store();
+        {
+            let mut legacy = MemoryStore::open_with_v2(&dir, false).unwrap();
+            let id = legacy.episodic_write_kind(
+                "user:default",
+                "préférence héritée",
+                serde_json::json!({"source":"legacy-test"}),
+                v(0.6),
+                false,
+                MemoryKind::Fact,
+            );
+            assert_eq!(id, 1);
+        }
+        let migrated = MemoryStore::open_with_v2(&dir, true).unwrap();
+        let object = migrated.object_get(1).unwrap();
+        assert_eq!(object.kind, MemoryObjectKind::Claim);
+        assert_eq!(object.status, MemoryObjectStatus::Accepted);
+        assert!(!object.source_refs.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

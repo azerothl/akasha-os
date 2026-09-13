@@ -61,6 +61,9 @@ pub struct PlatformConfig {
     /// Mode réseau au démarrage : online | offline_strict (§9.5).
     #[serde(default = "default_net_mode")]
     pub net_mode: String,
+    /// Active les APIs Memory V2 et la projection cognitive.
+    #[serde(default)]
+    pub memory_v2: bool,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -158,7 +161,11 @@ impl PlatformSubsystem {
     pub fn open(config: &PlatformConfig) -> Result<Arc<Self>, String> {
         let audit = AuditJournal::open(&config.audit_dir).map_err(|e| e.to_string())?;
         let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
-        let mem = MemoryStore::open(&config.memory_dir).map_err(|e| e.to_string())?;
+        let mem = MemoryStore::open_with_v2(
+            &config.memory_dir,
+            config.memory_v2 || crate::memory::memory_v2_env_enabled(),
+        )
+        .map_err(|e| e.to_string())?;
         let sessions = ChatSessionStore::open(&config.sessions_dir).map_err(|e| e.to_string())?;
         #[cfg(feature = "embeddings")]
         let embed = {
@@ -745,12 +752,15 @@ impl HostServices for PlatformSubsystem {
                 let product_k = args["product_k"].as_u64().unwrap_or(4) as usize;
                 let user_doc_k = args["user_doc_k"].as_u64().unwrap_or(3) as usize;
                 let emb = self.embed_text(query).unwrap_or_default();
-                let (hits, product_hits, user_doc_hits) = {
+                let (hits, product_hits, user_doc_hits, objects, object_relations) = {
                     let mem = self.mem.lock().unwrap();
                     let hits = mem.episodic_query(&emb, k, None);
                     let product_hits = crate::product_rag::recall(&mem, &emb, product_k);
                     let user_doc_hits = crate::user_docs::recall(&mem, &emb, user_doc_k);
-                    (hits, product_hits, user_doc_hits)
+                    let objects = if mem.memory_v2_enabled() { mem.object_query(&emb, k, None) } else { Vec::new() };
+                    let ids = objects.iter().map(|object| object.id).collect::<std::collections::HashSet<_>>();
+                    let object_relations = mem.object_relations_for(&ids);
+                    (hits, product_hits, user_doc_hits, objects, object_relations)
                 };
                 let mut prompt_block = crate::product_rag::format_prompt_block(&product_hits);
                 let user_doc_block = crate::user_docs::format_prompt_block(&user_doc_hits);
@@ -769,7 +779,177 @@ impl HostServices for PlatformSubsystem {
                     "hits": hits,
                     "product_hits": product_hits,
                     "user_doc_hits": user_doc_hits,
+                    "objects": objects,
+                    "object_relations": object_relations,
                 }))
+            }
+            "mem.object.create" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemObjectCreateRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.object.create: {e}"))?;
+                Self::require_cap(ctx, "mem.write", &req.namespace)?;
+                let vector = self.embed_text(&req.content).unwrap_or_default();
+                let object = self.mem.lock().unwrap().object_create(req, vector)?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "mem.object.create".into(),
+                    target: object.namespace.clone(),
+                    detail: serde_json::json!({"id": object.id, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::to_value(object).unwrap_or_default())
+            }
+            "mem.object.get" | "mem.decision.get" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemObjectGetRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("{service}: {e}"))?;
+                let object = self.mem.lock().unwrap().object_get(req.id)
+                    .ok_or_else(|| "objet mémoire inconnu".to_string())?;
+                if service == "mem.decision.get" && object.kind != aos_proto::MemoryObjectKind::Decision {
+                    return Err("l'objet n'est pas une décision".into());
+                }
+                Self::require_cap(ctx, "mem.query", &object.namespace)?;
+                Ok(serde_json::to_value(object).unwrap_or_default())
+            }
+            "mem.object.list" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemObjectListRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.object.list: {e}"))?;
+                if let Some(ns) = req.namespace.as_deref() { Self::require_cap(ctx, "mem.query", ns)?; }
+                let objects = self.mem.lock().unwrap().object_list(&req);
+                Ok(serde_json::to_value(objects).unwrap_or_default())
+            }
+            "mem.object.update" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemObjectUpdateRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.object.update: {e}"))?;
+                let old = self.mem.lock().unwrap().object_get(req.id)
+                    .ok_or_else(|| "objet mémoire inconnu".to_string())?;
+                Self::require_cap(ctx, "mem.write", &old.namespace)?;
+                let new_embedding = req
+                    .content
+                    .as_deref()
+                    .and_then(|content| self.embed_text(content).ok());
+                let object = {
+                    let mut mem = self.mem.lock().unwrap();
+                    let result = mem.object_update(req)?;
+                    if let Some(embedding) = new_embedding {
+                        mem.object_set_embedding(result.id, embedding)?;
+                        mem.object_get(result.id).ok_or_else(|| "objet mémoire inconnu".to_string())?
+                    } else {
+                        result
+                    }
+                };
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "mem.object.update".into(),
+                    target: object.namespace.clone(),
+                    detail: serde_json::json!({"id": object.id, "status": object.status, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::to_value(object).unwrap_or_default())
+            }
+            "mem.object.relate" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemObjectRelateRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.object.relate: {e}"))?;
+                let namespaces = {
+                    let mem = self.mem.lock().unwrap();
+                    (mem.object_get(req.from).map(|o| o.namespace), mem.object_get(req.to).map(|o| o.namespace))
+                };
+                let from_ns = namespaces.0.ok_or_else(|| "objet mémoire source inconnu".to_string())?;
+                let to_ns = namespaces.1.ok_or_else(|| "objet mémoire cible inconnu".to_string())?;
+                Self::require_cap(ctx, "mem.write", &from_ns)?;
+                Self::require_cap(ctx, "mem.write", &to_ns)?;
+                let relation = self.mem.lock().unwrap().relate_v2(req.from, req.kind, req.to, req.confidence, req.source_refs)?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "mem.object.relate".into(),
+                    target: from_ns,
+                    detail: serde_json::json!({"from": relation.from, "to": relation.to, "kind": relation.kind, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::to_value(relation).unwrap_or_default())
+            }
+            "mem.graph.query" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemGraphQueryRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.graph.query: {e}"))?;
+                let namespace = self.mem.lock().unwrap().object_get(req.root_id)
+                    .map(|object| object.namespace);
+                if let Some(ns) = namespace.as_deref() { Self::require_cap(ctx, "mem.query", ns)?; }
+                Ok(serde_json::to_value(self.mem.lock().unwrap().graph_query(&req)).unwrap_or_default())
+            }
+            "mem.timeline" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemTimelineRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.timeline: {e}"))?;
+                if let Some(ns) = req.namespace.as_deref() { Self::require_cap(ctx, "mem.query", ns)?; }
+                Ok(serde_json::to_value(self.mem.lock().unwrap().timeline(&req)).unwrap_or_default())
+            }
+            "mem.explain" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemExplainRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.explain: {e}"))?;
+                let object = self.mem.lock().unwrap().object_get(req.id)
+                    .ok_or_else(|| "objet mémoire inconnu".to_string())?;
+                Self::require_cap(ctx, "mem.query", &object.namespace)?;
+                Ok(serde_json::to_value(self.mem.lock().unwrap().explain(&req)).unwrap_or_default())
+            }
+            "mem.revalidate" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemRevalidateRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.revalidate: {e}"))?;
+                let old = self.mem.lock().unwrap().object_get(req.id)
+                    .ok_or_else(|| "objet mémoire inconnu".to_string())?;
+                Self::require_cap(ctx, "mem.write", &old.namespace)?;
+                let object = self.mem.lock().unwrap().object_revalidate(req)?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "mem.revalidate".into(),
+                    target: object.namespace.clone(),
+                    detail: serde_json::json!({"id": object.id, "confidence": object.confidence, "on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::to_value(object).unwrap_or_default())
+            }
+            "mem.narrative.generate" => {
+                if !self.mem.lock().unwrap().memory_v2_enabled() {
+                    return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
+                }
+                let req: aos_proto::MemNarrativeRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("mem.narrative.generate: {e}"))?;
+                let namespace = req.namespace.as_deref().unwrap_or("user:default");
+                Self::require_cap(ctx, if req.persist { "mem.write" } else { "mem.query" }, namespace)?;
+                let object = self.mem.lock().unwrap().narrative_generate(&req)?;
+                if req.persist {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "mem.narrative.generate".into(),
+                        target: object.namespace.clone(),
+                        detail: serde_json::json!({"id": object.id, "on_behalf_of": ctx.actor}),
+                    });
+                }
+                Ok(serde_json::to_value(object).unwrap_or_default())
             }
             "web.search" => {
                 // Cap réseau requise
@@ -1253,6 +1433,7 @@ mod canvas_seeing_tests {
                 .display()
                 .to_string(),
             net_mode: "online".into(),
+            memory_v2: false,
         }
     }
 

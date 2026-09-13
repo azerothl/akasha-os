@@ -307,6 +307,8 @@ pub fn persist_candidate_text(
     let classified = classify_candidates(&[aos_proto::MemExtractedFact {
         text: text.into(),
         supersedes_hint: None,
+        kind: None,
+        decision: None,
     }]);
     let outcome = classified.into_iter().next()?;
     if outcome.kind != MemExtractOutcomeKind::Stored {

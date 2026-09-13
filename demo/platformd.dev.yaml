@@ -4,6 +4,8 @@ bus: "127.0.0.1:24701"
 audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
+# Memory V2 cognitive graph (set true to enable V2 bus APIs).
+memory_v2: false
 modules_dir: var/modules
 sessions_dir: var/sessions
 

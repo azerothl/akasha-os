@@ -1949,6 +1949,334 @@ pub struct FsSetClassRequest {
 // Memory (§5) — P2
 // ---------------------------------------------------------------------------
 
+/// Semantic object kinds introduced by Memory V2.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryObjectKind {
+    Document,
+    Event,
+    Entity,
+    Claim,
+    Decision,
+    Goal,
+    Problem,
+    Preference,
+    Narrative,
+}
+
+impl Default for MemoryObjectKind {
+    fn default() -> Self {
+        Self::Claim
+    }
+}
+
+/// Lifecycle state of a Memory V2 object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryObjectStatus {
+    Candidate,
+    Accepted,
+    Rejected,
+    Superseded,
+    Archived,
+}
+
+impl Default for MemoryObjectStatus {
+    fn default() -> Self {
+        Self::Candidate
+    }
+}
+
+/// Temporal validity and observation metadata for a memory object.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryTemporal {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_to: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_confirmed_at: Option<u64>,
+}
+
+/// A source/evidence pointer. It deliberately stores references and excerpts,
+/// never hidden model reasoning.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct MemorySourceRef {
+    pub source_type: String,
+    pub source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excerpt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// Structured payload specific to a decision object.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryDecision {
+    pub question: String,
+    #[serde(default)]
+    pub options: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_option: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+    #[serde(default)]
+    pub participants: Vec<String>,
+    #[serde(default)]
+    pub consequences: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_at: Option<u64>,
+}
+
+/// Canonical Memory V2 object. `embedding` is persisted for local index
+/// rebuilds but omitted from normal wire responses when empty.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryObject {
+    /// Version du format du journal canonique JSONL.
+    #[serde(default = "default_memory_schema_version")]
+    pub schema_version: u16,
+    #[serde(default)]
+    pub id: u64,
+    pub kind: MemoryObjectKind,
+    pub namespace: String,
+    #[serde(default)]
+    pub title: String,
+    pub content: String,
+    #[serde(default)]
+    pub status: MemoryObjectStatus,
+    #[serde(default)]
+    pub created_at: u64,
+    #[serde(default)]
+    pub updated_at: u64,
+    #[serde(default)]
+    pub temporal: MemoryTemporal,
+    #[serde(default = "default_memory_confidence")]
+    pub confidence: f32,
+    #[serde(default = "default_memory_importance")]
+    pub importance: f32,
+    #[serde(default = "default_memory_freshness")]
+    pub freshness: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_used_at: Option<u64>,
+    #[serde(default)]
+    pub source_refs: Vec<MemorySourceRef>,
+    #[serde(default = "default_memory_visibility")]
+    pub visibility: String,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<MemoryDecision>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub embedding: Vec<f32>,
+}
+
+fn default_memory_schema_version() -> u16 { 2 }
+fn default_memory_confidence() -> f32 { 0.5 }
+fn default_memory_importance() -> f32 { 0.5 }
+fn default_memory_freshness() -> f32 { 1.0 }
+fn default_memory_visibility() -> String { "private".into() }
+
+/// V2 relation kind. Existing V1 relations remain available unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryRelationKind {
+    Contains,
+    Mentions,
+    About,
+    Involves,
+    Supports,
+    Contradicts,
+    DependsOn,
+    PartOf,
+    DerivedFrom,
+    Causes,
+    Targets,
+    Similar,
+    Updates,
+    Supersedes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryRelationV2 {
+    #[serde(default = "default_memory_schema_version")]
+    pub schema_version: u16,
+    pub from: u64,
+    pub kind: MemoryRelationKind,
+    pub to: u64,
+    #[serde(default = "default_memory_confidence")]
+    pub confidence: f32,
+    #[serde(default)]
+    pub source_refs: Vec<MemorySourceRef>,
+    #[serde(default)]
+    pub created_at: u64,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemObjectCreateRequest {
+    pub namespace: String,
+    pub kind: MemoryObjectKind,
+    #[serde(default)]
+    pub title: String,
+    pub content: String,
+    #[serde(default)]
+    pub status: MemoryObjectStatus,
+    #[serde(default = "default_memory_confidence")]
+    pub confidence: f32,
+    #[serde(default = "default_memory_importance")]
+    pub importance: f32,
+    #[serde(default)]
+    pub temporal: MemoryTemporal,
+    #[serde(default)]
+    pub source_refs: Vec<MemorySourceRef>,
+    #[serde(default = "default_memory_visibility")]
+    pub visibility: String,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub decision: Option<MemoryDecision>,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemObjectGetRequest {
+    pub id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemObjectUpdateRequest {
+    pub id: u64,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub status: Option<MemoryObjectStatus>,
+    #[serde(default)]
+    pub confidence: Option<f32>,
+    #[serde(default)]
+    pub importance: Option<f32>,
+    #[serde(default)]
+    pub temporal: Option<MemoryTemporal>,
+    #[serde(default)]
+    pub source_refs: Option<Vec<MemorySourceRef>>,
+    #[serde(default)]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub decision: Option<MemoryDecision>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemObjectRelateRequest {
+    pub from: u64,
+    pub kind: MemoryRelationKind,
+    pub to: u64,
+    #[serde(default = "default_memory_confidence")]
+    pub confidence: f32,
+    #[serde(default)]
+    pub source_refs: Vec<MemorySourceRef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemObjectListRequest {
+    #[serde(default)]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub kind: Option<MemoryObjectKind>,
+    #[serde(default)]
+    pub status: Option<MemoryObjectStatus>,
+    #[serde(default = "default_k")]
+    pub limit: usize,
+    #[serde(default)]
+    pub include_archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemGraphQueryRequest {
+    pub root_id: u64,
+    #[serde(default = "default_graph_depth")]
+    pub depth: usize,
+    #[serde(default = "default_graph_nodes")]
+    pub max_nodes: usize,
+    #[serde(default)]
+    pub relation: Option<MemoryRelationKind>,
+}
+
+fn default_graph_depth() -> usize { 2 }
+fn default_graph_nodes() -> usize { 64 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemTimelineRequest {
+    #[serde(default)]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub subject_id: Option<u64>,
+    #[serde(default)]
+    pub from_ms: Option<u64>,
+    #[serde(default)]
+    pub to_ms: Option<u64>,
+    #[serde(default = "default_timeline_limit")]
+    pub limit: usize,
+}
+
+fn default_timeline_limit() -> usize { 100 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemGraphResponse {
+    pub root: Option<MemoryObject>,
+    pub nodes: Vec<MemoryObject>,
+    pub relations: Vec<MemoryRelationV2>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemTimelineResponse {
+    pub objects: Vec<MemoryObject>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemExplainRequest { pub id: u64 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemExplanation {
+    pub object: Option<MemoryObject>,
+    pub supporting_sources: Vec<MemorySourceRef>,
+    pub relations: Vec<MemoryRelationV2>,
+    pub freshness_warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemRevalidateRequest {
+    pub id: u64,
+    #[serde(default)]
+    pub confidence: Option<f32>,
+    #[serde(default)]
+    pub valid_to: Option<u64>,
+    #[serde(default)]
+    pub status: Option<MemoryObjectStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemNarrativeRequest {
+    #[serde(default)]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub from_ms: Option<u64>,
+    #[serde(default)]
+    pub to_ms: Option<u64>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub persist: bool,
+}
+
 /// `mem.working_set` / `mem.working_get`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemWorkingRequest {
@@ -5367,6 +5695,13 @@ pub struct MemContextResponse {
     #[serde(default)]
     pub user_doc_hits: Vec<MemHit>,
     pub prompt_block: String,
+    /// Relevant semantic objects when Memory V2 is enabled.
+    #[serde(default)]
+    pub objects: Vec<MemoryObject>,
+    #[serde(default)]
+    pub object_relations: Vec<MemoryRelationV2>,
+    #[serde(default)]
+    pub memory_warnings: Vec<String>,
 }
 
 /// User document library — list manifest entries.
@@ -5447,6 +5782,12 @@ pub struct MemExtractedFact {
     pub text: String,
     #[serde(default)]
     pub supersedes_hint: Option<String>,
+    /// Optional semantic kind. Omitted values remain legacy claims.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<MemoryObjectKind>,
+    /// Structured decision payload when the candidate is a decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<MemoryDecision>,
 }
 
 /// Issue pour un candidat (stocké, skip dédup, ou filtré secret).
@@ -5579,14 +5920,16 @@ pub struct SkillPassCreateRequest {
 }
 
 /// Prompt système pour l'extraction post-tour (local_only, JSON strict).
-pub const MEM_EXTRACT_SYSTEM_PROMPT: &str = r#"Extract DURABLE facts about the USER from one chat turn.
+pub const MEM_EXTRACT_SYSTEM_PROMPT: &str = r#"Extract DURABLE facts and cognitive objects about the USER from one chat turn.
 The user may write in any language, any grammatical person, or short fragments.
 Reply with valid JSON only — no markdown, no chain-of-thought:
-{"facts":[{"text":"...","supersedes_hint":null}]}
+{"facts":[{"text":"...","supersedes_hint":null,"kind":"preference","decision":null}]}
 
 Rules:
 - Max 5 facts. Each "text" is a short third-person sentence in the user's language.
 - Extract identity (name, role), standing preferences, stable constraints, decisions that should persist across sessions.
+- For decisions, use kind "decision" and include decision.question, options, selected_option, rationale, participants, consequences and review_at when available.
+- Other kinds: event, entity, claim, goal, problem, preference, document, narrative.
 - Do NOT extract: secrets, passwords, tokens, API keys, IBAN, PEM, OTP, vault contents.
 - Do NOT extract: greetings, one-off questions, OS commands, tool traces, agent action logs, or assistant prose.
 - Do NOT extract one-shot tasks or completions: draw/sketch/canvas requests ("dessine une maison", "draw a cat on the canvas"), image generation asks, or any ephemeral command that should not survive the next session.
