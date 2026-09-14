@@ -2063,12 +2063,13 @@ pub struct FsSetClassRequest {
 // ---------------------------------------------------------------------------
 
 /// Semantic object kinds introduced by Memory V2.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryObjectKind {
     Document,
     Event,
     Entity,
+    #[default]
     Claim,
     Decision,
     Goal,
@@ -2077,27 +2078,16 @@ pub enum MemoryObjectKind {
     Narrative,
 }
 
-impl Default for MemoryObjectKind {
-    fn default() -> Self {
-        Self::Claim
-    }
-}
-
 /// Lifecycle state of a Memory V2 object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryObjectStatus {
+    #[default]
     Candidate,
     Accepted,
     Rejected,
     Superseded,
     Archived,
-}
-
-impl Default for MemoryObjectStatus {
-    fn default() -> Self {
-        Self::Candidate
-    }
 }
 
 /// Temporal validity and observation metadata for a memory object.
