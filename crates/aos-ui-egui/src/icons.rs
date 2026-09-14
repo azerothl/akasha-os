@@ -2373,6 +2373,253 @@ fn paint_refresh(ui: &mut Ui, rect: Rect, color: Color32) {
     painter.line_segment([tip, tip + Vec2::new(0.0, r * 0.35)], stroke);
 }
 
+/// Declarative UI action metaphors (Create primary chrome + result toolbar).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclActionIcon {
+    Generate,
+    SavePreset,
+    LoadPreset,
+    History,
+    Clear,
+    Upscale,
+    Variant,
+    Regenerate,
+    Save,
+}
+
+/// Resolve a painted icon metaphor from a declarative `icon_key`.
+pub fn resolve_decl_action_icon(icon_key: &str) -> Option<DeclActionIcon> {
+    match icon_key {
+        "generate" => Some(DeclActionIcon::Generate),
+        "save_preset" => Some(DeclActionIcon::SavePreset),
+        "load_preset" => Some(DeclActionIcon::LoadPreset),
+        "history" => Some(DeclActionIcon::History),
+        "clear" => Some(DeclActionIcon::Clear),
+        "upscale" => Some(DeclActionIcon::Upscale),
+        "variant" => Some(DeclActionIcon::Variant),
+        "regenerate" => Some(DeclActionIcon::Regenerate),
+        "save" => Some(DeclActionIcon::Save),
+        _ => None,
+    }
+}
+
+/// Fallback mapping from well-known declarative `action` ids (Create package).
+pub fn resolve_decl_action_icon_for_action(action: &str) -> Option<DeclActionIcon> {
+    match action {
+        "generate_image" | "generate_video" => Some(DeclActionIcon::Generate),
+        "save_preset" => Some(DeclActionIcon::SavePreset),
+        "load_preset" => Some(DeclActionIcon::LoadPreset),
+        "clear_preview" | "clear_layers" => Some(DeclActionIcon::Clear),
+        "upscale" => Some(DeclActionIcon::Upscale),
+        "variant" | "variant_video" => Some(DeclActionIcon::Variant),
+        "regenerate" | "regenerate_video" => Some(DeclActionIcon::Regenerate),
+        "save_result" => Some(DeclActionIcon::Save),
+        _ => None,
+    }
+}
+
+/// Painted icon + label button for declarative module chrome.
+pub fn decl_action_button(
+    ui: &mut Ui,
+    icon: DeclActionIcon,
+    label: &str,
+    tooltip: &str,
+    enabled: bool,
+    primary: bool,
+) -> bool {
+    let h = crate::theme::CONTROL_MIN_H_COMFORTABLE;
+    let font = crate::fonts::interface_font_id_small(ui);
+    let text_w = ui
+        .painter()
+        .layout_no_wrap(label.to_string(), font.clone(), Color32::WHITE)
+        .size()
+        .x;
+    let w = (crate::theme::ICON_GLYPH + 28.0 + text_w + 12.0)
+        .clamp(88.0, ui.available_width().min(240.0));
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(w, h), sense);
+    if ui.is_rect_visible(rect) {
+        let well = rect.shrink2(Vec2::new(2.0, 2.0));
+        let painter = ui.painter();
+        let accent = crate::theme::button_colors(ui).accent;
+        if primary && enabled {
+            painter.rect_filled(well, 6.0, accent);
+        } else if response.hovered() && enabled {
+            painter.rect_filled(well, 6.0, ui.visuals().widgets.hovered.bg_fill);
+        } else if !primary {
+            painter.rect_stroke(
+                well,
+                6.0,
+                Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color),
+                StrokeKind::Inside,
+            );
+        }
+        let text_color = if primary && enabled {
+            Color32::WHITE
+        } else if enabled {
+            hover_color(ui, &response)
+        } else {
+            ui.visuals().weak_text_color()
+        };
+        let icon_rect = Rect::from_center_size(
+            Pos2::new(well.left() + 16.0, well.center().y),
+            Vec2::splat(crate::theme::ICON_GLYPH),
+        );
+        paint_decl_action(ui, icon_rect, icon, text_color);
+        ui.painter().text(
+            Pos2::new(icon_rect.right() + 8.0, well.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            crate::fonts::interface_font_id_small(ui),
+            text_color,
+        );
+    }
+    response
+        .on_hover_text(tooltip)
+        .clicked()
+        && enabled
+}
+
+fn paint_decl_action(ui: &mut Ui, rect: Rect, icon: DeclActionIcon, color: Color32) {
+    match icon {
+        DeclActionIcon::Generate => paint_decl_generate(ui, rect, color),
+        DeclActionIcon::SavePreset | DeclActionIcon::Save => paint_decl_save(ui, rect, color),
+        DeclActionIcon::LoadPreset => paint_decl_load(ui, rect, color),
+        DeclActionIcon::History => paint_decl_history(ui, rect, color),
+        DeclActionIcon::Clear => paint_close_mark(ui, rect, color),
+        DeclActionIcon::Upscale => paint_decl_upscale(ui, rect, color),
+        DeclActionIcon::Variant => paint_decl_variant(ui, rect, color),
+        DeclActionIcon::Regenerate => paint_refresh(ui, rect, color),
+    }
+}
+
+fn paint_decl_generate(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.5_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width();
+    let star = c + Vec2::new(w * 0.16, -w * 0.18);
+    paint_star_4(painter, star, w * 0.22, stroke);
+    let d = w * 0.09;
+    painter.line_segment([star + Vec2::new(-d, -d), star + Vec2::new(d, d)], stroke);
+    painter.line_segment([star + Vec2::new(-d, d), star + Vec2::new(d, -d)], stroke);
+    let grip = c + Vec2::new(-w * 0.22, w * 0.22);
+    painter.line_segment([grip, star + Vec2::new(-w * 0.08, w * 0.08)], stroke);
+}
+
+fn paint_decl_save(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let body = Rect::from_center_size(rect.center() + Vec2::new(0.0, 1.0), rect.size() * 0.72);
+    painter.rect_stroke(body, 2.0, stroke, StrokeKind::Middle);
+    let slot = Rect::from_min_max(
+        Pos2::new(body.left() + 2.0, body.top() - body.height() * 0.18),
+        Pos2::new(body.right() - 2.0, body.top() + body.height() * 0.12),
+    );
+    painter.rect_stroke(slot, 1.5, stroke, StrokeKind::Middle);
+    painter.line_segment(
+        [
+            Pos2::new(body.center().x, body.top() + body.height() * 0.28),
+            Pos2::new(body.center().x, body.bottom() - 2.0),
+        ],
+        stroke,
+    );
+}
+
+fn paint_decl_load(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let w = rect.width();
+    let folder = Rect::from_center_size(c + Vec2::new(0.0, 1.5), Vec2::new(w * 0.72, w * 0.48));
+    painter.add(Shape::closed_line(
+        vec![
+            Pos2::new(folder.left(), folder.center().y),
+            Pos2::new(folder.left() + w * 0.18, folder.top()),
+            Pos2::new(folder.right(), folder.top()),
+            Pos2::new(folder.right(), folder.bottom()),
+            Pos2::new(folder.left(), folder.bottom()),
+        ],
+        stroke,
+    ));
+    painter.line_segment(
+        [Pos2::new(c.x, folder.top() - w * 0.08), Pos2::new(c.x, folder.top() - w * 0.28)],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            Pos2::new(c.x - w * 0.12, folder.top() - w * 0.18),
+            Pos2::new(c.x, folder.top() - w * 0.28),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            Pos2::new(c.x + w * 0.12, folder.top() - w * 0.18),
+            Pos2::new(c.x, folder.top() - w * 0.28),
+        ],
+        stroke,
+    );
+}
+
+fn paint_decl_history(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let r = rect.width() * 0.34;
+    painter.circle_stroke(c, r, stroke);
+    painter.line_segment([c, c + Vec2::new(r * 0.35, -r * 0.45)], stroke);
+    painter.line_segment([c, c + Vec2::new(r * 0.55, 0.0)], stroke);
+}
+
+fn paint_decl_upscale(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let inner = rect.shrink(3.0);
+    painter.rect_stroke(inner, 2.0, stroke, StrokeKind::Middle);
+    let arm = inner.width() * 0.22;
+    for (dx, dy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+        let corner = Pos2::new(
+            if dx < 0.0 {
+                inner.left()
+            } else {
+                inner.right()
+            },
+            if dy < 0.0 {
+                inner.top()
+            } else {
+                inner.bottom()
+            },
+        );
+        painter.line_segment(
+            [corner, corner + Vec2::new(dx * arm, dy * arm)],
+            stroke,
+        );
+    }
+}
+
+fn paint_decl_variant(ui: &mut Ui, rect: Rect, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let r = rect.width() * 0.12;
+    painter.circle_stroke(Pos2::new(c.x - r * 1.6, c.y + r), r, stroke);
+    painter.circle_stroke(Pos2::new(c.x + r * 1.6, c.y + r), r, stroke);
+    painter.circle_stroke(Pos2::new(c.x, c.y - r * 1.8), r, stroke);
+    painter.line_segment(
+        [Pos2::new(c.x, c.y - r * 0.6), Pos2::new(c.x - r, c.y + r * 0.2)],
+        stroke,
+    );
+    painter.line_segment(
+        [Pos2::new(c.x, c.y - r * 0.6), Pos2::new(c.x + r, c.y + r * 0.2)],
+        stroke,
+    );
+}
+
 fn paint_link_arrow(ui: &mut Ui, outgoing: bool) {
     let size = Vec2::new(12.0, 12.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
@@ -2406,5 +2653,26 @@ mod tests {
     #[test]
     fn attach_icon_is_widget() {
         let _ = std::any::type_name::<AttachIcon>();
+    }
+
+    #[test]
+    fn decl_action_icons_resolve_from_keys_and_actions() {
+        assert_eq!(
+            resolve_decl_action_icon("generate"),
+            Some(DeclActionIcon::Generate)
+        );
+        assert_eq!(
+            resolve_decl_action_icon_for_action("generate_image"),
+            Some(DeclActionIcon::Generate)
+        );
+        assert_eq!(
+            resolve_decl_action_icon_for_action("save_preset"),
+            Some(DeclActionIcon::SavePreset)
+        );
+        assert_eq!(
+            resolve_decl_action_icon_for_action("clear_preview"),
+            Some(DeclActionIcon::Clear)
+        );
+        assert!(resolve_decl_action_icon("unknown").is_none());
     }
 }

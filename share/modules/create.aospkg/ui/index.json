@@ -92,8 +92,10 @@
       "save_label": "Save image",
       "job_label": "Generation",
       "tab_preview": "Preview",
-      "preview_empty": "No image yet — enter a prompt and generate.",
-      "preview_empty_video": "No clip yet — enter a prompt and generate.",
+      "preview_empty": "No image yet",
+      "preview_empty_video": "No clip yet",
+      "advanced_disclosure": "Advanced",
+      "result_toolbar_section": "Result",
       "clear_preview_label": "Clear preview",
       "clear_layers_label": "Clear layers",
       "layers_list_label": "Layer order (back to front)",
@@ -219,8 +221,10 @@
       "save_label": "Enregistrer l'image",
       "job_label": "Génération",
       "tab_preview": "Aperçu",
-      "preview_empty": "Pas encore d'image — saisissez une invite et générez.",
-      "preview_empty_video": "Pas encore de clip — saisissez une invite et générez.",
+      "preview_empty": "Pas encore d'image",
+      "preview_empty_video": "Pas encore de clip",
+      "advanced_disclosure": "Avancé",
+      "result_toolbar_section": "Résultat",
       "clear_preview_label": "Effacer l’aperçu",
       "clear_layers_label": "Effacer les calques",
       "layers_list_label": "Ordre des calques (arrière vers avant)",
@@ -433,6 +437,14 @@
       "upscale_tile_size": {
         "type": "number",
         "default": 128
+      },
+      "advanced_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "upscale_open": {
+        "type": "boolean",
+        "default": false
       },
       "expert": {
         "type": "boolean",
@@ -897,6 +909,8 @@
                           "kind": "button",
                           "action": "generate_image",
                           "label_key": "generate_image_label",
+                          "icon_key": "generate",
+                          "primary": true,
                           "visible": {
                             "eq": [
                               "$local.media_mode",
@@ -924,6 +938,8 @@
                           "kind": "button",
                           "action": "generate_video",
                           "label_key": "generate_video_label",
+                          "icon_key": "generate",
+                          "primary": true,
                           "visible": {
                             "eq": [
                               "$local.media_mode",
@@ -1177,38 +1193,6 @@
                           "kind": "row",
                           "children": [
                             {
-                              "kind": "text_input",
-                              "state_key": "saved_preset_name",
-                              "label_key": "preset_name_label"
-                            },
-                            {
-                              "kind": "button",
-                              "action": "save_preset",
-                              "label_key": "save_preset_label",
-                              "enabled": {
-                                "ne": [
-                                  "$local.saved_preset_name",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "button",
-                              "action": "load_preset",
-                              "label_key": "load_preset_label",
-                              "enabled": {
-                                "ne": [
-                                  "$local.saved_preset_name",
-                                  ""
-                                ]
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "kind": "row",
-                          "children": [
-                            {
                               "kind": "select",
                               "state_key": "format",
                               "items": [
@@ -1273,16 +1257,110 @@
                               "max": 1024,
                               "step": 64,
                               "label_key": "height_label"
-                            },
-                            {
-                              "kind": "slider",
-                              "state_key": "steps",
-                              "min": 4,
-                              "max": 40,
-                              "step": 1,
-                              "label_key": "steps_label"
                             }
                           ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "section",
+                      "label_key": "advanced_disclosure",
+                      "collapsible": true,
+                      "open_state_key": "advanced_open",
+                      "children": [
+                        {
+                          "kind": "row",
+                          "children": [
+                            {
+                              "kind": "text_input",
+                              "state_key": "saved_preset_name",
+                              "label_key": "preset_name_label"
+                            },
+                            {
+                              "kind": "button",
+                              "action": "save_preset",
+                              "label_key": "save_preset_label",
+                              "icon_key": "save_preset",
+                              "enabled": {
+                                "ne": [
+                                  "$local.saved_preset_name",
+                                  ""
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "button",
+                              "action": "load_preset",
+                              "label_key": "load_preset_label",
+                              "icon_key": "load_preset",
+                              "enabled": {
+                                "ne": [
+                                  "$local.saved_preset_name",
+                                  ""
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "slider",
+                          "state_key": "steps",
+                          "min": 4,
+                          "max": 40,
+                          "step": 1,
+                          "label_key": "steps_label"
+                        },
+                        {
+                          "kind": "number",
+                          "state_key": "cfg_scale",
+                          "min": 1,
+                          "max": 30,
+                          "step": 0.5,
+                          "label_key": "cfg_label"
+                        },
+                        {
+                          "kind": "number",
+                          "state_key": "seed",
+                          "min": -1,
+                          "max": 2147483647,
+                          "label_key": "seed_label"
+                        },
+                        {
+                          "kind": "select",
+                          "state_key": "sampling_method",
+                          "items": [
+                            "",
+                            "euler",
+                            "euler_a",
+                            "heun",
+                            "dpm2",
+                            "lcm",
+                            "ddim"
+                          ],
+                          "label_key": "sampler_label",
+                          "item_label_keys": [
+                            "sampler_default",
+                            "sampler_euler",
+                            "sampler_euler_a",
+                            "sampler_heun",
+                            "sampler_dpm2",
+                            "sampler_lcm",
+                            "sampler_ddim"
+                          ]
+                        },
+                        {
+                          "kind": "number",
+                          "state_key": "flow_shift",
+                          "min": 0,
+                          "max": 10,
+                          "step": 0.1,
+                          "label_key": "flow_shift_label",
+                          "visible": {
+                            "eq": [
+                              "$local.media_mode",
+                              "video"
+                            ]
+                          }
                         },
                         {
                           "kind": "checkbox",
@@ -1340,75 +1418,6 @@
                               "label_key": "import_assets_label"
                             }
                           ]
-                        },
-                        {
-                          "kind": "checkbox",
-                          "state_key": "expert",
-                          "label_key": "expert_label"
-                        }
-                      ]
-                    },
-                    {
-                      "kind": "section",
-                      "label_key": "sampling_section",
-                      "visible": {
-                        "eq": [
-                          "$local.expert",
-                          true
-                        ]
-                      },
-                      "children": [
-                        {
-                          "kind": "number",
-                          "state_key": "cfg_scale",
-                          "min": 1,
-                          "max": 30,
-                          "step": 0.5,
-                          "label_key": "cfg_label"
-                        },
-                        {
-                          "kind": "number",
-                          "state_key": "seed",
-                          "min": -1,
-                          "max": 2147483647,
-                          "label_key": "seed_label"
-                        },
-                        {
-                          "kind": "select",
-                          "state_key": "sampling_method",
-                          "items": [
-                            "",
-                            "euler",
-                            "euler_a",
-                            "heun",
-                            "dpm2",
-                            "lcm",
-                            "ddim"
-                          ],
-                          "label_key": "sampler_label",
-                          "item_label_keys": [
-                            "sampler_default",
-                            "sampler_euler",
-                            "sampler_euler_a",
-                            "sampler_heun",
-                            "sampler_dpm2",
-                            "sampler_lcm",
-                            "sampler_ddim"
-                          ]
-                        },
-                        {
-                          "kind": "number",
-                          "state_key": "flow_shift",
-                          "min": 0,
-                          "max": 10,
-                          "step": 0.1,
-                          "label_key": "flow_shift_label",
-                          "visible": {
-                            "eq": [
-                              "$local.media_mode",
-                              "video"
-                            ]
-                          }
                         },
                         {
                           "kind": "section",
@@ -1516,6 +1525,7 @@
                         {
                           "tool": "create.history.get",
                           "label_key": "history_restore",
+                          "icon_key": "history",
                           "args": {
                             "id": "$row.id"
                           },
@@ -1546,6 +1556,7 @@
             "aspect_h_key": "height",
             "aspect_w": 16,
             "aspect_h": 9,
+            "empty_label_key": "preview_empty",
             "tooltip_key": "tip_layers"
           },
           {
@@ -1557,11 +1568,13 @@
           },
           {
             "kind": "row",
+            "toolbar": true,
             "children": [
               {
                 "kind": "button",
                 "action": "clear_preview",
                 "label_key": "clear_preview_label",
+                "icon_key": "clear",
                 "enabled": {
                   "ne": [
                     "$local.result_path",
@@ -1572,137 +1585,153 @@
               {
                 "kind": "button",
                 "action": "clear_layers",
-                "label_key": "clear_layers_label"
+                "label_key": "clear_layers_label",
+                "icon_key": "clear"
               }
             ]
           },
           {
             "kind": "section",
-            "label_key": "upscale_section",
+            "label_key": "result_toolbar_section",
             "children": [
               {
-                "kind": "text_input",
-                "state_key": "upscale_model",
-                "label_key": "upscale_model_label"
-              },
-              {
-                "kind": "number",
-                "state_key": "upscale_repeats",
-                "min": 1,
-                "max": 4,
-                "label_key": "upscale_repeats_label"
-              },
-              {
-                "kind": "number",
-                "state_key": "upscale_tile_size",
-                "min": 32,
-                "max": 512,
-                "label_key": "upscale_tile_label"
-              },
-              {
-                "kind": "button",
-                "action": "upscale",
-                "label_key": "upscale_label",
-                "enabled": {
-                  "and": [
-                    {
+                "kind": "row",
+                "toolbar": true,
+                "children": [
+                  {
+                    "kind": "button",
+                    "action": "upscale",
+                    "label_key": "upscale_label",
+                    "icon_key": "upscale",
+                    "enabled": {
+                      "and": [
+                        {
+                          "ne": [
+                            "$local.result_path",
+                            ""
+                          ]
+                        },
+                        {
+                          "ne": [
+                            "$local.upscale_model",
+                            ""
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "button",
+                    "action": "variant",
+                    "label_key": "variant_label",
+                    "icon_key": "variant",
+                    "visible": {
+                      "eq": [
+                        "$local.media_mode",
+                        "image"
+                      ]
+                    },
+                    "enabled": {
                       "ne": [
                         "$local.result_path",
                         ""
                       ]
+                    }
+                  },
+                  {
+                    "kind": "button",
+                    "action": "variant_video",
+                    "label_key": "variant_label",
+                    "icon_key": "variant",
+                    "visible": {
+                      "eq": [
+                        "$local.media_mode",
+                        "video"
+                      ]
                     },
-                    {
+                    "enabled": {
                       "ne": [
-                        "$local.upscale_model",
+                        "$local.result_path",
                         ""
                       ]
                     }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "action": "save_result",
-                "label_key": "save_label",
-                "enabled": {
-                  "ne": [
-                    "$local.result_path",
-                    ""
-                  ]
-                }
+                  },
+                  {
+                    "kind": "button",
+                    "action": "regenerate",
+                    "label_key": "regenerate_label",
+                    "icon_key": "regenerate",
+                    "visible": {
+                      "eq": [
+                        "$local.media_mode",
+                        "image"
+                      ]
+                    },
+                    "enabled": {
+                      "ne": [
+                        "$local.result_path",
+                        ""
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "button",
+                    "action": "regenerate_video",
+                    "label_key": "regenerate_label",
+                    "icon_key": "regenerate",
+                    "visible": {
+                      "eq": [
+                        "$local.media_mode",
+                        "video"
+                      ]
+                    },
+                    "enabled": {
+                      "ne": [
+                        "$local.result_path",
+                        ""
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "button",
+                    "action": "save_result",
+                    "label_key": "save_label",
+                    "icon_key": "save",
+                    "enabled": {
+                      "ne": [
+                        "$local.result_path",
+                        ""
+                      ]
+                    }
+                  }
+                ]
               },
               {
-                "kind": "button",
-                "action": "regenerate",
-                "label_key": "regenerate_label",
-                "visible": {
-                  "eq": [
-                    "$local.media_mode",
-                    "image"
-                  ]
-                },
-                "enabled": {
-                  "ne": [
-                    "$local.result_path",
-                    ""
-                  ]
-                }
-              },
-              {
-                "kind": "button",
-                "action": "variant",
-                "label_key": "variant_label",
-                "visible": {
-                  "eq": [
-                    "$local.media_mode",
-                    "image"
-                  ]
-                },
-                "enabled": {
-                  "ne": [
-                    "$local.result_path",
-                    ""
-                  ]
-                }
-              },
-              {
-                "kind": "button",
-                "action": "regenerate_video",
-                "label_key": "regenerate_label",
-                "visible": {
-                  "eq": [
-                    "$local.media_mode",
-                    "video"
-                  ]
-                },
-                "enabled": {
-                  "ne": [
-                    "$local.result_path",
-                    ""
-                  ]
-                }
-              },
-              {
-                "kind": "button",
-                "action": "variant_video",
-                "label_key": "variant_label",
-                "visible": {
-                  "eq": [
-                    "$local.media_mode",
-                    "video"
-                  ]
-                },
-                "enabled": {
-                  "ne": [
-                    "$local.result_path",
-                    ""
-                  ]
-                }
+                "kind": "section",
+                "label_key": "upscale_section",
+                "collapsible": true,
+                "open_state_key": "upscale_open",
+                "children": [
+                  {
+                    "kind": "text_input",
+                    "state_key": "upscale_model",
+                    "label_key": "upscale_model_label"
+                  },
+                  {
+                    "kind": "number",
+                    "state_key": "upscale_repeats",
+                    "min": 1,
+                    "max": 4,
+                    "label_key": "upscale_repeats_label"
+                  },
+                  {
+                    "kind": "number",
+                    "state_key": "upscale_tile_size",
+                    "min": 32,
+                    "max": 512,
+                    "label_key": "upscale_tile_label"
+                  }
+                ]
               }
             ]
           }

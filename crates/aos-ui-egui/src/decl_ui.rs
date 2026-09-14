@@ -1,5 +1,6 @@
 //! Host-rendered declarative module UI (E15 / Preview 0.7).
 
+use crate::icons;
 use crate::rich_composition_ui::{patch_to_local_map, LayerCanvasHostState};
 use crate::rich_decl::{
     init_state_from_schema, ImageViewInteractionState, JobProgressThrottle, RichDeclSubscriptions,
@@ -274,11 +275,7 @@ impl DeclUiPanelState {
             }
             "section" => {
                 let title = widget_text(w, doc, language);
-                ui.group(|ui| {
-                    if let Some(title) = title {
-                        ui.heading(title);
-                        ui.add_space(4.0);
-                    }
+                let mut render_children = |ui: &mut Ui| {
                     if let Some(children) = &w.children {
                         for child in children {
                             Self::render_widget(
@@ -301,33 +298,85 @@ impl DeclUiPanelState {
                             );
                         }
                     }
-                });
+                };
+                if w.collapsible.unwrap_or(false) {
+                    let open_key = w
+                        .open_state_key
+                        .clone()
+                        .unwrap_or_else(|| "advanced_open".into());
+                    let default_open = local_state
+                        .get(&open_key)
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let header = title.unwrap_or_else(|| "…".into());
+                    egui::CollapsingHeader::new(header)
+                        .id_salt(format!("decl-section-{}", open_key))
+                        .default_open(default_open)
+                        .show(ui, |ui| render_children(ui));
+                } else {
+                    ui.group(|ui| {
+                        if let Some(title) = title {
+                            ui.heading(title);
+                            ui.add_space(4.0);
+                        }
+                        render_children(ui);
+                    });
+                }
             }
             "row" => {
-                ui.horizontal(|ui| {
-                    if let Some(children) = &w.children {
-                        for c in children {
-                            Self::render_widget(
-                                ui,
-                                md_cache,
-                                c,
-                                doc,
-                                language,
-                                cache,
-                                binding_cache,
-                                local_state,
-                                document_state,
-                                subscriptions,
-                                image_views,
-                                layer_canvases,
-                                form_fields,
-                                tool_schemas,
-                                pending_invoke,
-                                actions,
-                            );
+                let toolbar = w.toolbar.unwrap_or(false);
+                if toolbar {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        if let Some(children) = &w.children {
+                            for c in children {
+                                Self::render_widget(
+                                    ui,
+                                    md_cache,
+                                    c,
+                                    doc,
+                                    language,
+                                    cache,
+                                    binding_cache,
+                                    local_state,
+                                    document_state,
+                                    subscriptions,
+                                    image_views,
+                                    layer_canvases,
+                                    form_fields,
+                                    tool_schemas,
+                                    pending_invoke,
+                                    actions,
+                                );
+                            }
                         }
-                    }
-                });
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        if let Some(children) = &w.children {
+                            for c in children {
+                                Self::render_widget(
+                                    ui,
+                                    md_cache,
+                                    c,
+                                    doc,
+                                    language,
+                                    cache,
+                                    binding_cache,
+                                    local_state,
+                                    document_state,
+                                    subscriptions,
+                                    image_views,
+                                    layer_canvases,
+                                    form_fields,
+                                    tool_schemas,
+                                    pending_invoke,
+                                    actions,
+                                );
+                            }
+                        }
+                    });
+                }
             }
             "heading" => {
                 if let Some(t) = widget_text(w, doc, language) {
@@ -524,6 +573,7 @@ impl DeclUiPanelState {
                 }
             }
             "prompt_starters" => {
+                let t = crate::i18n::strings(language);
                 let Some(state_key) = &w.state_key else {
                     return;
                 };
@@ -533,7 +583,7 @@ impl DeclUiPanelState {
                     .get(state_key)
                     .and_then(Value::as_str)
                     .filter(|value| items.iter().any(|item| item == value))
-                    .unwrap_or("Choisir un exemple…")
+                    .unwrap_or(t.decl_starter_placeholder)
                     .to_string();
                 ui.horizontal(|ui| {
                     ui.label(label);
@@ -554,6 +604,7 @@ impl DeclUiPanelState {
                 });
             }
             "asset_import" => {
+                let t = crate::i18n::strings(language);
                 let kind_key = w.state_key.as_deref().unwrap_or("asset_import_kind");
                 let path_key = w
                     .source
@@ -580,7 +631,8 @@ impl DeclUiPanelState {
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_string();
-                let title = widget_text(w, doc, language).unwrap_or_else(|| "Import assets".into());
+                let title = widget_text(w, doc, language)
+                    .unwrap_or_else(|| t.decl_asset_import_title.to_string());
                 ui.group(|ui| {
                     ui.label(title);
                     ui.horizontal(|ui| {
@@ -593,13 +645,13 @@ impl DeclUiPanelState {
                                     }
                                 }
                             });
-                        if ui.add_enabled(enabled, egui::Button::new("Choisir…")).clicked() {
+                        if ui.add_enabled(enabled, egui::Button::new(t.decl_asset_import_choose)).clicked() {
                             let filters: &[(&str, &[&str])] = match kind.as_str() {
-                                "style" => &[("Styles", &["txt"][..]), ("Tous les fichiers", &["*"][..])],
-                                _ => &[("Poids", &["safetensors", "ckpt", "pt", "bin"][..]), ("Tous les fichiers", &["*"][..])],
+                                "style" => &[("Styles", &["txt"][..]), ("All files", &["*"][..])],
+                                _ => &[("Weights", &["safetensors", "ckpt", "pt", "bin"][..]), ("All files", &["*"][..])],
                             };
                             if let Some(path) = crate::os_open::pick_os_file(
-                                "Importer un asset",
+                                t.decl_asset_import_title,
                                 filters,
                                 crate::os_open::user_downloads_dir().as_deref(),
                             ) {
@@ -611,9 +663,13 @@ impl DeclUiPanelState {
                         let shown = std::path::Path::new(&current_path)
                             .file_name()
                             .and_then(|name| name.to_str())
-                            .unwrap_or(if current_path.is_empty() { "Aucun fichier" } else { &current_path });
+                            .unwrap_or(if current_path.is_empty() {
+                                t.decl_asset_import_none
+                            } else {
+                                &current_path
+                            });
                         ui.weak(shown);
-                        if ui.add_enabled(enabled && !current_path.trim().is_empty(), egui::Button::new("Importer")).clicked() {
+                        if ui.add_enabled(enabled && !current_path.trim().is_empty(), egui::Button::new(t.decl_asset_import_submit)).clicked() {
                             match import_decl_asset(std::path::Path::new(&current_path), &kind) {
                                 Ok(name) => {
                                     status = format!("Asset importé : {name}");
@@ -804,6 +860,7 @@ impl DeclUiPanelState {
             }
             "file_picker" => {
                 if let Some(state_key) = &w.state_key {
+                    let t = crate::i18n::strings(language);
                     let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
                     let current = local_state
                         .get(state_key)
@@ -813,7 +870,7 @@ impl DeclUiPanelState {
                     ui.horizontal(|ui| {
                         ui.label(&label);
                         let shown = if current.is_empty() {
-                            "Aucun fichier sélectionné".to_string()
+                            t.decl_file_picker_none.to_string()
                         } else {
                             std::path::Path::new(&current)
                                 .file_name()
@@ -823,7 +880,7 @@ impl DeclUiPanelState {
                         };
                         ui.weak(shown);
                         if ui
-                            .add_enabled(enabled, egui::Button::new("Choisir…"))
+                            .add_enabled(enabled, egui::Button::new(t.decl_file_picker_choose))
                             .clicked()
                         {
                             if let Some(path) = crate::os_open::pick_os_file(
@@ -863,13 +920,32 @@ impl DeclUiPanelState {
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "Run".into());
                 let can_run = enabled && !pending_invoke && actions.invoke.is_none();
-                let response = ui.add_enabled(can_run, egui::Button::new(label));
-                let response = if let Some(tip) = widget_tooltip(w, doc, language).as_deref() {
-                    response.on_hover_text(tip)
+                let tooltip = widget_tooltip(w, doc, language)
+                    .unwrap_or_else(|| label.clone());
+                let icon = w
+                    .icon_key
+                    .as_deref()
+                    .and_then(icons::resolve_decl_action_icon)
+                    .or_else(|| {
+                        w.action
+                            .as_deref()
+                            .and_then(icons::resolve_decl_action_icon_for_action)
+                    });
+                let clicked = if let Some(icon) = icon {
+                    icons::decl_action_button(
+                        ui,
+                        icon,
+                        &label,
+                        &tooltip,
+                        can_run,
+                        w.primary.unwrap_or(false),
+                    )
                 } else {
-                    response
+                    let response = ui.add_enabled(can_run, egui::Button::new(label));
+                    let response = response.on_hover_text(tooltip);
+                    response.clicked()
                 };
-                if response.clicked() {
+                if clicked {
                     if w.action.as_deref() == Some("clear_preview") {
                         actions
                             .local_patch
@@ -1308,9 +1384,25 @@ impl DeclUiPanelState {
                             .and_then(Value::as_u64)
                             .map(|height| (width as u32, height as u32))
                     });
+                let media_mode = local_state
+                    .get("media_mode")
+                    .and_then(Value::as_str)
+                    .unwrap_or("image");
+                let empty_key = if media_mode == "video" {
+                    "preview_empty_video"
+                } else {
+                    "preview_empty"
+                };
+                let canvas_widget = if w.empty_label_key.is_some() {
+                    w.clone()
+                } else {
+                    let mut canvas_widget = w.clone();
+                    canvas_widget.empty_label_key = Some(empty_key.into());
+                    canvas_widget
+                };
                 if let Some(patch) = crate::rich_composition_ui::ui_layer_canvas(
                     ui,
-                    w,
+                    &canvas_widget,
                     doc,
                     language,
                     local_state,
@@ -1866,7 +1958,35 @@ fn render_table(
                                         continue;
                                     };
                                     let enabled = !pending_invoke && actions.invoke.is_none();
-                                    if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                                    let icon = action
+                                        .icon_key
+                                        .as_deref()
+                                        .and_then(icons::resolve_decl_action_icon)
+                                        .or_else(|| {
+                                            if action.tool == "create.history.get" {
+                                                Some(icons::DeclActionIcon::History)
+                                            } else {
+                                                None
+                                            }
+                                        });
+                                    let clicked = if let Some(icon) = icon {
+                                        icons::decl_action_button(
+                                            ui,
+                                            icon,
+                                            &label,
+                                            &label,
+                                            enabled,
+                                            false,
+                                        )
+                                    } else if ui
+                                        .add_enabled(enabled, egui::Button::new(label))
+                                        .clicked()
+                                    {
+                                        true
+                                    } else {
+                                        false
+                                    };
+                                    if clicked {
                                         let args = resolve_row_args(&action.args, row);
                                         queue_invoke(
                                             actions,

@@ -164,6 +164,9 @@ pub struct DeclUiRowAction {
     /// Bind tools to re-fetch after a successful invoke (e.g. list after create).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_binds: Option<Vec<String>>,
+    /// Painted icon metaphor for this row action (host-resolved).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_key: Option<String>,
 }
 
 /// Optional row filter for a [`DeclUiRowAction`].
@@ -332,6 +335,21 @@ pub struct DeclUiWidget {
     /// Bind tools to re-fetch after a successful invoke from this widget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_binds: Option<Vec<String>>,
+    /// Painted Lucide-style icon metaphor for `button` chrome (host-resolved).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_key: Option<String>,
+    /// Accent primary styling for painted `button` chrome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary: Option<bool>,
+    /// Render `section` as a collapsible disclosure (Settings-style calm surface).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collapsible: Option<bool>,
+    /// When collapsible, persist open/closed in this local state slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_state_key: Option<String>,
+    /// Compact grouped toolbar row (result actions, painted icon buttons).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toolbar: Option<bool>,
 }
 
 /// `module.ui` response — validated document ready for the egui host.

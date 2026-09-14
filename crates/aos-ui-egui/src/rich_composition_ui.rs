@@ -272,6 +272,7 @@ pub fn ui_layer_canvas(
 
     // The generated result is the canvas background. Layers are painted above
     // it so users can position and compare composition elements in context.
+    let mut painted_result = false;
     if let Some(path) = background_path.filter(|path| !path.is_empty()) {
         if let Some(texture) = crate::decl_ui::try_load_png(ui.ctx(), path) {
             let base = texture.size_vec2();
@@ -285,7 +286,22 @@ pub fn ui_layer_canvas(
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                 egui::Color32::WHITE,
             );
+            painted_result = true;
         }
+    }
+    if !painted_result {
+        let empty = w
+            .empty_label_key
+            .as_deref()
+            .and_then(|key| widget_label_from_key(doc, language, key))
+            .unwrap_or_else(|| t.decl_preview_empty.to_string());
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            empty,
+            crate::fonts::interface_font_id_small(ui),
+            ui.visuals().weak_text_color(),
+        );
     }
 
     let to_screen = |x: f32, y: f32, w: f32, h: f32| -> egui::Rect {
@@ -475,7 +491,7 @@ pub fn ui_layer_canvas(
         painter.rect_stroke(r, 3.0, stroke, egui::StrokeKind::Inside);
         let label = layer_display_name(layer, i, doc, language, &t);
         let text_pos = r.left_top() + egui::vec2(6.0, 4.0);
-        let font_id = egui::FontId::proportional(13.0);
+        let font_id = crate::fonts::interface_font_id_small(ui);
         let text_color = egui::Color32::from_white_alpha(alpha(255));
         painter.text(
             text_pos + egui::vec2(1.0, 1.0),
@@ -498,13 +514,12 @@ pub fn ui_layer_canvas(
     if let Some(selected_id) = selected {
         if let Some(layer) = layers.iter_mut().find(|layer| layer.id == selected_id) {
             ui.add_space(4.0);
-            ui.label("Prompt du calque sélectionné");
+            ui.label(t.decl_layer_prompt_label);
             let mut prompt = layer.prompt.clone();
             if ui
                 .add_sized(
                     [ui.available_width(), 56.0],
-                    egui::TextEdit::multiline(&mut prompt)
-                        .hint_text("Décrivez cet élément à placer dans la composition…"),
+                    egui::TextEdit::multiline(&mut prompt).hint_text(t.decl_layer_prompt_hint),
                 )
                 .changed()
             {
