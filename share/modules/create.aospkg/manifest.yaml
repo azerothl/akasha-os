@@ -1,6 +1,6 @@
 name: create
 version: 1.0.0
-hash: 2c0ca17245af18370f9c6327fba5f0e67a28387bbc08bacb70f507c634fbad98
+hash: 96d1f3e174844c62cd90279ab5d1a6b2f58da4098cb4d6e763d3c43c8add5436
 permissions:
   required_caps:
     - fs.read:/documents/create/**
@@ -45,24 +45,6 @@ tools:
     description: List image and video model packs for the picker
     input_schema:
       type: object
-  - name: create.preset.save
-    description: Save named parameter preset to document state
-    input_schema:
-      type: object
-      properties:
-        name:
-          type: string
-        params:
-          type: object
-      required: [name]
-  - name: create.preset.load
-    description: Load named parameter preset from document state
-    input_schema:
-      type: object
-      properties:
-        name:
-          type: string
-      required: [name]
 ui:
   contract: 2
   document: ui/index.json

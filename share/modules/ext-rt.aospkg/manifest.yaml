@@ -1,6 +1,6 @@
 name: ext-rt
 version: 1.0.0
-hash: 428009e8fdf1986df0c537453b93a22bc662df703d2061b7b297547c4bcb2ff3
+hash: 4bd702f9d38b4169c2af21022da036832f6c0ddae556bd4051f166076721c343
 permissions:
   required_caps: []
 tools:

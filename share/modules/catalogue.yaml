@@ -16,7 +16,7 @@ entries:
     version: "1.0.1"
     kind: module
     path: share/modules/tasks.aospkg
-    hash: sha256:530c32342d2cc16efc8e3eafb27a0498f9a1f2bdef468fa79662736d989bb7af
+    hash: sha256:534332df62cdb319acc291ed63afccb891b4b0e8fef17874e7d1804b8aa33107
     attested_caps:
       - fs.read:/documents/tasks/**
       - fs.write:/documents/tasks/**
@@ -24,20 +24,20 @@ entries:
     version: "1.0.0"
     kind: module
     path: share/modules/ext-rt.aospkg
-    hash: sha256:428009e8fdf1986df0c537453b93a22bc662df703d2061b7b297547c4bcb2ff3
+    hash: sha256:4bd702f9d38b4169c2af21022da036832f6c0ddae556bd4051f166076721c343
     attested_caps: []
   - name: canvas
     version: "1.0.0"
     kind: module
     path: share/modules/canvas.aospkg
-    hash: sha256:0db7466188b71be32ca2aec82a05b61e7190a06ce636b974d9f5443c953c9f7f
+    hash: sha256:815cb5cce4d3df9a9b04245a333dde976b70de2c7b4384c424cca75c3b333800
     attested_caps:
       - fs.write:/downloads/**
   - name: create
     version: "1.0.0"
     kind: module
     path: share/modules/create.aospkg
-    hash: sha256:2c0ca17245af18370f9c6327fba5f0e67a28387bbc08bacb70f507c634fbad98
+    hash: sha256:96d1f3e174844c62cd90279ab5d1a6b2f58da4098cb4d6e763d3c43c8add5436
     attested_caps:
       - fs.read:/documents/create/**
       - fs.write:/documents/create/**
