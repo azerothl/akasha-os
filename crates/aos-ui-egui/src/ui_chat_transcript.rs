@@ -9,8 +9,8 @@ use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
     agent_act_phrase, agent_canvas_session_ops, agent_panel, artifact_card, chat_ask, chat_media,
-    chat_room, i18n, icons, local_tz_offset_minutes, now_ms, research_choice, research_document,
-    schedule_card, skill_offer, UiApp,
+    chat_pending_status, chat_room, i18n, icons, local_tz_offset_minutes, now_ms, research_choice,
+    research_document, schedule_card, skill_offer, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
@@ -873,7 +873,14 @@ impl UiApp {
                                 ui.ctx().request_repaint();
                             }
                         });
-                        ui.weak("…");
+                        let pending_status = chat_pending_status::format_pending_assistant_status(
+                            t,
+                            self.chat_state.runtime.infer_phase,
+                            self.chat_state.active_session.as_deref(),
+                            &self.agents,
+                            &self.agent_ui.traces,
+                        );
+                        ui.weak(&pending_status);
                     });
                 }
                 if self.chat_state.runtime.load_fail_retry.is_some()

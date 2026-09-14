@@ -107,6 +107,7 @@ pub(crate) fn on_loaded(
         &mut app.chat_state.runtime.streaming,
         &mut app.chat_state.runtime.pending,
         &mut app.chat_state.runtime.inference_id,
+        &mut app.chat_state.runtime.infer_phase,
     );
     app.chat_state.runtime.room_turn_text = room_turn_text;
     if meta.canvas_open {
@@ -129,6 +130,8 @@ pub(crate) fn on_room_turn_done(
     if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
         app.chat_state.runtime.pending = false;
         app.chat_state.runtime.inference_id = None;
+        app.chat_state.runtime.infer_phase =
+            crate::chat_pending_status::ChatInferPhase::Preparing;
         app.chat_state.runtime.room_turn_text = None;
         if let Some(status) = chat_room::room_turn_done_status(agent_turns, cancelled) {
             app.status = status;

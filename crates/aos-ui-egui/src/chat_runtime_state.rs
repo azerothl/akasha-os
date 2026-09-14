@@ -1,5 +1,6 @@
 //! Runtime state for the active chat or room turn.
 
+use crate::chat_pending_status::ChatInferPhase;
 use crate::cmd::ChatRetryTurn;
 
 #[derive(Debug, Default)]
@@ -14,6 +15,8 @@ pub(crate) struct ChatRuntimeState {
     pub(crate) load_fail_retry: Option<ChatRetryTurn>,
     /// Unix ms when the current pending/streaming turn started.
     pub(crate) started_ms: u64,
+    /// Live inference phase while pending (before first token).
+    pub(crate) infer_phase: ChatInferPhase,
 }
 
 impl ChatRuntimeState {
@@ -23,6 +26,7 @@ impl ChatRuntimeState {
         self.inference_id = None;
         self.room_turn_text = room_turn_text;
         self.started_ms = crate::now_ms();
+        self.infer_phase = ChatInferPhase::Preparing;
     }
 
     pub(crate) fn finish_turn(&mut self) {
@@ -32,6 +36,7 @@ impl ChatRuntimeState {
         self.room_turn_text = None;
         self.outgoing_turn = None;
         self.started_ms = 0;
+        self.infer_phase = ChatInferPhase::Preparing;
     }
 }
 
@@ -49,6 +54,7 @@ mod tests {
             outgoing_turn: None,
             load_fail_retry: None,
             started_ms: 0,
+            infer_phase: ChatInferPhase::WaitingFirstToken,
         };
 
         state.begin_turn(Some("question".into()));
@@ -57,14 +63,17 @@ mod tests {
         assert_eq!(state.inference_id, None);
         assert_eq!(state.room_turn_text.as_deref(), Some("question"));
         assert!(state.started_ms > 0);
+        assert_eq!(state.infer_phase, ChatInferPhase::Preparing);
 
         state.inference_id = Some(7);
         state.streaming = "answer".into();
+        state.infer_phase = ChatInferPhase::Queued { position: 2 };
         state.finish_turn();
         assert!(!state.pending);
         assert!(state.streaming.is_empty());
         assert_eq!(state.inference_id, None);
         assert_eq!(state.room_turn_text, None);
         assert_eq!(state.started_ms, 0);
+        assert_eq!(state.infer_phase, ChatInferPhase::Preparing);
     }
 }

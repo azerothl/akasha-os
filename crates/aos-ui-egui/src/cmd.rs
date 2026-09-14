@@ -805,6 +805,11 @@ pub(crate) enum Evt {
         session_id: String,
         inference_id: u64,
     },
+    /// Live chat inference phase before the first streamed token.
+    ChatProgress {
+        session_id: String,
+        phase: crate::chat_pending_status::ChatInferPhase,
+    },
     ChatCancelled {
         session_id: String,
     },

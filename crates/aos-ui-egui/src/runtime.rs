@@ -559,6 +559,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
         } => {
             let t = i18n::strings(&language);
             let _ = evt_tx.send(Evt::Status(t.status_assistant_generating_progress.into()));
+            let _ = evt_tx.send(Evt::ChatProgress {
+                session_id: session_id.clone(),
+                phase: crate::chat_pending_status::ChatInferPhase::Preparing,
+            });
             let user_content =
                 aos_proto::chat_document::merge_documents_into_user_content(&user_text, &documents);
             if !skip_session_append {
@@ -676,6 +680,14 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                     let _ = evt_tx.send(Evt::InferStarted {
                                         session_id: sid.clone(),
                                         inference_id,
+                                    });
+                                }
+                                Ok(TokenEvent::Queued { position }) => {
+                                    let _ = evt_tx.send(Evt::ChatProgress {
+                                        session_id: sid.clone(),
+                                        phase: crate::chat_pending_status::ChatInferPhase::Queued {
+                                            position,
+                                        },
                                     });
                                 }
                                 Ok(TokenEvent::Delta { text }) => {
