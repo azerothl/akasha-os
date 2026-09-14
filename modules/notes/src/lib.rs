@@ -11,10 +11,10 @@
 mod core;
 
 use core::{
-    dedup_hits_by_path, excerpt_of, format_note_file, incoming_for, is_note_path, merge_related,
-    note_path, outgoing_refs, parse_wikilinks, remove_graph_node, slug_from_path, slugify,
-    split_title_body, upsert_graph_node, walk_neighbors, NoteGraph, NoteSummary, RelatedHit,
-    GRAPH_PATH, MEM_NS, NOTES_DIR,
+    bump_write_seq, dedup_hits_by_path, excerpt_of, format_note_file, incoming_for, is_note_path,
+    merge_related, normalize_tags, note_path, outgoing_refs, parse_wikilinks, remove_graph_node,
+    slug_from_path, slugify, split_frontmatter, split_h1, split_title_body, upsert_graph_node,
+    walk_neighbors, NoteGraph, NoteSummary, RelatedHit, GRAPH_PATH, MEM_NS, NOTES_DIR,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -38,11 +38,13 @@ struct CreateArgs {
     title: String,
     #[serde(default, alias = "body")]
     content: String,
+    #[serde(default)]
+    tags: Option<Vec<String>>,
 }
 
 fn create(args: &serde_json::Value) -> Result<serde_json::Value, String> {
     let a: CreateArgs = aos_module_sdk::parse_args(args)?;
-    write_note(&a.title, &a.content, None)
+    write_note(&a.title, &a.content, None, a.tags)
 }
 
 #[derive(Deserialize)]
@@ -57,6 +59,8 @@ struct UpdateArgs {
     content: String,
     #[serde(default)]
     new_title: Option<String>,
+    #[serde(default)]
+    tags: Option<Vec<String>>,
 }
 
 fn update(args: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -75,28 +79,36 @@ fn update(args: &serde_json::Value) -> Result<serde_json::Value, String> {
         );
     }
     let _ = old_path; // identité déjà résolue
-    write_note(new_title, &a.content, Some(&old_slug))
+    write_note(new_title, &a.content, Some(&old_slug), a.tags)
 }
 
 fn write_note(
     title: &str,
     content: &str,
     existing_slug: Option<&str>,
+    tags_override: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     let slug = existing_slug
         .map(|s| s.to_string())
         .unwrap_or_else(|| slugify(title));
     let path = note_path(&slug);
+    let (fm, rest, had_frontmatter) = split_frontmatter(content);
     // Si le contenu inclut déjà un H1, on le traite comme corps complet.
     let body = {
-        let (parsed_title, rest) = split_title_body(content);
+        let (parsed_title, h1_rest) = split_h1(&rest);
         if parsed_title.is_some() {
-            rest
+            h1_rest
         } else {
-            content.to_string()
+            rest
         }
     };
-    let file = format_note_file(title, &body);
+    let tags = resolve_tags(
+        tags_override,
+        fm.tags,
+        had_frontmatter,
+        existing_slug.is_some().then_some(path.as_str()),
+    );
+    let file = format_note_file(title, &body, &tags);
     let outgoing = parse_wikilinks(&body);
 
     let _ = aos_module_sdk::mem_delete_by_path(MEM_NS, &path);
@@ -105,10 +117,11 @@ fn write_note(
     let mem_id = aos_module_sdk::mem_write(
         MEM_NS,
         &format!("{} — {}", title, body),
-        serde_json::json!({"path": path, "title": title, "slug": slug}),
+        serde_json::json!({"path": path, "title": title, "slug": slug, "tags": tags}),
     )?;
 
     let mut graph = load_graph()?;
+    let seq = bump_write_seq(&mut graph);
     upsert_graph_node(
         &mut graph,
         &slug,
@@ -116,6 +129,8 @@ fn write_note(
         &path,
         &outgoing,
         Some(mem_id),
+        &tags,
+        seq,
     );
     save_graph(&graph)?;
 
@@ -126,11 +141,34 @@ fn write_note(
         "version": version,
         "memory_id": mem_id,
         "outgoing": outgoing,
+        "tags": tags,
     }))
+}
+
+fn resolve_tags(
+    override_tags: Option<Vec<String>>,
+    content_tags: Vec<String>,
+    had_frontmatter: bool,
+    existing_path: Option<&str>,
+) -> Vec<String> {
+    if let Some(tags) = override_tags {
+        return normalize_tags(tags);
+    }
+    if had_frontmatter {
+        return normalize_tags(content_tags);
+    }
+    if let Some(path) = existing_path {
+        if let Ok(prev) = aos_module_sdk::fs_read(path) {
+            let (prev_fm, _, _) = split_frontmatter(&prev);
+            return normalize_tags(prev_fm.tags);
+        }
+    }
+    Vec::new()
 }
 
 fn list() -> Result<serde_json::Value, String> {
     let paths = aos_module_sdk::fs_list(NOTES_DIR)?;
+    let graph = load_graph().unwrap_or_default();
     let mut notes = Vec::new();
     for path in paths {
         if !is_note_path(&path) {
@@ -140,16 +178,29 @@ fn list() -> Result<serde_json::Value, String> {
             continue;
         };
         let content = aos_module_sdk::fs_read(&path).unwrap_or_default();
+        let (fm, _, _) = split_frontmatter(&content);
         let (title_opt, body) = split_title_body(&content);
         let title = title_opt.unwrap_or_else(|| slug.replace('-', " "));
+        let node = graph.notes.get(&slug);
+        let tags = if fm.tags.is_empty() {
+            node.map(|n| n.tags.clone()).unwrap_or_default()
+        } else {
+            fm.tags
+        };
         notes.push(NoteSummary {
             title,
             path,
             slug,
             excerpt: excerpt_of(&body, 160),
+            tags,
+            updated_seq: node.map(|n| n.updated_seq).unwrap_or(0),
         });
     }
-    notes.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    notes.sort_by(|a, b| {
+        b.updated_seq
+            .cmp(&a.updated_seq)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
     aos_module_sdk::json_ok(&serde_json::json!({ "notes": notes }))
 }
 
@@ -211,17 +262,28 @@ fn read(args: &serde_json::Value) -> Result<serde_json::Value, String> {
     let (title_hint, path, slug) =
         resolve_identity(title.as_deref(), a.path.as_deref(), a.slug.as_deref())?;
     let content = aos_module_sdk::fs_read(&path)?;
+    let (fm, _, _) = split_frontmatter(&content);
     let (title_opt, body) = split_title_body(&content);
     let title = title_opt.unwrap_or(title_hint);
     let graph = load_graph().unwrap_or_default();
     let outgoing = outgoing_refs(&graph, &slug);
     let incoming = incoming_for(&graph, &slug);
+    let tags = if fm.tags.is_empty() {
+        graph
+            .notes
+            .get(&slug)
+            .map(|n| n.tags.clone())
+            .unwrap_or_default()
+    } else {
+        fm.tags
+    };
     aos_module_sdk::json_ok(&serde_json::json!({
         "title": title,
         "path": path,
         "slug": slug,
         "content": content,
         "body": body,
+        "tags": tags,
         "outgoing": outgoing,
         "incoming": incoming,
     }))
@@ -419,10 +481,21 @@ fn rebuild_graph_from_fs() -> Result<NoteGraph, String> {
             continue;
         };
         let content = aos_module_sdk::fs_read(&path).unwrap_or_default();
+        let (fm, _, _) = split_frontmatter(&content);
         let (title_opt, body) = split_title_body(&content);
         let title = title_opt.unwrap_or_else(|| slug.replace('-', " "));
         let outgoing = parse_wikilinks(&body);
-        upsert_graph_node(&mut graph, &slug, &title, &path, &outgoing, None);
+        let seq = bump_write_seq(&mut graph);
+        upsert_graph_node(
+            &mut graph,
+            &slug,
+            &title,
+            &path,
+            &outgoing,
+            None,
+            &fm.tags,
+            seq,
+        );
     }
     Ok(graph)
 }
@@ -436,7 +509,8 @@ fn ensure_graph_has_note(
 ) -> Result<(), String> {
     if !graph.notes.contains_key(slug) {
         let outgoing = parse_wikilinks(body);
-        upsert_graph_node(graph, slug, title, path, &outgoing, None);
+        let seq = bump_write_seq(graph);
+        upsert_graph_node(graph, slug, title, path, &outgoing, None, &[], seq);
         save_graph(graph)?;
     }
     Ok(())

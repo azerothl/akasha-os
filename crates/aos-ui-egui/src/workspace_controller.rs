@@ -39,6 +39,12 @@ impl UiApp {
             .apply_notes_related(hits, t.notes_related_count);
     }
 
+    pub(crate) fn on_notes_deleted(&mut self, path: String) {
+        let t = i18n::strings(&self.prefs.language);
+        self.workspace_ui
+            .apply_note_deleted(&path, t.notes_status_deleted);
+    }
+
     pub(crate) fn on_notes_saved(&mut self, path: String, slug: String, title: String) {
         let t = i18n::strings(&self.prefs.language);
         self.workspace_ui

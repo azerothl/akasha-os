@@ -68,6 +68,7 @@ tools:
       properties:
         title: { type: string }
         content: { type: string }
+        tags: { type: array, items: { type: string } }
       required: [title, content]
     output_schema:
       type: object
@@ -86,9 +87,10 @@ tools:
         slug: { type: string }
         content: { type: string }
         new_title: { type: string }
+        tags: { type: array, items: { type: string } }
       required: [content]
   - name: notes.list
-    description: List notes (title, path, excerpt)
+    description: List notes (title, path, excerpt, tags)
     input_schema:
       type: object
     output_schema:
@@ -150,7 +152,7 @@ $uiJson = @'
   "type": "declarative_ui",
   "title": "Notes",
   "description": "List, read, create and link notes (human surface of the notes module).",
-  "commands": ["notes.list", "notes.read", "notes.create", "notes.update", "notes.search", "notes.links", "notes.related"]
+  "commands": ["notes.list", "notes.read", "notes.create", "notes.update", "notes.delete", "notes.search", "notes.links", "notes.related"]
 }
 '@
 [System.IO.File]::WriteAllText((Join-OsPath $pkg ui index.html), $uiJson)

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::i18n::UiStrings;
 use crate::icons;
+use crate::ui_primitives;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteListItem {
@@ -14,6 +15,10 @@ pub struct NoteListItem {
     pub slug: String,
     #[serde(default)]
     pub excerpt: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub updated_seq: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -33,6 +38,8 @@ pub struct NoteDetail {
     pub content: String,
     #[serde(default)]
     pub body: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
     #[serde(default)]
     pub outgoing: Vec<NoteLink>,
     #[serde(default)]
@@ -73,19 +80,37 @@ pub struct NotesActions {
     pub read_title: Option<String>,
     pub save_create: Option<(String, String)>,
     pub save_update: Option<(String, String, String)>, // title, path, body
+    pub delete_path: Option<String>,
     pub attach_path: Option<String>,
     pub related: Option<(String, String)>, // path, topic
     pub retry_save: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotesSort {
+    Recent,
+    TitleAsc,
+    TitleDesc,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotesTagFilter {
+    All,
+    Untagged,
+    Tag(String),
 }
 
 pub struct NotesPanelState {
     pub notes: Vec<NoteListItem>,
     pub filter: String,
     pub search_query: String,
+    pub sort: NotesSort,
+    pub tag_filter: NotesTagFilter,
     pub search_hits: Vec<NoteSearchHit>,
     pub related_hits: Vec<NoteRelatedHit>,
     pub selected_path: Option<String>,
     pub edit_title: String,
+    pub edit_tags: String,
     pub edit_body: String,
     pub edit_path: Option<String>,
     pub edit_slug: Option<String>,
@@ -116,10 +141,13 @@ impl Default for NotesPanelState {
             notes: Vec::new(),
             filter: String::new(),
             search_query: String::new(),
+            sort: NotesSort::Recent,
+            tag_filter: NotesTagFilter::All,
             search_hits: Vec::new(),
             related_hits: Vec::new(),
             selected_path: None,
             edit_title: String::new(),
+            edit_tags: String::new(),
             edit_body: String::new(),
             edit_path: None,
             edit_slug: None,
@@ -156,13 +184,19 @@ impl NotesPanelState {
         self.edit_path = Some(detail.path);
         self.edit_slug = Some(detail.slug);
         self.edit_title = detail.title;
-        self.edit_body = if detail.body.is_empty() {
-            // Contenu brut sans H1 déjà séparé.
+        let raw_body = if detail.body.is_empty() {
             let (_, body) = split_h1(&detail.content);
             body
         } else {
             detail.body
         };
+        let (fm_tags, body) = split_note_frontmatter(&raw_body);
+        self.edit_body = body;
+        self.edit_tags = format_tags_input(if detail.tags.is_empty() {
+            &fm_tags
+        } else {
+            &detail.tags
+        });
         self.outgoing = detail.outgoing;
         self.incoming = detail.incoming;
         self.is_new = false;
@@ -188,6 +222,7 @@ impl NotesPanelState {
         self.edit_path = None;
         self.edit_slug = None;
         self.edit_title.clear();
+        self.edit_tags.clear();
         self.edit_body.clear();
         self.outgoing.clear();
         self.incoming.clear();
@@ -228,6 +263,15 @@ impl NotesPanelState {
         self.create_failed = false;
         Some(actions)
     }
+
+    pub fn apply_deleted(&mut self, path: &str, deleted_label: &str) {
+        self.notes.retain(|n| n.path != path);
+        if self.selected_path.as_deref() == Some(path) || self.edit_path.as_deref() == Some(path)
+        {
+            self.start_new();
+        }
+        self.status = deleted_label.to_string();
+    }
 }
 
 fn split_h1(content: &str) -> (Option<String>, String) {
@@ -241,6 +285,122 @@ fn split_h1(content: &str) -> (Option<String>, String) {
     } else {
         (None, content.to_string())
     }
+}
+
+fn split_note_frontmatter(content: &str) -> (Vec<String>, String) {
+    let bom_stripped = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let leading = bom_stripped.trim_start_matches(['\r', '\n']);
+    let Some(after_open) = leading.strip_prefix("---") else {
+        return (Vec::new(), content.to_string());
+    };
+    let after_open = after_open.strip_prefix('\r').unwrap_or(after_open);
+    let Some(after_open) = after_open.strip_prefix('\n') else {
+        return (Vec::new(), content.to_string());
+    };
+    let Some(close_idx) = after_open.find("\n---") else {
+        return (Vec::new(), content.to_string());
+    };
+    let yaml = &after_open[..close_idx];
+    let mut after = &after_open[close_idx + "\n---".len()..];
+    after = after.strip_prefix('\r').unwrap_or(after);
+    after = after.strip_prefix('\n').unwrap_or(after);
+    after = after.trim_start_matches(['\r', '\n']);
+    let mut tags = Vec::new();
+    for line in yaml.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("tags:") {
+            tags = parse_tags_input(rest.trim_start_matches('[').trim_end_matches(']'));
+        }
+    }
+    (tags, after.to_string())
+}
+
+pub fn parse_tags_input(raw: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for part in raw.split([',', ';']) {
+        let t = part.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let key = t.to_lowercase();
+        if !seen.insert(key) {
+            continue;
+        }
+        out.push(t.to_string());
+        if out.len() >= 16 {
+            break;
+        }
+    }
+    out
+}
+
+fn format_tags_input(tags: &[String]) -> String {
+    tags.join(", ")
+}
+
+fn compose_note_content(tags: &[String], body: &str) -> String {
+    format!("---\ntags: {}\n---\n\n{}", tags.join(", "), body)
+}
+
+fn collect_unique_tags(notes: &[NoteListItem]) -> Vec<String> {
+    let mut tags = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for n in notes {
+        for tag in &n.tags {
+            let key = tag.to_lowercase();
+            if seen.insert(key) {
+                tags.push(tag.clone());
+            }
+        }
+    }
+    tags.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    tags
+}
+
+pub fn visible_notes<'a>(
+    notes: &'a [NoteListItem],
+    query: &str,
+    tag_filter: &NotesTagFilter,
+    sort: NotesSort,
+) -> Vec<&'a NoteListItem> {
+    let q = query.trim().to_lowercase();
+    let mut items: Vec<&NoteListItem> = notes
+        .iter()
+        .filter(|n| note_matches_filters(n, &q, tag_filter))
+        .collect();
+    match sort {
+        NotesSort::Recent => items.sort_by(|a, b| {
+            b.updated_seq
+                .cmp(&a.updated_seq)
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+        }),
+        NotesSort::TitleAsc => {
+            items.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+        }
+        NotesSort::TitleDesc => {
+            items.sort_by(|a, b| b.title.to_lowercase().cmp(&a.title.to_lowercase()))
+        }
+    }
+    items
+}
+
+fn note_matches_filters(n: &NoteListItem, query: &str, tag_filter: &NotesTagFilter) -> bool {
+    let tag_ok = match tag_filter {
+        NotesTagFilter::All => true,
+        NotesTagFilter::Untagged => n.tags.is_empty(),
+        NotesTagFilter::Tag(tag) => n.tags.iter().any(|t| t.eq_ignore_ascii_case(tag)),
+    };
+    if !tag_ok {
+        return false;
+    }
+    if query.is_empty() {
+        return true;
+    }
+    n.title.to_lowercase().contains(query)
+        || n.excerpt.to_lowercase().contains(query)
+        || n.slug.to_lowercase().contains(query)
+        || n.tags.iter().any(|t| t.to_lowercase().contains(query))
 }
 
 fn insert_wrap(buf: &mut String, before: &str, after: &str, placeholder: &str) {
@@ -266,10 +426,6 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
     ui.horizontal(|ui| {
         if ui.button(t.decl_ui_refresh).clicked() {
             actions.list = true;
-        }
-        ui.text_edit_singleline(&mut state.search_query);
-        if ui.button(t.notes_search).clicked() && !state.search_query.is_empty() {
-            actions.search = Some(state.search_query.clone());
         }
         if ui.button(t.notes_new).clicked() {
             state.start_new();
@@ -303,47 +459,146 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
         .max_width(560.0)
         .resizable(true)
         .show_inside(ui, |list_ui| {
-            // --- Liste ---
             list_ui.vertical(|ui| {
                 ui.label(RichText::new(t.notes_list).strong());
+                let find = ui_primitives::search_field(
+                    ui,
+                    &mut state.filter,
+                    t.notes_filter,
+                    t.notes_find_hint,
+                    t.search_field_clear,
+                );
+                if find.has_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && !state.filter.trim().is_empty()
+                {
+                    actions.search = Some(state.filter.clone());
+                    state.search_query = state.filter.clone();
+                }
                 ui.horizontal(|ui| {
-                    ui.label(t.notes_filter);
-                    ui.text_edit_singleline(&mut state.filter);
+                    if ui
+                        .add_enabled(!state.filter.trim().is_empty(), egui::Button::new(t.notes_search))
+                        .clicked()
+                    {
+                        actions.search = Some(state.filter.clone());
+                        state.search_query = state.filter.clone();
+                    }
+                    ui.label(t.notes_sort);
+                    let sort_label = match state.sort {
+                        NotesSort::Recent => t.notes_sort_recent,
+                        NotesSort::TitleAsc => t.notes_sort_title,
+                        NotesSort::TitleDesc => t.notes_sort_title_desc,
+                    };
+                    egui::ComboBox::from_id_salt("notes_sort")
+                        .selected_text(sort_label)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut state.sort,
+                                NotesSort::Recent,
+                                t.notes_sort_recent,
+                            );
+                            ui.selectable_value(
+                                &mut state.sort,
+                                NotesSort::TitleAsc,
+                                t.notes_sort_title,
+                            );
+                            ui.selectable_value(
+                                &mut state.sort,
+                                NotesSort::TitleDesc,
+                                t.notes_sort_title_desc,
+                            );
+                        });
                 });
+                let known_tags = collect_unique_tags(&state.notes);
+                let has_untagged = state.notes.iter().any(|n| n.tags.is_empty());
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .selectable_label(
+                            matches!(state.tag_filter, NotesTagFilter::All),
+                            t.notes_tag_all,
+                        )
+                        .clicked()
+                    {
+                        state.tag_filter = NotesTagFilter::All;
+                    }
+                    if has_untagged
+                        && ui
+                            .selectable_label(
+                                matches!(state.tag_filter, NotesTagFilter::Untagged),
+                                t.notes_untagged,
+                            )
+                            .clicked()
+                    {
+                        state.tag_filter = NotesTagFilter::Untagged;
+                    }
+                    for tag in &known_tags {
+                        let selected = matches!(&state.tag_filter, NotesTagFilter::Tag(t) if t == tag);
+                        if ui.selectable_label(selected, tag).clicked() {
+                            state.tag_filter = NotesTagFilter::Tag(tag.clone());
+                        }
+                    }
+                });
+                let visible = visible_notes(
+                    &state.notes,
+                    &state.filter,
+                    &state.tag_filter,
+                    state.sort,
+                );
+                let shown = visible.len();
+                let total = state.notes.len();
+                if shown != total {
+                    ui.weak(
+                        t.notes_filtered_count
+                            .replace("{shown}", &shown.to_string())
+                            .replace("{total}", &total.to_string()),
+                    );
+                }
+                let items: Vec<NoteListItem> = visible.into_iter().cloned().collect();
                 egui::ScrollArea::vertical()
                     .id_salt("notes_list")
                     .max_height(list_h.max(120.0))
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        let filter = state.filter.to_lowercase();
-                        let items: Vec<_> = state
-                            .notes
-                            .iter()
-                            .filter(|n| {
-                                filter.is_empty()
-                                    || n.title.to_lowercase().contains(&filter)
-                                    || n.excerpt.to_lowercase().contains(&filter)
-                            })
-                            .cloned()
-                            .collect();
                         if items.is_empty() {
-                            ui.weak(t.notes_empty);
+                            ui.weak(if state.notes.is_empty() {
+                                t.notes_empty
+                            } else {
+                                t.notes_empty_filter
+                            });
                         }
                         for n in items {
                             let selected = state.selected_path.as_deref() == Some(n.path.as_str());
-                            let label = if n.excerpt.is_empty() {
-                                n.title.clone()
-                            } else {
-                                format!("{}\n{}", n.title, n.excerpt)
-                            };
-                            if ui.selectable_label(selected, label).clicked() {
-                                actions.read_path = Some(n.path.clone());
-                                // Toujours envoyer aussi le titre : évite les anciens
-                                // WASM notes.read qui exigeaient `title` (issue #1).
-                                if !n.title.is_empty() {
-                                    actions.read_title = Some(n.title.clone());
-                                }
-                            }
+                            ui.horizontal(|ui| {
+                                ui.vertical(|ui| {
+                                    let title = RichText::new(&n.title).strong();
+                                    if ui.selectable_label(selected, title).clicked() {
+                                        actions.read_path = Some(n.path.clone());
+                                        if !n.title.is_empty() {
+                                            actions.read_title = Some(n.title.clone());
+                                        }
+                                    }
+                                    if !n.excerpt.is_empty() {
+                                        ui.weak(&n.excerpt);
+                                    }
+                                    if !n.tags.is_empty() {
+                                        ui.weak(n.tags.join(" · "));
+                                    }
+                                });
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::TOP),
+                                    |ui| {
+                                        if ui_primitives::danger_confirm_button(
+                                            ui,
+                                            ("notes_del", n.path.as_str()),
+                                            t.notes_delete,
+                                            t.notes_delete_confirm,
+                                        ) {
+                                            actions.delete_path = Some(n.path.clone());
+                                        }
+                                    },
+                                );
+                            });
+                            ui.separator();
                         }
                     });
 
@@ -427,7 +682,8 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                     .clicked()
                 {
                     let title = state.edit_title.trim().to_string();
-                    let body = state.edit_body.clone();
+                    let tags = parse_tags_input(&state.edit_tags);
+                    let body = compose_note_content(&tags, &state.edit_body);
                     if state.is_new || state.edit_path.is_none() {
                         actions.save_create = Some((title, body));
                     } else {
@@ -440,12 +696,38 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                         actions.attach_path = Some(path.clone());
                     }
                     if ui.button(t.notes_related).clicked() {
-                        let topic = state.search_query.clone();
-                        actions.related = Some((path, topic));
+                        let topic = if state.filter.is_empty() {
+                            state.search_query.clone()
+                        } else {
+                            state.filter.clone()
+                        };
+                        actions.related = Some((path.clone(), topic));
+                    }
+                    if ui_primitives::danger_confirm_button(
+                        ui,
+                        ("notes_del_editor", path.as_str()),
+                        t.notes_delete,
+                        t.notes_delete_confirm,
+                    ) {
+                        actions.delete_path = Some(path);
                     }
                 }
                 if state.dirty {
                     ui.weak("•");
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label(t.notes_tags);
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut state.edit_tags)
+                            .desired_width(280.0)
+                            .hint_text(t.notes_tags_hint),
+                    )
+                    .changed()
+                {
+                    state.dirty = true;
                 }
             });
 
@@ -602,6 +884,8 @@ pub fn parse_list_result(v: &serde_json::Value) -> Vec<NoteListItem> {
                             path: path.to_string(),
                             slug,
                             excerpt: String::new(),
+                            tags: Vec::new(),
+                            updated_seq: 0,
                         });
                     }
                     serde_json::from_value::<NoteListItem>(item.clone()).ok()
@@ -680,5 +964,62 @@ mod tests {
             retry.save_create.as_ref().map(|(t, _)| t.as_str()),
             Some("t")
         );
+    }
+
+    fn sample_note(title: &str, tags: &[&str], seq: u64) -> NoteListItem {
+        NoteListItem {
+            title: title.into(),
+            path: format!("/documents/notes/{}.md", title.to_lowercase()),
+            slug: title.to_lowercase(),
+            excerpt: format!("{title} excerpt"),
+            tags: tags.iter().map(|s| (*s).to_string()).collect(),
+            updated_seq: seq,
+        }
+    }
+
+    #[test]
+    fn visible_notes_filters_sorts_and_tags() {
+        let notes = vec![
+            sample_note("Beta", &["travail"], 1),
+            sample_note("Alpha", &["idées"], 3),
+            sample_note("Gamma", &[], 2),
+        ];
+        let recent = visible_notes(&notes, "", &NotesTagFilter::All, NotesSort::Recent);
+        assert_eq!(
+            recent.iter().map(|n| n.title.as_str()).collect::<Vec<_>>(),
+            vec!["Alpha", "Gamma", "Beta"]
+        );
+        let tagged = visible_notes(
+            &notes,
+            "",
+            &NotesTagFilter::Tag("travail".into()),
+            NotesSort::TitleAsc,
+        );
+        assert_eq!(tagged.len(), 1);
+        assert_eq!(tagged[0].title, "Beta");
+        let found = visible_notes(&notes, "idée", &NotesTagFilter::All, NotesSort::TitleAsc);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "Alpha");
+        let untagged = visible_notes(&notes, "", &NotesTagFilter::Untagged, NotesSort::TitleAsc);
+        assert_eq!(untagged.len(), 1);
+        assert_eq!(untagged[0].title, "Gamma");
+    }
+
+    #[test]
+    fn apply_deleted_clears_open_note() {
+        let mut state = NotesPanelState::default();
+        state.notes = vec![sample_note("Alpha", &[], 1)];
+        state.selected_path = Some("/documents/notes/alpha.md".into());
+        state.edit_path = Some("/documents/notes/alpha.md".into());
+        state.is_new = false;
+        state.apply_deleted("/documents/notes/alpha.md", "Deleted");
+        assert!(state.notes.is_empty());
+        assert!(state.is_new);
+        assert_eq!(state.status, "Deleted");
+    }
+
+    #[test]
+    fn parse_tags_input_dedups() {
+        assert_eq!(parse_tags_input(" Travail, travail, idées "), vec!["Travail", "idées"]);
     }
 }

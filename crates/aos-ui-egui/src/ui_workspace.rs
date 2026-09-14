@@ -105,5 +105,26 @@ impl UiApp {
         if let Some((path, topic)) = actions.related {
             let _ = self.cmd_tx.send(Cmd::NotesRelated { path, topic });
         }
+        if let Some(path) = actions.delete_path {
+            let title = self
+                .workspace_ui
+                .notes
+                .notes
+                .iter()
+                .find(|n| n.path == path)
+                .map(|n| n.title.clone());
+            let slug = self
+                .workspace_ui
+                .notes
+                .notes
+                .iter()
+                .find(|n| n.path == path)
+                .map(|n| n.slug.clone());
+            let _ = self.cmd_tx.send(Cmd::NotesDelete {
+                title,
+                path: Some(path),
+                slug,
+            });
+        }
     }
 }
