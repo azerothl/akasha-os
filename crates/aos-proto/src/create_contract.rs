@@ -85,8 +85,10 @@ pub mod surface {
     pub const FR_RESTORE_LABEL: &str = "Restaurer";
     pub const FR_JOB_LABEL: &str = "Génération";
 
-    pub const FR_PREVIEW_EMPTY: &str = "Pas encore d'image";
-    pub const FR_PREVIEW_EMPTY_VIDEO: &str = "Pas encore de clip";
+    pub const FR_PREVIEW_EMPTY: &str = "Pas encore d'image.";
+    pub const FR_PREVIEW_EMPTY_VIDEO: &str = "Pas encore de clip.";
+    pub const EN_PREVIEW_EMPTY: &str = "No image yet.";
+    pub const EN_PREVIEW_EMPTY_VIDEO: &str = "No clip yet.";
     pub const FR_ADVANCED_DISCLOSURE: &str = "Avancé";
     pub const FR_RESULT_TOOLBAR_SECTION: &str = "Résultat";
     pub const FR_HISTORY_EMPTY: &str = "Aucune génération pour l'instant";
@@ -128,7 +130,8 @@ pub mod surface {
 #[cfg(test)]
 mod tests {
     use super::surface::{
-        EN_APP_TITLE, FR_APP_TITLE, FR_GENERATE_LABEL, FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
+        EN_APP_TITLE, EN_PREVIEW_EMPTY, EN_PREVIEW_EMPTY_VIDEO, FR_APP_TITLE, FR_GENERATE_LABEL,
+        FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
         FR_IMAGE_PACK_LABEL, FR_JOB_LABEL, FR_MODE_IMAGE, FR_MODE_VIDEO, FR_NEGATIVE_LABEL,
         FR_ADVANCED_DISCLOSURE, FR_PREVIEW_EMPTY, FR_PREVIEW_EMPTY_VIDEO, FR_PROMPT_LABEL,
         FR_RESTORE_LABEL, FR_RESULT_TOOLBAR_SECTION, FR_SAVE_LABEL, FR_STEPS_LABEL,
@@ -644,5 +647,13 @@ mod tests {
             Some("Balanced")
         );
         assert_eq!(en.get("camera_push").map(String::as_str), Some("Push in"));
+        assert_eq!(
+            en.get("preview_empty").map(String::as_str),
+            Some(super::surface::EN_PREVIEW_EMPTY)
+        );
+        assert_eq!(
+            en.get("preview_empty_video").map(String::as_str),
+            Some(super::surface::EN_PREVIEW_EMPTY_VIDEO)
+        );
     }
 }
