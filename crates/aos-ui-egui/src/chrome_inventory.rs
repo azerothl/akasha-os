@@ -80,6 +80,42 @@ mod tests {
         assert!(checked, "create ui index.json not found for audit");
     }
 
+    /// Designer jail (E23 health chrome): no canary / SLO / EWMA / RTT jargon in Audit UI.
+    const HEALTH_JAIL_FORBIDDEN: &[&str] = &["canary", "EWMA", "SLO", "RTT", "NFR-01"];
+
+    fn find_health_jargon_violations(src: &str, file: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for (i, line) in src.lines().enumerate() {
+            let t = line.trim();
+            if t.starts_with("//") || t.starts_with("///") || t.starts_with('*') {
+                continue;
+            }
+            if !(t.contains('"') || t.contains("format!(")) {
+                continue;
+            }
+            for term in HEALTH_JAIL_FORBIDDEN {
+                if line.contains(term) {
+                    out.push(format!("{file}:{}: forbidden health jargon `{term}`", i + 1));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn health_audit_chrome_has_no_designer_jail_jargon() {
+        let files = [("ui_audit.rs", CHROME_SOURCES[1]), ("main.rs", CHROME_SOURCES[0])];
+        let mut violations = Vec::new();
+        for (name, src) in files {
+            violations.extend(find_health_jargon_violations(src, name));
+        }
+        assert!(
+            violations.is_empty(),
+            "health chrome jail failed:\n{}",
+            violations.join("\n")
+        );
+    }
+
     #[test]
     fn chrome_inventory_has_no_control_emoji() {
         let files = [

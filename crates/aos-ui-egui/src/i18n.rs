@@ -843,6 +843,39 @@ pub struct UiStrings {
     pub agents_select_tab: &'static str,
     pub audit_heading: &'static str,
     pub audit_kill_p4: &'static str,
+    pub health_runtime_heading: &'static str,
+    pub health_check_ok: &'static str,
+    pub health_check_failed: &'static str,
+    pub health_no_snapshot: &'static str,
+    pub health_stability_heading: &'static str,
+    pub health_first_response_label: &'static str,
+    pub health_first_response_target: &'static str,
+    pub health_generation_speed_label: &'static str,
+    pub health_bus_latency_label: &'static str,
+    pub health_memory_restarts: &'static str,
+    pub health_issue_label: &'static str,
+    pub health_stability_signal: &'static str,
+    pub health_contributing_factors: &'static str,
+    pub health_stderr_clusters: &'static str,
+    pub health_no_watchdog_restarts: &'static str,
+    pub health_watchdog_restarted: &'static str,
+    pub health_watchdog_restart_failed: &'static str,
+    pub health_status_check_failed: &'static str,
+    pub health_step_models: &'static str,
+    pub health_step_agents: &'static str,
+    pub health_step_modules: &'static str,
+    pub health_step_memory: &'static str,
+    pub health_step_notes_list: &'static str,
+    pub health_step_notes_rw: &'static str,
+    pub health_step_inference: &'static str,
+    pub health_breach_slow_response: &'static str,
+    pub health_breach_memory_freed: &'static str,
+    pub health_factor_first_response: &'static str,
+    pub health_factor_generation_speed: &'static str,
+    pub health_factor_bus_latency: &'static str,
+    pub health_factor_memory_freed: &'static str,
+    pub health_factor_restarts: &'static str,
+    pub health_factor_fit_failed: &'static str,
     pub feedback_heading: &'static str,
     pub feedback_blurb: &'static str,
     pub feedback_title: &'static str,
@@ -1958,6 +1991,39 @@ const EN: UiStrings = UiStrings {
     agents_select_tab: "Select a tab.",
     audit_heading: "Audit log",
     audit_kill_p4: "Kill aos-auditd (P4 test)",
+    health_runtime_heading: "Health (runtime)",
+    health_check_ok: "Health check passed",
+    health_check_failed: "Health check failed",
+    health_no_snapshot: "No health snapshot yet (waiting for first check).",
+    health_stability_heading: "Stability",
+    health_first_response_label: "First response (smoothed)",
+    health_first_response_target: "(target under 2000 ms)",
+    health_generation_speed_label: "Generation speed (smoothed)",
+    health_bus_latency_label: "Internal bus latency (smoothed)",
+    health_memory_restarts: "Memory freed: {bytes} B · restarts last hour: {restarts}",
+    health_issue_label: "Issue: {detail}",
+    health_stability_signal: "Stability signal {score} (alert above {threshold})",
+    health_contributing_factors: "Likely factors: {factors}",
+    health_stderr_clusters: "Recent error clusters",
+    health_no_watchdog_restarts: "No watchdog restarts recorded.",
+    health_watchdog_restarted: "restarted",
+    health_watchdog_restart_failed: "restart failed",
+    health_status_check_failed: "Health check failed",
+    health_step_models: "Models",
+    health_step_agents: "Agents",
+    health_step_modules: "Modules",
+    health_step_memory: "Memory",
+    health_step_notes_list: "Notes",
+    health_step_notes_rw: "Notes read/write",
+    health_step_inference: "Model inference",
+    health_breach_slow_response: "First response slower than target ({observed} ms > {target} ms)",
+    health_breach_memory_freed: "GPU memory was freed ({bytes} B)",
+    health_factor_first_response: "first response drift",
+    health_factor_generation_speed: "generation speed drift",
+    health_factor_bus_latency: "internal bus latency drift",
+    health_factor_memory_freed: "memory freed",
+    health_factor_restarts: "recent restarts",
+    health_factor_fit_failed: "baseline not ready",
     feedback_heading: "Tester feedback",
     feedback_blurb: "Local copy in var/feedback/. A GitHub issue is opened on azerothl/akasha-os (browser form, or API if token / gh).",
     feedback_title: "Title",
@@ -3069,6 +3135,39 @@ const FR: UiStrings = UiStrings {
     agents_select_tab: "Sélectionnez un onglet.",
     audit_heading: "Journal d'audit",
     audit_kill_p4: "Tuer aos-auditd (test P4)",
+    health_runtime_heading: "Santé (runtime)",
+    health_check_ok: "Contrôle de santé réussi",
+    health_check_failed: "Échec du contrôle de santé",
+    health_no_snapshot: "Pas encore de contrôle de santé (attente du premier passage).",
+    health_stability_heading: "Stabilité",
+    health_first_response_label: "Première réponse (lissée)",
+    health_first_response_target: "(objectif < 2000 ms)",
+    health_generation_speed_label: "Vitesse de génération (lissée)",
+    health_bus_latency_label: "Latence interne du bus (lissée)",
+    health_memory_restarts: "Mémoire libérée : {bytes} o · redémarrages (1 h) : {restarts}",
+    health_issue_label: "Problème : {detail}",
+    health_stability_signal: "Signal de stabilité {score} (alerte au-dessus de {threshold})",
+    health_contributing_factors: "Facteurs probables : {factors}",
+    health_stderr_clusters: "Regroupements d'erreurs récents",
+    health_no_watchdog_restarts: "Aucun redémarrage watchdog enregistré.",
+    health_watchdog_restarted: "redémarré",
+    health_watchdog_restart_failed: "redémarrage échoué",
+    health_status_check_failed: "Échec du contrôle de santé",
+    health_step_models: "Modèles",
+    health_step_agents: "Agents",
+    health_step_modules: "Modules",
+    health_step_memory: "Mémoire",
+    health_step_notes_list: "Notes",
+    health_step_notes_rw: "Lecture/écriture des notes",
+    health_step_inference: "Inférence modèle",
+    health_breach_slow_response: "Première réponse au-dessus de l'objectif ({observed} ms > {target} ms)",
+    health_breach_memory_freed: "Mémoire GPU libérée ({bytes} o)",
+    health_factor_first_response: "écart temps de première réponse",
+    health_factor_generation_speed: "écart vitesse de génération",
+    health_factor_bus_latency: "écart latence interne du bus",
+    health_factor_memory_freed: "mémoire libérée",
+    health_factor_restarts: "redémarrages récents",
+    health_factor_fit_failed: "référence pas encore prête",
     feedback_heading: "Retour testeur",
     feedback_blurb: "Copie locale dans var/feedback/. Une issue GitHub est créée sur azerothl/akasha-os (formulaire navigateur, ou API si jeton / gh).",
     feedback_title: "Titre",
@@ -3354,6 +3453,56 @@ pub fn strings(lang: &str) -> UiStrings {
         EN
     } else {
         FR
+    }
+}
+
+/// Human label for one health-check step (never the internal step id).
+pub fn health_step_label(t: &UiStrings, step: &str) -> String {
+    let label = match step {
+        "model.list" => t.health_step_models,
+        "agent.list" => t.health_step_agents,
+        "module.list" => t.health_step_modules,
+        "mem.stats" => t.health_step_memory,
+        "notes.list" => t.health_step_notes_list,
+        "notes.create_read_delete" => t.health_step_notes_rw,
+        "model.infer" => t.health_step_inference,
+        other => other,
+    };
+    label.to_string()
+}
+
+/// Human label for a stability breach string from the health plane.
+pub fn health_breach_label(t: &UiStrings, breach: &str) -> String {
+    if let Some(rest) = breach.strip_prefix("ttft_ewma_ms=") {
+        let (observed, target) = rest
+            .split_once('>')
+            .map(|(o, tg)| (o.trim(), tg.trim()))
+            .unwrap_or((rest, "2000"));
+        let observed_ms = observed.parse::<f64>().unwrap_or(0.0);
+        let target_ms = target.parse::<f64>().unwrap_or(2000.0);
+        return t
+            .health_breach_slow_response
+            .replace("{observed}", &format!("{observed_ms:.0}"))
+            .replace("{target}", &format!("{target_ms:.0}"));
+    }
+    if let Some(bytes) = breach.strip_prefix("vram_unloaded_bytes=") {
+        return t
+            .health_breach_memory_freed
+            .replace("{bytes}", bytes.trim());
+    }
+    breach.to_string()
+}
+
+/// Human label for an anomaly contributing factor key.
+pub fn health_contributing_label(t: &UiStrings, key: &str) -> String {
+    match key {
+        "ttft_residual" => t.health_factor_first_response.to_string(),
+        "tok_s_residual" => t.health_factor_generation_speed.to_string(),
+        "bus_rtt_residual" => t.health_factor_bus_latency.to_string(),
+        "vram_unloaded" => t.health_factor_memory_freed.to_string(),
+        "restarts_1h" => t.health_factor_restarts.to_string(),
+        "fit_failed" => t.health_factor_fit_failed.to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -4000,5 +4149,44 @@ mod tests {
         assert_eq!(fr.skill_offer_created, "Créée");
         assert_eq!(en.skill_offer_dismissed, "Later");
         assert_eq!(fr.skill_offer_dismissed, "Plus tard");
+    }
+
+    #[test]
+    fn health_chrome_labels_avoid_designer_jail_jargon() {
+        const FORBIDDEN: &[&str] = &["canary", "EWMA", "SLO", "RTT", "NFR-01"];
+        for lang in ["en", "fr"] {
+            let t = strings(lang);
+            for label in [
+                t.health_check_ok,
+                t.health_check_failed,
+                t.health_stability_heading,
+                t.health_first_response_label,
+                t.health_generation_speed_label,
+                t.health_bus_latency_label,
+                t.health_status_check_failed,
+            ] {
+                for term in FORBIDDEN {
+                    assert!(
+                        !label.to_ascii_lowercase().contains(&term.to_ascii_lowercase()),
+                        "{lang} label `{label}` contains forbidden `{term}`"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn health_breach_and_step_labels_are_human() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(health_step_label(&en, "model.list"), "Models");
+        assert_eq!(health_step_label(&fr, "model.list"), "Modèles");
+        let breach = health_breach_label(&en, "ttft_ewma_ms=2500.0>2000");
+        assert!(breach.contains("2500"));
+        assert!(!breach.to_ascii_lowercase().contains("ewma"));
+        assert_eq!(
+            health_contributing_label(&en, "bus_rtt_residual"),
+            "internal bus latency drift"
+        );
     }
 }
