@@ -4,8 +4,9 @@ use crate::cmd::Evt;
 use crate::{agent_panel, chat_canvas, CHAT_AGENT_MAX_SUBAGENTS};
 use aos_ipc::BusClient;
 use aos_proto::{
-    chat_tts_request, chat_user_wants_module_authoring, AgentCreateRequest, AgentGoal,
-    ChatAttachment, ChatSessionAppendRequest, CognitiveMode, ModelInfo, ModelState,
+    chat_tts_request, chat_user_wants_advisory, chat_user_wants_module_authoring,
+    AgentCreateRequest, AgentGoal, ChatAttachment, ChatSessionAppendRequest, CognitiveMode,
+    ModelInfo, ModelState,
 };
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -103,10 +104,13 @@ pub(crate) fn deep_thinking_force_delegate(
     canvas_open: bool,
     canvas_exported: &[String],
 ) -> (String, Vec<String>, Vec<String>, String) {
-    let (mut skills, tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+    let (mut skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
     skills.retain(|s| s != "planner");
     if !skills.iter().any(|s| s == "deep-thinking") {
         skills.push("deep-thinking".into());
+    }
+    if chat_user_wants_advisory(user_text) {
+        strip_module_authoring_tools(&mut tools);
     }
     (
         user_text.to_string(),
@@ -114,6 +118,16 @@ pub(crate) fn deep_thinking_force_delegate(
         tools,
         "Je lance un agent Deep Thinking.".into(),
     )
+}
+
+/// Retire scaffold/package/install (garde list/describe pour l'analyse).
+fn strip_module_authoring_tools(tools: &mut Vec<String>) {
+    tools.retain(|t| {
+        !matches!(
+            t.as_str(),
+            "module.scaffold" | "module.package" | "module.install" | "module.compile"
+        )
+    });
 }
 
 fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) {
@@ -512,7 +526,9 @@ pub(crate) fn chat_delegate_agent_spec(
                 .unwrap_or("")
                 .trim()
                 .to_string();
-            let brief = if brief.is_empty() || self_tool {
+            let advisory = chat_user_wants_advisory(user_text);
+            // Ne laisse pas le superviseur réécrire un conseil en « Créer un module… ».
+            let brief = if brief.is_empty() || self_tool || advisory {
                 user_text.to_string()
             } else {
                 brief
@@ -548,7 +564,7 @@ pub(crate) fn chat_delegate_agent_spec(
             if chat_device_usb_intent(user_text) || chat_device_usb_intent(&brief) {
                 push_device_usb_tools_and_brief(&mut brief, user_text, &mut tools);
             }
-            if self_tool {
+            if self_tool && !advisory {
                 for t in [
                     "module.scaffold",
                     "module.package",
@@ -563,6 +579,9 @@ pub(crate) fn chat_delegate_agent_spec(
                 if action.action == "skill.create" && !tools.iter().any(|x| x == "skill.create") {
                     tools.push("skill.create".into());
                 }
+            }
+            if advisory {
+                strip_module_authoring_tools(&mut tools);
             }
             let mut prose = agent_panel::prose_without_json(model_output);
             if prose.is_empty() || self_tool {
@@ -677,7 +696,13 @@ pub(crate) async fn spawn_chat_delegate_agent(
 ) {
     let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
     let device_camera_delegate = tools.iter().any(|t| t == "device.camera.capture");
-    let goal_statement = if canvas_delegate {
+    let advisory = chat_user_wants_advisory(&user_text);
+    let mut tools = tools;
+    if advisory {
+        strip_module_authoring_tools(&mut tools);
+    }
+    let goal_statement = if canvas_delegate || advisory {
+        // Advisory: garder la question utilisateur (pas un brief « Créer… »).
         user_text.trim().to_string()
     } else {
         brief.clone()
@@ -918,10 +943,11 @@ fn chat_agent_kit_ex(
         "agent.await".into(),
         "user.ask".into(),
     ];
-    if lower.contains("module")
-        || lower.contains("scaffold")
-        || lower.contains("aospkg")
-        || lower.contains("ext-rt")
+    if !chat_user_wants_advisory(task)
+        && (lower.contains("module")
+            || lower.contains("scaffold")
+            || lower.contains("aospkg")
+            || lower.contains("ext-rt"))
     {
         for t in [
             "module.scaffold",
@@ -930,6 +956,15 @@ fn chat_agent_kit_ex(
             "module.list",
             "module.describe",
         ] {
+            if !tools.iter().any(|x| x == t) {
+                tools.push(t.into());
+            }
+        }
+    } else if chat_user_wants_advisory(task)
+        && (lower.contains("module") || lower.contains("aospkg") || lower.contains("ext-rt"))
+    {
+        // Analyse / limitations : lecture seule, pas de scaffold.
+        for t in ["module.list", "module.describe"] {
             if !tools.iter().any(|x| x == t) {
                 tools.push(t.into());
             }

@@ -218,7 +218,7 @@ IMPORTANT :
 - Notes (carnet interne Notes) : `notes.create` avec titre + **outline court**, puis `notes.update` **section par section** (≤ ~1200 caractères de `content` par appel). Ne mets jamais un guide entier dans un seul JSON.
 - Document fichier demandé par l'utilisateur (présentation, rapport, livrable, « fais-moi un document ») : `files.generate` sous `/downloads/` (md de préférence) — **pas** `notes.create`. Si `files.generate` n'est pas au catalogue, dis-le clairement.
 - `memory.recall` sert à accélérer le nœud / brief courant — pas à relire tout le goal.
-- Après `agent.spawn`, le runtime injecte `[child-done]` quand le sous-agent termine. Tu peux `agent.await` ou poursuivre dès que tu vois ce résultat — ne reste pas bloqué à attendre.
+- Après `agent.spawn`, le runtime injecte `[child-done]` quand le sous-agent termine. Tu peux `agent.await` ou poursuivre dès que tu vois ce résultat — ne reste pas bloqué à attendre. Si `agent.await` dit « toujours en cours », **réessaie** : l'enfant travaille encore (pas bloqué) — ne duplique pas son travail.
 - Après une découverte utile : `memory.remember`.
 - Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
 - Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
@@ -256,13 +256,19 @@ Réponds par un objet JSON unique : {"thought":"…","action":"<outil>","args":{
 
 Règles :
 - Première action obligatoire : `plan.create` avec un arbre hiérarchique complet (`steps` avec `children` si besoin).
+- **Conseil / évaluation** (ex. « si je veux… », « faudrait-il », « limitations », « demandes d'évolution ») :
+  le plan doit *analyser et répondre*, pas construire. Termine par `goal.complete` avec la réponse.
+  **Interdit** `module.scaffold` / `module.package` / `module.install` / `module.compile` sauf demande
+  explicite de *créer* le module maintenant.
 - Ensuite exécute, révise (`plan.replace_tree` / `plan.update_step`), délègue (`plan.delegate_step`) selon la complexité.
 - Les logs internes (`plan.append_log`) ne doivent PAS être dumpés dans la réponse utilisateur.
 - Traces utilisateur : le runtime publie des lignes légères ; ta réponse finale reste concise.
 - `plan.delegate_step` : brief COURT auto-suffisant ; le runtime spawn + lie l'étape.
-- Quand le sous-agent termine, le runtime injecte `[child-done]` et passe l'étape en Done. N'attends pas indéfiniment : intègre le résultat (ou `agent.await`) puis `plan.update_step`.
+- Quand le sous-agent termine, le runtime injecte `[child-done]` et passe l'étape en Done.
+  Après `agent.await` « toujours en cours » : **réessaie** `agent.await` — l'enfant n'est pas bloqué.
+  **Ne recrée pas** ses notes / scaffold en parallèle.
 - N'utilise PAS `plan.update` (mode normal) — uniquement les outils `plan.*` deep.
-- Fin : `goal.complete` quand le plan est Done.
+- Fin : `goal.complete` quand le plan est Done (ou quand l'évaluation est complète).
 
 Exemples :
 - plan.create : {"action":"plan.create","args":{"task":"…","steps":[{"id":"1","label":"Analyse","children":[{"id":"1.1","label":"Contexte"}]}]}}

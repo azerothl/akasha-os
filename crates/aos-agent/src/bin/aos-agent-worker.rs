@@ -52,15 +52,16 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSource,
     AgentSpec, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
-    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DeepPlanStepPatch,
-    DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse,
-    FsWriteRequest, InferParams, InferRequest, MemContextRequest, MemContextResponse,
-    MemEpisodicQueryRequest, MemEpisodicWriteRequest, MemHit, MemRememberResponse,
-    MemSharedReadRequest, MemSharedWriteRequest, ModelInfo, ModuleInfo, ModuleInvokeRequest,
-    ModuleInvokeResponse, NetFetchRequest, PlanAppendLogRequest, PlanCreateRequest,
-    PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse, PlanStep,
-    PlanStepStatus, PlanUpdateStepRequest, TaskNode, TaskNodeStatus, TokenEvent, WebBrowseRequest,
-    WebBrowseResponse, WebSearchHit, WebSearchRequest, WebSearchResponse,
+    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, DeepPlan,
+    DeepPlanStepPatch, DocumentRef, FilesGenerateRequest, FsListRequest, FsReadRequest,
+    FsReadResponse, FsWriteRequest, InferParams, InferRequest, MemContextRequest,
+    MemContextResponse, MemEpisodicQueryRequest, MemEpisodicWriteRequest, MemHit,
+    MemRememberResponse, MemSharedReadRequest, MemSharedWriteRequest, ModelInfo, ModuleInfo,
+    ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, PlanAppendLogRequest,
+    PlanCreateRequest, PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest,
+    PlanResponse, PlanStep, PlanStepStatus, PlanUpdateStepRequest, TaskNode, TaskNodeStatus,
+    TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
+    WebSearchResponse,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -68,6 +69,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, Mutex};
+
+/// Poll budget for `agent.await` (non–Deep Thinking).
+const AGENT_AWAIT_DEFAULT_SECS: u64 = 90;
+/// Deep Thinking children often need several minutes per delegated step.
+const AGENT_AWAIT_DEEP_SECS: u64 = 300;
+
+fn agent_await_still_running_message(child_id: &str, waited_secs: u64) -> String {
+    format!(
+        "agent.await: {child_id} toujours en cours après {waited_secs}s — \
+         l'enfant travaille encore (pas bloqué). Réessaie agent.await. \
+         Ne recrée pas son travail (notes/scaffold) en parallèle."
+    )
+}
 
 enum WorkerCmd {
     Resume,
@@ -525,6 +539,18 @@ async fn main() {
                             spec.goal.success_criteria,
                             assess.reason,
                             canvas_draw_strategy_hint(&canvas_exported)
+                        )
+                    } else if st.deep_thinking || spec.cognitive_mode.is_deep_thinking() {
+                        format!(
+                            "Goal à accomplir : {}\nCritères : {:?}\n\
+                             Classification : complex — {}. \
+                             Première action obligatoire : plan.create avec un arbre hiérarchique. \
+                             Si le goal est une évaluation / conseil : analyser et répondre \
+                             (goal.complete) — ne pas module.scaffold sauf demande explicite de construire. \
+                             Délègue les nœuds lourds via plan.delegate_step ; après spawn, \
+                             réessaie agent.await tant que l'enfant tourne (ne duplique pas son travail). \
+                             memory.recall sur le nœud / brief courant (pas sur le goal entier).",
+                            spec.goal.statement, spec.goal.success_criteria, assess.reason
                         )
                     } else {
                         format!(
@@ -2388,9 +2414,18 @@ async fn execute_action(
                 return ActResult::Continue(result);
             }
             let mut seen_in_list = false;
-            // Poll shared mem / agent state (~30s). Never Block: a missing or
+            // Poll shared mem / agent state. Deep Thinking children often need minutes;
+            // a short await must not be read as « blocked ». Never Block: a missing or
             // crashed child must not freeze the parent for a human Resume.
-            for i in 0..60 {
+            let await_secs = if shared.state.lock().await.deep_thinking
+                || spec.cognitive_mode.is_deep_thinking()
+            {
+                AGENT_AWAIT_DEEP_SECS
+            } else {
+                AGENT_AWAIT_DEFAULT_SECS
+            };
+            let polls = (await_secs * 1000) / 500;
+            for i in 0..polls {
                 if let Some(result) =
                     take_awaited_child_result(shared, bus, &agent_id, &child_id).await
                 {
@@ -2436,10 +2471,7 @@ async fn execute_action(
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
-            ActResult::Continue(format!(
-                "agent.await: {child_id} toujours en cours après 30s — \
-                 réessaie agent.await ou poursuis sans lui"
-            ))
+            ActResult::Continue(agent_await_still_running_message(&child_id, await_secs))
         }
         other => {
             // S6 phase 2 : politique par agent (fail-closed, refus explicite).
@@ -4706,9 +4738,10 @@ async fn bootstrap_memory_recall(
 }
 
 async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<String> {
-    let (progress, canvas_sid, canvas_draw) = {
+    let (progress, canvas_sid, canvas_draw, deep) = {
         let st = shared.state.lock().await;
         let canvas_draw = agent_has_canvas_tools(&spec.tools);
+        let deep = st.deep_thinking || spec.cognitive_mode.is_deep_thinking();
         let progress = if canvas_draw {
             canvas_reflect_user_content(
                 st.step,
@@ -4717,6 +4750,12 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
                 &st.plan_stack,
                 &st.trace,
                 &spec.tools,
+            )
+        } else if deep {
+            // Placeholder — remplacé après fetch du Deep Plan (plan_stack legacy est vide).
+            format!(
+                "step {}/{} goal={}",
+                st.step, spec.goal.max_steps, spec.goal.statement
             )
         } else {
             format!(
@@ -4729,7 +4768,18 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         } else {
             None
         };
-        (progress, canvas_sid, canvas_draw)
+        (progress, canvas_sid, canvas_draw, deep)
+    };
+    let progress = if deep {
+        let plan = fetch_deep_plan_for_critic(bus, shared, spec).await;
+        aos_agent::deep_thinking::deep_thinking_critic_progress(
+            shared.state.lock().await.step,
+            spec.goal.max_steps,
+            &spec.goal.statement,
+            plan.as_ref(),
+        )
+    } else {
+        progress
     };
     let mut images: Vec<String> = Vec::new();
     let mut data_refs: Vec<String> = Vec::new();
@@ -4751,6 +4801,8 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         } else {
             canvas_text_only_critic_system_prompt()
         }
+    } else if deep {
+        aos_agent::deep_thinking::deep_thinking_critic_system_prompt()
     } else {
         "Tu es un critique. En 2 phrases en français: est-ce que l'agent avance vers le goal ? Que faire ensuite ? \
          Réponds directement, sans balises <think> ni monologue Thinking Process."
@@ -4998,6 +5050,22 @@ async fn notify_parent_if_child(
         .await;
 }
 
+async fn fetch_deep_plan_for_critic(
+    bus: &BusClient,
+    shared: &Shared,
+    spec: &AgentSpec,
+) -> Option<DeepPlan> {
+    let plan_id = shared.state.lock().await.deep_plan_id.clone();
+    let req = PlanGetRequest {
+        plan_id,
+        agent_id: Some(spec.agent_id.clone()),
+    };
+    bus.call::<PlanGetRequest, PlanResponse>("plan.get", &req, vec![])
+        .await
+        .ok()
+        .map(|resp| resp.plan)
+}
+
 async fn take_awaited_child_result(
     shared: &Shared,
     bus: &BusClient,
@@ -5166,13 +5234,23 @@ fn collect_sources(action: &str, args: &serde_json::Value, outcome: &str) -> Vec
 #[cfg(test)]
 mod tests {
     use super::{
-        await_child_reject_reason, canvas_child_goal_statement, child_terminal_result,
-        consume_child_result, require_canvas_plan,
+        agent_await_still_running_message, await_child_reject_reason, canvas_child_goal_statement,
+        child_terminal_result, consume_child_result, require_canvas_plan, AGENT_AWAIT_DEEP_SECS,
     };
     use aos_agent::assess::AssessResult;
     use aos_agent::CognitiveState;
     use aos_proto::{AgentGoal, AgentSpec, AgentState};
     use std::collections::HashSet;
+
+    #[test]
+    fn await_still_running_message_is_not_blocked() {
+        let msg = agent_await_still_running_message("agent-227", AGENT_AWAIT_DEEP_SECS);
+        assert!(msg.contains("agent-227"));
+        assert!(msg.contains(&AGENT_AWAIT_DEEP_SECS.to_string()));
+        assert!(msg.contains("pas bloqué"));
+        assert!(msg.contains("Réessaie agent.await"));
+        assert!(msg.contains("notes/scaffold"));
+    }
 
     #[test]
     fn canvas_goal_requires_a_bounded_composition_plan() {

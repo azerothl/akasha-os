@@ -2751,8 +2751,67 @@ pub fn format_chat_supervisor_lock(running_version: &str) -> String {
     )
 }
 
-/// Intention chat : créer / installer un module ou une skill (pas « c'est quoi »).
+/// Demande de conseil / évaluation (pas une construction immédiate).
+///
+/// Ex. « Si je veux créer un module… qu'est-ce qu'il faudrait ? » ou
+/// « y a-t-il des limitations / faut-il des demandes d'évolution ? ».
+pub fn chat_user_wants_advisory(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    [
+        "si je veux",
+        "si je voulais",
+        "si l'on veut",
+        "si on veut",
+        "qu'est-ce qu'il faudrait",
+        "qu est-ce qu'il faudrait",
+        "quest-ce qu'il faudrait",
+        "que faudrait-il",
+        "que faudrait il",
+        "faudrait-il",
+        "faudrait il",
+        "faut-il",
+        "faut il",
+        "est-ce qu'il y a",
+        "est ce qu'il y a",
+        "est-ce qu'il ya",
+        "y a-t-il",
+        "y a t il",
+        "y'a-t-il",
+        "limitation",
+        "limitations",
+        "demande d'évolution",
+        "demandes d'évolution",
+        "demande d'evolution",
+        "demandes d'evolution",
+        "feature request",
+        "should i ",
+        "what would i need",
+        "what should i do",
+        "what do i need to",
+        "how would i ",
+        "how should i ",
+        "are there limitation",
+        "is it possible",
+        "est-ce possible",
+        "est ce possible",
+        "recommand",
+        "conseil",
+        "évaluation",
+        "evaluation",
+        "avis sur",
+        "que faire pour",
+        "qu'est ce qu'il faudrait",
+    ]
+    .iter()
+    .any(|p| lower.contains(p))
+}
+
+/// Intention chat : créer / installer un module ou une skill (pas « c'est quoi » / conseil).
 pub fn chat_user_wants_module_authoring(text: &str) -> bool {
+    // Conseils (« si je veux créer… faudrait-il ») ne sont pas de l'authoring.
+    if chat_user_wants_advisory(text) {
+        return false;
+    }
     let lower = text.to_lowercase();
     let mentions_target = lower.contains("module")
         || lower.contains("aospkg")
@@ -3072,7 +3131,9 @@ fn strip_tts_preamble(text: &str) -> String {
 
 #[cfg(test)]
 mod chat_delegation_tests {
-    use super::{chat_tts_request, chat_user_wants_module_authoring};
+    use super::{
+        chat_tts_request, chat_user_wants_advisory, chat_user_wants_module_authoring,
+    };
 
     #[test]
     fn create_module_spawns() {
@@ -3100,6 +3161,22 @@ mod chat_delegation_tests {
             "quels sont les modules installés"
         ));
         assert!(!chat_user_wants_module_authoring("liste les modules"));
+    }
+
+    #[test]
+    fn advisory_module_question_is_not_authoring() {
+        let q = "Si je veux creer un module d'aide au développement pour des gros \
+                 projet dans Akasha-os, qu'est ce qu'il faudrait que je fasse ? \
+                 est ce qu'il y'a des limitation actuellement et dans ce cas \
+                 est ce qu'il faut que je fasse des demandes d'évolutions ?";
+        assert!(chat_user_wants_advisory(q));
+        assert!(!chat_user_wants_module_authoring(q));
+        assert!(chat_user_wants_advisory(
+            "Should I build a module for large projects? Are there limitations?"
+        ));
+        assert!(!chat_user_wants_module_authoring(
+            "Should I build a module for large projects? Are there limitations?"
+        ));
     }
 
     #[test]
