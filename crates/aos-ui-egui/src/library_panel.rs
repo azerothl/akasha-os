@@ -1,4 +1,4 @@
-//! More → Library / Bibliothèque — personal document list (separate from research docs).
+//! More → Library / Bibliothèque — user documents (uploaded + agent-generated).
 
 use aos_proto::UserLibraryDoc;
 use eframe::egui::{self, Ui};

@@ -4206,7 +4206,8 @@ async fn maybe_enable_document_delivery(
         return;
     }
     shared.state.lock().await.push_user(
-        "[hint] L'utilisateur demande un document fichier : utilise files.generate sous /downloads/ (md), pas notes.create.",
+        "[hint] L'utilisateur demande un document fichier : utilise files.generate sous /downloads/ (md). \
+         Le fichier sera indexé dans la Bibliothèque. notes.create = brouillon interne seulement, pas le livrable.",
     );
     let already = tools.iter().any(|t| t.name == "files.generate");
     aos_agent::research_detect::ensure_document_file_tools(&mut spec.skills, &mut spec.tools);

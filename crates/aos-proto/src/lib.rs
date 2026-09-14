@@ -6509,6 +6509,9 @@ pub struct FilesGenerateRequest {
 pub struct FilesGenerateResponse {
     pub path: String,
     pub bytes: u64,
+    /// True when the file was also indexed into the user library.
+    #[serde(default)]
+    pub library_added: bool,
 }
 
 // ---------------------------------------------------------------------------

@@ -258,6 +258,9 @@ impl UiApp {
     pub(crate) fn attach_document_result_card(&mut self, question: &str, path: &str) {
         let label = research_choice::label_from_path(path);
         self.replace_progress_with_result(question, path);
+        // Platform files.generate already indexes the library; refresh UI + keep
+        // a soft research-index entry for migration/compat.
         self.record_prepared_document(question, path, &label);
+        let _ = self.cmd_tx.send(Cmd::UserLibraryList);
     }
 }

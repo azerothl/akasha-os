@@ -77,6 +77,25 @@ mod delegate_tests {
     }
 
     #[test]
+    fn chat_kit_document_ask_includes_files_generate() {
+        let (skills, tools) = crate::chat_delegate::chat_agent_kit(
+            "fais moi un document sur les modules Akasha",
+        );
+        assert!(skills.iter().any(|s| s == "file-author"));
+        assert!(tools.iter().any(|t| t == "files.generate"));
+        // Notes remain available as scratchpad / handoff.
+        assert!(tools.iter().any(|t| t == "notes.create"));
+    }
+
+    #[test]
+    fn chat_kit_note_ask_keeps_notes_without_forcing_files() {
+        let (_skills, tools) =
+            crate::chat_delegate::chat_agent_kit("écris une note rapide sur le salon");
+        assert!(tools.iter().any(|t| t == "notes.create"));
+        assert!(!tools.iter().any(|t| t == "files.generate"));
+    }
+
+    #[test]
     fn advisory_spawn_keeps_user_question_not_create_brief() {
         let q = "Si je veux créer un module helper, qu'est-ce qu'il faudrait faire ?";
         let out = r#"{"action":"agent.spawn","args":{"brief":"Créer un module helper"}}"#;

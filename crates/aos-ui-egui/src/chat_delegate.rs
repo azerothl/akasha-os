@@ -767,6 +767,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
         req.caps.push("media.generate".into());
         req.caps.push("fs.write:/downloads/**".into());
     }
+    if req.tools.iter().any(|t| t == "files.generate") {
+        req.caps.push("fs.write:/downloads/**".into());
+        req.caps.push("fs.read:/downloads/**".into());
+    }
     if req.tools.iter().any(|t| t.starts_with("canvas.")) {
         req.caps.push("tool.invoke:canvas".into());
         req.caps.push("fs.write:/downloads/**".into());
@@ -943,6 +947,9 @@ fn chat_agent_kit_ex(
         "agent.await".into(),
         "user.ask".into(),
     ];
+    if aos_agent::research_detect::user_requested_document(task) {
+        aos_agent::research_detect::ensure_document_file_tools(&mut skills, &mut tools);
+    }
     if !chat_user_wants_advisory(task)
         && (lower.contains("module")
             || lower.contains("scaffold")

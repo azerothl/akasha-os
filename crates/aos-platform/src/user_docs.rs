@@ -4,6 +4,7 @@
 //! `{memory_dir}/library/`; retrieval is consultative via `mem.context`.
 
 use crate::memory::MemoryStore;
+use crate::storage::StorageFs;
 use crate::subsystem::PlatformSubsystem;
 use aos_proto::chat_document;
 use aos_proto::UserLibraryDoc;
@@ -107,36 +108,103 @@ pub fn list_docs(memory_dir: &Path) -> Vec<UserLibraryDoc> {
     docs
 }
 
+/// Formats that belong in the user library after `files.generate`.
+pub fn is_library_ingest_format(format: &str) -> bool {
+    matches!(
+        format.trim().to_ascii_lowercase().as_str(),
+        "md" | "markdown" | "txt" | "text" | "pdf"
+    )
+}
+
+/// Resolve a host file path: absolute/existing host path, or logical FS path.
+pub fn resolve_document_source(
+    source_path: &str,
+    storage: Option<&StorageFs>,
+) -> Result<PathBuf, String> {
+    let as_path = Path::new(source_path);
+    if as_path.is_file() {
+        return Ok(as_path.to_path_buf());
+    }
+    if source_path.starts_with('/') {
+        if let Some(fs) = storage {
+            if let Ok(host) = fs.resolve_host(source_path) {
+                if host.is_file() {
+                    return Ok(host);
+                }
+            }
+        }
+        let home = std::env::var("AOS_HOME").unwrap_or_else(|_| ".".into());
+        let host = PathBuf::from(home)
+            .join("var/storage/data")
+            .join(source_path.trim_start_matches('/'));
+        if host.is_file() {
+            return Ok(host);
+        }
+    }
+    Err(format!("not a file: {source_path}"))
+}
+
 /// Add a local document to the library, copy it, and index chunks.
+///
+/// `source_path` may be a host path or a logical path (`/downloads/…`).
 pub fn add_document(
     sub: &PlatformSubsystem,
     memory_dir: &Path,
     source_path: &str,
 ) -> Result<(UserLibraryDoc, usize), String> {
-    if !chat_document::is_chat_document_path(source_path) {
+    add_document_with_storage(sub, memory_dir, source_path, None)
+}
+
+/// Like [`add_document`], with optional live [`StorageFs`] for logical→host resolve.
+pub fn add_document_with_storage(
+    sub: &PlatformSubsystem,
+    memory_dir: &Path,
+    source_path: &str,
+    storage: Option<&StorageFs>,
+) -> Result<(UserLibraryDoc, usize), String> {
+    let host = resolve_document_source(source_path, storage)?;
+    let host_str = host
+        .to_str()
+        .ok_or_else(|| format!("invalid path encoding: {}", host.display()))?;
+    if !chat_document::is_chat_document_path(source_path)
+        && !chat_document::is_chat_document_path(host_str)
+    {
         return Err("unsupported document type (pdf, txt, md)".into());
     }
-    let src = Path::new(source_path);
-    if !src.is_file() {
-        return Err(format!("not a file: {source_path}"));
+    add_document_from_host(sub, memory_dir, &host, source_path)
+}
+
+fn add_document_from_host(
+    sub: &PlatformSubsystem,
+    memory_dir: &Path,
+    host: &Path,
+    label_source: &str,
+) -> Result<(UserLibraryDoc, usize), String> {
+    let host_str = host
+        .to_str()
+        .ok_or_else(|| format!("invalid path encoding: {}", host.display()))?;
+    if !host.is_file() {
+        return Err(format!("not a file: {host_str}"));
     }
-    let label = chat_document::document_label_from_path(source_path);
-    let bytes = std::fs::read(src).map_err(|e| format!("read failed: {e}"))?;
+    if !chat_document::is_chat_document_path(host_str)
+        && !chat_document::is_chat_document_path(label_source)
+    {
+        return Err("unsupported document type (pdf, txt, md)".into());
+    }
+    let label = chat_document::document_label_from_path(label_source);
+    let bytes = std::fs::read(host).map_err(|e| format!("read failed: {e}"))?;
     let id = doc_id_for(&label, &bytes);
     let stored_name = format!("{}_{}", id, sanitize_filename(&label));
     let dest = files_dir(memory_dir).join(&stored_name);
     std::fs::create_dir_all(files_dir(memory_dir)).map_err(|e| e.to_string())?;
-    std::fs::copy(src, &dest).map_err(|e| format!("copy failed: {e}"))?;
-
-    let text = chat_document::extract_document_text(source_path)?;
-    let chunks = index_document(sub, memory_dir, &id, &label, &text)?;
+    std::fs::copy(host, &dest).map_err(|e| format!("copy failed: {e}"))?;
 
     let added_ms = now_ms();
     let added_date = format_utc_date(added_ms).unwrap_or_default();
 
     let doc = UserLibraryDoc {
         id: id.clone(),
-        label,
+        label: label.clone(),
         added_ms,
         size_bytes: bytes.len() as u64,
         added_date,
@@ -145,7 +213,88 @@ pub fn add_document(
     manifest.docs.retain(|d| d.id != id);
     manifest.docs.push(doc.clone());
     save_manifest(memory_dir, &manifest)?;
+
+    // Indexing is best-effort: library listing must succeed even without embeddings
+    // (e.g. `--no-default-features` builds, or temporarily unavailable embed model).
+    let chunks = match chat_document::extract_document_text(host_str) {
+        Ok(text) => match index_document(sub, memory_dir, &id, &label, &text) {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("[aos-platform] library index skip {label}: {e}");
+                0
+            }
+        },
+        Err(e) => {
+            eprintln!("[aos-platform] library extract skip {label}: {e}");
+            0
+        }
+    };
     Ok((doc, chunks))
+}
+
+/// Best-effort library ingest after `files.generate` (never fails the generate).
+pub fn try_ingest_generated(
+    sub: &PlatformSubsystem,
+    memory_dir: &Path,
+    logical_path: &str,
+    format: &str,
+    storage: Option<&StorageFs>,
+) -> bool {
+    if !is_library_ingest_format(format) {
+        return false;
+    }
+    match add_document_with_storage(sub, memory_dir, logical_path, storage) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("[aos-platform] library ingest skip {logical_path}: {e}");
+            false
+        }
+    }
+}
+
+/// Best-effort migration of legacy research-index entries into the user library.
+///
+/// Reads `{aos_home}/var/documents/research-index.json` and ingests each
+/// `/downloads/…` file that still exists. Idempotent (same content → same id).
+pub fn migrate_research_index(
+    sub: &PlatformSubsystem,
+    memory_dir: &Path,
+    aos_home: &Path,
+) -> usize {
+    let index_path = aos_home.join("var/documents/research-index.json");
+    let raw = match std::fs::read_to_string(&index_path) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    #[derive(Deserialize)]
+    struct Entry {
+        path: String,
+    }
+    #[derive(Deserialize, Default)]
+    struct Index {
+        #[serde(default)]
+        entries: Vec<Entry>,
+    }
+    let index: Index = serde_json::from_str(&raw).unwrap_or_default();
+    let mut n = 0usize;
+    for entry in index.entries {
+        if !entry.path.starts_with("/downloads/") && !entry.path.starts_with("/documents/") {
+            continue;
+        }
+        // Infer format from extension; default md for research docs.
+        let format = Path::new(&entry.path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("md");
+        let ok = {
+            let fs = sub.fs.lock().unwrap();
+            try_ingest_generated(sub, memory_dir, &entry.path, format, Some(&*fs))
+        };
+        if ok {
+            n += 1;
+        }
+    }
+    n
 }
 
 /// Remove a document from the library and wipe its indexed chunks.
@@ -426,6 +575,137 @@ mod tests {
         p.push(format!("aos-user-lib-{}-{}", std::process::id(), n));
         let _ = std::fs::create_dir_all(&p);
         p
+    }
+
+    #[test]
+    fn library_ingest_format_filters() {
+        assert!(is_library_ingest_format("md"));
+        assert!(is_library_ingest_format("PDF"));
+        assert!(!is_library_ingest_format("png"));
+        assert!(!is_library_ingest_format("json"));
+    }
+
+    #[test]
+    fn try_ingest_generated_logical_download_adds_manifest() {
+        let home = temp_memory_dir();
+        let mem = temp_memory_dir();
+        let storage_dir = home.join("var/storage");
+        let data = storage_dir.join("data/downloads");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(
+            data.join("report.md"),
+            "# Report\n\nEnough body text so a future indexer can chunk this document.\n",
+        )
+        .unwrap();
+        let cfg = crate::subsystem::PlatformConfig {
+            bus: "ipc://test".into(),
+            audit_dir: temp_memory_dir().display().to_string(),
+            storage_dir: storage_dir.display().to_string(),
+            memory_dir: mem.display().to_string(),
+            modules_dir: temp_memory_dir().display().to_string(),
+            catalogue_file: "/dev/null".into(),
+            community_catalogue_dir: temp_memory_dir().display().to_string(),
+            skills_dir: temp_memory_dir().display().to_string(),
+            sessions_dir: temp_memory_dir().display().to_string(),
+            embed_model: None,
+            policies_file: None,
+            confirm_timeout_sec: 60,
+            secrets_file: temp_memory_dir().join("secrets.yaml").display().to_string(),
+            net_mode: "online".into(),
+            memory_v2: false,
+            memory_v2_shadow: false,
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio");
+        let ok = rt.block_on(async {
+            let sub = crate::subsystem::PlatformSubsystem::open(&cfg).expect("open");
+            let fs = sub.fs.lock().unwrap();
+            try_ingest_generated(&sub, &mem, "/downloads/report.md", "md", Some(&*fs))
+        });
+        assert!(ok, "logical download should land in library");
+        let listed = list_docs(&mem);
+        assert!(listed.iter().any(|d| d.label == "report.md"));
+        // Idempotent: same path/content → same id, still one entry.
+        let ok2 = rt.block_on(async {
+            let sub = crate::subsystem::PlatformSubsystem::open(&cfg).expect("open");
+            let fs = sub.fs.lock().unwrap();
+            try_ingest_generated(&sub, &mem, "/downloads/report.md", "md", Some(&*fs))
+        });
+        assert!(ok2);
+        assert_eq!(list_docs(&mem).len(), 1);
+    }
+
+    #[test]
+    fn migrate_research_index_ingests_existing_download() {
+        let home = temp_memory_dir();
+        let mem = temp_memory_dir();
+        let storage_dir = home.join("var/storage");
+        let data = storage_dir.join("data/downloads");
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(
+            data.join("legacy.md"),
+            "# legacy research\n\nEnough body text so the library indexer creates at least one chunk.\n",
+        )
+        .unwrap();
+        let index_dir = home.join("var/documents");
+        std::fs::create_dir_all(&index_dir).unwrap();
+        std::fs::write(
+            index_dir.join("research-index.json"),
+            r#"{"entries":[{"question":"q","path":"/downloads/legacy.md","label":"legacy.md","created_ms":1}]}"#,
+        )
+        .unwrap();
+        let cfg = crate::subsystem::PlatformConfig {
+            bus: "ipc://test".into(),
+            audit_dir: temp_memory_dir().display().to_string(),
+            storage_dir: storage_dir.display().to_string(),
+            memory_dir: mem.display().to_string(),
+            modules_dir: temp_memory_dir().display().to_string(),
+            catalogue_file: "/dev/null".into(),
+            community_catalogue_dir: temp_memory_dir().display().to_string(),
+            skills_dir: temp_memory_dir().display().to_string(),
+            sessions_dir: temp_memory_dir().display().to_string(),
+            embed_model: None,
+            policies_file: None,
+            confirm_timeout_sec: 60,
+            secrets_file: temp_memory_dir().join("secrets.yaml").display().to_string(),
+            net_mode: "online".into(),
+            memory_v2: false,
+            memory_v2_shadow: false,
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio");
+        let n = rt.block_on(async {
+            let sub = crate::subsystem::PlatformSubsystem::open(&cfg).expect("open");
+            let first = migrate_research_index(&sub, &mem, &home);
+            let second = migrate_research_index(&sub, &mem, &home);
+            (first, second)
+        });
+        assert!(n.0 >= 1, "expected at least one migrated doc, got {}", n.0);
+        assert_eq!(n.1, n.0, "migration must be idempotent on count");
+        let listed = list_docs(&mem);
+        assert_eq!(listed.len(), 1);
+        assert!(listed.iter().any(|d| d.label.contains("legacy")));
+    }
+
+    #[test]
+    fn resolve_logical_via_aos_home_fallback() {
+        let home = temp_memory_dir();
+        let data = home.join("var/storage/data/downloads");
+        std::fs::create_dir_all(&data).unwrap();
+        let file = data.join("report.md");
+        std::fs::write(&file, "# hi\n").unwrap();
+        std::env::set_var("AOS_HOME", &home);
+        let resolved = resolve_document_source("/downloads/report.md", None).expect("resolve");
+        assert!(resolved.is_file());
+        assert_eq!(
+            resolved.file_name().and_then(|n| n.to_str()),
+            Some("report.md")
+        );
+        std::env::remove_var("AOS_HOME");
     }
 
     #[test]
