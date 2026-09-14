@@ -649,11 +649,11 @@ mod tests {
         assert_eq!(en.get("camera_push").map(String::as_str), Some("Push in"));
         assert_eq!(
             en.get("preview_empty").map(String::as_str),
-            Some(super::surface::EN_PREVIEW_EMPTY)
+            Some(EN_PREVIEW_EMPTY)
         );
         assert_eq!(
             en.get("preview_empty_video").map(String::as_str),
-            Some(super::surface::EN_PREVIEW_EMPTY_VIDEO)
+            Some(EN_PREVIEW_EMPTY_VIDEO)
         );
     }
 }
