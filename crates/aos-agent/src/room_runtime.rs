@@ -41,10 +41,11 @@ use crate::tools::{
 };
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentRoomConductRequest, AgentRoomConductResponse, AgentRoomTurnRequest, AgentRoomTurnResponse,
-    AgentSpec, CancelRequest, ChatAttachment, ChatMessage, ChatRoomMember,
-    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMessage,
-    ChatSessionMode, InferParams, InferRequest, ModuleInfo, TokenEvent,
+    AgentRoomConductProgress, AgentRoomConductRequest, AgentRoomConductResponse,
+    AgentRoomTurnRequest, AgentRoomTurnResponse, AgentSpec, CancelRequest, ChatAttachment,
+    ChatMessage, ChatRoomMember, ChatSessionAppendRequest, ChatSessionGetResponse,
+    ChatSessionIdRequest, ChatSessionMessage, ChatSessionMode, InferParams, InferRequest,
+    ModuleInfo, TokenEvent,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -76,13 +77,14 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
 - Pas de `agent.spawn` ni collègues inventés."#;
 
-/// État d'un tour de salon en cours (annulation cooperative).
+/// État d'un tour de salon en cours (annulation cooperative + progrès UI).
 #[derive(Debug)]
 pub struct RoomRoundState {
     pub cancelled: AtomicBool,
     pub cancel_notify: Notify,
     pub current_inference: Mutex<Option<u64>>,
     pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+    progress: Mutex<AgentRoomConductProgress>,
 }
 
 impl Default for RoomRoundState {
@@ -98,6 +100,7 @@ impl RoomRoundState {
             cancel_notify: Notify::new(),
             current_inference: Mutex::new(None),
             ask_reply_tx: Mutex::new(None),
+            progress: Mutex::new(AgentRoomConductProgress::default()),
         }
     }
 
@@ -108,6 +111,42 @@ impl RoomRoundState {
 
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::SeqCst)
+    }
+
+    pub async fn set_speaker(
+        &self,
+        session_id: &str,
+        speaker_id: &str,
+        speaker_name: &str,
+        turn_index: u32,
+        turn_total: u32,
+        phase: &str,
+    ) {
+        let mut p = self.progress.lock().await;
+        *p = AgentRoomConductProgress {
+            session_id: session_id.to_string(),
+            active: true,
+            speaker_id: Some(speaker_id.to_string()),
+            speaker_name: Some(speaker_name.to_string()),
+            turn_index,
+            turn_total: turn_total.max(turn_index),
+            phase: phase.to_string(),
+        };
+    }
+
+    pub async fn set_phase(&self, phase: &str) {
+        let mut p = self.progress.lock().await;
+        if p.active {
+            p.phase = phase.to_string();
+        }
+    }
+
+    pub async fn clear_progress(&self) {
+        *self.progress.lock().await = AgentRoomConductProgress::default();
+    }
+
+    pub async fn progress_snapshot(&self) -> AgentRoomConductProgress {
+        self.progress.lock().await.clone()
     }
 }
 
@@ -686,6 +725,7 @@ async fn run_room_tool_loop(
                 let lower = p.to_ascii_lowercase();
                 lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
             });
+        round.set_phase("generating").await;
         let raw_result = run_infer(
             bus,
             round,
@@ -739,11 +779,13 @@ async fn run_room_tool_loop(
         for action in parsed_actions {
             let trace_id = format!("{trace_base}-{step}");
             let outcome = if canonicalize_tool_name(&action.action) == "user.ask" {
+                round.set_phase("waiting_user").await;
                 handle_room_user_ask(bus, round, session_id, agent_id, display_name, &action.args)
                     .await?
             } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs) {
                 tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
+                round.set_phase("tools").await;
                 let mut outcome = execute_room_tool(
                     bus,
                     agent_id,
@@ -898,6 +940,7 @@ pub async fn execute_room_turn(
         if let Some(ref png) = canvas_png {
             refs = merge_canvas_vision_refs(&refs, png);
         }
+        round.set_phase("generating").await;
         let raw = run_infer(
             bus,
             round,
@@ -915,6 +958,7 @@ pub async fn execute_room_turn(
         let (content, thinking) = split_room_reply(&raw);
         (content, thinking, Vec::new())
     } else {
+        round.set_phase("generating").await;
         let (reply, artifacts) = run_room_tool_loop(
             bus,
             round,
@@ -989,6 +1033,7 @@ pub async fn execute_room_conduct(
 
     while (agent_turns as usize) < max {
         if round.is_cancelled() {
+            round.clear_progress().await;
             return Ok(AgentRoomConductResponse {
                 agent_turns,
                 cancelled: true,
@@ -1006,6 +1051,24 @@ pub async fn execute_room_conduct(
             .find(|m| m.agent_id == agent_id)
             .ok_or_else(|| format!("membre {agent_id} introuvable"))?;
 
+        let turn_index = agent_turns + 1;
+        let turn_total = turn_index.saturating_add(queue.len() as u32);
+        let display_name = if member.display_name.trim().is_empty() {
+            member.agent_id.as_str()
+        } else {
+            member.display_name.as_str()
+        };
+        round
+            .set_speaker(
+                &req.session_id,
+                &member.agent_id,
+                display_name,
+                turn_index,
+                turn_total,
+                "preparing",
+            )
+            .await;
+
         let turn_req = AgentRoomTurnRequest {
             session_id: req.session_id.clone(),
             agent_id: member.agent_id.clone(),
@@ -1016,12 +1079,16 @@ pub async fn execute_room_conduct(
         let reply = match execute_room_turn(bus, round.as_ref(), &turn_req).await {
             Ok(r) => r,
             Err(e) if e == "tour annulé" => {
+                round.clear_progress().await;
                 return Ok(AgentRoomConductResponse {
                     agent_turns,
                     cancelled: true,
                 });
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                round.clear_progress().await;
+                return Err(e);
+            }
         };
         if turn.peer_followup {
             peer_followups_run += 1;
@@ -1045,6 +1112,7 @@ pub async fn execute_room_conduct(
         }
     }
 
+    round.clear_progress().await;
     Ok(AgentRoomConductResponse {
         agent_turns,
         cancelled: false,
@@ -1670,5 +1738,25 @@ mod tests {
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!ids.iter().any(|x| x == "notes.create"));
         assert_eq!(caps, vec!["net.connect:*:*".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn speaker_progress_roundtrip() {
+        let round = RoomRoundState::new();
+        round
+            .set_speaker("sess", "a1", "Planificateur", 1, 4, "preparing")
+            .await;
+        let snap = round.progress_snapshot().await;
+        assert!(snap.active);
+        assert_eq!(snap.speaker_name.as_deref(), Some("Planificateur"));
+        assert_eq!(snap.turn_index, 1);
+        assert_eq!(snap.turn_total, 4);
+        assert_eq!(snap.phase, "preparing");
+
+        round.set_phase("generating").await;
+        assert_eq!(round.progress_snapshot().await.phase, "generating");
+
+        round.clear_progress().await;
+        assert!(!round.progress_snapshot().await.active);
     }
 }

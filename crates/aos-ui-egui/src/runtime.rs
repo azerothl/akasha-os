@@ -20,10 +20,10 @@ use aos_proto::{
     format_chat_supervisor_lock, format_system_assistant_prompt, AgentCreateRequest, AgentGoal,
     AgentIdRequest, AgentInfo, AgentKind, AgentPolicy, AgentPolicyGetRequest,
     AgentPolicySetRequest, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
-    AgentRosterUpdateRequest, AgentSpecResponse, AgentState, AgentSteerRequest, AgentTrace,
-    AuditEvent, AuditQueryRequest, CancelRequest, CapInfo, CapListRequest, CapRevokeRequest,
-    ChatAttachment, ChatMessage, ChatRoomMember, ChatSessionAppendRequest,
-    ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    AgentRoomConductProgress, AgentRosterUpdateRequest, AgentSpecResponse, AgentState,
+    AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest, CancelRequest, CapInfo,
+    CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
+    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
     ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
     ChatSessionRenameRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
     ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest,
@@ -4311,6 +4311,20 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 interval.tick().await;
                 loop {
                     interval.tick().await;
+                    if let Ok(progress) = poll_bus
+                        .call::<ChatSessionIdRequest, AgentRoomConductProgress>(
+                            agent_intents::ROOM_CONDUCT_PROGRESS,
+                            &ChatSessionIdRequest {
+                                session_id: poll_sid.clone(),
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        if progress.active {
+                            let _ = poll_evt.send(Evt::RoomProgress { progress });
+                        }
+                    }
                     load_session(&poll_bus, &poll_evt, &poll_sid).await;
                     poll_ctx.request_repaint();
                 }

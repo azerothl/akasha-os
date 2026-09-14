@@ -2894,6 +2894,13 @@ impl eframe::App for UiApp {
                         cancelled,
                     );
                 }
+                Evt::RoomProgress { progress } => {
+                    if self.chat_state.active_session.as_deref() == Some(progress.session_id.as_str())
+                        && self.chat_state.runtime.pending
+                    {
+                        self.chat_state.runtime.room_progress = Some(progress);
+                    }
+                }
                 Evt::CanvasMeta(meta) => {
                     canvas_event_controller::on_canvas_meta(self, meta);
                 }
@@ -3106,6 +3113,7 @@ impl eframe::App for UiApp {
                     );
                     if on_active {
                         self.chat_state.runtime.room_turn_text = None;
+                        self.chat_state.runtime.room_progress = None;
                         self.chat_state.runtime.infer_phase =
                             chat_pending_status::ChatInferPhase::Preparing;
                         let t = i18n::strings(&self.prefs.language);

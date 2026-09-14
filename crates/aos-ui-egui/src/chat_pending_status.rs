@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use aos_proto::{AgentInfo, AgentState, AgentTrace};
+use aos_proto::{AgentInfo, AgentRoomConductProgress, AgentState, AgentTrace};
 
 use crate::i18n::{self, UiStrings};
 
@@ -19,17 +19,78 @@ pub(crate) enum ChatInferPhase {
 }
 
 /// Format the weak status line under the pending assistant header.
+///
+/// In room (salon) mode there is no `model.infer` phase stream: the UI waits on a
+/// single `chat.session.room.turn` that runs the conductor + each member’s reply.
+/// Prefer live `AgentRoomConductProgress` (speaker + phase); otherwise a generic
+/// room label. Chat phase labels apply only outside room mode.
 pub(crate) fn format_pending_assistant_status(
     t: &UiStrings,
     phase: ChatInferPhase,
     session_id: Option<&str>,
     agents: &[AgentInfo],
     traces: &HashMap<String, AgentTrace>,
+    room_mode: bool,
+    room_progress: Option<&AgentRoomConductProgress>,
 ) -> String {
+    if room_mode {
+        if let Some(status) = format_room_progress(t, room_progress) {
+            return status;
+        }
+        if let Some(status) = format_active_agent_status(t, session_id, agents, traces) {
+            return status;
+        }
+        return t.chat_pending_room_turn.to_string();
+    }
     if let Some(status) = format_active_agent_status(t, session_id, agents, traces) {
         return status;
     }
     format_phase_status(t, phase)
+}
+
+fn format_room_progress(
+    t: &UiStrings,
+    progress: Option<&AgentRoomConductProgress>,
+) -> Option<String> {
+    let progress = progress.filter(|p| p.active)?;
+    let name = progress
+        .speaker_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            progress
+                .speaker_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })?;
+    let phase_label = room_phase_label(t, progress.phase.as_str());
+    if progress.turn_index > 0 && progress.turn_total > 0 {
+        Some(
+            t.chat_pending_room_speaker_step
+                .replace("{name}", name)
+                .replace("{i}", &progress.turn_index.to_string())
+                .replace("{n}", &progress.turn_total.to_string())
+                .replace("{phase}", phase_label),
+        )
+    } else {
+        Some(
+            t.chat_pending_room_speaker
+                .replace("{name}", name)
+                .replace("{phase}", phase_label),
+        )
+    }
+}
+
+fn room_phase_label<'a>(t: &'a UiStrings, phase: &str) -> &'a str {
+    match phase {
+        "generating" => t.chat_pending_room_phase_generating,
+        "tools" => t.chat_pending_room_phase_tools,
+        "waiting_user" => t.chat_pending_room_phase_waiting_user,
+        "preparing" => t.chat_pending_room_phase_preparing,
+        _ => t.chat_pending_room_phase_working,
+    }
 }
 
 fn format_phase_status(t: &UiStrings, phase: ChatInferPhase) -> String {
@@ -196,6 +257,8 @@ mod tests {
             Some("s1"),
             &agents,
             &HashMap::new(),
+            false,
+            None,
         );
         assert_eq!(status, "Search the repo");
     }
@@ -210,6 +273,8 @@ mod tests {
             Some("s1"),
             &agents,
             &HashMap::new(),
+            false,
+            None,
         );
         assert_eq!(
             status,
@@ -242,6 +307,8 @@ mod tests {
             Some("s1"),
             &agents,
             &traces,
+            false,
+            None,
         );
         assert_eq!(
             status,
@@ -259,6 +326,8 @@ mod tests {
             Some("s1"),
             &agents,
             &HashMap::new(),
+            false,
+            None,
         );
         assert_eq!(status, t.chat_pending_waiting_tokens);
     }
@@ -278,7 +347,63 @@ mod tests {
             Some("s1"),
             &agents,
             &HashMap::new(),
+            false,
+            None,
         );
         assert_eq!(status, t.chat_pending_preparing);
+    }
+
+    #[test]
+    fn room_mode_uses_room_label_not_preparing() {
+        let t = en();
+        let status = format_pending_assistant_status(
+            &t,
+            ChatInferPhase::Preparing,
+            Some("s1"),
+            &[],
+            &HashMap::new(),
+            true,
+            None,
+        );
+        assert_eq!(status, t.chat_pending_room_turn);
+
+        let t = fr();
+        let status = format_pending_assistant_status(
+            &t,
+            ChatInferPhase::Preparing,
+            Some("s1"),
+            &[],
+            &HashMap::new(),
+            true,
+            None,
+        );
+        assert_eq!(status, t.chat_pending_room_turn);
+        assert!(!status.contains("contexte"));
+    }
+
+    #[test]
+    fn room_progress_shows_speaker_and_phase() {
+        let t = fr();
+        let progress = AgentRoomConductProgress {
+            session_id: "s1".into(),
+            active: true,
+            speaker_id: Some("planner".into()),
+            speaker_name: Some("Planificateur".into()),
+            turn_index: 1,
+            turn_total: 4,
+            phase: "generating".into(),
+        };
+        let status = format_pending_assistant_status(
+            &t,
+            ChatInferPhase::Preparing,
+            Some("s1"),
+            &[],
+            &HashMap::new(),
+            true,
+            Some(&progress),
+        );
+        assert!(status.contains("Planificateur"));
+        assert!(status.contains("1/4"));
+        assert!(status.contains("génération"));
     }
 }

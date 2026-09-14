@@ -21,15 +21,15 @@ use aos_ipc::{BusClient, BusService};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentKind,
     AgentOutputEvent, AgentPolicyGetRequest, AgentPolicySetRequest, AgentPromptOptimizeRequest,
-    AgentPromptOptimizeResponse, AgentRoomConductRequest, AgentRoomTurnRequest,
-    AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse, AgentStartRequest, AgentState,
-    AgentSteerRequest, AgentStepRecord, AgentTrace, CancelRequest, CapInfo, CapListRequest,
-    CapMintRequest, CapMintResponse, ChatAttachment, ChatMessage, ChatSessionAppendRequest,
-    ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionRoomAskReplyRequest,
-    ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest, CognitiveMode, InferParams,
-    InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest,
-    PlanGetRequest, PlanReplaceTreeRequest, PlanResponse, PlanUpdateStepRequest, SecretGetRequest,
-    SkillInfo, TokenEvent,
+    AgentPromptOptimizeResponse, AgentRoomConductProgress, AgentRoomConductRequest,
+    AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse, AgentStartRequest,
+    AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, CancelRequest, CapInfo,
+    CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment, ChatMessage,
+    ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest,
+    CognitiveMode, InferParams, InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest,
+    PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse,
+    PlanUpdateStepRequest, SecretGetRequest, SkillInfo, TokenEvent,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -2315,6 +2315,44 @@ async fn main() {
                 };
                 cancel_room_round(&shared, &bus, &req.session_id).await;
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
+            }
+        });
+    }
+
+    // --- agent.room_conduct.progress ---
+    {
+        let shared = shared.clone();
+        svc.on(intents::ROOM_CONDUCT_PROGRESS, move |ctx| {
+            let shared = shared.clone();
+            async move {
+                let req: ChatSessionIdRequest = match ctx.payload() {
+                    Ok(r) => r,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                let round = {
+                    let rt = shared.lock().await;
+                    rt.room_rounds.get(&req.session_id).cloned()
+                };
+                let progress = match round {
+                    Some(round) => {
+                        let mut snap = round.progress_snapshot().await;
+                        if snap.session_id.is_empty() {
+                            snap.session_id = req.session_id;
+                        }
+                        snap
+                    }
+                    None => AgentRoomConductProgress {
+                        session_id: req.session_id,
+                        active: false,
+                        ..Default::default()
+                    },
+                };
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &progress).await;
             }
         });
     }

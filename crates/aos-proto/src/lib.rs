@@ -5774,6 +5774,27 @@ pub struct AgentRoomConductResponse {
     pub cancelled: bool,
 }
 
+/// Live progress for an in-flight `agent.room_conduct` (`agent.room_conduct.progress`).
+///
+/// Phases: `preparing` | `generating` | `tools` | `waiting_user`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AgentRoomConductProgress {
+    pub session_id: String,
+    pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_name: Option<String>,
+    /// 1-based index of the member turn currently running.
+    #[serde(default)]
+    pub turn_index: u32,
+    /// Estimated total member turns for this round (grows with peer follow-ups).
+    #[serde(default)]
+    pub turn_total: u32,
+    #[serde(default)]
+    pub phase: String,
+}
+
 /// `agent.room_turn` — inférence one-shot d'un membre du salon (sans spawn worker).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRoomTurnRequest {

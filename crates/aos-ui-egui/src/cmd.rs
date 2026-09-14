@@ -657,6 +657,10 @@ pub(crate) enum Evt {
         agent_turns: u32,
         cancelled: bool,
     },
+    /// Live salon speaker progress while `RoomTurn` is in flight.
+    RoomProgress {
+        progress: aos_proto::AgentRoomConductProgress,
+    },
     CanvasMeta(ChatSessionMeta),
     CanvasSnapshot {
         session_id: String,

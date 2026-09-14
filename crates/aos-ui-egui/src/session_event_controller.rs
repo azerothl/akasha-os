@@ -133,6 +133,7 @@ pub(crate) fn on_room_turn_done(
         app.chat_state.runtime.infer_phase =
             crate::chat_pending_status::ChatInferPhase::Preparing;
         app.chat_state.runtime.room_turn_text = None;
+        app.chat_state.runtime.room_progress = None;
         if let Some(status) = chat_room::room_turn_done_status(agent_turns, cancelled) {
             app.status = status;
         } else if app.status.starts_with("salon :") {

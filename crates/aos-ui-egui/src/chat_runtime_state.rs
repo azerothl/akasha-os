@@ -2,6 +2,7 @@
 
 use crate::chat_pending_status::ChatInferPhase;
 use crate::cmd::ChatRetryTurn;
+use aos_proto::AgentRoomConductProgress;
 
 #[derive(Debug, Default)]
 pub(crate) struct ChatRuntimeState {
@@ -9,6 +10,8 @@ pub(crate) struct ChatRuntimeState {
     pub(crate) pending: bool,
     pub(crate) inference_id: Option<u64>,
     pub(crate) room_turn_text: Option<String>,
+    /// Live salon speaker progress while a room turn is pending.
+    pub(crate) room_progress: Option<AgentRoomConductProgress>,
     /// Chat turn currently in flight (for load-fail Retry chrome).
     pub(crate) outgoing_turn: Option<ChatRetryTurn>,
     /// Last load-failed turn shown with Retry chrome.
@@ -25,6 +28,7 @@ impl ChatRuntimeState {
         self.pending = true;
         self.inference_id = None;
         self.room_turn_text = room_turn_text;
+        self.room_progress = None;
         self.started_ms = crate::now_ms();
         self.infer_phase = ChatInferPhase::Preparing;
     }
@@ -34,6 +38,7 @@ impl ChatRuntimeState {
         self.pending = false;
         self.inference_id = None;
         self.room_turn_text = None;
+        self.room_progress = None;
         self.outgoing_turn = None;
         self.started_ms = 0;
         self.infer_phase = ChatInferPhase::Preparing;
@@ -51,6 +56,7 @@ mod tests {
             pending: false,
             inference_id: Some(42),
             room_turn_text: None,
+            room_progress: None,
             outgoing_turn: None,
             load_fail_retry: None,
             started_ms: 0,

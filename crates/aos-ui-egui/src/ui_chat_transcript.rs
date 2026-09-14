@@ -879,6 +879,8 @@ impl UiApp {
                             self.chat_state.active_session.as_deref(),
                             &self.agents,
                             &self.agent_ui.traces,
+                            room_mode,
+                            self.chat_state.runtime.room_progress.as_ref(),
                         );
                         ui.weak(&pending_status);
                     });
