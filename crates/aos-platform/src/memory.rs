@@ -1120,7 +1120,7 @@ impl MemoryStore {
             .filter(|object| req.include_archived || object.status != MemoryObjectStatus::Archived)
             .cloned()
             .collect();
-        objects.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| b.id.cmp(&a.id)));
+        objects.sort_by_key(|a| std::cmp::Reverse((a.updated_at, a.id)));
         objects.truncate(req.limit.clamp(1, 512));
         objects
     }

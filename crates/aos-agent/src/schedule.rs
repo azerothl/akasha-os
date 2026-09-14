@@ -95,7 +95,7 @@ pub fn list() -> Result<Vec<ScheduleEntry>, String> {
             }
         }
     }
-    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out.sort_by_key(|a| a.id.clone());
     Ok(out)
 }
 

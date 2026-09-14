@@ -285,7 +285,7 @@ impl UiApp {
         let theme_c = crate::theme::button_colors(ui);
         let tip = {
             let mut top: Vec<(&String, &u64)> = self.billing.by_model.iter().collect();
-            top.sort_by(|a, b| b.1.cmp(a.1));
+            top.sort_by_key(|a| std::cmp::Reverse(*a.1));
             let mut lines: Vec<String> = top
                 .iter()
                 .take(3)

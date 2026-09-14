@@ -786,7 +786,7 @@ fn kmeans_cosine_clusters(items: &[(String, Vec<f32>)], k: usize) -> Vec<HealthC
             sample,
         });
     }
-    clusters.sort_by(|a, b| b.count.cmp(&a.count));
+    clusters.sort_by_key(|a| std::cmp::Reverse(a.count));
     clusters
 }
 

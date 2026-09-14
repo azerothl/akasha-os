@@ -338,9 +338,9 @@ impl ModuleRuntime {
                 preinstalled: is_preinstalled_for_runtime(&self.dir, &m.manifest.name),
             })
             .collect();
-        installed.sort_by(|a, b| a.name.cmp(b.name));
+        installed.sort_by_key(|a| a.name);
         let mut removed: Vec<_> = self.removed.values().collect();
-        removed.sort_by(|a, b| a.name.cmp(&b.name));
+        removed.sort_by_key(|a| a.name.as_str());
         let reg = Reg { installed, removed };
         let path = self.registry_path();
         let tmp = path.with_extension("yaml.tmp");
