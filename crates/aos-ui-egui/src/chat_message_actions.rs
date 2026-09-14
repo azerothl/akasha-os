@@ -88,7 +88,7 @@ pub(crate) fn show_hover_bar(
             let fill = ui.visuals().panel_fill;
             egui::Frame::NONE
                 .fill(fill)
-                .stroke(egui::Stroke::new(1.0, stroke.color))
+                .stroke(egui::Stroke::new(1.0_f32, stroke.color))
                 .corner_radius(theme::RADIUS_MD)
                 .inner_margin(egui::Margin::symmetric(pad as i8, pad as i8))
                 .show(ui, |ui| {
@@ -141,7 +141,7 @@ pub(crate) fn show_continue_strip(ui: &mut egui::Ui, t: &UiStrings) -> bool {
     let accent = theme::button_colors(ui).accent;
     egui::Frame::NONE
         .fill(ui.visuals().panel_fill)
-        .stroke(egui::Stroke::new(1.0, accent))
+        .stroke(egui::Stroke::new(1.0_f32, accent))
         .corner_radius(theme::RADIUS_MD)
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {

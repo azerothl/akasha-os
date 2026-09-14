@@ -2329,7 +2329,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                                         } else {
                                             t.confirm_wants_action.replace(
                                                 "{action}",
-                                                &i18n::confirm_action_label(&t, &c.action),
+                                                &i18n::confirm_action_label(t, &c.action),
                                             )
                                         });
                                         ui.add(
