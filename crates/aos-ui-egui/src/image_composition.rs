@@ -347,7 +347,10 @@ pub fn new_inpaint_mask_path() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    format!("/downloads/inpaint-mask-{ts}.png")
+    aos_proto::default_download_path(
+        aos_proto::DownloadKind::Images,
+        &format!("inpaint-mask-{ts}.png"),
+    )
 }
 
 fn logical_host_path(logical: &str) -> PathBuf {

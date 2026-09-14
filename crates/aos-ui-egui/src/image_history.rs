@@ -13,7 +13,7 @@ const HISTORY_CAP: usize = 40;
 pub struct ImageGenMeta {
     pub version: u32,
     pub created_unix: u64,
-    /// Logical path (`/downloads/image-….png`).
+    /// Logical path (`/downloads/images/image-….png`).
     pub path: String,
     #[serde(default)]
     pub model_id: String,
@@ -26,6 +26,9 @@ pub struct ImageGenMeta {
     pub generation_prompt: Option<String>,
     #[serde(default)]
     pub composition_blocks: Vec<CompositionBlock>,
+    /// Chat session that requested the generation, when known.
+    #[serde(default)]
+    pub session_id: String,
 }
 
 impl ImageGenMeta {
@@ -50,6 +53,7 @@ impl ImageGenMeta {
             prompt: prompt.into(),
             generation_prompt,
             composition_blocks,
+            session_id: String::new(),
         }
     }
 
@@ -115,28 +119,35 @@ pub fn clone_meta_for_new_path(
 }
 
 pub fn list_image_history(limit: usize) -> Vec<ImageGenMeta> {
-    let dir = downloads_host_dir();
-    let Ok(rd) = std::fs::read_dir(&dir) else {
-        return Vec::new();
-    };
-    let mut metas: Vec<ImageGenMeta> = rd
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
+    let mut dirs = vec![downloads_host_dir()];
+    dirs.push(downloads_host_dir().join("images"));
+    let mut metas: Vec<ImageGenMeta> = Vec::new();
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in rd.filter_map(|e| e.ok()) {
+            let is_meta = e
+                .path()
                 .file_name()
                 .and_then(|n| n.to_str())
                 .map(|n| n.ends_with(".meta.json"))
-                .unwrap_or(false)
-        })
-        .filter_map(|e| {
-            let raw = std::fs::read_to_string(e.path()).ok()?;
-            serde_json::from_str::<ImageGenMeta>(&raw).ok()
-        })
-        .filter(|m| {
-            let png = host_png_from_logical(&m.path);
-            png.is_file() || Path::new(&m.path).is_file()
-        })
-        .collect();
+                .unwrap_or(false);
+            if !is_meta {
+                continue;
+            }
+            let Some(meta) = std::fs::read_to_string(e.path())
+                .ok()
+                .and_then(|raw| serde_json::from_str::<ImageGenMeta>(&raw).ok())
+            else {
+                continue;
+            };
+            let png = host_png_from_logical(&meta.path);
+            if png.is_file() || Path::new(&meta.path).is_file() {
+                metas.push(meta);
+            }
+        }
+    }
     metas.sort_by_key(|a| std::cmp::Reverse(a.created_unix));
     metas.truncate(limit.clamp(1, HISTORY_CAP));
     metas

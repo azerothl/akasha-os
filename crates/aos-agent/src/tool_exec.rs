@@ -268,6 +268,7 @@ pub async fn invoke_native_tool(
                         title: None,
                         caps: caps.to_vec(),
                         actor,
+                        session_id: None,
                     },
                     vec![],
                 )

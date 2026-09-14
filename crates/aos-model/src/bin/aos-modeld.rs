@@ -5089,13 +5089,21 @@ async fn main() {
                                 .await;
                             return;
                         }
-                        let dest =
-                            req.path
+                        let dest = {
+                            let raw = req
+                                .path
                                 .clone()
                                 .filter(|p| !p.is_empty())
                                 .unwrap_or_else(|| {
                                     aos_model::media::default_media_image_dest(&req.options)
                                 });
+                            let kind = if aos_model::media::is_video_request(&req.options) {
+                                aos_proto::DownloadKind::Video
+                            } else {
+                                aos_proto::DownloadKind::Images
+                            };
+                            aos_proto::normalize_download_path(&raw, kind)
+                        };
                         match media::run_image(&sub, &bus, &req, &dest).await {
                             Ok(resp) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
@@ -5193,11 +5201,14 @@ async fn main() {
                                 .await;
                             return;
                         }
-                        let dest = req
-                            .path
-                            .clone()
-                            .filter(|p| !p.is_empty())
-                            .unwrap_or_else(aos_model::media::default_audio_path);
+                        let dest = {
+                            let raw = req
+                                .path
+                                .clone()
+                                .filter(|p| !p.is_empty())
+                                .unwrap_or_else(aos_model::media::default_audio_path);
+                            aos_proto::normalize_download_path(&raw, aos_proto::DownloadKind::Audio)
+                        };
                         match media::run_tts(&sub, &bus, &req, &dest).await {
                             Ok(resp) => {
                                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;

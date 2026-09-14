@@ -3745,6 +3745,7 @@ async fn invoke_native(
                         title: None,
                         caps: caps.to_vec(),
                         actor,
+                        session_id: session_id.map(|s| s.to_string()),
                     },
                     vec![],
                 )
@@ -3799,6 +3800,7 @@ async fn invoke_native(
                         actor: actor.clone(),
                         caps: caps.to_vec(),
                         trace_id: String::new(),
+                        session_id: session_id.map(|s| s.to_string()),
                     },
                     vec![],
                 )
@@ -3844,6 +3846,7 @@ async fn invoke_native(
                         actor: actor.clone(),
                         caps: caps.to_vec(),
                         trace_id: String::new(),
+                        session_id: session_id.map(|s| s.to_string()),
                     },
                     vec![],
                 )

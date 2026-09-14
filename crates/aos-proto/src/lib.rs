@@ -11,6 +11,7 @@ pub mod bridge;
 mod canvas_layers;
 mod canvas_style;
 pub mod chat_document;
+pub mod downloads_layout;
 pub mod create_contract;
 pub mod decl_ui;
 pub mod device_capture;
@@ -68,6 +69,10 @@ pub use device_usb::{
     UsbWriteRequest, UsbWriteResponse,
 };
 
+pub use downloads_layout::{
+    default_download_path, downloads_kind_dir, kind_for_files_format, kind_for_path,
+    normalize_download_path, DownloadKind,
+};
 pub use host_folder::{
     folder_display_name, grant_folder_for_path, looks_like_host_path, normalize_folder_key,
     HostFolderAccessRequest, HostFolderAccessResponse, HostFolderEntry, HostFolderOperation,
@@ -6036,7 +6041,7 @@ pub struct UserLibraryListResponse {
 }
 
 /// User document library — entry metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default)]
 pub struct UserLibraryDoc {
     pub id: String,
     pub label: String,
@@ -6047,6 +6052,15 @@ pub struct UserLibraryDoc {
     /// UTC calendar day at add time (`YYYY-MM-DD`), stable for list rows.
     #[serde(default)]
     pub added_date: String,
+    /// Logical VFS path when known (`/downloads/documents/…`).
+    #[serde(default)]
+    pub source_path: String,
+    /// Artefact kind (`document`, …).
+    #[serde(default)]
+    pub kind: String,
+    /// Chat/canvas session that produced the file, when known.
+    #[serde(default)]
+    pub session_id: String,
 }
 
 /// Add a local file (pdf/txt/md) to the user library.
@@ -6503,6 +6517,9 @@ pub struct FilesGenerateRequest {
     pub caps: Vec<String>,
     #[serde(default)]
     pub actor: String,
+    /// Chat/canvas session id when the caller has one.
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -6657,11 +6674,11 @@ pub struct MediaAudioOptions {
     pub speaker: Option<u32>,
 }
 
-/// `media.image.generate` — prompt → PNG sous `/downloads`.
+/// `media.image.generate` — prompt → PNG under `/downloads/images/`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaImageGenerateRequest {
     pub prompt: String,
-    /// Logical FS path (default `/downloads/image-<ts>.png`).
+    /// Logical FS path (default `/downloads/images/image-<ts>.png`).
     #[serde(default)]
     pub path: Option<String>,
     /// Offering id (`local:sd-v1-5`). Empty → first installed image pack.
@@ -6702,6 +6719,9 @@ pub struct MediaImageGenerateRequest {
     pub caps: Vec<String>,
     #[serde(default)]
     pub trace_id: String,
+    /// Chat session that requested the generation, when known.
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 /// `media.image.upscale` — ESRGAN upscale of an existing PNG (sd.cpp `--mode upscale`).
@@ -6726,7 +6746,7 @@ pub struct MediaImageUpscaleRequest {
     pub trace_id: String,
 }
 
-/// `media.audio.generate` — text → WAV TTS sous `/downloads`.
+/// `media.audio.generate` — text → WAV TTS under `/downloads/audio/`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaAudioGenerateRequest {
     pub text: String,
@@ -6743,6 +6763,9 @@ pub struct MediaAudioGenerateRequest {
     pub caps: Vec<String>,
     #[serde(default)]
     pub trace_id: String,
+    /// Chat session that requested the generation, when known.
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2807,9 +2807,20 @@ async fn main() {
                         match fetch_res {
                             Ok((bytes, ctype)) => {
                                 let name = aos_platform::net_services::safe_download_name(&req.url);
-                                let path = req
-                                    .dest_path
-                                    .unwrap_or_else(|| format!("/downloads/{name}"));
+                                let path = {
+                                    let raw = req
+                                        .dest_path
+                                        .unwrap_or_else(|| {
+                                            aos_proto::default_download_path(
+                                                aos_proto::DownloadKind::Fetched,
+                                                &name,
+                                            )
+                                        });
+                                    aos_proto::normalize_download_path(
+                                        &raw,
+                                        aos_proto::DownloadKind::Fetched,
+                                    )
+                                };
                                 let write_res =
                                     s.fs.lock()
                                         .unwrap()
@@ -2938,6 +2949,8 @@ async fn main() {
                             caps.push("fs.write:/downloads/**".into());
                             caps.push("fs.write:/documents/**".into());
                         }
+                        let kind = aos_proto::kind_for_files_format(&req.format);
+                        let path = aos_proto::normalize_download_path(&req.path, kind);
                         match aos_platform::files_gen::generate(
                             &req.format,
                             &req.content,
@@ -2947,33 +2960,23 @@ async fn main() {
                                 let write_res =
                                     s.fs.lock()
                                         .unwrap()
-                                        .write_bytes(&req.path, &bytes, &actor, &caps);
+                                        .write_bytes(&path, &bytes, &actor, &caps);
                                 match write_res {
                                     Ok(_) => {
-                                        let host_for_lib = s
-                                            .fs
-                                            .lock()
-                                            .unwrap()
-                                            .resolve_host(&req.path)
-                                            .ok()
-                                            .filter(|p| p.is_file())
-                                            .and_then(|p| p.to_str().map(|s| s.to_string()));
-                                        let library_added = host_for_lib
-                                            .map(|host| {
-                                                aos_platform::user_docs::try_ingest_generated(
-                                                    &s,
-                                                    &s.memory_dir,
-                                                    &host,
-                                                    &req.format,
-                                                    None,
-                                                )
-                                            })
-                                            .unwrap_or(false);
+                                        let library_added =
+                                            aos_platform::user_docs::try_ingest_generated(
+                                                &s,
+                                                &s.memory_dir,
+                                                &path,
+                                                &req.format,
+                                                None,
+                                                req.session_id.as_deref(),
+                                            );
                                         s.audit(AuditAppendRequest {
                                             trace_id: "files-gen".into(),
                                             actor,
                                             action: "files.generate".into(),
-                                            target: req.path.clone(),
+                                            target: path.clone(),
                                             detail: serde_json::json!({
                                                 "format": req.format,
                                                 "bytes": bytes.len(),
@@ -2984,7 +2987,7 @@ async fn main() {
                                             .respond(
                                                 aos_ipc::msg::Status::Ok,
                                                 &FilesGenerateResponse {
-                                                    path: req.path,
+                                                    path,
                                                     bytes: bytes.len() as u64,
                                                     library_added,
                                                 },
@@ -4858,24 +4861,33 @@ fn export_canvas_png(
         .unwrap_or(0);
     let (bytes, path, write_sidecar) = if format == "svg" {
         let bytes = aos_platform::canvas_raster::export_svg(&doc, w, h)?;
-        let path = req
-            .path
-            .clone()
-            .unwrap_or_else(|| format!("/downloads/canvas-{}-{}.svg", meta.id, stamp));
+        let path = req.path.clone().unwrap_or_else(|| {
+            aos_proto::default_download_path(
+                aos_proto::DownloadKind::Canvas,
+                &format!("canvas-{}-{}.svg", meta.id, stamp),
+            )
+        });
+        let path = aos_proto::normalize_download_path(&path, aos_proto::DownloadKind::Canvas);
         (bytes, path, true)
     } else if format == "json" {
         let bytes = aos_platform::canvas_raster::export_sidecar_json(&doc, meta.canvas_aspect)?;
-        let path = req
-            .path
-            .clone()
-            .unwrap_or_else(|| format!("/downloads/canvas-{}-{}.json", meta.id, stamp));
+        let path = req.path.clone().unwrap_or_else(|| {
+            aos_proto::default_download_path(
+                aos_proto::DownloadKind::Canvas,
+                &format!("canvas-{}-{}.json", meta.id, stamp),
+            )
+        });
+        let path = aos_proto::normalize_download_path(&path, aos_proto::DownloadKind::Canvas);
         (bytes, path, false)
     } else {
         let bytes = aos_platform::canvas_raster::export_png(&doc, w, h)?;
-        let path = req
-            .path
-            .clone()
-            .unwrap_or_else(|| format!("/downloads/canvas-{}-{}.png", meta.id, stamp));
+        let path = req.path.clone().unwrap_or_else(|| {
+            aos_proto::default_download_path(
+                aos_proto::DownloadKind::Canvas,
+                &format!("canvas-{}-{}.png", meta.id, stamp),
+            )
+        });
+        let path = aos_proto::normalize_download_path(&path, aos_proto::DownloadKind::Canvas);
         (bytes, path, true)
     };
     let caps = vec!["fs.write:/downloads/**".to_string()];
