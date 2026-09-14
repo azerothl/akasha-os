@@ -2864,7 +2864,8 @@ fn hydrate_persisted_agents(rt: &mut Runtime) {
                 .map(|s| s.is_empty())
                 .unwrap_or(true)
             {
-                info.fail_reason = Some("arrêté au redémarrage".into());
+                info.fail_reason =
+                    Some(aos_agent::actions::THREAD_FAIL_STOPPED_ON_RESTART.into());
             }
             dirty = true;
         }
