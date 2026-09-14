@@ -72,6 +72,8 @@ pub mod surface {
     pub const FR_MODE_VIDEO: &str = "Vidéo";
     pub const FR_IMAGE_PACK_LABEL: &str = "Pack image par défaut";
     pub const FR_VIDEO_PACK_LABEL: &str = "Pack vidéo";
+    pub const EN_IMAGE_PACK_LABEL: &str = "Default image pack";
+    pub const EN_VIDEO_PACK_LABEL: &str = "Video pack";
     pub const FR_PROMPT_LABEL: &str = "Invite";
     pub const FR_NEGATIVE_LABEL: &str = "Prompt négatif";
     pub const FR_VIDEO_DURATION_LABEL: &str = "Durée";
@@ -130,7 +132,8 @@ pub mod surface {
 #[cfg(test)]
 mod tests {
     use super::surface::{
-        EN_APP_TITLE, EN_PREVIEW_EMPTY, EN_PREVIEW_EMPTY_VIDEO, FR_APP_TITLE, FR_GENERATE_LABEL,
+        EN_APP_TITLE, EN_IMAGE_PACK_LABEL, EN_PREVIEW_EMPTY, EN_PREVIEW_EMPTY_VIDEO,
+        EN_VIDEO_PACK_LABEL, FR_APP_TITLE, FR_GENERATE_LABEL,
         FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
         FR_IMAGE_PACK_LABEL, FR_JOB_LABEL, FR_MODE_IMAGE, FR_MODE_VIDEO, FR_NEGATIVE_LABEL,
         FR_ADVANCED_DISCLOSURE, FR_PREVIEW_EMPTY, FR_PREVIEW_EMPTY_VIDEO, FR_PROMPT_LABEL,
@@ -654,6 +657,50 @@ mod tests {
         assert_eq!(
             en.get("preview_empty_video").map(String::as_str),
             Some(EN_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_eq!(
+            en.get("image_pack_label").map(String::as_str),
+            Some(EN_IMAGE_PACK_LABEL)
+        );
+        assert_eq!(
+            en.get("video_pack_label").map(String::as_str),
+            Some(EN_VIDEO_PACK_LABEL)
+        );
+    }
+
+    #[test]
+    fn cm_jail_chrome_copy_locked() {
+        let doc = read_ui_document();
+        let fr = &doc.labels.as_ref().expect("labels").fr;
+        let en = &doc.labels.as_ref().expect("labels").en;
+        assert_eq!(
+            fr.get("preview_empty_video").map(String::as_str),
+            Some(FR_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_eq!(
+            en.get("preview_empty_video").map(String::as_str),
+            Some(EN_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_ne!(
+            fr.get("preview_empty_video").map(String::as_str),
+            fr.get("preview_empty").map(String::as_str),
+            "video empty copy must differ from image empty copy"
+        );
+        assert_eq!(
+            fr.get("video_pack_label").map(String::as_str),
+            Some(FR_VIDEO_PACK_LABEL)
+        );
+        assert_eq!(
+            en.get("video_pack_label").map(String::as_str),
+            Some(EN_VIDEO_PACK_LABEL)
+        );
+        assert_eq!(
+            fr.get("image_pack_label").map(String::as_str),
+            Some(FR_IMAGE_PACK_LABEL)
+        );
+        assert_eq!(
+            en.get("image_pack_label").map(String::as_str),
+            Some(EN_IMAGE_PACK_LABEL)
         );
     }
 }

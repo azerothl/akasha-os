@@ -10,6 +10,14 @@ fn augment_create_catalog(mut result: Value, french: bool) -> Value {
     let Some(root) = result.as_object_mut() else {
         return result;
     };
+    let default_image = root
+        .get("default_image")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let default_video = root
+        .get("default_video")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     // The guest module owns the catalogue ids, while the host owns the
     // install registry and user asset folders. Enrich the binding here so a
     // declarative module keeps the same installed/not-installed semantics as
@@ -95,6 +103,12 @@ fn augment_create_catalog(mut result: Value, french: bool) -> Value {
         );
     }
     root.insert("assets".into(), Value::Object(assets));
+    if let Some(id) = default_image {
+        root.insert("default_image".into(), Value::String(id));
+    }
+    if let Some(id) = default_video {
+        root.insert("default_video".into(), Value::String(id));
+    }
     result
 }
 
