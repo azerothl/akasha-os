@@ -375,7 +375,9 @@ pub fn visible_notes<'a>(
                 .cmp(&a.updated_seq)
                 .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
         }),
-        NotesSort::TitleAsc => items.sort_by_key(|a| a.title.to_lowercase()),
+        NotesSort::TitleAsc => {
+            items.sort_by_key(|a| a.title.to_lowercase())
+        }
         NotesSort::TitleDesc => {
             items.sort_by_key(|a| std::cmp::Reverse(a.title.to_lowercase()))
         }
