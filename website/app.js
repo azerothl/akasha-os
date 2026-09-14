@@ -40,6 +40,28 @@
     return raw;
   }
 
+  function versionAnchor(version) {
+    return `#v${version.replace(/\./g, "-")}`;
+  }
+
+  function applyVersionStamps() {
+    const version = readProductVersion();
+    if (!version) {
+      return;
+    }
+    document.querySelectorAll("[data-aos-version]").forEach((el) => {
+      const declared = el.getAttribute("data-aos-version")?.trim();
+      if (declared === version) {
+        el.textContent = version;
+      }
+    });
+    const anchor = versionAnchor(version);
+    document.querySelectorAll("[data-aos-whats-new]").forEach((link) => {
+      const base = link.getAttribute("href")?.split("#")[0] || "whats-new.html";
+      link.setAttribute("href", `${base}${anchor}`);
+    });
+  }
+
   function releaseAssetUrl(version, fileName) {
     const tag = `v${version}`;
     return new URL(
@@ -149,15 +171,15 @@
       <details class="docs-rail-group" open>
         <summary>${spanLang("Start", "Démarrer")}</summary>
         <div class="docs-rail-links">
-          ${railLink(installHref(), "install", "Install", "Install")}
-          ${railLink(`${base}first-run.html`, "first-run", "First run", "First run")}
+          ${railLink(installHref(), "install", "Install", "Installer")}
+          ${railLink(`${base}first-run.html`, "first-run", "First run", "Premier lancement")}
         </div>
       </details>
       <details class="docs-rail-group" open>
         <summary>${spanLang("Use", "Utiliser")}</summary>
         <div class="docs-rail-links">
-          ${railLink(`${base}use.html`, "use", "Use", "Use")}
-          ${railLink(`${base}network.html`, "network", "Network", "Network")}
+          ${railLink(`${base}use.html`, "use", "Use", "Utiliser")}
+          ${railLink(`${base}network.html`, "network", "Network", "Réseau")}
           ${railLink(`${base}devices.html`, "devices", "Devices", "Périphériques")}
           ${railLink(`${base}troubleshoot.html`, "troubleshoot", "Troubleshoot", "Diagnostic")}
         </div>
@@ -175,15 +197,15 @@
         <div class="docs-rail-links">
           ${railLink(`${base}module-sdk.html`, "module-sdk", "Module SDK", "SDK module")}
           ${railLink(`${base}rich-apps.html`, "rich-apps", "Rich apps", "Apps riches")}
-          ${railLink(`${base}build.html`, "build", "Build", "Build")}
+          ${railLink(`${base}build.html`, "build", "Build", "Compiler")}
         </div>
       </details>
       <details class="docs-rail-group" open>
         <summary>${spanLang("Cohort", "Cohorte")}</summary>
         <div class="docs-rail-links">
-          ${railLink(`${base}feedback.html`, "feedback", "Feedback", "Feedback")}
-          ${railLink(`${base}limits.html`, "limits", "Limits", "Limits")}
-          ${railLink(`${base}whats-new.html`, "whats-new", "What's new", "Nouveauté")}
+          ${railLink(`${base}feedback.html`, "feedback", "Feedback", "Retour")}
+          ${railLink(`${base}limits.html`, "limits", "Limits", "Limites")}
+          ${railLink(`${base}whats-new.html`, "whats-new", "What's new", "Nouveautés")}
         </div>
       </details>
     `;
@@ -210,6 +232,7 @@
   }
 
   applyLang(currentLang());
+  applyVersionStamps();
   injectDocsRail();
   enhancePageToc();
 

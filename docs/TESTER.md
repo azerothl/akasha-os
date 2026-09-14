@@ -31,7 +31,7 @@ do, and say so in the report.
    (4 steps).
 3. **Chat** tab, network still off: ask “What is Akasha OS?” and wait for a
    streamed reply.
-4. **Notes** tab: title + body → **Create**, then **List**.
+4. **Notes** tab: title + body → **Create**, then **Refresh**.
 5. **Feedback** tab: title, category, body → **Send feedback**. Keep
    **Create a GitHub issue** checked (except security). Confirm Submit on
    GitHub if you have an account.
@@ -81,7 +81,7 @@ Expected banner: Preview on the host OS — this is not the bootable OS yet.
 
 ### 2. Human note
 
-- **Notes** tab → title + body → **Create**, then **List**.
+- **Notes** tab → title + body → **Create**, then **Refresh**.
 
 ### 2b. Tasks (dual-surface)
 
