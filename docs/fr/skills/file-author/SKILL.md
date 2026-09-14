@@ -15,5 +15,6 @@ tools:
 
 Travaille sur le FS logique Akasha OS.
 - Lis avant d'écrire (`fs.read` / `docs.read`).
-- Pour des artefacts utilisateur, préfère `files.generate` sous `/documents/` ou `/downloads/`.
+- Pour des artefacts utilisateur, préfère `files.generate` sous `/downloads/documents/` (ou `/documents/` si pertinent).
+- Images / audio / vidéo : `/downloads/images|audio|video/` ; canvas : `/downloads/canvas/`.
 - Garde les chemins stables et documente ce que tu as produit dans `goal.complete`.

@@ -152,7 +152,7 @@ pub fn add_document(
     memory_dir: &Path,
     source_path: &str,
 ) -> Result<(UserLibraryDoc, usize), String> {
-    add_document_with_storage(sub, memory_dir, source_path, None)
+    add_document_with_storage(sub, memory_dir, source_path, None, None)
 }
 
 /// Like [`add_document`], with optional live [`StorageFs`] for logical→host resolve.
@@ -161,6 +161,7 @@ pub fn add_document_with_storage(
     memory_dir: &Path,
     source_path: &str,
     storage: Option<&StorageFs>,
+    session_id: Option<&str>,
 ) -> Result<(UserLibraryDoc, usize), String> {
     let host = resolve_document_source(source_path, storage)?;
     let host_str = host
@@ -171,7 +172,7 @@ pub fn add_document_with_storage(
     {
         return Err("unsupported document type (pdf, txt, md)".into());
     }
-    add_document_from_host(sub, memory_dir, &host, source_path)
+    add_document_from_host(sub, memory_dir, &host, source_path, session_id)
 }
 
 fn add_document_from_host(
@@ -179,6 +180,7 @@ fn add_document_from_host(
     memory_dir: &Path,
     host: &Path,
     label_source: &str,
+    session_id: Option<&str>,
 ) -> Result<(UserLibraryDoc, usize), String> {
     let host_str = host
         .to_str()
@@ -201,6 +203,11 @@ fn add_document_from_host(
 
     let added_ms = now_ms();
     let added_date = format_utc_date(added_ms).unwrap_or_default();
+    let source_path = if label_source.starts_with('/') {
+        label_source.to_string()
+    } else {
+        String::new()
+    };
 
     let doc = UserLibraryDoc {
         id: id.clone(),
@@ -208,6 +215,9 @@ fn add_document_from_host(
         added_ms,
         size_bytes: bytes.len() as u64,
         added_date,
+        source_path,
+        kind: "document".into(),
+        session_id: session_id.unwrap_or("").to_string(),
     };
     let mut manifest = load_manifest(memory_dir);
     manifest.docs.retain(|d| d.id != id);
@@ -239,11 +249,12 @@ pub fn try_ingest_generated(
     logical_path: &str,
     format: &str,
     storage: Option<&StorageFs>,
+    session_id: Option<&str>,
 ) -> bool {
     if !is_library_ingest_format(format) {
         return false;
     }
-    match add_document_with_storage(sub, memory_dir, logical_path, storage) {
+    match add_document_with_storage(sub, memory_dir, logical_path, storage, session_id) {
         Ok(_) => true,
         Err(e) => {
             eprintln!("[aos-platform] library ingest skip {logical_path}: {e}");
@@ -288,7 +299,7 @@ pub fn migrate_research_index(
             .unwrap_or("md");
         let ok = {
             let fs = sub.fs.lock().unwrap();
-            try_ingest_generated(sub, memory_dir, &entry.path, format, Some(&*fs))
+            try_ingest_generated(sub, memory_dir, &entry.path, format, Some(&*fs), None)
         };
         if ok {
             n += 1;
@@ -622,16 +633,18 @@ mod tests {
         let ok = rt.block_on(async {
             let sub = crate::subsystem::PlatformSubsystem::open(&cfg).expect("open");
             let fs = sub.fs.lock().unwrap();
-            try_ingest_generated(&sub, &mem, "/downloads/report.md", "md", Some(&*fs))
+            try_ingest_generated(&sub, &mem, "/downloads/report.md", "md", Some(&*fs), None)
         });
         assert!(ok, "logical download should land in library");
         let listed = list_docs(&mem);
         assert!(listed.iter().any(|d| d.label == "report.md"));
+        assert!(listed.iter().any(|d| d.kind == "document"));
+        assert!(listed.iter().any(|d| d.source_path == "/downloads/report.md"));
         // Idempotent: same path/content → same id, still one entry.
         let ok2 = rt.block_on(async {
             let sub = crate::subsystem::PlatformSubsystem::open(&cfg).expect("open");
             let fs = sub.fs.lock().unwrap();
-            try_ingest_generated(&sub, &mem, "/downloads/report.md", "md", Some(&*fs))
+            try_ingest_generated(&sub, &mem, "/downloads/report.md", "md", Some(&*fs), None)
         });
         assert!(ok2);
         assert_eq!(list_docs(&mem).len(), 1);
@@ -726,6 +739,7 @@ mod tests {
             added_ms: 1_788_004_800_000,
             size_bytes: 42,
             added_date: "2026-08-29".into(),
+            ..Default::default()
         };
         save_manifest(
             &dir,
@@ -765,6 +779,7 @@ mod tests {
             added_ms: 1_788_004_800_000,
             size_bytes: 42,
             added_date: String::new(),
+            ..Default::default()
         };
         save_manifest(&dir, &Manifest { docs: vec![doc] }).unwrap();
         let listed = list_docs(&dir);

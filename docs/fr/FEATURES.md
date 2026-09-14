@@ -60,7 +60,8 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 
 - **Guides in-app** : ? Chat à côté du nom de session ; ? Canvas après Tout effacer — Créer avait déjà un guide
 - **Planifications Chat** : en cours / pause (Reprendre | Arrêter) / arrêt sans quitter la session
-- **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, ajouté à la Bibliothèque
+- **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, ajouté à la Bibliothèque sous `/downloads/documents/`
+- **Organisation Downloads** : les livrables vont dans des dossiers par type (`/downloads/documents|images|video|audio|canvas|fetched/`) ; les chemins plats legacy sont normalisés à l’écriture
 - **Bibliothèque utilisateur** : pdf/txt/md consultatifs (état vide + ligne)
 - **Offre skill du matin** : le titre nomme le besoin (pas un mot opaque) ; exemples de demandes ; invite atténuée ; Créer | Plus tard — jamais de création auto
 
@@ -130,7 +131,7 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 
 ### Nouveautés 0.8.0
 
-- **Image + TTS** (E16) : `media.image.generate` / `media.audio.generate` écrivent PNG/WAV sous `/downloads` ; cap `media.generate` ; le Placement Manager comptabilise la VRAM média
+- **Image + TTS** (E16) : `media.image.generate` / `media.audio.generate` écrivent PNG/WAV sous `/downloads/images/` et `/downloads/audio/` ; cap `media.generate` ; le Placement Manager comptabilise la VRAM média
 - Slash chat `/image` / `/speak` : l’image s’affiche, le clip se joue ; widgets E15 `image` / `audio` sur le même chemin
 - Packs média optionnels (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — téléchargement Models, **pas** dans le zip ; first-run ne les tire pas. Le même Download installe le moteur sd.cpp / piper dans `bin/` s’il manque
 - **Artefact hôte unifié** (E17) : un zip Win + un tar Linux ; `aos-modeld` (CUDA) + `aos-modeld-cpu` ; Settings **auto / gpu / cpu** redémarre modeld dans la session
@@ -380,7 +381,7 @@ Mode par défaut : **`offline_strict`** (egress refusé). Activer
 |--------|------|
 | `web.search` | Multi-moteurs : `auto` (Brave → SearXNG → DuckDuckGo → Bing), ou forcer `brave` / `searxng` / `duckduckgo` / `bing` |
 | `web.browse` | HTML → texte (sans JavaScript) ; `max_chars` configurable |
-| `net.fetch` | Télécharger une URL dans le FS logique (défaut `/downloads/`) |
+| `net.fetch` | Télécharger une URL dans le FS logique (défaut `/downloads/fetched/`) |
 | `files.generate` | Écrire `md` / `txt` / `json` / `csv` / `png` / `pdf` |
 
 Secrets optionnels (`var/secrets/keys.yaml`) :

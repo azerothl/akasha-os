@@ -1192,6 +1192,7 @@ mod create_regression_tests {
                 actor: String::new(),
                 caps: Vec::new(),
                 trace_id: String::new(),
+                session_id: None,
             };
             apply_create_presets(&mut req);
             assert_eq!(

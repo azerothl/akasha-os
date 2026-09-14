@@ -93,6 +93,7 @@ mod tests {
             added_ms: 0,
             size_bytes: 0,
             added_date: String::new(),
+            ..Default::default()
         }]);
         assert_eq!(state.library.docs.len(), 1);
         state.set_library_docs(Vec::new());

@@ -1664,6 +1664,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 title,
                 caps: vec!["fs.write:/downloads/**".into()],
                 actor: "human:ui".into(),
+                session_id: None,
             };
             match bus
                 .call::<FilesGenerateRequest, FilesGenerateResponse>("files.generate", &req, vec![])
@@ -3923,6 +3924,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             actor: "human:ui".into(),
                             caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                             trace_id: String::new(),
+                            session_id: None,
                         },
                         vec![],
                     )
@@ -4105,6 +4107,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         actor: "human:ui".into(),
                         caps: vec!["media.generate".into(), "fs.write:/downloads/**".into()],
                         trace_id: String::new(),
+                        session_id: None,
                     },
                     vec![],
                 )

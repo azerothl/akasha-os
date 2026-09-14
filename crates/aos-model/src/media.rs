@@ -51,13 +51,19 @@ pub fn actor_may_generate(actor: &str, caps: &[String]) -> bool {
 }
 
 pub fn default_image_path() -> String {
-    format!("/downloads/image-{}.png", media_dest_timestamp())
+    aos_proto::default_download_path(
+        aos_proto::DownloadKind::Images,
+        &format!("image-{}.png", media_dest_timestamp()),
+    )
 }
 
 pub fn default_video_path() -> String {
     // The bundled sd.cpp build emits WebM/AVI/WebP for vid_gen; MP4 is not
     // supported by its single-file video writer.
-    format!("/downloads/video-{}.webm", media_dest_timestamp())
+    aos_proto::default_download_path(
+        aos_proto::DownloadKind::Video,
+        &format!("video-{}.webm", media_dest_timestamp()),
+    )
 }
 
 fn media_dest_timestamp() -> u64 {
@@ -81,12 +87,15 @@ pub fn default_media_image_dest(options: &aos_proto::MediaImageOptions) -> Strin
 }
 
 pub fn default_audio_path() -> String {
-    format!(
-        "/downloads/speech-{}.wav",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+    aos_proto::default_download_path(
+        aos_proto::DownloadKind::Audio,
+        &format!(
+            "speech-{}.wav",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        ),
     )
 }
 
@@ -472,6 +481,18 @@ mod tests {
         assert!(!actor_may_generate("agent:abc", &[]));
         assert!(actor_may_generate("agent:abc", &["media.generate".into()]));
         assert!(actor_may_generate("human:ui", &[]));
+    }
+
+    #[test]
+    fn default_media_paths_use_type_folders() {
+        assert!(default_image_path().starts_with("/downloads/images/image-"));
+        assert!(default_video_path().starts_with("/downloads/video/video-"));
+        assert!(default_audio_path().starts_with("/downloads/audio/speech-"));
+        assert!(default_media_image_dest(&aos_proto::MediaImageOptions {
+            sd_mode: Some("vid_gen".into()),
+            ..Default::default()
+        })
+        .starts_with("/downloads/video/"));
     }
 
     #[test]

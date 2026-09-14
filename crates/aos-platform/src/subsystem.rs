@@ -1146,10 +1146,12 @@ impl HostServices for PlatformSubsystem {
                 Ok(serde_json::json!({"bytes": bytes.len(), "version": version, "path": dest}))
             }
             "files.generate" => {
-                let path = args["path"].as_str().unwrap_or("");
                 let format = args["format"].as_str().unwrap_or("md");
+                let path_raw = args["path"].as_str().unwrap_or("");
+                let kind = aos_proto::kind_for_files_format(format);
+                let path = aos_proto::normalize_download_path(path_raw, kind);
                 let content = args["content"].as_str().unwrap_or("");
-                Self::require_cap(ctx, "fs.write", path)?;
+                Self::require_cap(ctx, "fs.write", &path)?;
                 let bytes = crate::files_gen::generate(format, content, args["title"].as_str())
                     .map_err(|e| e.to_string())?;
                 let text = if format == "png" || format == "pdf" {
@@ -1163,37 +1165,26 @@ impl HostServices for PlatformSubsystem {
                     .lock()
                     .unwrap()
                     .write(
-                        path,
+                        &path,
                         &text,
                         &format!("module:{}", ctx.module),
                         &ctx.granted_caps,
                     )
                     .map_err(|e| e.to_string())?;
-                // Resolve host path then release fs lock before library ingest (locks mem).
-                let host_for_lib = self
-                    .fs
-                    .lock()
-                    .unwrap()
-                    .resolve_host(path)
-                    .ok()
-                    .filter(|p| p.is_file())
-                    .and_then(|p| p.to_str().map(|s| s.to_string()));
-                let library_added = host_for_lib
-                    .map(|host| {
-                        crate::user_docs::try_ingest_generated(
-                            self,
-                            &self.memory_dir,
-                            &host,
-                            format,
-                            None,
-                        )
-                    })
-                    .unwrap_or(false);
+                let session_id = args["session_id"].as_str();
+                let library_added = crate::user_docs::try_ingest_generated(
+                    self,
+                    &self.memory_dir,
+                    &path,
+                    format,
+                    None,
+                    session_id,
+                );
                 self.audit(AuditAppendRequest {
                     trace_id: ctx.trace_id.clone(),
                     actor: format!("module:{}", ctx.module),
                     action: "files.generate".into(),
-                    target: path.into(),
+                    target: path.clone(),
                     detail: serde_json::json!({
                         "format": format,
                         "on_behalf_of": ctx.actor,
@@ -1455,7 +1446,14 @@ impl HostServices for PlatformSubsystem {
                         .as_str()
                         .filter(|s| !s.is_empty())
                         .map(str::to_string)
-                        .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.svg"));
+                        .unwrap_or_else(|| {
+                            aos_proto::default_download_path(
+                                aos_proto::DownloadKind::Canvas,
+                                &format!("canvas-{session_id}-{stamp}.svg"),
+                            )
+                        });
+                    let path =
+                        aos_proto::normalize_download_path(&path, aos_proto::DownloadKind::Canvas);
                     (bytes, path, true)
                 } else if format == "json" {
                     let bytes =
@@ -1464,7 +1462,14 @@ impl HostServices for PlatformSubsystem {
                         .as_str()
                         .filter(|s| !s.is_empty())
                         .map(str::to_string)
-                        .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.json"));
+                        .unwrap_or_else(|| {
+                            aos_proto::default_download_path(
+                                aos_proto::DownloadKind::Canvas,
+                                &format!("canvas-{session_id}-{stamp}.json"),
+                            )
+                        });
+                    let path =
+                        aos_proto::normalize_download_path(&path, aos_proto::DownloadKind::Canvas);
                     (bytes, path, false)
                 } else {
                     let bytes = crate::canvas_raster::export_png(&doc, width, height)?;
@@ -1472,7 +1477,14 @@ impl HostServices for PlatformSubsystem {
                         .as_str()
                         .filter(|s| !s.is_empty())
                         .map(str::to_string)
-                        .unwrap_or_else(|| format!("/downloads/canvas-{session_id}-{stamp}.png"));
+                        .unwrap_or_else(|| {
+                            aos_proto::default_download_path(
+                                aos_proto::DownloadKind::Canvas,
+                                &format!("canvas-{session_id}-{stamp}.png"),
+                            )
+                        });
+                    let path =
+                        aos_proto::normalize_download_path(&path, aos_proto::DownloadKind::Canvas);
                     (bytes, path, true)
                 };
                 Self::require_cap(ctx, "fs.write", &path)?;

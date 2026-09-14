@@ -126,7 +126,10 @@ pub fn default_download_path(question: &str) -> String {
     } else {
         slug.as_str()
     };
-    format!("/downloads/research-{slug}.md")
+    format!(
+        "{}/research-{slug}.md",
+        aos_proto::downloads_kind_dir(aos_proto::DownloadKind::Documents)
+    )
 }
 
 /// Extract `/downloads/...` path from an agent trace (last files.generate wins).
@@ -230,19 +233,19 @@ mod tests {
         let mut trace = AgentTrace::default();
         trace.steps.push(AgentStepRecord {
             action: "files.generate".into(),
-            args: serde_json::json!({"path": "/downloads/research-agentic.md"}),
+            args: serde_json::json!({"path": "/downloads/documents/research-agentic.md"}),
             ..Default::default()
         });
         assert_eq!(
             path_from_trace(&trace).as_deref(),
-            Some("/downloads/research-agentic.md")
+            Some("/downloads/documents/research-agentic.md")
         );
     }
 
     #[test]
     fn default_download_path_slug() {
         let p = default_download_path("What is agentic?");
-        assert!(p.starts_with("/downloads/research-"));
+        assert!(p.starts_with("/downloads/documents/research-"));
         assert!(p.ends_with(".md"));
     }
 }

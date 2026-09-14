@@ -60,7 +60,8 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 
 - **In-app guides**: Chat ? beside the session name; Canvas ? after Clear all — Create already had a guide
 - **Chat schedules**: live / pause (Resume | Stop) / stop without leaving the session
-- **Research document**: in-thread Reply | Prepare a document — progress, Ready, added to the Library
+- **Research document**: in-thread Reply | Prepare a document — progress, Ready, added to the Library under `/downloads/documents/`
+- **Downloads layout**: generated artefacts land in type folders (`/downloads/documents|images|video|audio|canvas|fetched/`); legacy flat paths are soft-normalized on write
 - **User library**: consultative pdf/txt/md (empty state + row)
 - **Morning skill offer**: title names the need (not a single opaque word); shows example asks; muted prompt; Create | Later — never auto-creates
 
@@ -130,7 +131,7 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 
 ### What's new in 0.8.0
 
-- **Image + TTS** (E16): `media.image.generate` / `media.audio.generate` write PNG/WAV under `/downloads`; cap `media.generate`; Placement Manager accounts for media VRAM
+- **Image + TTS** (E16): `media.image.generate` / `media.audio.generate` write PNG/WAV under `/downloads/images/` and `/downloads/audio/`; cap `media.generate`; Placement Manager accounts for media VRAM
 - Chat slash `/image` / `/speak` shows the PNG and plays the clip; E15 `image` / `audio` widgets bind the same paths
 - Optional media packs (`local:sd-v1-5`, Piper `en_US` / `fr_FR`) — download from Models, **not** in the zip; first-run does not pull them. The same download fetches the sd.cpp / piper engine into `bin/` if it is missing
 - **Unified host artefact** (E17): one Win zip + one Linux tarball; `aos-modeld` (CUDA) + `aos-modeld-cpu` inside; Settings **auto / gpu / cpu** (0.9 migrates in-process; 0.8 restarted modeld)
@@ -379,7 +380,7 @@ Default mode is **`offline_strict`** (deny-by-default egress). Enable
 |--------|------|
 | `web.search` | Multi-engine search: `auto` (Brave → SearXNG → DuckDuckGo → Bing), or force `brave` / `searxng` / `duckduckgo` / `bing` |
 | `web.browse` | Fetch HTML → plain text (no JavaScript); `max_chars` configurable |
-| `net.fetch` | Download a URL into the logical FS (default `/downloads/`) |
+| `net.fetch` | Download a URL into the logical FS (default `/downloads/fetched/`) |
 | `files.generate` | Write `md` / `txt` / `json` / `csv` / `png` / `pdf` |
 
 Optional secrets (`var/secrets/keys.yaml`):

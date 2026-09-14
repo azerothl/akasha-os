@@ -528,20 +528,27 @@ pub fn import_legacy_history_if_needed(home: &Path) -> Result<usize, String> {
     }
 
     let mut metas = Vec::new();
-    for entry in fs::read_dir(&downloads).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if !path.is_file() {
+    let mut scan_dirs = vec![downloads.clone()];
+    scan_dirs.push(downloads.join("images"));
+    for scan in scan_dirs {
+        if !scan.is_dir() {
             continue;
         }
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !name.ends_with(".meta.json") {
-            continue;
-        }
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        if let Ok(meta) = serde_json::from_str::<LegacyImageMeta>(&raw) {
-            if !meta.path.is_empty() && !meta.prompt.is_empty() {
-                metas.push(meta);
+        for entry in fs::read_dir(&scan).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !name.ends_with(".meta.json") {
+                continue;
+            }
+            let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            if let Ok(meta) = serde_json::from_str::<LegacyImageMeta>(&raw) {
+                if !meta.path.is_empty() && !meta.prompt.is_empty() {
+                    metas.push(meta);
+                }
             }
         }
     }
