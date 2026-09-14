@@ -1393,13 +1393,8 @@ impl DeclUiPanelState {
                 } else {
                     "preview_empty"
                 };
-                let canvas_widget = if w.empty_label_key.is_some() {
-                    w.clone()
-                } else {
-                    let mut canvas_widget = w.clone();
-                    canvas_widget.empty_label_key = Some(empty_key.into());
-                    canvas_widget
-                };
+                let mut canvas_widget = w.clone();
+                canvas_widget.empty_label_key = Some(empty_key.into());
                 if let Some(patch) = crate::rich_composition_ui::ui_layer_canvas(
                     ui,
                     &canvas_widget,
@@ -2245,6 +2240,45 @@ fn render_scatter(ui: &mut Ui, val: &Value, series_key: Option<&str>) {
         });
 }
 
+fn catalog_row_label(
+    binding_cache: &HashMap<String, Value>,
+    binding_id: &str,
+    wire_id: &str,
+) -> Option<String> {
+    let root = binding_cache.get(binding_id)?;
+    for mode in ["image", "video"] {
+        if let Some(rows) = root.get(mode).and_then(Value::as_array) {
+            for row in rows {
+                if row.get("id").and_then(Value::as_str) == Some(wire_id) {
+                    return row
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(String::from);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn resolve_catalog_selected_label(
+    items: &[String],
+    item_labels: &[String],
+    current: &str,
+    binding_cache: &HashMap<String, Value>,
+    binding_id: Option<&str>,
+) -> String {
+    items
+        .iter()
+        .position(|item| item == current)
+        .and_then(|index| item_labels.get(index))
+        .cloned()
+        .or_else(|| {
+            binding_id.and_then(|id| catalog_row_label(binding_cache, id, current))
+        })
+        .unwrap_or_else(|| "—".to_string())
+}
+
 fn render_choice(
     ui: &mut Ui,
     w: &DeclUiWidget,
@@ -2333,6 +2367,29 @@ fn render_choice(
                 .get("media_mode")
                 .and_then(Value::as_str)
                 .unwrap_or("image");
+            if !items.iter().any(|item| item == &current) {
+                let default_key = if mode == "video" {
+                    "default_video"
+                } else {
+                    "default_image"
+                };
+                if let Some(binding) = w.binding.as_deref() {
+                    if let Some(root) = binding_cache.get(binding) {
+                        let replacement = root
+                            .get(default_key)
+                            .and_then(Value::as_str)
+                            .filter(|id| items.iter().any(|item| item == id))
+                            .or_else(|| items.first().map(String::as_str));
+                        if let Some(id) = replacement {
+                            current = id.to_string();
+                            actions.local_patch.insert(
+                                state_key.clone(),
+                                Value::String(current.clone()),
+                            );
+                        }
+                    }
+                }
+            }
             let ready = w
                 .binding
                 .as_deref()
@@ -2396,12 +2453,13 @@ fn render_choice(
                 if let Some(tip) = tooltip.as_deref() {
                     response.on_hover_text(tip);
                 }
-                let selected_label = items
-                    .iter()
-                    .position(|item| item == &current)
-                    .and_then(|index| item_labels.get(index))
-                    .cloned()
-                    .unwrap_or_else(|| current.clone());
+                let selected_label = resolve_catalog_selected_label(
+                    &items,
+                    &item_labels,
+                    &current,
+                    binding_cache,
+                    w.binding.as_deref(),
+                );
                 egui::ComboBox::from_id_salt(format!("select-{key}"))
                     .selected_text(selected_label)
                     .show_ui(ui, |ui| {
@@ -2468,12 +2526,13 @@ fn render_choice(
         let cur = form_fields.get(&key).cloned().unwrap_or_default();
         ui.add_enabled_ui(enabled, |ui| {
             ui.label(&label);
-            let selected_label = items
-                .iter()
-                .position(|item| item == &cur)
-                .and_then(|index| item_labels.get(index))
-                .cloned()
-                .unwrap_or_else(|| cur.clone());
+            let selected_label = resolve_catalog_selected_label(
+                &items,
+                &item_labels,
+                &cur,
+                binding_cache,
+                w.binding.as_deref(),
+            );
             egui::ComboBox::from_id_salt(format!("select-{key}"))
                 .selected_text(selected_label)
                 .show_ui(ui, |ui| {
