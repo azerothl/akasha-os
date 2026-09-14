@@ -892,6 +892,7 @@ pub struct ConsiderResult {
 }
 
 /// In-session heuristic scan — prefer current session, fall back to 14-day lookback.
+#[allow(clippy::too_many_arguments)] // Pass inputs stay explicit across skill-store / session sources.
 pub fn run_consider_pass(
     state: &mut SkillPassState,
     skills_dir: &Path,

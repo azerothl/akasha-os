@@ -1390,6 +1390,7 @@ impl LlamaContext {
 
     /// Variante de [`Self::generate_lookup`] qui transmet les définitions
     /// d'outils au template de chat.
+    #[allow(clippy::too_many_arguments)] // Generation control knobs stay explicit at this FFI boundary.
     pub fn generate_lookup_with_tools(
         &mut self,
         messages: &[(String, String)],

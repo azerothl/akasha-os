@@ -5766,7 +5766,8 @@ pub struct AgentRoomConductResponse {
 
 /// Live progress for an in-flight `agent.room_conduct` (`agent.room_conduct.progress`).
 ///
-/// Phases: `preparing` | `generating` | `tools` | `waiting_user`.
+/// Phases: `preparing` | `thinking` | `generating` | `reading` | `searching` | `tools` |
+/// `waiting_user`. Optional `detail` is a tool id (e.g. `fs.read`) while tools run.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AgentRoomConductProgress {
     pub session_id: String,
@@ -5783,6 +5784,9 @@ pub struct AgentRoomConductProgress {
     pub turn_total: u32,
     #[serde(default)]
     pub phase: String,
+    /// Current tool id while `phase` is reading/searching/tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 /// `agent.room_turn` — inférence one-shot d'un membre du salon (sans spawn worker).

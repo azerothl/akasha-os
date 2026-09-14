@@ -840,19 +840,41 @@ impl UiApp {
                 } else if self.chat_state.runtime.pending {
                     let (_, _, role_color) = chat_bubble_colors(ui, ChatBubbleKind::Assistant);
                     let thinking = if room_mode {
-                        self.chat_state
+                        if let Some(name) = self
+                            .chat_state
                             .runtime
-                            .room_turn_text
-                            .as_deref()
-                            .and_then(|msg| {
-                                chat_room::format_turn_speaker_queue(
-                                    t,
-                                    msg,
-                                    room_members,
-                                    room_conductor_policy,
-                                )
+                            .room_progress
+                            .as_ref()
+                            .filter(|p| p.active)
+                            .and_then(|p| {
+                                p.speaker_name
+                                    .as_deref()
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .or_else(|| {
+                                        p.speaker_id
+                                            .as_deref()
+                                            .map(str::trim)
+                                            .filter(|s| !s.is_empty())
+                                    })
                             })
-                            .unwrap_or_else(|| t.chat_assistant.to_string())
+                        {
+                            name.to_string()
+                        } else {
+                            self.chat_state
+                                .runtime
+                                .room_turn_text
+                                .as_deref()
+                                .and_then(|msg| {
+                                    chat_room::format_turn_speaker_queue(
+                                        t,
+                                        msg,
+                                        room_members,
+                                        room_conductor_policy,
+                                    )
+                                })
+                                .unwrap_or_else(|| t.chat_assistant.to_string())
+                        }
                     } else {
                         t.chat_assistant.to_string()
                     };

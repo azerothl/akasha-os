@@ -331,7 +331,7 @@ pub async fn run_canary(
     *rt.last_canary_latency_ms.lock().unwrap() = total_latency;
     *rt.last_canary_ok.lock().unwrap() = canary_ok;
 
-    let clusters = cluster_stderr(&sub, &rt.home).await;
+    let clusters = cluster_stderr(sub, &rt.home).await;
 
     let mut snap = rt.snapshot();
     snap.at_ms = now_ms();
@@ -566,6 +566,7 @@ pub fn ewma_state(ttft_ms: Option<f64>, tok_s: Option<f64>, bus_rtt_ms: Option<f
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Feature vector inputs stay explicit for SLO scoring.
 fn build_features(
     ewma: &EwmaState,
     metrics: &SystemMetrics,
@@ -748,8 +749,8 @@ fn kmeans_cosine_clusters(items: &[(String, Vec<f32>)], k: usize) -> Vec<HealthC
             }
             assigns[i] = best;
         }
-        for ci in 0..k {
-            let mut acc = vec![0.0f32; centroids[ci].len()];
+        for (ci, centroid) in centroids.iter_mut().enumerate().take(k) {
+            let mut acc = vec![0.0f32; centroid.len()];
             let mut n = 0usize;
             for (i, (_, v)) in items.iter().enumerate() {
                 if assigns[i] == ci {
@@ -763,7 +764,7 @@ fn kmeans_cosine_clusters(items: &[(String, Vec<f32>)], k: usize) -> Vec<HealthC
                 for a in &mut acc {
                     *a /= n as f32;
                 }
-                centroids[ci] = acc;
+                *centroid = acc;
             }
         }
     }

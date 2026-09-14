@@ -1004,12 +1004,12 @@ impl MemoryStore {
                 .decision
                 .as_ref()
                 .and_then(|d| d.rationale.as_ref())
-                .map_or(true, |rationale| rationale.trim().is_empty())
+                .is_none_or(|rationale| rationale.trim().is_empty())
             && object
                 .metadata
                 .get("justification")
                 .and_then(|value| value.as_str())
-                .map_or(true, |justification| justification.trim().is_empty())
+                .is_none_or(|justification| justification.trim().is_empty())
         {
             return Err("un objet accepted doit avoir une source ou une justification".into());
         }
@@ -1029,7 +1029,7 @@ impl MemoryStore {
         if let Some(existing) = self.objects.values().find(|object| {
             object.namespace == req.namespace
                 && object.kind == req.kind
-                && (idempotency_key.as_ref().map_or(false, |key| {
+                && (idempotency_key.as_ref().is_some_and(|key| {
                     object
                         .metadata
                         .get("_idempotency_key")
@@ -1114,9 +1114,9 @@ impl MemoryStore {
         let mut objects: Vec<_> = self
             .objects
             .values()
-            .filter(|object| req.namespace.as_deref().map_or(true, |ns| object.namespace == ns))
-            .filter(|object| req.kind.as_ref().map_or(true, |kind| &object.kind == kind))
-            .filter(|object| req.status.as_ref().map_or(true, |status| &object.status == status))
+            .filter(|object| req.namespace.as_deref().is_none_or(|ns| object.namespace == ns))
+            .filter(|object| req.kind.as_ref().is_none_or(|kind| &object.kind == kind))
+            .filter(|object| req.status.as_ref().is_none_or(|status| &object.status == status))
             .filter(|object| req.include_archived || object.status != MemoryObjectStatus::Archived)
             .cloned()
             .collect();
@@ -1165,8 +1165,8 @@ impl MemoryStore {
         self.relations_v2
             .iter()
             .filter(|relation| ids.contains(&relation.from) || ids.contains(&relation.to))
-            .cloned()
             .take(256)
+            .cloned()
             .collect()
     }
 
@@ -1187,9 +1187,9 @@ impl MemoryStore {
         let mut objects: Vec<MemoryObject> = self
             .objects
             .values()
-            .filter(|object| req.namespace.as_deref().map_or(true, |ns| object.namespace == ns))
+            .filter(|object| req.namespace.as_deref().is_none_or(|ns| object.namespace == ns))
             .filter(|object| {
-                req.project.as_deref().map_or(true, |project| {
+                req.project.as_deref().is_none_or(|project| {
                     object
                         .metadata
                         .get("project")
@@ -1209,8 +1209,8 @@ impl MemoryStore {
             .relations_v2
             .iter()
             .filter(|relation| selected.contains(&relation.from) && selected.contains(&relation.to))
-            .cloned()
             .take(256)
+            .cloned()
             .collect();
         MemMindPalaceResponse { objects, relations, truncated }
     }
@@ -1323,7 +1323,7 @@ impl MemoryStore {
             nodes.push(object.clone());
             if depth >= max_depth { continue; }
             for relation in &self.relations_v2 {
-                if req.relation.as_ref().map_or(false, |kind| &relation.kind != kind) { continue; }
+                if req.relation.as_ref().is_some_and(|kind| &relation.kind != kind) { continue; }
                 let next = if relation.from == id { Some(relation.to) } else if relation.to == id { Some(relation.from) } else { None };
                 if let Some(next) = next {
                     relations.push(relation.clone());
@@ -1373,7 +1373,7 @@ impl MemoryStore {
             .cloned()
             .collect();
         let freshness_warning = object.as_ref().and_then(|object| {
-            let expired = object.temporal.valid_to.map_or(false, |to| to < now_ms());
+            let expired = object.temporal.valid_to.is_some_and(|to| to < now_ms());
             if expired || object.freshness < 0.35 { Some("souvenir ancien ou à revalider".into()) } else { None }
         });
         MemExplanation { object, supporting_sources, relations, freshness_warning }
@@ -1968,7 +1968,7 @@ mod tests {
         s.relate_v2(a.id, MemoryRelationKind::Causes, b.id, 0.9, vec![source]).unwrap();
         let graph = s.graph_query(&MemGraphQueryRequest { root_id: a.id, depth: 2, max_nodes: 4, relation: None });
         assert_eq!(graph.nodes.len(), 2);
-        assert!(graph.relations.len() >= 1);
+        assert!(!graph.relations.is_empty());
         assert!(graph.relations.iter().any(|r| r.kind == MemoryRelationKind::Causes));
         assert_eq!(s.explain(&MemExplainRequest { id: b.id }).supporting_sources.len(), 1);
         assert_eq!(s.timeline(&MemTimelineRequest { namespace: Some("project:akasha".into()), subject_id: None, from_ms: None, to_ms: None, limit: 10 }).objects.len(), 2);

@@ -3582,7 +3582,7 @@ async fn invoke_native(
                 | "mem.migration.status"
         ) => {
             match bus
-                .call::<serde_json::Value, serde_json::Value>(service, &args, vec![])
+                .call::<serde_json::Value, serde_json::Value>(service, args, vec![])
                 .await
             {
                 Ok(value) => serde_json::to_string(&value).unwrap_or_default(),

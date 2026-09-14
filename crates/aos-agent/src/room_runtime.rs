@@ -131,13 +131,22 @@ impl RoomRoundState {
             turn_index,
             turn_total: turn_total.max(turn_index),
             phase: phase.to_string(),
+            detail: None,
         };
     }
 
     pub async fn set_phase(&self, phase: &str) {
+        self.set_activity(phase, None).await;
+    }
+
+    pub async fn set_activity(&self, phase: &str, detail: Option<&str>) {
         let mut p = self.progress.lock().await;
         if p.active {
             p.phase = phase.to_string();
+            p.detail = detail
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
         }
     }
 
@@ -147,6 +156,30 @@ impl RoomRoundState {
 
     pub async fn progress_snapshot(&self) -> AgentRoomConductProgress {
         self.progress.lock().await.clone()
+    }
+}
+
+/// Map a room tool action to a user-facing progress phase.
+pub fn room_tool_progress_phase(action: &str) -> &'static str {
+    let name = canonicalize_tool_name(action);
+    if name == "fs.read"
+        || name == "fs.list"
+        || name.starts_with("notes.read")
+        || name.starts_with("notes.list")
+        || name.starts_with("notes.search")
+        || name.starts_with("notes.related")
+        || name.starts_with("notes.links")
+        || name == "create.document.load"
+    {
+        "reading"
+    } else if name == "web.search"
+        || name == "web.browse"
+        || name == "net.fetch"
+        || name.contains("search")
+    {
+        "searching"
+    } else {
+        "tools"
     }
 }
 
@@ -516,6 +549,7 @@ fn compact_room_messages_for_overflow(
     Some(note)
 }
 
+#[allow(clippy::too_many_arguments)] // Infer stream control stays explicit at this room boundary.
 async fn run_infer_once(
     bus: &BusClient,
     round: &RoomRoundState,
@@ -725,7 +759,7 @@ async fn run_room_tool_loop(
                 let lower = p.to_ascii_lowercase();
                 lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
             });
-        round.set_phase("generating").await;
+        round.set_phase("thinking").await;
         let raw_result = run_infer(
             bus,
             round,
@@ -785,7 +819,10 @@ async fn run_room_tool_loop(
             } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs) {
                 tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
-                round.set_phase("tools").await;
+                let tool_name = canonicalize_tool_name(&action.action);
+                round
+                    .set_activity(room_tool_progress_phase(&tool_name), Some(&tool_name))
+                    .await;
                 let mut outcome = execute_room_tool(
                     bus,
                     agent_id,
@@ -940,7 +977,7 @@ pub async fn execute_room_turn(
         if let Some(ref png) = canvas_png {
             refs = merge_canvas_vision_refs(&refs, png);
         }
-        round.set_phase("generating").await;
+        round.set_phase("thinking").await;
         let raw = run_infer(
             bus,
             round,
@@ -958,7 +995,7 @@ pub async fn execute_room_turn(
         let (content, thinking) = split_room_reply(&raw);
         (content, thinking, Vec::new())
     } else {
-        round.set_phase("generating").await;
+        round.set_phase("thinking").await;
         let (reply, artifacts) = run_room_tool_loop(
             bus,
             round,
@@ -1753,10 +1790,18 @@ mod tests {
         assert_eq!(snap.turn_total, 4);
         assert_eq!(snap.phase, "preparing");
 
-        round.set_phase("generating").await;
-        assert_eq!(round.progress_snapshot().await.phase, "generating");
+        round.set_phase("thinking").await;
+        assert_eq!(round.progress_snapshot().await.phase, "thinking");
 
         round.clear_progress().await;
         assert!(!round.progress_snapshot().await.active);
+    }
+
+    #[test]
+    fn room_tool_progress_phase_classifies_read_and_search() {
+        assert_eq!(room_tool_progress_phase("fs.read"), "reading");
+        assert_eq!(room_tool_progress_phase("notes.search"), "reading");
+        assert_eq!(room_tool_progress_phase("web.search"), "searching");
+        assert_eq!(room_tool_progress_phase("canvas.stroke"), "tools");
     }
 }

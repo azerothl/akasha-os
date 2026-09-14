@@ -65,27 +65,44 @@ fn format_room_progress(
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
         })?;
-    let phase_label = room_phase_label(t, progress.phase.as_str());
+    let phase_label = room_activity_label(t, progress);
     if progress.turn_index > 0 && progress.turn_total > 0 {
         Some(
             t.chat_pending_room_speaker_step
                 .replace("{name}", name)
                 .replace("{i}", &progress.turn_index.to_string())
                 .replace("{n}", &progress.turn_total.to_string())
-                .replace("{phase}", phase_label),
+                .replace("{phase}", &phase_label),
         )
     } else {
         Some(
             t.chat_pending_room_speaker
                 .replace("{name}", name)
-                .replace("{phase}", phase_label),
+                .replace("{phase}", &phase_label),
         )
     }
 }
 
+fn room_activity_label(t: &UiStrings, progress: &AgentRoomConductProgress) -> String {
+    if let Some(detail) = progress
+        .detail
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if let Some(label) = i18n::tool_human_label(t, detail) {
+            return format!("{label}…");
+        }
+    }
+    room_phase_label(t, progress.phase.as_str()).to_string()
+}
+
 fn room_phase_label<'a>(t: &'a UiStrings, phase: &str) -> &'a str {
     match phase {
-        "generating" => t.chat_pending_room_phase_generating,
+        "thinking" => t.chat_pending_room_phase_thinking,
+        "generating" => t.chat_pending_room_phase_thinking, // legacy: room infer is reflection
+        "reading" => t.chat_pending_room_phase_reading,
+        "searching" => t.chat_pending_room_phase_searching,
         "tools" => t.chat_pending_room_phase_tools,
         "waiting_user" => t.chat_pending_room_phase_waiting_user,
         "preparing" => t.chat_pending_room_phase_preparing,
@@ -391,7 +408,8 @@ mod tests {
             speaker_name: Some("Planificateur".into()),
             turn_index: 1,
             turn_total: 4,
-            phase: "generating".into(),
+            phase: "thinking".into(),
+            detail: None,
         };
         let status = format_pending_assistant_status(
             &t,
@@ -404,6 +422,32 @@ mod tests {
         );
         assert!(status.contains("Planificateur"));
         assert!(status.contains("1/4"));
-        assert!(status.contains("génération"));
+        assert!(status.contains("réflexion"));
+    }
+
+    #[test]
+    fn room_progress_prefers_tool_detail_over_phase() {
+        let t = fr();
+        let progress = AgentRoomConductProgress {
+            session_id: "s1".into(),
+            active: true,
+            speaker_id: Some("planner".into()),
+            speaker_name: Some("Planificateur".into()),
+            turn_index: 1,
+            turn_total: 4,
+            phase: "reading".into(),
+            detail: Some("fs.read".into()),
+        };
+        let status = format_pending_assistant_status(
+            &t,
+            ChatInferPhase::Preparing,
+            Some("s1"),
+            &[],
+            &HashMap::new(),
+            true,
+            Some(&progress),
+        );
+        assert!(status.contains("Lire un fichier"));
+        assert!(!status.contains("génération"));
     }
 }
