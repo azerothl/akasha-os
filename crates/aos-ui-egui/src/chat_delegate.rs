@@ -938,6 +938,7 @@ fn chat_agent_kit_ex(
         "notes.update".into(),
         "notes.links".into(),
         "notes.related".into(),
+        "notes.delete".into(),
         "tasks.create".into(),
         "tasks.list".into(),
         "tasks.update".into(),

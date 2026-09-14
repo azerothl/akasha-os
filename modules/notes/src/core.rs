@@ -12,6 +12,9 @@ pub const MEM_NS: &str = "module:notes";
 pub struct NoteGraph {
     #[serde(default)]
     pub notes: HashMap<String, GraphNode>,
+    /// Compteur monotone incrémenté à chaque écriture (recence, sans horloge WASM).
+    #[serde(default)]
+    pub write_seq: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +25,10 @@ pub struct GraphNode {
     pub outgoing: Vec<String>,
     #[serde(default)]
     pub memory_id: Option<u64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub updated_seq: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +37,15 @@ pub struct NoteSummary {
     pub path: String,
     pub slug: String,
     pub excerpt: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub updated_seq: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NoteFrontmatter {
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,8 +119,101 @@ pub fn parse_wikilinks(body: &str) -> Vec<String> {
         .collect()
 }
 
-/// Sépare le titre H1 éventuel et le corps.
+/// Sépare un frontmatter YAML minimal (`tags:`) du corps markdown.
+/// `had_frontmatter` est vrai seulement si un bloc `---` … `---` valide a été lu.
+pub fn split_frontmatter(content: &str) -> (NoteFrontmatter, String, bool) {
+    let bom_stripped = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let leading = bom_stripped.trim_start_matches(['\r', '\n']);
+    let Some(after_open) = leading.strip_prefix("---") else {
+        return (NoteFrontmatter::default(), content.to_string(), false);
+    };
+    let after_open = after_open.strip_prefix('\r').unwrap_or(after_open);
+    let Some(after_open) = after_open.strip_prefix('\n') else {
+        return (NoteFrontmatter::default(), content.to_string(), false);
+    };
+    let Some(close_idx) = after_open.find("\n---") else {
+        return (NoteFrontmatter::default(), content.to_string(), false);
+    };
+    let yaml = &after_open[..close_idx];
+    let mut after = &after_open[close_idx + "\n---".len()..];
+    after = after.strip_prefix('\r').unwrap_or(after);
+    after = after.strip_prefix('\n').unwrap_or(after);
+    after = after.trim_start_matches(['\r', '\n']);
+    (
+        NoteFrontmatter {
+            tags: parse_frontmatter_tags(yaml),
+        },
+        after.to_string(),
+        true,
+    )
+}
+
+fn parse_frontmatter_tags(yaml: &str) -> Vec<String> {
+    for line in yaml.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("tags:") {
+            return normalize_tags(parse_tag_list(rest));
+        }
+    }
+    Vec::new()
+}
+
+fn parse_tag_list(raw: &str) -> Vec<String> {
+    let rest = raw
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    if rest.is_empty() {
+        return Vec::new();
+    }
+    rest.split([',', ';'])
+        .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
+        .collect()
+}
+
+/// Déduplique (casse ignorée), tronque, ignore les vides.
+pub fn normalize_tags(tags: impl IntoIterator<Item = impl AsRef<str>>) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for tag in tags {
+        let t: String = tag
+            .as_ref()
+            .trim()
+            .chars()
+            .take(32)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        if t.is_empty() {
+            continue;
+        }
+        let key = t.to_lowercase();
+        if !seen.insert(key) {
+            continue;
+        }
+        out.push(t);
+        if out.len() >= 16 {
+            break;
+        }
+    }
+    out
+}
+
+pub fn format_frontmatter(tags: &[String]) -> String {
+    format!("---\ntags: {}\n---\n\n", tags.join(", "))
+}
+
+/// Sépare le titre H1 éventuel et le corps (après frontmatter éventuel).
 pub fn split_title_body(content: &str) -> (Option<String>, String) {
+    let (_, rest, _) = split_frontmatter(content);
+    split_h1(&rest)
+}
+
+pub fn split_h1(content: &str) -> (Option<String>, String) {
     let trimmed = content.trim_start();
     if let Some(rest) = trimmed.strip_prefix("# ") {
         let mut lines = rest.lines();
@@ -117,8 +226,13 @@ pub fn split_title_body(content: &str) -> (Option<String>, String) {
     }
 }
 
-pub fn format_note_file(title: &str, body: &str) -> String {
-    format!("# {}\n\n{}\n", title, body.trim_end())
+pub fn format_note_file(title: &str, body: &str, tags: &[String]) -> String {
+    let inner = format!("# {}\n\n{}\n", title, body.trim_end());
+    if tags.is_empty() {
+        inner
+    } else {
+        format!("{}{}", format_frontmatter(tags), inner)
+    }
 }
 
 pub fn excerpt_of(body: &str, max: usize) -> String {
@@ -161,6 +275,8 @@ pub fn upsert_graph_node(
     path: &str,
     outgoing_titles: &[String],
     memory_id: Option<u64>,
+    tags: &[String],
+    updated_seq: u64,
 ) {
     let outgoing: Vec<String> = outgoing_titles.iter().map(|t| slugify(t)).collect();
     let node = GraphNode {
@@ -168,8 +284,16 @@ pub fn upsert_graph_node(
         path: path.to_string(),
         outgoing,
         memory_id,
+        tags: normalize_tags(tags.iter().map(|s| s.as_str())),
+        updated_seq,
     };
     graph.notes.insert(slug.to_string(), node);
+}
+
+/// Incrémente et retourne le compteur d'écriture du graphe.
+pub fn bump_write_seq(graph: &mut NoteGraph) -> u64 {
+    graph.write_seq = graph.write_seq.saturating_add(1);
+    graph.write_seq
 }
 
 /// Retire un nœud et les arêtes sortantes qui le ciblaient.
@@ -391,8 +515,26 @@ mod tests {
         let (t, b) = split_title_body("# Title\n\nBody here\n");
         assert_eq!(t.as_deref(), Some("Title"));
         assert_eq!(b.trim_end(), "Body here");
-        let file = format_note_file("Title", "Body");
+        let file = format_note_file("Title", "Body", &[]);
         assert!(file.starts_with("# Title\n\nBody\n"));
+    }
+
+    #[test]
+    fn frontmatter_tags_roundtrip() {
+        let file = format_note_file("Title", "Body", &["Travail".into(), "idées".into()]);
+        let (fm, rest, had) = split_frontmatter(&file);
+        assert!(had);
+        assert_eq!(fm.tags, vec!["Travail", "idées"]);
+        let (t, b) = split_title_body(&file);
+        assert_eq!(t.as_deref(), Some("Title"));
+        assert_eq!(b.trim_end(), "Body");
+        assert!(rest.starts_with("# Title"));
+        let empty = format_frontmatter(&[]);
+        let (fm2, body2, had2) = split_frontmatter(&format!("{empty}Hello"));
+        assert!(had2);
+        assert!(fm2.tags.is_empty());
+        assert_eq!(body2, "Hello");
+        assert_eq!(normalize_tags(["  A ", "a", "", "B"]), vec!["A", "B"]);
     }
 
     #[test]
@@ -405,6 +547,8 @@ mod tests {
             "/documents/notes/a.md",
             &["B".into()],
             Some(1),
+            &[],
+            1,
         );
         upsert_graph_node(
             &mut g,
@@ -413,6 +557,8 @@ mod tests {
             "/documents/notes/b.md",
             &["C".into()],
             Some(2),
+            &["lab".into()],
+            2,
         );
         upsert_graph_node(
             &mut g,
@@ -421,6 +567,8 @@ mod tests {
             "/documents/notes/c.md",
             &[],
             Some(3),
+            &[],
+            3,
         );
         let out = outgoing_refs(&g, "a");
         assert_eq!(out.len(), 1);
@@ -467,6 +615,8 @@ mod tests {
             "/documents/notes/a.md",
             &["B".into()],
             Some(1),
+            &["x".into()],
+            1,
         );
         upsert_graph_node(
             &mut g,
@@ -475,6 +625,8 @@ mod tests {
             "/documents/notes/b.md",
             &[],
             Some(2),
+            &[],
+            2,
         );
         remove_graph_node(&mut g, "b");
         assert!(!g.notes.contains_key("b"));

@@ -216,6 +216,39 @@ pub(crate) async fn invoke_notes(
                     let hits = notes_panel::parse_related(&r.result);
                     let _ = evt_tx.send(Evt::NotesRelated(hits));
                 }
+                "notes.delete" => {
+                    let path = r
+                        .result
+                        .get("path")
+                        .and_then(|p| p.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let _ = evt_tx.send(Evt::NotesDeleted { path });
+                    let list_req = ModuleInvokeRequest {
+                        module: "notes".into(),
+                        tool: "notes.list".into(),
+                        args: serde_json::json!({}),
+                        actor: "human:ui".into(),
+                        actor_caps: vec![
+                            "fs.read:/documents/notes/**".into(),
+                            "tool.invoke:notes".into(),
+                        ],
+                        trace_id: "ui-notes-list-after-delete".into(),
+                    };
+                    if let Ok(lr) = bus
+                        .call::<ModuleInvokeRequest, ModuleInvokeResponse>(
+                            "module.invoke",
+                            &list_req,
+                            vec![],
+                        )
+                        .await
+                    {
+                        if lr.ok {
+                            let notes = notes_panel::parse_list_result(&lr.result);
+                            let _ = evt_tx.send(Evt::NotesListed(notes));
+                        }
+                    }
+                }
                 "notes.create" | "notes.update" => {
                     let path = r
                         .result

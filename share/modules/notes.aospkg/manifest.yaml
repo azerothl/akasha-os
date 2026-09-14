@@ -1,6 +1,6 @@
 name: notes
 version: 1.1.0
-hash: 7e6fd20eb4036bc264d59e81f48343785506bdc3e9d612c33d40d38f29c902ca
+hash: ebb567931cf875a763978e0397847a4223b632685ec41ded969d2bf2adf67ac8
 permissions:
   required_caps:
     - fs.read:/documents/notes/**
@@ -15,6 +15,7 @@ tools:
       properties:
         title: { type: string }
         content: { type: string }
+        tags: { type: array, items: { type: string } }
       required: [title, content]
     output_schema:
       type: object
@@ -33,9 +34,10 @@ tools:
         slug: { type: string }
         content: { type: string }
         new_title: { type: string }
+        tags: { type: array, items: { type: string } }
       required: [content]
   - name: notes.list
-    description: List notes (title, path, excerpt)
+    description: List notes (title, path, excerpt, tags)
     input_schema:
       type: object
     output_schema:

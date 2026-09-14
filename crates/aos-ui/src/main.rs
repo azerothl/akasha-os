@@ -470,10 +470,25 @@ fn format_notes_tool_result(tool: &str, result: &serde_json::Value) -> String {
                 let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("?");
                 let path = item.get("path").and_then(|p| p.as_str()).unwrap_or("");
                 let excerpt = item.get("excerpt").and_then(|e| e.as_str()).unwrap_or("");
-                if excerpt.is_empty() {
-                    out.push_str(&format!("  - {title} ({path})\n"));
+                let tags = item
+                    .get("tags")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|t| t.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
+                let tag_bit = if tags.is_empty() {
+                    String::new()
                 } else {
-                    out.push_str(&format!("  - {title} ({path})\n    {excerpt}\n"));
+                    format!(" [{tags}]")
+                };
+                if excerpt.is_empty() {
+                    out.push_str(&format!("  - {title}{tag_bit} ({path})\n"));
+                } else {
+                    out.push_str(&format!("  - {title}{tag_bit} ({path})\n    {excerpt}\n"));
                 }
             }
             return out;

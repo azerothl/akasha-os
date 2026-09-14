@@ -10,6 +10,7 @@ tools:
   - notes.search
   - notes.links
   - notes.related
+  - notes.delete
 ---
 
 # Rédacteur de notes
@@ -37,3 +38,5 @@ Utilise les outils `notes.*` pour gérer les notes sous `/documents/notes/`.
 
 - `notes.related` score les voisins du graphe (sortants + backlinks) contre `topic`.
 - Garde les titres stables : le rename (nouveau slug) n'est pas supporté en v1.
+- Classe avec `tags` à la création/mise à jour (`["travail", "idées"]`) pour retrouver les notes.
+- Supprime avec `notes.delete` `{ title|path|slug }` après avoir listé/recherché la cible.

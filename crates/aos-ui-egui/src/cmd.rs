@@ -158,6 +158,11 @@ pub(crate) enum Cmd {
         path: String,
         topic: String,
     },
+    NotesDelete {
+        title: Option<String>,
+        path: Option<String>,
+        slug: Option<String>,
+    },
     UserLibraryList,
     UserLibraryAdd {
         path: String,
@@ -633,6 +638,9 @@ pub(crate) enum Evt {
         title: String,
         content: String,
         path: Option<String>,
+    },
+    NotesDeleted {
+        path: String,
     },
     /// Payload brut (compat scénarios / debug).
     Notes(String),
