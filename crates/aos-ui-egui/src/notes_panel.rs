@@ -354,7 +354,7 @@ fn collect_unique_tags(notes: &[NoteListItem]) -> Vec<String> {
             }
         }
     }
-    tags.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    tags.sort_by_key(|a| a.to_lowercase());
     tags
 }
 
@@ -375,11 +375,9 @@ pub fn visible_notes<'a>(
                 .cmp(&a.updated_seq)
                 .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
         }),
-        NotesSort::TitleAsc => {
-            items.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
-        }
+        NotesSort::TitleAsc => items.sort_by_key(|a| a.title.to_lowercase()),
         NotesSort::TitleDesc => {
-            items.sort_by(|a, b| b.title.to_lowercase().cmp(&a.title.to_lowercase()))
+            items.sort_by_key(|a| std::cmp::Reverse(a.title.to_lowercase()))
         }
     }
     items
@@ -1007,11 +1005,13 @@ mod tests {
 
     #[test]
     fn apply_deleted_clears_open_note() {
-        let mut state = NotesPanelState::default();
-        state.notes = vec![sample_note("Alpha", &[], 1)];
-        state.selected_path = Some("/documents/notes/alpha.md".into());
-        state.edit_path = Some("/documents/notes/alpha.md".into());
-        state.is_new = false;
+        let mut state = NotesPanelState {
+            notes: vec![sample_note("Alpha", &[], 1)],
+            selected_path: Some("/documents/notes/alpha.md".into()),
+            edit_path: Some("/documents/notes/alpha.md".into()),
+            is_new: false,
+            ..Default::default()
+        };
         state.apply_deleted("/documents/notes/alpha.md", "Deleted");
         assert!(state.notes.is_empty());
         assert!(state.is_new);
