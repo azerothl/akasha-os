@@ -16,6 +16,9 @@ pub(crate) struct ChatRuntimeState {
     pub(crate) outgoing_turn: Option<ChatRetryTurn>,
     /// Last load-failed turn shown with Retry chrome.
     pub(crate) load_fail_retry: Option<ChatRetryTurn>,
+    /// A stream that stopped after emitting content; keeps enough context for
+    /// a one-click continuation instead of forcing the user to restate the ask.
+    pub(crate) continue_retry: Option<ChatRetryTurn>,
     /// Unix ms when the current pending/streaming turn started.
     pub(crate) started_ms: u64,
     /// Live inference phase while pending (before first token).
@@ -59,6 +62,7 @@ mod tests {
             room_progress: None,
             outgoing_turn: None,
             load_fail_retry: None,
+            continue_retry: None,
             started_ms: 0,
             infer_phase: ChatInferPhase::WaitingFirstToken,
         };

@@ -100,6 +100,7 @@ impl UiApp {
                 let mut document_result_open: Option<(String, String)> = None;
                 let mut artifact_open: Option<artifact_card::ArtifactTarget> = None;
                 let mut schedule_act: Option<(String, usize, bool)> = None;
+                let mut session_branch_action: Option<(usize, bool)> = None;
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self
@@ -731,6 +732,18 @@ impl UiApp {
                             copied = true;
                             ui.close_menu();
                         }
+                        if matches!(role.as_str(), "user" | "vous" | "assistant")
+                            && self.chat_state.active_session.is_some()
+                        {
+                            if ui.button(t.chat_fork_here).clicked() {
+                                session_branch_action = Some((i + 1, true));
+                                ui.close_menu();
+                            }
+                            if ui.button(t.chat_return_here).clicked() {
+                                session_branch_action = Some((i + 1, false));
+                                ui.close_menu();
+                            }
+                        }
                     });
                     if copied {
                         self.push_status(t.copied.into());
@@ -793,6 +806,28 @@ impl UiApp {
                         self.approve_schedule_act(&act_id, msg_idx);
                     } else {
                         self.deny_schedule_act(&act_id, msg_idx);
+                    }
+                }
+                if let Some((keep_messages, fork)) = session_branch_action {
+                    if let Some(session_id) = self.chat_state.active_session.clone() {
+                        if fork {
+                            let title = self
+                                .chat_state
+                                .sessions
+                                .iter()
+                                .find(|session| session.id == session_id)
+                                .map(|session| format!("{} · branch", session.title));
+                            let _ = self.cmd_tx.send(Cmd::SessionFork {
+                                session_id,
+                                keep_messages,
+                                title,
+                            });
+                        } else {
+                            let _ = self.cmd_tx.send(Cmd::SessionTruncate {
+                                session_id,
+                                keep_messages,
+                            });
+                        }
                     }
                 }
                 if let Some(id) = open_agent {
@@ -946,6 +981,12 @@ impl UiApp {
                         }
                         crate::chat_load_fail::RecoveryAction::None => {}
                     }
+                }
+                if self.chat_state.runtime.continue_retry.is_some()
+                    && self.chat_state.active_session.is_some()
+                    && crate::chat_load_fail::render_partial_recovery(ui, t)
+                {
+                    self.continue_partial_turn();
                 }
                 ui.add_space(TRANSCRIPT_BOTTOM_PADDING);
             });

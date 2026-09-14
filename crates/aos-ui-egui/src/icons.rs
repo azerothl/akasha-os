@@ -1928,6 +1928,36 @@ pub fn bell_button(ui: &mut Ui) -> Response {
     response
 }
 
+/// Notification centre toggle with an explicit pending-state treatment. The
+/// dot duplicates the colour cue with a shape so permission requests remain
+/// discoverable in high-contrast themes and at a glance.
+pub fn notification_button(ui: &mut Ui, emphasized: bool) -> Response {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    let tc = crate::theme::button_colors(ui);
+    let color = if emphasized {
+        tc.warning
+    } else {
+        hover_color(ui, &response)
+    };
+    if ui.is_rect_visible(rect) {
+        if emphasized {
+            ui.painter().rect_filled(
+                rect,
+                crate::theme::RADIUS_SM as f32,
+                ui.visuals().widgets.hovered.bg_fill,
+            );
+            ui.painter().circle_filled(
+                rect.right_top() + Vec2::new(-5.0, 5.0),
+                3.0,
+                tc.danger,
+            );
+        }
+        paint_bell(ui, glyph_rect(rect), color);
+    }
+    response
+}
+
 /// Layer visibility toggle (replaces `👁` / em dash).
 pub fn visibility_toggle_button(ui: &mut Ui, visible: bool) -> Response {
     layer_action_icon_button(ui, |ui, rect, color| paint_eye(ui, rect, color, visible))

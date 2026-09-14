@@ -5680,6 +5680,24 @@ pub struct ChatSessionAppendRequest {
     pub thinking: Option<String>,
 }
 
+/// Create a non-destructive conversation branch from a message prefix.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionForkRequest {
+    pub session_id: String,
+    /// Number of messages to copy, in transcript order.
+    pub keep_messages: usize,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// Remove the tail of a conversation while keeping the selected prefix.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionTruncateRequest {
+    pub session_id: String,
+    /// Number of messages to keep, in transcript order.
+    pub keep_messages: usize,
+}
+
 /// Upsert the single Deep Thinking plan card in a session transcript.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSessionUpsertDeepPlanRequest {

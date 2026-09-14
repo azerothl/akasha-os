@@ -670,7 +670,9 @@ impl HostServices for PlatformSubsystem {
                 let ns = args["namespace"].as_str().unwrap_or("");
                 let text = args["text"].as_str().unwrap_or("");
                 Self::require_cap(ctx, "mem.write", ns)?;
-                let vector = self.embed_text(text)?;
+                // Keep memory writes available while the optional embedding
+                // model is unavailable. The entry can be re-indexed later.
+                let vector = self.embed_text(text).unwrap_or_default();
                 let id = self.mem.lock().unwrap().episodic_write(
                     ns,
                     text,
@@ -692,12 +694,28 @@ impl HostServices for PlatformSubsystem {
                 let query = args["query"].as_str().unwrap_or("");
                 let k = args["k"].as_u64().unwrap_or(5) as usize;
                 Self::require_cap(ctx, "mem.query", ns)?;
-                let vector = self.embed_text(query)?;
-                let hits = self.mem.lock().unwrap().episodic_query(
-                    &vector,
-                    k,
-                    if ns.is_empty() { None } else { Some(ns) },
-                );
+                let vector = self.embed_text(query).unwrap_or_default();
+                let namespace = if ns.is_empty() { None } else { Some(ns) };
+                let mut hits = self.mem.lock().unwrap().episodic_query(&vector, k, namespace);
+                if hits.is_empty() && vector.is_empty() {
+                    let terms: Vec<String> = query
+                        .split_whitespace()
+                        .map(|term| term.to_lowercase())
+                        .filter(|term| term.len() > 1)
+                        .collect();
+                    hits = self
+                        .mem
+                        .lock()
+                        .unwrap()
+                        .list(ns, false)
+                        .into_iter()
+                        .filter(|hit| {
+                            let haystack = hit.text.to_lowercase();
+                            terms.is_empty() || terms.iter().all(|term| haystack.contains(term))
+                        })
+                        .take(k.max(1))
+                        .collect();
+                }
                 Ok(serde_json::json!({"hits": hits}))
             }
             "mem.episodic_delete" => {

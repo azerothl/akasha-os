@@ -668,7 +668,12 @@ impl ChatSessionStore {
         model_id: Option<String>,
     ) -> Result<ChatSessionMeta, SessionError> {
         let ts = Self::now_ms();
-        let id = format!("sess-{ts}");
+        let mut id = format!("sess-{ts}");
+        let mut suffix = 0u64;
+        while self.dir(&id).exists() {
+            suffix = suffix.saturating_add(1);
+            id = format!("sess-{}-{}", ts, suffix);
+        }
         let title = title
             .filter(|t| !t.trim().is_empty())
             .unwrap_or_else(|| format!("Session {}", &id[5..]));
@@ -765,6 +770,41 @@ impl ChatSessionStore {
         meta.updated_ms = msg.ts_ms;
         self.save_meta(&meta)?;
         Ok(msg)
+    }
+
+    /// Create a new session containing a prefix of the source transcript.
+    /// This is the persistence primitive behind the UI's "fork here" action.
+    pub fn fork(
+        &self,
+        id: &str,
+        keep_messages: usize,
+        title: Option<String>,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        let (source_meta, messages) = self.get(id)?;
+        let branch_title = title
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| format!("{} · branch", source_meta.title));
+        let created = self.create(Some(branch_title), source_meta.model_id.clone())?;
+        let mut branch = self.load_meta(&created.id)?;
+        branch.mode = source_meta.mode;
+        branch.members = source_meta.members;
+        branch.conductor_policy = source_meta.conductor_policy;
+        branch.canvas_aspect = source_meta.canvas_aspect;
+        self.save_meta(&branch)?;
+        self.rewrite_messages(&created.id, &messages[..keep_messages.min(messages.len())])?;
+        Ok(self.to_public(self.load_meta(&created.id)?))
+    }
+
+    /// Destructively keep only a transcript prefix. Callers should expose this
+    /// as an explicit "return" action; normal branching uses [`Self::fork`].
+    pub fn truncate(&self, id: &str, keep_messages: usize) -> Result<ChatSessionMeta, SessionError> {
+        let (_, messages) = self.get(id)?;
+        let mut meta = self.load_meta(id)?;
+        let keep = keep_messages.min(messages.len());
+        self.rewrite_messages(id, &messages[..keep])?;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        Ok(self.to_public(meta))
     }
 
     /// Keep a single DeepPlan card per plan/agent in the transcript (update in place).
@@ -1242,6 +1282,34 @@ mod tests {
         assert_eq!(meta.message_count, 2);
         assert_eq!(msgs.len(), 2);
         assert_eq!(s.list(false).unwrap().len(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fork_copies_prefix_and_truncate_keeps_prefix() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-branch-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let source = s.create(Some("Source".into()), None).unwrap();
+        s.append(&source.id, "user", "first", vec![], None, None, None)
+            .unwrap();
+        s.append(&source.id, "assistant", "answer", vec![], None, None, None)
+            .unwrap();
+        s.append(&source.id, "user", "later", vec![], None, None, None)
+            .unwrap();
+
+        let branch = s
+            .fork(&source.id, 2, Some("Alternative".into()))
+            .unwrap();
+        let (_, branch_messages) = s.get(&branch.id).unwrap();
+        assert_eq!(branch_messages.len(), 2);
+        assert_eq!(branch_messages[1].content, "answer");
+
+        let returned = s.truncate(&source.id, 2).unwrap();
+        assert_eq!(returned.message_count, 2);
+        let (_, source_messages) = s.get(&source.id).unwrap();
+        assert_eq!(source_messages.len(), 2);
+        assert_eq!(source_messages[1].content, "answer");
         let _ = fs::remove_dir_all(&dir);
     }
 

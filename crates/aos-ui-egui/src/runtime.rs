@@ -23,10 +23,12 @@ use aos_proto::{
     AgentRoomConductProgress, AgentRosterUpdateRequest, AgentSpecResponse, AgentState,
     AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest, CancelRequest, CapInfo,
     CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
-    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionForkRequest,
+    ChatSessionGetResponse, ChatSessionIdRequest,
     ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
     ChatSessionRenameRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
     ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest,
+    ChatSessionTruncateRequest,
     ChatSessionSetModeRequest, ChatSessionSetModelRequest, ChatSessionSetPinnedRequest,
     ConfirmResponseRequest, DeviceCaptureStopRequest, DevicePermissionRevokeRequest,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
@@ -4174,6 +4176,57 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     vec![],
                 )
                 .await;
+        }
+        Cmd::SessionFork {
+            session_id,
+            keep_messages,
+            title,
+        } => {
+            match bus
+                .call::<ChatSessionForkRequest, ChatSessionMeta>(
+                    "chat.session.fork",
+                    &ChatSessionForkRequest {
+                        session_id,
+                        keep_messages,
+                        title,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(meta) => {
+                    let _ = evt_tx.send(Evt::Status(format!("session branch: {}", meta.title)));
+                    refresh_sessions(&bus, &evt_tx).await;
+                    announce_and_load_session(&bus, &evt_tx, &meta.id).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("session fork: {e}")));
+                }
+            }
+        }
+        Cmd::SessionTruncate {
+            session_id,
+            keep_messages,
+        } => {
+            match bus
+                .call::<ChatSessionTruncateRequest, ChatSessionMeta>(
+                    "chat.session.truncate",
+                    &ChatSessionTruncateRequest {
+                        session_id: session_id.clone(),
+                        keep_messages,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(_) => {
+                    refresh_sessions(&bus, &evt_tx).await;
+                    load_session(&bus, &evt_tx, &session_id).await;
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::Error(format!("session return: {e}")));
+                }
+            }
         }
         Cmd::SessionSetMode { session_id, mode } => {
             match bus

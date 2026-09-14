@@ -513,6 +513,15 @@ pub(crate) enum Cmd {
         content: String,
         attachments: Vec<ChatAttachment>,
     },
+    SessionFork {
+        session_id: String,
+        keep_messages: usize,
+        title: Option<String>,
+    },
+    SessionTruncate {
+        session_id: String,
+        keep_messages: usize,
+    },
     ChatCancel {
         inference_id: u64,
         session_id: String,

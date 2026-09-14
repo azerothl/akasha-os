@@ -2248,6 +2248,229 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         }
     }
 
+    fn ui_notifications_popup(&mut self, ctx: &egui::Context, t: &i18n::UiStrings) {
+        if !self.prefs.ui_layout.notifications_open {
+            return;
+        }
+        let fr = self.prefs.language == "fr";
+        egui::Window::new("Notifications")
+            .id(egui::Id::new("notification_centre_popup"))
+            .collapsible(false)
+            .resizable(true)
+            .default_width(440.0)
+            .min_width(320.0)
+            .max_width(560.0)
+            .anchor(egui::Align2::RIGHT_TOP, [-12.0, 42.0])
+            .show(ctx, |ui| {
+                let notice_count = self.agent_ui.notices.len();
+                let confirmation_count = self.confirmations_ui.len();
+                ui.horizontal(|ui| {
+                    ui.strong(if fr {
+                        "Centre de notifications"
+                    } else {
+                        "Notification centre"
+                    });
+                    ui.weak(format!("{}", notice_count + confirmation_count));
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if icons::close_button(ui).clicked() {
+                                self.prefs.ui_layout.notifications_open = false;
+                                save_preferences(&self.prefs);
+                            }
+                        },
+                    );
+                });
+                ui.separator();
+                let max_height = (ctx.screen_rect().height() - 120.0).max(220.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("notification_centre_scroll")
+                    .auto_shrink([false, false])
+                    .max_height(max_height)
+                    .show(ui, |ui| {
+                        if confirmation_count > 0 {
+                            ui.colored_label(
+                                crate::theme::button_colors(ui).warning,
+                                t.confirm_pending.replace(
+                                    "{n}",
+                                    &confirmation_count.to_string(),
+                                ),
+                            );
+                            ui.weak(if fr {
+                                "Une action d’agent attend votre décision."
+                            } else {
+                                "An agent action is waiting for your decision."
+                            });
+                            for c in self.confirmations_ui.pending.clone() {
+                                let device_capture = c.action.starts_with("device.camera.")
+                                    || c.action.starts_with("device.mic.");
+                                let device_usb = c.action.starts_with("device.usb.");
+                                let folder_grant =
+                                    c.action == aos_proto::HOST_FOLDER_ACCESS_ACTION;
+                                let device_grant = device_capture || device_usb || folder_grant;
+                                let rich = device_grant
+                                    || matches!(
+                                        c.action.as_str(),
+                                        "module.install"
+                                            | "module.uninstall"
+                                            | "module.compile"
+                                            | "skill.create"
+                                            | "cap.request"
+                                            | "media.generate"
+                                            | "media.image.generate"
+                                            | "media.audio.generate"
+                                    );
+                                egui::Frame::group(ui.style())
+                                    .inner_margin(egui::Margin::symmetric(10, 8))
+                                    .show(ui, |ui| {
+                                        ui.label(if folder_grant {
+                                            t.folder_grant_title.to_string()
+                                        } else {
+                                            t.confirm_wants_action.replace(
+                                                "{action}",
+                                                &i18n::confirm_action_label(&t, &c.action),
+                                            )
+                                        });
+                                        ui.add(
+                                            egui::Label::new(if folder_grant {
+                                                egui::RichText::new(&c.target).color(
+                                                    crate::theme::button_colors(ui).warning,
+                                                )
+                                            } else {
+                                                egui::RichText::new(format!(
+                                                    "{} → {}",
+                                                    c.target, c.reason
+                                                ))
+                                            })
+                                            .wrap(),
+                                        );
+                                        if device_capture {
+                                            ui.colored_label(
+                                                crate::theme::button_colors(ui).warning,
+                                                format!(
+                                                    "{} · {}",
+                                                    t.device_camera, t.device_microphone
+                                                ),
+                                            );
+                                        } else if device_usb {
+                                            ui.colored_label(
+                                                crate::theme::button_colors(ui).warning,
+                                                t.device_usb,
+                                            );
+                                        } else if rich {
+                                            ui.colored_label(
+                                                crate::theme::button_colors(ui).warning,
+                                                if fr {
+                                                    "Extension OS : revue des caps / manifeste requise"
+                                                } else {
+                                                    "OS extension: capability / manifest review required"
+                                                },
+                                            );
+                                        }
+                                        ui.horizontal_wrapped(|ui| {
+                                            if (!device_grant
+                                                && ui.button(t.confirm_grant).clicked())
+                                                || (device_grant
+                                                    && ui.button(t.device_allow_once).clicked())
+                                            {
+                                                let _ = self.cmd_tx.send(Cmd::Confirm {
+                                                    id: c.id.clone(),
+                                                    approved: true,
+                                                    persistent: false,
+                                                });
+                                                self.scenario_ui.confirm = true;
+                                            }
+                                            if device_grant && ui.button(t.device_always).clicked() {
+                                                let _ = self.cmd_tx.send(Cmd::Confirm {
+                                                    id: c.id.clone(),
+                                                    approved: true,
+                                                    persistent: true,
+                                                });
+                                                self.scenario_ui.confirm = true;
+                                            }
+                                            if ui
+                                                .button(if device_grant {
+                                                    t.device_deny
+                                                } else {
+                                                    t.confirm_deny
+                                                })
+                                                .clicked()
+                                            {
+                                                let _ = self.cmd_tx.send(Cmd::Confirm {
+                                                    id: c.id.clone(),
+                                                    approved: false,
+                                                    persistent: false,
+                                                });
+                                                self.scenario_ui.confirm = true;
+                                            }
+                                        });
+                                    });
+                                ui.add_space(6.0);
+                            }
+                        }
+
+                        if notice_count > 0 {
+                            ui.colored_label(
+                                crate::theme::button_colors(ui).accent,
+                                if fr { "Alertes agents" } else { "Agent notices" },
+                            );
+                            let mut notices = self.agent_ui.notices.clone();
+                            notices.sort_by_key(|n| match n.severity {
+                                NoticeSeverity::Urgent => 0,
+                                NoticeSeverity::Warning => 1,
+                                NoticeSeverity::Info => 2,
+                            });
+                            let mut dismiss: Vec<String> = Vec::new();
+                            let mut open_sess: Option<String> = None;
+                            for n in &notices {
+                                ui.horizontal_wrapped(|ui| {
+                                    let dot = match n.severity {
+                                        NoticeSeverity::Urgent => {
+                                            crate::theme::button_colors(ui).danger
+                                        }
+                                        NoticeSeverity::Warning => {
+                                            crate::theme::button_colors(ui).warning
+                                        }
+                                        NoticeSeverity::Info => {
+                                            crate::theme::button_colors(ui).accent
+                                        }
+                                    };
+                                    icons::status_dot(ui, dot);
+                                    ui.label(&n.summary);
+                                    if ui.button(if fr { "Ouvrir" } else { "Open" }).clicked() {
+                                        open_sess = Some(n.session_id.clone());
+                                        dismiss.push(n.agent_id.clone());
+                                    }
+                                    if icons::close_button(ui).clicked() {
+                                        dismiss.push(n.agent_id.clone());
+                                    }
+                                });
+                            }
+                            self.agent_ui.dismiss_notices(&dismiss);
+                            if let Some(id) = open_sess {
+                                self.tab = Tab::Chat;
+                                self.request_session_select(id);
+                            }
+                            if ui
+                                .button(if fr { "Tout marquer lu" } else { "Mark all read" })
+                                .clicked()
+                            {
+                                let ids: Vec<String> =
+                                    notices.iter().map(|n| n.agent_id.clone()).collect();
+                                self.agent_ui.dismiss_notices(&ids);
+                            }
+                        }
+                        if notice_count == 0 && confirmation_count == 0 {
+                            ui.weak(if fr {
+                                "Aucune notification en attente."
+                            } else {
+                                "No pending notifications."
+                            });
+                        }
+                    });
+            });
+    }
+
     fn status_clock_label(ui: &mut egui::Ui, text: impl Into<egui::RichText>) -> egui::Response {
         ui.add(egui::Label::new(text.into().small()).sense(egui::Sense::click()))
     }
@@ -3102,6 +3325,8 @@ impl eframe::App for UiApp {
                     );
                 }
                 Evt::ChatCancelled { session_id } => {
+                    let partial = self.chat_state.runtime.streaming.clone();
+                    let retry = self.chat_state.runtime.outgoing_turn.take();
                     let on_active = session_chat::on_chat_cancelled(
                         &mut self.chat_state.session_chat,
                         self.chat_state.active_session.as_deref(),
@@ -3118,6 +3343,9 @@ impl eframe::App for UiApp {
                             chat_pending_status::ChatInferPhase::Preparing;
                         let t = i18n::strings(&self.prefs.language);
                         self.status = t.chat_stopped.into();
+                        if let Some(retry) = retry {
+                            self.arm_partial_continuation(retry, partial);
+                        }
                     }
                 }
                 Evt::Catalogue(c) => module_event_controller::on_catalogue(self, c),
@@ -3300,16 +3528,43 @@ impl eframe::App for UiApp {
         egui::TopBottomPanel::top("banner").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let count = self.agent_ui.notices.len();
+                let confirmation_count = self.confirmations_ui.len();
+                let has_pending_attention = confirmation_count > 0 || count > 0;
                 ui.horizontal(|ui| {
-                    if icons::bell_button(ui)
-                        .on_hover_text("Centre de notifications")
+                    if icons::notification_button(ui, has_pending_attention)
+                        .on_hover_text(if confirmation_count > 0 {
+                            format!(
+                                "{} — {}",
+                                if self.prefs.language == "fr" {
+                                    "Demandes d’autorisation en attente"
+                                } else {
+                                    "Permission requests pending"
+                                },
+                                if self.prefs.ui_layout.notifications_open {
+                                    if self.prefs.language == "fr" { "masquer" } else { "hide" }
+                                } else if self.prefs.language == "fr" {
+                                    "afficher"
+                                } else {
+                                    "show"
+                                }
+                            )
+                        } else {
+                            "Centre de notifications".to_string()
+                        })
                         .clicked()
                     {
                         self.prefs.ui_layout.notifications_open =
                             !self.prefs.ui_layout.notifications_open;
                         save_preferences(&self.prefs);
                     }
-                    ui.label(format!("{count}"));
+                    ui.colored_label(
+                        if confirmation_count > 0 {
+                            crate::theme::button_colors(ui).warning
+                        } else {
+                            ui.visuals().weak_text_color()
+                        },
+                        format!("{}", count + confirmation_count),
+                    );
                 });
                 ui.weak(format!("Preview {} — {}", self.version, t.preview_tagline));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -3333,171 +3588,12 @@ impl eframe::App for UiApp {
                     .on_hover_text(t.preview_help_menu);
                 });
             });
-            if self.prefs.ui_layout.notifications_open && !self.agent_ui.notices.is_empty() {
-                let mut notices = self.agent_ui.notices.clone();
-                // S6 : urgents d'abord (questions bloquantes, échecs).
-                notices.sort_by_key(|n| match n.severity {
-                    NoticeSeverity::Urgent => 0,
-                    NoticeSeverity::Warning => 1,
-                    NoticeSeverity::Info => 2,
-                });
-                let fr = self.prefs.language == "fr";
-                ui.horizontal(|ui| {
-                    ui.weak(format!(
-                        "{} · {}",
-                        t.preview_tagline,
-                        if fr {
-                            format!("{} non lues", notices.len())
-                        } else {
-                            format!("{} unread", notices.len())
-                        }
-                    ));
-                    if ui
-                        .small_button(if fr {
-                            "Tout marquer lu"
-                        } else {
-                            "Mark all read"
-                        })
-                        .clicked()
-                    {
-                        let ids: Vec<String> = notices.iter().map(|n| n.agent_id.clone()).collect();
-                        self.agent_ui.dismiss_notices(&ids);
-                        notices.clear();
-                    }
-                });
-                let mut dismiss: Vec<String> = Vec::new();
-                let mut open_sess: Option<String> = None;
-                for n in &notices {
-                    ui.horizontal(|ui| {
-                        // Pastille de sévérité (thème, pas de couleur en dur).
-                        let dot = match n.severity {
-                            NoticeSeverity::Urgent => crate::theme::button_colors(ui).danger,
-                            NoticeSeverity::Warning => crate::theme::button_colors(ui).warning,
-                            NoticeSeverity::Info => crate::theme::button_colors(ui).accent,
-                        };
-                        icons::status_dot(ui, dot);
-                        ui.colored_label(egui::Color32::from_rgb(120, 180, 230), &n.summary);
-                        let sess_title = self
-                            .chat_state
-                            .sessions
-                            .iter()
-                            .find(|s| s.id == n.session_id)
-                            .map(|s| s.title.clone())
-                            .unwrap_or_else(|| n.session_id.clone());
-                        ui.label(format!("— {sess_title}"));
-                        if ui.button("Ouvrir").clicked() {
-                            open_sess = Some(n.session_id.clone());
-                            dismiss.push(n.agent_id.clone());
-                        }
-                        if icons::close_button(ui).clicked() {
-                            dismiss.push(n.agent_id.clone());
-                        }
-                    });
-                }
-                self.agent_ui.dismiss_notices(&dismiss);
-                if let Some(id) = open_sess {
-                    self.tab = Tab::Chat;
-                    self.request_session_select(id);
-                }
-            }
             if self.models_ui.model_download_restart.is_some() {
                 self.ui_model_download_restart(ui, ctx);
             }
-            // Confirmations en attente
-            if !self.confirmations_ui.is_empty() {
-                ui.separator();
-                ui.colored_label(
-                    egui::Color32::LIGHT_RED,
-                    t.confirm_pending
-                        .replace("{n}", &self.confirmations_ui.len().to_string()),
-                );
-                overflow_scroll_h(ui, "pending_confirms", 180.0, |ui| {
-                    for c in self.confirmations_ui.pending.clone() {
-                        ui.group(|ui| {
-                            let device_capture = c.action.starts_with("device.camera.")
-                                || c.action.starts_with("device.mic.");
-                            let device_usb = c.action.starts_with("device.usb.");
-                            let folder_grant = c.action == aos_proto::HOST_FOLDER_ACCESS_ACTION;
-                            let device_grant = device_capture || device_usb || folder_grant;
-                            let rich = device_grant
-                                || matches!(
-                                    c.action.as_str(),
-                                    "module.install"
-                                        | "module.uninstall"
-                                        | "module.compile"
-                                        | "skill.create"
-                                        | "cap.request"
-                                        | "media.generate"
-                                        | "media.image.generate"
-                                        | "media.audio.generate"
-                                );
-                            ui.label(if folder_grant {
-                                t.folder_grant_title.to_string()
-                            } else {
-                                t.confirm_wants_action
-                                    .replace("{action}", &i18n::confirm_action_label(&t, &c.action))
-                            });
-                            if folder_grant {
-                                ui.colored_label(egui::Color32::from_rgb(220, 180, 80), &c.target);
-                            } else {
-                                ui.monospace(format!("{} → {}", c.target, c.reason));
-                            }
-                            if device_capture {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(220, 180, 80),
-                                    format!("{} · {}", t.device_camera, t.device_microphone),
-                                );
-                            } else if device_usb {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(220, 180, 80),
-                                    t.device_usb,
-                                );
-                            } else if rich {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(220, 180, 80),
-                                    "Extension OS : revue des caps / manifeste requise",
-                                );
-                            }
-                            ui.horizontal(|ui| {
-                                if (!device_grant && ui.button(t.confirm_grant).clicked())
-                                    || (device_grant && ui.button(t.device_allow_once).clicked())
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::Confirm {
-                                        id: c.id.clone(),
-                                        approved: true,
-                                        persistent: false,
-                                    });
-                                    self.scenario_ui.confirm = true;
-                                }
-                                if device_grant && ui.button(t.device_always).clicked() {
-                                    let _ = self.cmd_tx.send(Cmd::Confirm {
-                                        id: c.id.clone(),
-                                        approved: true,
-                                        persistent: true,
-                                    });
-                                    self.scenario_ui.confirm = true;
-                                }
-                                if ui
-                                    .button(if device_grant {
-                                        t.device_deny
-                                    } else {
-                                        t.confirm_deny
-                                    })
-                                    .clicked()
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::Confirm {
-                                        id: c.id.clone(),
-                                        approved: false,
-                                        persistent: false,
-                                    });
-                                    self.scenario_ui.confirm = true;
-                                }
-                            });
-                        });
-                    }
-                });
-            }
         });
+
+        self.ui_notifications_popup(ctx, &t);
 
         let show_sidebar = matches!(
             self.prefs.ui_presentation,

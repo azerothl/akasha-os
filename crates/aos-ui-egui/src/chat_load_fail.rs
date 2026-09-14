@@ -45,3 +45,19 @@ pub(crate) fn render_load_fail_recovery(ui: &mut egui::Ui, t: &UiStrings) -> Rec
     });
     action
 }
+
+/// Recovery chrome for a stream that already produced useful text.
+pub(crate) fn render_partial_recovery(ui: &mut egui::Ui, t: &UiStrings) -> bool {
+    let mut continue_now = false;
+    ui.group(|ui| {
+        ui.label(t.chat_continue_partial);
+        if ui
+            .button(t.chat_continue_partial_hint)
+            .on_hover_text(t.chat_continue_partial_hint)
+            .clicked()
+        {
+            continue_now = true;
+        }
+    });
+    continue_now
+}
