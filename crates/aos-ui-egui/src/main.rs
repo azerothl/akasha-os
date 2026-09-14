@@ -2801,12 +2801,8 @@ impl eframe::App for UiApp {
                 Evt::Health(h) => {
                     let prev = self.security_ui.health_canary_was_ok;
                     if prev == Some(true) && !h.canary_ok {
-                        let fr = self.prefs.language == "fr";
-                        self.push_status(if fr {
-                            "canary: échec".into()
-                        } else {
-                            "canary: failed".into()
-                        });
+                        let t = i18n::strings(&self.prefs.language);
+                        self.push_status(t.health_status_check_failed.into());
                     }
                     self.security_ui.health_canary_was_ok = Some(h.canary_ok);
                     self.security_ui.health = Some(h);

@@ -362,23 +362,21 @@ impl UiApp {
         });
 
         // Santé : plan E23 + redémarrages watchdog + stderr daemons.
-        egui::CollapsingHeader::new(if fr {
-            "Santé (runtime)"
-        } else {
-            "Health (runtime)"
-        })
+        egui::CollapsingHeader::new(t.health_runtime_heading)
         .default_open(true)
         .show(ui, |ui| {
             if let Some(h) = &self.security_ui.health {
                 ui.horizontal(|ui| {
                     if h.canary_ok {
-                        ui.colored_label(crate::theme::button_colors(ui).success, "canary OK");
+                        ui.colored_label(
+                            crate::theme::button_colors(ui).success,
+                            t.health_check_ok,
+                        );
                     } else {
-                        ui.colored_label(crate::theme::button_colors(ui).danger, if fr {
-                            "canary ÉCHEC"
-                        } else {
-                            "canary FAILED"
-                        });
+                        ui.colored_label(
+                            crate::theme::button_colors(ui).danger,
+                            t.health_check_failed,
+                        );
                     }
                     if h.at_ms > 0 {
                         ui.weak(format_local_datetime(h.at_ms, tz));
@@ -393,7 +391,7 @@ impl UiApp {
                         }
                         ui.monospace(format!(
                             "{} — {:.0} ms{}",
-                            step.name,
+                            i18n::health_step_label(&t, &step.name),
                             step.latency_ms,
                             step.error
                                 .as_ref()
@@ -403,22 +401,33 @@ impl UiApp {
                     });
                 }
                 ui.separator();
-                ui.label("SLO (EWMA)");
+                ui.label(t.health_stability_heading);
                 if let Some(ttft) = h.slo.ttft_ewma_ms {
-                    ui.monospace(format!("TTFT EWMA: {ttft:.0} ms (NFR-01 < 2000)"));
+                    ui.monospace(format!(
+                        "{}: {ttft:.0} ms {}",
+                        t.health_first_response_label,
+                        t.health_first_response_target
+                    ));
                 }
                 if let Some(tok) = h.slo.tok_s_ewma {
-                    ui.monospace(format!("tok/s EWMA: {tok:.2}"));
+                    ui.monospace(format!("{}: {tok:.2} tok/s", t.health_generation_speed_label));
                 }
                 if let Some(rtt) = h.slo.bus_rtt_ewma_ms {
-                    ui.monospace(format!("bus RTT EWMA: {rtt:.1} ms"));
+                    ui.monospace(format!("{}: {rtt:.1} ms", t.health_bus_latency_label));
                 }
-                ui.monospace(format!(
-                    "VRAM unload: {} B · restarts 1h: {}",
-                    h.slo.vram_unloaded_bytes, h.slo.restarts_1h
-                ));
+                ui.monospace(
+                    t.health_memory_restarts
+                        .replace("{bytes}", &h.slo.vram_unloaded_bytes.to_string())
+                        .replace("{restarts}", &h.slo.restarts_1h.to_string()),
+                );
                 for b in &h.slo.breaches {
-                    ui.colored_label(crate::theme::button_colors(ui).warning, format!("breach: {b}"));
+                    ui.colored_label(
+                        crate::theme::button_colors(ui).warning,
+                        t.health_issue_label.replace(
+                            "{detail}",
+                            &i18n::health_breach_label(&t, b),
+                        ),
+                    );
                 }
                 if h.anomaly.fitted {
                     let tone = if h.anomaly.score > h.anomaly.threshold {
@@ -428,40 +437,34 @@ impl UiApp {
                     };
                     ui.colored_label(
                         tone,
-                        format!(
-                            "anomaly score {:.2} (threshold {:.2})",
-                            h.anomaly.score, h.anomaly.threshold
-                        ),
+                        t.health_stability_signal
+                            .replace("{score}", &format!("{:.2}", h.anomaly.score))
+                            .replace("{threshold}", &format!("{:.2}", h.anomaly.threshold)),
                     );
                     if !h.anomaly.contributing.is_empty() {
-                        ui.weak(format!("contributing: {}", h.anomaly.contributing.join(", ")));
+                        let factors = h
+                            .anomaly
+                            .contributing
+                            .iter()
+                            .map(|k| i18n::health_contributing_label(&t, k))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        ui.weak(t.health_contributing_factors.replace("{factors}", &factors));
                     }
                 }
                 if !h.clusters.is_empty() {
                     ui.separator();
-                    ui.label(if fr {
-                        "Clusters stderr"
-                    } else {
-                        "Stderr clusters"
-                    });
+                    ui.label(t.health_stderr_clusters);
                     for c in &h.clusters {
                         ui.monospace(format!("{}×{} — {}", c.count, c.label, c.sample));
                     }
                 }
             } else {
-                ui.weak(if fr {
-                    "Pas encore de snapshot health (attente du premier tick)."
-                } else {
-                    "No health snapshot yet (waiting for first tick)."
-                });
+                ui.weak(t.health_no_snapshot);
             }
             ui.separator();
             if self.security_ui.audit_restarts.is_empty() {
-                ui.weak(if fr {
-                    "Aucun redémarrage watchdog enregistré."
-                } else {
-                    "No watchdog restarts recorded."
-                });
+                ui.weak(t.health_no_watchdog_restarts);
             } else {
                 for r in self
                     .security_ui
@@ -482,15 +485,9 @@ impl UiApp {
                             "{} — {}",
                             r.daemon,
                             if r.ok {
-                                if fr {
-                                    "redémarré"
-                                } else {
-                                    "restarted"
-                                }
-                            } else if fr {
-                                "redémarrage ÉCHOUÉ"
+                                t.health_watchdog_restarted
                             } else {
-                                "restart FAILED"
+                                t.health_watchdog_restart_failed
                             }
                         ));
                     });
