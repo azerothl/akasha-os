@@ -38,6 +38,21 @@ fn inject_bundled_font(fonts: &mut FontDefinitions, key: &str, data: FontData) {
     }
 }
 
+/// Body-sized interface font from the active egui style (respects [`apply_ui_font`]).
+pub fn interface_font_id(ui: &egui::Ui) -> egui::FontId {
+    ui.style()
+        .text_styles
+        .get(&egui::TextStyle::Body)
+        .cloned()
+        .unwrap_or_else(|| egui::FontId::proportional(14.0))
+}
+
+/// Slightly smaller interface font for dense declarative chrome.
+pub fn interface_font_id_small(ui: &egui::Ui) -> egui::FontId {
+    let body = interface_font_id(ui);
+    egui::FontId::new(body.size * 0.92, body.family)
+}
+
 /// Apply the user's interface font. Safe to call every frame (same pattern as theme).
 pub fn apply_ui_font(ctx: &egui::Context, font_id: &str) {
     let choice = crate::prefs::normalize_ui_font(font_id);

@@ -1,8 +1,9 @@
 //! Compile-time inventory: chrome sources must not use emoji / tofu-prone glyphs as controls.
 //!
 //! Create module audit (Loïc #175): `modules/create/ui/index.json` ships label keys only;
-//! interactive chrome is host-rendered in `rich_composition_ui.rs` (painted layer icons +
-//! text i18n buttons). No font-symbol icon controls remain in the Create surface.
+//! interactive chrome is host-rendered in `decl_ui.rs` (painted action buttons via
+//! `icons::decl_action_button`) and `rich_composition_ui.rs` (painted layer icons).
+//! No font-symbol icon controls remain in the Create surface.
 
 /// Rust sources scanned for control emoji (buttons, selectable labels used as icons).
 const CHROME_SOURCES: &[&str] = &[

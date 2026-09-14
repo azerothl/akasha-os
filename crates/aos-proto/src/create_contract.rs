@@ -72,6 +72,8 @@ pub mod surface {
     pub const FR_MODE_VIDEO: &str = "Vidéo";
     pub const FR_IMAGE_PACK_LABEL: &str = "Pack image par défaut";
     pub const FR_VIDEO_PACK_LABEL: &str = "Pack vidéo";
+    pub const EN_IMAGE_PACK_LABEL: &str = "Default image pack";
+    pub const EN_VIDEO_PACK_LABEL: &str = "Video pack";
     pub const FR_PROMPT_LABEL: &str = "Invite";
     pub const FR_NEGATIVE_LABEL: &str = "Prompt négatif";
     pub const FR_VIDEO_DURATION_LABEL: &str = "Durée";
@@ -85,7 +87,12 @@ pub mod surface {
     pub const FR_RESTORE_LABEL: &str = "Restaurer";
     pub const FR_JOB_LABEL: &str = "Génération";
 
-    pub const FR_PREVIEW_EMPTY: &str = "Pas encore d'image — saisissez une invite et générez.";
+    pub const FR_PREVIEW_EMPTY: &str = "Pas encore d'image.";
+    pub const FR_PREVIEW_EMPTY_VIDEO: &str = "Pas encore de clip.";
+    pub const EN_PREVIEW_EMPTY: &str = "No image yet.";
+    pub const EN_PREVIEW_EMPTY_VIDEO: &str = "No clip yet.";
+    pub const FR_ADVANCED_DISCLOSURE: &str = "Avancé";
+    pub const FR_RESULT_TOOLBAR_SECTION: &str = "Résultat";
     pub const FR_HISTORY_EMPTY: &str = "Aucune génération pour l'instant";
 
     /// Label keys declared in `modules/create/ui/index.json`.
@@ -113,6 +120,8 @@ pub mod surface {
         "job_label",
         "preview_empty",
         "preview_empty_video",
+        "advanced_disclosure",
+        "result_toolbar_section",
         "history_restore",
         "history_prompt",
         "history_when",
@@ -123,9 +132,12 @@ pub mod surface {
 #[cfg(test)]
 mod tests {
     use super::surface::{
-        EN_APP_TITLE, FR_APP_TITLE, FR_GENERATE_LABEL, FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
+        EN_APP_TITLE, EN_IMAGE_PACK_LABEL, EN_PREVIEW_EMPTY, EN_PREVIEW_EMPTY_VIDEO,
+        EN_VIDEO_PACK_LABEL, FR_APP_TITLE, FR_GENERATE_LABEL,
+        FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
         FR_IMAGE_PACK_LABEL, FR_JOB_LABEL, FR_MODE_IMAGE, FR_MODE_VIDEO, FR_NEGATIVE_LABEL,
-        FR_PREVIEW_EMPTY, FR_PROMPT_LABEL, FR_RESTORE_LABEL, FR_SAVE_LABEL, FR_STEPS_LABEL,
+        FR_ADVANCED_DISCLOSURE, FR_PREVIEW_EMPTY, FR_PREVIEW_EMPTY_VIDEO, FR_PROMPT_LABEL,
+        FR_RESTORE_LABEL, FR_RESULT_TOOLBAR_SECTION, FR_SAVE_LABEL, FR_STEPS_LABEL,
         FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_VIDEO_DURATION_LABEL, FR_VIDEO_FPS_LABEL,
         FR_VIDEO_PACK_LABEL, FR_WIDTH_LABEL, LABEL_KEYS,
     };
@@ -350,6 +362,18 @@ mod tests {
         assert_eq!(
             fr.get("preview_empty").map(String::as_str),
             Some(FR_PREVIEW_EMPTY)
+        );
+        assert_eq!(
+            fr.get("preview_empty_video").map(String::as_str),
+            Some(FR_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_eq!(
+            fr.get("advanced_disclosure").map(String::as_str),
+            Some(FR_ADVANCED_DISCLOSURE)
+        );
+        assert_eq!(
+            fr.get("result_toolbar_section").map(String::as_str),
+            Some(FR_RESULT_TOOLBAR_SECTION)
         );
         assert_eq!(
             fr.get("history_restore").map(String::as_str),
@@ -626,5 +650,57 @@ mod tests {
             Some("Balanced")
         );
         assert_eq!(en.get("camera_push").map(String::as_str), Some("Push in"));
+        assert_eq!(
+            en.get("preview_empty").map(String::as_str),
+            Some(EN_PREVIEW_EMPTY)
+        );
+        assert_eq!(
+            en.get("preview_empty_video").map(String::as_str),
+            Some(EN_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_eq!(
+            en.get("image_pack_label").map(String::as_str),
+            Some(EN_IMAGE_PACK_LABEL)
+        );
+        assert_eq!(
+            en.get("video_pack_label").map(String::as_str),
+            Some(EN_VIDEO_PACK_LABEL)
+        );
+    }
+
+    #[test]
+    fn cm_jail_chrome_copy_locked() {
+        let doc = read_ui_document();
+        let fr = &doc.labels.as_ref().expect("labels").fr;
+        let en = &doc.labels.as_ref().expect("labels").en;
+        assert_eq!(
+            fr.get("preview_empty_video").map(String::as_str),
+            Some(FR_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_eq!(
+            en.get("preview_empty_video").map(String::as_str),
+            Some(EN_PREVIEW_EMPTY_VIDEO)
+        );
+        assert_ne!(
+            fr.get("preview_empty_video").map(String::as_str),
+            fr.get("preview_empty").map(String::as_str),
+            "video empty copy must differ from image empty copy"
+        );
+        assert_eq!(
+            fr.get("video_pack_label").map(String::as_str),
+            Some(FR_VIDEO_PACK_LABEL)
+        );
+        assert_eq!(
+            en.get("video_pack_label").map(String::as_str),
+            Some(EN_VIDEO_PACK_LABEL)
+        );
+        assert_eq!(
+            fr.get("image_pack_label").map(String::as_str),
+            Some(FR_IMAGE_PACK_LABEL)
+        );
+        assert_eq!(
+            en.get("image_pack_label").map(String::as_str),
+            Some(EN_IMAGE_PACK_LABEL)
+        );
     }
 }
