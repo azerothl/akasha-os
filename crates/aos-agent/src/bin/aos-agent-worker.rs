@@ -23,10 +23,10 @@ use aos_agent::canvas_scene::{
 };
 use aos_agent::context_budget::{
     choose_agent_max_tokens, clamp_spawn_brief, compact_after_prompt_overflow,
-    enforce_prompt_budget, estimate_messages_tokens, is_infer_stall_error, is_prompt_too_long_error,
-    is_technical_vision_infer_error, prompt_budget, sanitize_assistant_for_memory,
-    soft_pressure_threshold, LoopGuard, LoopVerdict, DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES,
-    MAX_OVERFLOW_INFER_RETRIES,
+    enforce_prompt_budget, estimate_messages_tokens, is_infer_stall_error,
+    is_prompt_too_long_error, is_technical_vision_infer_error, memory_text_for_unparsed_turn,
+    prompt_budget, sanitize_assistant_for_memory, soft_pressure_threshold, LoopGuard, LoopVerdict,
+    DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::device_tools::{capture_png_path_from_tool_result, invoke_device_tool};
 use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
@@ -592,6 +592,39 @@ async fn main() {
     let mut pending_steer: Option<String> = None;
     let mut terminal: Option<AgentState> = None;
     let mut loop_guard = LoopGuard::default();
+    let restored_noops = {
+        let st = shared.state.lock().await;
+        st.trace
+            .iter()
+            .rev()
+            .take_while(|record| record.action == "noop")
+            .count() as u32
+    };
+    loop_guard.restore_noop_streak(restored_noops);
+    if let Some(reason) = loop_guard.exhausted_abort_reason() {
+        {
+            let mut st = shared.state.lock().await;
+            st.artifacts.push(reason.clone());
+            st.push_user(&format!("[runtime] {reason}"));
+        }
+        report(
+            &bus,
+            &agent_id,
+            AgentOutputEvent::Error {
+                message: reason.clone(),
+            },
+        )
+        .await;
+        report(
+            &bus,
+            &agent_id,
+            AgentOutputEvent::Log {
+                line: reason.clone(),
+            },
+        )
+        .await;
+        terminal = Some(AgentState::Failed);
+    }
     let mut last_canvas_scene_png: Option<String> = None;
     let mut last_device_capture_png: Option<String> = None;
     let mut device_describe_hinted = false;
@@ -1111,7 +1144,23 @@ async fn main() {
                         "summary": "Capture webcam enregistrée. Analyse visuelle impossible : aucun modèle vision (projecteur d'image) n'est chargé. Charge Gemma 4 ou LLaVA dans Modèles, puis redemande ce que montre la photo."
                     }),
                 });
+            } else if aos_proto::chat_user_wants_advisory(&spec.goal.statement)
+                && prose.chars().count() >= 80
+            {
+                // Advisory answers are allowed to finish in prose. Treating
+                // a complete textual evaluation as noop used to send the
+                // worker into a pointless invalid-JSON loop.
+                batch_actions.push(AgentAction {
+                    thought: "réponse advisory complète".into(),
+                    action: "goal.complete".into(),
+                    args: serde_json::json!({ "summary": prose }),
+                });
             } else {
+                let diagnostic = if aos_proto::chat_user_wants_advisory(&spec.goal.statement) {
+                    "aucune action JSON détectée : pour une évaluation/conseil, émets une seule action JSON `goal.complete` avec `args.summary`; ne crée pas de note ni de module.".to_string()
+                } else {
+                    unparsed_action_diagnostic(&infer.text, infer.generated_tokens, gen_tokens)
+                };
                 batch_actions.push(AgentAction {
                     thought: if reasoning.is_empty() {
                         String::new()
@@ -1120,11 +1169,7 @@ async fn main() {
                     },
                     action: "noop".into(),
                     args: serde_json::json!({
-                        "_runtime_diagnostic": unparsed_action_diagnostic(
-                            &infer.text,
-                            infer.generated_tokens,
-                            gen_tokens,
-                        )
+                        "_runtime_diagnostic": diagnostic
                     }),
                 });
             }
@@ -1132,13 +1177,21 @@ async fn main() {
         let memory_text = if parsed_ok {
             strip_tool_markup(&full_text)
         } else {
-            full_text.clone()
+            memory_text_for_unparsed_turn(
+                &batch_actions[0].action,
+                &batch_actions[0].args,
+                &full_text,
+            )
         };
+        let memory_parsed_ok = parsed_ok || batch_actions[0].action == "goal.complete";
         shared
             .state
             .lock()
             .await
-            .push_assistant(&sanitize_assistant_for_memory(&memory_text, parsed_ok));
+            .push_assistant(&sanitize_assistant_for_memory(
+                &memory_text,
+                memory_parsed_ok,
+            ));
 
         let action_log = if batch_actions.len() == 1 {
             batch_actions[0].action.clone()
@@ -1660,8 +1713,10 @@ async fn main() {
         // generic critic on device-capture agents — it prefixes canvas advice
         // and loops webcam goals after a successful snap.
         let skip_device_critic = !canvas_agent && agent_has_device_capture_tools(&spec.tools);
+        let skip_advisory_critic = aos_proto::chat_user_wants_advisory(&spec.goal.statement);
         let model_reflection = if terminal.is_none()
             && !skip_device_critic
+            && !skip_advisory_critic
             && should_run_canvas_critic(canvas_agent, canvas_scene_changed, step)
         {
             reflect(&bus, &shared, &spec).await
@@ -2136,6 +2191,9 @@ async fn execute_action(
     let name = resolved_name.as_str();
     let args_owned = normalize_tool_args(name, &resolved_args);
     let args = &args_owned;
+    if let Some(msg) = advisory_construction_refusal(&spec.goal.statement, name) {
+        return ActResult::Continue(msg.into());
+    }
     // Skill name used as tool (research, file.author, …) → correction claire
     if tools.iter().all(|t| t.name != name) {
         if let Some(skill) = match_skill_by_action(name, skills) {
@@ -3109,6 +3167,12 @@ async fn handle_deep_plan_create(
     spec: &AgentSpec,
     args: &serde_json::Value,
 ) -> ActResult {
+    // `plan.create` is a bootstrap operation, not a way to replace the
+    // current plan. Repeated model calls used to create dplan-…-1, -2, -3
+    // and leave the critic looking at a different tree than the UI.
+    if let Some(existing) = shared.state.lock().await.deep_plan_id.clone() {
+        return ActResult::Continue(duplicate_deep_plan_message(&existing));
+    }
     let steps = parse_deep_steps(args);
     let task = args
         .get("task")
@@ -3119,6 +3183,7 @@ async fn handle_deep_plan_create(
         .get("title")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+    let (steps, task, title) = enforce_advisory_plan(&spec.goal.statement, steps, task, title);
     let req = PlanCreateRequest {
         agent_id: spec.agent_id.clone(),
         task,
@@ -3161,6 +3226,60 @@ async fn handle_deep_plan_create(
         }
         Err(e) => ActResult::Continue(format!("plan.create err: {e}")),
     }
+}
+
+fn duplicate_deep_plan_message(existing_id: &str) -> String {
+    format!("plan déjà créé id={existing_id}; utilise plan.get ou plan.replace_tree")
+}
+
+fn advisory_construction_refusal(goal: &str, tool_name: &str) -> Option<&'static str> {
+    if !aos_proto::chat_user_wants_advisory(goal) {
+        return None;
+    }
+    match tool_name {
+        "module.scaffold" | "module.package" | "module.install" | "module.compile" => Some(
+            "action refusée : le goal est une évaluation/conseil. Analyse et réponds ; ne construis pas le module sans demande explicite.",
+        ),
+        _ => None,
+    }
+}
+
+fn enforce_advisory_plan(
+    goal: &str,
+    steps: Vec<PlanStep>,
+    task: String,
+    title: Option<String>,
+) -> (Vec<PlanStep>, String, Option<String>) {
+    if !aos_proto::chat_user_wants_advisory(goal) {
+        return (steps, task, title);
+    }
+    // A local model may still emit a construction tree despite the prompt;
+    // do not let that turn an evaluation into scaffold/compile/install work.
+    (
+        advisory_plan_steps(),
+        format!("Évaluer et conseiller sur : {goal}"),
+        Some("Évaluation et recommandations".into()),
+    )
+}
+
+fn advisory_plan_steps() -> Vec<PlanStep> {
+    [
+        ("1", "Cartographier les capacités actuelles"),
+        ("2", "Identifier les limitations pour les gros projets"),
+        ("3", "Évaluer les besoins et les évolutions nécessaires"),
+        ("4", "Formuler les recommandations et la réponse"),
+    ]
+    .into_iter()
+    .map(|(id, label)| PlanStep {
+        id: id.into(),
+        label: label.into(),
+        description: None,
+        status: PlanStepStatus::Pending,
+        agent_id: None,
+        children: Vec::new(),
+        logs: Vec::new(),
+    })
+    .collect()
 }
 
 async fn handle_deep_plan_update_step(
@@ -3237,13 +3356,20 @@ async fn handle_deep_plan_replace_tree(
     if steps.is_empty() {
         return ActResult::Continue("plan.replace_tree : steps requis".into());
     }
+    let title = args
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let (steps, _, title) = enforce_advisory_plan(
+        &spec.goal.statement,
+        steps,
+        spec.goal.statement.clone(),
+        title,
+    );
     let req = PlanReplaceTreeRequest {
         plan_id,
         steps,
-        title: args
-            .get("title")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
+        title,
         status: None,
     };
     match bus
@@ -5243,7 +5369,7 @@ mod tests {
     };
     use aos_agent::assess::AssessResult;
     use aos_agent::CognitiveState;
-    use aos_proto::{AgentGoal, AgentSpec, AgentState};
+    use aos_proto::{AgentGoal, AgentSpec, AgentState, PlanStep};
     use std::collections::HashSet;
 
     #[test]
@@ -5254,6 +5380,82 @@ mod tests {
         assert!(msg.contains("pas bloqué"));
         assert!(msg.contains("Réessaie agent.await"));
         assert!(msg.contains("notes/scaffold"));
+    }
+
+    #[test]
+    fn advisory_plan_contains_analysis_only_steps() {
+        let steps = super::advisory_plan_steps();
+        assert_eq!(steps.len(), 4);
+        assert!(steps.iter().all(|step| {
+            let label = step.label.to_ascii_lowercase();
+            !label.contains("scaffold")
+                && !label.contains("compiler")
+                && !label.contains("installer")
+        }));
+    }
+
+    #[test]
+    fn advisory_plan_overrides_construction_tree() {
+        let construction = vec![PlanStep {
+            id: "1".into(),
+            label: "scaffold + compiler le module".into(),
+            ..PlanStep::default()
+        }];
+        let (steps, task, title) = super::enforce_advisory_plan(
+            "Si je veux créer un module, quelles limitations ?",
+            construction,
+            "construire le module".into(),
+            Some("Build".into()),
+        );
+        assert_eq!(title.as_deref(), Some("Évaluation et recommandations"));
+        assert!(task.starts_with("Évaluer et conseiller"));
+        assert!(steps.iter().all(|step| {
+            let label = step.label.to_ascii_lowercase();
+            !label.contains("scaffold") && !label.contains("compiler")
+        }));
+    }
+
+    #[test]
+    fn advisory_plan_leaves_non_advisory_tree_intact() {
+        let steps = vec![PlanStep {
+            id: "1".into(),
+            label: "scaffold le module".into(),
+            ..PlanStep::default()
+        }];
+        let (out, task, title) = super::enforce_advisory_plan(
+            "crée le module notes",
+            steps.clone(),
+            "construire".into(),
+            Some("Build".into()),
+        );
+        assert_eq!(out, steps);
+        assert_eq!(task, "construire");
+        assert_eq!(title.as_deref(), Some("Build"));
+    }
+
+    #[test]
+    fn advisory_construction_tools_are_refused() {
+        let goal = "Si je veux créer un module, qu'est-ce qu'il faudrait ?";
+        for tool in [
+            "module.scaffold",
+            "module.package",
+            "module.install",
+            "module.compile",
+        ] {
+            let msg = super::advisory_construction_refusal(goal, tool).expect(tool);
+            assert!(msg.contains("évaluation/conseil"));
+        }
+        assert!(super::advisory_construction_refusal(goal, "notes.create").is_none());
+        assert!(
+            super::advisory_construction_refusal("crée le module", "module.scaffold").is_none()
+        );
+    }
+
+    #[test]
+    fn duplicate_plan_create_points_at_existing_id() {
+        let msg = super::duplicate_deep_plan_message("dplan-abc");
+        assert!(msg.contains("dplan-abc"));
+        assert!(msg.contains("plan.get") || msg.contains("plan.replace_tree"));
     }
 
     #[test]
