@@ -578,11 +578,26 @@ impl DeclUiPanelState {
                     return;
                 };
                 let label = widget_text(w, doc, language).unwrap_or_else(|| "Suggestions".into());
-                let items = w.items.clone().unwrap_or_default();
+                let items: Vec<(String, String)> = w
+                    .items
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, item)| {
+                        let text = w
+                            .item_label_keys
+                            .as_ref()
+                            .and_then(|keys| keys.get(index))
+                            .and_then(|key| widget_text_from_key(Some(key), doc, language))
+                            .unwrap_or_else(|| item.clone());
+                        (item, text)
+                    })
+                    .collect();
                 let current = local_state
                     .get(state_key)
                     .and_then(Value::as_str)
-                    .filter(|value| items.iter().any(|item| item == value))
+                    .filter(|value| items.iter().any(|(_, label)| label == value))
                     .unwrap_or(t.decl_starter_placeholder)
                     .to_string();
                 ui.horizontal(|ui| {
@@ -591,11 +606,12 @@ impl DeclUiPanelState {
                         egui::ComboBox::from_id_salt(format!("prompt-starter-{state_key}"))
                             .selected_text(current)
                             .show_ui(ui, |ui| {
-                                for item in &items {
-                                    if ui.selectable_label(false, item).clicked() {
-                                        actions
-                                            .local_patch
-                                            .insert(state_key.clone(), Value::String(item.clone()));
+                                for (_item, item_label) in &items {
+                                    if ui.selectable_label(false, item_label).clicked() {
+                                        actions.local_patch.insert(
+                                            state_key.clone(),
+                                            Value::String(item_label.clone()),
+                                        );
                                         ui.close_menu();
                                     }
                                 }
