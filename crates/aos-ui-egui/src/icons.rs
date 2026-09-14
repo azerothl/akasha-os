@@ -842,6 +842,20 @@ pub enum ToolbarActionIcon {
     AlignCY,
 }
 
+/// Per-message transcript actions (hover bar + partial Continue).
+/// Stroke language matches Lucide 24px / toolbar glyphs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageActionIcon {
+    /// Lucide `copy` — two overlapping plates.
+    Copy,
+    /// Lucide `git-branch` — fork from this message.
+    Fork,
+    /// Lucide `undo-2` — truncate / return to here.
+    Return,
+    /// Lucide `play` — resume an interrupted assistant turn.
+    Continue,
+}
+
 /// Activity / agent-detail leading status glyph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentActivityIcon {
@@ -875,6 +889,20 @@ pub fn toolbar_action_selectable(
     tooltip: &str,
 ) -> bool {
     toolbar_selectable_inner(ui, selected, ToolbarSlot::Action(icon), tooltip)
+}
+
+/// Icon-only message action (28px hit, chamber hover fill).
+pub fn message_action_button(ui: &mut Ui, icon: MessageActionIcon, tooltip: &str) -> bool {
+    let size = Vec2::splat(BTN);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        if response.hovered() {
+            ui.painter()
+                .rect_filled(rect, 3.0, ui.visuals().widgets.hovered.bg_fill);
+        }
+        paint_message_action(ui, glyph_rect(rect), icon, hover_color(ui, &response));
+    }
+    response.on_hover_text(tooltip).clicked()
 }
 
 /// Icon-only toolbar button with an ASCII label (`F`, `P`, align text, …).
@@ -1289,6 +1317,59 @@ fn paint_toolbar_action(ui: &mut Ui, rect: Rect, icon: ToolbarActionIcon, color:
         ToolbarActionIcon::AlignBottom => paint_align(ui, rect, color, AlignEdge::Bottom),
         ToolbarActionIcon::AlignCX => paint_align(ui, rect, color, AlignEdge::CenterX),
         ToolbarActionIcon::AlignCY => paint_align(ui, rect, color, AlignEdge::CenterY),
+    }
+}
+
+fn paint_message_action(ui: &mut Ui, rect: Rect, icon: MessageActionIcon, color: Color32) {
+    let stroke = Stroke::new(1.4_f32, color);
+    let painter = ui.painter();
+    let c = rect.center();
+    let s = rect.width() * 0.28;
+    match icon {
+        MessageActionIcon::Copy => {
+            let back = Rect::from_min_max(
+                c + Vec2::new(-s * 0.95, -s * 1.05),
+                c + Vec2::new(s * 0.55, s * 0.55),
+            );
+            let front = Rect::from_min_max(
+                c + Vec2::new(-s * 0.35, -s * 0.45),
+                c + Vec2::new(s * 1.15, s * 1.15),
+            );
+            painter.rect_stroke(back, 1.5, stroke, StrokeKind::Outside);
+            painter.rect_filled(front, 1.5, ui.visuals().panel_fill);
+            painter.rect_stroke(front, 1.5, stroke, StrokeKind::Outside);
+        }
+        MessageActionIcon::Fork => {
+            let trunk_top = c + Vec2::new(-s * 0.35, -s * 1.05);
+            let joint = c + Vec2::new(-s * 0.35, s * 0.05);
+            let trunk_bot = c + Vec2::new(-s * 0.35, s * 1.05);
+            let tip = c + Vec2::new(s * 0.95, -s * 0.85);
+            painter.line_segment([trunk_top, trunk_bot], stroke);
+            painter.line_segment([joint, tip], stroke);
+            painter.circle_filled(trunk_top, s * 0.28, color);
+            painter.circle_filled(trunk_bot, s * 0.28, color);
+            painter.circle_filled(tip, s * 0.28, color);
+        }
+        MessageActionIcon::Return => {
+            let r = s * 1.1;
+            painter.circle_stroke(c + Vec2::new(r * 0.15, 0.0), r, stroke);
+            let tip = c + Vec2::new(-r * 0.95, -r * 0.15);
+            painter.line_segment([tip, tip + Vec2::new(s * 0.5, -s * 0.45)], stroke);
+            painter.line_segment([tip, tip + Vec2::new(s * 0.5, s * 0.2)], stroke);
+        }
+        MessageActionIcon::Continue => {
+            let left = c.x - s * 0.55;
+            let tip = Pos2::new(c.x + s * 1.05, c.y);
+            painter.add(Shape::convex_polygon(
+                vec![
+                    Pos2::new(left, c.y - s * 0.95),
+                    tip,
+                    Pos2::new(left, c.y + s * 0.95),
+                ],
+                color,
+                Stroke::NONE,
+            ));
+        }
     }
 }
 

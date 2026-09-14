@@ -101,6 +101,7 @@ impl UiApp {
                 let mut artifact_open: Option<artifact_card::ArtifactTarget> = None;
                 let mut schedule_act: Option<(String, usize, bool)> = None;
                 let mut session_branch_action: Option<(usize, bool)> = None;
+                let mut continue_from_action = false;
                 let tz_offset = local_tz_offset_minutes();
                 let chat_now = now_ms();
                 let reply_id = self
@@ -725,16 +726,43 @@ impl UiApp {
                     } else {
                         bubble.on_hover_text(&stamp)
                     };
+                    let can_branch = matches!(role.as_str(), "user" | "vous" | "assistant")
+                        && self.chat_state.active_session.is_some();
+                    let can_continue = i + 1 == n
+                        && role == "assistant"
+                        && self.chat_state.runtime.continue_retry.is_some()
+                        && self.chat_state.active_session.is_some();
+                    let action_clicks = crate::chat_message_actions::show_hover_bar(
+                        ui,
+                        i,
+                        &bubble,
+                        t,
+                        crate::chat_message_actions::MessageActionOpts {
+                            can_branch,
+                            can_continue,
+                        },
+                    );
                     let mut copied = false;
+                    if action_clicks.copy {
+                        ui.ctx().copy_text(copy_text.clone());
+                        copied = true;
+                    }
+                    if action_clicks.fork {
+                        session_branch_action = Some((i + 1, true));
+                    }
+                    if action_clicks.return_here {
+                        session_branch_action = Some((i + 1, false));
+                    }
+                    if action_clicks.continue_partial {
+                        continue_from_action = true;
+                    }
                     bubble.context_menu(|ui| {
                         if ui.button(t.btn_copy).clicked() {
                             ui.ctx().copy_text(copy_text.clone());
                             copied = true;
                             ui.close_menu();
                         }
-                        if matches!(role.as_str(), "user" | "vous" | "assistant")
-                            && self.chat_state.active_session.is_some()
-                        {
+                        if can_branch {
                             if ui.button(t.chat_fork_here).clicked() {
                                 session_branch_action = Some((i + 1, true));
                                 ui.close_menu();
@@ -743,6 +771,10 @@ impl UiApp {
                                 session_branch_action = Some((i + 1, false));
                                 ui.close_menu();
                             }
+                        }
+                        if can_continue && ui.button(t.chat_continue_partial_hint).clicked() {
+                            continue_from_action = true;
+                            ui.close_menu();
                         }
                     });
                     if copied {
@@ -984,7 +1016,8 @@ impl UiApp {
                 }
                 if self.chat_state.runtime.continue_retry.is_some()
                     && self.chat_state.active_session.is_some()
-                    && crate::chat_load_fail::render_partial_recovery(ui, t)
+                    && (continue_from_action
+                        || crate::chat_load_fail::render_partial_recovery(ui, t))
                 {
                     self.continue_partial_turn();
                 }

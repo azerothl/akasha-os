@@ -32,6 +32,7 @@ mod chat_error_copy;
 mod chat_event_controller;
 mod chat_load_fail;
 mod chat_media;
+mod chat_message_actions;
 mod chat_pending_status;
 mod chat_room;
 mod chat_runtime_state;
