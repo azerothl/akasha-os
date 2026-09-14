@@ -197,6 +197,31 @@ pub fn looks_like_truncated_action_json(text: &str) -> bool {
     open > close || t.contains("\"action\"") || t.contains("\"thought\"") || t.contains("\"args\"")
 }
 
+/// Working-memory payload when the model did not emit a parsed tool call.
+///
+/// Synthetic `goal.complete` (advisory / webcam prose) must keep the answer.
+/// Real `noop` turns keep the short runtime diagnostic instead of the raw dump.
+pub fn memory_text_for_unparsed_turn(
+    action: &str,
+    args: &serde_json::Value,
+    model_text: &str,
+) -> String {
+    if action == "goal.complete" {
+        if let Some(summary) = args.get("summary").and_then(|v| v.as_str()) {
+            if !summary.trim().is_empty() {
+                return summary.to_string();
+            }
+        }
+        return model_text.to_string();
+    }
+    args.get("_runtime_diagnostic")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("sortie modèle sans action exploitable")
+        .to_string()
+}
+
 /// Texte à stocker en working_memory (évite d'empiler des JSON géants tronqués / DSML).
 pub fn sanitize_assistant_for_memory(raw: &str, parsed_ok: bool) -> String {
     if raw.trim().is_empty() {
@@ -367,7 +392,35 @@ pub fn looks_like_tool_failure(tool_result: &str) -> bool {
         || lower.starts_with("error:")
 }
 
+fn noop_streak_abort_message() -> String {
+    "boucle détectée : JSON d'action invalide/tronqué à répétition \
+     (max_tokens, template incompatible ou réponse trop longue). \
+     Réduis la réponse et émets une seule action JSON valide."
+        .into()
+}
+
 impl LoopGuard {
+    /// Restore the consecutive invalid-output count after a worker restart.
+    /// Without this, health restores reset the guard and the same model
+    /// response can loop indefinitely across worker processes.
+    pub fn restore_noop_streak(&mut self, streak: u32) {
+        self.noop_streak = streak.min(MAX_NOOP_STREAK);
+        if self.noop_streak > 0 {
+            self.last_fail_key = "noop".into();
+            self.same_fail_streak = self.noop_streak;
+        }
+    }
+
+    /// If a restored trace already reached the noop limit, abort before the
+    /// next expensive generation. `observe` only runs after a turn.
+    pub fn exhausted_abort_reason(&self) -> Option<String> {
+        if self.noop_streak >= MAX_NOOP_STREAK {
+            Some(noop_streak_abort_message())
+        } else {
+            None
+        }
+    }
+
     pub fn observe(&mut self, action: &str, tool_result: &str) -> LoopVerdict {
         // This is a deterministic model/protocol incompatibility, not a
         // transient noop. Retrying the same 1.5–2k-token generation only
@@ -404,12 +457,7 @@ impl LoopGuard {
         }
 
         if self.noop_streak >= MAX_NOOP_STREAK {
-            return LoopVerdict::Abort(
-                "boucle détectée : JSON d'action invalide/tronqué à répétition \
-                 (max_tokens ou note trop longue). Découpez : notes.create court \
-                 puis notes.update par sections."
-                    .into(),
-            );
+            return LoopVerdict::Abort(noop_streak_abort_message());
         }
         if !is_noop && self.same_fail_streak >= MAX_SAME_FAIL_STREAK {
             return LoopVerdict::Abort(format!(
@@ -419,9 +467,9 @@ impl LoopGuard {
         }
         if self.noop_streak == 2 || self.same_fail_streak == 2 {
             return LoopVerdict::Warn(
-                "Attention boucle : pour une note longue, \
-                 notes.create (titre + plan court) puis notes.update section par section \
-                 (≤ ~1200 caractères de content)."
+                "Attention boucle : émets une seule action JSON valide et courte. \
+                 Pour une évaluation, termine avec goal.complete ; pour une note, \
+                 utilise notes.create avec title et content dans args."
                     .into(),
             );
         }
@@ -533,6 +581,52 @@ mod tests {
             g.observe("noop", "aucune action JSON"),
             LoopVerdict::Abort(_)
         ));
+    }
+
+    #[test]
+    fn loop_guard_restores_noop_streak_after_worker_restart() {
+        let mut g = LoopGuard::default();
+        g.restore_noop_streak(2);
+        assert!(g.exhausted_abort_reason().is_none());
+        assert!(matches!(
+            g.observe("noop", "aucune action JSON"),
+            LoopVerdict::Abort(_)
+        ));
+    }
+
+    #[test]
+    fn loop_guard_aborts_immediately_when_restored_streak_already_max() {
+        let mut g = LoopGuard::default();
+        g.restore_noop_streak(MAX_NOOP_STREAK);
+        let reason = g.exhausted_abort_reason().expect("already at max");
+        assert!(reason.contains("boucle détectée"));
+    }
+
+    #[test]
+    fn unparsed_goal_complete_keeps_summary_in_memory() {
+        let args = serde_json::json!({ "summary": "évaluation complète du runtime" });
+        let text = memory_text_for_unparsed_turn("goal.complete", &args, "raw dump");
+        assert_eq!(text, "évaluation complète du runtime");
+        let kept = sanitize_assistant_for_memory(&text, true);
+        assert!(kept.contains("évaluation complète du runtime"));
+    }
+
+    #[test]
+    fn unparsed_noop_keeps_diagnostic_not_raw_dump() {
+        let args = serde_json::json!({ "_runtime_diagnostic": "aucune action JSON détectée" });
+        let text = memory_text_for_unparsed_turn("noop", &args, "énorme JSON cassé {\"action\"");
+        assert_eq!(text, "aucune action JSON détectée");
+    }
+
+    #[test]
+    fn unparsed_goal_complete_falls_back_to_model_text() {
+        let args = serde_json::json!({});
+        let text = memory_text_for_unparsed_turn(
+            "goal.complete",
+            &args,
+            "description de la capture webcam",
+        );
+        assert_eq!(text, "description de la capture webcam");
     }
 
     #[test]

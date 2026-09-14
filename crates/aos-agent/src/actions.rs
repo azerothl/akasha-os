@@ -575,6 +575,7 @@ fn parse_action_clean(text: &str) -> Option<AgentAction> {
 const ACTION_WRAPPER_KEYS: &[&str] = &[
     "action",
     "args",
+    "params",
     "action_input",
     "thought",
     "thinking",
@@ -610,7 +611,7 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
         .get("action_input")
         .and_then(|value| value.as_object())
         .cloned();
-    let mut args = match obj.get("args") {
+    let mut args = match obj.get("args").or_else(|| obj.get("params")) {
         Some(a) if a.is_object() => a.clone(),
         Some(a) if !a.is_null() => serde_json::json!({ "value": a.clone() }),
         _ => action_input
@@ -620,6 +621,13 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
     };
 
     if let Some(map) = args.as_object_mut() {
+        // A few local templates call the argument envelope `params`; accept
+        // both spellings so a valid tool call does not arrive as `{}`.
+        if let Some(params) = obj.get("params").and_then(|v| v.as_object()) {
+            for (k, v) in params {
+                map.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
         if let Some(input) = action_input {
             for (k, v) in input {
                 map.entry(k).or_insert(v);
@@ -792,6 +800,30 @@ mod tests {
         );
         assert_eq!(a.args["tools"], serde_json::json!(["canvas.get"]));
         assert_eq!(a.args["skills"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn parse_params_alias_as_tool_args() {
+        let text = r#"{
+  "action": "notes.create",
+  "params": {"title": "x", "content": "y"}
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.args["title"], "x");
+        assert_eq!(a.args["content"], "y");
+    }
+
+    #[test]
+    fn nested_args_take_precedence_over_params_wrapper() {
+        let text = r#"{
+  "action": "notes.create",
+  "args": {"title": "from-args"},
+  "params": {"title": "from-params", "content": "y"}
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.args["title"], "from-args");
+        assert_eq!(a.args["content"], "y");
+        assert!(a.args.get("params").is_none());
     }
 
     #[test]
