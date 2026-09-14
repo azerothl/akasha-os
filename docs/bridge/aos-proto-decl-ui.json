@@ -32,6 +32,13 @@
           "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
           "properties": {
             "args": true,
+            "icon_key": {
+              "description": "Painted icon metaphor for this row action (host-resolved).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "label": {
               "type": [
                 "string",
@@ -189,6 +196,13 @@
                 "null"
               ]
             },
+            "collapsible": {
+              "description": "Render `section` as a collapsible disclosure (Settings-style calm surface).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "column_label_keys": {
               "description": "Header label keys for `table` columns (parallel to `columns`).",
               "items": {
@@ -222,6 +236,13 @@
               "description": "When true, table renders rows without a header band.",
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "icon_key": {
+              "description": "Painted Lucide-style icon metaphor for `button` chrome (host-resolved).",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -302,10 +323,24 @@
                 "null"
               ]
             },
+            "open_state_key": {
+              "description": "When collapsible, persist open/closed in this local state slot.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "prefix_label_key": {
               "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "primary": {
+              "description": "Accent primary styling for painted `button` chrome.",
+              "type": [
+                "boolean",
                 "null"
               ]
             },
@@ -410,6 +445,13 @@
               "description": "Tool invoked by `button` / submitted by `form`.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "toolbar": {
+              "description": "Compact grouped toolbar row (result actions, painted icon buttons).",
+              "type": [
+                "boolean",
                 "null"
               ]
             },
@@ -701,6 +743,13 @@
       "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
       "properties": {
         "args": true,
+        "icon_key": {
+          "description": "Painted icon metaphor for this row action (host-resolved).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "label": {
           "type": [
             "string",
@@ -751,6 +800,13 @@
           "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
           "properties": {
             "args": true,
+            "icon_key": {
+              "description": "Painted icon metaphor for this row action (host-resolved).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "label": {
               "type": [
                 "string",
@@ -908,6 +964,13 @@
                 "null"
               ]
             },
+            "collapsible": {
+              "description": "Render `section` as a collapsible disclosure (Settings-style calm surface).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "column_label_keys": {
               "description": "Header label keys for `table` columns (parallel to `columns`).",
               "items": {
@@ -941,6 +1004,13 @@
               "description": "When true, table renders rows without a header band.",
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "icon_key": {
+              "description": "Painted Lucide-style icon metaphor for `button` chrome (host-resolved).",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -1021,10 +1091,24 @@
                 "null"
               ]
             },
+            "open_state_key": {
+              "description": "When collapsible, persist open/closed in this local state slot.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "prefix_label_key": {
               "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "primary": {
+              "description": "Accent primary styling for painted `button` chrome.",
+              "type": [
+                "boolean",
                 "null"
               ]
             },
@@ -1132,6 +1216,13 @@
                 "null"
               ]
             },
+            "toolbar": {
+              "description": "Compact grouped toolbar row (result actions, painted icon buttons).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "tooltip_key": {
               "description": "Optional localized tooltip key shown on the widget chrome.",
               "type": [
@@ -1221,6 +1312,13 @@
             "null"
           ]
         },
+        "collapsible": {
+          "description": "Render `section` as a collapsible disclosure (Settings-style calm surface).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "column_label_keys": {
           "description": "Header label keys for `table` columns (parallel to `columns`).",
           "items": {
@@ -1254,6 +1352,13 @@
           "description": "When true, table renders rows without a header band.",
           "type": [
             "boolean",
+            "null"
+          ]
+        },
+        "icon_key": {
+          "description": "Painted Lucide-style icon metaphor for `button` chrome (host-resolved).",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -1334,10 +1439,24 @@
             "null"
           ]
         },
+        "open_state_key": {
+          "description": "When collapsible, persist open/closed in this local state slot.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "prefix_label_key": {
           "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "primary": {
+          "description": "Accent primary styling for painted `button` chrome.",
+          "type": [
+            "boolean",
             "null"
           ]
         },
@@ -1442,6 +1561,13 @@
           "description": "Tool invoked by `button` / submitted by `form`.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "toolbar": {
+          "description": "Compact grouped toolbar row (result actions, painted icon buttons).",
+          "type": [
+            "boolean",
             "null"
           ]
         },
@@ -1576,6 +1702,13 @@
           "description": "Per-row action on a `table` widget (E15 lot 2 / #149).",
           "properties": {
             "args": true,
+            "icon_key": {
+              "description": "Painted icon metaphor for this row action (host-resolved).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "label": {
               "type": [
                 "string",
@@ -1733,6 +1866,13 @@
                 "null"
               ]
             },
+            "collapsible": {
+              "description": "Render `section` as a collapsible disclosure (Settings-style calm surface).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "column_label_keys": {
               "description": "Header label keys for `table` columns (parallel to `columns`).",
               "items": {
@@ -1766,6 +1906,13 @@
               "description": "When true, table renders rows without a header band.",
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "icon_key": {
+              "description": "Painted Lucide-style icon metaphor for `button` chrome (host-resolved).",
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -1846,10 +1993,24 @@
                 "null"
               ]
             },
+            "open_state_key": {
+              "description": "When collapsible, persist open/closed in this local state slot.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "prefix_label_key": {
               "description": "Label shown before inline form fields (e.g. « Nouvelle » / « New »).",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "primary": {
+              "description": "Accent primary styling for painted `button` chrome.",
+              "type": [
+                "boolean",
                 "null"
               ]
             },
@@ -1954,6 +2115,13 @@
               "description": "Tool invoked by `button` / submitted by `form`.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "toolbar": {
+              "description": "Compact grouped toolbar row (result actions, painted icon buttons).",
+              "type": [
+                "boolean",
                 "null"
               ]
             },
