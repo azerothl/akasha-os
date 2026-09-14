@@ -2420,7 +2420,7 @@ pub fn resolve_decl_action_icon_for_action(action: &str) -> Option<DeclActionIco
 
 /// Width for painted declarative buttons — never panics when the row is narrower than 88px.
 pub fn decl_action_button_width(available_width: f32, text_w: f32) -> f32 {
-    let max_w = available_width.max(1.0).min(240.0);
+    let max_w = available_width.clamp(1.0, 240.0);
     let min_w = 88.0_f32.min(max_w);
     (crate::theme::ICON_GLYPH + 28.0 + text_w + 12.0).clamp(min_w, max_w)
 }
@@ -2666,7 +2666,7 @@ mod tests {
         for available in [0.0, 1.0, 40.0, 87.9, 88.0, 120.0, 400.0] {
             let w = decl_action_button_width(available, 48.0);
             assert!(w >= 1.0, "width must stay positive at available={available}");
-            assert!(w <= available.max(1.0).min(240.0) + f32::EPSILON);
+            assert!(w <= available.clamp(1.0, 240.0) + f32::EPSILON);
         }
     }
 
