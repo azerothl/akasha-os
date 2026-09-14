@@ -1978,13 +1978,8 @@ fn render_table(
                                             enabled,
                                             false,
                                         )
-                                    } else if ui
-                                        .add_enabled(enabled, egui::Button::new(label))
-                                        .clicked()
-                                    {
-                                        true
                                     } else {
-                                        false
+                                        ui.add_enabled(enabled, egui::Button::new(label)).clicked()
                                     };
                                     if clicked {
                                         let args = resolve_row_args(&action.args, row);
