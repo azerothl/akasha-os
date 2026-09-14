@@ -228,10 +228,25 @@ pub(crate) fn on_chat_cancelled(
     on_active
 }
 
+fn is_ephemeral_ui_line(line: &ChatLine) -> bool {
+    line.role == "système" || line.role == "system"
+}
+
 fn content_message_count(lines: &[ChatLine]) -> usize {
-    lines
+    lines.iter().filter(|line| !is_ephemeral_ui_line(line)).count()
+}
+
+/// How many persisted transcript messages to keep when branching from UI index
+/// `ui_index` (inclusive). Skips ephemeral `système`/`system` chrome that exists
+/// only in the painted transcript (e.g. "Historique rechargé.").
+pub(crate) fn persisted_prefix_len(chat: &[ChatLine], ui_index: usize) -> usize {
+    if chat.is_empty() {
+        return 0;
+    }
+    let end = ui_index.min(chat.len().saturating_sub(1));
+    chat[..=end]
         .iter()
-        .filter(|line| line.role != "système" && line.role != "system")
+        .filter(|line| !is_ephemeral_ui_line(line))
         .count()
 }
 
@@ -581,6 +596,21 @@ mod tests {
         infer_reply_durations(&mut chat);
         assert_eq!(chat[1].duration_ms, 3_200);
         assert_eq!(chat[0].duration_ms, 0);
+    }
+
+    #[test]
+    fn persisted_prefix_skips_history_banner() {
+        let chat = vec![
+            ChatLine::plain("système", "Historique rechargé."),
+            ChatLine::plain("user", "first"),
+            ChatLine::plain("assistant", "answer"),
+            ChatLine::plain("user", "relance"),
+        ];
+        // Fork on the assistant bubble (UI index 2) must keep 2 disk messages,
+        // not 3 (which would wrongly include the following user relaunch).
+        assert_eq!(persisted_prefix_len(&chat, 2), 2);
+        assert_eq!(persisted_prefix_len(&chat, 3), 3);
+        assert_eq!(persisted_prefix_len(&chat, 0), 0);
     }
 
     #[test]

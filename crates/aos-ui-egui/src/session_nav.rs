@@ -60,7 +60,7 @@ pub enum PendingSessionNav {
     None,
     /// User selected or opened a concrete session.
     Explicit(String),
-    /// `+ Nouvelle` clicked; waiting for runtime to name the new session.
+    /// `+ Nouvelle` or session fork; waiting for runtime to name the new session.
     AwaitingCreate,
     /// Active session deleted; waiting for runtime fallback id (`list[0]`).
     AwaitingDelete,
@@ -190,6 +190,18 @@ mod tests {
             Some("session-12"),
             &pending,
             "session-14",
+        ));
+    }
+
+    #[test]
+    fn fork_intent_switches_to_branch_session() {
+        // Fork reuses AwaitingCreate so announce_and_load_session can navigate.
+        let mut pending = PendingSessionNav::AwaitingCreate;
+        apply_session_load_intent(&mut pending, "session-branch");
+        assert!(should_switch_session_view(
+            Some("session-source"),
+            &pending,
+            "session-branch",
         ));
     }
 

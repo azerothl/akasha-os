@@ -44,6 +44,8 @@ impl UiApp {
             ));
             return;
         };
+        // A new user turn supersedes a pending one-click continuation.
+        self.chat_state.runtime.continue_retry = None;
         if pending_images.is_empty() && pending_documents.is_empty() {
             let tz = local_tz_offset_minutes();
             if let Some(parsed) = schedule_parse::try_parse_phrase(&text, now_ms(), tz) {
@@ -393,6 +395,82 @@ impl UiApp {
         self.scenario_ui.chat = true;
     }
 
+    /// Resume a response that stopped after emitting some text. The partial
+    /// answer is already part of the transcript; the hidden continuation
+    /// instruction keeps the composer and persisted conversation clean.
+    pub(crate) fn continue_partial_turn(&mut self) {
+        let Some(retry) = self.chat_state.runtime.continue_retry.take() else {
+            return;
+        };
+        if self.chat_state.active_session.as_deref() != Some(retry.session_id.as_str()) {
+            self.chat_state.runtime.continue_retry = Some(retry);
+            return;
+        }
+        self.chat_state.session_chat.begin_turn(&retry.session_id);
+        self.chat_state.runtime.begin_turn(None);
+        self.chat_state.runtime.outgoing_turn = Some(retry.clone());
+        let t = i18n::strings(&retry.language);
+        self.status = t.status_assistant_generating.into();
+        let _ = self.cmd_tx.send(retry.to_chat_cmd(true));
+        self.scenario_ui.chat = true;
+    }
+
+    pub(crate) fn offer_partial_continuation(
+        &mut self,
+        retry: ChatRetryTurn,
+        partial: String,
+    ) {
+        self.set_partial_continuation(retry, partial, true);
+    }
+
+    /// Arm recovery when the cancellation handler has already placed the
+    /// partial answer in the visible transcript.
+    pub(crate) fn arm_partial_continuation(
+        &mut self,
+        retry: ChatRetryTurn,
+        partial: String,
+    ) {
+        self.set_partial_continuation(retry, partial, false);
+    }
+
+    fn set_partial_continuation(
+        &mut self,
+        mut retry: ChatRetryTurn,
+        partial: String,
+        append_to_chat: bool,
+    ) {
+        if partial.trim().is_empty() {
+            return;
+        }
+        let display = crate::agent_panel::format_chat_assistant_display(
+            &partial,
+            &i18n::strings(&self.prefs.language),
+        );
+        if display.trim().is_empty() {
+            return;
+        }
+        let t = i18n::strings(&self.prefs.language);
+        if append_to_chat {
+            self.chat.push(ChatLine::plain("assistant", display.clone()));
+        }
+        let _ = self.cmd_tx.send(Cmd::SessionAppend {
+            session_id: retry.session_id.clone(),
+            role: "assistant".into(),
+            content: display,
+            attachments: vec![],
+        });
+        retry.history.push(("assistant".into(), partial));
+        let instruction = if retry.language.eq_ignore_ascii_case("fr") {
+            "Continue la réponse exactement là où elle s’est interrompue, sans répéter le texte déjà produit.".to_string()
+        } else {
+            "Continue the answer exactly where it stopped, without repeating the text already produced.".to_string()
+        };
+        retry.history.push(("user".into(), instruction.clone()));
+        retry.user_text = instruction;
+        self.chat_state.runtime.continue_retry = Some(retry);
+        self.status = t.chat_continue_partial.into();
+    }
+
     pub(crate) fn cancel_pending_turn(&mut self) {
         let Some(session_id) = self.chat_state.active_session.clone() else {
             return;
@@ -407,6 +485,8 @@ impl UiApp {
         if !self.chat_state.runtime.pending {
             return;
         }
+        let partial = self.chat_state.runtime.streaming.clone();
+        let retry = self.chat_state.runtime.outgoing_turn.take();
         let on_active = session_chat::on_chat_cancelled(
             &mut self.chat_state.session_chat,
             self.chat_state.active_session.as_deref(),
@@ -417,11 +497,13 @@ impl UiApp {
             &mut self.chat,
         );
         if on_active {
-            self.chat_state.runtime.outgoing_turn = None;
             self.chat_state.runtime.load_fail_retry = None;
             self.chat_state.runtime.room_turn_text = None;
             let t = i18n::strings(&self.prefs.language);
             self.status = t.chat_stopped.into();
+            if let Some(retry) = retry {
+                self.arm_partial_continuation(retry, partial);
+            }
         }
     }
 

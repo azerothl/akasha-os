@@ -26,7 +26,7 @@ use crate::persist;
 use crate::prompt::uses_gemma4_native_tools;
 use crate::room_ask::handle_room_user_ask;
 use crate::room_conductor::{
-    apply_peer_followups, build_initial_queue, effective_max_turns, effective_peer_followup_budget,
+    apply_peer_followups, build_initial_queue, effective_peer_followup_budget,
     format_roster_for_prompt, initial_schedule, peers_requesting_response, pop_next_scheduled_turn,
     sanitize_member_queue,
 };
@@ -1049,14 +1049,14 @@ pub async fn execute_room_conduct(
         return Err("salon sans membres".into());
     }
 
-    let max = effective_max_turns(&session.meta.conductor_policy) as usize;
+    // Every member in the roster gets one initial turn. Peer followups have a
+    // separate small budget so debate remains bounded without excluding agents.
     let peer_budget =
         effective_peer_followup_budget(session.meta.conductor_policy.max_agent_turns_per_user);
     let mut queue = initial_schedule(sanitize_member_queue(
         build_initial_queue(&req.content, &session.meta.members),
         &session.meta.members,
     ));
-    queue.truncate(max);
     if queue.is_empty() {
         return Ok(AgentRoomConductResponse {
             agent_turns: 0,
@@ -1067,8 +1067,9 @@ pub async fn execute_room_conduct(
     let mut agent_turns = 0u32;
     let mut initial_done = std::collections::HashSet::<String>::new();
     let mut peer_followups_run = 0u32;
+    let initial_target = queue.len();
 
-    while (agent_turns as usize) < max {
+    while initial_done.len() < initial_target || peer_followups_run < peer_budget {
         if round.is_cancelled() {
             round.clear_progress().await;
             return Ok(AgentRoomConductResponse {

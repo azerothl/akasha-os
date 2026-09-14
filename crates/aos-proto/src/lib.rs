@@ -3978,6 +3978,8 @@ fn default_max_agent_turns_per_user() -> u32 {
 /// Politique du conducteur de salon (runtime futur dans `aos-agentd`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatRoomConductorPolicy {
+    /// Budget de référence des tours contrôlés par message; le passage initial
+    /// inclut tout le roster et les rebonds pairs restent séparément bornés.
     #[serde(default = "default_max_agent_turns_per_user")]
     pub max_agent_turns_per_user: u32,
     #[serde(default = "default_true")]
@@ -5678,6 +5680,24 @@ pub struct ChatSessionAppendRequest {
     pub speaker_name: Option<String>,
     #[serde(default)]
     pub thinking: Option<String>,
+}
+
+/// Create a non-destructive conversation branch from a message prefix.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionForkRequest {
+    pub session_id: String,
+    /// Number of messages to copy, in transcript order.
+    pub keep_messages: usize,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// Remove the tail of a conversation while keeping the selected prefix.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionTruncateRequest {
+    pub session_id: String,
+    /// Number of messages to keep, in transcript order.
+    pub keep_messages: usize,
 }
 
 /// Upsert the single Deep Thinking plan card in a session transcript.

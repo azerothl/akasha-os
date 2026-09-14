@@ -45,3 +45,8 @@ pub(crate) fn render_load_fail_recovery(ui: &mut egui::Ui, t: &UiStrings) -> Rec
     });
     action
 }
+
+/// Recovery chrome for a stream that already produced useful text.
+pub(crate) fn render_partial_recovery(ui: &mut egui::Ui, t: &UiStrings) -> bool {
+    crate::chat_message_actions::show_continue_strip(ui, t)
+}

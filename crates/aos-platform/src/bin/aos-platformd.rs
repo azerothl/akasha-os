@@ -77,7 +77,7 @@ async fn main() {
                     Ok(req) => {
                         let s2 = s.clone();
                         let r = tokio::task::spawn_blocking(move || {
-                            let vector = s2.embed_text(&req.text)?;
+                            let vector = s2.embed_text(&req.text).unwrap_or_default();
                             let kind = req
                                 .kind
                                 .as_deref()
@@ -141,12 +141,35 @@ async fn main() {
                     Ok(req) => {
                         let s2 = s.clone();
                         let r = tokio::task::spawn_blocking(move || {
-                            let vector = s2.embed_text(&req.query)?;
-                            Ok::<_, String>(s2.mem.lock().unwrap().episodic_query(
+                            let vector = s2.embed_text(&req.query).unwrap_or_default();
+                            let namespace = req.namespace.as_deref();
+                            let mut hits = s2.mem.lock().unwrap().episodic_query(
                                 &vector,
                                 req.k,
-                                req.namespace.as_deref(),
-                            ))
+                                namespace,
+                            );
+                            if hits.is_empty() && vector.is_empty() {
+                                let terms: Vec<String> = req
+                                    .query
+                                    .split_whitespace()
+                                    .map(|term| term.to_lowercase())
+                                    .filter(|term| term.len() > 1)
+                                    .collect();
+                                hits = s2
+                                    .mem
+                                    .lock()
+                                    .unwrap()
+                                    .list(namespace.unwrap_or(""), false)
+                                    .into_iter()
+                                    .filter(|hit| {
+                                        let haystack = hit.text.to_lowercase();
+                                        terms.is_empty()
+                                            || terms.iter().all(|term| haystack.contains(term))
+                                    })
+                                    .take(req.k.max(1))
+                                    .collect();
+                            }
+                            Ok::<_, String>(hits)
                         })
                         .await
                         .unwrap_or_else(|e| Err(e.to_string()));
@@ -1553,6 +1576,58 @@ async fn main() {
                         let _ = ctx
                             .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
                             .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.fork", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionForkRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().fork(
+                            &req.session_id,
+                            req.keep_messages,
+                            req.title,
+                        );
+                        match result {
+                            Ok(meta) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx.respond_error(aos_ipc::msg::Status::InternalError, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("chat.session.truncate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<ChatSessionTruncateRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().truncate(&req.session_id, req.keep_messages);
+                        match result {
+                            Ok(meta) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx.respond_error(aos_ipc::msg::Status::InternalError, &e.to_string()).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide").await;
                     }
                 }
             }

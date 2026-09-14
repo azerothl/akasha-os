@@ -77,12 +77,18 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
     let t = crate::i18n::strings(&app.prefs.language);
     let load_fail = chat_error_copy::is_model_load_fail_error(&message);
     let visible = chat_error_copy::user_visible_chat_error(&t, &message);
+    let partial = app.chat_state.runtime.streaming.clone();
 
     app.chat_state.session_chat.finish_turn(&session_id);
     if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
         let retry_turn = app.chat_state.runtime.outgoing_turn.take();
         app.chat_state.runtime.finish_turn();
-        if load_fail {
+        if !partial.trim().is_empty() {
+            app.chat_state.runtime.load_fail_retry = None;
+            if let Some(retry) = retry_turn {
+                app.offer_partial_continuation(retry, partial);
+            }
+        } else if load_fail {
             app.chat_state.runtime.load_fail_retry = retry_turn;
         } else {
             app.chat_state.runtime.load_fail_retry = None;

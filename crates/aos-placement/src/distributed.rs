@@ -1148,9 +1148,11 @@ impl LanPairingRegistry {
 
 /// Encrypted, authenticated application frame for a future LAN transport.
 ///
-/// The nonce is derived from the monotonically increasing sequence number and
-/// the session key. The node/job binding is authenticated as associated data,
-/// so a frame cannot be moved to another paired node or job.
+/// Each frame carries a fresh OS-random nonce. The sequence number is kept
+/// separately for ordering and replay checks; it is not reused as nonce
+/// material when a new channel starts at zero with the same session key. The
+/// node/job binding is authenticated as associated data, so a frame cannot be
+/// moved to another paired node or job.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LanSecureFrame {
     pub node_id: String,
@@ -1180,7 +1182,7 @@ impl LanSessionKey {
         sequence: u64,
         plaintext: &[u8],
     ) -> Result<LanSecureFrame, String> {
-        let nonce = nonce_for(sequence);
+        let nonce: [u8; 12] = rand::random();
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.0));
         let ciphertext = cipher
             .encrypt(
@@ -1201,10 +1203,6 @@ impl LanSessionKey {
     }
 
     pub fn decrypt(&self, frame: &LanSecureFrame) -> Result<Vec<u8>, String> {
-        let expected_nonce = nonce_for(frame.sequence);
-        if frame.nonce != expected_nonce {
-            return Err("nonce LAN invalide".into());
-        }
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.0));
         cipher
             .decrypt(
@@ -1622,12 +1620,6 @@ async fn read_frame_from_stream(
         .await
         .map_err(|e| format!("lecture de trame LAN: {e}"))?;
     ciborium::from_reader(Cursor::new(encoded)).map_err(|e| format!("décodage de trame LAN: {e}"))
-}
-
-fn nonce_for(sequence: u64) -> [u8; 12] {
-    let mut nonce = [0; 12];
-    nonce[4..].copy_from_slice(&sequence.to_be_bytes());
-    nonce
 }
 
 fn frame_aad(node_id: &str, work_id: &str, sequence: u64) -> Vec<u8> {
@@ -2087,6 +2079,21 @@ mod tests {
         let frame = sender.send(b"shard payload").unwrap();
         assert_eq!(receiver.receive(&frame).unwrap(), b"shard payload");
         assert!(receiver.receive(&frame).is_err());
+
+        // A fresh channel may restart its sequence at zero, so nonce
+        // uniqueness must not depend on the per-channel counter.
+        let mut sender2 = LanSecureChannel::new(
+            LanSessionKey::from_bytes(&[7; 32]).unwrap(),
+            "coordinator",
+            "n1",
+            "work",
+        );
+        let frame2 = sender2.send(b"next payload").unwrap();
+        assert_ne!(frame.nonce, frame2.nonce);
+
+        let mut altered_nonce = frame2.clone();
+        altered_nonce.nonce[0] ^= 1;
+        assert!(receiver.receive(&altered_nonce).is_err());
 
         let mut wrong_job = frame.clone();
         wrong_job.work_id = "other-work".into();

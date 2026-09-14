@@ -1,10 +1,7 @@
 //! Conducteur déterministe pour les salons multi-agent (`ChatSessionMode::Room`).
 
 use crate::room_personas::persona_mention_labels;
-use aos_proto::{ChatRoomConductorPolicy, ChatRoomMember};
-
-/// Plafond dur des tours agent par message utilisateur (indépendamment de la politique).
-pub const HARD_MAX_AGENT_TURNS: u32 = 4;
+use aos_proto::ChatRoomMember;
 
 /// Plafond des tours relancés par un `@` pair après le passage initial du roster.
 pub const HARD_MAX_PEER_FOLLOWUPS: u32 = 2;
@@ -360,13 +357,6 @@ pub fn detect_peer_address(
         .next()
 }
 
-/// Nombre effectif de tours agent autorisés (politique + plafond dur).
-pub fn effective_max_turns(policy: &ChatRoomConductorPolicy) -> u32 {
-    policy
-        .max_agent_turns_per_user
-        .clamp(1, HARD_MAX_AGENT_TURNS)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,22 +406,20 @@ mod tests {
     }
 
     #[test]
-    fn cap_of_four_agent_turns() {
+    fn peer_followup_budget_is_bounded() {
         let policy = ChatRoomConductorPolicy {
             max_agent_turns_per_user: 99,
             allow_peer_debate: true,
         };
-        assert_eq!(effective_max_turns(&policy), 4);
+        assert_eq!(
+            effective_peer_followup_budget(policy.max_agent_turns_per_user),
+            2
+        );
         let policy_default = ChatRoomConductorPolicy::default();
-        assert_eq!(effective_max_turns(&policy_default), 4);
-
-        let m = members();
-        let content = "@Alpha @Beta @Gamma @Alpha @Beta extra";
-        let queue = build_initial_queue(content, &m);
-        let max = effective_max_turns(&policy) as usize;
-        let capped: Vec<_> = queue.into_iter().take(max).collect();
-        assert_eq!(capped.len(), 3);
-        assert!(capped.len() <= max);
+        assert_eq!(
+            effective_peer_followup_budget(policy_default.max_agent_turns_per_user),
+            2
+        );
     }
 
     #[test]
@@ -469,17 +457,24 @@ mod tests {
     }
 
     #[test]
-    fn no_mention_initial_queue_capped_by_effective_max_turns() {
-        let policy = ChatRoomConductorPolicy {
-            max_agent_turns_per_user: 1,
-            allow_peer_debate: false,
-        };
-        let max = effective_max_turns(&policy) as usize;
-        let m = members();
+    fn no_mention_initial_queue_keeps_all_members() {
+        let mut m = members();
+        m.push(ChatRoomMember {
+            agent_id: "agent-delta".into(),
+            display_name: "Delta".into(),
+            persona_id: None,
+            joined_ms: 4,
+        });
+        m.push(ChatRoomMember {
+            agent_id: "agent-epsilon".into(),
+            display_name: "Epsilon".into(),
+            persona_id: None,
+            joined_ms: 5,
+        });
         let queue = build_initial_queue("Hello everyone", &m);
-        let capped: Vec<_> = queue.into_iter().take(max).collect();
-        assert_eq!(capped.len(), 1);
-        assert_eq!(capped[0], "agent-alpha");
+        assert_eq!(queue.len(), 5);
+        assert_eq!(queue[3], "agent-delta");
+        assert_eq!(queue[4], "agent-epsilon");
     }
 
     #[test]
@@ -783,10 +778,9 @@ mod tests {
         let mut queue = initial_schedule(build_initial_queue("Quels risques ?", &m));
         let mut initial_done = HashSet::<String>::new();
         let mut peer_followups_run = 0u32;
-        let peer_budget = effective_peer_followup_budget(effective_max_turns(
-            &ChatRoomConductorPolicy::default(),
-        ));
-        let max = effective_max_turns(&ChatRoomConductorPolicy::default()) as usize;
+        let peer_budget = effective_peer_followup_budget(
+            ChatRoomConductorPolicy::default().max_agent_turns_per_user,
+        );
         let mut spoken = Vec::new();
         let replies = [
             ("agent-alpha", "@Beta ton avis ?"),
@@ -795,7 +789,8 @@ mod tests {
             ("agent-gamma", "ok"),
         ];
         let mut step = 0usize;
-        while spoken.len() < max {
+        let initial_target = queue.len();
+        while initial_done.len() < initial_target || peer_followups_run < peer_budget {
             let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) else {
                 break;
             };
@@ -824,6 +819,74 @@ mod tests {
             vec!["agent-alpha", "agent-beta", "agent-alpha", "agent-gamma",]
         );
         assert_eq!(peer_followups_run, 1);
+    }
+
+    #[test]
+    fn four_member_roster_can_rebound_after_initial_pass() {
+        use std::collections::HashSet;
+
+        let mut m = members();
+        m.push(ChatRoomMember {
+            agent_id: "agent-delta".into(),
+            display_name: "Delta".into(),
+            persona_id: None,
+            joined_ms: 4,
+        });
+
+        let policy = ChatRoomConductorPolicy::default();
+        let peer_budget = effective_peer_followup_budget(policy.max_agent_turns_per_user);
+        let mut queue = initial_schedule(build_initial_queue("Quels risques ?", &m));
+        let initial_target = queue.len();
+        let mut initial_done = HashSet::<String>::new();
+        let mut peer_followups_run = 0u32;
+        let mut spoken = Vec::new();
+        let replies = [
+            ("agent-alpha", "@Beta ton avis ?"),
+            ("agent-beta", "@Alpha confirmes ?"),
+            ("agent-alpha", "@Delta peux-tu vérifier ?"),
+            ("agent-delta", "@Alpha peux-tu confirmer ?"),
+            ("agent-alpha", "d'accord"),
+            ("agent-gamma", "ok"),
+        ];
+
+        let mut step = 0usize;
+        while initial_done.len() < initial_target || peer_followups_run < peer_budget {
+            let Some(turn) = pop_next_scheduled_turn(&mut queue, &initial_done) else {
+                break;
+            };
+            spoken.push(turn.agent_id.clone());
+            if turn.peer_followup {
+                peer_followups_run += 1;
+            } else {
+                initial_done.insert(turn.agent_id.clone());
+            }
+
+            let (speaker, reply) = replies[step];
+            assert_eq!(speaker, turn.agent_id);
+            let peers = peers_requesting_response(reply, &m, speaker);
+            apply_peer_followups(
+                &mut queue,
+                &peers,
+                &initial_done,
+                peer_followups_run,
+                peer_budget,
+            );
+            step += 1;
+        }
+
+        assert_eq!(
+            spoken,
+            vec![
+                "agent-alpha",
+                "agent-beta",
+                "agent-alpha",
+                "agent-delta",
+                "agent-alpha",
+                "agent-gamma",
+            ]
+        );
+        assert_eq!(initial_done.len(), 4);
+        assert_eq!(peer_followups_run, 2);
     }
 
     #[test]

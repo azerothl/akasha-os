@@ -1,8 +1,8 @@
 //! In-app chat room helpers (slice 3): personas, roster labels, speaker colors, @ mentions.
 
 use crate::i18n::{self, UiStrings};
+use aos_agent::room_conductor::build_initial_queue;
 use aos_agent::room_conductor::resolve_mention_token;
-use aos_agent::room_conductor::{build_initial_queue, effective_max_turns};
 use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
 use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 use aos_proto::{
@@ -43,15 +43,12 @@ pub fn format_turn_speaker_queue(
     t: &UiStrings,
     user_message: &str,
     members: &[ChatRoomMember],
-    conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
+    _conductor_policy: Option<&aos_proto::ChatRoomConductorPolicy>,
 ) -> Option<String> {
     if user_message.trim().is_empty() || members.is_empty() {
         return None;
     }
-    let mut queue = build_initial_queue(user_message, members);
-    if let Some(policy) = conductor_policy {
-        queue.truncate(effective_max_turns(policy) as usize);
-    }
+    let queue = build_initial_queue(user_message, members);
     if queue.is_empty() {
         return None;
     }
