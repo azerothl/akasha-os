@@ -10,7 +10,7 @@ use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_ind
 use crate::{
     agent_act_phrase, agent_canvas_session_ops, agent_panel, artifact_card, chat_ask, chat_media,
     chat_pending_status, chat_room, i18n, icons, local_tz_offset_minutes, now_ms, research_choice,
-    research_document, schedule_card, skill_offer, UiApp,
+    research_document, schedule_card, session_chat, skill_offer, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
@@ -721,17 +721,33 @@ impl UiApp {
                             }
                         }
                     });
-                    let bubble = if stamp.is_empty() {
-                        bubble
-                    } else {
-                        bubble.on_hover_text(&stamp)
-                    };
+                    // Stamp tooltip on the bubble body only — never on the top-right
+                    // action zone, otherwise the stamp popup fights the icon strip.
                     let can_branch = matches!(role.as_str(), "user" | "vous" | "assistant")
                         && self.chat_state.active_session.is_some();
                     let can_continue = i + 1 == n
                         && role == "assistant"
                         && self.chat_state.runtime.continue_retry.is_some()
                         && self.chat_state.active_session.is_some();
+                    if !stamp.is_empty() {
+                        let action_w = 12.0
+                            + (1 + usize::from(can_branch) * 2 + usize::from(can_continue)) as f32
+                                * (crate::theme::ICON_HIT + 2.0);
+                        let stamp_right =
+                            (bubble.rect.right() - action_w).max(bubble.rect.left() + 24.0);
+                        let stamp_rect = egui::Rect::from_min_max(
+                            bubble.rect.min,
+                            egui::pos2(stamp_right, bubble.rect.bottom()),
+                        );
+                        if stamp_rect.width() > 24.0 {
+                            ui.interact(
+                                stamp_rect,
+                                ui.id().with(("chat_msg_stamp", i)),
+                                egui::Sense::hover(),
+                            )
+                            .on_hover_text(&stamp);
+                        }
+                    }
                     let action_clicks = crate::chat_message_actions::show_hover_bar(
                         ui,
                         i,
@@ -748,10 +764,12 @@ impl UiApp {
                         copied = true;
                     }
                     if action_clicks.fork {
-                        session_branch_action = Some((i + 1, true));
+                        session_branch_action =
+                            Some((session_chat::persisted_prefix_len(&self.chat, i), true));
                     }
                     if action_clicks.return_here {
-                        session_branch_action = Some((i + 1, false));
+                        session_branch_action =
+                            Some((session_chat::persisted_prefix_len(&self.chat, i), false));
                     }
                     if action_clicks.continue_partial {
                         continue_from_action = true;
@@ -764,11 +782,17 @@ impl UiApp {
                         }
                         if can_branch {
                             if ui.button(t.chat_fork_here).clicked() {
-                                session_branch_action = Some((i + 1, true));
+                                session_branch_action = Some((
+                                    session_chat::persisted_prefix_len(&self.chat, i),
+                                    true,
+                                ));
                                 ui.close_menu();
                             }
                             if ui.button(t.chat_return_here).clicked() {
-                                session_branch_action = Some((i + 1, false));
+                                session_branch_action = Some((
+                                    session_chat::persisted_prefix_len(&self.chat, i),
+                                    false,
+                                ));
                                 ui.close_menu();
                             }
                         }
@@ -849,6 +873,12 @@ impl UiApp {
                                 .iter()
                                 .find(|session| session.id == session_id)
                                 .map(|session| format!("{} · branch", session.title));
+                            // Same latch as `+ Nouvelle`: SessionLoadIntent must bind
+                            // before SessionLoaded or the switch is treated as hijack.
+                            self.stash_composer_draft();
+                            self.pending_session_nav =
+                                crate::session_nav::PendingSessionNav::AwaitingCreate;
+                            self.schedule_ui.clear_transcript_dirty();
                             let _ = self.cmd_tx.send(Cmd::SessionFork {
                                 session_id,
                                 keep_messages,
