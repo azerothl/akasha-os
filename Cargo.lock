@@ -372,6 +372,7 @@ dependencies = [
  "ciborium",
  "criterion",
  "memmap2",
+ "rand 0.8.8",
  "serde",
  "thiserror 2.0.20",
  "tokio",
