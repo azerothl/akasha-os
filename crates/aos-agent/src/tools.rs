@@ -639,7 +639,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                 "type":"object",
                 "properties":{
                     "title":{"type":"string"},
-                    "content":{"type":"string","description":"Corps markdown (court à la création ; ≤ ~1200 car. recommandé)"}
+                    "content":{"type":"string","description":"Corps markdown (court à la création ; ≤ ~1200 car. recommandé)"},
+                    "tags":{"type":"array","items":{"type":"string"},"description":"Étiquettes de classement (ex. travail, idées)"}
                 },
                 "required":["title","content"]
             }),
@@ -654,14 +655,15 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "path":{"type":"string"},
                     "slug":{"type":"string"},
                     "content":{"type":"string","description":"Corps markdown complet ou section à écrire"},
-                    "new_title":{"type":"string"}
+                    "new_title":{"type":"string"},
+                    "tags":{"type":"array","items":{"type":"string"},"description":"Remplace les étiquettes si fourni"}
                 },
                 "required":["content"]
             }),
         ),
         (
             "notes.list",
-            "Lister les notes (titre, path, extrait)",
+            "Lister les notes (titre, path, extrait, étiquettes)",
             serde_json::json!({"type":"object"}),
         ),
         (
@@ -712,6 +714,18 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                     "topic":{"type":"string","description":"Sujet pour scorer la pertinence"},
                     "hops":{"type":"integer"},
                     "k":{"type":"integer"}
+                }
+            }),
+        ),
+        (
+            "notes.delete",
+            "Supprimer une note (fichier + mémoire + graphe)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "title":{"type":"string"},
+                    "path":{"type":"string"},
+                    "slug":{"type":"string"}
                 }
             }),
         ),
@@ -1288,6 +1302,7 @@ pub fn default_agent_tools() -> Vec<String> {
         "notes.update",
         "notes.links",
         "notes.related",
+        "notes.delete",
         "tasks.create",
         "tasks.list",
         "tasks.update",

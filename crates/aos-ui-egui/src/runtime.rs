@@ -1785,6 +1785,19 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             }
             invoke_notes(&bus, &evt_tx, "notes.related", args).await;
         }
+        Cmd::NotesDelete { title, path, slug } => {
+            let mut args = serde_json::json!({});
+            if let Some(t) = title {
+                args["title"] = serde_json::json!(t);
+            }
+            if let Some(p) = path {
+                args["path"] = serde_json::json!(p);
+            }
+            if let Some(s) = slug {
+                args["slug"] = serde_json::json!(s);
+            }
+            invoke_notes(&bus, &evt_tx, "notes.delete", args).await;
+        }
         Cmd::UserLibraryList => {
             match bus
                 .call::<(), UserLibraryListResponse>("user.library.list", &(), vec![])

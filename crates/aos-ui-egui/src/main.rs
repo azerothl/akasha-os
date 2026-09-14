@@ -568,6 +568,7 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "notes.update",
             "notes.links",
             "notes.related",
+            "notes.delete",
         ],
     ),
     (
@@ -3034,6 +3035,7 @@ impl eframe::App for UiApp {
                 Evt::NoteLoaded(detail) => self.on_note_loaded(detail),
                 Evt::NotesSearchHits(hits) => self.on_notes_search_hits(hits),
                 Evt::NotesRelated(hits) => self.on_notes_related(hits),
+                Evt::NotesDeleted { path } => self.on_notes_deleted(path),
                 Evt::UserLibraryListed(docs) => self.on_user_library_listed(docs),
                 Evt::NotesSaved { path, slug, title } => {
                     self.on_notes_saved(path, slug, title);

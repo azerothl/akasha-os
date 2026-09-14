@@ -39,6 +39,10 @@ impl WorkspaceUiState {
         self.notes.apply_related(hits, count_tpl);
     }
 
+    pub(crate) fn apply_note_deleted(&mut self, path: &str, deleted_label: &str) {
+        self.notes.apply_deleted(path, deleted_label);
+    }
+
     pub(crate) fn mark_note_saved(
         &mut self,
         path: String,
