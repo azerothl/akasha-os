@@ -698,6 +698,7 @@ impl UiApp {
                                     schedule_card::send_schedule_action(&self.cmd_tx, action);
                                 }
                                 ChatAttachment::DeepPlan {
+                                    agent_id,
                                     title,
                                     version,
                                     steps,
@@ -705,6 +706,11 @@ impl UiApp {
                                     show_logs_step_id,
                                     ..
                                 } => {
+                                    let agent_state = self
+                                        .agents
+                                        .iter()
+                                        .find(|a| a.agent_id == *agent_id)
+                                        .map(|a| a.state.clone());
                                     crate::deep_plan_ui::deep_plan_toggle(
                                         ui,
                                         i,
@@ -714,6 +720,10 @@ impl UiApp {
                                             steps,
                                             expand_step_ids,
                                             show_logs_step_id: show_logs_step_id.as_deref(),
+                                            agent_interrupted: crate::deep_plan_ui::agent_plan_interrupted(
+                                                agent_state.as_ref(),
+                                            ),
+                                            t,
                                         },
                                         &mut self.chat_state.view.deep_plan_open,
                                     );

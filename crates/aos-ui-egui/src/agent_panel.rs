@@ -28,9 +28,8 @@ pub fn agent_state_label(t: &i18n::UiStrings, state: &AgentState) -> &'static st
         AgentState::Failed => t.agent_state_failed,
         AgentState::Blocked => t.agent_state_blocked,
         AgentState::Running => t.agent_state_running,
-        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
-            t.agent_state_pending
-        }
+        AgentState::Killed => t.agent_state_killed,
+        AgentState::Created | AgentState::Paused | AgentState::Roster => t.agent_state_pending,
     }
 }
 
@@ -406,20 +405,19 @@ pub fn agent_has_notes_create_tool(info: &AgentInfo) -> bool {
 }
 
 /// Note-creation agent finished but the Notes tab is still empty — locked chrome only.
+/// Only when the user explicitly armed a note probe (`/agent …note…`), not because the
+/// delegate kit happens to include notes tools (e.g. advisory Deep Thinking).
 pub fn notes_create_fail_chrome(
     info: Option<&AgentInfo>,
     pending_note_agent: bool,
     notes_count: usize,
 ) -> bool {
-    if notes_count > 0 {
+    if !pending_note_agent || notes_count > 0 {
         return false;
     }
     let Some(a) = info else {
         return false;
     };
-    if !pending_note_agent && !agent_has_notes_create_tool(a) {
-        return false;
-    }
     matches!(
         a.state,
         AgentState::Done | AgentState::Failed | AgentState::Killed
@@ -2225,7 +2223,7 @@ Je vais répondre de manière naturelle"#;
         };
         assert!(notes_create_fail_chrome(Some(&ag), true, 0));
         assert!(!notes_create_fail_chrome(Some(&ag), true, 2));
-        assert!(notes_create_fail_chrome(Some(&ag), false, 0));
+        assert!(!notes_create_fail_chrome(Some(&ag), false, 0));
         let mut other = ag.clone();
         other.tools.clear();
         other.skills.clear();

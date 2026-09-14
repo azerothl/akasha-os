@@ -111,6 +111,7 @@ pub(crate) fn deep_thinking_force_delegate(
     }
     if chat_user_wants_advisory(user_text) {
         strip_module_authoring_tools(&mut tools);
+        strip_advisory_notes_tools(&mut skills, &mut tools);
     }
     (
         user_text.to_string(),
@@ -128,6 +129,12 @@ fn strip_module_authoring_tools(tools: &mut Vec<String>) {
             "module.scaffold" | "module.package" | "module.install" | "module.compile"
         )
     });
+}
+
+/// Advisory Deep Thinking: no note authoring — analysis/recommendation only.
+fn strip_advisory_notes_tools(skills: &mut Vec<String>, tools: &mut Vec<String>) {
+    skills.retain(|s| s != "notes-writer");
+    tools.retain(|t| !t.starts_with("notes."));
 }
 
 fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) {
@@ -582,6 +589,9 @@ pub(crate) fn chat_delegate_agent_spec(
             }
             if advisory {
                 strip_module_authoring_tools(&mut tools);
+                if skills.iter().any(|s| s == "deep-thinking") {
+                    strip_advisory_notes_tools(&mut skills, &mut tools);
+                }
             }
             let mut prose = agent_panel::prose_without_json(model_output);
             if prose.is_empty() || self_tool {
@@ -697,9 +707,13 @@ pub(crate) async fn spawn_chat_delegate_agent(
     let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
     let device_camera_delegate = tools.iter().any(|t| t == "device.camera.capture");
     let advisory = chat_user_wants_advisory(&user_text);
+    let mut skills = skills;
     let mut tools = tools;
     if advisory {
         strip_module_authoring_tools(&mut tools);
+        if deep_thinking {
+            strip_advisory_notes_tools(&mut skills, &mut tools);
+        }
     }
     let goal_statement = if canvas_delegate || advisory {
         // Advisory: garder la question utilisateur (pas un brief « Créer… »).
