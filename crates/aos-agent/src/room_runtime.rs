@@ -71,8 +71,8 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - `action` = nom exact du catalogue (`canvas.stroke`, `canvas.get`, …).
 - Pour le canvas : coords 0..1, commence par `canvas.get`, omets `session_id` (le runtime le force).
 - Couleur : `canvas.set_style` avec `color` #RRGGBB ou `color` sur chaque op — le teal par défaut n'est pas la seule teinte.
-- Document / présentation / rapport demandé par l'utilisateur : `files.generate` sous `/downloads/` (md), **pas** `notes.create`.
-- Notes du carnet interne uniquement si l'utilisateur demande une *note* — sinon livrable fichier.
+- Document / présentation / rapport demandé par l'utilisateur : `files.generate` sous `/downloads/` (md) — indexé dans la Bibliothèque. notes.create = brouillon / handoff seulement, pas le livrable.
+- Notes du carnet interne pour la réflexion ou si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
 - `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
 - Pas de `agent.spawn` ni collègues inventés."#;

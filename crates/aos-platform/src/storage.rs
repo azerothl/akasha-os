@@ -99,6 +99,11 @@ impl StorageFs {
     }
 
     /// Sécurise un chemin logique (`/documents/x.md`) en chemin hôte.
+    pub fn resolve_host(&self, logical: &str) -> Result<PathBuf, FsError> {
+        self.resolve(logical)
+    }
+
+    /// Sécurise un chemin logique (`/documents/x.md`) en chemin hôte.
     fn resolve(&self, logical: &str) -> Result<PathBuf, FsError> {
         let rel = logical.trim_start_matches('/');
         let mut out = self.root.join("data");

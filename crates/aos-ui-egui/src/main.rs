@@ -1999,18 +1999,6 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 self.open_overflow_tab(tab);
             }
         }
-        if icons::nav_more_row(
-            ui,
-            self.research_ui.documents_list.open,
-            icons::OverflowNavIcon::Documents,
-            t.nav_documents,
-        )
-        .on_hover_text(t.documents_list_title)
-        .clicked()
-        {
-            self.nav_more_open = false;
-            self.research_ui.open_documents_list();
-        }
         ui.add_space(4.0);
         ui.separator();
         ui.weak(nav::NavGroup::System.label(&lang));
@@ -3636,13 +3624,7 @@ impl eframe::App for UiApp {
             &self.prefs.language,
             &mut restart_onboarding,
         );
-        research_document::show_documents_list(
-            ctx,
-            &mut self.research_ui.documents_list,
-            &self.research_ui.documents,
-            &mut self.research_ui.overlay,
-            &t,
-        );
+        // Document overlay still used from chat result cards; list moved to Library.
         research_document::show_document_overlay(
             ctx,
             &mut self.research_ui.overlay,

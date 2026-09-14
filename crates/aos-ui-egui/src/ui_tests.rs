@@ -60,6 +60,52 @@ mod delegate_tests {
     }
 
     #[test]
+    fn advisory_module_question_skips_scaffold_tools() {
+        let q = "Si je veux creer un module d'aide au développement pour des gros \
+                 projets, qu'est ce qu'il faudrait que je fasse ? \
+                 y a-t-il des limitations ?";
+        let (brief, skills, tools, _) =
+            crate::chat_delegate::deep_thinking_force_delegate(q, false, &[]);
+        assert_eq!(brief, q);
+        assert!(skills.iter().any(|s| s == "deep-thinking"));
+        assert!(!tools.iter().any(|t| t == "module.scaffold"));
+        assert!(!tools.iter().any(|t| t == "module.install"));
+        assert!(
+            tools.iter().any(|t| t == "module.list")
+                || tools.iter().any(|t| t == "module.describe")
+        );
+    }
+
+    #[test]
+    fn chat_kit_document_ask_includes_files_generate() {
+        let (skills, tools) = crate::chat_delegate::chat_agent_kit(
+            "fais moi un document sur les modules Akasha",
+        );
+        assert!(skills.iter().any(|s| s == "file-author"));
+        assert!(tools.iter().any(|t| t == "files.generate"));
+        // Notes remain available as scratchpad / handoff.
+        assert!(tools.iter().any(|t| t == "notes.create"));
+    }
+
+    #[test]
+    fn chat_kit_note_ask_keeps_notes_without_forcing_files() {
+        let (_skills, tools) =
+            crate::chat_delegate::chat_agent_kit("écris une note rapide sur le salon");
+        assert!(tools.iter().any(|t| t == "notes.create"));
+        assert!(!tools.iter().any(|t| t == "files.generate"));
+    }
+
+    #[test]
+    fn advisory_spawn_keeps_user_question_not_create_brief() {
+        let q = "Si je veux créer un module helper, qu'est-ce qu'il faudrait faire ?";
+        let out = r#"{"action":"agent.spawn","args":{"brief":"Créer un module helper"}}"#;
+        let (brief, _skills, tools, _) =
+            chat_delegate_agent_spec(q, out, false, ASPECT, &[]).expect("déléguer");
+        assert_eq!(brief, q);
+        assert!(!tools.iter().any(|t| t == "module.scaffold"));
+    }
+
+    #[test]
     fn canvas_prefers_loaded_vision_model_over_a_text_chat_model() {
         let models = vec![
             model("vision-on-disk", ModelState::OnDisk, true),

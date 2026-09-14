@@ -211,6 +211,7 @@ pub fn document_prep_system_prompt(language: &str) -> String {
          Chaque fait externe issu du web DOIT avoir une note (titre source + URL). \
          N'invente jamais de source. Si un fetch échoue, dis-le dans le document.\n\
          Images seulement si utile via media.image.generate. Pas de diaporama.\n\
+         Le fichier généré est ajouté automatiquement à la Bibliothèque utilisateur.\n\
          Termine avec goal.complete en citant le chemin du fichier produit."
             .into()
     } else {
@@ -221,6 +222,7 @@ pub fn document_prep_system_prompt(language: &str) -> String {
          Every external web fact MUST have a footnote (source title + URL). \
          Never invent a source. If a fetch fails, say so in the document.\n\
          Images only when useful via media.image.generate. No slide deck.\n\
+         The generated file is automatically added to the user Library.\n\
          Finish with goal.complete citing the output file path."
             .into()
     }

@@ -60,7 +60,7 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 
 - **In-app guides**: Chat ? beside the session name; Canvas ? after Clear all — Create already had a guide
 - **Chat schedules**: live / pause (Resume | Stop) / stop without leaving the session
-- **Research document**: in-thread Reply | Prepare a document — progress, Ready, listed under More → Documents
+- **Research document**: in-thread Reply | Prepare a document — progress, Ready, added to the Library
 - **User library**: consultative pdf/txt/md (empty state + row)
 - **Morning skill offer**: title names the need (not a single opaque word); shows example asks; muted prompt; Create | Later — never auto-creates
 

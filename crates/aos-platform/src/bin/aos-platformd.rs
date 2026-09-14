@@ -2950,6 +2950,25 @@ async fn main() {
                                         .write_bytes(&req.path, &bytes, &actor, &caps);
                                 match write_res {
                                     Ok(_) => {
+                                        let host_for_lib = s
+                                            .fs
+                                            .lock()
+                                            .unwrap()
+                                            .resolve_host(&req.path)
+                                            .ok()
+                                            .filter(|p| p.is_file())
+                                            .and_then(|p| p.to_str().map(|s| s.to_string()));
+                                        let library_added = host_for_lib
+                                            .map(|host| {
+                                                aos_platform::user_docs::try_ingest_generated(
+                                                    &s,
+                                                    &s.memory_dir,
+                                                    &host,
+                                                    &req.format,
+                                                    None,
+                                                )
+                                            })
+                                            .unwrap_or(false);
                                         s.audit(AuditAppendRequest {
                                             trace_id: "files-gen".into(),
                                             actor,
@@ -2958,6 +2977,7 @@ async fn main() {
                                             detail: serde_json::json!({
                                                 "format": req.format,
                                                 "bytes": bytes.len(),
+                                                "library_added": library_added,
                                             }),
                                         });
                                         let _ = ctx
@@ -2966,6 +2986,7 @@ async fn main() {
                                                 &FilesGenerateResponse {
                                                     path: req.path,
                                                     bytes: bytes.len() as u64,
+                                                    library_added,
                                                 },
                                             )
                                             .await;

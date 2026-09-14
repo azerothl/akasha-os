@@ -11,7 +11,9 @@ pub use delegate::{bind_child_to_step, find_step, find_step_for_child};
 pub use engine::{deep_thinking_caps, DeepThinkingEngine, EngineError};
 pub use store::PlanStore;
 pub use summary::{
-    count_in_progress, format_plan_updated_trace, format_spawn_trace, light_plan_summary,
+    count_delegated, count_in_progress, deep_thinking_critic_progress,
+    deep_thinking_critic_system_prompt, format_plan_updated_trace, format_spawn_trace,
+    light_plan_summary,
 };
 
 pub mod intents {

@@ -16,13 +16,11 @@ use crate::storage::{glob_match, StorageFs};
 use crate::trust::TrustManager;
 use aos_proto::AuditAppendRequest;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "embeddings")]
 use aos_llama::{LlamaContext, LlamaModel, LoadOptions};
-#[cfg(feature = "embeddings")]
-use std::path::PathBuf;
 
 /// Configuration du daemon plateforme.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -129,6 +127,8 @@ pub struct PlatformSubsystem {
     pub audit: Mutex<AuditJournal>,
     pub fs: Mutex<StorageFs>,
     pub mem: Mutex<MemoryStore>,
+    /// Directory for memory + user library (`{memory_dir}/library`).
+    pub memory_dir: PathBuf,
     pub sessions: Mutex<ChatSessionStore>,
     pub modules: Mutex<ModuleRuntime>,
     pub skills: Mutex<crate::skill::SkillStore>,
@@ -243,6 +243,7 @@ impl PlatformSubsystem {
             audit: Mutex::new(audit),
             fs: Mutex::new(fs),
             mem: Mutex::new(mem),
+            memory_dir: PathBuf::from(&config.memory_dir),
             sessions: Mutex::new(sessions),
             modules: Mutex::new(rt),
             skills: Mutex::new(skills),
@@ -1168,14 +1169,42 @@ impl HostServices for PlatformSubsystem {
                         &ctx.granted_caps,
                     )
                     .map_err(|e| e.to_string())?;
+                // Resolve host path then release fs lock before library ingest (locks mem).
+                let host_for_lib = self
+                    .fs
+                    .lock()
+                    .unwrap()
+                    .resolve_host(path)
+                    .ok()
+                    .filter(|p| p.is_file())
+                    .and_then(|p| p.to_str().map(|s| s.to_string()));
+                let library_added = host_for_lib
+                    .map(|host| {
+                        crate::user_docs::try_ingest_generated(
+                            self,
+                            &self.memory_dir,
+                            &host,
+                            format,
+                            None,
+                        )
+                    })
+                    .unwrap_or(false);
                 self.audit(AuditAppendRequest {
                     trace_id: ctx.trace_id.clone(),
                     actor: format!("module:{}", ctx.module),
                     action: "files.generate".into(),
                     target: path.into(),
-                    detail: serde_json::json!({"format": format, "on_behalf_of": ctx.actor}),
+                    detail: serde_json::json!({
+                        "format": format,
+                        "on_behalf_of": ctx.actor,
+                        "library_added": library_added,
+                    }),
                 });
-                Ok(serde_json::json!({"version": version, "path": path}))
+                Ok(serde_json::json!({
+                    "version": version,
+                    "path": path,
+                    "library_added": library_added,
+                }))
             }
             "ext.asset_read" | "ext.load_handlers" => {
                 let rel = args["path"]

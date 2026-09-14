@@ -60,7 +60,7 @@ Tout ce qui a suivi la 0.16.0 est livré dans ce tag (pas de releases GitHub
 
 - **Guides in-app** : ? Chat à côté du nom de session ; ? Canvas après Tout effacer — Créer avait déjà un guide
 - **Planifications Chat** : en cours / pause (Reprendre | Arrêter) / arrêt sans quitter la session
-- **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, listé sous Plus → Documents
+- **Document recherche** : dans le fil Répondre | Préparer un document — progression, Prêt, ajouté à la Bibliothèque
 - **Bibliothèque utilisateur** : pdf/txt/md consultatifs (état vide + ligne)
 - **Offre skill du matin** : le titre nomme le besoin (pas un mot opaque) ; exemples de demandes ; invite atténuée ; Créer | Plus tard — jamais de création auto
 

@@ -22,13 +22,28 @@ pub fn spawn_background_indexing(sub: Arc<PlatformSubsystem>, memory_dir: String
         }
 
         let s = sub.clone();
+        let memory_dir_indexed = memory_dir.clone();
         match tokio::task::spawn_blocking(move || {
-            crate::user_docs::ensure_indexed(&s, Path::new(&memory_dir))
+            crate::user_docs::ensure_indexed(&s, Path::new(&memory_dir_indexed))
         })
         .await
         {
             Ok(n) => eprintln!("[aos-platformd] user library : {n} chunks indexés"),
             Err(e) => eprintln!("[aos-platformd] user library panic : {e}"),
+        }
+
+        let s = sub.clone();
+        match tokio::task::spawn_blocking(move || {
+            let home = std::env::var("AOS_HOME").unwrap_or_else(|_| ".".into());
+            crate::user_docs::migrate_research_index(&s, Path::new(&memory_dir), Path::new(&home))
+        })
+        .await
+        {
+            Ok(n) if n > 0 => {
+                eprintln!("[aos-platformd] research→library migration : {n} document(s)")
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("[aos-platformd] research→library migration panic : {e}"),
         }
     });
 }
