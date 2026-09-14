@@ -2063,12 +2063,13 @@ pub struct FsSetClassRequest {
 // ---------------------------------------------------------------------------
 
 /// Semantic object kinds introduced by Memory V2.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryObjectKind {
     Document,
     Event,
     Entity,
+    #[default]
     Claim,
     Decision,
     Goal,
@@ -2077,27 +2078,16 @@ pub enum MemoryObjectKind {
     Narrative,
 }
 
-impl Default for MemoryObjectKind {
-    fn default() -> Self {
-        Self::Claim
-    }
-}
-
 /// Lifecycle state of a Memory V2 object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryObjectStatus {
+    #[default]
     Candidate,
     Accepted,
     Rejected,
     Superseded,
     Archived,
-}
-
-impl Default for MemoryObjectStatus {
-    fn default() -> Self {
-        Self::Candidate
-    }
 }
 
 /// Temporal validity and observation metadata for a memory object.
@@ -5772,6 +5762,31 @@ pub struct AgentRoomConductResponse {
     pub agent_turns: u32,
     #[serde(default)]
     pub cancelled: bool,
+}
+
+/// Live progress for an in-flight `agent.room_conduct` (`agent.room_conduct.progress`).
+///
+/// Phases: `preparing` | `thinking` | `generating` | `reading` | `searching` | `tools` |
+/// `waiting_user`. Optional `detail` is a tool id (e.g. `fs.read`) while tools run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AgentRoomConductProgress {
+    pub session_id: String,
+    pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker_name: Option<String>,
+    /// 1-based index of the member turn currently running.
+    #[serde(default)]
+    pub turn_index: u32,
+    /// Estimated total member turns for this round (grows with peer follow-ups).
+    #[serde(default)]
+    pub turn_total: u32,
+    #[serde(default)]
+    pub phase: String,
+    /// Current tool id while `phase` is reading/searching/tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 /// `agent.room_turn` — inférence one-shot d'un membre du salon (sans spawn worker).

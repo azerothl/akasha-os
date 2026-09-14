@@ -9,8 +9,8 @@ use crate::cmd::Cmd;
 use crate::ui_format::{format_chat_stamp, format_local_date_short, local_day_index};
 use crate::{
     agent_act_phrase, agent_canvas_session_ops, agent_panel, artifact_card, chat_ask, chat_media,
-    chat_room, i18n, icons, local_tz_offset_minutes, now_ms, research_choice, research_document,
-    schedule_card, skill_offer, UiApp,
+    chat_pending_status, chat_room, i18n, icons, local_tz_offset_minutes, now_ms, research_choice,
+    research_document, schedule_card, skill_offer, UiApp,
 };
 use aos_proto::{ChatAttachment, ChatRoomMember};
 use eframe::egui;
@@ -840,19 +840,41 @@ impl UiApp {
                 } else if self.chat_state.runtime.pending {
                     let (_, _, role_color) = chat_bubble_colors(ui, ChatBubbleKind::Assistant);
                     let thinking = if room_mode {
-                        self.chat_state
+                        if let Some(name) = self
+                            .chat_state
                             .runtime
-                            .room_turn_text
-                            .as_deref()
-                            .and_then(|msg| {
-                                chat_room::format_turn_speaker_queue(
-                                    t,
-                                    msg,
-                                    room_members,
-                                    room_conductor_policy,
-                                )
+                            .room_progress
+                            .as_ref()
+                            .filter(|p| p.active)
+                            .and_then(|p| {
+                                p.speaker_name
+                                    .as_deref()
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                    .or_else(|| {
+                                        p.speaker_id
+                                            .as_deref()
+                                            .map(str::trim)
+                                            .filter(|s| !s.is_empty())
+                                    })
                             })
-                            .unwrap_or_else(|| t.chat_assistant.to_string())
+                        {
+                            name.to_string()
+                        } else {
+                            self.chat_state
+                                .runtime
+                                .room_turn_text
+                                .as_deref()
+                                .and_then(|msg| {
+                                    chat_room::format_turn_speaker_queue(
+                                        t,
+                                        msg,
+                                        room_members,
+                                        room_conductor_policy,
+                                    )
+                                })
+                                .unwrap_or_else(|| t.chat_assistant.to_string())
+                        }
                     } else {
                         t.chat_assistant.to_string()
                     };
@@ -873,7 +895,16 @@ impl UiApp {
                                 ui.ctx().request_repaint();
                             }
                         });
-                        ui.weak("…");
+                        let pending_status = chat_pending_status::format_pending_assistant_status(
+                            t,
+                            self.chat_state.runtime.infer_phase,
+                            self.chat_state.active_session.as_deref(),
+                            &self.agents,
+                            &self.agent_ui.traces,
+                            room_mode,
+                            self.chat_state.runtime.room_progress.as_ref(),
+                        );
+                        ui.weak(&pending_status);
                     });
                 }
                 if self.chat_state.runtime.load_fail_retry.is_some()

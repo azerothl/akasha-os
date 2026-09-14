@@ -20,10 +20,10 @@ use aos_proto::{
     format_chat_supervisor_lock, format_system_assistant_prompt, AgentCreateRequest, AgentGoal,
     AgentIdRequest, AgentInfo, AgentKind, AgentPolicy, AgentPolicyGetRequest,
     AgentPolicySetRequest, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
-    AgentRosterUpdateRequest, AgentSpecResponse, AgentState, AgentSteerRequest, AgentTrace,
-    AuditEvent, AuditQueryRequest, CancelRequest, CapInfo, CapListRequest, CapRevokeRequest,
-    ChatAttachment, ChatMessage, ChatRoomMember, ChatSessionAppendRequest,
-    ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
+    AgentRoomConductProgress, AgentRosterUpdateRequest, AgentSpecResponse, AgentState,
+    AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest, CancelRequest, CapInfo,
+    CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
+    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionGetResponse, ChatSessionIdRequest,
     ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
     ChatSessionRenameRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
     ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest,
@@ -559,6 +559,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
         } => {
             let t = i18n::strings(&language);
             let _ = evt_tx.send(Evt::Status(t.status_assistant_generating_progress.into()));
+            let _ = evt_tx.send(Evt::ChatProgress {
+                session_id: session_id.clone(),
+                phase: crate::chat_pending_status::ChatInferPhase::Preparing,
+            });
             let user_content =
                 aos_proto::chat_document::merge_documents_into_user_content(&user_text, &documents);
             if !skip_session_append {
@@ -676,6 +680,14 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                     let _ = evt_tx.send(Evt::InferStarted {
                                         session_id: sid.clone(),
                                         inference_id,
+                                    });
+                                }
+                                Ok(TokenEvent::Queued { position }) => {
+                                    let _ = evt_tx.send(Evt::ChatProgress {
+                                        session_id: sid.clone(),
+                                        phase: crate::chat_pending_status::ChatInferPhase::Queued {
+                                            position,
+                                        },
                                     });
                                 }
                                 Ok(TokenEvent::Delta { text }) => {
@@ -4299,6 +4311,20 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 interval.tick().await;
                 loop {
                     interval.tick().await;
+                    if let Ok(progress) = poll_bus
+                        .call::<ChatSessionIdRequest, AgentRoomConductProgress>(
+                            agent_intents::ROOM_CONDUCT_PROGRESS,
+                            &ChatSessionIdRequest {
+                                session_id: poll_sid.clone(),
+                            },
+                            vec![],
+                        )
+                        .await
+                    {
+                        if progress.active {
+                            let _ = poll_evt.send(Evt::RoomProgress { progress });
+                        }
+                    }
                     load_session(&poll_bus, &poll_evt, &poll_sid).await;
                     poll_ctx.request_repaint();
                 }

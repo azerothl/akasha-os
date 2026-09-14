@@ -1691,7 +1691,7 @@ fn schema_fields(schema: &Value, doc: &DeclUiDocument, language: &str) -> Vec<Sc
             });
         }
     }
-    out.sort_by(|a, b| a.key.cmp(&b.key));
+    out.sort_by_key(|a| a.key.clone());
     out
 }
 

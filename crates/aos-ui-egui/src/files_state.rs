@@ -57,7 +57,7 @@ impl FilesUiState {
             })
             .filter(|e| q.is_empty() || e.path.to_lowercase().contains(q.as_str()))
             .collect();
-        out.sort_by(|a, b| a.path.cmp(&b.path));
+        out.sort_by_key(|a| a.path.clone());
         out
     }
 

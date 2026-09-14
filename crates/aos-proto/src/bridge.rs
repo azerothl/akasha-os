@@ -36,7 +36,7 @@ fn defs(pairs: &[(&str, Value)]) -> Value {
         .iter()
         .map(|(k, v)| ((*k).to_string(), v.clone()))
         .collect();
-    items.sort_by(|a, b| a.0.cmp(&b.0));
+    items.sort_by_key(|(k, _)| k.clone());
     let mut map = Map::new();
     for (k, v) in items {
         map.insert(k, v);

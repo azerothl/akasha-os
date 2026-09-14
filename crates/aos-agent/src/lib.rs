@@ -68,6 +68,7 @@ pub mod intents {
     pub const ROOM_TURN: &str = "agent.room_turn";
     pub const ROOM_CONDUCT: &str = "agent.room_conduct";
     pub const ROOM_CONDUCT_CANCEL: &str = "agent.room_conduct.cancel";
+    pub const ROOM_CONDUCT_PROGRESS: &str = "agent.room_conduct.progress";
     pub const ROOM_ASK_REPLY: &str = "agent.room_ask_reply";
     pub const SPEC_GET: &str = "agent.spec.get";
     pub const ROSTER_UPDATE: &str = "agent.roster.update";

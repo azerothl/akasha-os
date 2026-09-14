@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use aos_proto::ChatAttachment;
 
 use crate::agent_panel;
+use crate::chat_pending_status::ChatInferPhase;
 use crate::cmd::ChatLine;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -16,6 +17,7 @@ pub(crate) struct SessionInflight {
     pub streaming: String,
     pub inference_id: Option<u64>,
     pub started_ms: u64,
+    pub infer_phase: ChatInferPhase,
 }
 
 #[derive(Debug, Default)]
@@ -31,6 +33,7 @@ impl SessionChatState {
         inf.streaming.clear();
         inf.inference_id = None;
         inf.started_ms = crate::now_ms();
+        inf.infer_phase = ChatInferPhase::Preparing;
     }
 
     pub fn push_delta(&mut self, session_id: &str, text: &str) {
@@ -41,11 +44,16 @@ impl SessionChatState {
         self.inflight_mut(session_id).inference_id = Some(inference_id);
     }
 
+    pub fn set_infer_phase(&mut self, session_id: &str, phase: ChatInferPhase) {
+        self.inflight_mut(session_id).infer_phase = phase;
+    }
+
     pub fn finish_turn(&mut self, session_id: &str) {
         if let Some(inf) = self.inflight.get_mut(session_id) {
             inf.pending = false;
             inf.streaming.clear();
             inf.inference_id = None;
+            inf.infer_phase = ChatInferPhase::Preparing;
         }
     }
 
@@ -78,18 +86,21 @@ impl SessionChatState {
         streaming: &mut String,
         chat_pending: &mut bool,
         chat_inference_id: &mut Option<u64>,
+        chat_infer_phase: &mut ChatInferPhase,
     ) {
         if let Some(sid) = active_session {
             if let Some(inf) = self.inflight.get(sid) {
                 *streaming = inf.streaming.clone();
                 *chat_pending = inf.pending;
                 *chat_inference_id = inf.inference_id;
+                *chat_infer_phase = inf.infer_phase;
                 return;
             }
         }
         streaming.clear();
         *chat_pending = false;
         *chat_inference_id = None;
+        *chat_infer_phase = ChatInferPhase::Preparing;
     }
 
     fn inflight_mut(&mut self, session_id: &str) -> &mut SessionInflight {
@@ -164,10 +175,26 @@ pub(crate) fn on_infer_started(
     session_id: &str,
     inference_id: u64,
     chat_inference_id: &mut Option<u64>,
+    chat_infer_phase: &mut ChatInferPhase,
 ) {
     state.set_inference_id(session_id, inference_id);
+    state.set_infer_phase(session_id, ChatInferPhase::WaitingFirstToken);
     if active_session == Some(session_id) {
         *chat_inference_id = Some(inference_id);
+        *chat_infer_phase = ChatInferPhase::WaitingFirstToken;
+    }
+}
+
+pub(crate) fn on_chat_progress(
+    state: &mut SessionChatState,
+    active_session: Option<&str>,
+    session_id: &str,
+    phase: ChatInferPhase,
+    chat_infer_phase: &mut ChatInferPhase,
+) {
+    state.set_infer_phase(session_id, phase);
+    if active_session == Some(session_id) {
+        *chat_infer_phase = phase;
     }
 }
 
@@ -355,6 +382,7 @@ mod tests {
         let mut streaming = String::new();
         let mut pending = false;
         let mut inference_id = None;
+        let mut infer_phase = ChatInferPhase::WaitingFirstToken;
 
         state.clear_unread(session_a());
         state.sync_active_view(
@@ -362,11 +390,13 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            &mut infer_phase,
         );
 
         assert!(!state.is_unread(session_a()));
         assert!(streaming.is_empty());
         assert!(!pending);
+        assert_eq!(infer_phase, ChatInferPhase::Preparing);
     }
 
     #[test]
@@ -376,6 +406,7 @@ mod tests {
         let mut streaming = String::new();
         let mut pending = false;
         let mut inference_id = None;
+        let mut infer_phase = ChatInferPhase::Preparing;
 
         // User sends in session A.
         state.begin_turn(session_a());
@@ -384,6 +415,7 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            &mut infer_phase,
         );
         assert!(pending);
 
@@ -393,6 +425,7 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            &mut infer_phase,
         );
         assert!(!pending);
         assert!(streaming.is_empty());
@@ -445,6 +478,7 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            &mut infer_phase,
         );
         assert!(!state.is_unread(session_a()));
         assert!(!pending);
@@ -459,12 +493,14 @@ mod tests {
         let mut streaming = String::new();
         let mut pending = false;
         let mut inference_id = None;
+        let mut infer_phase = ChatInferPhase::Preparing;
 
         state.sync_active_view(
             Some(session_b()),
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            &mut infer_phase,
         );
         assert!(!pending);
         assert!(streaming.is_empty());
@@ -483,9 +519,47 @@ mod tests {
             &mut streaming,
             &mut pending,
             &mut inference_id,
+            &mut infer_phase,
         );
         assert!(pending);
         assert_eq!(streaming, "hidden");
+    }
+
+    #[test]
+    fn chat_progress_survives_session_switch() {
+        let mut state = SessionChatState::default();
+        let mut infer_phase = ChatInferPhase::Preparing;
+        state.begin_turn(session_a());
+        on_chat_progress(
+            &mut state,
+            Some(session_a()),
+            session_a(),
+            ChatInferPhase::Queued { position: 4 },
+            &mut infer_phase,
+        );
+        assert_eq!(infer_phase, ChatInferPhase::Queued { position: 4 });
+
+        let mut streaming = String::new();
+        let mut pending = false;
+        let mut inference_id = None;
+        state.sync_active_view(
+            Some(session_b()),
+            &mut streaming,
+            &mut pending,
+            &mut inference_id,
+            &mut infer_phase,
+        );
+        assert_eq!(infer_phase, ChatInferPhase::Preparing);
+
+        state.sync_active_view(
+            Some(session_a()),
+            &mut streaming,
+            &mut pending,
+            &mut inference_id,
+            &mut infer_phase,
+        );
+        assert!(pending);
+        assert_eq!(infer_phase, ChatInferPhase::Queued { position: 4 });
     }
 
     #[test]

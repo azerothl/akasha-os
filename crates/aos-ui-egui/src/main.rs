@@ -32,6 +32,7 @@ mod chat_error_copy;
 mod chat_event_controller;
 mod chat_load_fail;
 mod chat_media;
+mod chat_pending_status;
 mod chat_room;
 mod chat_runtime_state;
 mod chat_sidebar_state;
@@ -2893,6 +2894,13 @@ impl eframe::App for UiApp {
                         cancelled,
                     );
                 }
+                Evt::RoomProgress { progress } => {
+                    if self.chat_state.active_session.as_deref() == Some(progress.session_id.as_str())
+                        && self.chat_state.runtime.pending
+                    {
+                        self.chat_state.runtime.room_progress = Some(progress);
+                    }
+                }
                 Evt::CanvasMeta(meta) => {
                     canvas_event_controller::on_canvas_meta(self, meta);
                 }
@@ -3081,6 +3089,16 @@ impl eframe::App for UiApp {
                         &session_id,
                         inference_id,
                         &mut self.chat_state.runtime.inference_id,
+                        &mut self.chat_state.runtime.infer_phase,
+                    );
+                }
+                Evt::ChatProgress { session_id, phase } => {
+                    session_chat::on_chat_progress(
+                        &mut self.chat_state.session_chat,
+                        self.chat_state.active_session.as_deref(),
+                        &session_id,
+                        phase,
+                        &mut self.chat_state.runtime.infer_phase,
                     );
                 }
                 Evt::ChatCancelled { session_id } => {
@@ -3095,6 +3113,9 @@ impl eframe::App for UiApp {
                     );
                     if on_active {
                         self.chat_state.runtime.room_turn_text = None;
+                        self.chat_state.runtime.room_progress = None;
+                        self.chat_state.runtime.infer_phase =
+                            chat_pending_status::ChatInferPhase::Preparing;
                         let t = i18n::strings(&self.prefs.language);
                         self.status = t.chat_stopped.into();
                     }

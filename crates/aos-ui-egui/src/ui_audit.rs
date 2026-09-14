@@ -372,11 +372,7 @@ impl UiApp {
             if let Some(h) = &self.security_ui.health {
                 ui.horizontal(|ui| {
                     if h.canary_ok {
-                        ui.colored_label(crate::theme::button_colors(ui).success, if fr {
-                            "canary OK"
-                        } else {
-                            "canary OK"
-                        });
+                        ui.colored_label(crate::theme::button_colors(ui).success, "canary OK");
                     } else {
                         ui.colored_label(crate::theme::button_colors(ui).danger, if fr {
                             "canary ÉCHEC"
@@ -407,7 +403,7 @@ impl UiApp {
                     });
                 }
                 ui.separator();
-                ui.label(if fr { "SLO (EWMA)" } else { "SLO (EWMA)" });
+                ui.label("SLO (EWMA)");
                 if let Some(ttft) = h.slo.ttft_ewma_ms {
                     ui.monospace(format!("TTFT EWMA: {ttft:.0} ms (NFR-01 < 2000)"));
                 }

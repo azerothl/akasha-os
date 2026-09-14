@@ -125,7 +125,7 @@ impl SkillStore {
                 out.push(info);
             }
         }
-        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out.sort_by_key(|a| a.name.clone());
         out
     }
 

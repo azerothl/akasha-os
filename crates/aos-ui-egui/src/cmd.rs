@@ -657,6 +657,10 @@ pub(crate) enum Evt {
         agent_turns: u32,
         cancelled: bool,
     },
+    /// Live salon speaker progress while `RoomTurn` is in flight.
+    RoomProgress {
+        progress: aos_proto::AgentRoomConductProgress,
+    },
     CanvasMeta(ChatSessionMeta),
     CanvasSnapshot {
         session_id: String,
@@ -804,6 +808,11 @@ pub(crate) enum Evt {
     InferStarted {
         session_id: String,
         inference_id: u64,
+    },
+    /// Live chat inference phase before the first streamed token.
+    ChatProgress {
+        session_id: String,
+        phase: crate::chat_pending_status::ChatInferPhase,
     },
     ChatCancelled {
         session_id: String,

@@ -584,7 +584,7 @@ fn need_phrase_from_tokens(messages: &[String], french: bool) -> (String, String
         }
     }
     let mut ranked: Vec<_> = freq.into_iter().collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    ranked.sort_by_key(|a| (std::cmp::Reverse(a.1), a.0.clone()));
     let words: Vec<&str> = ranked
         .iter()
         .take(3)
@@ -892,6 +892,7 @@ pub struct ConsiderResult {
 }
 
 /// In-session heuristic scan — prefer current session, fall back to 14-day lookback.
+#[allow(clippy::too_many_arguments)] // Pass inputs stay explicit across skill-store / session sources.
 pub fn run_consider_pass(
     state: &mut SkillPassState,
     skills_dir: &Path,
