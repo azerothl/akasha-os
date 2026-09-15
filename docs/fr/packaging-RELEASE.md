@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.16.2
-git push origin v0.16.2
+git tag v0.18.0
+git push origin v0.18.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ dans le même zip ; sans GGUF), publie :
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
-- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.16.2`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.18.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
 - **Rebuild complet** : `create_release` = true, `macos_only` = false.
 
 ## Manuel
@@ -42,12 +42,14 @@ Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.16.2 — I/O USB série
+Akasha OS Preview 0.18.0 — Memory V2, instincts, plan de santé
 
-- Windows, Linux, macOS : `device.usb.enumerate` / `open` / `read` / `write` / `close` série
-- Bannière : USB · une fois / toujours / refuser ; cap `device.usb.io`
-- CI utilise FakeUsbIoBackend ; les backends hôte énumèrent les ports série réels si présents
-- Mêmes bandes mill Win/Linux/Mac qu'en 0.16.x
+- Memory V2 par défaut (journal de décisions, mind palace ; sync shadow des faits legacy)
+- Instincts E22 en session sous pression de contexte ; plan de santé runtime E23
+- Notes tags / recherche live / delete ; fork/continue chat ; scènes/guides Canvas
+- Générateur de clés du coffre avec preset hex LAN
+- Polish LAN / santé / Deep Thinking / chrome Create
+- Mêmes bandes mill Win/Linux/Mac qu'en 0.17.x
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
 ```

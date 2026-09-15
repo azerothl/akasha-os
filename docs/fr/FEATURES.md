@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.17.0
+# Fonctionnalités Preview — Akasha OS 0.18.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,30 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 10/09/2026 · Preview **0.17.0**
+> Date : 15/09/2026 · Preview **0.18.0**
+
+### Nouveautés 0.18.0
+
+#### Fonctionnalités
+
+- **Memory V2** (défaut) : mémoire cognitive structurée avec journal de décisions et vues mind-palace ; les écritures de faits legacy restent synchronisées via projection shadow — voir [specification-memoire-v2.md](specification-memoire-v2.md)
+- **Instincts en session (E22 / P18)** : sous pression de contexte ou après ≥2 steers, `skill.pass.consider` peut proposer Créer | Plus tard dans ce chat ; inject borné (≤3) ; préférence `instincts_in_session` (défaut on)
+- **Plan de santé runtime (E23 / P19)** : canary éphémère + SLO/EWMA + anomalie résiduelle + clusters stderr (`health.snapshot` / `health.canary`) ; panneau Santé Audit ; Dépannage consomme le même snapshot
+- **Notes** : tags, recherche live et suppression pour les grandes collections (`notes.delete`)
+- **Chat** : fork-from-here et continuer après interruption ; le salon ouvre avec le roster complet ; statut live pendant l’attente de tokens
+- **Canvas** : scènes sémantiques et guides partagés ; protocole agent lecture/revue
+- **Coffre à secrets** : générateur de clés dans Paramètres (hex / numérique / alnum / base64url) avec preset hex LAN et rejet des clés invalides à l’enregistrement
+- **Chrome Create** : actions peintes, Advanced replié, barre résultat peaufinée ; starters de prompt localisés FR
+
+#### Correctifs
+
+- **LAN** : statut worker-off, alignement ports firewall, id fil vault masqué du chrome, déblocage staging pipeline, durcissement UX LAN Paramètres, nonces aléatoires pour les trames sécurisées
+- **Canary santé** : pas de faux échec avant la première marche ; workers advisory cessent de boucler sur JSON invalide après redémarrages santé
+- **Deep Thinking** : intent advisory / critic / thrashing await ; chemin advisory Cursor/fix
+- **Chat / export** : chrome d’erreur verrouillé Designer et parité export ; préparation document ancrée dans le fil avec journal
+- **Notes / agents** : panneau Notes i18n ; `fail_reason` redémarrage agent et chrome statut kill
+- **Tasks** : sync paquet DeclUI valide ; rejet root manquant à l’install
+- **Roster** : correspondance templates roster avant spawn délégué assistant
 
 ### Nouveautés 0.17.2
 
@@ -268,8 +291,9 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 ---
 
-## 3. Mémoire (PC.7 + P04.1/P04.2 + P05 / E14)
+## 3. Mémoire (PC.7 + P04.1/P04.2 + P05 / E14 + Memory V2)
 
+- **Memory V2** est le défaut Preview : mémoire cognitive structurée (journal de décisions, mind palace) avec observabilité de déploiement — voir [specification-memoire-v2.md](specification-memoire-v2.md)
 - **Faits utilisateur** long terme : remember / recall / lister / éditer / supprimer
 - Relations typées : `similar`, `updates`, `supersedes` (auto-lien)
 - Hits session + user assemblés en `mem.context` pour le chat et les agents
@@ -278,14 +302,15 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 - **Mémorisation auto depuis le chat** (Settings, **activée** par défaut) : après chaque tour,
   `mem.extract` propose des faits durables → `mem.user.remember` avec `source=chat` ;
   secrets filtrés ; badge **`[chat]`** dans la liste Mémoire
+- Les écritures de faits legacy restent projetées dans V2 (sync shadow)
 
 ---
 
 ## 4. Notes (P2.6)
 
 - Module WASM double-surface (`notes.aospkg`)
-- UI humaine : créer / lister / rechercher
-- Outils agent : `notes.create`, `notes.update`, `notes.search`, …
+- UI humaine : créer / lister / **tags** / **recherche live** / **supprimer**
+- Outils agent : `notes.create`, `notes.update`, `notes.search`, `notes.delete`, …
 - Les mêmes données pour humains et agents
 - Au boot, `share/modules/notes.aospkg` est copié vers `var/modules/notes` si le hash du manifeste ou l'empreinte WASM diffère (une update Preview ne doit pas garder un module périmé)
 - `notes.read` accepte `title`, `name`, `path` ou `slug`
@@ -451,7 +476,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.17.2
+## 11. Hors Preview 0.18.0
 
 - Image bootable / fer nu
 - STT / voix permanente
