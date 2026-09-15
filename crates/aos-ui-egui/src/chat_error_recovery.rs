@@ -31,10 +31,10 @@ pub(crate) fn render_chat_error_recovery(
             ui.label(&recovery.cause);
         }
         ui.horizontal(|ui| {
-            if recovery.retry_turn.is_some() {
-                if ui.button(t.chat_error_retry).clicked() {
-                    action = ChatErrorRecoveryAction::Retry;
-                }
+            if recovery.retry_turn.is_some()
+                && ui.button(t.chat_error_retry).clicked()
+            {
+                action = ChatErrorRecoveryAction::Retry;
             }
             if ui.button(t.chat_error_activity).clicked() {
                 action = ChatErrorRecoveryAction::Activity;
