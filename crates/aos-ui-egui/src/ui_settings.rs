@@ -4,7 +4,10 @@ use crate::cmd::Cmd;
 use crate::models_page;
 use crate::onboarding::save_onboarding;
 use crate::os_open::aos_home;
-use crate::prefs::{save_preferences, UiDensity, UiPresentationMode, UI_SCALE_PRESETS};
+use crate::prefs::{
+    hash_secrets_reveal_pin, save_preferences, secrets_reveal_pin_matches, UiDensity,
+    UiPresentationMode, UI_SCALE_PRESETS,
+};
 use crate::secret_keygen::{
     apply_lan_preset, generate, is_valid_lan_session_key, KeygenAlphabet, KeygenTarget,
     KEYGEN_LEN_MAX, KEYGEN_LEN_MIN,
@@ -15,10 +18,12 @@ use std::collections::HashSet;
 
 /// Modules represented by a catalogue row already have their install state and
 /// action there. Keep the standalone list for local modules only.
-fn catalogue_module_names(entries: impl IntoIterator<Item = (String, String)>) -> HashSet<String> {
+fn catalogue_module_names<'a>(
+    entries: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> HashSet<String> {
     entries
         .into_iter()
-        .filter_map(|(name, kind)| (kind == "module").then_some(name))
+        .filter_map(|(name, kind)| (kind == "module").then(|| name.to_owned()))
         .collect()
 }
 
@@ -62,6 +67,17 @@ fn keygen_target_label<'a>(target: KeygenTarget, t: &'a i18n::UiStrings) -> &'a 
     }
 }
 
+fn is_valid_secret_name(raw: &str) -> bool {
+    let raw = raw.trim();
+    !raw.is_empty()
+        && raw.len() <= 64
+        && raw
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+const SECRETS_REVEAL_TTL_SECS: f64 = 300.0;
+
 const SETTINGS_ADVANCED_IDS: [&str; 4] = ["secrets", "catalogue", "schedule", "backup"];
 
 fn settings_pill_label<'a>(id: &'a str, t: &'a i18n::UiStrings) -> &'a str {
@@ -95,6 +111,23 @@ fn show_settings_section(
 }
 
 impl UiApp {
+    fn fetch_settings_section_data(&mut self, section: &str) {
+        match section {
+            "catalogue" | "all" => {
+                let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
+                let _ = self.cmd_tx.send(Cmd::ModuleList);
+            }
+            "schedule" => {
+                let _ = self.cmd_tx.send(Cmd::ScheduleList);
+            }
+            "models" | "secrets" => {
+                // Secrets/LAN may need vault + cluster; keep these light and on-demand.
+                let _ = self.cmd_tx.send(Cmd::SecretList);
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.settings_title);
@@ -131,6 +164,7 @@ impl UiApp {
                             .clicked()
                         {
                             self.settings_ui.section = id.into();
+                            self.fetch_settings_section_data(id);
                         }
                     }
                     let adv_menu_label = if advanced_active {
@@ -146,6 +180,7 @@ impl UiApp {
                                 .clicked()
                             {
                                 self.settings_ui.section = id.into();
+                                self.fetch_settings_section_data(id);
                                 ui.close_menu();
                             }
                         }
@@ -294,6 +329,9 @@ impl UiApp {
                     if self.prefs.theme == "custom" {
                         ui.end_row();
                         ui.label(t.settings_custom_colors);
+                        egui::CollapsingHeader::new(t.settings_colors_applied)
+                            .default_open(false)
+                            .show(ui, |ui| {
                         egui::Grid::new("custom_theme_colors")
                             .num_columns(3)
                             .spacing([12.0, 8.0])
@@ -342,10 +380,16 @@ impl UiApp {
                                 );
                                 ui.end_row();
                                 if changed {
-                                    save_preferences(&self.prefs);
+                                    // Defer disk write until pointer release — saving every
+                                    // color-drag frame freezes Settings (custom theme + Inter).
+                                    if !ui.ctx().input(|i| i.pointer.any_down()) {
+                                        save_preferences(&self.prefs);
+                                    } else {
+                                        ui.ctx().request_repaint();
+                                    }
                                 }
                             });
-                        ui.weak(t.settings_colors_applied);
+                            });
                         ui.end_row();
                     }
 
@@ -526,142 +570,243 @@ impl UiApp {
                         ui.label(t.adaptive_planner_hint);
                     });
                     ui.end_row();
+                });
 
-                    ui.label(t.lan_cluster);
-                    ui.vertical(|ui| {
-                        if ui
-                            .checkbox(&mut self.prefs.lan_cluster, t.providers_enabled)
-                            .changed()
-                        {
-                            save_preferences(&self.prefs);
-                            self.status = format!("{} — {}", t.settings_saved, t.lan_cluster_hint);
+            // LAN stays outside settings_models Grid. Manual toggle (not CollapsingHeader)
+            // logs the click before any status body — expand froze with zero log lines.
+            ui.add_space(8.0);
+            ui.label(t.lan_cluster);
+            if ui
+                .checkbox(&mut self.prefs.lan_cluster, t.providers_enabled)
+                .changed()
+            {
+                save_preferences(&self.prefs);
+                self.status = format!("{} — {}", t.settings_saved, t.lan_cluster_hint);
+                crate::lan_trace::log(
+                    "ui.lan_cluster.toggled",
+                    &format!("enabled={}", self.prefs.lan_cluster),
+                );
+            }
+            ui.label(t.lan_cluster_hint);
+            if self.prefs.lan_cluster {
+                let status_open_id = egui::Id::new("settings_lan_status_open");
+                let mut status_open = ui
+                    .ctx()
+                    .data(|d| d.get_temp::<bool>(status_open_id).unwrap_or(false));
+                let status_clicked = ui
+                    .horizontal(|ui| {
+                        crate::icons::caret(ui, status_open);
+                        ui.add(egui::Button::new(t.lan_status_title).frame(false))
+                            .clicked()
+                    })
+                    .inner;
+                if status_clicked {
+                    status_open = !status_open;
+                    ui.ctx().data_mut(|d| d.insert_temp(status_open_id, status_open));
+                    crate::lan_trace::log(
+                        "ui.lan_status.toggle",
+                        &format!(
+                            "open={status_open} have_cache={} inflight={}",
+                            self.models_ui.lan_cluster.is_some(),
+                            self.models_ui.lan_nodes_inflight
+                        ),
+                    );
+                    if status_open {
+                        ui.ctx().data_mut(|d| {
+                            d.insert_temp(egui::Id::new("settings_lan_status_fetch_pending"), true);
+                        });
+                        ui.ctx().request_repaint();
+                    }
+                }
+
+                if status_open {
+                    let fetch_pending = ui.ctx().data_mut(|data| {
+                        let id = egui::Id::new("settings_lan_status_fetch_pending");
+                        let pending = data.get_temp::<bool>(id).unwrap_or(false);
+                        if pending {
+                            data.insert_temp(id, false);
                         }
-                        ui.label(t.lan_cluster_hint);
-                        if self.prefs.lan_cluster {
-                            let poll_due = ui.ctx().data_mut(|data| {
-                                let last = data.get_temp_mut_or::<f64>(
-                                    egui::Id::new("lan_status_poll"),
-                                    0.0,
-                                );
-                                let now = ui.input(|input| input.time);
-                                if now - *last > 5.0 {
-                                    *last = now;
-                                    true
+                        pending
+                    });
+                    // Read time BEFORE data_mut — nesting ui.input inside data_mut
+                    // deadlocks egui Context and freezes the window (IsHung).
+                    let now = ui.input(|input| input.time);
+                    let poll_due = ui.ctx().data_mut(|data| {
+                        let last =
+                            data.get_temp_mut_or::<f64>(egui::Id::new("lan_status_poll"), 0.0);
+                        if now - *last > 5.0 {
+                            *last = now;
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                    let need_fetch =
+                        fetch_pending || poll_due || self.models_ui.lan_cluster.is_none();
+                    if need_fetch && self.models_ui.request_lan_nodes_fetch() {
+                        let reason = if fetch_pending {
+                            "open"
+                        } else if poll_due {
+                            "poll"
+                        } else {
+                            "cold"
+                        };
+                        crate::lan_trace::log(
+                            "ui.cmd.ModelClusterNodes",
+                            &format!(
+                                "reason={reason} have_cache={}",
+                                self.models_ui.lan_cluster.is_some()
+                            ),
+                        );
+                        let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                    }
+
+                    if let Some(response) = &self.models_ui.lan_cluster {
+                        let worker_state = response.worker_state.as_str();
+                        let worker_ready = worker_state == "ready";
+                        let worker_error = matches!(
+                            worker_state,
+                            "secret_missing" | "bind_failed" | "restart_required"
+                        );
+                        ui.horizontal_wrapped(|ui| {
+                            ui.colored_label(
+                                if worker_ready {
+                                    egui::Color32::from_rgb(80, 190, 110)
+                                } else if worker_error {
+                                    egui::Color32::from_rgb(220, 80, 80)
                                 } else {
-                                    false
-                                }
-                            });
-                            if poll_due || self.models_ui.lan_cluster.is_none() {
-                                let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
-                            }
-                            if let Some(response) = &self.models_ui.lan_cluster {
-                                let worker_state = response.worker_state.as_str();
-                                let worker_ready = worker_state == "ready";
-                                let worker_error = matches!(
-                                    worker_state,
-                                    "secret_missing" | "bind_failed" | "restart_required"
-                                );
+                                    egui::Color32::from_rgb(220, 160, 70)
+                                },
+                                i18n::lan_worker_status_label(&t, worker_state),
+                            );
+                        });
+                        let message = i18n::lan_worker_status_message(
+                            &t,
+                            worker_state,
+                            &response.worker_detail,
+                            &self.prefs.lan_session_key_secret,
+                        );
+                        if !message.is_empty() {
+                            ui.colored_label(
+                                if worker_error {
+                                    egui::Color32::from_rgb(220, 80, 80)
+                                } else {
+                                    ui.visuals().weak_text_color()
+                                },
+                                message,
+                            );
+                        }
+                        let discovery_line = i18n::lan_discovery_telemetry_line(
+                            &t,
+                            response.discovery_active,
+                            response.discovery_tx,
+                            response.discovery_rx,
+                            &response.discovery_detail,
+                        );
+                        if !discovery_line.is_empty() {
+                            ui.weak(discovery_line);
+                        }
+                        if response.nodes.is_empty() {
+                            ui.weak(t.lan_no_nodes);
+                        } else {
+                            for node in &response.nodes {
                                 ui.horizontal_wrapped(|ui| {
-                                    ui.label(t.lan_status_title);
-                                    ui.colored_label(
-                                        if worker_ready {
-                                            egui::Color32::from_rgb(80, 190, 110)
-                                        } else if worker_error {
-                                            egui::Color32::from_rgb(220, 80, 80)
-                                        } else {
-                                            egui::Color32::from_rgb(220, 160, 70)
-                                        },
-                                        i18n::lan_worker_status_label(&t, worker_state),
-                                    );
+                                    ui.monospace(&node.node_id);
+                                    ui.label(format!(
+                                        "{} · {}",
+                                        node.display_name, node.address
+                                    ));
+                                    ui.weak(&node.trust);
+                                    if node.trust == "paired" {
+                                        if ui.button(t.lan_revoke).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::ModelClusterRevoke {
+                                                node_id: node.node_id.clone(),
+                                            });
+                                        }
+                                    } else if node.trust != "revoked"
+                                        && ui.button(t.lan_pair).clicked()
+                                    {
+                                        let _ = self.cmd_tx.send(Cmd::ModelClusterPair {
+                                            node_id: node.node_id.clone(),
+                                            public_key_fingerprint: node
+                                                .public_key_fingerprint
+                                                .clone(),
+                                        });
+                                    }
                                 });
-                                let message = i18n::lan_worker_status_message(
-                                    &t,
-                                    worker_state,
-                                    &response.worker_detail,
-                                    &self.prefs.lan_session_key_secret,
-                                );
-                                if !message.is_empty() {
-                                    ui.colored_label(
-                                        if worker_error {
-                                            egui::Color32::from_rgb(220, 80, 80)
-                                        } else {
-                                            ui.visuals().weak_text_color()
-                                        },
-                                        message,
-                                    );
-                                }
-                                let discovery_line = i18n::lan_discovery_telemetry_line(
-                                    &t,
-                                    response.discovery_active,
-                                    response.discovery_tx,
-                                    response.discovery_rx,
-                                    &response.discovery_detail,
-                                );
-                                if !discovery_line.is_empty() {
-                                    ui.weak(discovery_line);
-                                }
                             }
                         }
-                        if let Some(status) = &self.models_ui.lan_layer_pipeline {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(t.lan_layer_pipeline_status);
-                                let cluster = self.models_ui.lan_cluster.as_ref();
-                                let worker_ready =
-                                    cluster.map(|c| c.worker_state == "ready").unwrap_or(false);
-                                let ready =
-                                    status.enabled && status.adapter_ready && worker_ready;
-                                ui.colored_label(
-                                    if ready {
-                                        egui::Color32::from_rgb(80, 190, 110)
-                                    } else {
-                                        egui::Color32::from_rgb(220, 160, 70)
-                                    },
-                                    if ready { "ready" } else { "unavailable" },
-                                );
-                                ui.weak(&status.reason);
-                            });
+                    } else {
+                        ui.weak("…");
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(200));
+                    }
+                    if ui.button(t.lan_refresh).clicked() {
+                        self.models_ui.clear_lan_nodes_inflight();
+                        if self.models_ui.request_lan_nodes_fetch() {
+                            crate::lan_trace::log("ui.cmd.ModelClusterNodes", "reason=refresh");
+                            let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
                         }
+                    }
+                    if let Some(status) = &self.models_ui.lan_layer_pipeline {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(t.lan_layer_pipeline_status);
+                            let cluster = self.models_ui.lan_cluster.as_ref();
+                            let worker_ready = cluster
+                                .map(|c| c.worker_state == "ready")
+                                .unwrap_or(false);
+                            let ready = status.enabled && status.adapter_ready && worker_ready;
+                            ui.colored_label(
+                                if ready {
+                                    egui::Color32::from_rgb(80, 190, 110)
+                                } else {
+                                    egui::Color32::from_rgb(220, 160, 70)
+                                },
+                                if ready { "ready" } else { "unavailable" },
+                            );
+                            ui.weak(&status.reason);
+                        });
+                    }
+                }
+
+                egui::CollapsingHeader::new(t.lan_local_identity)
+                    .id_salt("settings_lan_config")
+                    .default_open(false)
+                    .show(ui, |ui| {
                         egui::Grid::new("settings_lan_local")
                             .num_columns(2)
                             .spacing([12.0, 6.0])
                             .show(ui, |ui| {
                                 ui.label(t.lan_local_identity);
-                                if ui
-                                    .add(
-                                        egui::TextEdit::singleline(&mut self.prefs.lan_node_id)
-                                            .desired_width(220.0),
-                                    )
-                                    .changed()
-                                {
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(&mut self.prefs.lan_node_id)
+                                        .desired_width(220.0),
+                                );
+                                // Save on blur only — per-keystroke write + Inter caret blink froze UI.
+                                if r.lost_focus() {
                                     save_preferences(&self.prefs);
                                 }
                                 ui.end_row();
 
                                 ui.label(t.lan_listen_address);
-                                if ui
-                                    .add(
-                                        egui::TextEdit::singleline(
-                                            &mut self.prefs.lan_listen_address,
-                                        )
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(&mut self.prefs.lan_listen_address)
                                         .desired_width(220.0)
                                         .hint_text("192.168.1.20:9001"),
-                                    )
-                                    .changed()
-                                {
+                                );
+                                if r.lost_focus() {
                                     save_preferences(&self.prefs);
                                 }
                                 ui.end_row();
 
                                 ui.label(t.lan_public_fingerprint);
-                                if ui
-                                    .add(
-                                        egui::TextEdit::singleline(
-                                            &mut self.prefs.lan_public_key_fingerprint,
-                                        )
-                                        .desired_width(220.0),
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.prefs.lan_public_key_fingerprint,
                                     )
-                                    .changed()
-                                {
+                                    .desired_width(220.0),
+                                );
+                                if r.lost_focus() {
                                     save_preferences(&self.prefs);
                                 }
                                 ui.end_row();
@@ -691,42 +836,41 @@ impl UiApp {
                                 ui.end_row();
 
                                 ui.label(t.lan_session_secret);
-                                if ui
-                                    .add(
-                                        egui::TextEdit::singleline(
-                                            &mut self.prefs.lan_session_key_secret,
-                                        )
-                                        .desired_width(220.0)
-                                        .hint_text("lan_cluster_session_key"),
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(
+                                        &mut self.prefs.lan_session_key_secret,
                                     )
-                                    .changed()
-                                {
+                                    .desired_width(220.0)
+                                    .hint_text("lan_cluster_session_key"),
+                                );
+                                if r.lost_focus() {
                                     save_preferences(&self.prefs);
                                 }
                                 ui.end_row();
                             });
                         ui.weak(t.lan_discovery_hint);
                         ui.weak(t.lan_session_secret_hint);
+                    });
 
+                egui::CollapsingHeader::new(t.lan_add_node)
+                    .id_salt("settings_lan_nodes_pipeline")
+                    .default_open(false)
+                    .show(ui, |ui| {
                         egui::Grid::new("settings_lan_add_node")
                             .num_columns(2)
                             .spacing([12.0, 6.0])
                             .show(ui, |ui| {
                                 ui.label(t.lan_node_id);
                                 ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.settings_ui.lan_node_id,
-                                    )
-                                    .desired_width(220.0),
+                                    egui::TextEdit::singleline(&mut self.settings_ui.lan_node_id)
+                                        .desired_width(220.0),
                                 );
                                 ui.end_row();
 
                                 ui.label(t.lan_node_name);
                                 ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.settings_ui.lan_node_name,
-                                    )
-                                    .desired_width(220.0),
+                                    egui::TextEdit::singleline(&mut self.settings_ui.lan_node_name)
+                                        .desired_width(220.0),
                                 );
                                 ui.end_row();
 
@@ -774,9 +918,6 @@ impl UiApp {
                                 self.settings_ui.lan_node_fingerprint.clear();
                             }
                         }
-                        if ui.button(t.lan_refresh).clicked() {
-                            let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
-                        }
                         ui.separator();
                         ui.label("Test du pipeline par couches");
                         if ui
@@ -819,12 +960,9 @@ impl UiApp {
                             )
                             .clicked()
                         {
-                            if let Some(model) = self
-                                .models_ui
-                                .model_infos
-                                .iter()
-                                .find(|model| model.id == self.settings_ui.lan_pipeline_model)
-                            {
+                            if let Some(model) = self.models_ui.model_infos.iter().find(|model| {
+                                model.id == self.settings_ui.lan_pipeline_model
+                            }) {
                                 let _ = self.cmd_tx.send(Cmd::ModelClusterPipelineTest {
                                     model_id: model.id.clone(),
                                     total_layers: model.n_layers,
@@ -833,47 +971,18 @@ impl UiApp {
                                 });
                                 self.status = "Test du pipeline LAN en cours…".into();
                             } else {
-                                self.status = "Sélectionnez un modèle local avec des couches".into();
+                                self.status =
+                                    "Sélectionnez un modèle local avec des couches".into();
                             }
-                        }
-                        let lan_nodes = self.models_ui.lan_cluster.clone();
-                        match lan_nodes {
-                            Some(response) if response.nodes.is_empty() => {
-                                ui.weak(t.lan_no_nodes);
-                            }
-                            Some(response) => {
-                                for node in response.nodes {
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.monospace(&node.node_id);
-                                        ui.label(format!(
-                                            "{} · {}",
-                                            node.display_name, node.address
-                                        ));
-                                        ui.weak(&node.trust);
-                                        if node.trust == "paired" {
-                                            if ui.button(t.lan_revoke).clicked() {
-                                                let _ = self.cmd_tx.send(Cmd::ModelClusterRevoke {
-                                                    node_id: node.node_id.clone(),
-                                                });
-                                            }
-                                        } else if node.trust != "revoked"
-                                            && ui.button(t.lan_pair).clicked()
-                                        {
-                                            let _ = self.cmd_tx.send(Cmd::ModelClusterPair {
-                                                node_id: node.node_id.clone(),
-                                                public_key_fingerprint: node
-                                                    .public_key_fingerprint
-                                                    .clone(),
-                                            });
-                                        }
-                                    });
-                                }
-                            }
-                            None => {}
                         }
                     });
-                    ui.end_row();
+            }
 
+            egui::Grid::new("settings_models_routing")
+                .num_columns(2)
+                .spacing([12.0, 8.0])
+                .min_col_width(label_w)
+                .show(ui, |ui| {
                     ui.label(t.routing);
                     ui.horizontal(|ui| {
                         for code in ["local_only", "balanced", "remote_only"] {
@@ -1328,6 +1437,7 @@ impl UiApp {
                             self.settings_ui.keygen_length,
                         ) {
                             Ok(value) => {
+                                self.settings_ui.keygen_preview = value.clone();
                                 *self.settings_ui.keygen_target_field_mut() = value;
                                 self.push_status(t.settings_secret_keygen_filled.into());
                             }
@@ -1337,7 +1447,11 @@ impl UiApp {
                         }
                     }
                     if ui.button(t.settings_secret_keygen_copy).clicked() {
-                        let value = self.settings_ui.keygen_target_field_mut().clone();
+                        let value = if !self.settings_ui.keygen_preview.is_empty() {
+                            self.settings_ui.keygen_preview.clone()
+                        } else {
+                            self.settings_ui.keygen_target_field_mut().clone()
+                        };
                         if value.is_empty() {
                             self.toasts
                                 .push_error(t.settings_secret_keygen_hint.to_string());
@@ -1347,6 +1461,16 @@ impl UiApp {
                         }
                     }
                 });
+                if !self.settings_ui.keygen_preview.is_empty() {
+                    ui.horizontal(|ui| {
+                        ui.label(t.settings_secret_keygen_preview);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.settings_ui.keygen_preview)
+                                .desired_width(320.0)
+                                .font(egui::TextStyle::Monospace),
+                        );
+                    });
+                }
                 ui.add_space(8.0);
                 egui::Grid::new("settings_secrets")
                     .num_columns(2)
@@ -1433,7 +1557,123 @@ impl UiApp {
                             }
                         });
                         ui.end_row();
+
+                        ui.label(t.settings_secret_custom);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(
+                                    &mut self.settings_ui.secret_custom_name,
+                                )
+                                .desired_width(140.0)
+                                .hint_text(t.settings_secret_custom_name),
+                            );
+                            ui.add(
+                                egui::TextEdit::singleline(
+                                    &mut self.settings_ui.secret_custom_value,
+                                )
+                                .password(true)
+                                .desired_width(180.0)
+                                .hint_text(t.settings_secret_custom_value),
+                            );
+                            if ui.button(t.settings_secret_save).clicked() {
+                                let name =
+                                    self.settings_ui.secret_custom_name.trim().to_string();
+                                if !is_valid_secret_name(&name) {
+                                    self.toasts
+                                        .push_error(t.settings_secret_name_invalid.to_string());
+                                } else {
+                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                        name,
+                                        value: self.settings_ui.secret_custom_value.clone(),
+                                    });
+                                    self.settings_ui.secret_custom_name.clear();
+                                    self.settings_ui.secret_custom_value.clear();
+                                }
+                            }
+                        });
+                        ui.end_row();
                     });
+                ui.weak(t.settings_secret_custom_hint);
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(t.settings_secret_reveal_title).strong());
+                ui.weak(t.settings_secret_reveal_hint);
+                let now = ui.input(|i| i.time);
+                if !self.settings_ui.secrets_unlocked(now) {
+                    self.settings_ui.secrets_revealed.clear();
+                }
+                let pin_set = !self.prefs.secrets_reveal_pin_hash.is_empty();
+                let unlocked = self.settings_ui.secrets_unlocked(now);
+                if !pin_set {
+                    ui.label(t.settings_secret_reveal_create);
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(
+                                &mut self.settings_ui.secrets_pin_entry,
+                            )
+                            .password(true)
+                            .desired_width(120.0)
+                            .hint_text(t.settings_secret_reveal_pin),
+                        );
+                        ui.add(
+                            egui::TextEdit::singleline(
+                                &mut self.settings_ui.secrets_pin_confirm,
+                            )
+                            .password(true)
+                            .desired_width(120.0)
+                            .hint_text(t.settings_secret_reveal_pin_confirm),
+                        );
+                        if ui.button(t.settings_secret_reveal_set).clicked() {
+                            let pin = self.settings_ui.secrets_pin_entry.clone();
+                            let confirm = self.settings_ui.secrets_pin_confirm.clone();
+                            if pin.chars().count() < 4 {
+                                self.toasts
+                                    .push_error(t.settings_secret_reveal_short.to_string());
+                            } else if pin != confirm {
+                                self.toasts
+                                    .push_error(t.settings_secret_reveal_mismatch.to_string());
+                            } else {
+                                self.prefs.secrets_reveal_pin_hash =
+                                    hash_secrets_reveal_pin(&pin);
+                                save_preferences(&self.prefs);
+                                self.settings_ui
+                                    .unlock_secrets_reveal(now, SECRETS_REVEAL_TTL_SECS);
+                                self.push_status(t.settings_saved.into());
+                            }
+                        }
+                    });
+                } else if !unlocked {
+                    ui.horizontal(|ui| {
+                        ui.label(t.settings_secret_reveal_unlock);
+                        ui.add(
+                            egui::TextEdit::singleline(
+                                &mut self.settings_ui.secrets_pin_entry,
+                            )
+                            .password(true)
+                            .desired_width(140.0)
+                            .hint_text(t.settings_secret_reveal_pin),
+                        );
+                        if ui.button(t.settings_secret_reveal_enter).clicked() {
+                            if secrets_reveal_pin_matches(
+                                &self.prefs.secrets_reveal_pin_hash,
+                                &self.settings_ui.secrets_pin_entry,
+                            ) {
+                                self.settings_ui
+                                    .unlock_secrets_reveal(now, SECRETS_REVEAL_TTL_SECS);
+                            } else {
+                                self.toasts
+                                    .push_error(t.settings_secret_reveal_bad_pin.to_string());
+                                self.settings_ui.secrets_pin_entry.clear();
+                            }
+                        }
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.weak(t.settings_secret_reveal_unlock);
+                        if ui.button(t.settings_secret_reveal_lock).clicked() {
+                            self.settings_ui.lock_secrets_reveal();
+                        }
+                    });
+                }
                 ui.horizontal(|ui| {
                     if ui.button(t.settings_secret_list).clicked() {
                         let _ = self.cmd_tx.send(Cmd::SecretList);
@@ -1441,14 +1681,44 @@ impl UiApp {
                     if self.settings_ui.secret_vault_encrypted {
                         ui.weak(t.settings_secret_encrypted);
                     }
-                    if !self.settings_ui.secret_names.is_empty() {
-                        ui.weak(format!(
-                            "{}: {}",
-                            t.settings_secret_configured,
-                            self.settings_ui.secret_names.join(", ")
-                        ));
-                    }
                 });
+                if self.settings_ui.secret_names.is_empty() {
+                    ui.weak(format!("{}: —", t.settings_secret_configured));
+                } else {
+                    for name in self.settings_ui.secret_names.clone() {
+                        ui.horizontal(|ui| {
+                            ui.monospace(&name);
+                            let revealed = self.settings_ui.secrets_revealed.get(&name).cloned();
+                            if let Some(value) = revealed.as_ref() {
+                                ui.monospace(value);
+                                if ui.button(t.settings_secret_reveal_copy).clicked() {
+                                    ui.ctx().copy_text(value.clone());
+                                    self.push_status(t.copied.into());
+                                }
+                                if ui.button(t.settings_secret_reveal_hide).clicked() {
+                                    self.settings_ui.secrets_revealed.remove(&name);
+                                }
+                            } else {
+                                ui.weak("••••••••");
+                                if unlocked
+                                    && ui.button(t.settings_secret_reveal_show).clicked()
+                                {
+                                    let _ = self.cmd_tx.send(Cmd::SecretGet {
+                                        name: name.clone(),
+                                    });
+                                }
+                            }
+                            if ui.button(t.settings_secret_reveal_delete).clicked() {
+                                let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                    name: name.clone(),
+                                    value: String::new(),
+                                });
+                                self.settings_ui.secrets_revealed.remove(&name);
+                            }
+                        });
+                    }
+                }
+                ui.weak(t.settings_brave_hint);
                 ui.weak(t.settings_brave_hint);
             });
         }
@@ -1501,13 +1771,13 @@ impl UiApp {
                         catalogue_module_names(
                             cat.entries
                                 .iter()
-                                .map(|entry| (entry.name.clone(), entry.kind.clone())),
+                                .map(|entry| (entry.name.as_str(), entry.kind.as_str())),
                         )
                     })
                     .unwrap_or_default();
-                match self.settings_ui.catalogue.clone() {
+                match self.settings_ui.catalogue.as_ref() {
                     Some(cat) if cat.signature_ok || cat.extra_signature_ok => {
-                        for e in cat.entries {
+                        for e in &cat.entries {
                             let source_label = if e.source == "community" {
                                 t.settings_catalogue_source_community
                             } else {
@@ -1517,8 +1787,7 @@ impl UiApp {
                                 .settings_ui
                                 .installed_modules
                                 .iter()
-                                .find(|m| m.name == e.name)
-                                .cloned();
+                                .find(|m| m.name == e.name);
                             let skill_installed = self
                                 .settings_ui
                                 .installed_skills
@@ -1537,11 +1806,7 @@ impl UiApp {
                                         " [{}]",
                                         t.settings_catalogue_installed
                                     ));
-                                    if installed_mod
-                                        .as_ref()
-                                        .map(|m| m.quarantined)
-                                        .unwrap_or(false)
-                                    {
+                                    if installed_mod.map(|m| m.quarantined).unwrap_or(false) {
                                         label.push_str(" [quarantine]");
                                     }
                                 }
@@ -1607,8 +1872,8 @@ impl UiApp {
 
                 ui.add_space(8.0);
                 ui.weak(t.settings_installed_modules);
-                for m in self.settings_ui.installed_modules.clone() {
-                    if catalogue_modules.contains(&m.name) {
+                for m in &self.settings_ui.installed_modules {
+                    if catalogue_modules.contains(m.name.as_str()) {
                         continue;
                     }
                     ui.horizontal(|ui| {
@@ -1663,7 +1928,7 @@ impl UiApp {
                 if self.schedule_ui.entries.is_empty() {
                     ui.weak("Aucun schedule");
                 } else {
-                    for s in self.schedule_ui.entries.clone() {
+                    for s in &self.schedule_ui.entries {
                         ui.horizontal(|ui| {
                             let flag = if s.enabled { "ON" } else { "OFF" };
                             ui.monospace(&s.id);
@@ -1677,7 +1942,7 @@ impl UiApp {
                                     .on_hover_text(t.tip_schedule_cancel)
                                     .clicked()
                             {
-                                let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id });
+                                let _ = self.cmd_tx.send(Cmd::ScheduleCancel { id: s.id.clone() });
                             }
                         });
                     }
@@ -1699,10 +1964,7 @@ mod tests {
 
     #[test]
     fn installed_catalogue_modules_are_not_repeated_in_the_local_list() {
-        let catalogue = catalogue_module_names([
-            ("notes".to_string(), "module".to_string()),
-            ("morning-brief".to_string(), "skill".to_string()),
-        ]);
+        let catalogue = catalogue_module_names([("notes", "module"), ("morning-brief", "skill")]);
         let installed = ["notes", "cohortmod"];
         let standalone: Vec<_> = installed
             .into_iter()

@@ -185,6 +185,15 @@ pub fn apply_theme(
     theme: &str,
     custom: &crate::prefs::CustomThemePreferences,
 ) {
+    let cache_key = format!(
+        "{theme}|{}|{}|{}|{}|{}",
+        custom.background, custom.panel, custom.text, custom.accent, custom.danger
+    );
+    let theme_id = egui::Id::new("aos_applied_theme");
+    let unchanged = ctx.data(|d| d.get_temp::<String>(theme_id).as_deref() == Some(cache_key.as_str()));
+    if unchanged {
+        return;
+    }
     let visuals = match theme {
         "light" => chamber_light(),
         "soft" => chamber_soft(),
@@ -195,6 +204,7 @@ pub fn apply_theme(
     ctx.set_visuals(visuals);
     let colors = theme_colors(theme, custom);
     ctx.memory_mut(|m| m.data.insert_persisted(theme_colors_id(), colors));
+    ctx.data_mut(|d| d.insert_temp(theme_id, cache_key));
 }
 
 /// Scale the whole Preview chrome (rail, status bar, panels) via egui zoom factor.
@@ -270,12 +280,19 @@ pub fn add_form_field(ui: &mut egui::Ui, width: f32, edit: egui::TextEdit<'_>) -
 }
 
 pub fn apply_ui_density(ctx: &egui::Context, density: crate::prefs::UiDensity) {
+    let density_id = egui::Id::new("aos_applied_density");
+    let key = format!("{density:?}");
+    let unchanged = ctx.data(|d| d.get_temp::<String>(density_id).as_deref() == Some(key.as_str()));
+    if unchanged {
+        return;
+    }
     let mut style = (*ctx.style()).clone();
     let h = density.control_height();
     style.spacing.interact_size.y = h;
     style.spacing.button_padding = egui::vec2(16.0, ((h - 20.0) / 2.0).max(6.0));
     style.spacing.item_spacing = egui::vec2(SPACE_UNIT, SPACE_UNIT);
     ctx.set_style(style);
+    ctx.data_mut(|d| d.insert_temp(density_id, key));
 }
 
 fn chamber_dark() -> egui::Visuals {

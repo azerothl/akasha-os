@@ -2,17 +2,22 @@
 
 use crate::secret_keygen::{KeygenAlphabet, KeygenTarget, LAN_SESSION_KEY_HEX_LEN};
 use aos_proto::{ModuleCatalogue, ModuleInfo};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(crate) struct SettingsUiState {
     pub(crate) search: String,
     /// P1 pagination lite : section sélectionnée quand la recherche est vide.
-    /// `all` = tout (comportement historique), sinon un id de section.
+    /// `me` = panneau léger au premier open ; `all` reste disponible via la pill.
     pub(crate) section: String,
     pub(crate) secret_brave: String,
     pub(crate) secret_github: String,
     pub(crate) secret_openai: String,
     pub(crate) secret_lan_session: String,
+    pub(crate) secret_custom_name: String,
+    pub(crate) secret_custom_value: String,
+    /// Last generated value shown in clear (password fields stay masked).
+    pub(crate) keygen_preview: String,
     pub(crate) keygen_alphabet: KeygenAlphabet,
     pub(crate) keygen_length: usize,
     pub(crate) keygen_target: KeygenTarget,
@@ -23,6 +28,13 @@ pub(crate) struct SettingsUiState {
     pub(crate) lan_pipeline_model: String,
     pub(crate) secret_names: Vec<String>,
     pub(crate) secret_vault_encrypted: bool,
+    /// PIN entry for create / unlock (never persisted in clear).
+    pub(crate) secrets_pin_entry: String,
+    pub(crate) secrets_pin_confirm: String,
+    /// Wall-clock seconds until which reveal stays unlocked (egui input time).
+    pub(crate) secrets_unlocked_until: f64,
+    pub(crate) secrets_revealed: HashMap<String, String>,
+    pub(crate) secrets_reveal_pending: Option<String>,
     pub(crate) catalogue: Option<ModuleCatalogue>,
     pub(crate) installed_skills: Vec<String>,
     pub(crate) installed_modules: Vec<ModuleInfo>,
@@ -34,11 +46,14 @@ impl Default for SettingsUiState {
     fn default() -> Self {
         Self {
             search: String::new(),
-            section: "all".into(),
+            section: "me".into(),
             secret_brave: String::new(),
             secret_github: String::new(),
             secret_openai: String::new(),
             secret_lan_session: String::new(),
+            secret_custom_name: String::new(),
+            secret_custom_value: String::new(),
+            keygen_preview: String::new(),
             keygen_alphabet: KeygenAlphabet::Hex,
             keygen_length: LAN_SESSION_KEY_HEX_LEN,
             keygen_target: KeygenTarget::LanSession,
@@ -49,6 +64,11 @@ impl Default for SettingsUiState {
             lan_pipeline_model: String::new(),
             secret_names: Vec::new(),
             secret_vault_encrypted: false,
+            secrets_pin_entry: String::new(),
+            secrets_pin_confirm: String::new(),
+            secrets_unlocked_until: 0.0,
+            secrets_revealed: HashMap::new(),
+            secrets_reveal_pending: None,
             catalogue: None,
             installed_skills: Vec::new(),
             installed_modules: Vec::new(),
@@ -62,6 +82,26 @@ impl SettingsUiState {
     pub(crate) fn apply_secret_list(&mut self, names: Vec<String>, encrypted: bool) {
         self.secret_names = names;
         self.secret_vault_encrypted = encrypted;
+        self.secrets_revealed
+            .retain(|name, _| self.secret_names.iter().any(|n| n == name));
+    }
+
+    pub(crate) fn secrets_unlocked(&self, now: f64) -> bool {
+        now < self.secrets_unlocked_until
+    }
+
+    pub(crate) fn lock_secrets_reveal(&mut self) {
+        self.secrets_unlocked_until = 0.0;
+        self.secrets_revealed.clear();
+        self.secrets_reveal_pending = None;
+        self.secrets_pin_entry.clear();
+        self.secrets_pin_confirm.clear();
+    }
+
+    pub(crate) fn unlock_secrets_reveal(&mut self, now: f64, ttl_secs: f64) {
+        self.secrets_unlocked_until = now + ttl_secs;
+        self.secrets_pin_entry.clear();
+        self.secrets_pin_confirm.clear();
     }
 
     pub(crate) fn set_catalogue(&mut self, catalogue: ModuleCatalogue) {

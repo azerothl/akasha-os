@@ -42,6 +42,9 @@ pub(crate) struct ModelsUiState {
     pub(crate) plan_errors: HashMap<String, String>,
     pub(crate) plan_loading: HashSet<String>,
     pub(crate) lan_cluster: Option<LanClusterNodesResponse>,
+    /// True while a `ModelClusterNodes` cmd is in flight — prevents per-frame floods
+    /// when État LAN is open and `lan_cluster` is still `None`.
+    pub(crate) lan_nodes_inflight: bool,
     pub(crate) lan_layer_pipeline: Option<LanClusterLayerPipelineStatusResponse>,
     pub(crate) adapter_statuses: HashMap<String, aos_proto::ModelAdapterStatusResponse>,
     /// S7.3 : dernière activité par modèle (epoch ms) + dernier scan disque.
@@ -75,6 +78,7 @@ impl Default for ModelsUiState {
             plan_errors: HashMap::new(),
             plan_loading: HashSet::new(),
             lan_cluster: None,
+            lan_nodes_inflight: false,
             lan_layer_pipeline: None,
             adapter_statuses: HashMap::new(),
             model_usage: HashMap::new(),
@@ -136,6 +140,7 @@ impl ModelsUiState {
     }
 
     pub(crate) fn set_lan_cluster(&mut self, response: LanClusterNodesResponse) {
+        self.lan_nodes_inflight = false;
         self.lan_cluster = Some(response);
     }
 
@@ -144,6 +149,18 @@ impl ModelsUiState {
         response: LanClusterLayerPipelineStatusResponse,
     ) {
         self.lan_layer_pipeline = Some(response);
+    }
+
+    pub(crate) fn clear_lan_nodes_inflight(&mut self) {
+        self.lan_nodes_inflight = false;
+    }
+
+    pub(crate) fn request_lan_nodes_fetch(&mut self) -> bool {
+        if self.lan_nodes_inflight {
+            return false;
+        }
+        self.lan_nodes_inflight = true;
+        true
     }
 
     pub(crate) fn set_adapter_status(&mut self, response: aos_proto::ModelAdapterStatusResponse) {

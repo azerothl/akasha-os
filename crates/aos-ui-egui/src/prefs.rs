@@ -2,6 +2,7 @@
 
 use aos_placement::{is_placeholder_listen_address, reachable_lan_address};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 /// Density of the application chrome.  `comfortable` is the default and keeps
@@ -249,6 +250,21 @@ pub struct Preferences {
     pub ui_layout: UiLayoutPreferences,
     #[serde(default)]
     pub custom_theme: CustomThemePreferences,
+    /// SHA-256 hex of `aos-secrets-reveal-v1|{pin}` — empty means no reveal PIN yet.
+    #[serde(default)]
+    pub secrets_reveal_pin_hash: String,
+}
+
+/// SHA-256 hex of the Settings secrets-reveal PIN (local UI gate only).
+pub fn hash_secrets_reveal_pin(pin: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"aos-secrets-reveal-v1|");
+    hasher.update(pin.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn secrets_reveal_pin_matches(stored_hash: &str, pin: &str) -> bool {
+    !stored_hash.is_empty() && stored_hash == hash_secrets_reveal_pin(pin)
 }
 
 /// Preset scale steps exposed in Settings → Me.
@@ -442,6 +458,7 @@ impl Default for Preferences {
             ui_presentation: UiPresentationMode::default(),
             ui_layout: UiLayoutPreferences::default(),
             custom_theme: CustomThemePreferences::default(),
+            secrets_reveal_pin_hash: String::new(),
         }
     }
 }

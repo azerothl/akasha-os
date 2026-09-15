@@ -41,10 +41,21 @@ pub enum SecretError {
 }
 
 /// Identités bus autorisées à lire un secret brut (`secrets.get`).
+///
+/// `ui-egui` / `ui` / `ui-iced` may read for Settings reveal only (gated by a
+/// local UI PIN in the chrome). Agents remain forbidden.
 pub fn may_get_raw_secret(from: &str) -> bool {
     matches!(
         from,
-        "platformd" | "modeld" | "agentd" | "session" | "session-health" | "session-trust"
+        "platformd"
+            | "modeld"
+            | "agentd"
+            | "session"
+            | "session-health"
+            | "session-trust"
+            | "ui-egui"
+            | "ui"
+            | "ui-iced"
     ) || from.starts_with("service:")
 }
 
@@ -803,12 +814,9 @@ mod tests {
         s.set("openai_key", "sk-test", "ui-egui").unwrap();
         assert!(s.get("openai_key", "modeld").is_ok());
         assert!(s.get("openai_key", "platformd").is_ok());
+        assert!(s.get("openai_key", "ui-egui").is_ok());
         assert!(matches!(
             s.get("openai_key", "agent:1"),
-            Err(SecretError::Forbidden(_))
-        ));
-        assert!(matches!(
-            s.get("openai_key", "ui-egui"),
             Err(SecretError::Forbidden(_))
         ));
         let names = s.list_names("ui-egui").unwrap();

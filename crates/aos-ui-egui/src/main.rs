@@ -60,6 +60,7 @@ mod icons;
 mod image_composition;
 mod image_history;
 mod image_prompt;
+mod lan_trace;
 mod library_panel;
 mod media_event_controller;
 mod media_image_defaults;
@@ -753,6 +754,13 @@ impl UiApp {
     fn new(cmd_tx: Sender<Cmd>, evt_rx: Receiver<Evt>, version: String) -> Self {
         let onboarding = load_onboarding();
         let mut prefs = load_preferences();
+        lan_trace::log(
+            "ui.boot",
+            &format!(
+                "ui_font={} theme={} lan_cluster={}",
+                prefs.ui_font, prefs.theme, prefs.lan_cluster
+            ),
+        );
         if prefs.language.is_empty() {
             prefs.language = onboarding.language.clone();
         }
@@ -1822,9 +1830,12 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::UserLibraryList);
             }
             Tab::Settings => {
-                let _ = self.cmd_tx.send(Cmd::ScheduleList);
-                let _ = self.cmd_tx.send(Cmd::CatalogueRefresh);
-                let _ = self.cmd_tx.send(Cmd::ModuleList);
+                // Avoid laying out the entire Settings tree on first open (Inter + "all"
+                // tessellation freezes the UI). Keep an explicit "all" pill for opt-in.
+                if self.settings_ui.section == "all" {
+                    self.settings_ui.section = "me".into();
+                }
+                // Fetch only what the landing section needs; heavier lists load on pill click.
             }
             _ => {}
         }
@@ -3169,6 +3180,12 @@ impl eframe::App for UiApp {
                 Evt::SecretList { names, encrypted } => {
                     self.on_secret_list(names, encrypted);
                 }
+                Evt::SecretGot { name, value } => {
+                    self.on_secret_got(name, value);
+                }
+                Evt::SecretGetFailed { name, error } => {
+                    self.on_secret_get_failed(name, error);
+                }
                 Evt::WebResults(r) => self.chat_state.sidebar.web_results = r,
                 Evt::BrowsePreview(t) => self.chat_state.sidebar.browse_preview = t,
                 Evt::NetMode(online) => {
@@ -3265,7 +3282,11 @@ impl eframe::App for UiApp {
                     self.on_model_cluster_layer_pipeline_status(response)
                 }
                 Evt::ModelClusterRefresh => {
-                    let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                    self.models_ui.clear_lan_nodes_inflight();
+                    if self.models_ui.request_lan_nodes_fetch() {
+                        crate::lan_trace::log("ui.cmd.ModelClusterNodes", "reason=evt_refresh");
+                        let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                    }
                 }
                 Evt::ModelClusterOperationFailed(error) => self.on_model_cluster_error(error),
                 Evt::Providers(list) => self.on_providers(list),

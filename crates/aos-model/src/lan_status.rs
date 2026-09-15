@@ -51,7 +51,11 @@ pub fn compute_lan_cluster_status(
                 WORKER_STATE_READY.into(),
                 snapshot.worker_detail.clone(),
             )
-        } else if snapshot.worker_detail.is_empty() {
+        } else if snapshot.worker_detail.is_empty()
+            || worker_detail_is_secret_race(&snapshot.worker_detail)
+        {
+            // Key is readable now but the listener never started (startup race
+            // with secrets.get) — ask for a Preview relaunch / modeld restart.
             (WORKER_STATE_RESTART_REQUIRED.into(), String::new())
         } else {
             (
@@ -74,6 +78,14 @@ pub fn compute_lan_cluster_status(
         discovery_tx: snapshot.discovery_tx,
         discovery_rx: snapshot.discovery_rx,
     }
+}
+
+fn worker_detail_is_secret_race(detail: &str) -> bool {
+    let lower = detail.to_ascii_lowercase();
+    lower.contains("secrets.get")
+        || lower.contains("notfound")
+        || lower.contains("aucun service")
+        || lower.contains("clé lan indisponible")
 }
 
 #[cfg(test)]
@@ -158,5 +170,22 @@ mod tests {
         );
         assert_eq!(status.worker_state, WORKER_STATE_BIND_FAILED);
         assert_eq!(status.worker_detail, "address already in use");
+    }
+
+    #[test]
+    fn stale_secrets_get_race_becomes_restart_when_key_readable() {
+        let status = compute_lan_cluster_status(
+            true,
+            true,
+            "",
+            &LanRuntimeSnapshot {
+                worker_detail:
+                    "clé LAN indisponible: statut NotFound: aucun service pour secrets.get"
+                        .into(),
+                ..LanRuntimeSnapshot::default()
+            },
+        );
+        assert_eq!(status.worker_state, WORKER_STATE_RESTART_REQUIRED);
+        assert!(status.worker_detail.is_empty());
     }
 }
