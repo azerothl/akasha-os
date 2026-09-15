@@ -34,7 +34,7 @@ ne permet pas, et dites-le dans le rapport.
    **tutoriel** (4 étapes).
 3. Onglet **Chat**, réseau encore off : demander « Qu’est-ce qu’Akasha OS ? »
    et attendre une réponse streamée.
-4. Onglet **Notes** : titre + corps → **Create**, puis **List**.
+4. Onglet **Notes** : titre + corps → **Créer**, puis **Rafraîchir**.
 5. Onglet **Feedback** : titre, catégorie, corps → **Send feedback**. Laisser
    **Create a GitHub issue** coché (sauf security). Confirmer Submit sur
    GitHub si vous avez un compte.
@@ -82,7 +82,7 @@ Bannière attendue : Preview sur l’OS hôte — ce n’est pas encore l’OS b
 
 ### 2. Note humaine
 
-- Onglet **Notes** → titre + contenu → **Créer**, puis **Lister**.
+- Onglet **Notes** → titre + contenu → **Créer**, puis **Rafraîchir**.
 
 ### 2b. Tasks (dual-surface)
 
