@@ -88,6 +88,38 @@ $lnk2.WorkingDirectory = $Prefix
 if (Test-Path $ico) { $lnk2.IconLocation = "$ico,0" }
 $lnk2.Save()
 
+function Ensure-LanFirewallRules {
+    try {
+        $legacy = Get-NetFirewallRule -DisplayName "Akasha Daemon LAN 3876" -ErrorAction SilentlyContinue
+        if ($legacy) {
+            Remove-NetFirewallRule -DisplayName "Akasha Daemon LAN 3876" -ErrorAction SilentlyContinue
+            Write-Host "Removed legacy firewall rule (TCP 3876)."
+        }
+        $modeld = Join-Path $Prefix "bin\aos-modeld.exe"
+        $rules = @(
+            @{ Name = "Akasha OS Preview LAN discovery"; Port = 47821; Protocol = "UDP" },
+            @{ Name = "Akasha OS Preview LAN worker"; Port = 9001; Protocol = "TCP" }
+        )
+        foreach ($rule in $rules) {
+            $existing = Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue
+            if ($existing) { continue }
+            if (-not (Test-Path -LiteralPath $modeld)) {
+                Write-Warning "Skip LAN firewall rule $($rule.Name): $modeld missing"
+                continue
+            }
+            New-NetFirewallRule -DisplayName $rule.Name `
+                -Direction Inbound -Action Allow -Enabled True `
+                -Protocol $rule.Protocol -LocalPort $rule.Port `
+                -Profile Private,Domain -Program $modeld | Out-Null
+            Write-Host "Firewall: $($rule.Name) ($($rule.Protocol) $($rule.Port))"
+        }
+    } catch {
+        Write-Warning "LAN firewall rules not applied (run install as Administrator): $_"
+    }
+}
+
+Ensure-LanFirewallRules
+
 Write-Host "OK. Lancez « Akasha OS Preview » depuis le Bureau."
 Write-Host "Données utilisateur conservées sous $Prefix\var"
 Write-Host "Désinstall : supprimer $Prefix et les raccourcis."

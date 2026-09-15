@@ -830,6 +830,20 @@ pub struct LanClusterNode {
 pub struct LanClusterNodesResponse {
     pub enabled: bool,
     pub nodes: Vec<LanClusterNode>,
+    /// Stable worker readiness code (`ready`, `secret_missing`, `bind_failed`, …).
+    #[serde(default)]
+    pub worker_state: String,
+    /// Optional detail from modeld (bind address, OS error, vault error text).
+    #[serde(default)]
+    pub worker_detail: String,
+    #[serde(default)]
+    pub discovery_active: bool,
+    #[serde(default)]
+    pub discovery_detail: String,
+    #[serde(default)]
+    pub discovery_tx: u64,
+    #[serde(default)]
+    pub discovery_rx: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
