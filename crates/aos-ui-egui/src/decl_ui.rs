@@ -242,8 +242,15 @@ impl DeclUiPanelState {
         match w.kind.as_str() {
             "column" => {
                 let h = ui.available_height();
+                let column_salt = (
+                    w.label_key.as_deref(),
+                    w.label.as_deref(),
+                    w.children.as_ref().map(|c| c.len()).unwrap_or(0),
+                    // Distinguish left/right split panes that share kind+len.
+                    ui.id(),
+                );
                 egui::ScrollArea::vertical()
-                    .id_salt("decl_ui_column")
+                    .id_salt(("decl_ui_column", column_salt))
                     .max_height(h.max(120.0))
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
