@@ -1835,6 +1835,9 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Settings if self.settings_ui.section == "all" => {
                 self.settings_ui.section = "me".into();
             }
+            Tab::Settings => {
+                // Fetch only what the landing section needs; heavier lists load on pill click.
+            }
             _ => {}
         }
     }
