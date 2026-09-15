@@ -156,6 +156,15 @@ pub fn export_fail_reason(
             "Impossible de continuer.".into()
         };
     }
+    if reason == crate::actions::THREAD_FAIL_STOPPED_ON_RESTART
+        || reason == crate::actions::LEGACY_FAIL_STOPPED_ON_RESTART
+    {
+        return if en {
+            "Stopped on restart.".into()
+        } else {
+            "Arrêté au redémarrage.".into()
+        };
+    }
     if reason.trim().is_empty() {
         return if en {
             "reason not recorded".into()
@@ -482,7 +491,7 @@ pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
         fail_reason: if is_roster {
             None
         } else {
-            Some("arrêté au redémarrage".into())
+            Some(crate::actions::THREAD_FAIL_STOPPED_ON_RESTART.into())
         },
         session_id: spec.session_id.clone(),
         model_id: spec.model_id.clone(),
@@ -849,6 +858,17 @@ mod tests {
         assert!(!md_en.contains("Couldn't draw."));
         let md_fr = export_trace_markdown(&trace, Some(&info), "fr", Some(&ops));
         assert!(!md_fr.contains("Impossible de dessiner."));
+    }
+
+    #[test]
+    fn export_fail_reason_stopped_on_restart_localized() {
+        let sentinel = export_fail_reason("en", crate::actions::THREAD_FAIL_STOPPED_ON_RESTART, None, None, None);
+        assert_eq!(sentinel, "Stopped on restart.");
+        assert!(!sentinel.contains("arrêté"));
+        let legacy = export_fail_reason("en", crate::actions::LEGACY_FAIL_STOPPED_ON_RESTART, None, None, None);
+        assert_eq!(legacy, "Stopped on restart.");
+        let fr = export_fail_reason("fr", crate::actions::THREAD_FAIL_STOPPED_ON_RESTART, None, None, None);
+        assert_eq!(fr, "Arrêté au redémarrage.");
     }
 
     #[test]

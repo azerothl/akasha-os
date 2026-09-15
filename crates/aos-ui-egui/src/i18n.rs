@@ -740,6 +740,7 @@ pub struct UiStrings {
     pub agent_fail_unknown: &'static str,
     pub agent_could_not_act: &'static str,
     pub agent_could_not_continue: &'static str,
+    pub agent_stopped_on_restart: &'static str,
     pub agent_steer_hint: &'static str,
     pub agent_reply_hint: &'static str,
     pub providers_refresh: &'static str,
@@ -972,6 +973,23 @@ pub struct UiStrings {
     pub notes_status_deleted: &'static str,
     pub notes_empty_filter: &'static str,
     pub notes_filtered_count: &'static str,
+    pub notes_links_header: &'static str,
+    pub notes_outgoing: &'static str,
+    pub notes_backlinks: &'static str,
+    pub notes_related_relevance: &'static str,
+    pub notes_related_row: &'static str,
+    pub notes_hop_one: &'static str,
+    pub notes_hops_many: &'static str,
+    pub notes_relevance: &'static str,
+    pub notes_md_ph_title: &'static str,
+    pub notes_md_ph_subtitle: &'static str,
+    pub notes_md_ph_section: &'static str,
+    pub notes_md_ph_text: &'static str,
+    pub notes_md_ph_item: &'static str,
+    pub notes_md_ph_quote: &'static str,
+    pub notes_md_ph_code: &'static str,
+    pub notes_md_ph_cell: &'static str,
+    pub notes_md_ph_note_link: &'static str,
     pub status_audio_generating: &'static str,
     pub status_assistant_generating: &'static str,
     pub status_assistant_generating_progress: &'static str,
@@ -1916,6 +1934,7 @@ const EN: UiStrings = UiStrings {
     agent_fail_unknown: "reason not recorded",
     agent_could_not_act: "The agent could not act.",
     agent_could_not_continue: "Couldn't keep going.",
+    agent_stopped_on_restart: "Stopped on restart.",
     agent_steer_hint: "directive…",
     agent_reply_hint: "answer…",
     providers_refresh: "Refresh",
@@ -2149,6 +2168,23 @@ const EN: UiStrings = UiStrings {
     notes_status_deleted: "Deleted",
     notes_empty_filter: "No note matches this search.",
     notes_filtered_count: "{shown} of {total} notes",
+    notes_links_header: "Links",
+    notes_outgoing: "Outgoing",
+    notes_backlinks: "Backlinks",
+    notes_related_relevance: "Related (relevance)",
+    notes_related_row: "{title} [{relation}] · {hops} · {relevance}",
+    notes_hop_one: "1 hop",
+    notes_hops_many: "{n} hops",
+    notes_relevance: "relevance {score}",
+    notes_md_ph_title: "Title",
+    notes_md_ph_subtitle: "Subtitle",
+    notes_md_ph_section: "Section",
+    notes_md_ph_text: "text",
+    notes_md_ph_item: "item",
+    notes_md_ph_quote: "quote",
+    notes_md_ph_code: "code",
+    notes_md_ph_cell: "cell",
+    notes_md_ph_note_link: "Note title",
     status_audio_generating: "Audio: generating…",
     status_assistant_generating: "Assistant: generating…",
     status_assistant_generating_progress: "Assistant: generation in progress…",
@@ -3089,6 +3125,7 @@ const FR: UiStrings = UiStrings {
     agent_fail_unknown: "motif non renseigné",
     agent_could_not_act: "L'agent n'a pas pu agir.",
     agent_could_not_continue: "Impossible de continuer.",
+    agent_stopped_on_restart: "Arrêté au redémarrage.",
     agent_steer_hint: "directive…",
     agent_reply_hint: "réponse…",
     providers_refresh: "Rafraîchir",
@@ -3322,6 +3359,23 @@ const FR: UiStrings = UiStrings {
     notes_status_deleted: "Supprimée",
     notes_empty_filter: "Aucune note ne correspond.",
     notes_filtered_count: "{shown} sur {total} notes",
+    notes_links_header: "Liens",
+    notes_outgoing: "Sortants",
+    notes_backlinks: "Backlinks",
+    notes_related_relevance: "Liées (pertinence)",
+    notes_related_row: "{title} [{relation}] · {hops} · {relevance}",
+    notes_hop_one: "1 saut",
+    notes_hops_many: "{n} sauts",
+    notes_relevance: "pertinence {score}",
+    notes_md_ph_title: "Titre",
+    notes_md_ph_subtitle: "Sous-titre",
+    notes_md_ph_section: "Section",
+    notes_md_ph_text: "texte",
+    notes_md_ph_item: "élément",
+    notes_md_ph_quote: "citation",
+    notes_md_ph_code: "code",
+    notes_md_ph_cell: "cellule",
+    notes_md_ph_note_link: "Titre note",
     status_audio_generating: "Audio : génération…",
     status_assistant_generating: "Assistant : génération…",
     status_assistant_generating_progress: "Assistant : génération en cours…",
@@ -3593,6 +3647,36 @@ pub fn health_contributing_label(t: &UiStrings, key: &str) -> String {
     }
 }
 
+/// Humanize hop count for related-note rows (#239).
+pub fn format_note_hops(t: &UiStrings, hops: u32) -> String {
+    if hops == 1 {
+        t.notes_hop_one.to_string()
+    } else {
+        t.notes_hops_many.replace("{n}", &hops.to_string())
+    }
+}
+
+/// Humanize relevance score for related-note rows (#239).
+pub fn format_note_relevance(t: &UiStrings, score: f32) -> String {
+    t.notes_relevance
+        .replace("{score}", &format!("{score:.2}"))
+}
+
+/// Localized related-note row: title, relation, hops, relevance — no raw field names.
+pub fn format_related_note_label(
+    t: &UiStrings,
+    title: &str,
+    relation: &str,
+    hops: u32,
+    score: f32,
+) -> String {
+    t.notes_related_row
+        .replace("{title}", title)
+        .replace("{relation}", relation)
+        .replace("{hops}", &format_note_hops(t, hops))
+        .replace("{relevance}", &format_note_relevance(t, score))
+}
+
 /// Map agent `fail_reason` sentinels to localized thread copy.
 pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String {
     match reason {
@@ -3601,6 +3685,12 @@ pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String 
         }
         Some(r) if r == aos_agent::actions::THREAD_FAIL_COULD_NOT_CONTINUE => {
             t.agent_could_not_continue.to_string()
+        }
+        Some(r)
+            if r == aos_agent::actions::THREAD_FAIL_STOPPED_ON_RESTART
+                || r == aos_agent::actions::LEGACY_FAIL_STOPPED_ON_RESTART =>
+        {
+            t.agent_stopped_on_restart.to_string()
         }
         Some(other) if aos_agent::context_budget::is_overflow_fail_reason(other) => {
             t.agent_could_not_continue.to_string()
@@ -3929,6 +4019,41 @@ mod tests {
     }
 
     #[test]
+    fn locked_notes_links_and_placeholders_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.notes_links_header, "Links");
+        assert_eq!(fr.notes_links_header, "Liens");
+        assert_eq!(en.notes_outgoing, "Outgoing");
+        assert_eq!(fr.notes_outgoing, "Sortants");
+        assert_eq!(en.notes_backlinks, "Backlinks");
+        assert_eq!(en.notes_related_relevance, "Related (relevance)");
+        assert_eq!(fr.notes_related_relevance, "Liées (pertinence)");
+        assert_eq!(en.notes_md_ph_title, "Title");
+        assert_eq!(fr.notes_md_ph_title, "Titre");
+        assert_eq!(en.notes_md_ph_subtitle, "Subtitle");
+        assert_eq!(fr.notes_md_ph_subtitle, "Sous-titre");
+        assert_eq!(en.notes_md_ph_text, "text");
+        assert_eq!(fr.notes_md_ph_text, "texte");
+    }
+
+    #[test]
+    fn format_related_note_label_humanizes_hops_and_score() {
+        let en = strings("en");
+        let fr = strings("fr");
+        let en_one = format_related_note_label(&en, "Alpha", "out", 1, 0.82);
+        assert_eq!(en_one, "Alpha [out] · 1 hop · relevance 0.82");
+        assert!(!en_one.contains("hop1"));
+        assert!(!en_one.contains("score"));
+        let en_many = format_related_note_label(&en, "Beta", "in", 2, 0.5);
+        assert_eq!(en_many, "Beta [in] · 2 hops · relevance 0.50");
+        let fr_many = format_related_note_label(&fr, "Gamma", "out", 2, 0.82);
+        assert_eq!(fr_many, "Gamma [out] · 2 sauts · pertinence 0.82");
+        assert!(!fr_many.contains("hop"));
+        assert!(!fr_many.contains("score"));
+    }
+
+    #[test]
     fn roster_tool_labels_avoid_raw_ids() {
         let t = strings("en");
         assert_eq!(roster_tool_label(&t, "notes.create"), "Create note");
@@ -4079,6 +4204,30 @@ mod tests {
         assert_eq!(resolved, en.agent_could_not_act);
         assert!(!resolved.contains("JSON"));
         assert!(!resolved.contains("notes.create"));
+    }
+
+    #[test]
+    fn agent_stopped_on_restart_i18n_maps_sentinel_and_legacy() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.agent_stopped_on_restart, "Stopped on restart.");
+        assert_eq!(fr.agent_stopped_on_restart, "Arrêté au redémarrage.");
+        let sentinel = resolve_agent_fail_reason(
+            &en,
+            Some(aos_agent::actions::THREAD_FAIL_STOPPED_ON_RESTART),
+        );
+        assert_eq!(sentinel, en.agent_stopped_on_restart);
+        assert!(!sentinel.contains("arrêté"));
+        let legacy = resolve_agent_fail_reason(
+            &en,
+            Some(aos_agent::actions::LEGACY_FAIL_STOPPED_ON_RESTART),
+        );
+        assert_eq!(legacy, en.agent_stopped_on_restart);
+        let legacy_fr = resolve_agent_fail_reason(
+            &fr,
+            Some(aos_agent::actions::LEGACY_FAIL_STOPPED_ON_RESTART),
+        );
+        assert_eq!(legacy_fr, fr.agent_stopped_on_restart);
     }
 
     #[test]

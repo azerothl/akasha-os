@@ -733,35 +733,35 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
 
             ui.horizontal_wrapped(|ui| {
                 if ui.small_button(t.notes_md_h1).clicked() {
-                    insert_wrap(&mut state.edit_body, "# ", "\n", "Titre");
+                    insert_wrap(&mut state.edit_body, "# ", "\n", t.notes_md_ph_title);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_h2).clicked() {
-                    insert_wrap(&mut state.edit_body, "## ", "\n", "Sous-titre");
+                    insert_wrap(&mut state.edit_body, "## ", "\n", t.notes_md_ph_subtitle);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_h3).clicked() {
-                    insert_wrap(&mut state.edit_body, "### ", "\n", "Section");
+                    insert_wrap(&mut state.edit_body, "### ", "\n", t.notes_md_ph_section);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_bold).clicked() {
-                    insert_wrap(&mut state.edit_body, "**", "**", "texte");
+                    insert_wrap(&mut state.edit_body, "**", "**", t.notes_md_ph_text);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_italic).clicked() {
-                    insert_wrap(&mut state.edit_body, "*", "*", "texte");
+                    insert_wrap(&mut state.edit_body, "*", "*", t.notes_md_ph_text);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_list).clicked() {
-                    insert_wrap(&mut state.edit_body, "- ", "\n", "élément");
+                    insert_wrap(&mut state.edit_body, "- ", "\n", t.notes_md_ph_item);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_quote).clicked() {
-                    insert_wrap(&mut state.edit_body, "> ", "\n", "citation");
+                    insert_wrap(&mut state.edit_body, "> ", "\n", t.notes_md_ph_quote);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_code).clicked() {
-                    insert_wrap(&mut state.edit_body, "```\n", "\n```\n", "code");
+                    insert_wrap(&mut state.edit_body, "```\n", "\n```\n", t.notes_md_ph_code);
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_table).clicked() {
@@ -769,12 +769,12 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                         &mut state.edit_body,
                         "| A | B |\n| --- | --- |\n| ",
                         " |  |\n",
-                        "cellule",
+                        t.notes_md_ph_cell,
                     );
                     state.dirty = true;
                 }
                 if ui.small_button(t.notes_md_link).clicked() {
-                    insert_wrap(&mut state.edit_body, "[[", "]]", "Titre note");
+                    insert_wrap(&mut state.edit_body, "[[", "]]", t.notes_md_ph_note_link);
                     state.dirty = true;
                 }
             });
@@ -808,9 +808,9 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
         // Liens
         if !state.outgoing.is_empty() || !state.incoming.is_empty() {
             ui.separator();
-            ui.label(RichText::new("Liens").strong());
+            ui.label(RichText::new(t.notes_links_header).strong());
             if !state.outgoing.is_empty() {
-                ui.label("Sortants");
+                ui.label(t.notes_outgoing);
                 for l in state.outgoing.clone() {
                     ui.horizontal(|ui| {
                         if l.exists {
@@ -825,7 +825,7 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                 }
             }
             if !state.incoming.is_empty() {
-                ui.label("Backlinks");
+                ui.label(t.notes_backlinks);
                 for l in state.incoming.clone() {
                     ui.horizontal(|ui| {
                         icons::link_backlink(ui);
@@ -839,7 +839,7 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
 
         if !state.related_hits.is_empty() {
             ui.separator();
-            ui.label(RichText::new("Liées (pertinence)").strong());
+            ui.label(RichText::new(t.notes_related_relevance).strong());
             let related_h = ui.available_height().max(80.0);
             egui::ScrollArea::vertical()
                 .id_salt("notes_related")
@@ -847,11 +847,15 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for h in state.related_hits.clone() {
+                        let label = crate::i18n::format_related_note_label(
+                            t,
+                            &h.title,
+                            &h.relation,
+                            h.hops,
+                            h.score,
+                        );
                         if ui
-                            .button(format!(
-                                "{} [{}] hop{} score {:.2}",
-                                h.title, h.relation, h.hops, h.score
-                            ))
+                            .button(label)
                             .on_hover_text(&h.excerpt)
                             .clicked()
                         {
@@ -1023,5 +1027,14 @@ mod tests {
     #[test]
     fn parse_tags_input_dedups() {
         assert_eq!(parse_tags_input(" Travail, travail, idées "), vec!["Travail", "idées"]);
+    }
+
+    #[test]
+    fn format_related_note_label_uses_i18n_templates() {
+        let en = crate::i18n::strings("en");
+        let label = crate::i18n::format_related_note_label(&en, "Note A", "out", 2, 0.75);
+        assert_eq!(label, "Note A [out] · 2 hops · relevance 0.75");
+        assert!(!label.contains("hop2"));
+        assert!(!label.contains("score"));
     }
 }
