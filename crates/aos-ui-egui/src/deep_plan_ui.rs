@@ -1,7 +1,8 @@
 //! Deep Thinking plan collapsible UI + chat command parsing.
 
 use crate::cmd::ChatLine;
-use aos_proto::{ChatAttachment, DeepPlan, PlanStep, PlanStepStatus};
+use crate::i18n::UiStrings;
+use aos_proto::{AgentState, ChatAttachment, DeepPlan, PlanStep, PlanStepStatus};
 use eframe::egui;
 
 /// Parse user requests about the deep plan. Returns a UI action if matched.
@@ -98,14 +99,33 @@ pub(crate) fn apply_command_to_attachment(att: &mut ChatAttachment, cmd: &DeepPl
     }
 }
 
-fn status_label(s: PlanStepStatus) -> &'static str {
-    match s {
-        PlanStepStatus::Pending => "pending",
-        PlanStepStatus::InProgress => "in_progress",
-        PlanStepStatus::Done => "done",
-        PlanStepStatus::Delegated => "delegated",
-        PlanStepStatus::Blocked => "blocked",
+fn plan_step_display_status(status: PlanStepStatus, agent_interrupted: bool) -> PlanStepStatus {
+    if agent_interrupted
+        && matches!(
+            status,
+            PlanStepStatus::Pending | PlanStepStatus::InProgress
+        )
+    {
+        PlanStepStatus::Blocked
+    } else {
+        status
     }
+}
+
+fn status_label(t: &UiStrings, status: PlanStepStatus, agent_interrupted: bool) -> &'static str {
+    let status = plan_step_display_status(status, agent_interrupted);
+    match status {
+        PlanStepStatus::Pending => t.plan_step_pending,
+        PlanStepStatus::InProgress => t.plan_step_in_progress,
+        PlanStepStatus::Done => t.plan_step_done,
+        PlanStepStatus::Delegated => t.plan_step_delegated,
+        PlanStepStatus::Blocked if agent_interrupted => t.plan_step_stopped,
+        PlanStepStatus::Blocked => t.plan_step_blocked,
+    }
+}
+
+pub(crate) fn agent_plan_interrupted(state: Option<&AgentState>) -> bool {
+    matches!(state, Some(AgentState::Killed | AgentState::Failed))
 }
 
 /// Collapse historical duplicates then upsert the live plan card for `agent_id`.
@@ -239,6 +259,8 @@ pub(crate) struct DeepPlanToggle<'a> {
     pub steps: &'a [PlanStep],
     pub expand_step_ids: &'a [String],
     pub show_logs_step_id: Option<&'a str>,
+    pub agent_interrupted: bool,
+    pub t: &'a UiStrings,
 }
 
 /// Collapsible Deep Thinking plan tree (mirrors salon thinking toggle).
@@ -274,11 +296,13 @@ pub(crate) fn deep_plan_toggle(
         for step in plan.steps {
             draw_step(
                 ui,
+                plan.t,
                 step,
                 0,
                 plan.expand_step_ids,
                 plan.show_logs_step_id,
                 expanded,
+                plan.agent_interrupted,
             );
         }
     }
@@ -286,11 +310,13 @@ pub(crate) fn deep_plan_toggle(
 
 fn draw_step(
     ui: &mut egui::Ui,
+    t: &UiStrings,
     step: &PlanStep,
     depth: usize,
     expand_step_ids: &[String],
     show_logs_step_id: Option<&str>,
     parent_expanded: bool,
+    agent_interrupted: bool,
 ) {
     let force = expand_step_ids
         .iter()
@@ -309,7 +335,7 @@ fn draw_step(
         "{indent}> Étape {} — {} [{}]",
         step.id,
         step.label,
-        status_label(step.status)
+        status_label(t, step.status, agent_interrupted)
     );
     ui.label(
         egui::RichText::new(line)
@@ -331,11 +357,13 @@ fn draw_step(
     for child in &step.children {
         draw_step(
             ui,
+            t,
             child,
             depth + 1,
             expand_step_ids,
             show_logs_step_id,
             child_parent,
+            agent_interrupted,
         );
     }
 }
@@ -395,6 +423,28 @@ mod tests {
         };
         assert_eq!(*version, 2);
         assert!(matches!(steps[0].status, PlanStepStatus::Done));
+    }
+
+    #[test]
+    fn interrupted_agent_pending_steps_show_stopped_label() {
+        let t_fr = crate::i18n::strings("fr");
+        assert_eq!(
+            status_label(&t_fr, PlanStepStatus::Pending, true),
+            t_fr.plan_step_stopped
+        );
+        assert_eq!(
+            status_label(&t_fr, PlanStepStatus::InProgress, true),
+            t_fr.plan_step_stopped
+        );
+        assert_eq!(
+            status_label(&t_fr, PlanStepStatus::Done, true),
+            t_fr.plan_step_done
+        );
+        let t_en = crate::i18n::strings("en");
+        assert_eq!(
+            status_label(&t_en, PlanStepStatus::Pending, false),
+            t_en.plan_step_pending
+        );
     }
 
     #[test]

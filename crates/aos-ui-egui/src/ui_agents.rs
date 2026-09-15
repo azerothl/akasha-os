@@ -103,10 +103,10 @@ fn avatar_compact_row(
 fn agent_activity_icon(state: &AgentState) -> icons::AgentActivityIcon {
     match state {
         AgentState::Done => icons::AgentActivityIcon::Done,
-        AgentState::Failed => icons::AgentActivityIcon::Failed,
+        AgentState::Failed | AgentState::Killed => icons::AgentActivityIcon::Failed,
         AgentState::Blocked => icons::AgentActivityIcon::Blocked,
         AgentState::Running => icons::AgentActivityIcon::Running,
-        AgentState::Created | AgentState::Paused | AgentState::Killed | AgentState::Roster => {
+        AgentState::Created | AgentState::Paused | AgentState::Roster => {
             icons::AgentActivityIcon::Pending
         }
     }
@@ -118,7 +118,7 @@ fn ui_activity_agent_row(ui: &mut egui::Ui, t: &i18n::UiStrings, agent: &AgentIn
         icons::agent_activity_icon(ui, agent_activity_icon(&agent.state));
         ui.label(agent.display_title());
         let state_label = agent_panel::agent_state_label(t, &agent.state);
-        if agent.state == AgentState::Failed {
+        if matches!(agent.state, AgentState::Failed | AgentState::Killed) {
             ui.colored_label(theme::HYDROGEN, state_label);
         } else {
             ui.weak(state_label);

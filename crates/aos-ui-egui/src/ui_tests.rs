@@ -74,6 +74,8 @@ mod delegate_tests {
             tools.iter().any(|t| t == "module.list")
                 || tools.iter().any(|t| t == "module.describe")
         );
+        assert!(!skills.iter().any(|s| s == "notes-writer"));
+        assert!(!tools.iter().any(|t| t.starts_with("notes.")));
     }
 
     #[test]
@@ -673,6 +675,59 @@ mod canvas_completion_tests {
         assert_eq!(text, t.notes_create_failed);
         assert!(!text.to_ascii_lowercase().contains("created"));
         assert!(!text.contains("cohort"));
+    }
+
+    #[test]
+    fn completion_chat_advisory_deep_thinking_without_note_probe_no_fail_chrome() {
+        let t = i18n::strings("fr");
+        let mut ag = canvas_agent("advisory-dt");
+        ag.state = AgentState::Done;
+        ag.tools = vec!["module.list".into(), "module.describe".into()];
+        ag.skills = vec!["deep-thinking".into()];
+        ag.last_output = "Voici une analyse des limitations.".into();
+        let text = agent_completion_chat_text(&ag, &t, None, None, false, 0);
+        assert!(!text.contains(t.notes_create_failed));
+        assert!(text.contains("analyse"));
+    }
+
+    #[test]
+    fn killed_agent_state_label_not_pending() {
+        let t_en = i18n::strings("en");
+        let t_fr = i18n::strings("fr");
+        assert_eq!(
+            agent_panel::agent_state_label(&t_en, &AgentState::Killed),
+            "Stopped"
+        );
+        assert_eq!(
+            agent_panel::agent_state_label(&t_fr, &AgentState::Killed),
+            "Arrêté"
+        );
+        assert_ne!(
+            agent_panel::agent_state_label(&t_fr, &AgentState::Killed),
+            t_fr.agent_state_pending
+        );
+    }
+
+    #[test]
+    fn restart_kill_fail_reason_localized() {
+        let t_en = i18n::strings("en");
+        let t_fr = i18n::strings("fr");
+        let sentinel = aos_agent::actions::THREAD_FAIL_STOPPED_ON_RESTART;
+        assert_eq!(
+            i18n::resolve_agent_fail_reason(&t_en, Some(sentinel)),
+            t_en.agent_stopped_on_restart
+        );
+        assert_eq!(
+            i18n::resolve_agent_fail_reason(&t_fr, Some(sentinel)),
+            t_fr.agent_stopped_on_restart
+        );
+        assert_eq!(
+            i18n::resolve_agent_fail_reason(
+                &t_fr,
+                Some(aos_agent::actions::LEGACY_FAIL_STOPPED_ON_RESTART),
+            ),
+            t_fr.agent_stopped_on_restart
+        );
     }
 
     #[test]
