@@ -342,8 +342,8 @@ pub struct UiStrings {
     pub lan_auto_discovery: &'static str,
     pub lan_discovery_port: &'static str,
     pub lan_discovery_hint: &'static str,
-    pub lan_session_secret: &'static str,
     pub lan_session_value: &'static str,
+    pub lan_session_configure_in_secrets: &'static str,
     pub lan_session_secret_hint: &'static str,
     pub lan_add_node: &'static str,
     pub lan_node_fields_required: &'static str,
@@ -1618,9 +1618,9 @@ const EN: UiStrings = UiStrings {
     lan_auto_discovery: "Auto-discover LAN candidates",
     lan_discovery_port: "Discovery UDP port",
     lan_discovery_hint: "Empty or loopback listen addresses are filled with this machine's LAN IP. Candidates stay unpaired until you verify and pair them. Discovery starts on the next model daemon launch.",
-    lan_session_secret: "Session-key secret name",
     lan_session_value: "LAN session key",
-    lan_session_secret_hint: "Store a 64-character hexadecimal key in the encrypted vault (use Generate → LAN preset). The key value is never displayed after Save.",
+    lan_session_configure_in_secrets: "Configure in Settings → Secrets",
+    lan_session_secret_hint: "Store a 64-character hexadecimal key in Settings → Secrets (Generate → LAN preset). The key value is never displayed after Save.",
     lan_add_node: "Add node",
     lan_node_fields_required: "Complete all node fields before adding it.",
     lan_node_id: "Node ID",
@@ -2885,9 +2885,9 @@ const FR: UiStrings = UiStrings {
     lan_auto_discovery: "Découvrir automatiquement les candidats LAN",
     lan_discovery_port: "Port UDP de découverte",
     lan_discovery_hint: "Une adresse d’écoute vide ou en loopback est remplacée par l’IP LAN de cette machine. Les candidats restent non appairés jusqu’à vérification et appairage. La découverte démarre au prochain lancement du daemon de modèles.",
-    lan_session_secret: "Nom du secret de session",
     lan_session_value: "Clé de session LAN",
-    lan_session_secret_hint: "Stockez une clé hexadécimale de 64 caractères dans le coffre chiffré (Générer → préréglage LAN). Sa valeur n’est plus affichée après Enregistrer.",
+    lan_session_configure_in_secrets: "À configurer dans Paramètres → Secrets",
+    lan_session_secret_hint: "Stockez une clé hexadécimale de 64 caractères dans Paramètres → Secrets (Générer → préréglage LAN). Sa valeur n’est plus affichée après Enregistrer.",
     lan_add_node: "Ajouter le nœud",
     lan_node_fields_required: "Renseignez tous les champs du nœud avant de l’ajouter.",
     lan_node_id: "Identifiant du nœud",
@@ -4192,9 +4192,69 @@ pub fn lan_discovery_telemetry_line(
     parts.join(" · ")
 }
 
+/// User-visible Settings → LAN / Secrets copy exercised in chrome (labels, hints, status).
+pub fn settings_lan_secrets_chrome_strings(t: &UiStrings) -> Vec<&'static str> {
+    vec![
+        t.lan_cluster,
+        t.lan_cluster_hint,
+        t.lan_layer_pipeline_status,
+        t.lan_refresh,
+        t.lan_pair,
+        t.lan_revoke,
+        t.lan_no_nodes,
+        t.lan_local_identity,
+        t.lan_listen_address,
+        t.lan_public_fingerprint,
+        t.lan_auto_discovery,
+        t.lan_discovery_port,
+        t.lan_discovery_hint,
+        t.lan_session_value,
+        t.lan_session_configure_in_secrets,
+        t.lan_session_secret_hint,
+        t.lan_add_node,
+        t.lan_node_fields_required,
+        t.lan_node_id,
+        t.lan_node_name,
+        t.lan_node_address,
+        t.lan_node_fingerprint,
+        t.lan_status_title,
+        t.lan_status_ready,
+        t.lan_status_error,
+        t.lan_status_partial,
+        t.lan_status_secret_missing,
+        t.lan_status_bind_failed,
+        t.lan_status_restart_required,
+        t.lan_status_discovery_active,
+        t.lan_status_discovery_inactive,
+        t.lan_status_discovery_counters,
+        t.settings_pill_secrets,
+        t.settings_secret_keygen_lan_preset,
+        t.settings_secret_lan_invalid,
+        t.settings_secret_save,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_lan_secrets_chrome_never_exposes_vault_wire_ids() {
+        for lang in ["en", "fr"] {
+            let t = strings(lang);
+            for s in settings_lan_secrets_chrome_strings(&t) {
+                assert!(
+                    !s.contains(LAN_SESSION_WIRE_ID),
+                    "chrome must not expose {LAN_SESSION_WIRE_ID}: {s}"
+                );
+            }
+            assert_eq!(t.lan_session_value, if lang == "fr" {
+                "Clé de session LAN"
+            } else {
+                "LAN session key"
+            });
+        }
+    }
 
     #[test]
     fn lan_status_chrome_never_exposes_vault_wire_ids() {
