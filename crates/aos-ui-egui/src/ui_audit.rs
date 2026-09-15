@@ -367,7 +367,9 @@ impl UiApp {
         .show(ui, |ui| {
             if let Some(h) = &self.security_ui.health {
                 ui.horizontal(|ui| {
-                    if h.canary_ok {
+                    if h.steps.is_empty() {
+                        ui.weak(t.health_no_snapshot);
+                    } else if h.canary_ok {
                         ui.colored_label(
                             crate::theme::button_colors(ui).success,
                             t.health_check_ok,

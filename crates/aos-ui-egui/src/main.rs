@@ -3013,7 +3013,8 @@ impl eframe::App for UiApp {
                 Evt::Metrics(m) => self.metrics = Some(m),
                 Evt::Health(h) => {
                     let prev = self.security_ui.health_canary_was_ok;
-                    if prev == Some(true) && !h.canary_ok {
+                    // Empty steps = canary not run yet — never toast a false failure.
+                    if prev == Some(true) && !h.canary_ok && !h.steps.is_empty() {
                         let t = i18n::strings(&self.prefs.language);
                         self.push_status(t.health_status_check_failed.into());
                     }
