@@ -578,7 +578,6 @@ impl UiApp {
                                     &t,
                                     worker_state,
                                     &response.worker_detail,
-                                    &self.prefs.lan_session_key_secret,
                                 );
                                 if !message.is_empty() {
                                     ui.colored_label(
@@ -683,21 +682,6 @@ impl UiApp {
                                     .add(
                                         egui::DragValue::new(&mut self.prefs.lan_discovery_port)
                                             .range(1024..=65535),
-                                    )
-                                    .changed()
-                                {
-                                    save_preferences(&self.prefs);
-                                }
-                                ui.end_row();
-
-                                ui.label(t.lan_session_secret);
-                                if ui
-                                    .add(
-                                        egui::TextEdit::singleline(
-                                            &mut self.prefs.lan_session_key_secret,
-                                        )
-                                        .desired_width(220.0)
-                                        .hint_text("lan_cluster_session_key"),
                                     )
                                     .changed()
                                 {
@@ -1445,7 +1429,7 @@ impl UiApp {
                         ui.weak(format!(
                             "{}: {}",
                             t.settings_secret_configured,
-                            self.settings_ui.secret_names.join(", ")
+                            i18n::secret_names_for_chrome(&t, &self.settings_ui.secret_names),
                         ));
                     }
                 });
