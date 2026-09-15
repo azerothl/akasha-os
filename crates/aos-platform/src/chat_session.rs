@@ -1502,7 +1502,7 @@ archived: false
         s.append(
             &m.id,
             "system",
-            "agent.spawn.denied — Couldn't launch the agent.",
+            "Something went wrong. Try again.\nCouldn't launch the agent.",
             vec![],
             None,
             None,
@@ -1511,7 +1511,7 @@ archived: false
         .unwrap();
         let md = s.export_markdown(&m.id).unwrap();
         assert!(md.contains("## system"));
-        assert!(md.contains("agent.spawn.denied"));
+        assert!(md.contains("Couldn't launch the agent."));
         let _ = fs::remove_dir_all(&dir);
     }
 

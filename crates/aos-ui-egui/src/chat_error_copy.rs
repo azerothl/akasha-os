@@ -4,11 +4,11 @@ use crate::i18n::UiStrings;
 use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
 use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 
-/// Stable machine code + localized short reason for chat chrome.
+/// Stable machine code (audit only) + localized short human cause for chat chrome.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChatErrorClassified {
     pub code: &'static str,
-    pub reason: String,
+    pub cause: String,
 }
 
 /// True when the runtime error is a model weight load failure (often embeds a `.gguf` path).
@@ -172,16 +172,20 @@ fn is_cap_or_policy_denial(msg: &str) -> Option<&'static str> {
     None
 }
 
-pub(crate) fn format_chat_error(classified: &ChatErrorClassified) -> String {
-    format!("{} — {}", classified.code, classified.reason)
+/// Designer chrome: fallback headline plus optional cause line (no wire codes).
+pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified) -> String {
+    if classified.code == "chat.error" {
+        return t.chat_error_generic.to_string();
+    }
+    format!("{}\n{}", t.chat_error_generic, classified.cause)
 }
 
-/// Classify a raw runtime error into a stable code and localized reason.
+/// Classify a raw runtime error into a stable code and localized cause phrase.
 pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassified {
     if is_room_host_path_sentinel(raw) {
         return ChatErrorClassified {
             code: "room.path_denied",
-            reason: room_host_path_disallowed_toast(t)
+            cause: room_host_path_disallowed_toast(t)
                 .map(str::to_string)
                 .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string()),
         };
@@ -189,7 +193,7 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
     if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
         return ChatErrorClassified {
             code: "room.action_unavailable",
-            reason: t.room_action_unavailable.to_string(),
+            cause: t.room_action_unavailable.to_string(),
         };
     }
     let lower = raw.to_ascii_lowercase();
@@ -199,49 +203,49 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
     {
         return ChatErrorClassified {
             code: "room.action_unavailable",
-            reason: t.room_action_unavailable.to_string(),
+            cause: t.room_action_unavailable.to_string(),
         };
     }
     if raw.starts_with("media.image.generate:") {
         if raw.to_ascii_lowercase().contains("annul") {
             return ChatErrorClassified {
                 code: "media.generation_cancelled",
-                reason: t.studio_generation_cancelled.to_string(),
+                cause: t.studio_generation_cancelled.to_string(),
             };
         }
         return ChatErrorClassified {
             code: "media.generation_failed",
-            reason: t.studio_generation_failed.to_string(),
+            cause: t.studio_generation_failed.to_string(),
         };
     }
     if is_tasks_quarantine_error(raw) {
         return ChatErrorClassified {
             code: "tasks.quarantined",
-            reason: t.tasks_quarantined.to_string(),
+            cause: t.chat_error_tasks_quarantined.to_string(),
         };
     }
     if is_create_install_error(raw) {
         return ChatErrorClassified {
             code: "create.install_failed",
-            reason: t.create_install_failed.to_string(),
+            cause: t.chat_error_create_install.to_string(),
         };
     }
     if is_tasks_open_or_install_error(raw) {
         return ChatErrorClassified {
             code: "tasks.open_failed",
-            reason: t.tasks_open_failed.to_string(),
+            cause: t.chat_error_tasks_open.to_string(),
         };
     }
     if is_model_load_fail_error(raw) {
         return ChatErrorClassified {
             code: "model.load_failed",
-            reason: t.chat_load_fail_message.to_string(),
+            cause: t.chat_load_fail_message.to_string(),
         };
     }
     if is_chat_timeout_error(raw) {
         return ChatErrorClassified {
             code: "chat.timeout",
-            reason: t.chat_error_timeout.to_string(),
+            cause: t.chat_error_timeout.to_string(),
         };
     }
 
@@ -251,19 +255,19 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         if status_lower == "permissiondenied" {
             return ChatErrorClassified {
                 code: "cap.denied",
-                reason: t.chat_error_cap_denied.to_string(),
+                cause: t.chat_error_cap_denied.to_string(),
             };
         }
         if status_lower == "internalerror" {
             if is_agent_spawn_error(ipc_body) {
                 return ChatErrorClassified {
                     code: "agent.create.failed",
-                    reason: t.chat_error_agent_create_failed.to_string(),
+                    cause: t.chat_error_agent_create_failed.to_string(),
                 };
             }
             return ChatErrorClassified {
                 code: "chat.internal_error",
-                reason: t.chat_error_internal.to_string(),
+                cause: t.chat_error_internal.to_string(),
             };
         }
         if status_lower == "badrequest" {
@@ -272,7 +276,7 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
             {
                 return ChatErrorClassified {
                     code: "bad_request.payload",
-                    reason: t.chat_error_bad_request.to_string(),
+                    cause: t.chat_error_bad_request.to_string(),
                 };
             }
             return classify_chat_error(t, ipc_body);
@@ -282,39 +286,39 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
     if lower.contains("brief sous-agent vide") || lower.contains("empty sub-agent brief") {
         return ChatErrorClassified {
             code: "agent.spawn.empty_brief",
-            reason: t.chat_error_agent_spawn_empty_brief.to_string(),
+            cause: t.chat_error_agent_spawn_empty_brief.to_string(),
         };
     }
     if is_advisory_construction_refusal(raw) {
         return ChatErrorClassified {
             code: "module.scaffold.advisory",
-            reason: t.chat_error_module_scaffold_advisory.to_string(),
+            cause: t.chat_error_module_scaffold_advisory.to_string(),
         };
     }
     if let Some(code) = is_cap_or_policy_denial(raw) {
-        let reason = if code == "cap.denied" {
+        let cause = if code == "cap.denied" {
             t.chat_error_cap_denied.to_string()
         } else {
             t.chat_error_policy_denied.to_string()
         };
-        return ChatErrorClassified { code, reason };
+        return ChatErrorClassified { code, cause };
     }
     if lower.contains("agent déjà en cours") || lower.contains("agent already running") {
         return ChatErrorClassified {
             code: "agent.spawn.busy",
-            reason: t.chat_error_agent_spawn_busy.to_string(),
+            cause: t.chat_error_agent_spawn_busy.to_string(),
         };
     }
     if is_agent_spawn_error(raw) {
         return ChatErrorClassified {
             code: "agent.spawn.denied",
-            reason: t.chat_error_agent_spawn_denied.to_string(),
+            cause: t.chat_error_agent_spawn_denied.to_string(),
         };
     }
     if is_module_scaffold_error(raw) {
         return ChatErrorClassified {
             code: "module.scaffold.denied",
-            reason: t.chat_error_module_scaffold_denied.to_string(),
+            cause: t.chat_error_module_scaffold_denied.to_string(),
         };
     }
 
@@ -325,7 +329,7 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         }
         return ChatErrorClassified {
             code: "bad_request",
-            reason: t.chat_error_bad_request.to_string(),
+            cause: t.chat_error_bad_request.to_string(),
         };
     }
 
@@ -334,18 +338,18 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         if lower.contains("create") {
             return ChatErrorClassified {
                 code: "create.install_failed",
-                reason: t.create_install_failed.to_string(),
+                cause: t.chat_error_create_install.to_string(),
             };
         }
         if lower.contains("tasks") {
             return ChatErrorClassified {
                 code: "tasks.open_failed",
-                reason: t.tasks_open_failed.to_string(),
+                cause: t.chat_error_tasks_open.to_string(),
             };
         }
         return ChatErrorClassified {
             code: "chat.error",
-            reason: t.chat_error_generic.to_string(),
+            cause: t.chat_error_generic.to_string(),
         };
     }
 
@@ -357,13 +361,13 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
     if raw.trim().is_empty() {
         return ChatErrorClassified {
             code: "chat.error",
-            reason: t.chat_error_generic.to_string(),
+            cause: t.chat_error_generic.to_string(),
         };
     }
 
     ChatErrorClassified {
         code: "chat.error",
-        reason: t.chat_error_generic.to_string(),
+        cause: t.chat_error_generic.to_string(),
     }
 }
 
@@ -371,39 +375,39 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
 pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) -> String {
     let stripped = strip_ipc_status_prefix(raw);
     if module == "tasks" && is_tasks_quarantine_error(stripped) {
-        return format_chat_error(&ChatErrorClassified {
+        return format_chat_error(t, &ChatErrorClassified {
             code: "tasks.quarantined",
-            reason: t.tasks_quarantined.to_string(),
+            cause: t.chat_error_tasks_quarantined.to_string(),
         });
     }
     if is_tasks_quarantine_error(stripped) {
-        return format_chat_error(&ChatErrorClassified {
+        return format_chat_error(t, &ChatErrorClassified {
             code: "tasks.quarantined",
-            reason: t.tasks_quarantined.to_string(),
+            cause: t.chat_error_tasks_quarantined.to_string(),
         });
     }
     if module == "tasks" && is_tasks_open_or_install_error(stripped) {
-        return format_chat_error(&ChatErrorClassified {
+        return format_chat_error(t, &ChatErrorClassified {
             code: "tasks.open_failed",
-            reason: t.tasks_open_failed.to_string(),
+            cause: t.chat_error_tasks_open.to_string(),
         });
     }
     if is_tasks_open_or_install_error(stripped) {
-        return format_chat_error(&ChatErrorClassified {
+        return format_chat_error(t, &ChatErrorClassified {
             code: "tasks.open_failed",
-            reason: t.tasks_open_failed.to_string(),
+            cause: t.chat_error_tasks_open.to_string(),
         });
     }
     if module == "create" && is_create_install_error(stripped) {
-        return format_chat_error(&ChatErrorClassified {
+        return format_chat_error(t, &ChatErrorClassified {
             code: "create.install_failed",
-            reason: t.create_install_failed.to_string(),
+            cause: t.chat_error_create_install.to_string(),
         });
     }
     if is_create_install_error(stripped) {
-        return format_chat_error(&ChatErrorClassified {
+        return format_chat_error(t, &ChatErrorClassified {
             code: "create.install_failed",
-            reason: t.create_install_failed.to_string(),
+            cause: t.chat_error_create_install.to_string(),
         });
     }
     user_visible_chat_error(t, stripped)
@@ -411,7 +415,7 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
 
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
-    format_chat_error(&classify_chat_error(t, raw))
+    format_chat_error(t, &classify_chat_error(t, raw))
 }
 
 #[cfg(test)]
@@ -422,21 +426,15 @@ mod tests {
     fn room_action_unavailable_maps_to_locked_copy() {
         let en = crate::i18n::strings("en");
         let fr = crate::i18n::strings("fr");
-        assert_eq!(
-            user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE),
-            format_chat_error(&classify_chat_error(&en, ROOM_ACTION_UNAVAILABLE))
-        );
-        assert!(user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE).contains("room.action_unavailable"));
+        let classified = classify_chat_error(&en, ROOM_ACTION_UNAVAILABLE);
+        let out = user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE);
+        assert_eq!(out, format_chat_error(&en, &classified));
+        assert!(out.starts_with(en.chat_error_generic));
+        assert!(out.contains(en.room_action_unavailable));
+        assert!(!out.contains("BadRequest"));
         assert_eq!(
             user_visible_chat_error(&fr, ROOM_ACTION_UNAVAILABLE),
-            format_chat_error(&classify_chat_error(&fr, ROOM_ACTION_UNAVAILABLE))
-        );
-        assert_eq!(
-            user_visible_chat_error(&en, "action notes.create indisponible en tour de salon"),
-            format_chat_error(&classify_chat_error(
-                &en,
-                "action notes.create indisponible en tour de salon"
-            ))
+            format_chat_error(&fr, &classify_chat_error(&fr, ROOM_ACTION_UNAVAILABLE))
         );
     }
 
@@ -451,9 +449,10 @@ mod tests {
     fn sanitize_replaces_path_with_i18n_load_fail() {
         let t = crate::i18n::strings("fr");
         let out = user_visible_chat_error(&t, "poids introuvables: C:\\share\\models\\foo.gguf");
-        assert!(out.contains("model.load_failed"));
+        assert!(out.starts_with(t.chat_error_generic));
+        assert!(out.contains(t.chat_load_fail_message));
         assert_eq!(
-            classify_chat_error(&t, "poids introuvables: C:\\share\\models\\foo.gguf").reason,
+            classify_chat_error(&t, "poids introuvables: C:\\share\\models\\foo.gguf").cause,
             t.chat_load_fail_message
         );
         assert!(!out.contains("gguf"));
@@ -461,14 +460,11 @@ mod tests {
     }
 
     #[test]
-    fn generic_path_leak_uses_generic_copy_with_code() {
+    fn generic_path_leak_uses_fallback_only() {
         let t = crate::i18n::strings("en");
         let out = user_visible_chat_error(&t, "open failed: /var/run/aos-modeld.stderr.log");
-        assert!(out.starts_with("chat.error —"));
-        assert_eq!(
-            classify_chat_error(&t, "open failed: /var/run/aos-modeld.stderr.log").reason,
-            t.chat_error_generic
-        );
+        assert_eq!(out, t.chat_error_generic);
+        assert!(!out.contains("var/run"));
     }
 
     #[test]
@@ -478,116 +474,56 @@ mod tests {
             &t,
             "media.image.generate: failed to load C:\\share\\models\\ltx.gguf",
         );
-        assert!(out.contains("media.generation_failed"));
-        assert_eq!(
-            classify_chat_error(
-                &t,
-                "media.image.generate: failed to load C:\\share\\models\\ltx.gguf"
-            )
-            .reason,
-            t.studio_generation_failed
-        );
+        assert!(out.contains(t.studio_generation_failed));
+        assert!(!out.contains("gguf"));
     }
 
     #[test]
-    fn media_generation_cancel_maps_to_cancelled_copy() {
-        let t = crate::i18n::strings("fr");
-        let out = user_visible_chat_error(&t, "media.image.generate: génération annulée");
-        assert!(out.contains("media.generation_cancelled"));
-    }
-
-    #[test]
-    fn tasks_open_failure_maps_to_locked_copy() {
+    fn tasks_open_failure_maps_to_human_cause() {
         let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
         let raw = "statut BadRequest: UI déclarative invalide: type must be declarative_ui, got missing field `root` at line 6 column 1";
-        let out_en = user_visible_module_error(&en, "tasks", raw);
-        let out_fr = user_visible_module_error(&fr, "tasks", raw);
-        assert!(out_en.contains("tasks.open_failed"));
-        assert!(out_fr.contains("tasks.open_failed"));
-        assert!(!out_en.contains("BadRequest"));
-        assert!(!out_en.contains("root"));
-        assert!(!out_en.contains("declarative"));
+        let out = user_visible_module_error(&en, "tasks", raw);
+        assert!(out.contains(en.chat_error_generic));
+        assert!(out.contains(en.chat_error_tasks_open));
+        assert!(!out.contains("BadRequest"));
+        assert!(!out.contains("root"));
     }
 
     #[test]
-    fn tasks_catalogue_install_failure_maps_to_locked_copy() {
+    fn create_install_failure_maps_to_human_cause() {
         let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
-        let raw = "statut BadRequest: hash catalogue non conforme pour tasks";
-        assert!(user_visible_chat_error(&en, raw).contains("tasks.open_failed"));
-        assert!(user_visible_chat_error(&fr, raw).contains("tasks.open_failed"));
-        assert!(!user_visible_chat_error(&en, raw).contains("BadRequest"));
-    }
-
-    #[test]
-    fn tasks_quarantine_maps_to_locked_copy() {
-        let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
-        let raw = "statut BadRequest: module en quarantaine: tasks";
-        assert!(user_visible_module_error(&en, "tasks", raw).contains("tasks.quarantined"));
-        assert!(user_visible_module_error(&fr, "tasks", raw).contains("tasks.quarantined"));
-        assert!(!user_visible_module_error(&en, "tasks", raw).contains("BadRequest"));
-    }
-
-    #[test]
-    fn create_install_failure_maps_to_locked_copy() {
-        let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
         let raw = "statut BadRequest: hash catalogue non conforme pour create";
-        assert!(user_visible_chat_error(&en, raw).contains("create.install_failed"));
-        assert!(user_visible_chat_error(&fr, raw).contains("create.install_failed"));
-        assert!(!user_visible_chat_error(&en, raw).contains("BadRequest"));
-        assert!(!user_visible_chat_error(&en, raw).contains(".aospkg"));
+        let out = user_visible_chat_error(&en, raw);
+        assert!(out.contains(en.chat_error_create_install));
+        assert!(!out.contains("BadRequest"));
     }
 
     #[test]
-    fn room_host_path_disallowed_maps_to_locked_copy() {
+    fn agent_create_failure_shows_human_cause_not_wire_jargon() {
         let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
-        assert!(user_visible_chat_error(&en, ROOM_HOST_PATH_DISALLOWED).contains("room.path_denied"));
-        assert!(user_visible_chat_error(&fr, ROOM_HOST_PATH_DISALLOWED).contains("room.path_denied"));
-        assert_eq!(
-            room_host_path_disallowed_toast(&en),
-            Some(en.room_host_path_disallowed)
-        );
-        assert!(!en.room_host_path_disallowed.contains('/'));
-        assert!(!en.room_host_path_disallowed.contains(':'));
-        assert!(!fr.room_host_path_disallowed.contains('/'));
-        assert!(!fr.room_host_path_disallowed.contains(':'));
-    }
-
-    #[test]
-    fn agent_create_bad_request_maps_to_spawn_denied() {
-        let en = crate::i18n::strings("en");
-        let raw = "statut BadRequest: payload invalide";
-        let classified = classify_chat_error(&en, raw);
-        assert_eq!(classified.code, "bad_request.payload");
         let spawn = "statut InternalError: spawn worker failed for agent.create";
-        let classified_spawn = classify_chat_error(&en, spawn);
-        assert_eq!(classified_spawn.code, "agent.create.failed");
         let visible = user_visible_chat_error(&en, spawn);
-        assert!(visible.contains("agent.create.failed"));
+        assert!(visible.contains(en.chat_error_generic));
+        assert!(visible.contains(en.chat_error_agent_create_failed));
         assert!(!visible.contains("InternalError"));
-        assert!(!visible.contains("statut"));
+        assert!(!visible.contains("agent.create"));
     }
 
     #[test]
-    fn advisory_scaffold_refusal_has_stable_code() {
+    fn advisory_scaffold_refusal_has_human_cause() {
         let en = crate::i18n::strings("en");
         let raw = "action refusée : le goal est une évaluation/conseil. Analyse et réponds ; ne construis pas le module sans demande explicite.";
-        let classified = classify_chat_error(&en, raw);
-        assert_eq!(classified.code, "module.scaffold.advisory");
-        assert!(user_visible_chat_error(&en, raw).contains("module.scaffold.advisory"));
+        let visible = user_visible_chat_error(&en, raw);
+        assert!(visible.contains(en.chat_error_module_scaffold_advisory));
+        assert!(!visible.contains("évaluation/conseil"));
     }
 
     #[test]
-    fn chat_timeout_has_stable_code_without_path() {
+    fn chat_timeout_has_human_cause_without_path() {
         let en = crate::i18n::strings("en");
         let raw = "timeout chat (180 s) — modeld a peut-être planté (voir var/run/aos-modeld.stderr.log) ; relancez aos-session";
         let visible = user_visible_chat_error(&en, raw);
-        assert!(visible.contains("chat.timeout"));
+        assert!(visible.contains(en.chat_error_timeout));
         assert!(!visible.contains("var/run"));
-        assert!(!visible.contains(".log"));
     }
 }

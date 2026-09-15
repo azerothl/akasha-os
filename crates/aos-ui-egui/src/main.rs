@@ -29,6 +29,7 @@ mod chat_composer_state;
 mod chat_controller;
 mod chat_delegate;
 mod chat_error_copy;
+mod chat_error_recovery;
 mod chat_event_controller;
 mod chat_load_fail;
 mod chat_media;
@@ -3561,7 +3562,7 @@ impl eframe::App for UiApp {
                                 .security_ui
                                 .recent_chat_errors
                                 .iter()
-                                .map(|e| (e.code.clone(), e.message.clone()))
+                                .map(|e| (e.code.clone(), e.cause.clone()))
                                 .collect();
                             let _ = self.cmd_tx.send(Cmd::Troubleshoot {
                                 recent_chat_errors,

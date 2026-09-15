@@ -8,7 +8,7 @@ pub(crate) struct ChatErrorRecord {
     pub(crate) at_ms: u64,
     pub(crate) session_id: Option<String>,
     pub(crate) code: String,
-    pub(crate) message: String,
+    pub(crate) cause: String,
 }
 
 #[derive(Default)]
@@ -83,14 +83,14 @@ impl SecurityUiState {
         &mut self,
         session_id: Option<String>,
         code: &str,
-        message: String,
+        cause: String,
         at_ms: u64,
     ) {
         self.recent_chat_errors.push(ChatErrorRecord {
             at_ms,
             session_id,
             code: code.to_string(),
-            message,
+            cause,
         });
         while self.recent_chat_errors.len() > MAX_RECENT_CHAT_ERRORS {
             self.recent_chat_errors.remove(0);

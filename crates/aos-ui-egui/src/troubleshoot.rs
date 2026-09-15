@@ -185,9 +185,9 @@ pub(crate) async fn run_troubleshoot(
 
     if !recent_chat_errors.is_empty() {
         let mut block = String::from("## Recent chat errors\n");
-        for (code, message) in recent_chat_errors.iter().rev().take(10) {
-            block.push_str(&format!("- `{code}` — {message}\n"));
-            findings.push(format!("chat error {code}"));
+        for (code, cause) in recent_chat_errors.iter().rev().take(10) {
+            block.push_str(&format!("- {cause} [{code}]\n"));
+            findings.push(format!("chat error: {cause}"));
         }
         sections.push(block);
     }

@@ -1004,6 +1004,24 @@ impl UiApp {
                         ui.weak(&pending_status);
                     });
                 }
+                if let Some(recovery) = self
+                    .chat_state
+                    .runtime
+                    .chat_error_recovery
+                    .clone()
+                    .filter(|_| self.chat_state.active_session.is_some())
+                {
+                    match crate::chat_error_recovery::render_chat_error_recovery(ui, t, &recovery)
+                    {
+                        crate::chat_error_recovery::ChatErrorRecoveryAction::Retry => {
+                            self.retry_chat_error_turn();
+                        }
+                        crate::chat_error_recovery::ChatErrorRecoveryAction::Activity => {
+                            self.on_tab_open(crate::Tab::Agents);
+                        }
+                        crate::chat_error_recovery::ChatErrorRecoveryAction::None => {}
+                    }
+                }
                 if self.chat_state.runtime.load_fail_retry.is_some()
                     && self.chat_state.active_session.is_some()
                 {
