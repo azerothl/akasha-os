@@ -7,7 +7,7 @@ mod delegate_tests {
     use super::*;
     use crate::chat_delegate::{
         canvas_model_id, chat_device_usb_connect_intent, chat_device_usb_intent,
-        user_wants_deep_thinking,
+        user_wants_deep_thinking, ChatDelegateSpec,
     };
     use aos_proto::{CanvasAspect, ModelInfo, ModelState};
 
@@ -49,7 +49,12 @@ mod delegate_tests {
 
     #[test]
     fn deep_thinking_force_delegate_adds_skill() {
-        let (brief, skills, _tools, prose) = crate::chat_delegate::deep_thinking_force_delegate(
+        let ChatDelegateSpec {
+            brief,
+            skills,
+            prose,
+            ..
+        } = crate::chat_delegate::deep_thinking_force_delegate(
             "planifie le déploiement",
             false,
             &[],
@@ -64,8 +69,12 @@ mod delegate_tests {
         let q = "Si je veux creer un module d'aide au développement pour des gros \
                  projets, qu'est ce qu'il faudrait que je fasse ? \
                  y a-t-il des limitations ?";
-        let (brief, skills, tools, _) =
-            crate::chat_delegate::deep_thinking_force_delegate(q, false, &[]);
+        let ChatDelegateSpec {
+            brief,
+            skills,
+            tools,
+            ..
+        } = crate::chat_delegate::deep_thinking_force_delegate(q, false, &[]);
         assert_eq!(brief, q);
         assert!(skills.iter().any(|s| s == "deep-thinking"));
         assert!(!tools.iter().any(|t| t == "module.scaffold"));
@@ -101,7 +110,7 @@ mod delegate_tests {
     fn advisory_spawn_keeps_user_question_not_create_brief() {
         let q = "Si je veux créer un module helper, qu'est-ce qu'il faudrait faire ?";
         let out = r#"{"action":"agent.spawn","args":{"brief":"Créer un module helper"}}"#;
-        let (brief, _skills, tools, _) =
+        let ChatDelegateSpec { brief, tools, .. } =
             chat_delegate_agent_spec(q, out, false, ASPECT, &[]).expect("déléguer");
         assert_eq!(brief, q);
         assert!(!tools.iter().any(|t| t == "module.scaffold"));
@@ -144,7 +153,7 @@ mod delegate_tests {
             ASPECT,
             &full_canvas_exported(),
         );
-        let (brief, _skills, tools, prose) = spec.expect("doit déléguer");
+        let ChatDelegateSpec { brief, tools, prose, .. } = spec.expect("doit déléguer");
         assert_eq!(brief, "crée un module ping");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
         assert!(prose.contains("agent"));
@@ -167,7 +176,7 @@ mod delegate_tests {
         let out = r#"{"action":"module.scaffold","args":{"name":"ping"}}"#;
         let spec =
             chat_delegate_agent_spec("fais un ping", out, false, ASPECT, &full_canvas_exported());
-        let (_brief, _skills, tools, _) = spec.expect("doit déléguer");
+        let ChatDelegateSpec { tools, .. } = spec.expect("doit déléguer");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
     }
 
@@ -195,7 +204,7 @@ mod delegate_tests {
             ASPECT,
             &full_canvas_exported(),
         );
-        let (_brief, _skills, tools, _prose) = spec.expect("doit déléguer image");
+        let ChatDelegateSpec { tools, .. } = spec.expect("doit déléguer image");
         assert!(tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "canvas.stroke"));
     }
@@ -210,7 +219,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("canvas ouvert + dessine doit déléguer canvas");
-        let (_brief, _skills, tools, _prose) = spec;
+        let ChatDelegateSpec { tools, .. } = spec;
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
@@ -228,7 +237,7 @@ mod delegate_tests {
             ASPECT,
             &full_canvas_exported(),
         );
-        let (brief, skills, tools, prose) = spec.expect("doit déléguer canvas");
+        let ChatDelegateSpec { brief, skills, tools, prose, .. } = spec.expect("doit déléguer canvas");
         assert_eq!(brief, "dessine sur le canvas une maison");
         assert!(!brief.contains("toit + murs"));
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
@@ -249,7 +258,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("canvas delegate");
-        let (brief, _skills, tools, _) = spec;
+        let ChatDelegateSpec { brief, tools, .. } = spec;
         assert!(tools.iter().any(|x| x.starts_with("canvas.")));
         assert_eq!(brief, "dessine une canette Coca-Cola sur le canvas");
         assert!(!brief.contains("Exemple si le sujet est une maison"));
@@ -266,7 +275,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("dessine dans le canvas doit déléguer canvas");
-        let (_brief, _skills, tools, _prose) = spec;
+        let ChatDelegateSpec { tools, .. } = spec;
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "user.ask"));
@@ -282,7 +291,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("dessine une maison doit déléguer image");
-        let (_brief, _skills, tools, _prose) = spec;
+        let ChatDelegateSpec { tools, .. } = spec;
         assert!(tools.iter().any(|x| x == "media.image.generate"));
         assert!(!tools.iter().any(|x| x == "canvas.stroke"));
     }
@@ -313,7 +322,7 @@ mod delegate_tests {
             ASPECT,
             &full_canvas_exported(),
         );
-        let (_brief, _skills, tools, _) = spec.expect("JSON tronqué + explicit canvas");
+        let ChatDelegateSpec { tools, .. } = spec.expect("JSON tronqué + explicit canvas");
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
     }
 
@@ -336,7 +345,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("webcam must force-delegate");
-        let (_brief, _skills, tools, prose) = spec;
+        let ChatDelegateSpec { tools, prose, .. } = spec;
         assert!(tools.iter().any(|x| x == "device.camera.capture"));
         assert!(tools.iter().any(|x| x == "device.enumerate"));
         assert!(prose.to_lowercase().contains("webcam") || prose.contains("caméra"));
@@ -353,7 +362,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("mic must delegate");
-        let (_brief, _skills, tools, _) = spec;
+        let ChatDelegateSpec { tools, .. } = spec;
         assert!(tools.iter().any(|x| x == "device.mic.capture"));
     }
 
@@ -396,7 +405,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("usb must delegate");
-        let (_brief, _skills, tools, prose) = spec;
+        let ChatDelegateSpec { tools, prose, .. } = spec;
         assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
         assert!(tools.iter().any(|x| x == "device.usb.open"));
         assert!(tools.iter().any(|x| x == "device.usb.read"));
@@ -417,7 +426,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("usb spawn must delegate");
-        let (_brief, _skills, tools, prose) = spec;
+        let ChatDelegateSpec { tools, prose, .. } = spec;
         assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
         assert!(prose.contains("USB"));
     }
@@ -432,7 +441,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("com connect must delegate");
-        let (brief, _skills, tools, _) = spec;
+        let ChatDelegateSpec { brief, tools, .. } = spec;
         assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
         assert!(tools.iter().any(|x| x == "device.usb.open"));
         assert!(brief.contains("device.usb.enumerate"));
@@ -451,7 +460,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("usb list must delegate");
-        let (brief, _skills, tools, _) = spec;
+        let ChatDelegateSpec { brief, tools, .. } = spec;
         assert!(tools.iter().any(|x| x == "device.usb.enumerate"));
         assert!(!brief.contains("Procédure obligatoire"));
     }
@@ -472,7 +481,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("image delegate");
-        let image_tools = image.2;
+        let image_tools = image.tools.clone();
         assert!(image_tools.iter().any(|x| x == "media.image.generate"));
         assert!(!image_tools.iter().any(|x| x == "canvas.stroke"));
 
@@ -484,7 +493,7 @@ mod delegate_tests {
             &full_canvas_exported(),
         )
         .expect("canvas delegate after image");
-        let canvas_tools = canvas.2;
+        let canvas_tools = canvas.tools.clone();
         assert!(canvas_tools.iter().any(|x| x == "canvas.stroke"));
         assert!(!canvas_tools.iter().any(|x| x == "media.image.generate"));
     }
@@ -632,6 +641,7 @@ mod canvas_completion_tests {
             kind: AgentKind::Task,
             display_name: None,
             persona_id: None,
+            source_roster_id: None,
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,

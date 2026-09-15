@@ -104,6 +104,7 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         kind: req.kind,
         display_name: req.display_name.clone(),
         persona_id: req.persona_id.clone(),
+        source_roster_id: req.source_roster_id.clone(),
         system_prompt: req.system_prompt.clone(),
         skills: req.skills.clone(),
         tools: req.tools.clone(),
