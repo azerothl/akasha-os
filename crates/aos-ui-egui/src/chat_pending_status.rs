@@ -231,6 +231,7 @@ mod tests {
             kind: AgentKind::Task,
             display_name: None,
             persona_id: None,
+            source_roster_id: None,
             origin: Some("assistant".into()),
             avatar: None,
             color: None,

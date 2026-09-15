@@ -1165,6 +1165,11 @@ pub struct AgentSpec {
     /// Persona intégrée (`researcher`, `coder`, …) si applicable.
     #[serde(default)]
     pub persona_id: Option<String>,
+    /// Library roster id whose profile was cloned into this task worker.
+    /// Not a hierarchy parent (`parent_id`); future personality / short-term memory
+    /// can key off this stable library identity.
+    #[serde(default)]
+    pub source_roster_id: Option<String>,
     #[serde(default)]
     pub system_prompt: Option<String>,
     #[serde(default)]
@@ -1240,6 +1245,9 @@ pub struct AgentCreateRequest {
     pub display_name: Option<String>,
     #[serde(default)]
     pub persona_id: Option<String>,
+    /// Library roster id to clone profile from (task workers only).
+    #[serde(default)]
+    pub source_roster_id: Option<String>,
     /// Capacités initiales demandées (URIs `cap://` ou `tool.invoke:*`).
     #[serde(default)]
     pub caps: Vec<String>,
@@ -1309,6 +1317,7 @@ impl AgentCreateRequest {
             kind: AgentKind::default(),
             display_name: None,
             persona_id: None,
+            source_roster_id: None,
             caps: Vec::new(),
             model_id: None,
             policy: None,
@@ -1739,6 +1748,9 @@ pub struct AgentInfo {
     pub display_name: Option<String>,
     #[serde(default)]
     pub persona_id: Option<String>,
+    /// Library roster id whose profile was cloned into this task (if any).
+    #[serde(default)]
+    pub source_roster_id: Option<String>,
     /// `library` | `form` | `slash` | `assistant` | `room` — provenance de création.
     #[serde(default)]
     pub origin: Option<String>,
@@ -2772,6 +2784,10 @@ Chat (cette session) — tu n'as PAS de boucle d'outils :
   {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\"}}
   N'écris JAMAIS le manifeste, handlers.yaml, ni un arbre declarative_ui.
   L'agent fera module.scaffold + module.package + module.install.
+- Si un bloc « Agents bibliothèque » est présent ci-dessous et qu'un agent
+  convient (outils / rôle), préfère :
+  {\"action\":\"agent.spawn\",\"args\":{\"brief\":\"<demande utilisateur>\",\"roster_id\":\"<id>\"}}
+  Sinon spawn sans roster_id — l'hôte pourra encore auto-matcher.
 - Ne lance pas toi-même d'outils (pas de module.scaffold, pas de TOOL:, pas de
   audio.generate ni tool.invoke).
 - Mémoire : tu n'enregistres rien toi-même. Les faits durables (nom, préférences…)
@@ -7519,6 +7535,7 @@ mod chat_session_room_tests {
             kind: AgentKind::Roster,
             display_name: Some("Coder".into()),
             persona_id: Some("coder".into()),
+            source_roster_id: None,
             origin: None,
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
@@ -7568,6 +7585,7 @@ mod chat_session_room_tests {
             kind: AgentKind::Roster,
             display_name: Some("Skills Auditor".into()),
             persona_id: None,
+            source_roster_id: None,
             origin: Some("library".into()),
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
@@ -7586,5 +7604,48 @@ mod chat_session_room_tests {
         };
         assert!(!delegate.uses_typed_display_name());
         assert!(delegate.is_ephemeral_chat_spawn());
+    }
+
+    #[test]
+    fn source_roster_id_round_trips_on_create_and_info() {
+        let mut req = AgentCreateRequest::simple("do work");
+        req.source_roster_id = Some("agent-42".into());
+        let json = serde_json::to_string(&req).unwrap();
+        let back: AgentCreateRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.source_roster_id.as_deref(), Some("agent-42"));
+
+        let info = AgentInfo {
+            agent_id: "agent-99".into(),
+            state: AgentState::Running,
+            directive: "do work".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 32,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            model_id: None,
+            title: String::new(),
+            kind: AgentKind::Task,
+            display_name: Some("Skills Auditor".into()),
+            persona_id: None,
+            source_roster_id: Some("agent-42".into()),
+            origin: Some("assistant".into()),
+            deep_plan: None,
+            cognitive_mode: CognitiveMode::Normal,
+            avatar: None,
+            color: None,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let back: AgentInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.source_roster_id.as_deref(), Some("agent-42"));
     }
 }

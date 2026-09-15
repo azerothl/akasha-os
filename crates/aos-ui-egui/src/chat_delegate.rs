@@ -5,8 +5,8 @@ use crate::{agent_panel, chat_canvas, CHAT_AGENT_MAX_SUBAGENTS};
 use aos_ipc::BusClient;
 use aos_proto::{
     chat_tts_request, chat_user_wants_advisory, chat_user_wants_module_authoring,
-    AgentCreateRequest, AgentGoal, ChatAttachment, ChatSessionAppendRequest, CognitiveMode,
-    ModelInfo, ModelState,
+    AgentCreateRequest, AgentGoal, AgentIdRequest, AgentInfo, AgentKind, AgentSpecResponse,
+    ChatAttachment, ChatSessionAppendRequest, CognitiveMode, ModelInfo, ModelState,
 };
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -103,7 +103,7 @@ pub(crate) fn deep_thinking_force_delegate(
     user_text: &str,
     canvas_open: bool,
     canvas_exported: &[String],
-) -> (String, Vec<String>, Vec<String>, String) {
+) -> ChatDelegateSpec {
     let (mut skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
     skills.retain(|s| s != "planner");
     if !skills.iter().any(|s| s == "deep-thinking") {
@@ -113,12 +113,13 @@ pub(crate) fn deep_thinking_force_delegate(
         strip_module_authoring_tools(&mut tools);
         strip_advisory_notes_tools(&mut skills, &mut tools);
     }
-    (
-        user_text.to_string(),
+    ChatDelegateSpec {
+        brief: user_text.to_string(),
         skills,
         tools,
-        "Je lance un agent Deep Thinking.".into(),
-    )
+        prose: "Je lance un agent Deep Thinking.".into(),
+        roster_id: None,
+    }
 }
 
 /// Retire scaffold/package/install (garde list/describe pour l'analyse).
@@ -135,6 +136,218 @@ fn strip_module_authoring_tools(tools: &mut Vec<String>) {
 fn strip_advisory_notes_tools(skills: &mut Vec<String>, tools: &mut Vec<String>) {
     skills.retain(|s| s != "notes-writer");
     tools.retain(|t| !t.starts_with("notes."));
+}
+
+/// Host-side decision to spawn a background agent from Direct chat.
+#[derive(Debug, Clone)]
+pub(crate) struct ChatDelegateSpec {
+    pub brief: String,
+    pub skills: Vec<String>,
+    pub tools: Vec<String>,
+    pub prose: String,
+    /// Explicit library id from supervisor `agent.spawn` args (`roster_id` / `agent_id`).
+    pub roster_id: Option<String>,
+}
+
+/// Profile cloned from a library roster entry into a new Task worker.
+#[derive(Debug, Clone)]
+pub(crate) struct RosterBinding {
+    pub source_roster_id: String,
+    pub display_name: Option<String>,
+    pub persona_id: Option<String>,
+    pub system_prompt: Option<String>,
+    pub skills: Vec<String>,
+    pub tools: Vec<String>,
+    pub mcp_servers: Vec<String>,
+    pub caps: Vec<String>,
+    pub avatar: Option<String>,
+    pub color: Option<String>,
+    pub model_id: Option<String>,
+}
+
+fn is_delegate_roster_candidate(agent: &AgentInfo) -> bool {
+    if agent.is_ephemeral_chat_spawn() {
+        return false;
+    }
+    if agent.is_roster() {
+        return true;
+    }
+    agent.kind == AgentKind::Task
+        && matches!(agent.origin.as_deref(), Some("library") | Some("form"))
+}
+
+fn binding_from_agent(agent: &AgentInfo) -> RosterBinding {
+    let display_name = {
+        let t = agent.display_title();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    };
+    RosterBinding {
+        source_roster_id: agent.agent_id.clone(),
+        display_name,
+        persona_id: agent.persona_id.clone(),
+        system_prompt: None,
+        skills: agent.skills.clone(),
+        tools: agent.tools.clone(),
+        mcp_servers: agent.mcp_servers.clone(),
+        caps: agent.caps.clone(),
+        avatar: agent.avatar.clone(),
+        color: agent.color.clone(),
+        model_id: agent.model_id.clone(),
+    }
+}
+
+fn tools_fully_covered(have: &[String], need: &[String]) -> bool {
+    !need.is_empty() && need.iter().all(|t| have.iter().any(|h| h == t))
+}
+
+fn skill_overlap(have: &[String], need: &[String]) -> usize {
+    need.iter()
+        .filter(|s| have.iter().any(|h| h == *s))
+        .count()
+}
+
+/// Pick a library roster (or library Task) profile to clone into a new worker.
+///
+/// Explicit id always wins when the agent is an eligible library candidate.
+/// Auto-match requires full coverage of `needed_tools` and skips empty-tool personas.
+pub(crate) fn match_roster_for_delegate(
+    agents: &[AgentInfo],
+    needed_skills: &[String],
+    needed_tools: &[String],
+    explicit_id: Option<&str>,
+) -> Option<RosterBinding> {
+    let candidates: Vec<&AgentInfo> = agents
+        .iter()
+        .filter(|a| is_delegate_roster_candidate(a))
+        .collect();
+
+    if let Some(id) = explicit_id.map(str::trim).filter(|s| !s.is_empty()) {
+        return candidates
+            .iter()
+            .find(|a| a.agent_id == id)
+            .map(|a| binding_from_agent(a));
+    }
+
+    if needed_tools.is_empty() {
+        return None;
+    }
+
+    let mut best: Option<(&AgentInfo, i32, usize)> = None;
+    for agent in candidates {
+        if agent.tools.is_empty() {
+            continue;
+        }
+        if !tools_fully_covered(&agent.tools, needed_tools) {
+            continue;
+        }
+        let skills = skill_overlap(&agent.skills, needed_skills) as i32;
+        let score = (needed_tools.len() as i32) * 10 + skills;
+        let extras = agent.tools.len();
+        match best {
+            None => best = Some((agent, score, extras)),
+            Some((_, best_score, best_extras)) => {
+                if score > best_score || (score == best_score && extras < best_extras) {
+                    best = Some((agent, score, extras));
+                }
+            }
+        }
+    }
+    best.map(|(a, _, _)| binding_from_agent(a))
+}
+
+fn merge_unique(dst: &mut Vec<String>, src: &[String]) {
+    for item in src {
+        if !dst.iter().any(|x| x == item) {
+            dst.push(item.clone());
+        }
+    }
+}
+
+/// Union host kit with roster profile; records `source_roster_id` for future personality/STM.
+pub(crate) fn apply_roster_binding(req: &mut AgentCreateRequest, binding: &RosterBinding) {
+    req.source_roster_id = Some(binding.source_roster_id.clone());
+    if let Some(name) = binding
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        req.display_name = Some(name.to_string());
+    }
+    if binding.persona_id.is_some() {
+        req.persona_id = binding.persona_id.clone();
+    }
+    if let Some(prompt) = binding
+        .system_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        match req.system_prompt.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(host) => {
+                req.system_prompt = Some(format!("{prompt}\n\n{host}"));
+            }
+            None => {
+                req.system_prompt = Some(prompt.to_string());
+            }
+        }
+    }
+    merge_unique(&mut req.skills, &binding.skills);
+    merge_unique(&mut req.tools, &binding.tools);
+    merge_unique(&mut req.mcp_servers, &binding.mcp_servers);
+    merge_unique(&mut req.caps, &binding.caps);
+    if req.avatar.is_none() {
+        req.avatar = binding.avatar.clone();
+    }
+    if req.color.is_none() {
+        req.color = binding.color.clone();
+    }
+    if req
+        .model_id
+        .as_ref()
+        .map(|s| s.trim().is_empty())
+        .unwrap_or(true)
+    {
+        req.model_id = binding.model_id.clone();
+    }
+}
+
+fn roster_ack(display_name: &str) -> String {
+    format!("Je confie ça à {display_name}.")
+}
+
+/// Short library list for the Direct supervisor prompt.
+pub(crate) fn format_roster_for_delegation_prompt(agents: &[AgentInfo]) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for agent in agents.iter().filter(|a| is_delegate_roster_candidate(a)) {
+        let name = agent.display_title();
+        let mut caps = Vec::new();
+        if !agent.tools.is_empty() {
+            let preview: Vec<&str> = agent.tools.iter().take(6).map(String::as_str).collect();
+            caps.push(format!("tools={}", preview.join(",")));
+        }
+        if !agent.skills.is_empty() {
+            let preview: Vec<&str> = agent.skills.iter().take(4).map(String::as_str).collect();
+            caps.push(format!("skills={}", preview.join(",")));
+        }
+        let detail = if caps.is_empty() {
+            "tools=(none)".to_string()
+        } else {
+            caps.join("; ")
+        };
+        lines.push(format!("- {} [{}]: {detail}", agent.agent_id, name));
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n\nAgents bibliothèque (préférer un match via roster_id si adapté) :\n{}",
+        lines.join("\n")
+    )
 }
 
 fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) {
@@ -510,14 +723,14 @@ pub(crate) fn chat_delegate_kit(
     (skills, tools)
 }
 
-/// Si le chat doit déléguer : (brief, skills, tools, phrase d'accusé).
+/// Si le chat doit déléguer : brief, kit, phrase d'accusé, roster_id optionnel.
 pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
     canvas_open: bool,
     _canvas_aspect: aos_proto::CanvasAspect,
     canvas_exported: &[String],
-) -> Option<(String, Vec<String>, Vec<String>, String)> {
+) -> Option<ChatDelegateSpec> {
     if chat_tts_request(user_text).is_some() {
         return None;
     }
@@ -533,6 +746,14 @@ pub(crate) fn chat_delegate_agent_spec(
                 .unwrap_or("")
                 .trim()
                 .to_string();
+            let roster_id = action
+                .args
+                .get("roster_id")
+                .or_else(|| action.args.get("agent_id"))
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
             let advisory = chat_user_wants_advisory(user_text);
             // Ne laisse pas le superviseur réécrire un conseil en « Créer un module… ».
             let brief = if brief.is_empty() || self_tool || advisory {
@@ -607,7 +828,13 @@ pub(crate) fn chat_delegate_agent_spec(
                     "Je lance un agent pour cette tâche.".into()
                 };
             }
-            return Some((brief, skills, tools, prose));
+            return Some(ChatDelegateSpec {
+                brief,
+                skills,
+                tools,
+                prose,
+                roster_id,
+            });
         }
     }
     // JSON agent.spawn tronqué / illisible : si intent canvas, déléguer quand même.
@@ -618,55 +845,66 @@ pub(crate) fn chat_delegate_agent_spec(
             || model_output.to_lowercase().contains("agent"))
     {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true, canvas_exported);
-        return Some((
-            user_text.to_string(),
+        return Some(ChatDelegateSpec {
+            brief: user_text.to_string(),
             skills,
             tools,
-            "Je lance un agent pour dessiner sur le canvas.".into(),
-        ));
+            prose: "Je lance un agent pour dessiner sur le canvas.".into(),
+            roster_id: None,
+        });
     }
     if chat_user_wants_module_authoring(user_text) {
         let (skills, tools) = chat_agent_kit(user_text);
-        return Some((
-            user_text.to_string(),
+        return Some(ChatDelegateSpec {
+            brief: user_text.to_string(),
             skills,
             tools,
-            "Je lance un agent pour créer le module.".into(),
-        ));
+            prose: "Je lance un agent pour créer le module.".into(),
+            roster_id: None,
+        });
     }
     if canvas_intent {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true, canvas_exported);
-        return Some((
-            user_text.to_string(),
+        return Some(ChatDelegateSpec {
+            brief: user_text.to_string(),
             skills,
             tools,
-            "Je lance un agent pour dessiner sur le canvas.".into(),
-        ));
+            prose: "Je lance un agent pour dessiner sur le canvas.".into(),
+            roster_id: None,
+        });
     }
     if chat_canvas::chat_user_wants_pixel_draw(user_text, canvas_open) {
         let (skills, tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
-        return Some((
-            user_text.to_string(),
+        return Some(ChatDelegateSpec {
+            brief: user_text.to_string(),
             skills,
             tools,
-            "Je lance un agent pour générer l'image.".into(),
-        ));
+            prose: "Je lance un agent pour générer l'image.".into(),
+            roster_id: None,
+        });
     }
     if let Some(intent) = chat_device_capture_intent(user_text) {
         let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
         push_device_capture_tools(&mut tools, intent);
-        return Some((
-            user_text.to_string(),
+        return Some(ChatDelegateSpec {
+            brief: user_text.to_string(),
             skills,
             tools,
-            device_capture_ack(intent),
-        ));
+            prose: device_capture_ack(intent),
+            roster_id: None,
+        });
     }
     if chat_device_usb_intent(user_text) {
         let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
         let mut brief = user_text.to_string();
         push_device_usb_tools_and_brief(&mut brief, user_text, &mut tools);
-        return Some((brief, skills, tools, device_usb_ack()));
+        return Some(ChatDelegateSpec {
+            brief,
+            skills,
+            tools,
+            prose: device_usb_ack(),
+            roster_id: None,
+        });
     }
     None
 }
@@ -697,6 +935,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     skills: Vec<String>,
     tools: Vec<String>,
     prose: String,
+    roster_id: Option<String>,
     auto_remember: bool,
     instincts_in_session: bool,
     model_id: Option<String>,
@@ -795,6 +1034,73 @@ pub(crate) async fn spawn_chat_delegate_agent(
     if req.tools.iter().any(|t| t == "device.mic.capture") {
         req.caps.push("device.mic.capture".into());
     }
+
+    let agents: Vec<AgentInfo> = bus
+        .call(aos_agent::intents::LIST, &(), vec![])
+        .await
+        .unwrap_or_default();
+    let mut prose = prose;
+    if let Some(mut binding) = match_roster_for_delegate(
+        &agents,
+        &req.skills,
+        &req.tools,
+        roster_id.as_deref(),
+    ) {
+        if let Ok(spec_resp) = bus
+            .call::<AgentIdRequest, AgentSpecResponse>(
+                aos_agent::intents::SPEC_GET,
+                &AgentIdRequest {
+                    agent_id: binding.source_roster_id.clone(),
+                },
+                vec![],
+            )
+            .await
+        {
+            let spec = spec_resp.spec;
+            if binding.system_prompt.is_none() {
+                binding.system_prompt = spec.system_prompt;
+            }
+            merge_unique(&mut binding.skills, &spec.skills);
+            merge_unique(&mut binding.tools, &spec.tools);
+            merge_unique(&mut binding.mcp_servers, &spec.mcp_servers);
+            merge_unique(&mut binding.caps, &spec.caps);
+            if binding.avatar.is_none() {
+                binding.avatar = spec.avatar;
+            }
+            if binding.color.is_none() {
+                binding.color = spec.color;
+            }
+            if binding.persona_id.is_none() {
+                binding.persona_id = spec.persona_id;
+            }
+            if binding
+                .display_name
+                .as_ref()
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+            {
+                binding.display_name = spec.display_name;
+            }
+            if binding
+                .model_id
+                .as_ref()
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+            {
+                binding.model_id = spec.model_id;
+            }
+        }
+        apply_roster_binding(&mut req, &binding);
+        if let Some(name) = binding
+            .display_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            prose = roster_ack(name);
+        }
+    }
+
     req.gate_mode = crate::prefs::load_preferences().agent_gate_mode.clone();
     let wants_deep =
         deep_thinking || user_wants_deep_thinking(&user_text) || user_wants_deep_thinking(&brief);
@@ -1063,3 +1369,187 @@ fn chat_agent_kit_ex(
     }
     (skills, tools)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aos_proto::{AgentKind, AgentState, CognitiveMode};
+
+    fn sample_agent(
+        id: &str,
+        kind: AgentKind,
+        origin: Option<&str>,
+        tools: &[&str],
+        skills: &[&str],
+    ) -> AgentInfo {
+        AgentInfo {
+            agent_id: id.into(),
+            state: if kind == AgentKind::Roster {
+                AgentState::Roster
+            } else {
+                AgentState::Created
+            },
+            directive: String::new(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 0,
+            max_steps: 0,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: skills.iter().map(|s| (*s).to_string()).collect(),
+            tools: tools.iter().map(|s| (*s).to_string()).collect(),
+            mcp_servers: vec![],
+            fail_reason: None,
+            session_id: None,
+            model_id: None,
+            title: id.into(),
+            kind,
+            display_name: Some(id.into()),
+            persona_id: None,
+            source_roster_id: None,
+            origin: origin.map(str::to_string),
+            avatar: None,
+            color: None,
+            deep_plan: None,
+            cognitive_mode: CognitiveMode::Normal,
+        }
+    }
+
+    #[test]
+    fn match_explicit_roster_id() {
+        let agents = vec![
+            sample_agent(
+                "agent-notes",
+                AgentKind::Roster,
+                Some("library"),
+                &["notes.create"],
+                &["notes"],
+            ),
+            sample_agent(
+                "persona-coder",
+                AgentKind::Roster,
+                None,
+                &[],
+                &[],
+            ),
+        ];
+        let hit = match_roster_for_delegate(
+            &agents,
+            &[],
+            &["module.scaffold".into()],
+            Some("persona-coder"),
+        )
+        .expect("explicit id");
+        assert_eq!(hit.source_roster_id, "persona-coder");
+    }
+
+    #[test]
+    fn match_by_tool_overlap() {
+        let agents = vec![
+            sample_agent(
+                "persona-coder",
+                AgentKind::Roster,
+                None,
+                &[],
+                &[],
+            ),
+            sample_agent(
+                "agent-mod",
+                AgentKind::Roster,
+                Some("library"),
+                &["module.scaffold", "module.package", "module.install"],
+                &[],
+            ),
+            sample_agent(
+                "agent-notes",
+                AgentKind::Roster,
+                Some("library"),
+                &["notes.create", "notes.list"],
+                &["notes"],
+            ),
+        ];
+        let need = vec![
+            "module.scaffold".into(),
+            "module.package".into(),
+            "module.install".into(),
+        ];
+        let hit = match_roster_for_delegate(&agents, &[], &need, None).expect("tool match");
+        assert_eq!(hit.source_roster_id, "agent-mod");
+    }
+
+    #[test]
+    fn skip_empty_tools_and_ephemeral() {
+        let agents = vec![
+            sample_agent(
+                "persona-coder",
+                AgentKind::Roster,
+                None,
+                &[],
+                &[],
+            ),
+            sample_agent(
+                "agent-ephemeral",
+                AgentKind::Task,
+                Some("assistant"),
+                &["module.scaffold", "module.package", "module.install"],
+                &[],
+            ),
+        ];
+        let need = vec![
+            "module.scaffold".into(),
+            "module.package".into(),
+            "module.install".into(),
+        ];
+        assert!(match_roster_for_delegate(&agents, &[], &need, None).is_none());
+    }
+
+    #[test]
+    fn apply_binding_unions_host_canvas_kit() {
+        let mut req = AgentCreateRequest::simple("dessine un cercle");
+        req.tools = vec!["canvas.stroke".into(), "canvas.rect".into()];
+        req.skills = vec!["canvas".into()];
+        req.system_prompt = Some("HOST_CANVAS".into());
+        let binding = RosterBinding {
+            source_roster_id: "agent-artist".into(),
+            display_name: Some("Artist".into()),
+            persona_id: None,
+            system_prompt: Some("ARTIST_PERSONA".into()),
+            skills: vec!["style".into()],
+            tools: vec!["canvas.ellipse".into()],
+            mcp_servers: vec![],
+            caps: vec!["tool.invoke:canvas".into()],
+            avatar: Some("spark".into()),
+            color: None,
+            model_id: None,
+        };
+        apply_roster_binding(&mut req, &binding);
+        assert_eq!(req.source_roster_id.as_deref(), Some("agent-artist"));
+        assert_eq!(req.display_name.as_deref(), Some("Artist"));
+        assert!(req.tools.iter().any(|t| t == "canvas.stroke"));
+        assert!(req.tools.iter().any(|t| t == "canvas.ellipse"));
+        assert!(req.skills.iter().any(|s| s == "canvas"));
+        assert!(req.skills.iter().any(|s| s == "style"));
+        let prompt = req.system_prompt.as_deref().unwrap_or("");
+        assert!(prompt.contains("ARTIST_PERSONA"));
+        assert!(prompt.contains("HOST_CANVAS"));
+    }
+
+    #[test]
+    fn parse_spawn_roster_id_arg() {
+        let out = r#"Je m'en occupe.
+{"action":"agent.spawn","args":{"brief":"créer une note","roster_id":"agent-notes"}}"#;
+        let spec = chat_delegate_agent_spec(
+            "crée une note",
+            out,
+            false,
+            aos_proto::CanvasAspect::Square,
+            &[],
+        )
+        .expect("delegate");
+        assert_eq!(spec.roster_id.as_deref(), Some("agent-notes"));
+    }
+}
+

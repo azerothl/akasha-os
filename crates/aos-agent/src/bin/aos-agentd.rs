@@ -507,6 +507,7 @@ fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
         kind: AgentKind::Roster,
         display_name: spec.display_name.clone(),
         persona_id: spec.persona_id.clone(),
+        source_roster_id: spec.source_roster_id.clone(),
         origin: spec.origin.clone(),
         avatar: spec.avatar.clone(),
         color: spec.color.clone(),
@@ -753,6 +754,7 @@ async fn spawn_worker(
             kind: spec.kind,
             display_name: spec.display_name.clone(),
             persona_id: spec.persona_id.clone(),
+            source_roster_id: spec.source_roster_id.clone(),
             origin: spec.origin.clone(),
             avatar: spec.avatar.clone(),
             color: spec.color.clone(),
@@ -916,7 +918,12 @@ async fn main() {
                         return;
                     }
                 };
-                let agent_id = if let Some(pid) = req.persona_id.as_deref() {
+                let agent_id = if req.spawns_worker() {
+                    // Task workers always get a fresh id. persona_id / source_roster_id
+                    // are profile links, not stable worker ids (roster library keeps
+                    // persona-* ids separately).
+                    persist::alloc_agent_id()
+                } else if let Some(pid) = req.persona_id.as_deref() {
                     persona_agent_id(pid)
                 } else {
                     persist::alloc_agent_id()

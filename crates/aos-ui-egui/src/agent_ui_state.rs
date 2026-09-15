@@ -515,6 +515,7 @@ mod tests {
             kind: Default::default(),
             display_name: Some("Helper".into()),
             persona_id: None,
+            source_roster_id: None,
             system_prompt: Some("be helpful".into()),
             skills: vec!["notes-writer".into()],
             tools: vec!["notes.list".into()],

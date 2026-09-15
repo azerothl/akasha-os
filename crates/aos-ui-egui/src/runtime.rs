@@ -10,6 +10,7 @@ use crate::{
     load_module_ui, load_session, run_troubleshoot, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
+use crate::chat_delegate::format_roster_for_delegation_prompt;
 use aos_agent::intents as agent_intents;
 use aos_agent::schedule::{
     ScheduleCreateRequest, ScheduleEntry, ScheduleIdRequest, ScheduleListResponse,
@@ -621,6 +622,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
 
             let mut system = format_system_assistant_prompt(&version);
             system.push_str(CHAT_DELEGATION_PROMPT);
+            let roster_agents: Vec<AgentInfo> = bus
+                .call(aos_agent::intents::LIST, &(), vec![])
+                .await
+                .unwrap_or_default();
+            system.push_str(&format_roster_for_delegation_prompt(&roster_agents));
             system.push_str(&format_chat_supervisor_lock(&version));
             system.push_str("\n\n");
             system.push_str(&product);
@@ -741,8 +747,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                 &canvas_exported,
                             ));
                         }
-                        if let Some((brief, skills, tools, prose)) = delegate {
-                            let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
+                        if let Some(spec) = delegate {
+                            let canvas_delegate = spec.tools.iter().any(|t| t.starts_with("canvas."));
                             if canvas_delegate && session_has_running_canvas_agent(&bus, &sid).await
                             {
                                 let _ = bus
@@ -774,10 +780,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                                 evt_tx.clone(),
                                 sid,
                                 user_text,
-                                brief,
-                                skills,
-                                tools,
-                                prose,
+                                spec.brief,
+                                spec.skills,
+                                spec.tools,
+                                spec.prose,
+                                spec.roster_id,
                                 auto_remember,
                                 instincts_in_session,
                                 model_id,
