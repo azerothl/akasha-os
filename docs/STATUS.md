@@ -7,17 +7,24 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.17.2 — hotfix: Create preset tools in packaged manifest,
-**Later** without forced model download, registry merge after Create migration,
-LAN discovery listen/ad fixes. See 0.17.0 for rich Create module workspace
-(split-pane, presets, layers, prompt assist), painted UI chrome (SVG icons,
-interface font, Settings/rail/status strip), DeclUI fixes — on top of 0.16.2
-USB I/O. Host also has **P18 / E22** instincts in-session (extends `skill.pass`)
-and **P19 / E23** runtime health plane (canary + SLO/EWMA + residual IF).
-Not a bootable OS. Cohort gate still open
+**Preview:** 0.18.0 — Memory V2 default, **P18 / E22** instincts in-session,
+**P19 / E23** runtime health plane, Notes tags/search/delete, chat
+fork/continue, Canvas scenes/guides, secrets vault key generator, Create
+chrome polish, LAN/health/Deep Thinking fixes. Builds on 0.17.x Create
+workspace + painted UI chrome. Not a bootable OS. Cohort gate still open
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path). **Next:**
 PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
 documented 2-GPU run.
+
+## P20 — Preview 0.18.0 (Memory V2 + instincts + health + Notes/Chat) — done
+
+| # | Item | Status |
+|---|------|--------|
+| P20.1 | Memory V2 as Preview default (decision journal, mind palace, shadow sync) | done |
+| P20.2 | Ship P18 (E22 instincts) + P19 (E23 health plane) in the tagged release | done |
+| P20.3 | Notes tags / live search / delete; chat fork/continue; Canvas scenes/guides | done |
+| P20.4 | Secrets vault keygen; Create chrome; LAN/health/Deep Thinking polish | done |
+| P20.5 | Version, docs, website and release packaging | done |
 
 ## P19 — E23 runtime health plane — done
 

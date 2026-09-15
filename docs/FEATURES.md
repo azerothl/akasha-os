@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.17.0
+# Preview features — Akasha OS 0.18.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,30 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 10/09/2026 · Preview **0.17.0**
+> Date: 15/09/2026 · Preview **0.18.0**
+
+### What's new in 0.18.0
+
+#### Features
+
+- **Memory V2** (default): structured cognitive memory with decision journal and mind-palace supervision views; legacy fact writes stay in sync via shadow projection — see [fr/specification-memoire-v2.md](fr/specification-memoire-v2.md)
+- **Instincts in-session (E22 / P18)**: under context pressure or after ≥2 steers, `skill.pass.consider` may offer Create | Later in this chat; bounded instinct inject (≤3); Settings `instincts_in_session` (default on)
+- **Runtime health plane (E23 / P19)**: ephemeral canary + SLO/EWMA + residual anomaly + stderr clusters (`health.snapshot` / `health.canary`); Audit Health panel; Troubleshoot consumes the same snapshot
+- **Notes**: tags, live search, and delete so large collections stay findable (`notes.delete`)
+- **Chat**: fork-from-here and continue-after-interrupt; salon opening pass uses the full roster; live status while awaiting tokens
+- **Canvas**: semantic scenes and shared guides; agent read/review protocol
+- **Secrets vault**: in-Settings key generator (hex / numeric / alnum / base64url) with LAN hex preset and invalid-key rejection on Save
+- **Create chrome**: painted actions, folded Advanced, result toolbar polish; FR-localized prompt starters
+
+#### Fixes
+
+- **LAN**: worker-off status, firewall port alignment, vault wire id hidden from chrome, pipeline staging unblock, Settings LAN UX harden, random nonces for secure frames
+- **Health canary**: no false failure before the first walk; advisory workers stop looping on invalid JSON after health restarts
+- **Deep Thinking**: advisory intent / critic / await thrashing; Cursor/fix advisory path
+- **Chat / export**: Designer-locked error chrome and export parity; document prep grounded in thread context with journal
+- **Notes / agents**: i18n Notes panel; agent restart `fail_reason` and kill status chrome
+- **Tasks**: valid DeclUI package sync; reject missing root at install
+- **Roster**: match roster templates before assistant delegate spawn
 
 ### What's new in 0.17.2
 
@@ -266,8 +289,9 @@ Slash commands:
 
 ---
 
-## 3. Memory (PC.7 + P04.1/P04.2 + P05 / E14)
+## 3. Memory (PC.7 + P04.1/P04.2 + P05 / E14 + Memory V2)
 
+- **Memory V2** is the Preview default: structured cognitive memory (decision journal, mind palace) with rollout observability — see [fr/specification-memoire-v2.md](fr/specification-memoire-v2.md)
 - Long-term **user facts**: remember / recall / list / edit / delete in the Memory tab
 - Typed relations: `similar`, `updates`, `supersedes` (auto-link on close remembers)
 - Session + user hits assembled as `mem.context` for chat and agents
@@ -276,14 +300,15 @@ Slash commands:
 - **Auto-remember from chat** (Settings, **on** by default): after each chat turn,
   `mem.extract` proposes durable facts → `mem.user.remember` with `source=chat`;
   secrets filtered; Memory list shows a `[chat]` badge
+- Legacy fact writes stay projected into V2 (shadow sync)
 
 ---
 
 ## 4. Notes (P2.6)
 
 - Dual-surface WASM module (`notes.aospkg`)
-- Human UI: create / list / search
-- Agent tools: `notes.create`, `notes.update`, `notes.search`, …
+- Human UI: create / list / **tags** / **live search** / **delete**
+- Agent tools: `notes.create`, `notes.update`, `notes.search`, `notes.delete`, …
 - Same data for humans and agents
 - On boot, `share/modules/notes.aospkg` is copied to `var/modules/notes` when the manifest hash or WASM fingerprint differs (a Preview update must not keep a stale module)
 - `notes.read` accepts `title`, `name`, `path`, or `slug`
@@ -450,7 +475,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.17.2
+## 11. Not in Preview 0.18.0
 
 - Bootable / bare-metal image
 - STT / always-on voice

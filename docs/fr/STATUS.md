@@ -7,17 +7,24 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.17.2 — correctif : outils preset Create dans le manifeste empaqueté,
-**Plus tard** sans téléchargement forcé, fusion registre après migration Create,
-correctifs écoute/annonce découverte LAN. Voir 0.17.0 pour l'espace Create enrichi
-(volet scindé, presets, calques, assist prompt), chrome UI peint (icônes SVG,
-police interface, bande statut/rail/Paramètres), correctifs DeclUI — par-dessus
-l’I/O USB 0.16.2. L’hôte inclut aussi **P18 / E22** instincts en session
-(étend `skill.pass`) et **P19 / E23** plan de santé runtime (canary + SLO/EWMA +
-IF résiduel). Pas un OS bootable. Gate cohorte encore ouverte
+**Preview :** 0.18.0 — Memory V2 par défaut, **P18 / E22** instincts en session,
+**P19 / E23** plan de santé runtime, Notes tags/recherche/suppression, fork/continue
+chat, scènes/guides Canvas, générateur de clés coffre, chrome Create peaufiné,
+correctifs LAN/santé/Deep Thinking. S’appuie sur l’espace Create 0.17.x et le
+chrome UI peint. Pas un OS bootable. Gate cohorte encore ouverte
 (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
 **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ; E9
 hard-green après un run 2 GPU documenté.
+
+## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait
+
+| # | Élément | État |
+|---|---------|------|
+| P20.1 | Memory V2 défaut Preview (journal décisions, mind palace, sync shadow) | fait |
+| P20.2 | Livrer P18 (E22 instincts) + P19 (E23 santé) dans le tag | fait |
+| P20.3 | Notes tags / recherche live / delete ; fork/continue chat ; scènes/guides Canvas | fait |
+| P20.4 | Keygen coffre ; chrome Create ; polish LAN/santé/Deep Thinking | fait |
+| P20.5 | Version, docs, site et packaging release | fait |
 
 ## P19 — E23 plan de santé runtime — fait
 

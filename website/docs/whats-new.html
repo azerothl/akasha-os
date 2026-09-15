@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.17.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.18.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -51,12 +51,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version="0.17.2">0.17.2</span> is a host app, not a bootable OS.
+            <span data-aos-version="0.18.0">0.18.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version="0.17.2">0.17.2</span> est une appli hôte, pas un OS
+            <span data-aos-version="0.18.0">0.18.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -70,6 +70,7 @@
         </p>
 
         <nav class="log-toc log-toc-sticky" aria-label="Versions">
+          <a href="#v0-18-0">0.18.0</a>
           <a href="#v0-17-2">0.17.2</a>
           <a href="#v0-17-0">0.17.0</a>
           <a href="#v0-16-0">0.16.0</a>
@@ -93,6 +94,56 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+        <article class="grant" id="v0-18-0">
+          <h2>0.18.0</h2>
+          <p class="rev-when">15/09/2026</p>
+          <p class="hist" data-lang="en">
+            Since 0.17.2, Memory V2 becomes the Preview default; instincts under
+            context pressure (E22) and the runtime health plane (E23) ship in the
+            tagged release. Notes gain tags, live search and delete; chat adds
+            fork/continue; Canvas adds scenes and guides. Secrets vault keygen,
+            Create chrome polish, and LAN/health fixes close the cut. Still a
+            host app, not a bootable OS.
+          </p>
+          <p class="hist" data-lang="fr">
+            Depuis la 0.17.2, Memory V2 devient le défaut Preview ; les instincts
+            sous pression de contexte (E22) et le plan de santé runtime (E23)
+            partent dans le tag. Notes gagne tags, recherche live et
+            suppression ; le chat ajoute fork/continue ; Canvas ajoute scènes et
+            guides. Keygen du coffre, chrome Create peaufiné et correctifs
+            LAN/santé ferment la coupe. Toujours une appli hôte, pas un OS
+            bootable.
+          </p>
+          <p class="hist" data-lang="en"><strong>Features</strong></p>
+          <p class="hist" data-lang="fr"><strong>Fonctionnalités</strong></p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>Memory V2</strong>: default cognitive memory with decision journal and mind-palace views; legacy facts stay shadow-synced.</li>
+            <li data-lang="fr"><strong>Memory V2</strong> : mémoire cognitive par défaut avec journal de décisions et vues mind-palace ; faits legacy synchronisés en shadow.</li>
+            <li data-lang="en"><strong>Instincts (E22)</strong>: in-session Create | Later under context pressure; bounded instinct inject; Settings toggle.</li>
+            <li data-lang="fr"><strong>Instincts (E22)</strong> : Créer | Plus tard en session sous pression de contexte ; inject borné ; bascule Paramètres.</li>
+            <li data-lang="en"><strong>Health plane (E23)</strong>: canary + SLO/EWMA + residual anomaly; Audit Health panel; Troubleshoot snapshot.</li>
+            <li data-lang="fr"><strong>Plan santé (E23)</strong> : canary + SLO/EWMA + anomalie résiduelle ; panneau Santé Audit ; snapshot Dépannage.</li>
+            <li data-lang="en"><strong>Notes</strong>: tags, live search, and delete for large collections.</li>
+            <li data-lang="fr"><strong>Notes</strong> : tags, recherche live et suppression pour les grandes collections.</li>
+            <li data-lang="en"><strong>Chat</strong>: fork-from-here, continue-after-interrupt, full salon opening roster, live await status.</li>
+            <li data-lang="fr"><strong>Chat</strong> : fork-from-here, continuer après interruption, roster salon complet à l’ouverture, statut live d’attente.</li>
+            <li data-lang="en"><strong>Canvas</strong>: semantic scenes and shared guides with agent read/review protocol.</li>
+            <li data-lang="fr"><strong>Canvas</strong> : scènes sémantiques et guides partagés avec protocole agent lecture/revue.</li>
+            <li data-lang="en"><strong>Secrets vault</strong>: key generator with LAN hex preset; invalid LAN keys rejected on Save.</li>
+            <li data-lang="fr"><strong>Coffre à secrets</strong> : générateur de clés avec preset hex LAN ; clés LAN invalides rejetées à l’enregistrement.</li>
+          </ul>
+          <p class="hist" data-lang="en"><strong>Fixes</strong></p>
+          <p class="hist" data-lang="fr"><strong>Correctifs</strong></p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>LAN</strong>: worker-off status, firewall ports, vault wire id chrome jail, pipeline staging, random secure-frame nonces.</li>
+            <li data-lang="fr"><strong>LAN</strong> : statut worker-off, ports firewall, id fil vault hors chrome, staging pipeline, nonces aléatoires des trames sécurisées.</li>
+            <li data-lang="en"><strong>Health / Deep Thinking</strong>: no false canary before first walk; advisory thrashing and invalid-JSON loops after restarts.</li>
+            <li data-lang="fr"><strong>Santé / Deep Thinking</strong> : pas de faux canary avant la première marche ; thrashing advisory et boucles JSON invalide après redémarrages.</li>
+            <li data-lang="en"><strong>Chat / Notes / Create</strong>: error chrome and export parity; Notes i18n; Create painted actions and FR starters.</li>
+            <li data-lang="fr"><strong>Chat / Notes / Create</strong> : chrome d’erreur et parité export ; Notes i18n ; actions Create peintes et starters FR.</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-17-2">
           <h2>0.17.2</h2>

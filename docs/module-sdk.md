@@ -2,7 +2,7 @@
 
 **Language:** English | [Français](fr/module-sdk.md)
 
-> Date: 11/09/2026 · Preview **0.17.0**
+> Date: 15/09/2026 · Preview **0.18.0**
 
 Guide for contributors and advanced testers packaging WASM modules with
 declarative UI. For the first module without cargo, start at

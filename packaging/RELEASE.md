@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.16.2
-git push origin v0.16.2
+git tag v0.18.0
+git push origin v0.18.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
-- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.16.2`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.18.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
 - **Full rebuild**: `create_release` = true, `macos_only` = false.
 
 ### Internal seL4 gate (not a tester release)
@@ -49,12 +49,14 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.16.2 — USB serial I/O
+Akasha OS Preview 0.18.0 — Memory V2, instincts, health plane
 
-- Windows, Linux, macOS: serial `device.usb.enumerate` / `open` / `read` / `write` / `close`
-- Grant chrome: USB · Allow once / Always / Deny; cap `device.usb.io`
-- CI uses FakeUsbIoBackend; host backends enumerate real serial ports when present
-- Same Win/Linux/Mac mill bands as 0.16.x
+- Memory V2 default (decision journal, mind palace; shadow sync from legacy facts)
+- E22 instincts in-session under context pressure; E23 runtime health plane
+- Notes tags / live search / delete; chat fork/continue; Canvas scenes/guides
+- Secrets vault key generator with LAN hex preset
+- LAN / health / Deep Thinking / Create chrome polish
+- Same Win/Linux/Mac mill bands as 0.17.x
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
 ```
