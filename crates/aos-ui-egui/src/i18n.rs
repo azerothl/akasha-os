@@ -491,6 +491,22 @@ pub struct UiStrings {
     pub chat_previous_in_progress: &'static str,
     pub chat_history_reloaded: &'static str,
     pub chat_error_generic: &'static str,
+    pub chat_error_retry: &'static str,
+    pub chat_error_activity: &'static str,
+    pub chat_error_timeout: &'static str,
+    pub chat_error_bad_request: &'static str,
+    pub chat_error_internal: &'static str,
+    pub chat_error_agent_spawn_denied: &'static str,
+    pub chat_error_agent_spawn_empty_brief: &'static str,
+    pub chat_error_agent_spawn_busy: &'static str,
+    pub chat_error_agent_create_failed: &'static str,
+    pub chat_error_module_scaffold_advisory: &'static str,
+    pub chat_error_module_scaffold_denied: &'static str,
+    pub chat_error_cap_denied: &'static str,
+    pub chat_error_policy_denied: &'static str,
+    pub chat_error_tasks_open: &'static str,
+    pub chat_error_create_install: &'static str,
+    pub chat_error_tasks_quarantined: &'static str,
     pub create_install_failed: &'static str,
     pub tasks_open_failed: &'static str,
     pub tasks_quarantined: &'static str,
@@ -1711,9 +1727,25 @@ const EN: UiStrings = UiStrings {
     chat_fork_here: "Fork from here",
     chat_return_here: "Return to here",
     chat_branch_created: "New branch created",
-    chat_previous_in_progress: "Previous response still in progress — please wait.",
+    chat_previous_in_progress: "The previous reply is still in progress.",
     chat_history_reloaded: "History reloaded.",
     chat_error_generic: "Something went wrong. Try again.",
+    chat_error_retry: "Retry",
+    chat_error_activity: "Activity",
+    chat_error_timeout: "The reply timed out.",
+    chat_error_bad_request: "The request was rejected.",
+    chat_error_internal: "An internal error stopped this turn.",
+    chat_error_agent_spawn_denied: "Couldn't launch the agent.",
+    chat_error_agent_spawn_empty_brief: "The agent brief was empty.",
+    chat_error_agent_spawn_busy: "An agent is already running on this session.",
+    chat_error_agent_create_failed: "Couldn't start the delegated agent.",
+    chat_error_module_scaffold_advisory: "Module scaffolding isn't available for advisory questions.",
+    chat_error_module_scaffold_denied: "Module scaffolding was refused.",
+    chat_error_cap_denied: "A required capability was denied.",
+    chat_error_policy_denied: "The action was blocked by policy.",
+    chat_error_tasks_open: "Couldn't open Tasks.",
+    chat_error_create_install: "Couldn't install Create.",
+    chat_error_tasks_quarantined: "Tasks is quarantined.",
     create_install_failed: "Couldn't install Create. Try again.",
     tasks_open_failed: "Couldn't open Tasks. Try again.",
     tasks_quarantined: "Tasks is quarantined.",
@@ -2927,9 +2959,25 @@ const FR: UiStrings = UiStrings {
     chat_fork_here: "Créer une branche ici",
     chat_return_here: "Revenir ici",
     chat_branch_created: "Nouvelle branche créée",
-    chat_previous_in_progress: "réponse précédente encore en cours — patientez.",
+    chat_previous_in_progress: "La réponse précédente est encore en cours.",
     chat_history_reloaded: "Historique rechargé.",
     chat_error_generic: "Un problème est survenu. Réessayez.",
+    chat_error_retry: "Réessayer",
+    chat_error_activity: "Activité",
+    chat_error_timeout: "Délai de réponse dépassé.",
+    chat_error_bad_request: "La requête a été refusée.",
+    chat_error_internal: "Une erreur interne a interrompu ce tour.",
+    chat_error_agent_spawn_denied: "Impossible de lancer l'agent.",
+    chat_error_agent_spawn_empty_brief: "Le brief de l'agent est vide.",
+    chat_error_agent_spawn_busy: "Un agent est déjà en cours sur cette session.",
+    chat_error_agent_create_failed: "Impossible de démarrer l'agent délégué.",
+    chat_error_module_scaffold_advisory: "Scaffolding module refusé pour une question consultative.",
+    chat_error_module_scaffold_denied: "Scaffolding module refusé.",
+    chat_error_cap_denied: "Capacité requise refusée.",
+    chat_error_policy_denied: "Action bloquée par la politique.",
+    chat_error_tasks_open: "Impossible d'ouvrir Tâches.",
+    chat_error_create_install: "Impossible d'installer Créer.",
+    chat_error_tasks_quarantined: "Tâches en quarantaine.",
     create_install_failed: "Impossible d'installer Créer. Réessayez.",
     tasks_open_failed: "Impossible d'ouvrir Tâches. Réessayez.",
     tasks_quarantined: "Tasks est en quarantaine.",
@@ -4079,6 +4127,28 @@ mod tests {
         assert_eq!(fr.notes_sort_recent, "Récentes");
         assert_eq!(en.models_sees_images, "sees images");
         assert_eq!(fr.models_sees_images, "voit les images");
+    }
+
+    #[test]
+    fn locked_chat_error_chrome_fr_en() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(en.chat_error_generic, "Something went wrong. Try again.");
+        assert_eq!(fr.chat_error_generic, "Un problème est survenu. Réessayez.");
+        assert_eq!(en.chat_error_retry, "Retry");
+        assert_eq!(fr.chat_error_retry, "Réessayer");
+        assert_eq!(en.chat_error_activity, "Activity");
+        assert_eq!(fr.chat_error_activity, "Activité");
+        assert_eq!(
+            en.chat_previous_in_progress,
+            "The previous reply is still in progress."
+        );
+        assert_eq!(
+            fr.chat_previous_in_progress,
+            "La réponse précédente est encore en cours."
+        );
+        assert_eq!(en.chat_error_agent_spawn_denied, "Couldn't launch the agent.");
+        assert_eq!(fr.chat_error_agent_spawn_denied, "Impossible de lancer l'agent.");
     }
 
     #[test]

@@ -46,6 +46,7 @@ impl UiApp {
         };
         // A new user turn supersedes a pending one-click continuation.
         self.chat_state.runtime.continue_retry = None;
+        self.chat_state.runtime.chat_error_recovery = None;
         if pending_images.is_empty() && pending_documents.is_empty() {
             let tz = local_tz_offset_minutes();
             if let Some(parsed) = schedule_parse::try_parse_phrase(&text, now_ms(), tz) {
@@ -97,9 +98,17 @@ impl UiApp {
             {
                 self.chat_state.session_chat.finish_turn(&session_id);
             } else {
-                self.chat.push(ChatLine::plain("user", text));
-                self.chat
-                    .push(ChatLine::plain("système", t.chat_previous_in_progress));
+                self.chat.push(ChatLine::plain("user", text.clone()));
+                let notice = t.chat_previous_in_progress.to_string();
+                crate::chat_event_controller::push_persisted_system_chrome(self, notice);
+                if let Some(sid) = self.chat_state.active_session.clone() {
+                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                        session_id: sid,
+                        role: "user".into(),
+                        content: text,
+                        attachments: vec![],
+                    });
+                }
                 return;
             }
         }
@@ -361,6 +370,28 @@ impl UiApp {
             profile: self.prefs.placement_profile.clone(),
         });
         self.status = format!("vision: {model_id}");
+    }
+
+    pub(crate) fn retry_chat_error_turn(&mut self) {
+        let Some(mut recovery) = self.chat_state.runtime.chat_error_recovery.take() else {
+            return;
+        };
+        let Some(retry) = recovery.retry_turn.take() else {
+            self.chat_state.runtime.chat_error_recovery = Some(recovery);
+            return;
+        };
+        if self.chat_state.active_session.as_deref() != Some(retry.session_id.as_str()) {
+            recovery.retry_turn = Some(retry);
+            self.chat_state.runtime.chat_error_recovery = Some(recovery);
+            return;
+        }
+        self.chat_state.session_chat.begin_turn(&retry.session_id);
+        self.chat_state.runtime.begin_turn(None);
+        self.chat_state.runtime.outgoing_turn = Some(retry.clone());
+        let t = i18n::strings(&retry.language);
+        self.status = t.status_assistant_generating.into();
+        let _ = self.cmd_tx.send(retry.to_chat_cmd(true));
+        self.scenario_ui.chat = true;
     }
 
     pub(crate) fn retry_load_failed_turn(&mut self) {

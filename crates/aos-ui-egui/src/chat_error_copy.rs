@@ -4,6 +4,13 @@ use crate::i18n::UiStrings;
 use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
 use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
 
+/// Stable machine code (audit only) + localized short human cause for chat chrome.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChatErrorClassified {
+    pub code: &'static str,
+    pub cause: String,
+}
+
 /// True when the runtime error is a model weight load failure (often embeds a `.gguf` path).
 pub(crate) fn is_model_load_fail_error(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
@@ -109,83 +116,306 @@ fn strip_ipc_status_prefix(msg: &str) -> &str {
         .unwrap_or(msg)
 }
 
-/// Map a raw module UI/runtime error to localized chrome copy (no IPC status leaks).
-pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) -> String {
-    let stripped = strip_ipc_status_prefix(raw);
-    if module == "tasks" && is_tasks_quarantine_error(stripped) {
-        return t.tasks_quarantined.to_string();
+fn ipc_status_body(msg: &str) -> (Option<&str>, &str) {
+    let trimmed = msg.trim();
+    let rest = trimmed.strip_prefix("statut ").or_else(|| trimmed.strip_prefix("Statut "));
+    if let Some(rest) = rest {
+        if let Some(colon) = rest.find(':') {
+            let status = rest[..colon].trim();
+            let body = rest[colon + 1..].trim_start();
+            return (Some(status), body);
+        }
     }
-    if is_tasks_quarantine_error(stripped) {
-        return t.tasks_quarantined.to_string();
-    }
-    if module == "tasks" && is_tasks_open_or_install_error(stripped) {
-        return t.tasks_open_failed.to_string();
-    }
-    if is_tasks_open_or_install_error(stripped) {
-        return t.tasks_open_failed.to_string();
-    }
-    if module == "create" && is_create_install_error(stripped) {
-        return t.create_install_failed.to_string();
-    }
-    if is_create_install_error(stripped) {
-        return t.create_install_failed.to_string();
-    }
-    user_visible_chat_error(t, stripped)
+    (None, trimmed)
 }
 
-/// Map a raw runtime error to localized chat chrome copy (no path leaks).
-pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
+fn is_chat_timeout_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("timeout chat") || lower.contains("chat timeout")
+}
+
+fn is_advisory_construction_refusal(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("évaluation/conseil")
+        || lower.contains("evaluation/conseil")
+        || lower.contains("evaluation/advice")
+        || (lower.contains("conseil") && lower.contains("module") && lower.contains("refus"))
+}
+
+fn is_agent_spawn_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("agent.create")
+        || lower.contains("agent.spawn")
+        || lower.contains("brief sous-agent")
+        || lower.contains("sous-agent")
+        || lower.contains("agent déjà en cours")
+        || lower.contains("agent already")
+}
+
+fn is_module_scaffold_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("module.scaffold")
+        || lower.contains("module.package")
+        || lower.contains("module.install")
+        || lower.contains("module.compile")
+}
+
+fn is_cap_or_policy_denial(msg: &str) -> Option<&'static str> {
+    let lower = msg.to_ascii_lowercase();
+    if lower.contains("permissiondenied") || lower.contains("cap.deny") || lower.contains("cap deny")
+    {
+        return Some("cap.denied");
+    }
+    if lower.contains("policy.deny") || lower.contains("policy deny") {
+        return Some("policy.denied");
+    }
+    None
+}
+
+/// Designer chrome: fallback headline plus optional cause line (no wire codes).
+pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified) -> String {
+    if classified.code == "chat.error" {
+        return t.chat_error_generic.to_string();
+    }
+    format!("{}\n{}", t.chat_error_generic, classified.cause)
+}
+
+/// Classify a raw runtime error into a stable code and localized cause phrase.
+pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassified {
     if is_room_host_path_sentinel(raw) {
-        return room_host_path_disallowed_toast(t)
-            .map(str::to_string)
-            .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string());
+        return ChatErrorClassified {
+            code: "room.path_denied",
+            cause: room_host_path_disallowed_toast(t)
+                .map(str::to_string)
+                .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string()),
+        };
     }
     if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
-        return t.room_action_unavailable.to_string();
+        return ChatErrorClassified {
+            code: "room.action_unavailable",
+            cause: t.room_action_unavailable.to_string(),
+        };
     }
     let lower = raw.to_ascii_lowercase();
     if lower.contains("indisponible en tour de salon")
         || lower.contains("indisponible en salon")
         || lower.contains("isn't available in the room")
     {
-        return t.room_action_unavailable.to_string();
+        return ChatErrorClassified {
+            code: "room.action_unavailable",
+            cause: t.room_action_unavailable.to_string(),
+        };
     }
     if raw.starts_with("media.image.generate:") {
         if raw.to_ascii_lowercase().contains("annul") {
-            return t.studio_generation_cancelled.to_string();
+            return ChatErrorClassified {
+                code: "media.generation_cancelled",
+                cause: t.studio_generation_cancelled.to_string(),
+            };
         }
-        return t.studio_generation_failed.to_string();
+        return ChatErrorClassified {
+            code: "media.generation_failed",
+            cause: t.studio_generation_failed.to_string(),
+        };
     }
     if is_tasks_quarantine_error(raw) {
-        return t.tasks_quarantined.to_string();
+        return ChatErrorClassified {
+            code: "tasks.quarantined",
+            cause: t.chat_error_tasks_quarantined.to_string(),
+        };
     }
     if is_create_install_error(raw) {
-        return t.create_install_failed.to_string();
+        return ChatErrorClassified {
+            code: "create.install_failed",
+            cause: t.chat_error_create_install.to_string(),
+        };
     }
     if is_tasks_open_or_install_error(raw) {
-        return t.tasks_open_failed.to_string();
-    }
-    if raw.contains("BadRequest:") || raw.contains("badrequest:") {
-        return t.chat_error_generic.to_string();
+        return ChatErrorClassified {
+            code: "tasks.open_failed",
+            cause: t.chat_error_tasks_open.to_string(),
+        };
     }
     if is_model_load_fail_error(raw) {
-        return t.chat_load_fail_message.to_string();
+        return ChatErrorClassified {
+            code: "model.load_failed",
+            cause: t.chat_load_fail_message.to_string(),
+        };
     }
+    if is_chat_timeout_error(raw) {
+        return ChatErrorClassified {
+            code: "chat.timeout",
+            cause: t.chat_error_timeout.to_string(),
+        };
+    }
+
+    let (ipc_status, ipc_body) = ipc_status_body(raw);
+    if let Some(status) = ipc_status {
+        let status_lower = status.to_ascii_lowercase();
+        if status_lower == "permissiondenied" {
+            return ChatErrorClassified {
+                code: "cap.denied",
+                cause: t.chat_error_cap_denied.to_string(),
+            };
+        }
+        if status_lower == "internalerror" {
+            if is_agent_spawn_error(ipc_body) {
+                return ChatErrorClassified {
+                    code: "agent.create.failed",
+                    cause: t.chat_error_agent_create_failed.to_string(),
+                };
+            }
+            return ChatErrorClassified {
+                code: "chat.internal_error",
+                cause: t.chat_error_internal.to_string(),
+            };
+        }
+        if status_lower == "badrequest" {
+            if ipc_body.eq_ignore_ascii_case("payload invalide")
+                || ipc_body.eq_ignore_ascii_case("invalid payload")
+            {
+                return ChatErrorClassified {
+                    code: "bad_request.payload",
+                    cause: t.chat_error_bad_request.to_string(),
+                };
+            }
+            return classify_chat_error(t, ipc_body);
+        }
+    }
+
+    if lower.contains("brief sous-agent vide") || lower.contains("empty sub-agent brief") {
+        return ChatErrorClassified {
+            code: "agent.spawn.empty_brief",
+            cause: t.chat_error_agent_spawn_empty_brief.to_string(),
+        };
+    }
+    if is_advisory_construction_refusal(raw) {
+        return ChatErrorClassified {
+            code: "module.scaffold.advisory",
+            cause: t.chat_error_module_scaffold_advisory.to_string(),
+        };
+    }
+    if let Some(code) = is_cap_or_policy_denial(raw) {
+        let cause = if code == "cap.denied" {
+            t.chat_error_cap_denied.to_string()
+        } else {
+            t.chat_error_policy_denied.to_string()
+        };
+        return ChatErrorClassified { code, cause };
+    }
+    if lower.contains("agent déjà en cours") || lower.contains("agent already running") {
+        return ChatErrorClassified {
+            code: "agent.spawn.busy",
+            cause: t.chat_error_agent_spawn_busy.to_string(),
+        };
+    }
+    if is_agent_spawn_error(raw) {
+        return ChatErrorClassified {
+            code: "agent.spawn.denied",
+            cause: t.chat_error_agent_spawn_denied.to_string(),
+        };
+    }
+    if is_module_scaffold_error(raw) {
+        return ChatErrorClassified {
+            code: "module.scaffold.denied",
+            cause: t.chat_error_module_scaffold_denied.to_string(),
+        };
+    }
+
+    if raw.contains("BadRequest:") || raw.contains("badrequest:") {
+        let stripped = strip_ipc_status_prefix(raw);
+        if stripped != raw {
+            return classify_chat_error(t, stripped);
+        }
+        return ChatErrorClassified {
+            code: "bad_request",
+            cause: t.chat_error_bad_request.to_string(),
+        };
+    }
+
     if leaks_filesystem_path(raw) || raw.contains(".aospkg") {
         let lower = raw.to_ascii_lowercase();
         if lower.contains("create") {
-            return t.create_install_failed.to_string();
+            return ChatErrorClassified {
+                code: "create.install_failed",
+                cause: t.chat_error_create_install.to_string(),
+            };
         }
         if lower.contains("tasks") {
-            return t.tasks_open_failed.to_string();
+            return ChatErrorClassified {
+                code: "tasks.open_failed",
+                cause: t.chat_error_tasks_open.to_string(),
+            };
         }
-        return t.chat_error_generic.to_string();
+        return ChatErrorClassified {
+            code: "chat.error",
+            cause: t.chat_error_generic.to_string(),
+        };
     }
+
     let stripped = strip_ipc_status_prefix(raw);
     if stripped != raw {
-        return user_visible_chat_error(t, stripped);
+        return classify_chat_error(t, stripped);
     }
-    raw.to_string()
+
+    if raw.trim().is_empty() {
+        return ChatErrorClassified {
+            code: "chat.error",
+            cause: t.chat_error_generic.to_string(),
+        };
+    }
+
+    ChatErrorClassified {
+        code: "chat.error",
+        cause: t.chat_error_generic.to_string(),
+    }
+}
+
+/// Map a raw module UI/runtime error to localized chrome copy (no IPC status leaks).
+pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) -> String {
+    let stripped = strip_ipc_status_prefix(raw);
+    if module == "tasks" && is_tasks_quarantine_error(stripped) {
+        return format_chat_error(t, &ChatErrorClassified {
+            code: "tasks.quarantined",
+            cause: t.chat_error_tasks_quarantined.to_string(),
+        });
+    }
+    if is_tasks_quarantine_error(stripped) {
+        return format_chat_error(t, &ChatErrorClassified {
+            code: "tasks.quarantined",
+            cause: t.chat_error_tasks_quarantined.to_string(),
+        });
+    }
+    if module == "tasks" && is_tasks_open_or_install_error(stripped) {
+        return format_chat_error(t, &ChatErrorClassified {
+            code: "tasks.open_failed",
+            cause: t.chat_error_tasks_open.to_string(),
+        });
+    }
+    if is_tasks_open_or_install_error(stripped) {
+        return format_chat_error(t, &ChatErrorClassified {
+            code: "tasks.open_failed",
+            cause: t.chat_error_tasks_open.to_string(),
+        });
+    }
+    if module == "create" && is_create_install_error(stripped) {
+        return format_chat_error(t, &ChatErrorClassified {
+            code: "create.install_failed",
+            cause: t.chat_error_create_install.to_string(),
+        });
+    }
+    if is_create_install_error(stripped) {
+        return format_chat_error(t, &ChatErrorClassified {
+            code: "create.install_failed",
+            cause: t.chat_error_create_install.to_string(),
+        });
+    }
+    user_visible_chat_error(t, stripped)
+}
+
+/// Map a raw runtime error to localized chat chrome copy (no path leaks).
+pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
+    format_chat_error(t, &classify_chat_error(t, raw))
 }
 
 #[cfg(test)]
@@ -196,17 +426,15 @@ mod tests {
     fn room_action_unavailable_maps_to_locked_copy() {
         let en = crate::i18n::strings("en");
         let fr = crate::i18n::strings("fr");
-        assert_eq!(
-            user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE),
-            en.room_action_unavailable
-        );
+        let classified = classify_chat_error(&en, ROOM_ACTION_UNAVAILABLE);
+        let out = user_visible_chat_error(&en, ROOM_ACTION_UNAVAILABLE);
+        assert_eq!(out, format_chat_error(&en, &classified));
+        assert!(out.starts_with(en.chat_error_generic));
+        assert!(out.contains(en.room_action_unavailable));
+        assert!(!out.contains("BadRequest"));
         assert_eq!(
             user_visible_chat_error(&fr, ROOM_ACTION_UNAVAILABLE),
-            fr.room_action_unavailable
-        );
-        assert_eq!(
-            user_visible_chat_error(&en, "action notes.create indisponible en tour de salon"),
-            en.room_action_unavailable
+            format_chat_error(&fr, &classify_chat_error(&fr, ROOM_ACTION_UNAVAILABLE))
         );
     }
 
@@ -221,16 +449,22 @@ mod tests {
     fn sanitize_replaces_path_with_i18n_load_fail() {
         let t = crate::i18n::strings("fr");
         let out = user_visible_chat_error(&t, "poids introuvables: C:\\share\\models\\foo.gguf");
-        assert_eq!(out, t.chat_load_fail_message);
+        assert!(out.starts_with(t.chat_error_generic));
+        assert!(out.contains(t.chat_load_fail_message));
+        assert_eq!(
+            classify_chat_error(&t, "poids introuvables: C:\\share\\models\\foo.gguf").cause,
+            t.chat_load_fail_message
+        );
         assert!(!out.contains("gguf"));
         assert!(!out.contains('\\'));
     }
 
     #[test]
-    fn generic_path_leak_uses_generic_copy() {
+    fn generic_path_leak_uses_fallback_only() {
         let t = crate::i18n::strings("en");
         let out = user_visible_chat_error(&t, "open failed: /var/run/aos-modeld.stderr.log");
         assert_eq!(out, t.chat_error_generic);
+        assert!(!out.contains("var/run"));
     }
 
     #[test]
@@ -240,86 +474,56 @@ mod tests {
             &t,
             "media.image.generate: failed to load C:\\share\\models\\ltx.gguf",
         );
-        assert_eq!(out, t.studio_generation_failed);
+        assert!(out.contains(t.studio_generation_failed));
+        assert!(!out.contains("gguf"));
     }
 
     #[test]
-    fn media_generation_cancel_maps_to_cancelled_copy() {
-        let t = crate::i18n::strings("fr");
-        let out = user_visible_chat_error(&t, "media.image.generate: génération annulée");
-        assert_eq!(out, t.studio_generation_cancelled);
-    }
-
-    #[test]
-    fn tasks_open_failure_maps_to_locked_copy() {
+    fn tasks_open_failure_maps_to_human_cause() {
         let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
         let raw = "statut BadRequest: UI déclarative invalide: type must be declarative_ui, got missing field `root` at line 6 column 1";
-        let out_en = user_visible_module_error(&en, "tasks", raw);
-        let out_fr = user_visible_module_error(&fr, "tasks", raw);
-        assert_eq!(out_en, en.tasks_open_failed);
-        assert_eq!(out_fr, fr.tasks_open_failed);
-        assert!(!out_en.contains("BadRequest"));
-        assert!(!out_en.contains("root"));
-        assert!(!out_en.contains("declarative"));
+        let out = user_visible_module_error(&en, "tasks", raw);
+        assert!(out.contains(en.chat_error_generic));
+        assert!(out.contains(en.chat_error_tasks_open));
+        assert!(!out.contains("BadRequest"));
+        assert!(!out.contains("root"));
     }
 
     #[test]
-    fn tasks_catalogue_install_failure_maps_to_locked_copy() {
+    fn create_install_failure_maps_to_human_cause() {
         let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
-        let raw = "statut BadRequest: hash catalogue non conforme pour tasks";
-        assert_eq!(user_visible_chat_error(&en, raw), en.tasks_open_failed);
-        assert_eq!(user_visible_chat_error(&fr, raw), fr.tasks_open_failed);
-        assert!(!user_visible_chat_error(&en, raw).contains("BadRequest"));
-    }
-
-    #[test]
-    fn tasks_quarantine_maps_to_locked_copy() {
-        let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
-        let raw = "statut BadRequest: module en quarantaine: tasks";
-        assert_eq!(user_visible_module_error(&en, "tasks", raw), en.tasks_quarantined);
-        assert_eq!(user_visible_module_error(&fr, "tasks", raw), fr.tasks_quarantined);
-        assert!(!user_visible_module_error(&en, "tasks", raw).contains("BadRequest"));
-    }
-
-    #[test]
-    fn create_install_failure_maps_to_locked_copy() {
-        let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
         let raw = "statut BadRequest: hash catalogue non conforme pour create";
-        assert_eq!(
-            user_visible_chat_error(&en, raw),
-            en.create_install_failed
-        );
-        assert_eq!(
-            user_visible_chat_error(&fr, raw),
-            fr.create_install_failed
-        );
-        assert!(!user_visible_chat_error(&en, raw).contains("BadRequest"));
-        assert!(!user_visible_chat_error(&en, raw).contains(".aospkg"));
+        let out = user_visible_chat_error(&en, raw);
+        assert!(out.contains(en.chat_error_create_install));
+        assert!(!out.contains("BadRequest"));
     }
 
     #[test]
-    fn room_host_path_disallowed_maps_to_locked_copy() {
+    fn agent_create_failure_shows_human_cause_not_wire_jargon() {
         let en = crate::i18n::strings("en");
-        let fr = crate::i18n::strings("fr");
-        assert_eq!(
-            user_visible_chat_error(&en, ROOM_HOST_PATH_DISALLOWED),
-            en.room_host_path_disallowed
-        );
-        assert_eq!(
-            user_visible_chat_error(&fr, ROOM_HOST_PATH_DISALLOWED),
-            fr.room_host_path_disallowed
-        );
-        assert_eq!(
-            room_host_path_disallowed_toast(&en),
-            Some(en.room_host_path_disallowed)
-        );
-        assert!(!en.room_host_path_disallowed.contains('/'));
-        assert!(!en.room_host_path_disallowed.contains(':'));
-        assert!(!fr.room_host_path_disallowed.contains('/'));
-        assert!(!fr.room_host_path_disallowed.contains(':'));
+        let spawn = "statut InternalError: spawn worker failed for agent.create";
+        let visible = user_visible_chat_error(&en, spawn);
+        assert!(visible.contains(en.chat_error_generic));
+        assert!(visible.contains(en.chat_error_agent_create_failed));
+        assert!(!visible.contains("InternalError"));
+        assert!(!visible.contains("agent.create"));
+    }
+
+    #[test]
+    fn advisory_scaffold_refusal_has_human_cause() {
+        let en = crate::i18n::strings("en");
+        let raw = "action refusée : le goal est une évaluation/conseil. Analyse et réponds ; ne construis pas le module sans demande explicite.";
+        let visible = user_visible_chat_error(&en, raw);
+        assert!(visible.contains(en.chat_error_module_scaffold_advisory));
+        assert!(!visible.contains("évaluation/conseil"));
+    }
+
+    #[test]
+    fn chat_timeout_has_human_cause_without_path() {
+        let en = crate::i18n::strings("en");
+        let raw = "timeout chat (180 s) — modeld a peut-être planté (voir var/run/aos-modeld.stderr.log) ; relancez aos-session";
+        let visible = user_visible_chat_error(&en, raw);
+        assert!(visible.contains(en.chat_error_timeout));
+        assert!(!visible.contains("var/run"));
     }
 }

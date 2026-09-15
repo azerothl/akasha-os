@@ -863,7 +863,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
             });
         }
         Err(e) => {
-            let _ = evt_tx.send(Evt::Error(e.to_string()));
+            let _ = evt_tx.send(Evt::ChatError {
+                session_id: sid,
+                message: e.to_string(),
+            });
         }
     }
 }
@@ -928,7 +931,10 @@ pub(crate) async fn spawn_document_prep_agent(
             });
         }
         Err(e) => {
-            let _ = evt_tx.send(Evt::Error(e.to_string()));
+            let _ = evt_tx.send(Evt::ChatError {
+                session_id: sid,
+                message: e.to_string(),
+            });
         }
     }
 }

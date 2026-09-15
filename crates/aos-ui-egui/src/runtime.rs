@@ -21,7 +21,8 @@ use aos_proto::{
     AgentIdRequest, AgentInfo, AgentKind, AgentPolicy, AgentPolicyGetRequest,
     AgentPolicySetRequest, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
     AgentRoomConductProgress, AgentRosterUpdateRequest, AgentSpecResponse, AgentState,
-    AgentSteerRequest, AgentTrace, AuditEvent, AuditQueryRequest, CancelRequest, CapInfo,
+    AgentSteerRequest, AgentTrace, AuditAppendRequest, AuditEvent, AuditQueryRequest,
+    CancelRequest, CapInfo,
     CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
     ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionForkRequest,
     ChatSessionGetResponse, ChatSessionIdRequest,
@@ -2433,6 +2434,25 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             Err(e) => {
                 let _ = evt_tx.send(Evt::Error(e.to_string()));
             }
+        }
+        Cmd::AuditAppend {
+            action,
+            target,
+            detail,
+        } => {
+            let _ = bus
+                .call::<AuditAppendRequest, bool>(
+                    "audit.append",
+                    &AuditAppendRequest {
+                        trace_id: String::new(),
+                        actor: "human:ui".into(),
+                        action,
+                        target,
+                        detail,
+                    },
+                    vec![],
+                )
+                .await;
         },
         Cmd::CapList { holder } => {
             if let Some(agent_id) = holder.strip_prefix("agent:") {
@@ -2890,8 +2910,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::Troubleshoot => {
-            run_troubleshoot(&bus, &evt_tx).await;
+        Cmd::Troubleshoot { recent_chat_errors } => {
+            run_troubleshoot(&bus, &evt_tx, recent_chat_errors).await;
         }
         Cmd::KillAuditd => {
             #[cfg(windows)]

@@ -3,6 +3,14 @@
 use crate::ui_audit::DaemonRestart;
 use aos_proto::{AuditEvent, CapInfo};
 
+#[derive(Debug, Clone)]
+pub(crate) struct ChatErrorRecord {
+    pub(crate) at_ms: u64,
+    pub(crate) session_id: Option<String>,
+    pub(crate) code: String,
+    pub(crate) cause: String,
+}
+
 #[derive(Default)]
 pub(crate) struct SecurityUiState {
     pub(crate) audit: Vec<AuditEvent>,
@@ -31,7 +39,11 @@ pub(crate) struct SecurityUiState {
     pub(crate) health: Option<aos_proto::HealthSnapshot>,
     /// Previous canary_ok — detect ok→fail for status bar.
     pub(crate) health_canary_was_ok: Option<bool>,
+    /// Recent chat errors (classified chrome) for Audit Health / Troubleshoot.
+    pub(crate) recent_chat_errors: Vec<ChatErrorRecord>,
 }
+
+const MAX_RECENT_CHAT_ERRORS: usize = 20;
 
 impl SecurityUiState {
     pub(crate) fn set_audit(&mut self, audit: Vec<AuditEvent>) {
@@ -65,6 +77,24 @@ impl SecurityUiState {
 
     pub(crate) fn set_device_active(&mut self, active: Vec<aos_proto::DeviceActiveCapture>) {
         self.device_active = active;
+    }
+
+    pub(crate) fn record_chat_error(
+        &mut self,
+        session_id: Option<String>,
+        code: &str,
+        cause: String,
+        at_ms: u64,
+    ) {
+        self.recent_chat_errors.push(ChatErrorRecord {
+            at_ms,
+            session_id,
+            code: code.to_string(),
+            cause,
+        });
+        while self.recent_chat_errors.len() > MAX_RECENT_CHAT_ERRORS {
+            self.recent_chat_errors.remove(0);
+        }
     }
 }
 
