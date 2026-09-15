@@ -101,11 +101,211 @@ pub fn seed_screenshot_create_layers(app: &mut UiApp) {
     app.open_module_tab(MODULE_NAME.into());
 }
 
+/// Minimal split surface that reproduces the preset/upscale collision region.
+const CREATE_LAYOUT_SHOT_DOC: &str = r#"{
+  "type": "declarative_ui",
+  "contract": 2,
+  "title": "Create",
+  "title_key": "app_title",
+  "labels": {
+    "fallback": "fr",
+    "fr": {
+      "app_title": "Créer",
+      "advanced_disclosure": "Avancé",
+      "preset_name_label": "Nom du préréglage",
+      "save_preset_label": "Enregistrer le préréglage",
+      "load_preset_label": "Charger le préréglage",
+      "upscale_section": "Agrandir le résultat",
+      "upscale_model_label": "Modèle d'agrandissement",
+      "upscale_repeats_label": "Passes",
+      "upscale_tile_label": "Taille des tuiles",
+      "upscale_label": "Agrandir l'image actuelle",
+      "result_toolbar_section": "Résultat",
+      "save_label": "Enregistrer l'image",
+      "regenerate_label": "Régénérer",
+      "variant_label": "Nouvelle variante"
+    },
+    "en": {
+      "app_title": "Create",
+      "advanced_disclosure": "Advanced",
+      "preset_name_label": "Preset name",
+      "save_preset_label": "Save preset",
+      "load_preset_label": "Load preset",
+      "upscale_section": "Upscale result",
+      "upscale_model_label": "Upscaler model",
+      "upscale_repeats_label": "Passes",
+      "upscale_tile_label": "Tile size",
+      "upscale_label": "Upscale current image",
+      "result_toolbar_section": "Result",
+      "save_label": "Save image",
+      "regenerate_label": "Regenerate",
+      "variant_label": "New variant"
+    }
+  },
+  "root": {
+    "kind": "split",
+    "split_ratio": 0.48,
+    "children": [
+      {
+        "kind": "column",
+        "children": [
+          {
+            "kind": "section",
+            "label_key": "advanced_disclosure",
+            "children": [
+              {
+                "kind": "text_input",
+                "state_key": "saved_preset_name",
+                "label_key": "preset_name_label"
+              },
+              {
+                "kind": "row",
+                "toolbar": true,
+                "children": [
+                  {
+                    "kind": "button",
+                    "action": "save_preset",
+                    "label_key": "save_preset_label",
+                    "icon_key": "save_preset"
+                  },
+                  {
+                    "kind": "button",
+                    "action": "load_preset",
+                    "label_key": "load_preset_label",
+                    "icon_key": "load_preset"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "column",
+        "children": [
+          {
+            "kind": "section",
+            "label_key": "upscale_section",
+            "children": [
+              {
+                "kind": "text_input",
+                "state_key": "upscale_model",
+                "label_key": "upscale_model_label"
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "number",
+                    "state_key": "upscale_repeats",
+                    "min": 1,
+                    "max": 4,
+                    "label_key": "upscale_repeats_label"
+                  },
+                  {
+                    "kind": "number",
+                    "state_key": "upscale_tile_size",
+                    "min": 32,
+                    "max": 512,
+                    "label_key": "upscale_tile_label"
+                  }
+                ]
+              },
+              {
+                "kind": "button",
+                "action": "upscale",
+                "label_key": "upscale_label",
+                "icon_key": "upscale"
+              }
+            ]
+          },
+          {
+            "kind": "section",
+            "label_key": "result_toolbar_section",
+            "children": [
+              {
+                "kind": "row",
+                "toolbar": true,
+                "children": [
+                  {
+                    "kind": "button",
+                    "action": "save_result",
+                    "label_key": "save_label",
+                    "icon_key": "save"
+                  },
+                  {
+                    "kind": "button",
+                    "action": "regenerate",
+                    "label_key": "regenerate_label",
+                    "icon_key": "regenerate"
+                  },
+                  {
+                    "kind": "button",
+                    "action": "variant",
+                    "label_key": "variant_label",
+                    "icon_key": "variant"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}"#;
+
+/// Seed a focused Create layout shot for the preset/upscale overlap region.
+pub fn seed_screenshot_create_layout(app: &mut UiApp) {
+    seed_screenshot_modules(app);
+    let panel = app
+        .decl_panels
+        .entry(MODULE_NAME.into())
+        .or_insert_with(|| DeclUiPanelState::new(MODULE_NAME));
+    match DeclUiDocument::parse_json_with_contract(CREATE_LAYOUT_SHOT_DOC.as_bytes(), UI_CONTRACT_V2)
+    {
+        Ok(doc) => {
+            panel.set_document(doc);
+            panel
+                .local_state
+                .insert("advanced_open".into(), json!(true));
+            panel
+                .local_state
+                .insert("upscale_open".into(), json!(true));
+            panel
+                .local_state
+                .insert("saved_preset_name".into(), json!("demo-preset"));
+            panel
+                .local_state
+                .insert("upscale_model".into(), json!("realesrgan"));
+            panel
+                .local_state
+                .insert("upscale_repeats".into(), json!(1));
+            panel
+                .local_state
+                .insert("upscale_tile_size".into(), json!(128));
+        }
+        Err(err) => {
+            eprintln!("seed_screenshot_create_layout: parse failed: {err}");
+        }
+    }
+    app.prefs.language = "fr".into();
+    save_preferences(&app.prefs);
+    app.open_module_tab(MODULE_NAME.into());
+}
+
 pub fn screenshot_dir_from_env() -> Option<PathBuf> {
     std::env::var("AOS_UI_SCREENSHOT_DIR")
         .ok()
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from)
+}
+
+fn screenshot_focus_create_layout() -> bool {
+    matches!(
+        std::env::var("AOS_UI_SCREENSHOT_FOCUS").ok().as_deref(),
+        Some("create-layout") | Some("create_layout")
+    )
 }
 
 pub struct UiScreenshotHarness {
@@ -114,6 +314,7 @@ pub struct UiScreenshotHarness {
     settle_left: u32,
     step: u8,
     waiting: bool,
+    focus_create_layout: bool,
 }
 
 impl UiScreenshotHarness {
@@ -123,6 +324,7 @@ impl UiScreenshotHarness {
             settle_left: 4,
             step: 0,
             waiting: false,
+            focus_create_layout: screenshot_focus_create_layout(),
         }
     }
 
@@ -166,6 +368,22 @@ impl UiScreenshotHarness {
         }
         if self.settle_left > 0 {
             self.settle_left -= 1;
+            return;
+        }
+
+        if self.focus_create_layout {
+            match self.step {
+                0 => {
+                    seed_screenshot_create_layout(app);
+                    self.request(ctx, "07-create-preset-upscale-layout-fr");
+                    self.step = 1;
+                    self.settle_left = 6;
+                }
+                _ => {
+                    eprintln!("AOS_UI_SCREENSHOT_DIR: create-layout capture complete — exiting");
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
             return;
         }
 
