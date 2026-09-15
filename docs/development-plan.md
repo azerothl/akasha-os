@@ -2,9 +2,10 @@
 
 **Language:** English | [Français](fr/plan-developpement-phases.md)
 
-> Version: 1.5  
-> Date: 19/08/2026  
-> Status: reference plan  
+> Version: 1.6  
+> Date: 15/09/2026  
+> Status: reference plan (foundation + early Preview detail)  
+> **Schedule source of truth for shipped Preview increments after P11:** [STATUS.md](STATUS.md) (P12–P20 / 0.12.x–0.18.0, including P18–P19). Do not treat the overview table alone as complete without STATUS.  
 > References: `docs/functional-specs.md`, `docs/technical-specs.md`, `docs/vision.md`, `docs/FEATURES.md`, `docs/evolution-roadmap.md`
 
 ---
@@ -16,9 +17,11 @@ The development of Agent OS has two layers that must not be collapsed:
 1. **Foundation phases (P0–P5 + PV + PC)** — prove placement, caps, WASM,
    security, host isolation, seL4 scaffolding, and the installable Preview
    cohort. Bare metal = after PV (ADR 0001).
-2. **Preview increment phases (P03–P09)** — ship host-app releases **without
+2. **Preview increment phases (P03 onward)** — ship host-app releases **without
    inventing a P6 gate** while the PC cohort is still open. Numbering is
-   `P0n` / Preview `0.n.0` (E* from [evolution-roadmap.md](evolution-roadmap.md)).
+   `P0n` / Preview `0.n.0` (and later `P1n` / patch lanes) tied to E* from
+   [evolution-roadmap.md](evolution-roadmap.md). Detail past P11 lives in
+   [STATUS.md](STATUS.md) and `docs/phases/`.
 
 P0–P5 prove and polish the system **on the host**; **PV** is the **seL4 kernel
 scaffolding** (QEMU VM, without GPU); **PC** is the **distributable Preview**
@@ -46,12 +49,20 @@ userspace before committing to the microkernel port.
 | **P09**     | Win/Linux Preview host                | Preview **0.9.0** — E18 mid-token migrate + E19 media models/options + chat media plugins    | shipped             | done        |
 | **P10**     | Win/Linux Preview host                | Preview **0.10.0** — E7 TPM + E8 live + E9 path + Media polish + internal seL4               | shipped             | done        |
 | **P11**     | Win/Linux Preview host                | Preview **0.11.0** — E20 local decode (KV Q8, prefix cache, C1 prompt-lookup)                | shipped             | done        |
+| **P12**     | Win/Linux/macOS Preview host          | Preview **0.12.0** — vision chat + macOS Apple Silicon ship (+ 0.12.1)                       | shipped             | done        |
+| **P13**     | Win/Linux/macOS Preview host          | Preview **0.13.0** — Create reference/inpaint/short video + chat documents                   | shipped             | done        |
+| **P16**     | Win/Linux/macOS Preview host          | Preview **0.16.0** — canvas quality + model ops (+ 0.16.1/0.16.2)                            | shipped             | done        |
+| **P17**     | Win/Linux/macOS Preview host          | Preview **0.17.x** — Create workspace + UI chrome (+ 0.17.1 / 0.17.2)                        | shipped             | done        |
+| **P18**     | Win/Linux/macOS Preview host          | **E22** instincts in-session                                                                  | shipped             | done        |
+| **P19**     | Win/Linux/macOS Preview host          | **E23** runtime health plane                                                                  | shipped             | done        |
+| **P20**     | Win/Linux/macOS Preview host          | Preview **0.18.0** — Memory V2 default + ship P18/P19 + Notes/Chat/Canvas polish             | shipped             | done        |
 
 
 **Indicative total** (foundation): ~60–80 weeks in a naïve sequence;
 **PV ∥ P5 ∥ PC** brings the critical path closer. Preview increments
-(P03–P09) run on the already-shipped host stack. These durations are rough
+(P03 onward) run on the already-shipped host stack. These durations are rough
 orders of magnitude—each exit gate takes precedence over the schedule.
+For the authoritative shipped list after P11, see [STATUS.md](STATUS.md).
 
 ---
 
@@ -510,10 +521,11 @@ egui UI = main surface; feedback through `feedback.submit` (local only).
 # Linux: ./packaging/build-preview.sh
 ```
 
-> PC status (18/08/2026): Preview **0.8.0** is the current host release
-> (E16 media, E17 unified artefact, Providers). PC.1–PC.14 shipped since 0.1; subsequent product
-> work is Preview increments P03–P09, not a new PC.n number. Cohort gate
-> still open — see `docs/INSTALL.md` and `docs/FEATURES.md`.
+> PC status (15/09/2026): Preview **0.18.0** is the current host baseline in
+> `VERSION` / STATUS / FEATURES (GitHub Releases may lag). PC.1–PC.14 shipped
+> since 0.1; subsequent product work is Preview increments (P03 onward — see
+> [STATUS.md](STATUS.md) past P11), not a new PC.n number. Cohort gate still
+> open — see `docs/INSTALL.md` and `docs/FEATURES.md`.
 
 
 
@@ -574,7 +586,11 @@ multi-GPU, and apply general polish. **Output: Agent OS v1.0.**
 
 
 
-## Preview increments (P03–P09)
+## Preview increments (P03 onward)
+
+Early increment checklists (P03–P11) stay in this file. **P12+ delivery status
+is maintained in [STATUS.md](STATUS.md)** so this plan does not become a stale
+schedule past the last detailed section below.
 
 These phases sit **on top of** the PC host stack. They do **not** replace
 P0–P5 / PV / PC and they are **not** a P6 gate. Detail lives in
@@ -726,7 +742,15 @@ Detail: [phases/phase-preview-10.md](phases/phase-preview-10.md).
 
 Detail: [phases/phase-preview-11.md](phases/phase-preview-11.md).
 
-### Remaining after 0.11 (not a new P6)
+### P12+ — see STATUS (source of truth)
+
+Delivered Preview increments **after P11** (P12 vision+macOS, P13 Create media,
+P16–P17 canvas/Create chrome, P18 E22 instincts, P19 E23 health, P20 / Preview
+**0.18.0**, plus patch lanes) are summarized in [STATUS.md](STATUS.md) with
+phase notes under `docs/phases/` where they exist. This plan does **not**
+duplicate those checklists — update STATUS when a new Preview ships.
+
+### Remaining (not a new P6)
 
 | Item | Notes |
 |------|--------|
@@ -754,7 +778,7 @@ P0 (simulator)
        │                 ├──> PV (seL4 VM, without GPU) [kernel port]
        │                 │     └──> bare metal (product) [PV green + AccelDevice P5.3]
        │                 └──> PC (installable Preview 0.1)
-       │                       └──> P03 → P04 → P05 → P06 → P07 → P08 → P09
+       │                       └──> P03 → … → P11 → (P12+ in STATUS)
        │                             (Preview increments on the host; not P6)
        └──> (P1.7 aarch64, parallel with P1, non-blocking)
 ```
@@ -765,9 +789,10 @@ P0 (simulator)
 - P4 depends on P3 (do not port interfaces that are still changing)
 - **PV and P5 are parallel** (ADR 0001): GPU on the host, kernel in the VM
 - Bare metal waits for a green PV gate, not GPU passthrough from Windows
-- **P03–P09 do not wait for the PC cohort gate**; they must not invent a P6 number
+- **P03 onward do not wait for the PC cohort gate**; they must not invent a P6 number
 - P08 (E16/E17) depends on P1 Model Subsystem + P07 E15 if widget kinds are added; it does **not** depend on E9 / TPM / live sibling HTTP
 - P09 (E18 + E19) depends on P08 E16 engines + E17 cancel+restart (migrate and extra media packs ship on that base)
+- P12+ sequencing is recorded in [STATUS.md](STATUS.md), not duplicated here
 
 ---
 
@@ -783,8 +808,8 @@ P0 (simulator)
 | Workstream                    | Responsibilities                                | Main phases                         |
 | ----------------------------- | ----------------------------------------------- | ----------------------------------- |
 | **Kernel & Security stream**  | Microkernel, caps, IPC, drivers                 | P0, P4, **PV**, P5                  |
-| **Models & Inference stream** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5, **P08**, **P09**    |
-| **Agents & UX stream**        | Agent Runtime, UI, modules, memory, audit       | P1, P2, P3, P5, **PC**, **P03–P09** |
+| **Models & Inference stream** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5, **P08+**    |
+| **Agents & UX stream**        | Agent Runtime, UI, modules, memory, audit       | P1, P2, P3, P5, **PC**, **P03+** |
 
 
 A team of 3–5 people can cover these 3 streams with rotations; the phases are
@@ -796,7 +821,7 @@ in parallel with P1).
 The `Must` requirements in `docs/functional-specs.md` must be **all covered
 by the end of P3** (except those explicitly tied to the microkernel, covered
 in P4). `Should` and `Could` requirements are distributed across P4/PV/P5 or
-deferred if necessary. Preview increments (P03–P09) cover E* product
+deferred if necessary. Preview increments (P03 onward) cover E* product
 priorities on the host without waiting for remaining P5.2 / PV.4 / PC cohort.
 
 ---
@@ -818,11 +843,11 @@ priorities on the host without waiting for remaining P5.2 / PV.4 / PC cohort.
 
 - `docs/functional-specs.md` — product requirements
 - `docs/technical-specs.md` — technical architecture
-- `docs/FEATURES.md` — shipped Preview catalogue (currently 0.8.0)
-- `docs/STATUS.md` — delivered-phase summary
+- `docs/FEATURES.md` — shipped Preview catalogue (currently **0.18.0**)
+- `docs/STATUS.md` — delivered-phase summary (**source of truth** past P11)
 - `docs/vision.md` — framing and open directions
-- `docs/competitive-landscape.md` — agentic OS / runtime survey (August 2026)
-- `docs/evolution-roadmap.md` — post-landscape priorities E1–E22 (not a P6 gate)
-- `docs/phases/phase-preview-03.md` … `phase-preview-09.md` — Preview increment plans
+- `docs/competitive-landscape.md` — agentic OS / runtime survey (September 2026)
+- `docs/evolution-roadmap.md` — post-landscape priorities E1–E23 (not a P6 gate)
+- `docs/phases/phase-preview-03.md` … `phase-preview-11.md` (+ later phase notes) — Preview increment plans
 - (published ADRs): `adr/0001-microkernel.md` (P4 host + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepted: egui), `adr/0005-offload-etat-de-l-art.md` (pre-P1), `adr/0006-license-split.md` (host AGPL+CLA vs guest Apache/MIT)
 

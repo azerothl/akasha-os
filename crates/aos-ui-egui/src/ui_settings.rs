@@ -23,7 +23,8 @@ fn catalogue_module_names<'a>(
 ) -> HashSet<String> {
     entries
         .into_iter()
-        .filter_map(|(name, kind)| (kind == "module").then(|| name.to_owned()))
+        .filter(|&(_, kind)| kind == "module")
+        .map(|(name, _)| name.to_owned())
         .collect()
 }
 

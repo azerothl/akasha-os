@@ -2,9 +2,10 @@
 
 **Langue :** [English](../development-plan.md) | Français
 
-> Version : 1.5  
-> Date : 19/08/2026  
-> Statut : plan de référence  
+> Version : 1.6  
+> Date : 15/09/2026  
+> Statut : plan de référence (fondation + détail early Preview)  
+> **Source de vérité calendrier pour les incréments Preview après P11 :** [STATUS.md](STATUS.md) (P12–P20 / 0.12.x–0.18.0, y compris P18–P19). Ne pas traiter le tableau d’overview seul comme exhaustif sans STATUS.  
 > Références : `specs-fonctionnelles.md`, `specs-techniques.md`, `reflexion-agent-os.md`, `FEATURES.md`, `plan-evolutions.md`
 
 ---
@@ -16,9 +17,11 @@ Le développement d'Agent OS a **deux couches** à ne pas fusionner :
 1. **Phases de fondation (P0–P5 + PV + PC)** — prouver placement, caps, WASM,
    sécurité, isolation hôte, échafaudage seL4, et la Preview installable.
    Fer nu = après PV (ADR 0001).
-2. **Incréments Preview (P03–P09)** — livrer des releases de l’appli hôte
+2. **Incréments Preview (P03 et suivants)** — livrer des releases de l’appli hôte
    **sans inventer une gate P6** tant que la cohorte PC est ouverte. Numérotation
-   `P0n` / Preview `0.n.0` (E* du [plan-evolutions.md](plan-evolutions.md)).
+   `P0n` / Preview `0.n.0` (puis `P1n` / lanes de patch) liée aux E* du
+   [plan-evolutions.md](plan-evolutions.md). Le détail après P11 vit dans
+   [STATUS.md](STATUS.md) et `docs/phases/`.
 
 P0–P5 prouvent et polissent le système **sur l'hôte** ; **PV** est l'échafaudage
 **noyau seL4** (VM QEMU, sans GPU) ; **PC** est la **Preview distribuable**
@@ -45,11 +48,19 @@ userspace avant d'engager le port microkernel.
 | **P09** | Hôte Preview Win/Linux | Preview **0.9.0** — E18 migrate mid-token + E19 modèles/options média + plugins chat média | livré | fait |
 | **P10** | Hôte Preview Win/Linux | Preview **0.10.0** — E7 TPM + E8 live + E9 + polish Media + seL4 interne | livré | fait |
 | **P11** | Hôte Preview Win/Linux | Preview **0.11.0** — E20 decode local (KV Q8, prefix cache, prompt-lookup C1) | livré | fait |
+| **P12** | Hôte Preview Win/Linux/macOS | Preview **0.12.0** — vision chat + ship macOS Apple Silicon (+ 0.12.1) | livré | fait |
+| **P13** | Hôte Preview Win/Linux/macOS | Preview **0.13.0** — Create référence/inpaint/vidéo courte + docs chat | livré | fait |
+| **P16** | Hôte Preview Win/Linux/macOS | Preview **0.16.0** — qualité canvas + ops modèles (+ 0.16.1/0.16.2) | livré | fait |
+| **P17** | Hôte Preview Win/Linux/macOS | Preview **0.17.x** — espace Create + chrome UI (+ 0.17.1 / 0.17.2) | livré | fait |
+| **P18** | Hôte Preview Win/Linux/macOS | **E22** instincts en session | livré | fait |
+| **P19** | Hôte Preview Win/Linux/macOS | **E23** plan de santé runtime | livré | fait |
+| **P20** | Hôte Preview Win/Linux/macOS | Preview **0.18.0** — Memory V2 défaut + ship P18/P19 + polish Notes/Chat/Canvas | livré | fait |
 
 **Total indicatif** (fondation) : ~60-80 semaines en séquence naïve ;
 **PV ∥ P5 ∥ PC** rapproche le chemin critique. Les incréments Preview
-(P03–P09) tournent sur la stack hôte déjà livrée. Ces durées sont des
+(P03 et suivants) tournent sur la stack hôte déjà livrée. Ces durées sont des
 ordres de grandeur — chaque gate de sortie prime sur le calendrier.
+Pour la liste livrée faisant autorité après P11, voir [STATUS.md](STATUS.md).
 
 ---
 
@@ -363,10 +374,12 @@ n'est pas le fer nu** (ADR 0001).
 # Linux : ./packaging/build-preview.sh
 ```
 
-> Statut PC (18/08/2026) : Preview **0.8.0** est la release hôte courante
-> (image/TTS, artefact CPU/GPU unifié, Providers). PC.1–PC.14 livrés depuis 0.1 ; le travail
-> produit suivant est les incréments P03–P09, pas un nouveau numéro PC.n.
-> Gate cohorte encore ouverte — voir `docs/INSTALL.md` et `docs/FEATURES.md`.
+> Statut PC (15/09/2026) : Preview **0.18.0** est la baseline hôte courante dans
+> `VERSION` / STATUS / FEATURES (les GitHub Releases peuvent retarder). PC.1–PC.14
+> livrés depuis 0.1 ; le travail produit suivant est les incréments Preview
+> (P03 et suivants — voir [STATUS.md](STATUS.md) après P11), pas un nouveau
+> numéro PC.n. Gate cohorte encore ouverte — voir `docs/INSTALL.md` et
+> `docs/FEATURES.md`.
 
 ### Risques spécifiques
 
@@ -406,12 +419,15 @@ Exploiter pleinement le GPU/NPU comme citoyen de première classe du scheduler, 
 
 ---
 
-## Incréments Preview (P03–P09)
+## Incréments Preview (P03 et suivants)
 
+Les checklists early (P03–P11) restent dans ce fichier. **Le statut de livraison
+P12+ est tenu dans [STATUS.md](STATUS.md)** pour que ce plan ne redevienne pas
+un calendrier périmé au-delà de la dernière section détaillée ci-dessous.
 Ces phases s’empilent **sur** la stack hôte PC. Elles **ne remplacent pas**
-P0–P5 / PV / PC et **ne sont pas** une gate P6. Détail :
+P0–P5 / PV / PC et **ne sont pas** une gate P6. Détail early :
 `docs/fr/phases/phase-preview-0n.md`. Catalogue livré : [FEATURES.md](FEATURES.md).
-Priorités : E1–E22 dans [plan-evolutions.md](plan-evolutions.md).
+Priorités : E1–E23 dans [plan-evolutions.md](plan-evolutions.md).
 
 ### P03 — Preview 0.3.0 (E1–E5) — fait
 
@@ -552,21 +568,25 @@ E7 TPM + E8 `aos-bridged` live + E9 chemin multi-GPU + polish Media + seL4 inter
 
 Détail : [phases/phase-preview-11.md](phases/phase-preview-11.md).
 
-### Reste après 0.11 (pas une nouvelle P6)
+### P12+ — voir STATUS (source de vérité)
 
-P11 est l’incrément Preview courant. Le reste est planifié quand le
-hardware ou un daemon existe ; toujours Horizon B / C :
+Les incréments Preview **après P11** (P12 vision+macOS, P13 Create média,
+P16–P17 canvas/Create chrome, P18 E22 instincts, P19 E23 santé, P20 / Preview
+**0.18.0**, plus lanes de patch) sont résumés dans [STATUS.md](STATUS.md) avec
+notes de phase sous `docs/phases/` quand elles existent. Ce plan **ne
+duplique pas** ces checklists — mettre à jour STATUS à chaque nouvelle Preview.
+
+### Reste (pas une nouvelle P6)
 
 | Item | Notes |
 |------|--------|
-| **E7 TPM** | Livré en 0.10 (enveloppe hôte ; pas de PCR) |
-| **E8 live** | Livré en 0.10 (`aos-bridged` opt-in) |
-| **E9 / P5.2** | Chemin code en 0.10 ; hard-green = run 2 GPU documenté |
+| **E9 hard-green** | Run 2 GPU documenté (chemin code en 0.10 avec skip 1 GPU) |
 | **P5.3 / E11** | `AccelDevice` + fer nu (après PV.4) |
 | **P5.5** | Hôte aarch64 validé |
 | **P5.4 restant** | Accessibilité (F-UI-08) |
 | **Cohorte PC** | 3 Windows + 1 Linux + 1 macOS Apple Silicon ; indépendante des incréments Preview |
 | **E12 / E13** | Horizon C (préemption cognitive, compositor / webview optionnelle) |
+| **PV.4+** | Fer nu seL4 (gates internes `sel4-pv-*` PV.1–PV.3 seulement en 0.10) |
 
 ---
 
@@ -582,7 +602,7 @@ P0 (simulateur)
        │                 ├──> PV (seL4 VM, sans GPU) [port noyau]
        │                 │     └──> fer nu (produit) [PV vert + AccelDevice P5.3]
        │                 └──> PC (Preview 0.1 installable)
-       │                       └──> P03 → P04 → P05 → P06 → P07 → P08 → P09
+       │                       └──> P03 → … → P11 → (P12+ dans STATUS)
        │                             (incréments Preview sur l'hôte ; pas P6)
        └──> (P1.7 aarch64, parallèle à P1, non bloquant)
 ```
@@ -592,9 +612,10 @@ P0 (simulateur)
 - P4 dépend de P3 (on ne porte pas des interfaces encore en mouvement)
 - **PV et P5 sont parallèles** (ADR 0001) : GPU sur l'hôte, noyau dans la VM
 - Le fer nu attend un gate PV vert, pas un passthrough GPU depuis Windows
-- **P03–P09 n'attendent pas la gate cohorte PC** ; ils ne doivent pas inventer un numéro P6
+- **P03 et suivants n'attendent pas la gate cohorte PC** ; ils ne doivent pas inventer un numéro P6
 - P08 (E16/E17) dépend du Model Subsystem P1 + E15 P07 si des kinds de widgets sont ajoutés ; il **ne** dépend **pas** de E9 / TPM / HTTP sibling live
 - P09 (E18 + E19) dépend de P08 E16 moteurs + E17 cancel+restart (migrate et packs média extra sur cette base)
+- Le séquençage P12+ est enregistré dans [STATUS.md](STATUS.md), pas dupliqué ici
 
 ---
 
@@ -605,14 +626,14 @@ P0 (simulateur)
 | Flux | Responsabilités | Phases principales |
 |------|-----------------|-------------------|
 | **Flux Noyau & Sécurité** | Microkernel, caps, IPC, drivers | P0, P4, **PV**, P5 |
-| **Flux Modèles & Inférence** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5, **P08**, **P09** |
-| **Flux Agents & UX** | Agent Runtime, UI, modules, mémoire, audit | P1, P2, P3, P5, **PC**, **P03–P09** |
+| **Flux Modèles & Inférence** | Model Subsystem, placement, scheduler, backends | P0, P1, P3, P5, **P08+** |
+| **Flux Agents & UX** | Agent Runtime, UI, modules, mémoire, audit | P1, P2, P3, P5, **PC**, **P03+** |
 
 Une équipe de 3-5 personnes peut couvrir ces 3 flux avec des rotations ; les phases sont pensées pour être majoritairement séquentielles mais avec des recouvrements partiels (ex. P1.7 aarch64 en parallèle de P1).
 
 ### Priorités par phase (rappel)
 
-Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvertes à la fin de P3** (sauf celles explicitement liées au microkernel, couvertes en P4). Les `Should` et `Could` sont répartis sur P4/PV/P5 ou reportés si nécessaire. Les incréments Preview (P03–P09) couvrent les priorités produit E* sur l'hôte sans attendre le reste P5.2 / PV.4 / cohorte PC.
+Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvertes à la fin de P3** (sauf celles explicitement liées au microkernel, couvertes en P4). Les `Should` et `Could` sont répartis sur P4/PV/P5 ou reportés si nécessaire. Les incréments Preview (P03 et suivants) couvrent les priorités produit E* sur l'hôte sans attendre le reste P5.2 / PV.4 / cohorte PC.
 
 ---
 
@@ -629,10 +650,10 @@ Les exigences `Must` de `specs-fonctionnelles.md` doivent être **toutes couvert
 
 - `specs-fonctionnelles.md` — exigences produit
 - `specs-techniques.md` — architecture technique
-- `FEATURES.md` — catalogue Preview livrée (actuellement 0.8.0)
-- `STATUS.md` — résumé des phases livrées
+- `FEATURES.md` — catalogue Preview livrée (actuellement **0.18.0**)
+- `STATUS.md` — résumé des phases livrées (**source de vérité** après P11)
 - `reflexion-agent-os.md` — cadrage et pistes ouvertes
-- `paysage-concurrentiel.md` — enquête OS / runtimes agentiques (août 2026)
-- `plan-evolutions.md` — priorités post-paysage E1–E22 (pas une gate P6)
-- `phases/phase-preview-03.md` … `phase-preview-09.md` — plans d’incréments Preview
+- `paysage-concurrentiel.md` — enquête OS / runtimes agentiques (septembre 2026)
+- `plan-evolutions.md` — priorités post-paysage E1–E23 (pas une gate P6)
+- `phases/phase-preview-03.md` … `phase-preview-11.md` (+ notes de phase ultérieures) — plans d’incréments Preview
 - (ADRs publiés) : `adr/0001-microkernel.md` (P4 hôte + **phase PV** seL4 VM), `adr/0002-model-placement.md` (P0), `adr/0003-ui-framework.md` (accepté : egui), `adr/0005-offload-etat-de-l-art.md` (pré-P1), `adr/0006-license-split.md` (hôte AGPL+CLA vs guest Apache/MIT)

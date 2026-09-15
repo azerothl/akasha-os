@@ -1829,13 +1829,11 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Library => {
                 let _ = self.cmd_tx.send(Cmd::UserLibraryList);
             }
-            Tab::Settings => {
-                // Avoid laying out the entire Settings tree on first open (Inter + "all"
-                // tessellation freezes the UI). Keep an explicit "all" pill for opt-in.
-                if self.settings_ui.section == "all" {
-                    self.settings_ui.section = "me".into();
-                }
-                // Fetch only what the landing section needs; heavier lists load on pill click.
+            // Avoid laying out the entire Settings tree on first open (Inter + "all"
+            // tessellation freezes the UI). Keep an explicit "all" pill for opt-in.
+            // Heavier lists load on pill click.
+            Tab::Settings if self.settings_ui.section == "all" => {
+                self.settings_ui.section = "me".into();
             }
             _ => {}
         }
