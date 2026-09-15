@@ -311,6 +311,16 @@ pub struct UiStrings {
     pub lan_node_name: &'static str,
     pub lan_node_address: &'static str,
     pub lan_node_fingerprint: &'static str,
+    pub lan_status_title: &'static str,
+    pub lan_status_ready: &'static str,
+    pub lan_status_error: &'static str,
+    pub lan_status_partial: &'static str,
+    pub lan_status_secret_missing: &'static str,
+    pub lan_status_bind_failed: &'static str,
+    pub lan_status_restart_required: &'static str,
+    pub lan_status_discovery_active: &'static str,
+    pub lan_status_discovery_inactive: &'static str,
+    pub lan_status_discovery_counters: &'static str,
     pub models_plan_button: &'static str,
     pub models_plan_title: &'static str,
     pub models_plan_hint: &'static str,
@@ -1519,6 +1529,18 @@ const EN: UiStrings = UiStrings {
     lan_node_name: "Display name",
     lan_node_address: "LAN address",
     lan_node_fingerprint: "Public-key fingerprint",
+    lan_status_title: "LAN status",
+    lan_status_ready: "Ready",
+    lan_status_error: "Error",
+    lan_status_partial: "Partial",
+    lan_status_secret_missing:
+        "LAN worker off: store a 64-hex session key in Settings → Secrets as \"{}\" and restart Preview.",
+    lan_status_bind_failed: "LAN worker off: could not bind the listener ({})",
+    lan_status_restart_required:
+        "Session key found — restart Preview so the LAN worker can listen for peers.",
+    lan_status_discovery_active: "Discovery active",
+    lan_status_discovery_inactive: "Discovery inactive",
+    lan_status_discovery_counters: "Discovery traffic: {} sent / {} received",
     models_plan_button: "Compare plans",
     models_plan_title: "Planner diagnostic",
     models_plan_hint: "Read-only comparison of automatic placement profiles. No model weights or prompts are sent.",
@@ -2717,6 +2739,18 @@ const FR: UiStrings = UiStrings {
     lan_node_name: "Nom affiché",
     lan_node_address: "Adresse LAN",
     lan_node_fingerprint: "Empreinte de clé publique",
+    lan_status_title: "État LAN",
+    lan_status_ready: "Prêt",
+    lan_status_error: "Erreur",
+    lan_status_partial: "Partiel",
+    lan_status_secret_missing:
+        "Worker LAN arrêté : enregistrez une clé de session hexadécimale (64 caractères) dans Paramètres → Secrets sous « {} », puis redémarrez Preview.",
+    lan_status_bind_failed: "Worker LAN arrêté : impossible d’ouvrir l’écoute ({})",
+    lan_status_restart_required:
+        "Clé de session trouvée — redémarrez Preview pour que le worker LAN écoute les pairs.",
+    lan_status_discovery_active: "Découverte active",
+    lan_status_discovery_inactive: "Découverte inactive",
+    lan_status_discovery_counters: "Trafic découverte : {} envoyés / {} reçus",
     models_plan_button: "Comparer les plans",
     models_plan_title: "Diagnostic du planner",
     models_plan_hint: "Comparaison en lecture seule des profils de placement. Aucun poids ni prompt n’est envoyé.",
@@ -3895,9 +3929,86 @@ pub fn routing_technical(t: &UiStrings, code: &str) -> &'static str {
     }
 }
 
+pub fn lan_worker_status_label(t: &UiStrings, worker_state: &str) -> &'static str {
+    match worker_state {
+        "ready" => t.lan_status_ready,
+        "secret_missing" | "bind_failed" | "restart_required" => t.lan_status_error,
+        "disabled" => t.lan_status_partial,
+        _ => t.lan_status_partial,
+    }
+}
+
+pub fn lan_worker_status_message(
+    t: &UiStrings,
+    worker_state: &str,
+    worker_detail: &str,
+    secret_name: &str,
+) -> String {
+    match worker_state {
+        "secret_missing" => t.lan_status_secret_missing.replace("{}", secret_name),
+        "bind_failed" => {
+            if worker_detail.is_empty() {
+                t.lan_status_bind_failed.replace("{}", "unknown error")
+            } else {
+                t.lan_status_bind_failed.replace("{}", worker_detail)
+            }
+        }
+        "restart_required" => t.lan_status_restart_required.to_string(),
+        "ready" if !worker_detail.is_empty() => worker_detail.to_string(),
+        _ => String::new(),
+    }
+}
+
+pub fn lan_discovery_telemetry_line(
+    t: &UiStrings,
+    discovery_active: bool,
+    discovery_tx: u64,
+    discovery_rx: u64,
+    discovery_detail: &str,
+) -> String {
+    let mut parts = Vec::new();
+    parts.push(
+        if discovery_active {
+            t.lan_status_discovery_active
+        } else {
+            t.lan_status_discovery_inactive
+        }
+        .to_string(),
+    );
+    if discovery_tx > 0 || discovery_rx > 0 {
+        let mut counters = t.lan_status_discovery_counters.to_string();
+        if let Some(idx) = counters.find("{}") {
+            counters.replace_range(idx..idx + 2, &discovery_tx.to_string());
+        }
+        if let Some(idx) = counters.find("{}") {
+            counters.replace_range(idx..idx + 2, &discovery_rx.to_string());
+        }
+        parts.push(counters);
+    }
+    if !discovery_detail.is_empty() {
+        parts.push(discovery_detail.to_string());
+    }
+    parts.join(" · ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lan_status_messages_use_secret_name_and_counters() {
+        let en = strings("en");
+        let msg = lan_worker_status_message(
+            &en,
+            "secret_missing",
+            "",
+            "lan_cluster_session_key",
+        );
+        assert!(msg.contains("lan_cluster_session_key"));
+        let counters = lan_discovery_telemetry_line(&en, true, 3, 1, "");
+        assert!(counters.contains('3'));
+        assert!(counters.contains('1'));
+    }
 
     #[test]
     fn settings_section_headings_en_fr() {

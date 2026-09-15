@@ -515,10 +515,79 @@ impl UiApp {
                             self.status = format!("{} — {}", t.settings_saved, t.lan_cluster_hint);
                         }
                         ui.label(t.lan_cluster_hint);
+                        if self.prefs.lan_cluster {
+                            let poll_due = ui.ctx().data_mut(|data| {
+                                let last = data.get_temp_mut_or::<f64>(
+                                    egui::Id::new("lan_status_poll"),
+                                    0.0,
+                                );
+                                let now = ui.input(|input| input.time);
+                                if now - *last > 5.0 {
+                                    *last = now;
+                                    true
+                                } else {
+                                    false
+                                }
+                            });
+                            if poll_due || self.models_ui.lan_cluster.is_none() {
+                                let _ = self.cmd_tx.send(Cmd::ModelClusterNodes);
+                            }
+                            if let Some(response) = &self.models_ui.lan_cluster {
+                                let worker_state = response.worker_state.as_str();
+                                let worker_ready = worker_state == "ready";
+                                let worker_error = matches!(
+                                    worker_state,
+                                    "secret_missing" | "bind_failed" | "restart_required"
+                                );
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(t.lan_status_title);
+                                    ui.colored_label(
+                                        if worker_ready {
+                                            egui::Color32::from_rgb(80, 190, 110)
+                                        } else if worker_error {
+                                            egui::Color32::from_rgb(220, 80, 80)
+                                        } else {
+                                            egui::Color32::from_rgb(220, 160, 70)
+                                        },
+                                        i18n::lan_worker_status_label(&t, worker_state),
+                                    );
+                                });
+                                let message = i18n::lan_worker_status_message(
+                                    &t,
+                                    worker_state,
+                                    &response.worker_detail,
+                                    &self.prefs.lan_session_key_secret,
+                                );
+                                if !message.is_empty() {
+                                    ui.colored_label(
+                                        if worker_error {
+                                            egui::Color32::from_rgb(220, 80, 80)
+                                        } else {
+                                            ui.visuals().weak_text_color()
+                                        },
+                                        message,
+                                    );
+                                }
+                                let discovery_line = i18n::lan_discovery_telemetry_line(
+                                    &t,
+                                    response.discovery_active,
+                                    response.discovery_tx,
+                                    response.discovery_rx,
+                                    &response.discovery_detail,
+                                );
+                                if !discovery_line.is_empty() {
+                                    ui.weak(discovery_line);
+                                }
+                            }
+                        }
                         if let Some(status) = &self.models_ui.lan_layer_pipeline {
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(t.lan_layer_pipeline_status);
-                                let ready = status.enabled && status.adapter_ready;
+                                let cluster = self.models_ui.lan_cluster.as_ref();
+                                let worker_ready =
+                                    cluster.map(|c| c.worker_state == "ready").unwrap_or(false);
+                                let ready =
+                                    status.enabled && status.adapter_ready && worker_ready;
                                 ui.colored_label(
                                     if ready {
                                         egui::Color32::from_rgb(80, 190, 110)

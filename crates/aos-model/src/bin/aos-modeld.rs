@@ -3,7 +3,7 @@
 //! Usage : `aos-modeld [config.yaml]` (défaut `demo/modeld.dev.yaml`).
 
 use aos_ipc::{BusClient, BusService, StreamHandle};
-use aos_model::{media, providers, ModelSubsystem, ModeldConfig};
+use aos_model::{lan_status, media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     reachable_lan_address, worker_bind_address, AdapterExecutionPhase, BackendKind,
     DistributedWork, InferencePlanDiagnostic, LanActivationAssembly, LanChatMessage,
@@ -2405,6 +2405,7 @@ async fn main() {
         let registry = load_lan_registry(&config, &preference_home);
         Arc::new(Mutex::new(LanCluster::new(registry)))
     };
+    let lan_snapshot = Arc::new(Mutex::new(lan_status::LanRuntimeSnapshot::default()));
     if config.lan_cluster_enabled_at(&preference_home)
         && config.lan_auto_discovery_at(&preference_home)
     {
@@ -2433,6 +2434,7 @@ async fn main() {
         };
         let cluster = lan_cluster.clone();
         let discovery_home = preference_home.clone();
+        let lan_snapshot_task = lan_snapshot.clone();
         tokio::spawn(async move {
             let bind_address = format!("0.0.0.0:{port}");
             let broadcast_address = format!("255.255.255.255:{port}");
@@ -2440,16 +2442,34 @@ async fn main() {
                 Ok(socket) => socket,
                 Err(error) => {
                     eprintln!("[aos-modeld] découverte LAN désactivée: {error}");
+                    if let Ok(mut snapshot) = lan_snapshot_task.lock() {
+                        snapshot.discovery_active = false;
+                        snapshot.discovery_detail = error;
+                    }
                     return;
                 }
             };
+            if let Ok(mut snapshot) = lan_snapshot_task.lock() {
+                snapshot.discovery_active = true;
+                snapshot.discovery_detail.clear();
+            }
             let mut announce_tick = tokio::time::interval(std::time::Duration::from_secs(5));
             loop {
                 tokio::select! {
                     _ = announce_tick.tick() => {
                         if let Some(advertisement) = advertisement.as_ref() {
-                            if let Err(error) = socket.announce(advertisement).await {
-                                eprintln!("[aos-modeld] annonce LAN: {error}");
+                            match socket.announce(advertisement).await {
+                                Ok(()) => {
+                                    if let Ok(mut snapshot) = lan_snapshot_task.lock() {
+                                        snapshot.discovery_tx = snapshot.discovery_tx.saturating_add(1);
+                                    }
+                                }
+                                Err(error) => {
+                                    eprintln!("[aos-modeld] annonce LAN: {error}");
+                                    if let Ok(mut snapshot) = lan_snapshot_task.lock() {
+                                        snapshot.discovery_detail = error;
+                                    }
+                                }
                             }
                         }
                     }
@@ -2458,6 +2478,9 @@ async fn main() {
                             Ok(node) => {
                                 if node.node_id == local_node.node_id {
                                     continue;
+                                }
+                                if let Ok(mut snapshot) = lan_snapshot_task.lock() {
+                                    snapshot.discovery_rx = snapshot.discovery_rx.saturating_add(1);
                                 }
                                 if let Ok(mut cluster) = cluster.lock() {
                                     if cluster.registry_mut().try_discover(node).is_ok() {
@@ -2468,7 +2491,12 @@ async fn main() {
                                     }
                                 }
                             }
-                            Err(error) => eprintln!("[aos-modeld] réception découverte LAN: {error}"),
+                            Err(error) => {
+                                eprintln!("[aos-modeld] réception découverte LAN: {error}");
+                                if let Ok(mut snapshot) = lan_snapshot_task.lock() {
+                                    snapshot.discovery_detail = error;
+                                }
+                            }
                         }
                     }
                 }
@@ -2494,18 +2522,21 @@ async fn main() {
         let listen_address =
             worker_bind_address(&config.lan_listen_address_at(&preference_home));
         let secret_name = config.lan_session_key_secret_at(&preference_home);
+        let lan_snapshot_worker = lan_snapshot.clone();
         match load_lan_session_key(&bus, &secret_name).await {
             Ok(session_key) => {
                 let empty_registry = LanPairingRegistry::default();
                 match LanTcpListener::bind(&local_node_id, &listen_address, &empty_registry).await {
                     Ok(listener) => {
-                        eprintln!(
-                            "[aos-modeld] worker LAN prêt sur {}",
-                            listener
-                                .local_addr()
-                                .map(|address| address.to_string())
-                                .unwrap_or_else(|_| listen_address.clone())
-                        );
+                        let bound = listener
+                            .local_addr()
+                            .map(|address| address.to_string())
+                            .unwrap_or_else(|_| listen_address.clone());
+                        eprintln!("[aos-modeld] worker LAN prêt sur {bound}");
+                        if let Ok(mut snapshot) = lan_snapshot_worker.lock() {
+                            snapshot.worker_ready = true;
+                            snapshot.worker_detail = bound;
+                        }
                         let cluster = lan_cluster.clone();
                         let subsystem_task = subsystem.clone();
                         let worker_registry = Arc::new(Mutex::new(LanWorkerRegistry::default()));
@@ -2554,10 +2585,22 @@ async fn main() {
                             }
                         });
                     }
-                    Err(error) => eprintln!("[aos-modeld] worker LAN désactivé: {error}"),
+                    Err(error) => {
+                        eprintln!("[aos-modeld] worker LAN désactivé: {error}");
+                        if let Ok(mut snapshot) = lan_snapshot_worker.lock() {
+                            snapshot.worker_ready = false;
+                            snapshot.worker_detail = error;
+                        }
+                    }
                 }
             }
-            Err(error) => eprintln!("[aos-modeld] worker LAN désactivé: {error}"),
+            Err(error) => {
+                eprintln!("[aos-modeld] worker LAN désactivé: {error}");
+                if let Ok(mut snapshot) = lan_snapshot_worker.lock() {
+                    snapshot.worker_ready = false;
+                    snapshot.worker_detail = error;
+                }
+            }
         }
     }
 
@@ -2882,17 +2925,46 @@ async fn main() {
         let cluster = lan_cluster.clone();
         let model_config = config.clone();
         let preference_home = preference_home.clone();
+        let lan_snapshot = lan_snapshot.clone();
+        let bus = bus.clone();
         svc.on("model.cluster.nodes", move |ctx| {
             let cluster = cluster.clone();
             let model_config = model_config.clone();
             let preference_home = preference_home.clone();
+            let lan_snapshot = lan_snapshot.clone();
+            let bus = bus.clone();
             async move {
                 let enabled = model_config.lan_cluster_enabled_at(&preference_home);
+                let secret_name = model_config.lan_session_key_secret_at(&preference_home);
+                let snapshot = lan_snapshot
+                    .lock()
+                    .map(|snapshot| snapshot.clone())
+                    .unwrap_or_default();
+                let (session_key_available, session_key_error) = if enabled {
+                    match load_lan_session_key(&bus, &secret_name).await {
+                        Ok(_) => (true, String::new()),
+                        Err(error) => (false, error),
+                    }
+                } else {
+                    (false, String::new())
+                };
+                let status = lan_status::compute_lan_cluster_status(
+                    enabled,
+                    session_key_available,
+                    &session_key_error,
+                    &snapshot,
+                );
                 let response = cluster
                     .lock()
                     .map(|cluster| LanClusterNodesResponse {
                         enabled,
                         nodes: cluster.registry().nodes().map(lan_node_info).collect(),
+                        worker_state: status.worker_state,
+                        worker_detail: status.worker_detail,
+                        discovery_active: status.discovery_active,
+                        discovery_detail: status.discovery_detail,
+                        discovery_tx: status.discovery_tx,
+                        discovery_rx: status.discovery_rx,
                     })
                     .map_err(|_| "verrou cluster indisponible".to_string());
                 match response {
