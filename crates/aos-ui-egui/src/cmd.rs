@@ -110,6 +110,9 @@ pub(crate) enum Cmd {
         name: String,
         value: String,
     },
+    SecretGet {
+        name: String,
+    },
     SecretList,
     NetSetMode {
         online: bool,
@@ -723,6 +726,14 @@ pub(crate) enum Evt {
     SecretList {
         names: Vec<String>,
         encrypted: bool,
+    },
+    SecretGot {
+        name: String,
+        value: String,
+    },
+    SecretGetFailed {
+        name: String,
+        error: String,
     },
     WebResults(Vec<WebSearchHit>),
     BrowsePreview(String),

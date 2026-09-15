@@ -10,6 +10,16 @@ impl UiApp {
         self.settings_ui.apply_secret_list(names, encrypted);
     }
 
+    pub(crate) fn on_secret_got(&mut self, name: String, value: String) {
+        self.settings_ui.secrets_revealed.insert(name, value);
+    }
+
+    pub(crate) fn on_secret_get_failed(&mut self, name: String, error: String) {
+        self.settings_ui.secrets_reveal_pending = None;
+        self.toasts
+            .push_error(format!("{name}: {error}"));
+    }
+
     pub(crate) fn on_catalogue(&mut self, catalogue: ModuleCatalogue) {
         self.settings_ui.set_catalogue(catalogue);
     }

@@ -1,6 +1,7 @@
 //! Interface font selection — bundled OFL faces plus the egui default stack.
 
 use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
+use std::sync::Mutex;
 
 /// English / French labels for each [`crate::prefs::UI_FONT_IDS`] entry.
 pub const UI_FONT_LABELS: [(&str, &str); 4] = [
@@ -9,6 +10,9 @@ pub const UI_FONT_LABELS: [(&str, &str); 4] = [
     ("Source Sans", "Source Sans"),
     ("Atkinson", "Atkinson"),
 ];
+
+/// Process-wide last applied face — survives egui Context quirks better than temp data.
+static APPLIED_UI_FONT: Mutex<String> = Mutex::new(String::new());
 
 pub fn ui_font_label(id: &str, fr: bool) -> &'static str {
     let key = crate::prefs::normalize_ui_font(id);
@@ -53,9 +57,20 @@ pub fn interface_font_id_small(ui: &egui::Ui) -> egui::FontId {
     egui::FontId::new(body.size * 0.92, body.family)
 }
 
-/// Apply the user's interface font. Safe to call every frame (same pattern as theme).
+/// Apply the user's interface font when the preference changes.
+///
+/// Must **not** call [`egui::Context::set_fonts`] every frame: egui compares the
+/// full TTF bytes on each call, which freezes the UI (especially Settings) when
+/// a bundled face like Inter is selected.
 pub fn apply_ui_font(ctx: &egui::Context, font_id: &str) {
     let choice = crate::prefs::normalize_ui_font(font_id);
+    {
+        let applied = APPLIED_UI_FONT.lock().unwrap_or_else(|e| e.into_inner());
+        if applied.as_str() == choice {
+            return;
+        }
+    }
+
     let mut fonts = default_fonts();
     match choice {
         "default" => {}
@@ -77,6 +92,10 @@ pub fn apply_ui_font(ctx: &egui::Context, font_id: &str) {
             )),
         ),
         _ => {}
+    }
+    // Record before set_fonts so a slow/re-entrant pass cannot re-install Inter.
+    if let Ok(mut applied) = APPLIED_UI_FONT.lock() {
+        *applied = choice.to_owned();
     }
     ctx.set_fonts(fonts);
 }

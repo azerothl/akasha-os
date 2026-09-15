@@ -33,6 +33,15 @@ impl UiApp {
     }
 
     pub(crate) fn on_model_cluster_nodes(&mut self, response: aos_proto::LanClusterNodesResponse) {
+        crate::lan_trace::log(
+            "ui.evt.cluster_nodes",
+            &format!(
+                "worker={} nodes={} enabled={}",
+                response.worker_state,
+                response.nodes.len(),
+                response.enabled
+            ),
+        );
         self.models_ui.set_lan_cluster(response);
     }
 
@@ -40,10 +49,19 @@ impl UiApp {
         &mut self,
         response: aos_proto::LanClusterLayerPipelineStatusResponse,
     ) {
+        crate::lan_trace::log(
+            "ui.evt.layer_pipeline",
+            &format!(
+                "enabled={} adapter_ready={} reason={}",
+                response.enabled, response.adapter_ready, response.reason
+            ),
+        );
         self.models_ui.set_lan_layer_pipeline(response);
     }
 
     pub(crate) fn on_model_cluster_error(&mut self, error: String) {
+        crate::lan_trace::log("ui.evt.cluster_error", &error);
+        self.models_ui.clear_lan_nodes_inflight();
         self.status = error.clone();
         self.toasts.push_error(error);
     }

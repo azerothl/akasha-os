@@ -17,6 +17,13 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 
+/// Plaintext rejection marker written before closing a refused worker socket.
+///
+/// Encoded as the first little-endian `u32` length word so a coordinator waiting
+/// for a secure frame can surface the reason instead of a bare TCP reset.
+const LAN_REJECT_MAGIC: u32 = u32::from_le_bytes(*b"LANR");
+const LAN_REJECT_MAX_REASON_BYTES: usize = 2048;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NodeTrust {
@@ -1055,6 +1062,9 @@ impl LanPairingRegistry {
             return Err("empreinte de clé inattendue".into());
         }
         node.trust = NodeTrust::Paired;
+        // Pairing is explicit trust: Preview LAN workers may receive model shards
+        // when the coordinator also opts in via allow_sensitive_data.
+        ensure_sensitive_data_capability(&mut node.capabilities);
         Ok(())
     }
 
@@ -1127,6 +1137,13 @@ impl LanPairingRegistry {
         self.nodes.values()
     }
 
+    /// Grant `sensitive-data` on every known node (Preview LAN workers).
+    pub fn ensure_sensitive_data_capabilities(&mut self) {
+        for node in self.nodes.values_mut() {
+            ensure_sensitive_data_capability(&mut node.capabilities);
+        }
+    }
+
     pub fn paired_nodes(&self) -> impl Iterator<Item = &LanNode> {
         self.nodes
             .values()
@@ -1143,6 +1160,12 @@ impl LanPairingRegistry {
             registry.try_discover(node)?;
         }
         Ok(registry)
+    }
+}
+
+fn ensure_sensitive_data_capability(capabilities: &mut Vec<String>) {
+    if !capabilities.iter().any(|cap| cap == "sensitive-data") {
+        capabilities.push("sensitive-data".into());
     }
 }
 
@@ -1389,16 +1412,39 @@ impl LanTcpListener {
             .accept()
             .await
             .map_err(|e| format!("accept LAN impossible: {e}"))?;
-        let peer = registry
-            .node_for_ip(remote_address.ip())
-            .ok_or("adresse source LAN inconnue")?;
+        let peer = match registry.node_for_ip(remote_address.ip()) {
+            Some(peer) => peer,
+            None => {
+                let reason = format!(
+                    "adresse source LAN inconnue ({}); appairer ce nœud côté worker",
+                    remote_address.ip()
+                );
+                let _ = write_lan_reject(&mut stream, &reason).await;
+                return Err(reason);
+            }
+        };
         let peer_node_id = peer.node_id.clone();
-        registry.authorize_peer(&peer_node_id)?;
+        if let Err(error) = registry.authorize_peer(&peer_node_id) {
+            let _ = write_lan_reject(&mut stream, &error).await;
+            return Err(error);
+        }
 
-        let frame =
-            read_frame_from_stream(&mut stream, LanTcpTransport::DEFAULT_MAX_FRAME_BYTES).await?;
+        let frame = match read_frame_from_stream(
+            &mut stream,
+            LanTcpTransport::DEFAULT_MAX_FRAME_BYTES,
+        )
+        .await
+        {
+            Ok(frame) => frame,
+            Err(error) => {
+                let _ = write_lan_reject(&mut stream, &error).await;
+                return Err(error);
+            }
+        };
         if frame.node_id != peer_node_id || frame.work_id.trim().is_empty() {
-            return Err("première trame LAN inattendue".into());
+            let reason = "première trame LAN inattendue".to_string();
+            let _ = write_lan_reject(&mut stream, &reason).await;
+            return Err(reason);
         }
         let work_id = frame.work_id.clone();
         let mut transport = LanTcpTransport::from_stream(
@@ -1408,16 +1454,32 @@ impl LanTcpListener {
             work_id.clone(),
             key,
         );
-        let plaintext = transport.channel.receive(&frame)?;
-        let hello: LanWorkMessage = ciborium::from_reader(Cursor::new(plaintext))
-            .map_err(|e| format!("décodage de hello LAN: {e}"))?;
+        let plaintext = match transport.channel.receive(&frame) {
+            Ok(plaintext) => plaintext,
+            Err(error) => {
+                let _ = write_lan_reject(&mut transport.stream, &error).await;
+                return Err(error);
+            }
+        };
+        let hello: LanWorkMessage = match ciborium::from_reader(Cursor::new(plaintext)) {
+            Ok(hello) => hello,
+            Err(error) => {
+                let reason = format!("décodage de hello LAN: {error}");
+                let _ = write_lan_reject(&mut transport.stream, &reason).await;
+                return Err(reason);
+            }
+        };
         match hello {
             LanWorkMessage::Hello {
                 work_id: hello_work_id,
                 node_id,
                 protocol_version,
             } if hello_work_id == work_id && node_id == peer_node_id && protocol_version == 1 => {}
-            _ => return Err("handshake LAN sans hello valide".into()),
+            _ => {
+                let reason = "handshake LAN sans hello valide".to_string();
+                let _ = write_lan_reject(&mut transport.stream, &reason).await;
+                return Err(reason);
+            }
         }
 
         let control_work = DistributedWork {
@@ -1493,7 +1555,20 @@ impl LanTcpTransport {
                 work,
             )
             .await?;
-        let hello = transport.receive_message(work).await?;
+        let hello = transport.receive_message(work).await.map_err(|error| {
+            if error.starts_with("refus LAN distant:") {
+                error
+            } else if is_lan_connection_reset(&error) {
+                format!(
+                    "handshake LAN interrompu avec {address}: le nœud distant a fermé la connexion \
+(appairage réciproque manquant, clé de session différente, ou worker LAN inactif/obsolète). \
+Sur le nœud distant: appairer ce coordinateur, utiliser le même secret de session, \
+mettre à jour AgentOS-Preview, puis redémarrer aos-modeld."
+                )
+            } else {
+                error
+            }
+        })?;
         if !matches!(hello, LanWorkMessage::Hello { .. }) {
             return Err("handshake LAN sans réponse hello".into());
         }
@@ -1610,7 +1685,27 @@ async fn read_frame_from_stream(
     let length = stream
         .read_u32()
         .await
-        .map_err(|e| format!("lecture de trame LAN: {e}"))? as usize;
+        .map_err(|e| map_lan_io_error("lecture de trame LAN", e))?;
+    if length == LAN_REJECT_MAGIC {
+        let reason_len = stream
+            .read_u32()
+            .await
+            .map_err(|e| map_lan_io_error("lecture de refus LAN", e))? as usize;
+        if reason_len == 0 || reason_len > LAN_REJECT_MAX_REASON_BYTES {
+            return Err("refus LAN distant illisible".into());
+        }
+        let mut reason = vec![0; reason_len];
+        stream
+            .read_exact(&mut reason)
+            .await
+            .map_err(|e| map_lan_io_error("lecture de refus LAN", e))?;
+        let reason = String::from_utf8_lossy(&reason).trim().to_string();
+        if reason.is_empty() {
+            return Err("refus LAN distant sans motif".into());
+        }
+        return Err(format!("refus LAN distant: {reason}"));
+    }
+    let length = length as usize;
     if length == 0 || length > max_frame_bytes {
         return Err("taille de trame LAN refusée".into());
     }
@@ -1618,8 +1713,58 @@ async fn read_frame_from_stream(
     stream
         .read_exact(&mut encoded)
         .await
-        .map_err(|e| format!("lecture de trame LAN: {e}"))?;
+        .map_err(|e| map_lan_io_error("lecture de trame LAN", e))?;
     ciborium::from_reader(Cursor::new(encoded)).map_err(|e| format!("décodage de trame LAN: {e}"))
+}
+
+async fn write_lan_reject(stream: &mut tokio::net::TcpStream, reason: &str) -> Result<(), String> {
+    let reason = reason.trim().as_bytes();
+    if reason.is_empty() || reason.len() > LAN_REJECT_MAX_REASON_BYTES {
+        return Err("motif de refus LAN invalide".into());
+    }
+    stream
+        .write_u32(LAN_REJECT_MAGIC)
+        .await
+        .map_err(|e| map_lan_io_error("écriture de refus LAN", e))?;
+    stream
+        .write_u32(reason.len() as u32)
+        .await
+        .map_err(|e| map_lan_io_error("écriture de refus LAN", e))?;
+    stream
+        .write_all(reason)
+        .await
+        .map_err(|e| map_lan_io_error("écriture de refus LAN", e))?;
+    stream
+        .flush()
+        .await
+        .map_err(|e| map_lan_io_error("écriture de refus LAN", e))
+}
+
+fn map_lan_io_error(prefix: &str, error: std::io::Error) -> String {
+    let message = format!("{prefix}: {error}");
+    if is_lan_connection_reset(&message) {
+        format!(
+            "{message} (le nœud distant a coupé le socket — souvent appairage réciproque manquant ou clé de session différente)"
+        )
+    } else {
+        message
+    }
+}
+
+fn is_lan_connection_reset(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("10054")
+        || lower.contains("10053")
+        || lower.contains("connection reset")
+        || lower.contains("connection abort")
+        || lower.contains("forcibly closed")
+        || lower.contains("fermée par")
+        || lower.contains("fermee par")
+        || lower.contains("abandonnée")
+        || lower.contains("abandonnee")
+        || lower.contains("broken pipe")
+        || lower.contains("unexpected eof")
+        || lower.contains("early eof")
 }
 
 fn frame_aad(node_id: &str, work_id: &str, sequence: u64) -> Vec<u8> {
@@ -1864,6 +2009,27 @@ mod tests {
         assert!(registry.authorize("n1", &work).is_ok());
         registry.revoke("n1");
         assert!(registry.authorize("n1", &work).is_err());
+    }
+
+    #[test]
+    fn pairing_grants_sensitive_data_for_model_transfer() {
+        let mut registry = LanPairingRegistry::default();
+        registry.discover(node());
+        let sensitive = DistributedWork {
+            work_id: "w".into(),
+            model_id: "m".into(),
+            shard_ids: vec![1],
+            allow_sensitive_data: true,
+            encrypted_transport: true,
+        };
+        registry.pair("n1", "abc").unwrap();
+        assert!(registry
+            .get("n1")
+            .unwrap()
+            .capabilities
+            .iter()
+            .any(|cap| cap == "sensitive-data"));
+        assert!(registry.authorize("n1", &sensitive).is_ok());
     }
 
     #[test]

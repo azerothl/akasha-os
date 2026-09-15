@@ -1222,9 +1222,46 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 Ok(_) => {
                     let _ =
                         evt_tx.send(Evt::Status(format!("secret `{name}` enregistré (chiffré)")));
+                    // Refresh names so custom keys appear immediately.
+                    if let Ok(r) = bus
+                        .call::<SecretListRequest, SecretListResponse>(
+                            "secrets.list",
+                            &SecretListRequest {},
+                            vec![],
+                        )
+                        .await
+                    {
+                        let _ = evt_tx.send(Evt::SecretList {
+                            names: r.names,
+                            encrypted: r.encrypted,
+                        });
+                    }
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::SecretGet { name } => {
+            match bus
+                .call::<aos_proto::SecretGetRequest, String>(
+                    "secrets.get",
+                    &aos_proto::SecretGetRequest {
+                        name: name.clone(),
+                        actor: "ui-egui".into(),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(value) => {
+                    let _ = evt_tx.send(Evt::SecretGot { name, value });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::SecretGetFailed {
+                        name,
+                        error: e.to_string(),
+                    });
                 }
             }
         }
@@ -3030,12 +3067,24 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             }
         }
         Cmd::ModelClusterNodes => {
+            let t0 = std::time::Instant::now();
+            crate::lan_trace::log("rt.ModelClusterNodes.start", "");
             match bus
                 .call::<(), aos_proto::LanClusterNodesResponse>("model.cluster.nodes", &(), vec![])
                 .await
             {
                 Ok(nodes) => {
+                    crate::lan_trace::log(
+                        "rt.model.cluster.nodes.ok",
+                        &format!(
+                            "elapsed_ms={} worker={} nodes={}",
+                            t0.elapsed().as_millis(),
+                            nodes.worker_state,
+                            nodes.nodes.len()
+                        ),
+                    );
                     let _ = evt_tx.send(Evt::ModelClusterNodes(nodes));
+                    let t1 = std::time::Instant::now();
                     match bus
                         .call::<(), aos_proto::LanClusterLayerPipelineStatusResponse>(
                             "model.cluster.layer_pipeline_status",
@@ -3045,14 +3094,26 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         .await
                     {
                         Ok(status) => {
+                            crate::lan_trace::log(
+                                "rt.layer_pipeline.ok",
+                                &format!("elapsed_ms={}", t1.elapsed().as_millis()),
+                            );
                             let _ = evt_tx.send(Evt::ModelClusterLayerPipelineStatus(status));
                         }
                         Err(e) => {
+                            crate::lan_trace::log(
+                                "rt.layer_pipeline.err",
+                                &format!("elapsed_ms={} err={e}", t1.elapsed().as_millis()),
+                            );
                             let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
                         }
                     }
                 }
                 Err(e) => {
+                    crate::lan_trace::log(
+                        "rt.model.cluster.nodes.err",
+                        &format!("elapsed_ms={} err={e}", t0.elapsed().as_millis()),
+                    );
                     let _ = evt_tx.send(Evt::ModelClusterOperationFailed(e.to_string()));
                 }
             }
@@ -3282,7 +3343,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         display_name,
                         address,
                         public_key_fingerprint,
-                        capabilities: Vec::new(),
+                        capabilities: vec!["sensitive-data".into()],
                     },
                     vec![],
                 )

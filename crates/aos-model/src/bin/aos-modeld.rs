@@ -228,15 +228,23 @@ fn lan_registry_path(home: &std::path::Path) -> std::path::PathBuf {
 }
 
 fn load_lan_registry(config: &ModeldConfig, home: &std::path::Path) -> LanPairingRegistry {
-    if let Ok(raw) = std::fs::read_to_string(lan_registry_path(home)) {
+    let mut registry = if let Ok(raw) = std::fs::read_to_string(lan_registry_path(home)) {
         if let Ok(mut registry) = serde_json::from_str::<LanPairingRegistry>(&raw) {
             for node in config.lan_cluster.nodes.clone() {
                 let _ = registry.try_discover(node);
             }
-            return registry;
+            registry
+        } else {
+            LanPairingRegistry::from_nodes(config.lan_cluster.nodes.clone()).unwrap_or_default()
         }
-    }
-    LanPairingRegistry::from_nodes(config.lan_cluster.nodes.clone()).unwrap_or_default()
+    } else {
+        LanPairingRegistry::from_nodes(config.lan_cluster.nodes.clone()).unwrap_or_default()
+    };
+    // Older registries omitted capabilities; Preview workers always accept
+    // sensitive shards once paired (coordinator still opts in per job).
+    registry.ensure_sensitive_data_capabilities();
+    let _ = persist_lan_registry(&registry, home);
+    registry
 }
 
 fn persist_lan_registry(
@@ -293,6 +301,42 @@ async fn load_lan_session_key(bus: &BusClient, secret_name: &str) -> Result<LanS
         .await
         .map_err(|error| format!("clé LAN indisponible: {error}"))?;
     parse_lan_session_key(&secret)
+}
+
+fn secrets_service_not_ready(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("notfound")
+        || lower.contains("aucun service")
+        || lower.contains("closed")
+        || lower.contains("connexion")
+}
+
+/// Wait for platformd to advertise `secrets.get` (startup race with modeld).
+async fn load_lan_session_key_ready(
+    bus: &BusClient,
+    secret_name: &str,
+) -> Result<LanSessionKey, String> {
+    const ATTEMPTS: u32 = 40;
+    const DELAY: std::time::Duration = std::time::Duration::from_millis(250);
+    let mut last = String::new();
+    for attempt in 1..=ATTEMPTS {
+        match load_lan_session_key(bus, secret_name).await {
+            Ok(key) => {
+                if attempt > 1 {
+                    eprintln!(
+                        "[aos-modeld] secrets.get prêt après {attempt} tentative(s) pour `{secret_name}`"
+                    );
+                }
+                return Ok(key);
+            }
+            Err(error) if secrets_service_not_ready(&error) && attempt < ATTEMPTS => {
+                last = error;
+                tokio::time::sleep(DELAY).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last)
 }
 
 async fn send_lan_cancel(
@@ -2418,7 +2462,7 @@ async fn main() {
             address: advertised_address,
             public_key_fingerprint: config.lan_public_key_fingerprint_at(&preference_home),
             trust: NodeTrust::Unpaired,
-            capabilities: Vec::new(),
+            capabilities: vec!["sensitive-data".into()],
         };
         let advertisement = if local_node.public_key_fingerprint.trim().is_empty() {
             eprintln!(
@@ -2523,7 +2567,8 @@ async fn main() {
             worker_bind_address(&config.lan_listen_address_at(&preference_home));
         let secret_name = config.lan_session_key_secret_at(&preference_home);
         let lan_snapshot_worker = lan_snapshot.clone();
-        match load_lan_session_key(&bus, &secret_name).await {
+        // Retry: platformd may not have advertised secrets.get yet when modeld boots.
+        match load_lan_session_key_ready(&bus, &secret_name).await {
             Ok(session_key) => {
                 let empty_registry = LanPairingRegistry::default();
                 match LanTcpListener::bind(&local_node_id, &listen_address, &empty_registry).await {

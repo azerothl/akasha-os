@@ -1,9 +1,8 @@
 //! Lecteur GGUF minimal indépendant de llama.cpp.
 //!
 //! Il valide l'en-tête, les métadonnées et l'index des tenseurs. La lecture de
-//! données est volontairement limitée à F32 pour fournir une première
-//! référence sûre à l'adaptateur RPC ; les blocs quantifiés nécessitent un
-//! décodeur par format et sont refusés explicitement.
+//! données couvre F32/F16/BF16 et les blocs quantifiés courants (Q4_0…Q6_K)
+//! pour l'adaptateur RPC Akasha ; les autres types restent refusés.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -20,6 +19,8 @@ const MAX_TENSORS: u64 = 1_000_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GgufTensorType {
     F32,
+    F16,
+    BF16,
     Q4_0,
     Q4_1,
     Q5_0,
@@ -134,6 +135,7 @@ impl GgufModel {
             }
             let tensor_type = match reader.u32()? {
                 0 => GgufTensorType::F32,
+                1 => GgufTensorType::F16,
                 2 => GgufTensorType::Q4_0,
                 3 => GgufTensorType::Q4_1,
                 6 => GgufTensorType::Q5_0,
@@ -144,6 +146,7 @@ impl GgufModel {
                 12 => GgufTensorType::Q4K,
                 13 => GgufTensorType::Q5K,
                 14 => GgufTensorType::Q6K,
+                30 => GgufTensorType::BF16,
                 other => GgufTensorType::Other(other),
             };
             let offset = reader.u64()?;
@@ -368,6 +371,8 @@ impl GgufModel {
                 .iter()
                 .map(|chunk| f32::from_le_bytes(*chunk))
                 .collect(),
+            GgufTensorType::F16 => decode_f16(bytes, input)?,
+            GgufTensorType::BF16 => decode_bf16(bytes, input)?,
             GgufTensorType::Q4_0 => decode_q4_0(bytes, input)?,
             GgufTensorType::Q4_1 => decode_q4_1(bytes, input)?,
             GgufTensorType::Q5_0 => decode_q5_0(bytes, input)?,
@@ -394,53 +399,27 @@ impl GgufModel {
             .ok_or_else(|| format!("tenseur GGUF absent: {name}"))?;
         let size = tensor_size(info)? as usize;
         let start = self.data_start as usize + info.offset as usize;
+        let elements = info.dimensions.iter().product::<u64>() as usize;
+        let slice = &self.bytes.as_slice()[start..start + size];
         match info.tensor_type {
-            GgufTensorType::F32 => Ok(self.bytes.as_slice()[start..start + size]
+            GgufTensorType::F32 => Ok(slice
                 .as_chunks::<4>()
                 .0
                 .iter()
                 .map(|bytes| f32::from_le_bytes(*bytes))
                 .collect()),
-            GgufTensorType::Q4_0 => decode_q4_0(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q4_1 => decode_q4_1(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q5_0 => decode_q5_0(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q5_1 => decode_q5_1(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q8_0 => decode_q8_0(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q2K => decode_q2_k(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q3K => decode_q3_k(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q4K => decode_q4_k(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q5K => decode_q5_k(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
-            GgufTensorType::Q6K => decode_q6_k(
-                &self.bytes.as_slice()[start..start + size],
-                info.dimensions.iter().product::<u64>() as usize,
-            ),
+            GgufTensorType::F16 => decode_f16(slice, elements),
+            GgufTensorType::BF16 => decode_bf16(slice, elements),
+            GgufTensorType::Q4_0 => decode_q4_0(slice, elements),
+            GgufTensorType::Q4_1 => decode_q4_1(slice, elements),
+            GgufTensorType::Q5_0 => decode_q5_0(slice, elements),
+            GgufTensorType::Q5_1 => decode_q5_1(slice, elements),
+            GgufTensorType::Q8_0 => decode_q8_0(slice, elements),
+            GgufTensorType::Q2K => decode_q2_k(slice, elements),
+            GgufTensorType::Q3K => decode_q3_k(slice, elements),
+            GgufTensorType::Q4K => decode_q4_k(slice, elements),
+            GgufTensorType::Q5K => decode_q5_k(slice, elements),
+            GgufTensorType::Q6K => decode_q6_k(slice, elements),
             GgufTensorType::Other(_) => Err(format!(
                 "tenseur GGUF {} non supporté: {:?}",
                 name, info.tensor_type
@@ -458,6 +437,9 @@ fn tensor_size(info: &GgufTensorInfo) -> Result<u64, String> {
     match info.tensor_type {
         GgufTensorType::F32 => elements
             .checked_mul(4)
+            .ok_or_else(|| "taille de tenseur GGUF débordante".into()),
+        GgufTensorType::F16 | GgufTensorType::BF16 => elements
+            .checked_mul(2)
             .ok_or_else(|| "taille de tenseur GGUF débordante".into()),
         GgufTensorType::Q4_0 => {
             if elements % 32 != 0 {
@@ -496,6 +478,30 @@ fn block_size_k(elements: u64, bytes_per_block: u64, name: &str) -> Result<u64, 
     (elements / 256)
         .checked_mul(bytes_per_block)
         .ok_or_else(|| "taille de tenseur GGUF débordante".into())
+}
+
+fn decode_f16(bytes: &[u8], elements: usize) -> Result<Vec<f32>, String> {
+    if bytes.len() != elements.saturating_mul(2) {
+        return Err("bloc F16 GGUF invalide".into());
+    }
+    Ok(bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|chunk| f16_to_f32(u16::from_le_bytes(*chunk)))
+        .collect())
+}
+
+fn decode_bf16(bytes: &[u8], elements: usize) -> Result<Vec<f32>, String> {
+    if bytes.len() != elements.saturating_mul(2) {
+        return Err("bloc BF16 GGUF invalide".into());
+    }
+    Ok(bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|chunk| bf16_to_f32(u16::from_le_bytes(*chunk)))
+        .collect())
 }
 
 fn decode_q4_0(bytes: &[u8], elements: usize) -> Result<Vec<f32>, String> {
@@ -791,6 +797,10 @@ fn f16_to_f32(bits: u16) -> f32 {
     f32::from_bits(raw)
 }
 
+fn bf16_to_f32(bits: u16) -> f32 {
+    f32::from_bits(u32::from(bits) << 16)
+}
+
 fn align_up(value: u64, alignment: u64) -> Result<u64, String> {
     let remainder = value % alignment;
     if remainder == 0 {
@@ -971,6 +981,37 @@ mod tests {
         assert_eq!(weight.shape, vec![3, 2]);
         assert_eq!(weight.values, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         assert_eq!(model.tensor_f32_weight_row("w", 2).unwrap(), vec![5.0, 6.0]);
+    }
+
+    #[test]
+    fn lit_tenseurs_f16_et_bf16() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"GGUF");
+        bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&2u64.to_le_bytes());
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        string(&mut bytes, "f16");
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&2u64.to_le_bytes());
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        string(&mut bytes, "bf16");
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&2u64.to_le_bytes());
+        bytes.extend_from_slice(&30u32.to_le_bytes());
+        bytes.extend_from_slice(&4u64.to_le_bytes());
+        while bytes.len() % 32 != 0 {
+            bytes.push(0);
+        }
+        // F16 1.5 = 0x3e00, 2.5 = 0x4100
+        bytes.extend_from_slice(&0x3e00u16.to_le_bytes());
+        bytes.extend_from_slice(&0x4100u16.to_le_bytes());
+        // BF16 1.5 = 0x3fc0, 2.5 = 0x4020
+        bytes.extend_from_slice(&0x3fc0u16.to_le_bytes());
+        bytes.extend_from_slice(&0x4020u16.to_le_bytes());
+        let model = GgufModel::from_bytes(bytes).unwrap();
+        assert_eq!(model.tensor_f32("f16").unwrap(), vec![1.5, 2.5]);
+        assert_eq!(model.tensor_f32("bf16").unwrap(), vec![1.5, 2.5]);
     }
 
     #[test]
