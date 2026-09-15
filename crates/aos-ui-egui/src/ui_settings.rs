@@ -23,7 +23,8 @@ fn catalogue_module_names<'a>(
 ) -> HashSet<String> {
     entries
         .into_iter()
-        .filter_map(|(name, kind)| (kind == "module").then(|| name.to_owned()))
+        .filter(|&(_, kind)| kind == "module")
+        .map(|(name, _)| name.to_owned())
         .collect()
 }
 
@@ -834,17 +835,8 @@ impl UiApp {
                                 }
                                 ui.end_row();
 
-                                ui.label(t.lan_session_secret);
-                                let r = ui.add(
-                                    egui::TextEdit::singleline(
-                                        &mut self.prefs.lan_session_key_secret,
-                                    )
-                                    .desired_width(220.0)
-                                    .hint_text("lan_cluster_session_key"),
-                                );
-                                if r.lost_focus() {
-                                    save_preferences(&self.prefs);
-                                }
+                                ui.label(t.lan_session_value);
+                                ui.weak(t.lan_session_configure_in_secrets);
                                 ui.end_row();
                             });
                         ui.weak(t.lan_discovery_hint);
