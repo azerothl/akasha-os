@@ -595,6 +595,8 @@ pub(crate) enum Cmd {
     DocumentPrepSpawn {
         session_id: String,
         question: String,
+        /// Recent chat turns so deictic asks stay grounded.
+        history: Vec<(String, String)>,
         language: String,
         model_id: Option<String>,
         max_steps: u32,

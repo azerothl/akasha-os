@@ -85,7 +85,8 @@ impl UiApp {
     }
 
     pub(crate) fn poll_agent_trace(&mut self, ctx: &egui::Context) {
-        if self.agent_ui.open_tabs.is_empty() {
+        let prep_ids: Vec<String> = self.agent_ui.document_prep_agents.keys().cloned().collect();
+        if self.agent_ui.open_tabs.is_empty() && prep_ids.is_empty() {
             return;
         }
         ctx.request_repaint_after(Duration::from_millis(400));
@@ -93,7 +94,13 @@ impl UiApp {
             return;
         }
         self.agent_ui.mark_traces_fetched();
-        for id in self.agent_ui.open_tabs.clone() {
+        let mut ids = self.agent_ui.open_tabs.clone();
+        for id in prep_ids {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        for id in ids {
             let _ = self.cmd_tx.send(Cmd::AgentTrace { id });
         }
     }
@@ -112,10 +119,14 @@ impl UiApp {
     }
 
     pub(crate) fn on_agent_trace(&mut self, t: AgentTrace) {
-        if let Some(question) = self.agent_ui.take_document_prep(&t.agent_id) {
-            if let Some(path) = aos_agent::document_prep::path_from_trace(&t) {
+        // Only finalize document prep when a downloads path exists — mid-run polls
+        // must not drop tracking before files.generate.
+        if let Some(path) = aos_agent::document_prep::path_from_trace(&t) {
+            if let Some(question) = self.agent_ui.take_document_prep(&t.agent_id) {
                 self.attach_document_result_card(&question, &path);
             }
+        } else if t.steps.iter().any(|s| s.action == "goal.complete") {
+            let _ = self.agent_ui.take_document_prep(&t.agent_id);
         }
         self.agent_ui.upsert_trace(t);
     }

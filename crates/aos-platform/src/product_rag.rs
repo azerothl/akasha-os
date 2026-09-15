@@ -165,7 +165,7 @@ pub fn format_prompt_block(hits: &[aos_proto::MemHit]) -> String {
         return String::new();
     }
     let mut out = String::from(
-        "Documentation produit (extraits RAG — base-toi dessus pour UI / nouveautés) :\n",
+        "Documentation produit (extraits utiles pour l'UI et les nouveautés) :\n",
     );
     for h in hits {
         let source = h
@@ -507,5 +507,25 @@ mod tests {
         assert!(hits[0].text.contains("fresh chunk"));
         let raw = std::fs::read_to_string(&meta_path).unwrap();
         assert!(raw.contains("0.15.0"));
+    }
+
+    #[test]
+    fn product_prompt_block_avoids_rag_jargon() {
+        let hit = aos_proto::MemHit {
+            id: 1,
+            namespace: PRODUCT_NS.into(),
+            text: "Canvas vectoriel avec export PNG.".into(),
+            score: 0.9,
+            metadata: serde_json::json!({"source": "FEATURES.md", "heading": "UI"}),
+            pinned: false,
+            kind: None,
+            relations: vec![],
+            superseded: false,
+        };
+        let block = super::format_prompt_block(&[hit]);
+        let lower = block.to_lowercase();
+        assert!(block.contains("Documentation produit"));
+        assert!(!lower.contains("rag"));
+        assert!(!lower.contains("claim"));
     }
 }

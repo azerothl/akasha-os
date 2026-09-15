@@ -163,19 +163,6 @@ fn strip_chat_control_tokens(text: &str) -> String {
     out.trim().to_string()
 }
 
-fn find_canvas_tool_leak(lower: &str) -> Option<usize> {
-    let mut search_from = 0;
-    while let Some(i) = lower[search_from..].find("canvas.") {
-        let pos = search_from + i;
-        let rest = &lower[pos + "canvas.".len()..];
-        if rest.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
-            return Some(pos);
-        }
-        search_from = pos + 1;
-    }
-    None
-}
-
 const SELF_NARRATION: &[&str] = &[
     "je vais répondre",
     "je vais expliquer",
@@ -235,19 +222,10 @@ fn chat_sentence_is_meta_leak(s: &str) -> bool {
 }
 
 fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
+    // Hard meta / self-talk only. Tool ids (module.scaffold, canvas.*, …) are
+    // humanized before sanitize — truncating on them cuts advisory how-tos mid-backtick.
     const FORBIDDEN: &[&str] = &[
-        "media.image.generate",
-        "media.image.",
         "@agent-",
-        "agent.spawn",
-        "canvas.stroke",
-        "canvas.rect",
-        "canvas.ellipse",
-        "canvas.undo",
-        "canvas.get",
-        "canvas.export",
-        "module.scaffold",
-        "tool.invoke",
         "tool invocation loop",
         "erreur bus",
         "internalerror",
@@ -275,14 +253,6 @@ fn chat_meta_substring_pos(lower: &str) -> Option<usize> {
     let mut earliest = None::<usize>;
     for f in FORBIDDEN {
         if let Some(i) = lower.find(f) {
-            earliest = Some(earliest.map_or(i, |e| e.min(i)));
-        }
-    }
-    if let Some(i) = find_canvas_tool_leak(lower) {
-        earliest = Some(earliest.map_or(i, |e| e.min(i)));
-    }
-    for word in ["json", "rules", "règles"] {
-        if let Some(i) = lower.find(word) {
             earliest = Some(earliest.map_or(i, |e| e.min(i)));
         }
     }
@@ -726,20 +696,26 @@ fn format_action_as_markdown(
 
 /// Affichage chat final : prose lisible sans fuites meta internes.
 pub fn format_chat_assistant_display(raw: &str, t: &crate::i18n::UiStrings) -> String {
-    let base = sanitize_chat_visible_bubble(&format_assistant_display(raw));
-    crate::chat_room::humanize_tool_id_tokens(&base, t)
+    // Humanize tool ids first so sanitize does not hard-cut advisory replies at
+    // `module.scaffold` / similar (looked like an unexplained mid-sentence stop).
+    let displayed = format_assistant_display(raw);
+    let humanized = crate::chat_room::humanize_tool_id_tokens(&displayed, t);
+    sanitize_chat_visible_bubble(&humanized)
 }
 
 /// Back-compat wrapper when locale is unavailable (strips ids, no human labels).
 #[allow(dead_code)]
 pub fn format_chat_assistant_display_localeless(raw: &str) -> String {
-    sanitize_chat_visible_bubble(&format_assistant_display(raw))
+    let displayed = format_assistant_display(raw);
+    let stripped = crate::chat_room::strip_tool_id_tokens(&displayed);
+    sanitize_chat_visible_bubble(&stripped)
 }
 
 /// Pendant le stream chat : évite JSON/outils bruts et fuites meta.
 pub fn format_chat_streaming_preview(raw: &str, t: &crate::i18n::UiStrings) -> String {
-    let base = sanitize_chat_visible_bubble(&format_streaming_preview(raw));
-    crate::chat_room::humanize_tool_id_tokens(&base, t)
+    let preview = format_streaming_preview(raw);
+    let humanized = crate::chat_room::humanize_tool_id_tokens(&preview, t);
+    sanitize_chat_visible_bubble(&humanized)
 }
 
 /// Pendant le stream : évite d'afficher l'objet JSON brut incomplet.
@@ -1733,6 +1709,10 @@ mod tests {
         i18n::strings("en")
     }
 
+    fn t_fr() -> i18n::UiStrings {
+        i18n::strings("fr")
+    }
+
     #[test]
     fn step_header_includes_clock_duration_and_tokens() {
         let t = t_en();
@@ -1824,11 +1804,29 @@ Le canvas sert aux esquisses vectorielles."#;
     }
 
     #[test]
-    fn streaming_truncates_mid_token_before_tool_id() {
+    fn streaming_humanizes_tool_id_without_hard_cut() {
         let raw = "Le Canvas est un panneau vectoriel. Selon media.image.generate";
         let out = format_chat_streaming_preview(raw, &t_en());
         assert!(!out.to_ascii_lowercase().contains("media.image"), "{out}");
         assert!(out.contains("vectoriel"), "{out}");
+        assert!(out.contains("Selon"), "{out}");
+    }
+
+    #[test]
+    fn advisory_module_scaffold_howto_not_cut_at_backtick() {
+        let raw = "Pour créer un module d'aide au développement dans le catalogue des modules du système, voici ce que tu devrais faire :\n\n**Pour créer un module**\n\n1. Scaffold : initialise la structure du module avec l'outil `module.scaffold`.\n2. Ensuite package puis install.";
+        let out = format_chat_assistant_display(raw, &t_fr());
+        assert!(!out.contains("module.scaffold"), "{out}");
+        assert!(out.contains("Scaffold"), "{out}");
+        assert!(out.contains("catalogue"), "{out}");
+        assert!(
+            out.contains("package") || out.contains("install") || out.contains("Ensuite"),
+            "must keep the rest of the how-to, got: {out}"
+        );
+        assert!(
+            !out.trim_end().ends_with('`'),
+            "must not leave a dangling backtick cut: {out}"
+        );
     }
 
     #[test]
