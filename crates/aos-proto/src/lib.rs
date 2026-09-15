@@ -5598,7 +5598,7 @@ pub enum ChatAttachment {
         #[serde(default)]
         label: String,
     },
-    /// In-progress document preparation (Researching… + Stop).
+    /// In-progress document preparation (writing… + live steps + Stop).
     DocumentProgress {
         question: String,
         agent_id: String,

@@ -876,13 +876,15 @@ pub(crate) async fn spawn_document_prep_agent(
     evt_tx: Sender<Evt>,
     sid: String,
     question: String,
+    history: Vec<(String, String)>,
     language: String,
     _model_id: Option<String>,
     max_steps: u32,
 ) {
-    let goal = question.trim().to_string();
+    let title = question.trim().to_string();
+    let goal = aos_agent::research_detect::document_prep_goal_from_thread(&history, &title);
     let mut req = AgentCreateRequest::simple(goal.clone());
-    req.display_name = Some(aos_agent::persist::agent_title(&goal));
+    req.display_name = Some(aos_agent::persist::agent_title(&title));
     req.origin = Some("document".into());
     req.skills = vec!["research".into(), "file-author".into()];
     req.tools = vec![
@@ -892,6 +894,8 @@ pub(crate) async fn spawn_document_prep_agent(
         "files.generate".into(),
         "fs.read".into(),
         "fs.list".into(),
+        "agent.spawn".into(),
+        "agent.await".into(),
         "goal.complete".into(),
     ];
     req.session_id = Some(sid.clone());
@@ -904,7 +908,7 @@ pub(crate) async fn spawn_document_prep_agent(
             "Structured markdown under /downloads/ with footnoted sources".into(),
         ],
         max_steps,
-        max_subagents: 0,
+        max_subagents: CHAT_AGENT_MAX_SUBAGENTS,
         timeout_secs: 3600,
     });
     req.caps.push("tool.invoke:research".into());
@@ -925,7 +929,7 @@ pub(crate) async fn spawn_document_prep_agent(
             let _ = evt_tx.send(Evt::AgentSpawned {
                 session_id: sid,
                 agent_id: r.agent_id,
-                title: goal,
+                title,
                 origin: "document".into(),
                 ack: String::new(),
             });

@@ -1653,6 +1653,30 @@ fn parse_memory_flag(value: &str) -> Option<bool> {
     }
 }
 
+/// Format cognitive objects for chat/system injection.
+///
+/// Never include wire ids or Debug kind tags (`[4630::Claim]`) — small models
+/// echo those markers into the user-visible reply.
+pub fn format_cognitive_objects_for_prompt(objects: &[MemoryObject]) -> String {
+    if objects.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("Mémoire cognitive:\n");
+    for object in objects {
+        let content = object.content.trim();
+        if content.is_empty() {
+            continue;
+        }
+        let title = object.title.trim();
+        if title.is_empty() {
+            out.push_str(&format!("- {content}\n"));
+        } else {
+            out.push_str(&format!("- {title}: {content}\n"));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2141,5 +2165,35 @@ mod tests {
         assert!(object_ids.iter().all(|id| s.object_get(*id).is_some()));
         assert!(crate::memory_narrative::NarrativeScheduleState::path_for(&dir).exists());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cognitive_prompt_omits_wire_ids_and_kind_tags() {
+        let objects = vec![MemoryObject {
+            schema_version: 1,
+            id: 4630,
+            kind: MemoryObjectKind::Claim,
+            namespace: "user:default".into(),
+            title: "framework".into(),
+            content: "Documentation produit pour UI".into(),
+            status: MemoryObjectStatus::Accepted,
+            created_at: 0,
+            updated_at: 0,
+            temporal: Default::default(),
+            confidence: 0.8,
+            importance: 0.5,
+            freshness: 1.0,
+            last_used_at: None,
+            source_refs: Vec::new(),
+            visibility: "private".into(),
+            metadata: serde_json::json!({}),
+            decision: None,
+            embedding: Vec::new(),
+        }];
+        let block = format_cognitive_objects_for_prompt(&objects);
+        assert!(block.contains("framework: Documentation produit pour UI"));
+        assert!(!block.contains("4630"));
+        assert!(!block.contains("Claim"));
+        assert!(!block.contains("::"));
     }
 }

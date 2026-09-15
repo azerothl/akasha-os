@@ -492,10 +492,9 @@ async fn main() {
                             }
                         }
                         if !objects.is_empty() {
-                            prompt_block.push_str("Mémoire cognitive:\n");
-                            for object in &objects {
-                                prompt_block.push_str(&format!("- [{}::{:?}] {}\n", object.id, object.kind, object.content));
-                            }
+                            prompt_block.push_str(&aos_platform::memory::format_cognitive_objects_for_prompt(
+                                &objects,
+                            ));
                         }
                         let _ = ctx
                             .respond(

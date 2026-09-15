@@ -382,7 +382,10 @@ impl UiApp {
                                     title,
                                     origin,
                                 } => {
-                                    if origin == "room" || origin == "document" {
+                                    // Room members are shown as speaker bubbles, not agent cards.
+                                    // Document-prep agents keep their card so the live journal
+                                    // appears in the transcript (progress card holds Stop).
+                                    if origin == "room" {
                                         continue;
                                     }
                                     let info = self.agents.iter().find(|a| a.agent_id == *agent_id);
@@ -602,8 +605,11 @@ impl UiApp {
                                     agent_id,
                                     state,
                                 } => {
+                                    let info =
+                                        self.agents.iter().find(|a| a.agent_id == *agent_id);
+                                    let trace = self.agent_ui.traces.get(agent_id);
                                     let action = research_choice::render_document_progress(
-                                        ui, t, question, agent_id, state,
+                                        ui, t, question, agent_id, state, info, trace,
                                     );
                                     if action != research_choice::DocumentProgressAction::None {
                                         document_progress_action = Some((i, action));

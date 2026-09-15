@@ -660,7 +660,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 messages,
                 tools: vec![],
                 params: InferParams {
-                    max_tokens: 1024,
+                    max_tokens: 2048,
                     ..Default::default()
                 },
                 priority: 8,
@@ -1531,6 +1531,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
         Cmd::DocumentPrepSpawn {
             session_id,
             question,
+            history,
             language,
             model_id,
             max_steps,
@@ -1540,6 +1541,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 evt_tx.clone(),
                 session_id,
                 question,
+                history,
                 language,
                 model_id,
                 max_steps,

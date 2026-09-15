@@ -100,6 +100,7 @@ impl UiApp {
         let _ = self.cmd_tx.send(Cmd::DocumentPrepSpawn {
             session_id: session_id.to_string(),
             question: pending.user_text,
+            history: pending.history,
             language: pending.language,
             model_id: pending.model_id,
             max_steps: pending.max_steps,
@@ -109,7 +110,12 @@ impl UiApp {
     }
 
     pub(crate) fn attach_document_progress_agent(&mut self, agent_id: &str, question: &str) {
-        let att = research_document::progress_attachment(question, agent_id);
+        let progress = research_document::progress_attachment(question, agent_id);
+        let agent_ref = ChatAttachment::AgentRef {
+            agent_id: agent_id.to_string(),
+            title: question.to_string(),
+            origin: "document".into(),
+        };
         for line in &mut self.chat {
             let has_placeholder = line.attachments.iter().any(|a| {
                 matches!(
@@ -128,16 +134,24 @@ impl UiApp {
                             agent_id: id,
                             ..
                         } if id == "pending"
+                    ) && !matches!(
+                        a,
+                        ChatAttachment::AgentRef {
+                            origin,
+                            ..
+                        } if origin == "document"
                     )
                 });
-                line.attachments.push(att.clone());
+                line.attachments.push(progress);
+                // Live journal card in the transcript (same as other chat agents).
+                line.attachments.push(agent_ref);
                 return;
             }
         }
         self.chat.push(ChatLine {
             role: "assistant".into(),
             text: String::new(),
-            attachments: vec![att],
+            attachments: vec![progress, agent_ref],
             speaker_id: None,
             speaker_name: None,
             thinking: None,
