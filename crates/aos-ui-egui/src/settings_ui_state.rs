@@ -1,5 +1,6 @@
 //! Mutable state owned by the Settings panel (secrets, catalogue, schedule form).
 
+use crate::secret_keygen::{KeygenAlphabet, KeygenTarget, LAN_SESSION_KEY_HEX_LEN};
 use aos_proto::{ModuleCatalogue, ModuleInfo};
 
 #[derive(Debug)]
@@ -12,6 +13,9 @@ pub(crate) struct SettingsUiState {
     pub(crate) secret_github: String,
     pub(crate) secret_openai: String,
     pub(crate) secret_lan_session: String,
+    pub(crate) keygen_alphabet: KeygenAlphabet,
+    pub(crate) keygen_length: usize,
+    pub(crate) keygen_target: KeygenTarget,
     pub(crate) lan_node_id: String,
     pub(crate) lan_node_name: String,
     pub(crate) lan_node_address: String,
@@ -35,6 +39,9 @@ impl Default for SettingsUiState {
             secret_github: String::new(),
             secret_openai: String::new(),
             secret_lan_session: String::new(),
+            keygen_alphabet: KeygenAlphabet::Hex,
+            keygen_length: LAN_SESSION_KEY_HEX_LEN,
+            keygen_target: KeygenTarget::LanSession,
             lan_node_id: String::new(),
             lan_node_name: String::new(),
             lan_node_address: String::new(),
@@ -83,6 +90,16 @@ impl SettingsUiState {
             aos_proto::decl_ui::sidebar_decl_ui_module(&m.name, m.ui_mode.as_deref())
                 && !baseline.iter().any(|n| n == &m.name)
         })
+    }
+
+    /// Field that receives the next generated secret.
+    pub(crate) fn keygen_target_field_mut(&mut self) -> &mut String {
+        match self.keygen_target {
+            KeygenTarget::Brave => &mut self.secret_brave,
+            KeygenTarget::Github => &mut self.secret_github,
+            KeygenTarget::Openai => &mut self.secret_openai,
+            KeygenTarget::LanSession => &mut self.secret_lan_session,
+        }
     }
 
     /// Take a non-empty schedule create request from the form, clearing the goal.
@@ -141,5 +158,14 @@ mod tests {
             &listed,
             &["cohortmod".into()]
         ));
+    }
+
+    #[test]
+    fn keygen_target_field_routes_lan_by_default() {
+        let mut state = SettingsUiState::default();
+        assert_eq!(state.keygen_target, KeygenTarget::LanSession);
+        assert_eq!(state.keygen_length, LAN_SESSION_KEY_HEX_LEN);
+        *state.keygen_target_field_mut() = "abc".into();
+        assert_eq!(state.secret_lan_session, "abc");
     }
 }
