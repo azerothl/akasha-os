@@ -669,6 +669,48 @@ mod tests {
     }
 
     #[test]
+    fn prompt_starters_use_locale_keyed_labels() {
+        let source = std::fs::read_to_string(workspace_root().join("modules/create/ui/index.json"))
+            .expect("create source ui");
+        for needle in [
+            "\"starter_portrait\"",
+            "\"item_label_keys\"",
+            "starter_product",
+            "starter_landscape",
+        ] {
+            assert!(
+                source.contains(needle),
+                "create source ui must declare locale-keyed prompt starters: {needle}"
+            );
+        }
+        let doc = read_ui_document();
+        let labels = doc.labels.as_ref().expect("labels");
+        let fr = &labels.fr;
+        let en = &labels.en;
+        assert_eq!(
+            fr.get("starter_portrait").map(String::as_str),
+            Some("Un portrait cinématographique à la lumière naturelle douce")
+        );
+        assert_eq!(
+            en.get("starter_portrait").map(String::as_str),
+            Some("A cinematic portrait with soft natural light")
+        );
+        assert_ne!(
+            fr.get("starter_portrait"),
+            en.get("starter_portrait"),
+            "FR prompt starters must differ from EN"
+        );
+        let shipped = std::fs::read_to_string(
+            workspace_root().join("share/modules/create.aospkg/ui/index.json"),
+        )
+        .expect("create shipped ui");
+        assert_eq!(
+            source, shipped,
+            "modules/create/ui/index.json must match share/modules/create.aospkg/ui/index.json"
+        );
+    }
+
+    #[test]
     fn cm_jail_chrome_copy_locked() {
         let doc = read_ui_document();
         let fr = &doc.labels.as_ref().expect("labels").fr;
