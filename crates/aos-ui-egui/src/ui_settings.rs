@@ -5,6 +5,10 @@ use crate::models_page;
 use crate::onboarding::save_onboarding;
 use crate::os_open::aos_home;
 use crate::prefs::{save_preferences, UiDensity, UiPresentationMode, UI_SCALE_PRESETS};
+use crate::secret_keygen::{
+    apply_lan_preset, generate, is_valid_lan_session_key, KeygenAlphabet, KeygenTarget,
+    KEYGEN_LEN_MAX, KEYGEN_LEN_MIN,
+};
 use crate::{i18n, Tab, UiApp};
 use eframe::egui;
 use std::collections::HashSet;
@@ -38,6 +42,24 @@ fn edit_theme_color(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool 
     }
     ui.label(label);
     changed
+}
+
+fn keygen_alphabet_label<'a>(alphabet: KeygenAlphabet, t: &'a i18n::UiStrings) -> &'a str {
+    match alphabet {
+        KeygenAlphabet::Hex => t.settings_secret_keygen_hex,
+        KeygenAlphabet::Numeric => t.settings_secret_keygen_numeric,
+        KeygenAlphabet::Alphanumeric => t.settings_secret_keygen_alnum,
+        KeygenAlphabet::Base64Url => t.settings_secret_keygen_base64url,
+    }
+}
+
+fn keygen_target_label<'a>(target: KeygenTarget, t: &'a i18n::UiStrings) -> &'a str {
+    match target {
+        KeygenTarget::Brave => t.settings_secret_keygen_target_brave,
+        KeygenTarget::Github => t.settings_secret_keygen_target_github,
+        KeygenTarget::Openai => t.settings_secret_openai,
+        KeygenTarget::LanSession => t.lan_session_value,
+    }
 }
 
 const SETTINGS_ADVANCED_IDS: [&str; 4] = ["secrets", "catalogue", "schedule", "backup"];
@@ -1183,15 +1205,86 @@ impl UiApp {
             });
         }
 
-        if section_visible("secrets", &["secret", "clé", "token", "api"]) {
+        if section_visible("secrets", &["secret", "clé", "token", "api", "générer", "generate"]) {
             show_settings_section(ui, show_section_heading, t.settings_secrets, |ui| {
                 ui.weak(t.settings_secrets_blurb);
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new(t.settings_secret_keygen).strong());
+                ui.weak(t.settings_secret_keygen_hint);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(t.settings_secret_keygen_alphabet);
+                    egui::ComboBox::from_id_salt("settings_keygen_alphabet")
+                        .selected_text(keygen_alphabet_label(self.settings_ui.keygen_alphabet, &t))
+                        .show_ui(ui, |ui| {
+                            for alphabet in KeygenAlphabet::ALL {
+                                ui.selectable_value(
+                                    &mut self.settings_ui.keygen_alphabet,
+                                    alphabet,
+                                    keygen_alphabet_label(alphabet, &t),
+                                );
+                            }
+                        });
+                    ui.label(t.settings_secret_keygen_length);
+                    let mut length = self.settings_ui.keygen_length as u32;
+                    ui.add(
+                        egui::DragValue::new(&mut length)
+                            .range(KEYGEN_LEN_MIN as u32..=KEYGEN_LEN_MAX as u32)
+                            .speed(1.0),
+                    );
+                    self.settings_ui.keygen_length = length as usize;
+                    if ui.button(t.settings_secret_keygen_lan_preset).clicked() {
+                        apply_lan_preset(
+                            &mut self.settings_ui.keygen_alphabet,
+                            &mut self.settings_ui.keygen_length,
+                        );
+                        self.settings_ui.keygen_target = KeygenTarget::LanSession;
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(t.settings_secret_keygen_target);
+                    egui::ComboBox::from_id_salt("settings_keygen_target")
+                        .selected_text(keygen_target_label(self.settings_ui.keygen_target, &t))
+                        .show_ui(ui, |ui| {
+                            for target in KeygenTarget::ALL {
+                                ui.selectable_value(
+                                    &mut self.settings_ui.keygen_target,
+                                    target,
+                                    keygen_target_label(target, &t),
+                                );
+                            }
+                        });
+                    if ui.button(t.settings_secret_keygen_generate).clicked() {
+                        match generate(
+                            self.settings_ui.keygen_alphabet,
+                            self.settings_ui.keygen_length,
+                        ) {
+                            Ok(value) => {
+                                *self.settings_ui.keygen_target_field_mut() = value;
+                                self.push_status(t.settings_secret_keygen_filled.into());
+                            }
+                            Err(error) => {
+                                self.toasts.push_error(error);
+                            }
+                        }
+                    }
+                    if ui.button(t.settings_secret_keygen_copy).clicked() {
+                        let value = self.settings_ui.keygen_target_field_mut().clone();
+                        if value.is_empty() {
+                            self.toasts
+                                .push_error(t.settings_secret_keygen_hint.to_string());
+                        } else {
+                            ui.ctx().copy_text(value);
+                            self.push_status(t.copied.into());
+                        }
+                    }
+                });
+                ui.add_space(8.0);
                 egui::Grid::new("settings_secrets")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
                     .min_col_width(label_w)
                     .show(ui, |ui| {
-                        ui.label("Brave Search");
+                        ui.label(t.settings_secret_brave);
                         ui.horizontal(|ui| {
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.settings_ui.secret_brave)
@@ -1209,7 +1302,7 @@ impl UiApp {
                         });
                         ui.end_row();
 
-                        ui.label("GitHub token");
+                        ui.label(t.settings_secret_github);
                         ui.horizontal(|ui| {
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.settings_ui.secret_github)
@@ -1256,12 +1349,18 @@ impl UiApp {
                                 .hint_text("64 hex characters"),
                             );
                             if ui.button(t.settings_secret_save).clicked() {
-                                let name = self.prefs.lan_session_key_secret.clone();
-                                let _ = self.cmd_tx.send(Cmd::SecretSet {
-                                    name,
-                                    value: self.settings_ui.secret_lan_session.clone(),
-                                });
-                                self.settings_ui.secret_lan_session.clear();
+                                let value = self.settings_ui.secret_lan_session.clone();
+                                if !value.trim().is_empty() && !is_valid_lan_session_key(&value) {
+                                    self.toasts
+                                        .push_error(t.settings_secret_lan_invalid.to_string());
+                                } else {
+                                    let name = self.prefs.lan_session_key_secret.clone();
+                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
+                                        name,
+                                        value,
+                                    });
+                                    self.settings_ui.secret_lan_session.clear();
+                                }
                             }
                         });
                         ui.end_row();

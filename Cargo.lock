@@ -514,6 +514,7 @@ dependencies = [
  "eframe",
  "egui_commonmark",
  "egui_plot",
+ "getrandom 0.2.17",
  "image",
  "rfd",
  "serde",

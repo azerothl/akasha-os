@@ -90,6 +90,7 @@ mod schedule_act_phrase;
 mod schedule_card;
 mod schedule_event_controller;
 mod schedule_ui_state;
+mod secret_keygen;
 mod security_ui_state;
 mod session_chat;
 mod session_event_controller;
