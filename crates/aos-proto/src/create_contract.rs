@@ -745,4 +745,101 @@ mod tests {
             Some(EN_IMAGE_PACK_LABEL)
         );
     }
+
+    /// Regression: preset save must not share a row with the name field (overflow
+    /// into the right pane stacked "Agrandir" over "Enregistrer le préréglage"),
+    /// and the upscale CTA must live inside the upscale section — not the result
+    /// toolbar group that also hosts save/regenerate/variant.
+    #[test]
+    fn create_ui_keeps_preset_and_upscale_actions_separated() {
+        use crate::decl_ui::DeclUiWidget;
+
+        fn walk(w: &DeclUiWidget, visit: &mut impl FnMut(&DeclUiWidget)) {
+            visit(w);
+            if let Some(children) = &w.children {
+                for c in children {
+                    walk(c, visit);
+                }
+            }
+            if let Some(tabs) = &w.tabs {
+                for tab in tabs {
+                    if let Some(content) = &tab.content {
+                        walk(content, visit);
+                    }
+                }
+            }
+        }
+
+        let doc = read_ui_document();
+        let mut preset_row_ok = false;
+        let mut upscale_cta_in_upscale_section = false;
+        let mut upscale_cta_in_result_toolbar = false;
+
+        walk(&doc.root, &mut |w| {
+            if w.kind == "section"
+                && w.open_state_key.as_deref() == Some("advanced_open")
+            {
+                let children = w.children.as_deref().unwrap_or(&[]);
+                let name_is_own_widget = children.iter().any(|c| {
+                    c.kind == "text_input" && c.state_key.as_deref() == Some("saved_preset_name")
+                });
+                let save_in_toolbar = children.iter().any(|c| {
+                    c.kind == "row"
+                        && c.toolbar == Some(true)
+                        && c.children.as_deref().unwrap_or(&[]).iter().any(|b| {
+                            b.kind == "button" && b.action.as_deref() == Some("save_preset")
+                        })
+                });
+                let cramped_shared_row = children.iter().any(|c| {
+                    c.kind == "row"
+                        && c.children.as_deref().unwrap_or(&[]).iter().any(|x| {
+                            x.kind == "text_input"
+                                && x.state_key.as_deref() == Some("saved_preset_name")
+                        })
+                        && c.children.as_deref().unwrap_or(&[]).iter().any(|x| {
+                            x.kind == "button" && x.action.as_deref() == Some("save_preset")
+                        })
+                });
+                preset_row_ok = name_is_own_widget && save_in_toolbar && !cramped_shared_row;
+            }
+            if w.kind == "section" && w.label_key.as_deref() == Some("upscale_section") {
+                upscale_cta_in_upscale_section = w
+                    .children
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|c| c.kind == "button" && c.action.as_deref() == Some("upscale"));
+            }
+            if w.kind == "section" && w.label_key.as_deref() == Some("result_toolbar_section") {
+                upscale_cta_in_result_toolbar = w
+                    .children
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|c| match c.kind.as_str() {
+                        "button" => c.action.as_deref() == Some("upscale"),
+                        "row" => c
+                            .children
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter()
+                            .any(|b| b.kind == "button" && b.action.as_deref() == Some("upscale")),
+                        _ => false,
+                    });
+            }
+        });
+
+        assert!(
+            preset_row_ok,
+            "preset name must be full-width with save/load on a toolbar row below"
+        );
+        assert!(
+            upscale_cta_in_upscale_section,
+            "upscale CTA must sit inside the upscale section"
+        );
+        assert!(
+            !upscale_cta_in_result_toolbar,
+            "upscale CTA must not share the result toolbar with save/regenerate/variant"
+        );
+    }
 }

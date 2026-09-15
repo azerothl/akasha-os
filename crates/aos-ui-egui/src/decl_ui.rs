@@ -247,9 +247,15 @@ impl DeclUiPanelState {
                     .max_height(h.max(120.0))
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = crate::theme::SPACE_UNIT;
                         ui.vertical(|ui| {
                             if let Some(children) = &w.children {
-                                for c in children {
+                                for (idx, c) in children.iter().enumerate() {
+                                    if idx > 0 && c.kind == "section" {
+                                        // Extra rhythm above section headers so
+                                        // boxed groups and disclosures separate.
+                                        ui.add_space(crate::theme::SPACE_UNIT);
+                                    }
                                     Self::render_widget(
                                         ui,
                                         md_cache,
@@ -276,6 +282,7 @@ impl DeclUiPanelState {
             "section" => {
                 let title = widget_text(w, doc, language);
                 let mut render_children = |ui: &mut Ui| {
+                    ui.spacing_mut().item_spacing.y = crate::theme::SPACE_UNIT;
                     if let Some(children) = &w.children {
                         for child in children {
                             Self::render_widget(
@@ -326,6 +333,7 @@ impl DeclUiPanelState {
             "row" => {
                 let toolbar = w.toolbar.unwrap_or(false);
                 if toolbar {
+                    ui.add_space(2.0);
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         if let Some(children) = &w.children {
@@ -352,7 +360,10 @@ impl DeclUiPanelState {
                         }
                     });
                 } else {
-                    ui.horizontal(|ui| {
+                    // Wrap so long FR labels + fields never force siblings into
+                    // the neighboring split pane.
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = crate::theme::SPACE_UNIT;
                         if let Some(children) = &w.children {
                             for c in children {
                                 Self::render_widget(
@@ -857,14 +868,17 @@ impl DeclUiPanelState {
                         .unwrap_or("")
                         .to_string();
                     ui.add_enabled_ui(enabled, |ui| {
-                        ui.horizontal(|ui| {
+                        // Label above field — matches Settings form rhythm and
+                        // keeps FR labels from crushing the edit height in a row.
+                        ui.vertical(|ui| {
                             ui.label(label);
-                            if ui
-                                .add_sized(
-                                    [ui.available_width().max(80.0), 28.0],
-                                    egui::TextEdit::singleline(&mut text),
-                                )
-                                .changed()
+                            let field_w = ui.available_width().clamp(120.0, 480.0);
+                            if crate::theme::add_form_field(
+                                ui,
+                                field_w,
+                                egui::TextEdit::singleline(&mut text),
+                            )
+                            .changed()
                             {
                                 actions
                                     .local_patch
@@ -1087,17 +1101,23 @@ impl DeclUiPanelState {
                         // Give the split an explicit frame so both panes receive
                         // the complete height of the host panel, even when their
                         // initial content is short or an image is not loaded yet.
+                        // Clip each pane so a wide control (e.g. preset row) cannot
+                        // paint over the sibling pane (Create upscale vs save-preset).
                         let available = ui.available_size();
+                        let gap = crate::theme::SPACE_UNIT;
                         ui.allocate_ui_with_layout(
                             available,
                             egui::Layout::left_to_right(egui::Align::TOP),
                             |ui| {
                                 let pane_height = ui.available_height();
-                                let w_left = (ui.available_width() * ratio).max(1.0);
+                                let total_w = ui.available_width();
+                                let w_left = ((total_w - gap) * ratio).max(1.0);
+                                let w_right = (total_w - gap - w_left).max(1.0);
                                 ui.allocate_ui_with_layout(
                                     egui::vec2(w_left, pane_height),
                                     egui::Layout::top_down(egui::Align::LEFT),
                                     |ui| {
+                                        ui.set_clip_rect(ui.max_rect());
                                         Self::render_widget(
                                             ui,
                                             md_cache,
@@ -1118,23 +1138,31 @@ impl DeclUiPanelState {
                                         );
                                     },
                                 );
-                                Self::render_widget(
-                                    ui,
-                                    md_cache,
-                                    &children[1],
-                                    doc,
-                                    language,
-                                    cache,
-                                    binding_cache,
-                                    local_state,
-                                    document_state,
-                                    subscriptions,
-                                    image_views,
-                                    layer_canvases,
-                                    form_fields,
-                                    tool_schemas,
-                                    pending_invoke,
-                                    actions,
+                                ui.add_space(gap);
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(w_right, pane_height),
+                                    egui::Layout::top_down(egui::Align::LEFT),
+                                    |ui| {
+                                        ui.set_clip_rect(ui.max_rect());
+                                        Self::render_widget(
+                                            ui,
+                                            md_cache,
+                                            &children[1],
+                                            doc,
+                                            language,
+                                            cache,
+                                            binding_cache,
+                                            local_state,
+                                            document_state,
+                                            subscriptions,
+                                            image_views,
+                                            layer_canvases,
+                                            form_fields,
+                                            tool_schemas,
+                                            pending_invoke,
+                                            actions,
+                                        );
+                                    },
                                 );
                             },
                         );
