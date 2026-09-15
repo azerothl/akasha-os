@@ -1630,7 +1630,7 @@ const EN: UiStrings = UiStrings {
     lan_status_error: "Error",
     lan_status_partial: "Partial",
     lan_status_secret_missing:
-        "LAN worker off: store a 64-hex session key in Settings → Secrets as \"{}\" and restart Preview.",
+        "LAN worker stopped: save a session key in Settings → LAN, then restart Preview.",
     lan_status_bind_failed: "LAN worker off: could not bind the listener ({})",
     lan_status_restart_required:
         "Session key found — restart Preview so the LAN worker can listen for peers.",
@@ -2896,7 +2896,7 @@ const FR: UiStrings = UiStrings {
     lan_status_error: "Erreur",
     lan_status_partial: "Partiel",
     lan_status_secret_missing:
-        "Worker LAN arrêté : enregistrez une clé de session hexadécimale (64 caractères) dans Paramètres → Secrets sous « {} », puis redémarrez Preview.",
+        "Worker LAN arrêté : enregistrez une clé de session dans Paramètres → LAN, puis redémarrez Preview.",
     lan_status_bind_failed: "Worker LAN arrêté : impossible d’ouvrir l’écoute ({})",
     lan_status_restart_required:
         "Clé de session trouvée — redémarrez Preview pour que le worker LAN écoute les pairs.",
@@ -4110,21 +4110,47 @@ pub fn lan_worker_status_message(
     t: &UiStrings,
     worker_state: &str,
     worker_detail: &str,
-    secret_name: &str,
 ) -> String {
     match worker_state {
-        "secret_missing" => t.lan_status_secret_missing.replace("{}", secret_name),
+        "secret_missing" => t.lan_status_secret_missing.to_string(),
         "bind_failed" => {
-            if worker_detail.is_empty() {
+            let detail = sanitize_lan_chrome_detail(worker_detail);
+            if detail.is_empty() {
                 t.lan_status_bind_failed.replace("{}", "unknown error")
             } else {
-                t.lan_status_bind_failed.replace("{}", worker_detail)
+                t.lan_status_bind_failed.replace("{}", &detail)
             }
         }
         "restart_required" => t.lan_status_restart_required.to_string(),
-        "ready" if !worker_detail.is_empty() => worker_detail.to_string(),
+        "ready" if !worker_detail.is_empty() => sanitize_lan_chrome_detail(worker_detail),
         _ => String::new(),
     }
+}
+
+const LAN_SESSION_WIRE_ID: &str = "lan_cluster_session_key";
+
+/// Strip vault wire ids from backend detail before showing it in chrome.
+pub fn sanitize_lan_chrome_detail(detail: &str) -> String {
+    if detail.contains(LAN_SESSION_WIRE_ID) {
+        String::new()
+    } else {
+        detail.to_string()
+    }
+}
+
+/// Human-readable secret list for Settings chrome (no vault wire ids).
+pub fn secret_names_for_chrome(t: &UiStrings, names: &[String]) -> String {
+    names
+        .iter()
+        .map(|name| {
+            if name == LAN_SESSION_WIRE_ID {
+                t.lan_session_value.to_string()
+            } else {
+                name.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 pub fn lan_discovery_telemetry_line(
@@ -4154,7 +4180,10 @@ pub fn lan_discovery_telemetry_line(
         parts.push(counters);
     }
     if !discovery_detail.is_empty() {
-        parts.push(discovery_detail.to_string());
+        let detail = sanitize_lan_chrome_detail(discovery_detail);
+        if !detail.is_empty() {
+            parts.push(detail);
+        }
     }
     parts.join(" · ")
 }
@@ -4164,16 +4193,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lan_status_messages_use_secret_name_and_counters() {
-        let en = strings("en");
-        let msg = lan_worker_status_message(
-            &en,
-            "secret_missing",
-            "",
-            "lan_cluster_session_key",
-        );
-        assert!(msg.contains("lan_cluster_session_key"));
-        let counters = lan_discovery_telemetry_line(&en, true, 3, 1, "");
+    fn lan_status_chrome_never_exposes_vault_wire_ids() {
+        for lang in ["en", "fr"] {
+            let t = strings(lang);
+            let msg = lan_worker_status_message(&t, "secret_missing", "");
+            assert!(
+                !msg.contains(LAN_SESSION_WIRE_ID),
+                "chrome must not expose {LAN_SESSION_WIRE_ID}"
+            );
+            assert_eq!(lan_worker_status_label(&t, "secret_missing"), t.lan_status_error);
+            if lang == "en" {
+                assert_eq!(
+                    msg,
+                    "LAN worker stopped: save a session key in Settings → LAN, then restart Preview."
+                );
+                assert_eq!(t.lan_status_error, "Error");
+            } else {
+                assert_eq!(
+                    msg,
+                    "Worker LAN arrêté : enregistrez une clé de session dans Paramètres → LAN, puis redémarrez Preview."
+                );
+                assert_eq!(t.lan_status_error, "Erreur");
+            }
+            assert!(sanitize_lan_chrome_detail(
+                "clé LAN indisponible: secret inconnu: lan_cluster_session_key"
+            )
+            .is_empty());
+            let configured = secret_names_for_chrome(
+                &t,
+                &["brave_search_api_key".into(), LAN_SESSION_WIRE_ID.into()],
+            );
+            assert!(!configured.contains(LAN_SESSION_WIRE_ID));
+            assert!(configured.contains(t.lan_session_value));
+        }
+        let counters = lan_discovery_telemetry_line(&strings("en"), true, 3, 1, "");
         assert!(counters.contains('3'));
         assert!(counters.contains('1'));
     }
