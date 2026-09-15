@@ -44,7 +44,7 @@ fn edit_theme_color(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool 
     changed
 }
 
-fn keygen_alphabet_label<'a>(alphabet: KeygenAlphabet, t: &'a i18n::UiStrings) -> &'a str {
+fn keygen_alphabet_label(alphabet: KeygenAlphabet, t: &i18n::UiStrings) -> &str {
     match alphabet {
         KeygenAlphabet::Hex => t.settings_secret_keygen_hex,
         KeygenAlphabet::Numeric => t.settings_secret_keygen_numeric,
@@ -53,7 +53,7 @@ fn keygen_alphabet_label<'a>(alphabet: KeygenAlphabet, t: &'a i18n::UiStrings) -
     }
 }
 
-fn keygen_target_label<'a>(target: KeygenTarget, t: &'a i18n::UiStrings) -> &'a str {
+fn keygen_target_label(target: KeygenTarget, t: &i18n::UiStrings) -> &str {
     match target {
         KeygenTarget::Brave => t.settings_secret_keygen_target_brave,
         KeygenTarget::Github => t.settings_secret_keygen_target_github,
