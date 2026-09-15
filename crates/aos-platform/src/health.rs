@@ -231,7 +231,9 @@ async fn tick_slo(sub: &Arc<PlatformSubsystem>, rt: &HealthRuntime) -> Result<()
         breaches,
     };
     snap.anomaly = anomaly;
-    // Preserve canary steps / clusters / canary_ok from last canary.
+    // Keep canary steps/clusters; sync ok flag from the last canary (or boot
+    // default) so SLO ticks never republish Default's false before first walk.
+    snap.canary_ok = canary_ok;
     rt.publish(snap);
     Ok(())
 }

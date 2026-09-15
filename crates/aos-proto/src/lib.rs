@@ -992,11 +992,12 @@ pub struct HealthCluster {
 }
 
 /// Aggregated runtime health (`health.snapshot` / `health.canary`).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthSnapshot {
     #[serde(default)]
     pub at_ms: u64,
-    #[serde(default)]
+    /// Absent / not-yet-run must not read as a failed canary (`bool` Default is false).
+    #[serde(default = "default_health_canary_ok")]
     pub canary_ok: bool,
     #[serde(default)]
     pub steps: Vec<HealthCanaryStep>,
@@ -1008,9 +1009,35 @@ pub struct HealthSnapshot {
     pub clusters: Vec<HealthCluster>,
 }
 
+fn default_health_canary_ok() -> bool {
+    true
+}
+
+impl Default for HealthSnapshot {
+    fn default() -> Self {
+        Self {
+            at_ms: 0,
+            canary_ok: true,
+            steps: Vec::new(),
+            slo: HealthSlo::default(),
+            anomaly: HealthAnomaly::default(),
+            clusters: Vec::new(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod health_snapshot_tests {
     use super::*;
+
+    #[test]
+    fn health_snapshot_default_is_not_a_failed_canary() {
+        let snap = HealthSnapshot::default();
+        assert!(snap.canary_ok);
+        assert!(snap.steps.is_empty());
+        let from_empty = serde_json::from_str::<HealthSnapshot>("{}").unwrap();
+        assert!(from_empty.canary_ok);
+    }
 
     #[test]
     fn health_snapshot_roundtrip() {
