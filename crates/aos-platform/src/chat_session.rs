@@ -1482,6 +1482,40 @@ archived: false
     }
 
     #[test]
+    fn export_markdown_includes_system_chrome() {
+        let dir = std::env::temp_dir().join(format!("aos-sess-sys-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = ChatSessionStore::open(&dir).unwrap();
+        let m = s.create(Some("Session".into()), None).unwrap();
+        s.append(&m.id, "user", "advisory question", vec![], None, None, None)
+            .unwrap();
+        s.append(
+            &m.id,
+            "assistant",
+            "Here is advice.",
+            vec![],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        s.append(
+            &m.id,
+            "system",
+            "agent.spawn.denied — Couldn't launch the agent.",
+            vec![],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let md = s.export_markdown(&m.id).unwrap();
+        assert!(md.contains("## system"));
+        assert!(md.contains("agent.spawn.denied"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn export_markdown_includes_agent_completion_body() {
         let dir = std::env::temp_dir().join(format!("aos-sess-export-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);

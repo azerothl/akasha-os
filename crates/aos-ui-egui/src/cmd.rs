@@ -248,7 +248,9 @@ pub(crate) enum Cmd {
         avatar: Option<String>,
         color: Option<String>,
     },
-    Troubleshoot,
+    Troubleshoot {
+        recent_chat_errors: Vec<(String, String)>,
+    },
     Audit {
         last: usize,
         actor: Option<String>,
@@ -257,6 +259,12 @@ pub(crate) enum Cmd {
     },
     /// S7.6 : vérification d'intégrité de la chaîne (`audit.verify`).
     AuditVerify,
+    /// Chat error surfaced to the user — append to audit journal.
+    AuditAppend {
+        action: String,
+        target: String,
+        detail: serde_json::Value,
+    },
     CapList {
         holder: String,
     },

@@ -229,7 +229,8 @@ pub(crate) fn on_chat_cancelled(
 }
 
 fn is_ephemeral_ui_line(line: &ChatLine) -> bool {
-    line.role == "système" || line.role == "system"
+    // Persisted session chrome uses role `system` on disk; UI-only notices use `système`.
+    line.role == "système"
 }
 
 fn content_message_count(lines: &[ChatLine]) -> usize {
@@ -237,8 +238,9 @@ fn content_message_count(lines: &[ChatLine]) -> usize {
 }
 
 /// How many persisted transcript messages to keep when branching from UI index
-/// `ui_index` (inclusive). Skips ephemeral `système`/`system` chrome that exists
-/// only in the painted transcript (e.g. "Historique rechargé.").
+/// `ui_index` (inclusive). Skips ephemeral `système` chrome that exists only in
+/// the painted transcript (e.g. "Historique rechargé."); persisted `system`
+/// lines from disk are counted.
 pub(crate) fn persisted_prefix_len(chat: &[ChatLine], ui_index: usize) -> usize {
     if chat.is_empty() {
         return 0;

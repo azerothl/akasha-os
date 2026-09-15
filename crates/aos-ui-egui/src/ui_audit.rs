@@ -493,6 +493,17 @@ impl UiApp {
                     });
                 }
             }
+            if !self.security_ui.recent_chat_errors.is_empty() {
+                ui.separator();
+                ui.label(if fr {
+                    "Erreurs chat récentes"
+                } else {
+                    "Recent chat errors"
+                });
+                for err in self.security_ui.recent_chat_errors.iter().rev().take(8) {
+                    ui.monospace(format!("{} — {}", err.code, err.message));
+                }
+            }
             if !self.security_ui.audit_logs.is_empty() {
                 ui.separator();
             }

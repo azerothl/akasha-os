@@ -97,9 +97,17 @@ impl UiApp {
             {
                 self.chat_state.session_chat.finish_turn(&session_id);
             } else {
-                self.chat.push(ChatLine::plain("user", text));
-                self.chat
-                    .push(ChatLine::plain("système", t.chat_previous_in_progress));
+                self.chat.push(ChatLine::plain("user", text.clone()));
+                let notice = t.chat_previous_in_progress.to_string();
+                crate::chat_event_controller::push_persisted_system_chrome(self, notice);
+                if let Some(sid) = self.chat_state.active_session.clone() {
+                    let _ = self.cmd_tx.send(Cmd::SessionAppend {
+                        session_id: sid,
+                        role: "user".into(),
+                        content: text,
+                        attachments: vec![],
+                    });
+                }
                 return;
             }
         }

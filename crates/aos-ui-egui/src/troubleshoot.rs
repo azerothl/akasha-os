@@ -10,7 +10,11 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 /// Collecte un diagnostic Preview, l'archive localement et préremplit l'onglet Retour.
-pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>) {
+pub(crate) async fn run_troubleshoot(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    recent_chat_errors: Vec<(String, String)>,
+) {
     let _ = evt_tx.send(Evt::Status("Dépannage : collecte des diagnostics…".into()));
     let home = aos_home();
     let version = std::fs::read_to_string(home.join("VERSION"))
@@ -178,6 +182,15 @@ pub(crate) async fn run_troubleshoot(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>)
         }
     }
     sections.push(svc);
+
+    if !recent_chat_errors.is_empty() {
+        let mut block = String::from("## Recent chat errors\n");
+        for (code, message) in recent_chat_errors.iter().rev().take(10) {
+            block.push_str(&format!("- `{code}` — {message}\n"));
+            findings.push(format!("chat error {code}"));
+        }
+        sections.push(block);
+    }
 
     let healthy = findings.is_empty();
     let summary = if healthy {
