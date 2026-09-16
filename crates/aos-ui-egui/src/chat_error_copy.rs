@@ -245,10 +245,21 @@ fn is_cap_or_policy_denial(msg: &str) -> Option<&'static str> {
     None
 }
 
+/// CM-locked toast when a salon ask-reply cannot be delivered.
+pub(crate) fn room_ask_unmatched_toast(t: &UiStrings) -> String {
+    t.room_ask_failed_toast.to_string()
+}
+
 /// Designer chrome: fallback headline plus optional cause line (no wire codes).
 pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified) -> String {
     if classified.code == "chat.error" {
         return t.chat_error_generic.to_string();
+    }
+    if classified.code == "room.ask_not_waiting" {
+        return format!(
+            "{}\n{}",
+            t.room_ask_failed_toast, classified.cause
+        );
     }
     format!("{}\n{}", t.chat_error_generic, classified.cause)
 }
@@ -634,9 +645,11 @@ mod tests {
         let classified = classify_chat_error(&en, wrapped);
         assert_eq!(classified.code, "room.ask_not_waiting");
         let out = user_visible_chat_error(&en, wrapped);
+        assert!(out.starts_with(en.room_ask_failed_toast));
         assert!(out.contains(en.room_ask_not_waiting));
         assert!(!out.contains("InternalError"));
         assert!(!out.contains("BadRequest"));
+        assert_eq!(room_ask_unmatched_toast(&en), en.room_ask_failed_toast);
         let missing_round =
             classify_chat_error(&en, "statut NotFound: aucun tour salon en attente");
         assert_eq!(missing_round.code, "room.ask_not_waiting");

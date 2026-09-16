@@ -559,6 +559,9 @@ pub struct UiStrings {
     pub room_queue_joiner: &'static str,
     pub room_thinking_label: &'static str,
     pub room_action_unavailable: &'static str,
+    /// CM-locked toast when an ask-reply cannot be delivered (no wire codes in UI).
+    pub room_ask_failed_toast: &'static str,
+    /// More precise cause under the ask-failed umbrella (audit / optional subline).
     pub room_ask_not_waiting: &'static str,
     /// Toast when an agent (or user) names a host folder outside `/documents` and `/downloads`.
     pub room_host_path_disallowed: &'static str,
@@ -1848,6 +1851,7 @@ const EN: UiStrings = UiStrings {
     room_queue_joiner: " then ",
     room_thinking_label: "Reflection",
     room_action_unavailable: "That action isn't available in the room.",
+    room_ask_failed_toast: "Couldn't ask that question. Try again.",
     room_ask_not_waiting: "The room isn't waiting for an answer.",
     room_host_path_disallowed: "An agent tried to open a folder outside this workspace.",
     room_host_path_disallowed_named:
@@ -3129,6 +3133,7 @@ const FR: UiStrings = UiStrings {
     room_queue_joiner: " puis ",
     room_thinking_label: "Réflexion",
     room_action_unavailable: "Action indisponible dans le salon.",
+    room_ask_failed_toast: "Impossible de poser la question. Réessayez.",
     room_ask_not_waiting: "Le salon n'attend plus de réponse.",
     room_host_path_disallowed: "Un agent a tenté d'ouvrir un dossier hors de cet espace de travail.",
     room_host_path_disallowed_named:
@@ -4502,6 +4507,14 @@ mod tests {
         assert_eq!(
             fr.chat_error_agent_spawn_denied,
             "Impossible de lancer l'agent."
+        );
+        assert_eq!(
+            en.room_ask_failed_toast,
+            "Couldn't ask that question. Try again."
+        );
+        assert_eq!(
+            fr.room_ask_failed_toast,
+            "Impossible de poser la question. Réessayez."
         );
         assert_eq!(
             en.room_ask_not_waiting,
