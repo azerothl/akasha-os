@@ -44,11 +44,13 @@ Under the Preview home `var/modules/`:
 Windows: `%LOCALAPPDATA%\AgentOS-Preview`. Linux / macOS:
 `~/.local/share/agentos-preview`.
 
-## Path B — Settings
+## Path B — Settings (catalogue / uninstall)
 
-Settings → Modules: `module.scaffold` (kind `script`) → `module.package` →
-`module.install`. Same cap review. Uninstall: Settings → Installed modules
-(not the bundled four).
+Settings does **not** expose `module.scaffold` / `module.package`. Authoring
+stays Path A (Scenarios or Chat). Settings → **Local module catalogue**:
+install a listed package (same cap review). **Installed modules** in that
+section: uninstall non-bundled modules (not the four protected hosts).
+Re-install still works.
 
 ## Rust compile (not first)
 
