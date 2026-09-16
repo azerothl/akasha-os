@@ -335,10 +335,11 @@ impl UiApp {
                                                 send_cap_radius,
                                                 fill,
                                             );
+                                            let ink = crate::theme::ink_on_accent(fill);
                                             let galley = ui.painter().layout_no_wrap(
                                                 t.agent_send.to_owned(),
                                                 egui::TextStyle::Button.resolve(ui.style()),
-                                                egui::Color32::WHITE,
+                                                ink,
                                             );
                                             let arrow_h = 10.0_f32;
                                             let stack_h = galley.size().y + 4.0 + arrow_h;
@@ -348,11 +349,7 @@ impl UiApp {
                                                 cap_rect.center().x - galley.size().x * 0.5,
                                                 top,
                                             );
-                                            ui.painter().galley(
-                                                label_pos,
-                                                galley,
-                                                egui::Color32::WHITE,
-                                            );
+                                            ui.painter().galley(label_pos, galley, ink);
                                             let arrow_rect = egui::Rect::from_center_size(
                                                 egui::pos2(
                                                     cap_rect.center().x,
@@ -363,10 +360,7 @@ impl UiApp {
                                             ui.allocate_new_ui(
                                                 egui::UiBuilder::new().max_rect(arrow_rect),
                                                 |ui| {
-                                                    icons::send_arrow(
-                                                        ui,
-                                                        egui::Color32::WHITE,
-                                                    );
+                                                    icons::send_arrow(ui, ink);
                                                 },
                                             );
                                         }

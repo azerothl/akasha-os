@@ -2436,9 +2436,11 @@ pub fn decl_action_button(
 ) -> bool {
     let h = crate::theme::CONTROL_MIN_H_COMFORTABLE;
     let font = crate::fonts::interface_font_id_small(ui);
+    let accent = crate::theme::button_colors(ui).accent;
+    let primary_ink = crate::theme::ink_on_accent(accent);
     let text_w = ui
         .painter()
-        .layout_no_wrap(label.to_string(), font.clone(), Color32::WHITE)
+        .layout_no_wrap(label.to_string(), font.clone(), primary_ink)
         .size()
         .x;
     let w = decl_action_button_width(ui.available_width(), text_w);
@@ -2451,7 +2453,6 @@ pub fn decl_action_button(
     if ui.is_rect_visible(rect) {
         let well = rect.shrink2(Vec2::new(2.0, 2.0));
         let painter = ui.painter();
-        let accent = crate::theme::button_colors(ui).accent;
         if primary && enabled {
             painter.rect_filled(well, 6.0, accent);
         } else if response.hovered() && enabled {
@@ -2465,7 +2466,7 @@ pub fn decl_action_button(
             );
         }
         let text_color = if primary && enabled {
-            Color32::WHITE
+            primary_ink
         } else if enabled {
             hover_color(ui, &response)
         } else {
