@@ -1,14 +1,14 @@
-//! Allowlisted external coding harnesses (`harness.run`).
+//! Allowlisted external coding harnesses (`harness.run` + session backend).
 //!
-//! Phase 1: spawn `codex` / `claude` / `grok` with a fixed argv template, never a
-//! shell, never model-supplied extra flags. Confirmation is the act-gate.
-//!
-//! Phase 2 (not implemented): a real external agent backend that appears on the
-//! roster and maps pause / resume / steer / kill onto the child process.
+//! Phase 1: one-shot `harness.run` tool (fixed argv, act-gate).
+//! Phase 2: worker `execution_backend = ExternalHarness` — sequential CLI turns
+//! with resume/continue for steer, cancel on pause, kill_on_drop for kill.
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
@@ -50,7 +50,7 @@ impl HarnessKind {
         self.as_str()
     }
 
-    /// Fixed argv; the prompt is the only user-controlled token.
+    /// Fixed argv for a fresh one-shot / first session turn.
     pub fn argv(self, prompt: &str) -> Vec<String> {
         match self {
             Self::Codex => vec![
@@ -64,6 +64,28 @@ impl HarnessKind {
                 "--output-format".into(),
                 "text".into(),
             ],
+            Self::Grok => vec!["-p".into(), prompt.to_string()],
+        }
+    }
+
+    /// Fixed argv to continue the last session in `cwd` (steer / follow-up).
+    pub fn continue_argv(self, prompt: &str) -> Vec<String> {
+        match self {
+            Self::Codex => vec![
+                "exec".into(),
+                "resume".into(),
+                "--last".into(),
+                "--skip-git-repo-check".into(),
+                prompt.to_string(),
+            ],
+            Self::Claude => vec![
+                "-c".into(),
+                "-p".into(),
+                prompt.to_string(),
+                "--output-format".into(),
+                "text".into(),
+            ],
+            // Grok has no stable resume flag — reissue the steer as a fresh prompt.
             Self::Grok => vec!["-p".into(), prompt.to_string()],
         }
     }
@@ -85,9 +107,7 @@ pub fn parse_request(args: &Value) -> Result<(HarnessKind, String, Option<String
         .get("harness")
         .and_then(|v| v.as_str())
         .and_then(HarnessKind::parse)
-        .ok_or_else(|| {
-            "harness.run : harness requis (codex | claude | grok)".to_string()
-        })?;
+        .ok_or_else(|| "harness.run : harness requis (codex | claude | grok)".to_string())?;
     let prompt = args
         .get("prompt")
         .and_then(|v| v.as_str())
@@ -121,7 +141,7 @@ pub fn parse_request(args: &Value) -> Result<(HarnessKind, String, Option<String
     Ok((kind, prompt, cwd, timeout_sec))
 }
 
-fn find_harness_binary(kind: HarnessKind) -> Result<PathBuf, String> {
+pub fn find_harness_binary(kind: HarnessKind) -> Result<PathBuf, String> {
     let name = kind.bin_name();
     let mut names = vec![name.to_string()];
     if cfg!(windows) {
@@ -154,7 +174,7 @@ fn stem_matches(path: &Path, harness: &str) -> bool {
         .is_some_and(|stem| stem.eq_ignore_ascii_case(harness))
 }
 
-fn resolve_cwd(raw: Option<&str>) -> Result<PathBuf, String> {
+pub fn resolve_cwd(raw: Option<&str>) -> Result<PathBuf, String> {
     let base = std::env::var_os("AOS_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
@@ -184,27 +204,81 @@ fn truncate_chars(s: &str, max: usize) -> String {
     if count <= max {
         return s.to_string();
     }
-    format!("{}…\n[tronqué {} caractères]", s.chars().take(max).collect::<String>(), count)
+    format!(
+        "{}…\n[tronqué {} caractères]",
+        s.chars().take(max).collect::<String>(),
+        count
+    )
 }
 
-/// Run an allowlisted harness. Never uses a shell.
-pub async fn run(args: &Value, caps: &[String]) -> String {
-    if !has_harness_cap(caps) {
-        return "harness.run : capacité manquante (coche Harness sur l'agent)".into();
+/// Outcome of one allowlisted CLI turn.
+#[derive(Debug, Clone)]
+pub struct HarnessTurnResult {
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub timed_out: bool,
+    pub cancelled: bool,
+    pub cwd: PathBuf,
+}
+
+impl HarnessTurnResult {
+    pub fn format_tool_result(&self, kind: HarnessKind) -> String {
+        if self.cancelled {
+            return format!("harness={} cancelled\ncwd={}", kind.as_str(), self.cwd.display());
+        }
+        if self.timed_out {
+            return format!(
+                "harness={} timed out\ncwd={}",
+                kind.as_str(),
+                self.cwd.display()
+            );
+        }
+        let code = self
+            .exit_code
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "signal".into());
+        format!(
+            "harness={} exit={code}\ncwd={}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+            kind.as_str(),
+            self.cwd.display(),
+            truncate_chars(&self.stdout, MAX_OUTPUT_CHARS),
+            truncate_chars(&self.stderr, MAX_OUTPUT_CHARS / 4)
+        )
     }
-    let (kind, prompt, cwd_raw, timeout_sec) = match parse_request(args) {
-        Ok(v) => v,
-        Err(e) => return e,
+
+    pub fn ok(&self) -> bool {
+        !self.timed_out && !self.cancelled && self.exit_code == Some(0)
+    }
+}
+
+/// Spawn one fixed-argv turn. When `cancel` flips true, the child is killed.
+pub async fn run_turn(
+    kind: HarnessKind,
+    prompt: &str,
+    cwd_raw: Option<&str>,
+    timeout_sec: u64,
+    resume: bool,
+    cancel: Option<Arc<AtomicBool>>,
+) -> Result<HarnessTurnResult, String> {
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        return Err("harness : prompt vide".into());
+    }
+    if prompt.chars().count() > MAX_PROMPT_CHARS {
+        return Err(format!(
+            "harness : prompt trop long (max {MAX_PROMPT_CHARS} caractères)"
+        ));
+    }
+    let bin = find_harness_binary(kind)?;
+    let cwd = resolve_cwd(cwd_raw)?;
+    let argv = if resume {
+        kind.continue_argv(prompt)
+    } else {
+        kind.argv(prompt)
     };
-    let bin = match find_harness_binary(kind) {
-        Ok(p) => p,
-        Err(e) => return e,
-    };
-    let cwd = match resolve_cwd(cwd_raw.as_deref()) {
-        Ok(p) => p,
-        Err(e) => return e,
-    };
-    let argv = kind.argv(&prompt);
+    let timeout_sec = timeout_sec.clamp(MIN_TIMEOUT_SECS, MAX_TIMEOUT_SECS);
+
     let mut cmd = Command::new(&bin);
     cmd.args(&argv)
         .current_dir(&cwd)
@@ -217,10 +291,9 @@ pub async fn run(args: &Value, caps: &[String]) -> String {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(e) => return format!("harness.run spawn err: {e}"),
-    };
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("harness spawn err: {e}"))?;
     let mut stdout_pipe = child.stdout.take();
     let mut stderr_pipe = child.stderr.take();
     let stdout_task = tokio::spawn(async move {
@@ -237,34 +310,86 @@ pub async fn run(args: &Value, caps: &[String]) -> String {
         }
         String::from_utf8_lossy(&buf).into_owned()
     });
-    match tokio::time::timeout(Duration::from_secs(timeout_sec), child.wait()).await {
-        Ok(status) => {
-            let code = status
-                .map(|s| {
-                    s.code()
-                        .map(|c| c.to_string())
-                        .unwrap_or_else(|| "signal".into())
-                })
-                .unwrap_or_else(|e| format!("wait err: {e}"));
-            let out = stdout_task.await.unwrap_or_default();
-            let err = stderr_task.await.unwrap_or_default();
-            format!(
-                "harness={} exit={code}\ncwd={}\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                kind.as_str(),
-                cwd.display(),
-                truncate_chars(&out, MAX_OUTPUT_CHARS),
-                truncate_chars(&err, MAX_OUTPUT_CHARS / 4)
-            )
-        }
-        Err(_) => {
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_sec);
+    loop {
+        if cancel
+            .as_ref()
+            .is_some_and(|c| c.load(Ordering::SeqCst))
+        {
             let _ = child.kill().await;
             let _ = child.wait().await;
-            format!(
-                "harness.run : timeout après {timeout_sec}s ({})",
-                kind.as_str()
-            )
+            let _ = stdout_task.await;
+            let _ = stderr_task.await;
+            return Ok(HarnessTurnResult {
+                exit_code: None,
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: false,
+                cancelled: true,
+                cwd,
+            });
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            let _ = stdout_task.await;
+            let _ = stderr_task.await;
+            return Ok(HarnessTurnResult {
+                exit_code: None,
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: true,
+                cancelled: false,
+                cwd,
+            });
+        }
+        match tokio::time::timeout(Duration::from_millis(200), child.wait()).await {
+            Ok(status) => {
+                let exit_code = status.ok().and_then(|s| s.code());
+                let stdout = stdout_task.await.unwrap_or_default();
+                let stderr = stderr_task.await.unwrap_or_default();
+                return Ok(HarnessTurnResult {
+                    exit_code,
+                    stdout,
+                    stderr,
+                    timed_out: false,
+                    cancelled: false,
+                    cwd,
+                });
+            }
+            Err(_) => continue,
         }
     }
+}
+
+/// Run an allowlisted harness (Phase 1 tool). Never uses a shell.
+pub async fn run(args: &Value, caps: &[String]) -> String {
+    if !has_harness_cap(caps) {
+        return "harness.run : capacité manquante (coche Harness sur l'agent)".into();
+    }
+    let (kind, prompt, cwd_raw, timeout_sec) = match parse_request(args) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    match run_turn(
+        kind,
+        &prompt,
+        cwd_raw.as_deref(),
+        timeout_sec,
+        false,
+        None,
+    )
+    .await
+    {
+        Ok(r) => r.format_tool_result(kind),
+        Err(e) => e,
+    }
+}
+
+pub fn default_turn_timeout_secs() -> u64 {
+    DEFAULT_TIMEOUT_SECS
 }
 
 #[cfg(test)]
@@ -317,6 +442,11 @@ mod tests {
             vec!["-p", p, "--output-format", "text"]
         );
         assert_eq!(HarnessKind::Grok.argv(p), vec!["-p", p]);
+        assert_eq!(
+            HarnessKind::Codex.continue_argv(p)[..3],
+            ["exec", "resume", "--last"]
+        );
+        assert_eq!(HarnessKind::Claude.continue_argv(p)[0], "-c");
     }
 
     #[test]

@@ -209,6 +209,29 @@ impl UiApp {
                     .desired_rows(2)
                     .desired_width(f32::INFINITY),
             );
+            ui.label(t.agents_execution_backend);
+            egui::ComboBox::from_id_salt("agent_execution_backend")
+                .selected_text(i18n::execution_backend_label(
+                    &t,
+                    &self.agent_ui.execution_backend,
+                ))
+                .show_ui(ui, |ui| {
+                    for id in ["native", "codex", "claude", "grok"] {
+                        ui.selectable_value(
+                            &mut self.agent_ui.execution_backend,
+                            id.to_string(),
+                            i18n::execution_backend_label(&t, id),
+                        );
+                    }
+                });
+            if self.agent_ui.execution_backend != "native" {
+                ui.label(t.agents_harness_cwd);
+                ui.text_edit_singleline(&mut self.agent_ui.harness_cwd);
+                ui.weak(t.agents_harness_cwd_hint);
+                if !self.agent_ui.tool_selected.iter().any(|x| x == "harness.run") {
+                    self.agent_ui.tool_selected.push("harness.run".into());
+                }
+            }
             ui.collapsing(t.agents_skills, |ui| {
                 if self.agent_ui.skill_catalog.is_empty() {
                     ui.weak(t.agents_catalog_empty);
@@ -528,6 +551,26 @@ impl UiApp {
         ui.collapsing(t.agents_tools, |ui| {
             ui_roster_tool_checkboxes(ui, &t, &mut draft.tools);
         });
+        ui.label(t.agents_execution_backend);
+        egui::ComboBox::from_id_salt(("roster_execution_backend", agent_id))
+            .selected_text(i18n::execution_backend_label(&t, &draft.execution_backend))
+            .show_ui(ui, |ui| {
+                for id in ["native", "codex", "claude", "grok"] {
+                    ui.selectable_value(
+                        &mut draft.execution_backend,
+                        id.to_string(),
+                        i18n::execution_backend_label(&t, id),
+                    );
+                }
+            });
+        if draft.execution_backend != "native" {
+            ui.label(t.agents_harness_cwd);
+            ui.text_edit_singleline(&mut draft.harness_cwd);
+            ui.weak(t.agents_harness_cwd_hint);
+            if !draft.tools.iter().any(|x| x == "harness.run") {
+                draft.tools.push("harness.run".into());
+            }
+        }
         ui.collapsing(t.agents_skills, |ui| {
             if self.agent_ui.skill_catalog.is_empty() {
                 ui.weak(t.agents_catalog_empty);
@@ -619,6 +662,8 @@ impl UiApp {
                 } else {
                     Some(draft.color)
                 },
+                execution_backend: draft.execution_backend,
+                harness_cwd: draft.harness_cwd,
             });
         }
     }

@@ -344,6 +344,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -409,6 +410,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -459,6 +461,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };

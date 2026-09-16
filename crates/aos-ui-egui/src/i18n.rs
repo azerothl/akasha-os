@@ -876,6 +876,13 @@ pub struct UiStrings {
     pub agents_tool_family_agents: &'static str,
     pub agents_tool_family_devices: &'static str,
     pub agents_tool_family_harness: &'static str,
+    pub agents_execution_backend: &'static str,
+    pub agents_execution_backend_native: &'static str,
+    pub agents_execution_backend_codex: &'static str,
+    pub agents_execution_backend_claude: &'static str,
+    pub agents_execution_backend_grok: &'static str,
+    pub agents_harness_cwd: &'static str,
+    pub agents_harness_cwd_hint: &'static str,
     pub agents_tool_notes_create: &'static str,
     pub agents_tool_notes_list: &'static str,
     pub agents_tool_notes_read: &'static str,
@@ -2152,6 +2159,13 @@ const EN: UiStrings = UiStrings {
     agents_tool_family_agents: "Agents",
     agents_tool_family_devices: "Camera / mic / USB",
     agents_tool_family_harness: "External CLIs",
+    agents_execution_backend: "Runtime",
+    agents_execution_backend_native: "Akasha (built-in)",
+    agents_execution_backend_codex: "Codex CLI",
+    agents_execution_backend_claude: "Claude Code",
+    agents_execution_backend_grok: "Grok CLI",
+    agents_harness_cwd: "Working directory",
+    agents_harness_cwd_hint: "Optional folder for the CLI (default: AOS_HOME). Steer continues the last session there.",
     agents_tool_notes_create: "Create note",
     agents_tool_notes_list: "List notes",
     agents_tool_notes_read: "Read note",
@@ -3423,6 +3437,13 @@ const FR: UiStrings = UiStrings {
     agents_tool_family_agents: "Agents",
     agents_tool_family_devices: "Caméra / micro / USB",
     agents_tool_family_harness: "CLI externes",
+    agents_execution_backend: "Runtime",
+    agents_execution_backend_native: "Akasha (intégré)",
+    agents_execution_backend_codex: "CLI Codex",
+    agents_execution_backend_claude: "Claude Code",
+    agents_execution_backend_grok: "CLI Grok",
+    agents_harness_cwd: "Dossier de travail",
+    agents_harness_cwd_hint: "Dossier optionnel pour le CLI (défaut : AOS_HOME). Steer reprend la dernière session à cet endroit.",
     agents_tool_notes_create: "Créer une note",
     agents_tool_notes_list: "Lister les notes",
     agents_tool_notes_read: "Lire une note",
@@ -4042,6 +4063,16 @@ pub fn job_state_human_label<'a>(t: &'a UiStrings, state: &str) -> &'a str {
         "failed" | "error" => t.decl_job_state_failed,
         "cancelled" | "canceled" => t.decl_job_state_cancelled,
         _ => t.decl_job_state_running,
+    }
+}
+
+/// Human label for agent execution backend wire id.
+pub fn execution_backend_label<'a>(t: &'a UiStrings, id: &str) -> &'a str {
+    match id.trim().to_ascii_lowercase().as_str() {
+        "codex" => t.agents_execution_backend_codex,
+        "claude" | "claude-code" => t.agents_execution_backend_claude,
+        "grok" | "grok-bot" => t.agents_execution_backend_grok,
+        _ => t.agents_execution_backend_native,
     }
 }
 

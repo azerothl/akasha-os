@@ -1212,6 +1212,9 @@ pub struct AgentSpec {
     /// Profil cognitif : normal (défaut) ou deep thinking (plan hiérarchique dédié).
     #[serde(default)]
     pub cognitive_mode: CognitiveMode,
+    /// Native Akasha loop (default) or allowlisted external coding CLI backend.
+    #[serde(default)]
+    pub execution_backend: AgentExecutionBackend,
 }
 
 fn default_agent_gate_mode() -> String {
@@ -1295,6 +1298,9 @@ pub struct AgentCreateRequest {
     /// Profil cognitif : normal (défaut) ou deep thinking.
     #[serde(default)]
     pub cognitive_mode: CognitiveMode,
+    /// Native Akasha loop (default) or allowlisted external coding CLI backend.
+    #[serde(default)]
+    pub execution_backend: AgentExecutionBackend,
 }
 
 impl AgentCreateRequest {
@@ -1336,6 +1342,7 @@ impl AgentCreateRequest {
             avatar: None,
             color: None,
             cognitive_mode: CognitiveMode::default(),
+            execution_backend: AgentExecutionBackend::default(),
         }
     }
 
@@ -1382,6 +1389,9 @@ pub struct AgentRosterUpdateRequest {
     pub avatar: Option<String>,
     #[serde(default)]
     pub color: Option<String>,
+    /// When set, replaces the roster entry's execution backend.
+    #[serde(default)]
+    pub execution_backend: Option<AgentExecutionBackend>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1546,6 +1556,90 @@ impl CognitiveMode {
             Self::Normal => "normal",
             Self::DeepThinking => "deep_thinking",
         }
+    }
+}
+
+/// Where a task worker runs its goal loop.
+///
+/// `Native` = Akasha Observe/Think/Act. `ExternalHarness` = allowlisted local CLI
+/// (Codex / Claude Code / Grok) under the worker, with steer/pause/kill mapped to
+/// resume turns / cancel / process tree kill.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AgentExecutionBackend {
+    #[default]
+    Native,
+    ExternalHarness {
+        /// `codex` | `claude` | `grok`
+        harness: String,
+        /// Working directory for the CLI (defaults to AOS_HOME when empty).
+        #[serde(default)]
+        cwd: Option<String>,
+    },
+}
+
+impl AgentExecutionBackend {
+    pub fn is_native(&self) -> bool {
+        matches!(self, Self::Native)
+    }
+
+    pub fn is_external_harness(&self) -> bool {
+        matches!(self, Self::ExternalHarness { .. })
+    }
+
+    pub fn harness_id(&self) -> Option<&str> {
+        match self {
+            Self::Native => None,
+            Self::ExternalHarness { harness, .. } => Some(harness.as_str()),
+        }
+    }
+
+    pub fn cwd(&self) -> Option<&str> {
+        match self {
+            Self::ExternalHarness { cwd: Some(c), .. } if !c.trim().is_empty() => Some(c.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Parse UI / wire id (`""` / `native` / `codex` / `claude` / `grok`).
+    pub fn from_harness_id(id: &str, cwd: Option<String>) -> Self {
+        match id.trim().to_ascii_lowercase().as_str() {
+            "" | "native" | "akasha" => Self::Native,
+            "codex" => Self::ExternalHarness {
+                harness: "codex".into(),
+                cwd,
+            },
+            "claude" | "claude-code" => Self::ExternalHarness {
+                harness: "claude".into(),
+                cwd,
+            },
+            "grok" | "grok-bot" => Self::ExternalHarness {
+                harness: "grok".into(),
+                cwd,
+            },
+            other if !other.is_empty() => Self::ExternalHarness {
+                harness: other.to_string(),
+                cwd,
+            },
+            _ => Self::Native,
+        }
+    }
+}
+
+#[cfg(test)]
+mod execution_backend_tests {
+    use super::*;
+
+    #[test]
+    fn from_harness_id_roundtrip() {
+        assert!(AgentExecutionBackend::from_harness_id("native", None).is_native());
+        let b = AgentExecutionBackend::from_harness_id("codex", Some("E:/repo".into()));
+        assert_eq!(b.harness_id(), Some("codex"));
+        assert_eq!(b.cwd(), Some("E:/repo"));
+        let json = serde_json::to_value(&b).unwrap();
+        assert_eq!(json["kind"], "external_harness");
+        let back: AgentExecutionBackend = serde_json::from_value(json).unwrap();
+        assert_eq!(back, b);
     }
 }
 
@@ -1765,6 +1859,8 @@ pub struct AgentInfo {
     pub deep_plan: Option<DeepPlan>,
     #[serde(default)]
     pub cognitive_mode: CognitiveMode,
+    #[serde(default)]
+    pub execution_backend: AgentExecutionBackend,
 }
 
 impl AgentInfo {
@@ -7539,6 +7635,7 @@ mod chat_session_room_tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -7589,6 +7686,7 @@ mod chat_session_room_tests {
             origin: Some("library".into()),
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -7641,6 +7739,7 @@ mod chat_session_room_tests {
             origin: Some("assistant".into()),
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };

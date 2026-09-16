@@ -307,6 +307,13 @@ async fn main() {
         .await
         .expect("connexion au bus");
 
+    if spec.execution_backend.is_external_harness() {
+        aos_agent::harness_backend::ensure_harness_caps(&mut spec);
+        let _ = persist::write_spec(&spec);
+        aos_agent::harness_backend::run(bus, bus_addr, spec, restore).await;
+        return;
+    }
+
     inherit_session_model(&bus, &mut spec).await;
     inherit_device_vision_model(&bus, &mut spec).await;
 
@@ -2976,6 +2983,7 @@ async fn spawn_child(
         gate_mode: parent.gate_mode.clone(),
         origin: None,
         cognitive_mode: aos_proto::CognitiveMode::Normal,
+        execution_backend: Default::default(),
         avatar: None,
         color: None,
     };
@@ -5488,6 +5496,7 @@ mod tests {
             gate_mode: "autonomous".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -5563,6 +5572,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -5598,6 +5608,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };

@@ -237,6 +237,7 @@ mod tests {
             color: None,
             deep_plan: None,
             cognitive_mode: Default::default(),
+            execution_backend: Default::default(),
         }
     }
 

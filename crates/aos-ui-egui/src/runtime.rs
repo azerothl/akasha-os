@@ -2067,6 +2067,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             library,
             avatar,
             color,
+            execution_backend,
+            harness_cwd,
         } => {
             let name = display_name.trim().to_string();
             if name.is_empty() {
@@ -2096,6 +2098,16 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             } else {
                 Some(color.to_string())
             };
+            let cwd = {
+                let c = harness_cwd.trim();
+                if c.is_empty() {
+                    None
+                } else {
+                    Some(c.to_string())
+                }
+            };
+            req.execution_backend =
+                aos_proto::AgentExecutionBackend::from_harness_id(&execution_backend, cwd);
             if library {
                 let role = task.trim();
                 req.system_prompt = if system_prompt.is_some() {
@@ -2110,6 +2122,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             }
             req.skills = skills;
             req.tools = tools;
+            if req.execution_backend.is_external_harness()
+                && !req.tools.iter().any(|t| t == "harness.run")
+            {
+                req.tools.push("harness.run".into());
+            }
             req.mcp_servers = mcp_servers;
             req.documents = documents;
             req.optimize_prompt = if library { false } else { optimize_prompt };
@@ -2305,7 +2322,23 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             model_id,
             avatar,
             color,
+            execution_backend,
+            harness_cwd,
         } => {
+            let cwd = {
+                let c = harness_cwd.trim();
+                if c.is_empty() {
+                    None
+                } else {
+                    Some(c.to_string())
+                }
+            };
+            let mut tools = tools;
+            let backend =
+                aos_proto::AgentExecutionBackend::from_harness_id(&execution_backend, cwd);
+            if backend.is_external_harness() && !tools.iter().any(|t| t == "harness.run") {
+                tools.push("harness.run".into());
+            }
             match bus
                 .call::<AgentRosterUpdateRequest, AgentSpecResponse>(
                     aos_agent::intents::ROSTER_UPDATE,
@@ -2320,6 +2353,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         model_id,
                         avatar,
                         color,
+                        execution_backend: Some(backend),
                     },
                     vec![],
                 )

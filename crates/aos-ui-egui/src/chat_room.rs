@@ -115,6 +115,7 @@ pub fn agents_with_library_placeholders(agents: &[AgentInfo], _t: &UiStrings) ->
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         });
@@ -2403,6 +2404,7 @@ mod tests {
             origin: Some("library".into()),
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         }
@@ -2436,6 +2438,7 @@ mod tests {
             origin: Some("form".into()),
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         }
@@ -2469,6 +2472,7 @@ mod tests {
             origin: Some("assistant".into()),
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         }

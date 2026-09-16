@@ -645,6 +645,7 @@ mod canvas_completion_tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         }

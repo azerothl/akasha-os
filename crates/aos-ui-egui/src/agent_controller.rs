@@ -47,6 +47,8 @@ impl UiApp {
             library,
             avatar: self.agent_ui.avatar.clone(),
             color: self.agent_ui.color.clone(),
+            execution_backend: self.agent_ui.execution_backend.clone(),
+            harness_cwd: self.agent_ui.harness_cwd.clone(),
         });
     }
 

@@ -122,6 +122,7 @@ pub fn roster_spec_from_request(agent_id: &str, req: &AgentCreateRequest) -> Age
         avatar: req.avatar.clone(),
         color: req.color.clone(),
         cognitive_mode: req.cognitive_mode,
+        execution_backend: req.execution_backend.clone(),
     }
 }
 

@@ -1026,6 +1026,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             library: false,
             avatar: String::new(),
             color: String::new(),
+            execution_backend: "native".into(),
+            harness_cwd: String::new(),
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
@@ -1280,6 +1282,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     library: false,
                     avatar: String::new(),
                     color: String::new(),
+                    execution_backend: "native".into(),
+                    harness_cwd: String::new(),
                 });
                 // Rester dans le chat — carte via Evt::AgentSpawned
             }

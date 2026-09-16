@@ -9,9 +9,11 @@
 # does its own network egress — Akasha net.connect / offline_strict do not
 # wrap it. Prefer native web.search / web.browse / net.fetch for ordinary HTML.
 #
-# Coding CLIs (Codex, Claude Code, Grok): prefer the native gated tool
-# `harness.run` on an agent (Agents → tools → External CLIs). Do not add a
-# generic shell MCP here — Akasha will not wrap arbitrary argv.
+# Coding CLIs (Codex, Claude Code, Grok):
+# - One-shot from a native agent: enable tool `harness.run` (Agents → External CLIs).
+# - Full worker backend with Steer/Pause/Kill: Agents → Advanced → Runtime =
+#   Codex / Claude / Grok (sets AgentSpec.execution_backend). Do not add a
+#   generic shell MCP here — Akasha will not wrap arbitrary argv.
 #
 # servers:
 #   filesystem:
