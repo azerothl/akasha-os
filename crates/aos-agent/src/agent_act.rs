@@ -74,6 +74,9 @@ pub fn requires_act_gate(action: &str) -> bool {
     if name.starts_with("web.") || name == "net.fetch" {
         return true;
     }
+    if name.starts_with("harness.") {
+        return true;
+    }
     if name == "mem.episodic_write" {
         return true;
     }
@@ -94,6 +97,11 @@ mod tests {
     fn gate_canvas_mutate_not_get() {
         assert!(requires_act_gate("canvas.stroke"));
         assert!(!requires_act_gate("canvas.get"));
+    }
+
+    #[test]
+    fn gate_harness_always() {
+        assert!(requires_act_gate("harness.run"));
     }
 
     #[test]

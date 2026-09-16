@@ -57,6 +57,8 @@ pub struct UiStrings {
     pub agent_act_net_fetch_url: &'static str,
     pub agent_act_net_fetch: &'static str,
     pub agent_act_mem_episodic_write: &'static str,
+    pub agent_act_harness_run: &'static str,
+    pub agent_act_harness_run_prompt: &'static str,
     pub agent_act_generic: &'static str,
     pub status_update_pending: &'static str,
     pub status_update_downloading: &'static str,
@@ -873,6 +875,7 @@ pub struct UiStrings {
     pub agents_tool_family_canvas: &'static str,
     pub agents_tool_family_agents: &'static str,
     pub agents_tool_family_devices: &'static str,
+    pub agents_tool_family_harness: &'static str,
     pub agents_tool_notes_create: &'static str,
     pub agents_tool_notes_list: &'static str,
     pub agents_tool_notes_read: &'static str,
@@ -920,6 +923,7 @@ pub struct UiStrings {
     pub agents_tool_device_usb_read: &'static str,
     pub agents_tool_device_usb_write: &'static str,
     pub agents_tool_device_usb_close: &'static str,
+    pub agents_tool_harness_run: &'static str,
     pub agents_mcp: &'static str,
     pub agents_mcp_empty: &'static str,
     pub agents_docs: &'static str,
@@ -1333,6 +1337,8 @@ const EN: UiStrings = UiStrings {
     agent_act_net_fetch_url: "The agent wants to download {url}.",
     agent_act_net_fetch: "The agent wants to download a URL.",
     agent_act_mem_episodic_write: "The agent wants to save a memory.",
+    agent_act_harness_run: "The agent wants to run an external coding CLI.",
+    agent_act_harness_run_prompt: "The agent wants to run {harness}: « {prompt} ».",
     agent_act_generic: "The agent wants to perform an action.",
     status_update_pending: "Update {version} ready. Relaunch to apply.",
     status_update_downloading: "Downloading {version}…",
@@ -2145,6 +2151,7 @@ const EN: UiStrings = UiStrings {
     agents_tool_family_canvas: "Canvas",
     agents_tool_family_agents: "Agents",
     agents_tool_family_devices: "Camera / mic / USB",
+    agents_tool_family_harness: "External CLIs",
     agents_tool_notes_create: "Create note",
     agents_tool_notes_list: "List notes",
     agents_tool_notes_read: "Read note",
@@ -2192,6 +2199,7 @@ const EN: UiStrings = UiStrings {
     agents_tool_device_usb_read: "USB read",
     agents_tool_device_usb_write: "USB write",
     agents_tool_device_usb_close: "Close USB handle",
+    agents_tool_harness_run: "Run Codex / Claude / Grok",
     agents_mcp: "MCP servers",
     agents_mcp_empty: "Configure var/mcp/servers.yaml then Refresh",
     agents_docs: "Documents (comma-separated paths)",
@@ -2600,6 +2608,8 @@ const FR: UiStrings = UiStrings {
     agent_act_net_fetch_url: "L'agent veut télécharger {url}.",
     agent_act_net_fetch: "L'agent veut télécharger une URL.",
     agent_act_mem_episodic_write: "L'agent veut enregistrer un souvenir.",
+    agent_act_harness_run: "L'agent veut lancer un CLI de coding externe.",
+    agent_act_harness_run_prompt: "L'agent veut lancer {harness} : « {prompt} ».",
     agent_act_generic: "L'agent veut effectuer une action.",
     status_update_pending: "Mise à jour {version} prête. Relancer pour appliquer.",
     status_update_downloading: "Téléchargement {version}…",
@@ -3412,6 +3422,7 @@ const FR: UiStrings = UiStrings {
     agents_tool_family_canvas: "Canvas",
     agents_tool_family_agents: "Agents",
     agents_tool_family_devices: "Caméra / micro / USB",
+    agents_tool_family_harness: "CLI externes",
     agents_tool_notes_create: "Créer une note",
     agents_tool_notes_list: "Lister les notes",
     agents_tool_notes_read: "Lire une note",
@@ -3459,6 +3470,7 @@ const FR: UiStrings = UiStrings {
     agents_tool_device_usb_read: "Lecture USB",
     agents_tool_device_usb_write: "Écriture USB",
     agents_tool_device_usb_close: "Fermer USB",
+    agents_tool_harness_run: "Lancer Codex / Claude / Grok",
     agents_mcp: "Serveurs MCP",
     agents_mcp_empty: "Configurer var/mcp/servers.yaml puis Rafraîchir",
     agents_docs: "Documents (chemins séparés par virgule)",
@@ -4001,6 +4013,7 @@ pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> 
         "device.usb.read" => Some(t.agents_tool_device_usb_read),
         "device.usb.write" => Some(t.agents_tool_device_usb_write),
         "device.usb.close" => Some(t.agents_tool_device_usb_close),
+        "harness.run" => Some(t.agents_tool_harness_run),
         _ => None,
     }
 }
@@ -4500,6 +4513,10 @@ mod tests {
         assert_eq!(
             roster_tool_label(&t, "device.camera.capture"),
             "Webcam photo"
+        );
+        assert_eq!(
+            roster_tool_label(&t, "harness.run"),
+            "Run Codex / Claude / Grok"
         );
         let t_fr = strings("fr");
         assert_eq!(roster_tool_label(&t_fr, "notes.create"), "Créer une note");

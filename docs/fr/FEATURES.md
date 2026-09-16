@@ -337,6 +337,7 @@ Boucle Observe / Think / Act avec caps, confirmation et audit.
 | `task.assess` | Classe le goal en **simple** ou **complex** ; complex active la skill planner |
 | Skills | Recettes déclaratives (`share/skills/`, surchargeables sous `var/skills/`) |
 | Outils | Natif, module WASM, MCP, ou runtime (plan / spawn / mémoire) |
+| `harness.run` | Spawn opt-in allowlisté des CLI locaux `codex` / `claude` / `grok` (prompt seulement, act-gate même en chat autonome) ; **pas** encore un backend roster / steer |
 | MCP | Serveurs stdio optionnels (`share/mcp/servers.yaml.example`) ; un MCP navigateur headless installé par l’utilisateur peut lire les pages JS (voir §7) |
 | Sous-agents | `agent.spawn` / `agent.await` avec un brief étroit |
 | `user.ask` | Pause et question à l'utilisateur dans le chat lié ; réponse via steer |
@@ -487,6 +488,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Multi-GPU **hard-green** sans run 2 GPU documenté (chemin + skip 1 GPU en 0.10)
 - Scellage PCR / attestation vault
 - Merge binaire sibling / assistant-as-module
+- Backend d'agent de coding externe (Codex / Claude Code / Grok comme membres roster avec steer) — `harness.run` est uniquement la tranche CLI gated
 - Webview sandboxée / UI module HTML/JS (compositor E13)
 - kind `webview` (pie/scatter livrés en 0.10.1)
 - Second GGUF draft / vLLM dans le TCB / DFlash2 (E20 = prompt-lookup seulement)

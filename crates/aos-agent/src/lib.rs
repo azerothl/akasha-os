@@ -13,6 +13,7 @@ pub mod deep_thinking;
 pub mod device_tools;
 pub mod document_index;
 pub mod document_prep;
+pub mod harness;
 pub mod health;
 pub mod host_folder;
 pub mod mcp;

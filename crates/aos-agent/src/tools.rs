@@ -372,6 +372,22 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             backend: ToolBackend::Native,
             required_caps: vec!["device.usb.io".into()],
         },
+        ToolDesc {
+            name: "harness.run".into(),
+            description: "Lancer un CLI coding allowlisté (codex, claude, grok) avec un prompt. Pas de shell libre ni d'argv extra. Confirmation requise. cwd optionnel (dossier existant).".into(),
+            input_schema: serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "harness":{"type":"string","description":"codex | claude | grok"},
+                    "prompt":{"type":"string","description":"consigne transmise au CLI (seul argument libre)"},
+                    "cwd":{"type":"string","description":"dossier de travail existant (défaut AOS_HOME)"},
+                    "timeout_sec":{"type":"integer","description":"15–600, défaut 180"}
+                },
+                "required":["harness","prompt"]
+            }),
+            backend: ToolBackend::Native,
+            required_caps: vec!["harness.run".into()],
+        },
         // Runtime
         ToolDesc {
             name: "plan.update".into(),
@@ -1616,6 +1632,7 @@ pub fn reserved_tool_prefix(prefix: &str) -> bool {
             | "device"
             | "usb"
             | "shell"
+            | "harness"
     )
 }
 
@@ -2166,6 +2183,18 @@ mod tests {
     }
 
     #[test]
+    fn harness_run_is_opt_in_native() {
+        assert!(!is_module_fallback_candidate("harness.run"));
+        let permissive = select_tools(&[], &[]);
+        assert!(!permissive.iter().any(|t| t.name == "harness.run"));
+        let tools = select_tools(&["harness.run".into()], &[]);
+        assert!(tools.iter().any(|t| t.name == "harness.run"));
+        let (kind, _, _) = classify_action("harness.run", &tools, &[]);
+        assert_eq!(kind, "native");
+        assert!(caps_for_tools(&tools, &[]).contains(&"harness.run".to_string()));
+    }
+
+    #[test]
     fn resolve_usb_io_cap_tool_rejects_bare_cap_name() {
         let err =
             resolve_usb_io_cap_tool("device.usb.io", &serde_json::json!({})).expect_err("bare cap");
@@ -2205,6 +2234,8 @@ mod tests {
         assert!(!is_module_fallback_candidate("shell.run"));
         assert!(reserved_tool_prefix("usb"));
         assert!(reserved_tool_prefix("shell"));
+        assert!(reserved_tool_prefix("harness"));
+        assert!(!is_module_fallback_candidate("harness.run"));
     }
 
     #[test]

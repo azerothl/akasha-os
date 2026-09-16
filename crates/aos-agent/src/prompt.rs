@@ -222,6 +222,7 @@ IMPORTANT :
 - Après une découverte utile : `memory.remember`.
 - Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
 - Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
+- `harness.run` (si au catalogue) : CLI allowlisté `codex` / `claude` / `grok` — prompt seulement, jamais de shell ni d'argv extra. Confirmation utilisateur.
 
 Actions runtime (toujours `{"action":"…","args":{…}}` — ne mets pas brief/tools au top-level) :
 - plan.update : {"action":"plan.update","args":{"nodes":[{"id":"1","title":"...","status":"Pending"}]}}
@@ -244,6 +245,7 @@ Extensions OS (si limitation) :
 - module.package : {"name":"..."}  (script/ext-rt, sans rustc)
 - module.compile : {"name":"..."}  (Rust→WASM, confirmation)
 - module.install : {"source_dir":"..."}  (après package/compile)
+- harness.run : {"harness":"codex|claude|grok","prompt":"..."}  (CLI allowlist, confirmation)
 
 Ou appelle un outil du catalogue avec action = nom de l'outil.
 Compat : une ligne `TOOL: <outil> <args json>` est aussi acceptée.

@@ -2738,6 +2738,10 @@ async fn wait_user_answer(
 }
 
 fn should_gate_action(spec: &AgentSpec, action: &str) -> bool {
+    let canonical = canonicalize_tool_name(action);
+    if spec.session_id.is_some() && canonical.starts_with("harness.") {
+        return true;
+    }
     spec.session_id.is_some()
         && aos_agent::agent_act::AgentGateMode::parse(&spec.gate_mode)
             == aos_agent::agent_act::AgentGateMode::Ask
@@ -4281,6 +4285,7 @@ async fn invoke_native(
         | "device.usb.read"
         | "device.usb.write"
         | "device.usb.close" => invoke_device_tool(bus, agent_id, tool, args, session_id).await,
+        "harness.run" => aos_agent::harness::run(args, caps).await,
         other => format!("natif non implémenté: {other}"),
     }
 }

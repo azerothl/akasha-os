@@ -617,6 +617,7 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "device.usb.close",
         ],
     ),
+    ("harness", &["harness.run"]),
 ];
 
 fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
@@ -628,6 +629,7 @@ fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
         "canvas" => t.agents_tool_family_canvas,
         "agents" => t.agents_tool_family_agents,
         "devices" => t.agents_tool_family_devices,
+        "harness" => t.agents_tool_family_harness,
         _ => "?",
     }
 }

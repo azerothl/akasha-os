@@ -121,6 +121,18 @@ pub fn format_agent_act_phrase(t: &UiStrings, action: &str, args: &Value) -> Str
             }
         }
         "mem.episodic_write" => t.agent_act_mem_episodic_write.into(),
+        "harness.run" => {
+            if let Some(harness) = arg_str(args, "harness") {
+                let prompt = arg_str(args, "prompt").unwrap_or_default();
+                subst(
+                    &subst(t.agent_act_harness_run_prompt, "harness", &harness),
+                    "prompt",
+                    &truncate(&prompt, 80),
+                )
+            } else {
+                t.agent_act_harness_run.into()
+            }
+        }
         _ => {
             if let Some(label) = crate::i18n::tool_human_label(t, name) {
                 label.to_string()
@@ -192,6 +204,19 @@ mod tests {
         let en = format_agent_act_phrase(&t, "canvas.stroke", &json!({}));
         assert!(!en.contains("canvas.stroke"));
         assert!(en.contains("draw"));
+    }
+
+    #[test]
+    fn harness_run_phrase_names_cli() {
+        let t = crate::i18n::strings("en");
+        let en = format_agent_act_phrase(
+            &t,
+            "harness.run",
+            &json!({"harness":"codex","prompt":"fix tests"}),
+        );
+        assert!(en.contains("codex"));
+        assert!(en.contains("fix tests"));
+        assert!(!en.contains("harness.run"));
     }
 
     #[test]
