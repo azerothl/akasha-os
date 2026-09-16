@@ -323,7 +323,7 @@ fn screenshot_result_path() -> String {
         .unwrap_or_else(|| "/downloads/images/journey-teapot.png".into())
 }
 
-/// Minimal Create surface for marketing: prompt + result preview + history cue.
+/// Minimal Create surface for marketing: prompt + large result preview.
 const MARKETING_CREATE_DOC: &str = r#"{
   "type": "declarative_ui",
   "contract": 2,
@@ -348,7 +348,7 @@ const MARKETING_CREATE_DOC: &str = r#"{
   },
   "root": {
     "kind": "split",
-    "split_ratio": 0.42,
+    "split_ratio": 0.30,
     "children": [
       {
         "kind": "column",
@@ -400,11 +400,7 @@ const MARKETING_CREATE_DOC: &str = r#"{
   }
 }"#;
 
-/// Seed Chat + Create for website marketing captures (FR copy).
-pub fn seed_screenshot_marketing_chat(app: &mut UiApp) {
-    seed_screenshot_modules(app);
-    app.prefs.language = "fr".into();
-    save_preferences(&app.prefs);
+fn seed_marketing_sessions(app: &mut UiApp) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -417,7 +413,7 @@ pub fn seed_screenshot_marketing_chat(app: &mut UiApp) {
             updated_ms: now,
             archived: false,
             pinned: true,
-            message_count: 2,
+            message_count: 4,
             model_id: Some("local:qwen3.5-9b-instruct".into()),
             mode: Default::default(),
             members: vec![],
@@ -457,6 +453,32 @@ pub fn seed_screenshot_marketing_chat(app: &mut UiApp) {
         },
     ];
     app.chat_state.active_session = Some("shot-a".into());
+}
+
+/// Rail marketing shot: Memory selected so the primary rail selection differs from Chat.
+pub fn seed_screenshot_marketing_rail(app: &mut UiApp) {
+    seed_screenshot_modules(app);
+    seed_marketing_sessions(app);
+    app.prefs.language = "fr".into();
+    app.prefs.ui_layout.activity_panel_open = false;
+    app.prefs.ui_layout.context_panel_open = false;
+    app.prefs.ui_layout.chat_sidebar_width = 200.0;
+    save_preferences(&app.prefs);
+    app.memory_ui.query = "préférence".into();
+    app.memory_ui.note = "Je préfère le français pour l'interface.".into();
+    app.tab = Tab::Memory;
+}
+
+/// Chat marketing shot: conversation transcript with session list visible.
+pub fn seed_screenshot_marketing_chat(app: &mut UiApp) {
+    seed_screenshot_modules(app);
+    seed_marketing_sessions(app);
+    app.prefs.language = "fr".into();
+    app.prefs.ui_layout.activity_panel_open = false;
+    app.prefs.ui_layout.context_panel_open = false;
+    app.prefs.ui_layout.chat_sidebar_width = 220.0;
+    save_preferences(&app.prefs);
+    app.chat_state.sidebar.tools_open = false;
     app.chat = vec![
         ChatLine::plain(
             "user",
@@ -466,11 +488,21 @@ pub fn seed_screenshot_marketing_chat(app: &mut UiApp) {
             "assistant",
             "Oui — lumière douce, table en bois clair, photo produit, sans texte. Tu peux lancer Générer dans Créer.",
         ),
+        ChatLine::plain(
+            "user",
+            "Parfait. Garde aussi « pas de texte dans l’image ».",
+        ),
+        ChatLine::plain(
+            "assistant",
+            "Noté. Invite prête — ouvre Créer et lance Générer quand tu veux.",
+        ),
     ];
     app.tab = Tab::Chat;
 }
 
 pub fn seed_screenshot_marketing_create(app: &mut UiApp) {
+    use crate::rich_decl::ImageViewInteractionState;
+
     seed_screenshot_modules(app);
     let panel = app
         .decl_panels
@@ -487,12 +519,22 @@ pub fn seed_screenshot_marketing_create(app: &mut UiApp) {
                 ),
             );
             panel.seed_local("result_path", json!(screenshot_result_path()));
+            // Fill the preview panel (slight zoom past 1:1 so 512² reads larger).
+            panel.image_views.insert(
+                "preview".into(),
+                ImageViewInteractionState {
+                    zoom: 1.45,
+                    ..Default::default()
+                },
+            );
         }
         Err(err) => {
             eprintln!("seed_screenshot_marketing_create: parse failed: {err}");
         }
     }
     app.prefs.language = "fr".into();
+    app.prefs.ui_layout.activity_panel_open = false;
+    app.prefs.ui_layout.context_panel_open = false;
     save_preferences(&app.prefs);
     app.open_module_tab(MODULE_NAME.into());
 }
@@ -581,24 +623,22 @@ impl UiScreenshotHarness {
         if self.focus_marketing {
             match self.step {
                 0 => {
-                    seed_screenshot_marketing_chat(app);
-                    app.chat_state.sidebar.tools_open = false;
+                    seed_screenshot_marketing_rail(app);
                     self.request(ctx, "m1-rail");
                     self.step = 1;
-                    self.settle_left = 5;
+                    self.settle_left = 6;
                 }
                 1 => {
                     seed_screenshot_marketing_chat(app);
-                    app.chat_state.sidebar.tools_open = true;
                     self.request(ctx, "m2-chat");
                     self.step = 2;
-                    self.settle_left = 5;
+                    self.settle_left = 6;
                 }
                 2 => {
                     seed_screenshot_marketing_create(app);
                     self.request(ctx, "m3-create");
                     self.step = 3;
-                    self.settle_left = 8;
+                    self.settle_left = 10;
                 }
                 _ => {
                     eprintln!("AOS_UI_SCREENSHOT_DIR: marketing captures complete — exiting");
