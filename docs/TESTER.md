@@ -392,6 +392,19 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Script must print URL + sha256, refuse on mismatch, overlay into the stable
   prefix without wiping `var/`.
 
+## Automated user journeys (team)
+
+For release machines with real SD/LTX weights, run the bus-driven end-user
+suite (sessions + image/video + restart + optional website screenshots):
+
+```powershell
+.\demo\run-user-journeys.ps1 -Screenshots
+```
+
+Details, fixtures, and the short manual UI checklist:
+[USER-JOURNEYS.md](USER-JOURNEYS.md). This does **not** replace the cohort
+short path above.
+
 ## Success criteria (team)
 
 - **Gate:** 3 Windows + 1 Linux + 1 macOS Apple Silicon testers complete the

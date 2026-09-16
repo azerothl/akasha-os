@@ -59,12 +59,24 @@ impl RichDeclSubscriptions {
 }
 
 /// Local pan/zoom state for an `image_view` widget (host-owned, no WASM round trips).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ImageViewInteractionState {
     pub zoom: f32,
     pub pan: [f32; 2],
     pub interaction_id: String,
     pub active: bool,
+}
+
+impl Default for ImageViewInteractionState {
+    fn default() -> Self {
+        Self {
+            // 1.0 = fit-to-panel; 0 was treated as 0.1 and collapsed previews to a thumbnail.
+            zoom: 1.0,
+            pan: [0.0, 0.0],
+            interaction_id: String::new(),
+            active: false,
+        }
+    }
 }
 
 impl ImageViewInteractionState {

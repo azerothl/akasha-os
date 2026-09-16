@@ -1374,7 +1374,13 @@ impl DeclUiPanelState {
                                 let fit = (max_w / base.x.max(1.0))
                                     .min(max_h / base.y.max(1.0))
                                     .min(1.0);
-                                let size = base * fit * view.zoom.max(0.1);
+                                // Treat unset/zero zoom as 1.0 so previews fill the panel.
+                                let zoom = if view.zoom <= 0.0 {
+                                    1.0
+                                } else {
+                                    view.zoom
+                                };
+                                let size = base * fit * zoom.clamp(0.1, 8.0);
                                 let offset = egui::vec2(view.pan[0], view.pan[1]);
                                 ui.image((tex.id(), size));
                                 let rect = ui.min_rect().translate(offset);
@@ -1387,7 +1393,8 @@ impl DeclUiPanelState {
                                 if response.hovered() {
                                     let scroll = ui.input(|i| i.raw_scroll_delta.y);
                                     if scroll.abs() > 0.0 {
-                                        view.zoom = (view.zoom + scroll * 0.001).clamp(0.2, 8.0);
+                                        let base_zoom = if view.zoom <= 0.0 { 1.0 } else { view.zoom };
+                                        view.zoom = (base_zoom + scroll * 0.001).clamp(0.2, 8.0);
                                     }
                                 }
                             } else {

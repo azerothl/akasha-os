@@ -7,7 +7,7 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     assert!(
         args.len() >= 3,
-        "usage: preview_probe INTENT JSON [TIMEOUT_SECONDS]"
+        "usage: preview_probe INTENT JSON|@file [TIMEOUT_SECONDS]"
     );
     let seconds = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(120);
     let bus_addr = std::env::var("AOS_PROBE_BUS").unwrap_or_else(|_| "127.0.0.1:24701".into());
@@ -138,7 +138,12 @@ async fn main() {
         }
         return;
     }
-    let req: Value = serde_json::from_str(&args[2]).expect("request JSON");
+    let req_raw = if args[2].starts_with('@') {
+        std::fs::read_to_string(&args[2][1..]).expect("request JSON file")
+    } else {
+        args[2].clone()
+    };
+    let req: Value = serde_json::from_str(&req_raw).expect("request JSON");
     if args[1] == "model.infer" {
         let req: InferRequest = serde_json::from_value(req).expect("model.infer request");
         let result = tokio::time::timeout(
