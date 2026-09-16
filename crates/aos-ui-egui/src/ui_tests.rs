@@ -65,6 +65,19 @@ mod delegate_tests {
     }
 
     #[test]
+    fn partial_continuation_is_detected() {
+        assert!(crate::chat_delegate::chat_is_partial_continuation(
+            "Continue la réponse exactement là où elle s’est interrompue, sans répéter le texte déjà produit."
+        ));
+        assert!(crate::chat_delegate::chat_is_partial_continuation(
+            "Continue the answer exactly where it stopped, without repeating the text already produced."
+        ));
+        assert!(!crate::chat_delegate::chat_is_partial_continuation(
+            "fais des specs pour un module"
+        ));
+    }
+
+    #[test]
     fn advisory_module_question_skips_scaffold_tools() {
         let q = "Si je veux creer un module d'aide au développement pour des gros \
                  projets, qu'est ce qu'il faudrait que je fasse ? \

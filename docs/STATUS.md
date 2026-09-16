@@ -10,11 +10,13 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 **Preview:** 0.18.0 — Memory V2 default, **P18 / E22** instincts in-session,
 **P19 / E23** runtime health plane, Notes tags/search/delete, chat
 fork/continue, Canvas scenes/guides, secrets vault key generator, Create
-chrome polish, LAN/health/Deep Thinking fixes. Builds on 0.17.x Create
-workspace + painted UI chrome. Not a bootable OS. Cohort gate still open
-(**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path). **Next:**
-PC cohort close; Horizon C / PV.4+ when scheduled; E9 hard-green after a
-documented 2-GPU run.
+chrome polish, LAN/health/Deep Thinking fixes; opt-in **external coding CLIs**
+(`harness.run` + Agents Advanced Runtime) and optional **`aos-mcpd`** MCP
+server façade ([harness.md](harness.md), [mcp-server.md](mcp-server.md)).
+Builds on 0.17.x Create workspace + painted UI chrome. Not a bootable OS.
+Cohort gate still open (**3 Windows + 1 Linux + 1 macOS Apple Silicon**,
+15-minute path). **Next:** PC cohort close; Horizon C / PV.4+ when scheduled;
+E9 hard-green after a documented 2-GPU run.
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + health + Notes/Chat) — done
 
@@ -24,7 +26,8 @@ documented 2-GPU run.
 | P20.2 | Ship P18 (E22 instincts) + P19 (E23 health plane) in the tagged release | done |
 | P20.3 | Notes tags / live search / delete; chat fork/continue; Canvas scenes/guides | done |
 | P20.4 | Secrets vault keygen; Create chrome; LAN/health/Deep Thinking polish | done |
-| P20.5 | Version, docs, website and release packaging | done |
+| P20.5 | External coding CLIs (`harness.run` + Runtime) + optional `aos-mcpd` ([harness.md](harness.md), [mcp-server.md](mcp-server.md)) | done |
+| P20.6 | Version, docs, website and release packaging | done |
 
 ## P19 — E23 runtime health plane — done
 

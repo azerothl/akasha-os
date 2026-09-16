@@ -14,6 +14,7 @@
 # - Full worker backend with Steer/Pause/Kill: Agents → Advanced → Runtime =
 #   Codex / Claude / Grok (sets AgentSpec.execution_backend). Do not add a
 #   generic shell MCP here — Akasha will not wrap arbitrary argv.
+# - Details (PATH, fixed argv, cwd): docs/harness.md
 #
 # Reverse direction (IDE → Akasha): use bin/aos-mcpd as an MCP *server* in
 # Claude Code / Codex / Cursor / Copilot. See docs/mcp-server.md and

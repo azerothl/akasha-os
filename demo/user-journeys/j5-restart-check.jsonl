@@ -1,0 +1,4 @@
+{"fixture_id":"j5-list-after-restart","intent":"chat.session.list","request":null}
+{"fixture_id":"j5-get-a","intent":"chat.session.get","request":{"session_id":"{{session_a}}"}}
+{"fixture_id":"j5-get-b","intent":"chat.session.get","request":{"session_id":"{{session_b}}"}}
+{"fixture_id":"j5-get-c","intent":"chat.session.get","request":{"session_id":"{{session_c}}"}}

@@ -58,3 +58,4 @@ Voir aussi [`share/mcp/akasha-mcp.example.json`](../../share/mcp/akasha-mcp.exam
 - Bridge HTTP mem/secrets : [sibling-bridge.md](sibling-bridge.md) (`aos-bridged`)
 - Akasha client MCP : `share/mcp/servers.yaml.example`
 - CLI externes *dans* Akasha : Agents → `harness.run` / Runtime
+  ([harness.md](harness.md))

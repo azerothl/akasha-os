@@ -334,6 +334,11 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Settings / secrets: after restart, `var/secrets/master.backend` may read `tpm` only when the master was sealed with Platform Crypto (`TPM2` blob); TPM presence alone is not enough. Otherwise `keyring` or `file`.
 - Optional: start `aos-bridged` from Preview `bin/` (loopback only) against a running session; health + `mem.context` + `mem.stats` / `mem.list` succeed; agent-style `X-Aos-From` on `secrets.get` returns 403. Smoke: `.\demo\smoke-bridge.ps1`.
 
+### 25b. External coding CLIs + MCP server (0.18.0)
+
+- Optional: with `codex` / `claude` / `grok` on PATH, create an agent with External CLIs / Advanced **Runtime** ≠ Native; first spawn act-gate Allow; Steer / Pause / Kill behave as in [harness.md](harness.md). Or enable tool `harness.run` on a native agent for a one-shot.
+- Optional: with Preview running, point an MCP client at `bin/aos-mcpd` (`AOS_BUS_ADDR=127.0.0.1:24701`); `tools/list` shows `akasha_*`; `akasha_models` or `akasha_mem_stats` returns JSON. See [mcp-server.md](mcp-server.md) and `share/mcp/akasha-mcp.example.json`.
+
 ### 26. Updates auto-download + img2img (0.10.1)
 
 - Settings: enable **Auto-download updates** (off by default). After a newer Release is detected, `var/updates/pending.json` appears and the banner says relaunch to apply (no Download click needed).
@@ -386,6 +391,19 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Linux: `curl -fsSL https://azerothl.github.io/akasha-os/install.sh | sh`
 - Script must print URL + sha256, refuse on mismatch, overlay into the stable
   prefix without wiping `var/`.
+
+## Automated user journeys (team)
+
+For release machines with real SD/LTX weights, run the bus-driven end-user
+suite (sessions + image/video + restart + optional website screenshots):
+
+```powershell
+.\demo\run-user-journeys.ps1 -Screenshots
+```
+
+Details, fixtures, and the short manual UI checklist:
+[USER-JOURNEYS.md](USER-JOURNEYS.md). This does **not** replace the cohort
+short path above.
 
 ## Success criteria (team)
 

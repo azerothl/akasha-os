@@ -21,7 +21,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 - **Canvas** : scènes sémantiques et guides partagés ; protocole agent lecture/revue
 - **Coffre à secrets** : générateur de clés dans Paramètres (hex / numérique / alnum / base64url) avec preset hex LAN et rejet des clés invalides à l’enregistrement
 - **Chrome Create** : actions peintes, Advanced replié, barre résultat peaufinée ; starters de prompt localisés FR
-- **CLI de code externes** : `harness.run` opt-in plus **Runtime** Agents Avancé (Codex / Claude / Grok) avec Steer / Pause / Kill
+- **CLI de code externes** : `harness.run` opt-in plus **Runtime** Agents Avancé (Codex / Claude / Grok) avec Steer / Pause / Kill ([harness.md](harness.md))
 - **Façade serveur MCP** : `aos-mcpd` optionnel expose `akasha_models` / `akasha_infer` / `akasha_mem_*` en stdio pour les IDE externes ([mcp-server.md](mcp-server.md))
 
 #### Correctifs
@@ -339,8 +339,8 @@ Boucle Observe / Think / Act avec caps, confirmation et audit.
 | `task.assess` | Classe le goal en **simple** ou **complex** ; complex active la skill planner |
 | Skills | Recettes déclaratives (`share/skills/`, surchargeables sous `var/skills/`) |
 | Outils | Natif, module WASM, MCP, ou runtime (plan / spawn / mémoire) |
-| `harness.run` | Spawn opt-in allowlisté des CLI locaux `codex` / `claude` / `grok` (prompt seulement, act-gate même en chat autonome) |
-| Backend harness externe | Agents → Avancé → **Runtime** = Codex / Claude / Grok : les workers de tâche exécutent des tours CLI sous `aos-agent-worker` ; **Steer** continue la session (`exec resume` / `-c`), **Pause** annule le tour en cours, **Kill** arrête l’arbre worker |
+| `harness.run` | Spawn opt-in allowlisté des CLI locaux `codex` / `claude` / `grok` (prompt seulement, act-gate même en chat autonome) — détail [harness.md](harness.md) |
+| Backend harness externe | Agents → Avancé → **Runtime** = Codex / Claude / Grok : les workers de tâche exécutent des tours CLI sous `aos-agent-worker` ; **Steer** continue la session (`exec resume` / `-c`), **Pause** annule le tour en cours, **Kill** arrête l’arbre worker — [harness.md](harness.md) |
 | MCP | *Client* stdio optionnel (`share/mcp/servers.yaml.example`) ; un MCP navigateur headless installé par l’utilisateur peut lire les pages JS (voir §7). *Serveur* stdio optionnel `aos-mcpd` (mem + infer) pour IDE externes ([mcp-server.md](mcp-server.md)) |
 | Sous-agents | `agent.spawn` / `agent.await` avec un brief étroit |
 | `user.ask` | Pause et question à l'utilisateur dans le chat lié ; réponse via steer |

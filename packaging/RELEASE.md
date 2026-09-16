@@ -49,12 +49,14 @@ GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.18.0 — Memory V2, instincts, health plane
+Akasha OS Preview 0.18.0 — Memory V2, instincts, health plane, harness + MCP server
 
 - Memory V2 default (decision journal, mind palace; shadow sync from legacy facts)
 - E22 instincts in-session under context pressure; E23 runtime health plane
 - Notes tags / live search / delete; chat fork/continue; Canvas scenes/guides
 - Secrets vault key generator with LAN hex preset
+- Opt-in external coding CLIs (harness.run + Agents Advanced Runtime) — docs/harness.md
+- Optional aos-mcpd stdio MCP façade for IDEs — docs/mcp-server.md
 - LAN / health / Deep Thinking / Create chrome polish
 - Same Win/Linux/Mac mill bands as 0.17.x
 

@@ -215,7 +215,9 @@ Légende : **oui** / **partiel** / **non** / **vision**. Colonne **Akasha** = si
 
 **Akasha OS n’est pas en retard sur « l’OS agentique » au sens noyau.** Sur cette définition (caps, IPC sémantique, GPU-as-service, audit, WASM dual-surface, seL4), le seul pair public est agentOS — et Akasha OS a une Preview humaine plus complète.
 
-**Le retard « assistant personnel » (couche C)** vs OpenClaw / Hermes est en grande partie **déjà couvert par le sibling Akasha** (canaux, daemon 24/7, vault, calendrier, voix, CPU/Ollama). Ce n’est pas un trou de la famille : c’est un trou *volontaire* d’Akasha OS si la thèse reste le noyau.
+**Preview livre aussi des ponts opt-in vers l’écosystème coding** sans devenir un IDE : tours CLI locaux allowlistés Codex / Claude / Grok dans les agents ([harness.md](harness.md)), et un serveur MCP stdio optionnel (`aos-mcpd`) pour que les IDE appellent mem/infer sur un Preview lancé ([mcp-server.md](mcp-server.md)). Plus étroit que les backends Hermes multi-sandbox ou le sprawl de canaux OpenClaw — scope volontaire.
+
+**Le retard « assistant personnel » (couche C)** vs OpenClaw / Hermes est en grande partie **déjà couvert par le sibling Akasha** (canaux, daemon 24/7, vault, calendrier, voix, CPU/Ollama). Ce n’est pas un trou de famille ; c’est un écart *volontaire* d’Akasha OS si la thèse reste le noyau.
 
 Quatre écarts structurels :
 

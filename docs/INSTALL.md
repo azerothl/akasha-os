@@ -97,7 +97,7 @@ Quick start without `install.cmd` (still uses the stable data prefix):
 ## Package contents
 
 ```
-bin/            daemons (+ CUDA runtime on GPU builds)
+bin/            daemons (+ CUDA runtime on GPU builds); optional aos-bridged + aos-mcpd
 share/models/   manifest.json (GGUF downloaded on first run)
 share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
 share/skills/   Preview skills (notes-writer, research, file-author, planner, tasks)
@@ -107,6 +107,11 @@ VERSION         build semver
 FIRST-RUN.md    text tutorial
 var/            local data (created at run; agents, mcp, skills overrides)
 ```
+
+`aos-bridged` and `aos-mcpd` ship in `bin/` but are **not** started by
+`aos-session`. Point external IDEs at `aos-mcpd` ([mcp-server.md](mcp-server.md)).
+Pull local Codex / Claude / Grok into agents via `harness.run` or Agents
+Advanced **Runtime** ([harness.md](harness.md)).
 
 ## First launch
 
