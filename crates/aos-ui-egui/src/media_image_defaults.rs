@@ -214,29 +214,31 @@ fn image_model_presets(model_id: &str) -> PresetTriplet {
             },
         },
         "local:ltx2.3-dev" => PresetTriplet {
+            // Align with catalogue video_defaults / AK-024 (768×512 base).
             fast: ImageModelPreset {
                 width: 768,
-                height: 432,
+                height: 512,
                 steps: 6,
                 cfg: 6.0,
                 sampler: "euler",
             },
             balanced: ImageModelPreset {
-                width: 1280,
-                height: 720,
+                width: 768,
+                height: 512,
                 steps: 8,
                 cfg: 6.0,
                 sampler: "euler",
             },
             quality: ImageModelPreset {
-                width: 1280,
-                height: 720,
+                width: 768,
+                height: 512,
                 steps: 12,
                 cfg: 6.5,
                 sampler: "heun",
             },
         },
         "local:minimax-h3" => PresetTriplet {
+            // Distilled: cfg must stay 1.0 (catalogue engine_args).
             fast: ImageModelPreset {
                 width: 640,
                 height: 384,
@@ -252,8 +254,8 @@ fn image_model_presets(model_id: &str) -> PresetTriplet {
                 sampler: "euler",
             },
             quality: ImageModelPreset {
-                width: 864,
-                height: 480,
+                width: 1344,
+                height: 768,
                 steps: 8,
                 cfg: 1.0,
                 sampler: "euler",
@@ -344,5 +346,225 @@ pub fn image_options_for_model(model_id: Option<&str>, profile: Option<&str>) ->
         max_vram: if wants_perf { Some("-1".into()) } else { None },
         stream_layers: if wants_perf { Some(true) } else { None },
         ..MediaImageOptions::default()
+    }
+}
+
+/// Full Create DeclUI defaults for a model + quality profile + image/video mode.
+/// Merges hardcoded recipes with catalogue `video_defaults` / `engine_args` so
+/// picking a pack is enough for a sane one-click generate (prompt only).
+#[derive(Debug, Clone)]
+pub struct CreateGenerationDefaults {
+    pub width: u32,
+    pub height: u32,
+    pub steps: u32,
+    pub cfg_scale: f32,
+    pub sampling_method: String,
+    pub flow_shift: Option<f32>,
+    pub video_frames: Option<u32>,
+    pub fps: Option<u32>,
+    /// When `Some`, DeclUI `format` is forced (video → `custom` to keep pack aspect).
+    pub format: Option<&'static str>,
+    pub offload_to_cpu: Option<bool>,
+    pub diffusion_fa: Option<bool>,
+    pub max_vram: Option<String>,
+    pub stream_layers: Option<bool>,
+}
+
+fn parse_engine_f32(args: &std::collections::HashMap<String, String>, key: &str) -> Option<f32> {
+    args.get(key)?.trim().parse().ok()
+}
+
+fn parse_engine_bool(args: &std::collections::HashMap<String, String>, key: &str) -> Option<bool> {
+    match args.get(key)?.trim() {
+        "1" | "true" | "True" | "yes" => Some(true),
+        "0" | "false" | "False" | "no" => Some(false),
+        _ => None,
+    }
+}
+
+fn video_frames_for_profile(model_id: &str, profile: &str, catalog_frames: Option<u32>) -> u32 {
+    let seconds = match profile {
+        "fast" => 2,
+        "quality" => 4,
+        _ => 3,
+    };
+    let from_duration = video_frames_for_duration_model(seconds, model_id);
+    match profile {
+        // Prefer the catalogue ceiling when the user asks for quality.
+        "quality" => catalog_frames.unwrap_or(from_duration).max(from_duration),
+        "fast" => from_duration,
+        // Balanced: short practical clip, never longer than the pack recipe.
+        _ => catalog_frames
+            .map(|frames| frames.min(from_duration))
+            .unwrap_or(from_duration),
+    }
+}
+
+pub fn create_generation_defaults(
+    model_id: Option<&str>,
+    profile: Option<&str>,
+    media_mode: &str,
+) -> CreateGenerationDefaults {
+    let id = model_id.unwrap_or_default();
+    let profile = profile.unwrap_or("balanced");
+    let base = image_options_for_model(Some(id), Some(profile));
+    let catalog = crate::models_page::catalog_model_by_id(id);
+    let video = catalog.as_ref().and_then(|m| m.video_defaults.as_ref());
+    let engine = catalog.as_ref().map(|m| &m.engine_args);
+
+    let mut width = base.width.unwrap_or(512);
+    let mut height = base.height.unwrap_or(512);
+    let mut cfg = base.cfg_scale.unwrap_or(7.0);
+    let sampler = base.sampling_method.clone().unwrap_or_default();
+    let mut flow_shift = None;
+    let mut video_frames = None;
+    let mut fps = None;
+    let mut format = None;
+    let mut offload = base.offload_to_cpu;
+    let mut diffusion_fa = base.diffusion_fa;
+    let mut max_vram = base.max_vram.clone();
+    let mut stream_layers = base.stream_layers;
+
+    if media_mode == "video" {
+        // Keep pack aspect ratio — Create's default format is 1:1 which would
+        // squash Wan/LTX/MiniMax into a square and wreck quality.
+        format = Some("custom");
+        if let Some(v) = video {
+            if let Some(w) = v.width {
+                width = w;
+            }
+            if let Some(h) = v.height {
+                height = h;
+            }
+            fps = v.fps.or(Some(24));
+            video_frames = Some(video_frames_for_profile(id, profile, v.frames));
+        } else {
+            fps = Some(if id.contains("wan") { 16 } else { 24 });
+            video_frames = Some(video_frames_for_profile(id, profile, None));
+        }
+        if let Some(args) = engine {
+            if let Some(v) = parse_engine_f32(args, "flow-shift") {
+                flow_shift = Some(v);
+            }
+            if let Some(v) = parse_engine_f32(args, "cfg-scale") {
+                cfg = v;
+            }
+            if let Some(v) = args.get("fps").and_then(|s| s.trim().parse().ok()) {
+                fps = Some(v);
+            }
+            offload = parse_engine_bool(args, "offload-to-cpu").or(offload);
+            diffusion_fa = parse_engine_bool(args, "diffusion-fa").or(diffusion_fa);
+            stream_layers = parse_engine_bool(args, "stream-layers").or(stream_layers);
+            if let Some(v) = args.get("max-vram").filter(|s| !s.trim().is_empty()) {
+                max_vram = Some(v.clone());
+            }
+        }
+        if flow_shift.is_none()
+            && (id.contains("wan")
+                || id.contains("ltx")
+                || id.contains("flux")
+                || id.contains("qwen-image"))
+        {
+            flow_shift = Some(3.0);
+        }
+        // Video packs are heavy; prefer the catalogue offload recipe when unset.
+        if offload.is_none() {
+            offload = Some(true);
+            diffusion_fa = Some(true);
+            stream_layers = Some(true);
+            max_vram = Some("-1".into());
+        }
+    } else if let Some(args) = engine {
+        if let Some(v) = parse_engine_f32(args, "flow-shift") {
+            flow_shift = Some(v);
+        }
+        if let Some(v) = parse_engine_f32(args, "cfg-scale") {
+            cfg = v;
+        }
+        offload = parse_engine_bool(args, "offload-to-cpu").or(offload);
+        diffusion_fa = parse_engine_bool(args, "diffusion-fa").or(diffusion_fa);
+        stream_layers = parse_engine_bool(args, "stream-layers").or(stream_layers);
+        if let Some(v) = args.get("max-vram").filter(|s| !s.trim().is_empty()) {
+            max_vram = Some(v.clone());
+        }
+    }
+
+    CreateGenerationDefaults {
+        width,
+        height,
+        steps: base.steps.unwrap_or(20),
+        cfg_scale: cfg,
+        sampling_method: sampler,
+        flow_shift,
+        video_frames,
+        fps,
+        format,
+        offload_to_cpu: offload,
+        diffusion_fa,
+        max_vram,
+        stream_layers,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with_workspace_home<T>(f: impl FnOnce() -> T) -> T {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let previous = std::env::var_os("AOS_HOME");
+        std::env::set_var("AOS_HOME", &root);
+        let out = f();
+        match previous {
+            Some(value) => std::env::set_var("AOS_HOME", value),
+            None => std::env::remove_var("AOS_HOME"),
+        }
+        out
+    }
+
+    #[test]
+    fn ltx_balanced_matches_catalogue_aspect_not_square() {
+        with_workspace_home(|| {
+            let d =
+                create_generation_defaults(Some("local:ltx2.3-dev"), Some("balanced"), "video");
+            assert_eq!((d.width, d.height), (768, 512));
+            assert_eq!(d.format, Some("custom"));
+            assert_eq!(d.fps, Some(24));
+            assert!(d.video_frames.unwrap_or(0) >= 33);
+            assert_eq!(d.cfg_scale, 6.0);
+        });
+    }
+
+    #[test]
+    fn wan_video_defaults_use_16fps_grid() {
+        with_workspace_home(|| {
+            let d =
+                create_generation_defaults(Some("local:wan2.2-t2i"), Some("balanced"), "video");
+            assert_eq!((d.width, d.height), (832, 480));
+            assert_eq!(d.fps, Some(16));
+            assert_eq!(d.flow_shift, Some(3.0));
+            let frames = d.video_frames.unwrap_or(0);
+            assert_eq!(frames % 4, 1, "Wan frames must be 4n+1, got {frames}");
+        });
+    }
+
+    #[test]
+    fn minimax_keeps_cfg_one() {
+        with_workspace_home(|| {
+            let d =
+                create_generation_defaults(Some("local:minimax-h3"), Some("balanced"), "video");
+            assert_eq!(d.cfg_scale, 1.0);
+            assert_eq!(d.format, Some("custom"));
+        });
+    }
+
+    #[test]
+    fn image_mode_does_not_force_custom_format() {
+        let d = create_generation_defaults(Some("local:sd-v1-5"), Some("balanced"), "image");
+        assert_eq!((d.width, d.height), (512, 512));
+        assert!(d.format.is_none());
+        assert!(d.video_frames.is_none());
+        assert_eq!(d.steps, 24);
+        assert_eq!(d.cfg_scale, 7.0);
     }
 }

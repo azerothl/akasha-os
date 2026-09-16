@@ -46,6 +46,12 @@ pub struct CatalogModel {
     pub tags: Vec<String>,
     #[serde(default)]
     pub description: Option<String>,
+    /// Short-clip recipes from the catalogue (AK-024). Ignored when absent.
+    #[serde(default)]
+    pub video_defaults: Option<VideoDefaults>,
+    /// Pack-specific sd.cpp knobs (`flow-shift`, `cfg-scale`, offload flags…).
+    #[serde(default)]
+    pub engine_args: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -188,6 +194,17 @@ pub fn first_catalog_vision_model_id() -> Option<String> {
 
 pub fn load_catalog_models() -> Vec<CatalogModel> {
     load_catalog_models_from(&aos_home())
+}
+
+/// Look up one catalogue entry by id (bundled + custom offerings).
+pub fn catalog_model_by_id(model_id: &str) -> Option<CatalogModel> {
+    let id = model_id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    load_catalog_models()
+        .into_iter()
+        .find(|model| model.id == id)
 }
 
 fn load_catalog_models_from(home: &Path) -> Vec<CatalogModel> {
@@ -658,5 +675,30 @@ mod vision_catalog_tests {
                 "missing vision model {id}"
             );
         }
+    }
+
+    #[test]
+    fn video_packs_expose_catalogue_video_defaults() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let models = load_catalog_models_from(&root);
+        let ltx = models
+            .iter()
+            .find(|m| m.id == "local:ltx2.3-dev")
+            .expect("ltx");
+        let defaults = ltx.video_defaults.as_ref().expect("ltx video_defaults");
+        assert_eq!(defaults.width, Some(768));
+        assert_eq!(defaults.height, Some(512));
+        assert_eq!(defaults.fps, Some(24));
+        assert!(ltx.engine_args.contains_key("mode"));
+        let wan = models
+            .iter()
+            .find(|m| m.id == "local:wan2.2-t2i")
+            .expect("wan");
+        let wan_defaults = wan.video_defaults.as_ref().expect("wan video_defaults");
+        assert_eq!(wan_defaults.fps, Some(16));
+        assert_eq!(
+            wan.engine_args.get("flow-shift").map(String::as_str),
+            Some("3.0")
+        );
     }
 }

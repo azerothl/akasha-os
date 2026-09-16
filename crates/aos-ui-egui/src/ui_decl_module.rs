@@ -34,6 +34,11 @@ impl UiApp {
             for (key, value) in actions.local_patch.drain() {
                 panel.local_state.insert(key, value);
             }
+            // Re-run after patches so Image↔Video / model picks apply in the
+            // same interaction (select reconcile updates model_id via patch).
+            if module == "create" {
+                sync_create_generation_defaults(panel);
+            }
         }
         if actions.refresh {
             let _ = self.cmd_tx.send(Cmd::ModuleUiRefresh {
@@ -77,10 +82,9 @@ impl UiApp {
     }
 }
 
-/// Keep the declarative Create controls in lockstep with the native panel's
-/// model/profile recipe. This runs only when the pair changes, so a user can
-/// still tune width, steps, CFG and expert flags without them being reset on
-/// each repaint.
+/// Keep the declarative Create controls in lockstep with the model/profile
+/// recipe (catalogue `video_defaults` + hardcoded presets). Runs only when the
+/// mode/model/profile triple changes so the user can still tune knobs after.
 fn sync_create_generation_defaults(panel: &mut decl_ui::DeclUiPanelState) {
     let model_id = panel
         .local_state
@@ -105,67 +109,142 @@ fn sync_create_generation_defaults(panel: &mut decl_ui::DeclUiPanelState) {
         return;
     }
     panel.create_preset_key = key;
-    let options = crate::media_image_defaults::image_options_for_model(
+    let defaults = crate::media_image_defaults::create_generation_defaults(
         Some(model_id.as_str()),
         Some(profile.as_str()),
+        &mode,
     );
     let state = &mut panel.local_state;
-    if let Some(width) = options.width {
-        state.insert("width".into(), serde_json::Value::from(width));
-    }
-    if let Some(height) = options.height {
-        state.insert("height".into(), serde_json::Value::from(height));
-    }
-    if let Some(steps) = options.steps {
-        state.insert("steps".into(), serde_json::Value::from(steps));
-    }
-    if let Some(cfg) = options.cfg_scale {
-        state.insert("cfg_scale".into(), serde_json::Value::from(cfg));
-    }
+    state.insert("width".into(), serde_json::Value::from(defaults.width));
+    state.insert("height".into(), serde_json::Value::from(defaults.height));
+    state.insert("steps".into(), serde_json::Value::from(defaults.steps));
+    state.insert(
+        "cfg_scale".into(),
+        serde_json::Value::from(defaults.cfg_scale),
+    );
     state.insert(
         "sampling_method".into(),
-        options
-            .sampling_method
-            .map(serde_json::Value::String)
-            .unwrap_or_else(|| serde_json::Value::String(String::new())),
+        serde_json::Value::String(defaults.sampling_method),
     );
-    if let Some(value) = options.offload_to_cpu {
+    if let Some(format) = defaults.format {
+        state.insert("format".into(), serde_json::Value::String(format.into()));
+    } else if mode == "image" {
+        // Leaving video (`format=custom`) for an image pack: restore a quick
+        // square default unless the user already picked a named aspect.
+        let current = state
+            .get("format")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("custom");
+        if current == "custom" {
+            state.insert("format".into(), serde_json::Value::String("1:1".into()));
+        }
+    }
+    if let Some(frames) = defaults.video_frames {
+        state.insert("video_frames".into(), serde_json::Value::from(frames));
+    }
+    if let Some(fps) = defaults.fps {
+        state.insert("fps".into(), serde_json::Value::from(fps));
+    }
+    if let Some(shift) = defaults.flow_shift {
+        state.insert("flow_shift".into(), serde_json::Value::from(shift));
+    }
+    if let Some(value) = defaults.offload_to_cpu {
         state.insert("offload_to_cpu".into(), serde_json::Value::Bool(value));
+    } else {
+        state.insert("offload_to_cpu".into(), serde_json::Value::Bool(false));
     }
-    if let Some(value) = options.diffusion_fa {
+    if let Some(value) = defaults.diffusion_fa {
         state.insert("diffusion_fa".into(), serde_json::Value::Bool(value));
+    } else {
+        state.insert("diffusion_fa".into(), serde_json::Value::Bool(false));
     }
-    if let Some(value) = options.stream_layers {
+    if let Some(value) = defaults.stream_layers {
         state.insert("stream_layers".into(), serde_json::Value::Bool(value));
+    } else {
+        state.insert("stream_layers".into(), serde_json::Value::Bool(false));
     }
-    if let Some(value) = options.max_vram {
+    if let Some(value) = defaults.max_vram {
         state.insert("max_vram".into(), serde_json::Value::String(value));
+    } else {
+        state.insert("max_vram".into(), serde_json::Value::String(String::new()));
     }
-    // Native Create exposes the format as an aspect-ratio transform over the
-    // current model base size. Apply the same transform when a non-custom
-    // format is already selected.
-    let format = state
-        .get("format")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("custom");
-    if format != "custom" {
-        let base = state
-            .get("width")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(512)
-            .max(
-                state
-                    .get("height")
-                    .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(512),
-            );
-        let (width, height) = match format {
-            "16:9" => (base, (base * 9 / 16).max(64)),
-            "9:16" => ((base * 9 / 16).max(64), base),
-            "1:1" => (base, base),
-            _ => return,
-        };
-        state.insert("width".into(), serde_json::Value::from(width));
-        state.insert("height".into(), serde_json::Value::from(height));
+
+    // Named aspects only for image mode — video keeps catalogue pixels.
+    if mode != "video" {
+        let format = state
+            .get("format")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("custom");
+        if format != "custom" {
+            let base = state
+                .get("width")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(512)
+                .max(
+                    state
+                        .get("height")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(512),
+                );
+            let (width, height) = match format {
+                "16:9" => (base, (base * 9 / 16).max(64)),
+                "9:16" => ((base * 9 / 16).max(64), base),
+                "1:1" => (base, base),
+                _ => return,
+            };
+            state.insert("width".into(), serde_json::Value::from(width));
+            state.insert("height".into(), serde_json::Value::from(height));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sync_create_generation_defaults;
+    use crate::decl_ui::DeclUiPanelState;
+    use serde_json::json;
+
+    #[test]
+    fn switching_to_ltx_video_sets_catalogue_recipe_not_square() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        std::env::set_var("AOS_HOME", &root);
+        let mut panel = DeclUiPanelState::new("create");
+        panel
+            .local_state
+            .insert("media_mode".into(), json!("video"));
+        panel
+            .local_state
+            .insert("model_id".into(), json!("local:ltx2.3-dev"));
+        panel
+            .local_state
+            .insert("profile".into(), json!("balanced"));
+        // Simulate the schema default that previously wrecked video aspect.
+        panel.local_state.insert("format".into(), json!("1:1"));
+        panel.local_state.insert("width".into(), json!(512));
+        panel.local_state.insert("height".into(), json!(512));
+        sync_create_generation_defaults(&mut panel);
+        assert_eq!(
+            panel.local_state.get("format").and_then(|v| v.as_str()),
+            Some("custom")
+        );
+        assert_eq!(
+            (
+                panel.local_state.get("width").and_then(|v| v.as_u64()),
+                panel.local_state.get("height").and_then(|v| v.as_u64())
+            ),
+            (Some(768), Some(512))
+        );
+        assert_eq!(
+            panel.local_state.get("fps").and_then(|v| v.as_u64()),
+            Some(24)
+        );
+        assert!(
+            panel
+                .local_state
+                .get("video_frames")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                >= 33
+        );
     }
 }
