@@ -1819,7 +1819,23 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                 let _ = self.cmd_tx.send(Cmd::MemSweepStatus);
             }
             Tab::Module(name) => {
-                let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
+                // Keep an already-loaded DeclUI session (Create job progress,
+                // form state, preview path) across leave/re-enter. Explicit
+                // Refresh still uses ModuleUiRefresh → full reload.
+                if let Some(panel) = self.decl_panels.get(&name) {
+                    if !panel.needs_ui_load() {
+                        for tool in panel.tools_to_bind() {
+                            let _ = self.cmd_tx.send(Cmd::ModuleUiBind {
+                                module: name.clone(),
+                                tool,
+                            });
+                        }
+                    } else {
+                        let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
+                    }
+                } else {
+                    let _ = self.cmd_tx.send(Cmd::ModuleUiLoad { module: name });
+                }
             }
             Tab::Files => {
                 let _ = self.cmd_tx.send(Cmd::FilesList {

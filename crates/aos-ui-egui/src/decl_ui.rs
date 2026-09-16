@@ -62,6 +62,9 @@ pub struct DeclUiPanelState {
     pub pending_invoke: bool,
     pub pending_refresh_binds: Vec<String>,
     pub pending_clear_form_keys: Vec<String>,
+    /// Local state to apply after the next `set_document` (e.g. open-with-prompt
+    /// seeds that would otherwise be wiped by schema defaults).
+    pub pending_local_seed: HashMap<String, Value>,
     /// Last Create model/profile pair for which native generation defaults
     /// were applied. Kept outside declarative state so manual edits are not
     /// overwritten on every frame.
@@ -74,6 +77,12 @@ impl DeclUiPanelState {
             module: module.into(),
             ..Default::default()
         }
+    }
+
+    /// True when the host still needs `ModuleUiLoad` (missing or failed document).
+    /// When false, leave/re-enter must keep `local_state` and in-flight job handles.
+    pub fn needs_ui_load(&self) -> bool {
+        self.document.is_none()
     }
 
     pub fn set_document(&mut self, doc: DeclUiDocument) {
@@ -90,6 +99,20 @@ impl DeclUiPanelState {
             self.subscriptions.register(&sub.id);
         }
         self.document = Some(doc);
+        if !self.pending_local_seed.is_empty() {
+            for (key, value) in self.pending_local_seed.drain() {
+                self.local_state.insert(key, value);
+            }
+        }
+    }
+
+    pub fn seed_local(&mut self, key: impl Into<String>, value: Value) {
+        let key = key.into();
+        if self.document.is_some() {
+            self.local_state.insert(key, value);
+        } else {
+            self.pending_local_seed.insert(key, value);
+        }
     }
 
     pub fn close(&mut self) {
