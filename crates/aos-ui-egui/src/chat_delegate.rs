@@ -98,6 +98,16 @@ pub(crate) fn apply_deep_thinking_mode(req: &mut AgentCreateRequest, goal: &str)
     }
 }
 
+/// Reprise après timeout / Stop : consigne injectée par `set_partial_continuation`.
+///
+/// Ces tours doivent rester en chat Direct (streamer la suite) — jamais forcer
+/// un agent Deep Thinking dont le goal serait uniquement « Continue la réponse… ».
+pub(crate) fn chat_is_partial_continuation(text: &str) -> bool {
+    let t = text.trim();
+    t.starts_with("Continue la réponse exactement là où elle")
+        || t.starts_with("Continue the answer exactly where it stopped")
+}
+
 /// Spec de délégation forcée (chip Deep ou phrase) quand le superviseur n'a pas spawn.
 pub(crate) fn deep_thinking_force_delegate(
     user_text: &str,

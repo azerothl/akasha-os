@@ -598,6 +598,61 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     .await;
             }
 
+            // Deep Thinking chip: spawn immediately — do not run a long supervisor
+            // inference that times out mid-answer then re-delegates on "Continue…".
+            // Partial-continuation turns stay in Direct chat to finish the stream.
+            let partial_continuation =
+                crate::chat_delegate::chat_is_partial_continuation(&user_text);
+            if deep_thinking
+                && !partial_continuation
+                && aos_proto::chat_tts_request(&user_text).is_none()
+            {
+                let canvas_exported: Vec<String> = bus
+                    .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
+                    .await
+                    .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
+                    .unwrap_or_default();
+                let mut delegate = chat_delegate_agent_spec(
+                    &user_text,
+                    "",
+                    canvas_open,
+                    canvas_aspect,
+                    &canvas_exported,
+                );
+                if delegate.is_none() {
+                    delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
+                        &user_text,
+                        canvas_open,
+                        &canvas_exported,
+                    ));
+                }
+                if let Some(spec) = delegate {
+                    let canvas_delegate = spec.tools.iter().any(|t| t.starts_with("canvas."));
+                    if !(canvas_delegate && session_has_running_canvas_agent(&bus, &session_id).await)
+                    {
+                        spawn_chat_delegate_agent(
+                            bus.clone(),
+                            evt_tx.clone(),
+                            session_id,
+                            user_text,
+                            spec.brief,
+                            spec.skills,
+                            spec.tools,
+                            spec.prose,
+                            spec.roster_id,
+                            auto_remember,
+                            instincts_in_session,
+                            model_id,
+                            max_steps,
+                            canvas_aspect,
+                            deep_thinking,
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+
             let mem_block = bus
                 .call::<MemContextRequest, MemContextResponse>(
                     "mem.context",
@@ -740,7 +795,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             canvas_aspect,
                             &canvas_exported,
                         );
-                        if deep_thinking && delegate.is_none() {
+                        if deep_thinking
+                            && !crate::chat_delegate::chat_is_partial_continuation(&user_text)
+                            && delegate.is_none()
+                        {
                             delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
                                 &user_text,
                                 canvas_open,

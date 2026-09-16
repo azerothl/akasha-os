@@ -5,7 +5,7 @@
 
 use aos_agent::actions::{
     parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
-    unparsed_action_diagnostic, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
+    AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::canvas_scene::{
@@ -1151,22 +1151,33 @@ async fn main() {
                         "summary": "Capture webcam enregistrée. Analyse visuelle impossible : aucun modèle vision (projecteur d'image) n'est chargé. Charge Gemma 4 ou LLaVA dans Modèles, puis redemande ce que montre la photo."
                     }),
                 });
-            } else if aos_proto::chat_user_wants_advisory(&spec.goal.statement)
+            } else if (aos_proto::chat_user_wants_advisory(&spec.goal.statement)
+                || spec.cognitive_mode.is_deep_thinking())
                 && prose.chars().count() >= 80
             {
-                // Advisory answers are allowed to finish in prose. Treating
-                // a complete textual evaluation as noop used to send the
-                // worker into a pointless invalid-JSON loop.
+                // Advisory / Deep Thinking deliverables may finish as prose.
+                // Treating that as noop used to loop on invalid-JSON until fail.
                 batch_actions.push(AgentAction {
-                    thought: "réponse advisory complète".into(),
+                    thought: if spec.cognitive_mode.is_deep_thinking() {
+                        "réponse Deep Thinking complète".into()
+                    } else {
+                        "réponse advisory complète".into()
+                    },
                     action: "goal.complete".into(),
                     args: serde_json::json!({ "summary": prose }),
                 });
             } else {
-                let diagnostic = if aos_proto::chat_user_wants_advisory(&spec.goal.statement) {
-                    "aucune action JSON détectée : pour une évaluation/conseil, émets une seule action JSON `goal.complete` avec `args.summary`; ne crée pas de note ni de module.".to_string()
+                let diagnostic = if aos_proto::chat_user_wants_advisory(&spec.goal.statement)
+                    || spec.cognitive_mode.is_deep_thinking()
+                {
+                    "aucune action JSON détectée : pour une évaluation/conseil ou un livrable Deep Thinking, émets une seule action JSON `goal.complete` avec `args.summary` (ou `user.ask` pour une question à l'humain) ; ne crée pas de note ni de module.".to_string()
                 } else {
-                    unparsed_action_diagnostic(&infer.text, infer.generated_tokens, gen_tokens)
+                    aos_agent::actions::unparsed_action_diagnostic_ex(
+                        &infer.text,
+                        infer.generated_tokens,
+                        gen_tokens,
+                        canvas_agent,
+                    )
                 };
                 batch_actions.push(AgentAction {
                     thought: if reasoning.is_empty() {
@@ -4794,14 +4805,42 @@ async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: u
         Err(e) => parts.push(format!("(mémoire utilisateur: err {e})")),
     }
 
-    if parts.is_empty() {
+    let joined = if parts.is_empty() {
         format!(
             "(aucune information mémorisée trouvée pour « {} »)",
             truncate(query, 120)
         )
     } else {
         parts.join("\n")
+    };
+    filter_canvas_noise_from_recall(&joined, query)
+}
+
+/// Drop stale canvas digests / critic lines when the recall query is unrelated.
+/// Otherwise Deep Thinking agents invent canvas plans from old session compaction.
+fn filter_canvas_noise_from_recall(block: &str, query: &str) -> String {
+    let q = query.to_ascii_lowercase();
+    if q.contains("canvas")
+        || q.contains("dessin")
+        || q.contains("dessine")
+        || q.contains("draw")
+        || q.contains("sketch")
+    {
+        return block.to_string();
     }
+    let filtered: Vec<&str> = block
+        .lines()
+        .filter(|line| {
+            let l = line.to_ascii_lowercase();
+            !(l.contains("[canvas digest]")
+                || l.contains("[canvas critic")
+                || l.contains("canvas.path")
+                || l.contains("canvas.stroke")
+                || l.contains("\"action\":\"canvas.")
+                || l.contains("\"action\": \"canvas."))
+        })
+        .collect();
+    filtered.join("\n")
 }
 
 async fn inject_mem_context(bus: &BusClient, shared: &Shared, agent_id: &str, query: &str) {
@@ -5470,6 +5509,20 @@ mod tests {
         let msg = super::duplicate_deep_plan_message("dplan-abc");
         assert!(msg.contains("dplan-abc"));
         assert!(msg.contains("plan.get") || msg.contains("plan.replace_tree"));
+    }
+
+    #[test]
+    fn recall_filters_stale_canvas_digest_for_non_canvas_query() {
+        let block = "Mémoire cognitive:\n\
+            - [compaction] 13 messages : assistant: {\"action\":\"canvas.path\"…}\n\
+            - [canvas digest]\nne…\n\
+            - L'utilisateur préfère le français.\n";
+        let filtered = super::filter_canvas_noise_from_recall(block, "Continue la réponse");
+        assert!(!filtered.contains("canvas.path"));
+        assert!(!filtered.contains("[canvas digest]"));
+        assert!(filtered.contains("français"));
+        let kept = super::filter_canvas_noise_from_recall(block, "reprendre le dessin canvas");
+        assert!(kept.contains("canvas.path"));
     }
 
     #[test]
