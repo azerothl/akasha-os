@@ -22,14 +22,14 @@
       "signal": {
         "role": "primary",
         "displayName": "Cyan Rail",
-        "canonical": "#3ee0c4",
+        "canonical": "#2ef0c8",
         "tonalRamp": [
           "#0a241f",
           "#123d36",
           "#1a5c52",
           "#248072",
           "#2eb8a0",
-          "#3ee0c4",
+          "#2ef0c8",
           "#7aecd8",
           "#c5f6ee"
         ]
@@ -37,16 +37,16 @@
       "hydrogen": {
         "role": "secondary",
         "displayName": "Hydrogen",
-        "canonical": "#e85d4c",
+        "canonical": "#ff5a48",
         "tonalRamp": [
-          "#3a1410",
-          "#6a241c",
-          "#9c382c",
-          "#c44c3e",
-          "#e85d4c",
-          "#f08a7c",
-          "#f6b8ae",
-          "#fce8e4"
+          "#2a100e",
+          "#4a1c18",
+          "#6e2a22",
+          "#9a3c30",
+          "#c94a3a",
+          "#ff5a48",
+          "#ff8f7a",
+          "#ffd2c8"
         ]
       },
       "paper": {
@@ -77,6 +77,21 @@
           "#3a8880",
           "#7ab8b0",
           "#c5e8e2"
+        ]
+      },
+      "ice": {
+        "role": "accent",
+        "displayName": "Ice Track",
+        "canonical": "#5ee7ff",
+        "tonalRamp": [
+          "#071820",
+          "#0c2a38",
+          "#123f54",
+          "#1a5c78",
+          "#2a8fb0",
+          "#5ee7ff",
+          "#9ef0ff",
+          "#d7f9ff"
         ]
       }
     },
@@ -182,7 +197,7 @@
       "name": "Honesty Stack",
       "kind": "card",
       "refersTo": "fact",
-      "description": "Landing honesty on void: Archivo cyan title, Fira paper body, centered. Cut-face gaps, no paper sheet. Class is .fact — never .plate (weather class on inner pages).",
+      "description": "Landing honesty on void: Archivo cyan title, Fira paper body, centered. Cut-face gaps, no paper sheet. Class is .fact \u2014 never .plate (weather class on inner pages).",
       "html": "<article class=\"ds-fact\"><h2>Host</h2><p>Preview 0.8.0 is a host app on Windows or Linux x64.</p></article>",
       "css": ".ds-fact { background: transparent; color: var(--paper, #dce6f0); padding: 0; text-align: center; } .ds-fact h2 { margin: 0 0 8px; color: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; } .ds-fact p { margin: 0 auto; max-width: 36rem; color: var(--paper, #dce6f0); font-family: \"Fira Sans\", \"Segoe UI\", sans-serif; font-size: 0.98rem; line-height: 1.55; }"
     },
@@ -191,7 +206,7 @@
       "kind": "custom",
       "refersTo": "swipe",
       "description": "One cyan bar: HOST / NVIDIA rec. / NOT BOOTABLE. Archivo Narrow uppercase, void type.",
-      "html": "<p class=\"ds-swipe\">HOST · NVIDIA rec. · NOT BOOTABLE</p>",
+      "html": "<p class=\"ds-swipe\">HOST \u00b7 NVIDIA rec. \u00b7 NOT BOOTABLE</p>",
       "css": ".ds-swipe { margin: 0; width: 100%; padding: 12px; color: var(--void, #070b14); background: var(--signal, #3ee0c4); font-family: \"Archivo Narrow\", \"Arial Narrow\", sans-serif; font-size: clamp(1.05rem, 1.6vw, 1.35rem); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; border-radius: 0; }"
     },
     {
@@ -213,7 +228,7 @@
   ],
   "narrative": {
     "northStar": "The Orrery",
-    "overview": "The public site is a mechanical orrery in night ether, not an AI-OS product hero and not a radio correlator. A live canvas draws MEMORY, CAPS, GPU, and AGENTS on elliptical rails; capability rods run from the hub to each globe. The landing fold is that machine on the left and an honesty stack on the right: Fira lede, one cyan swipe of HOST / NVIDIA rec. / NOT BOOTABLE, then cut-face Host / NVIDIA / Boot on void. The hydrogen winding key sits flush on the bottom rail. Inner pages are the same ether dimmed, with copy and cut-face stacks on void.\n\nPersonality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the same register as the thesis. Density is instrument-like: an 8px unit, flush square chrome, Archivo Narrow on the machine. Confirmed rejections: an AI-OS hero, a spectrogram correlator, a split-flap board, and a card grid of features. The header is the circular A-mark plus the words Akasha OS — never Station.",
+    "overview": "The public site is a mechanical orrery in night ether, not an AI-OS product hero and not a radio correlator. A live canvas draws MEMORY, CAPS, GPU, and AGENTS on elliptical rails; capability rods run from the hub to each globe. The landing fold is that machine on the left and an honesty stack on the right: Fira lede, one cyan swipe of HOST / NVIDIA rec. / NOT BOOTABLE, then cut-face Host / NVIDIA / Boot on void. The hydrogen winding key sits flush on the bottom rail. Inner pages are the same ether dimmed, with copy and cut-face stacks on void.\n\nPersonality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the same register as the thesis. Density is instrument-like: an 8px unit, flush square chrome, Archivo Narrow on the machine. Confirmed rejections: an AI-OS hero, a spectrogram correlator, a split-flap board, and a card grid of features. The header is the circular A-mark plus the words Akasha OS \u2014 never Station.",
     "keyCharacteristics": [
       "Night void field with a live canvas orrery (MEMORY, CAPS, GPU, AGENTS); plate weather dims the ether to 38% and tucks it to the corner",
       "Archivo Narrow 700 on rails, swipe, headlines, and the winding key; Archivo Narrow 600 on canvas orbit IDs",
@@ -230,7 +245,7 @@
       },
       {
         "name": "The Cyan Rail Rule",
-        "body": "If a control is idle, it sits on mute; if it is live, current, or a destination, it goes to signal — except the one hydrogen key.",
+        "body": "If a control is idle, it sits on mute; if it is live, current, or a destination, it goes to signal \u2014 except the one hydrogen key.",
         "section": "colors"
       },
       {
@@ -245,7 +260,7 @@
       },
       {
         "name": "The Two Weathers Rule",
-        "body": "body.sky is the night fold (full-bleed orrery, hydrogen key, no footer). body.plate is working copy: ether at 38% opacity, hub shifted to the corner, continue links instead of hydrogen — except install, which keeps the Download key. Do not run the sky fold layout on plate pages.",
+        "body": "body.sky is the night fold (full-bleed orrery, hydrogen key, no footer). body.plate is working copy: ether at 38% opacity, hub shifted to the corner, continue links instead of hydrogen \u2014 except install, which keeps the Download key. Do not run the sky fold layout on plate pages.",
         "section": "layout"
       },
       {

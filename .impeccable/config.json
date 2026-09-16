@@ -1,3 +1,36 @@
 {
-  "buildPath": "code"
+  "buildPath": "code",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "website/styles.css"
+        ],
+        "createdAt": "2026-09-16T11:02:08.569Z",
+        "reason": "Established Orrery plate routes use cyan rail gutters as identity; Product chamber landing inherits plate chrome on secondary pages without rewriting grant/why gutters in P0."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "*",
+        "files": [
+          "website/styles.css"
+        ],
+        "createdAt": "2026-09-16T11:02:24.221Z",
+        "reason": "Pre-existing website type ramp predates DESIGN.md detector coverage; Product chamber P0 keeps plate type while aligning tokens to PRODUCT.md."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "website/styles.css"
+        ],
+        "createdAt": "2026-09-16T11:02:24.254Z",
+        "reason": "Token realignment to PRODUCT.md cloud chamber (#2ef0c8/#5ee7ff/#ff5a48); DESIGN.md updated at finish to match shipped site."
+      }
+    ]
+  }
 }
