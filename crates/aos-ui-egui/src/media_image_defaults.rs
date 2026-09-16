@@ -537,10 +537,8 @@ pub fn create_generation_defaults(
             let fps_u = fps.unwrap_or(if id.contains("wan") { 16 } else { 24 }).max(1);
             let mut cap = max_secs.saturating_mul(fps_u);
             // Wan / LTX expect 4n+1 frame counts.
-            if id.contains("wan") || id.contains("ltx") {
-                if cap > 1 {
-                    cap = ((cap.saturating_sub(1)) / 4) * 4 + 1;
-                }
+            if (id.contains("wan") || id.contains("ltx")) && cap > 1 {
+                cap = ((cap.saturating_sub(1)) / 4) * 4 + 1;
             }
             if let Some(frames) = video_frames.as_mut() {
                 *frames = (*frames).min(cap.max(1));
