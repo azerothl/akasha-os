@@ -280,12 +280,28 @@ pub fn prepare_room_bubble_text(
 
 /// Remove runtime sentinels from visible salon prose (toast copy is shown separately).
 pub fn strip_salon_sentinels(text: &str) -> String {
-    let mut work = text.to_string();
+    let mut work = strip_prefixed_host_path_sentinel(text);
     for sentinel in [ROOM_HOST_PATH_DISALLOWED, ROOM_ACTION_UNAVAILABLE] {
         work = work.replace(&format!("`{sentinel}`"), "");
         work = remove_bare_token(&work, sentinel);
     }
     collapse_paint_spaces_outside_fences(&work)
+}
+
+fn strip_prefixed_host_path_sentinel(text: &str) -> String {
+    let prefix = format!("{ROOM_HOST_PATH_DISALLOWED}:");
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(idx) = rest.find(&prefix) {
+        out.push_str(&rest[..idx]);
+        rest = &rest[idx + prefix.len()..];
+        let skip = rest
+            .find(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_')))
+            .unwrap_or(rest.len());
+        rest = &rest[skip..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn remove_bare_token(text: &str, token: &str) -> String {
@@ -2753,6 +2769,11 @@ mod tests {
         assert!(!stripped.contains("room_host_path_disallowed"));
         assert!(stripped.contains("Le blocage"));
         assert!(stripped.contains("est absolu"));
+        let named = strip_salon_sentinels("refus room_host_path_disallowed:agents ici");
+        assert!(!named.contains("room_host_path_disallowed"));
+        assert!(!named.contains("agents"));
+        assert!(named.contains("refus"));
+        assert!(named.contains("ici"));
     }
 
     #[test]

@@ -560,8 +560,10 @@ pub struct UiStrings {
     pub room_thinking_label: &'static str,
     pub room_action_unavailable: &'static str,
     pub room_ask_not_waiting: &'static str,
-    /// CM-locked toast for host paths outside `/documents`, `/downloads`, notes — empty until copy lands.
+    /// Toast when an agent (or user) names a host folder outside `/documents` and `/downloads`.
     pub room_host_path_disallowed: &'static str,
+    /// Same toast with a safe last-segment folder label (`{folder}`).
+    pub room_host_path_disallowed_named: &'static str,
     /// Slice C (frozen copy — chooser not wired yet).
     pub room_policy_one_agent: &'static str,
     /// Slice C (frozen copy — chooser not wired yet).
@@ -1847,7 +1849,9 @@ const EN: UiStrings = UiStrings {
     room_thinking_label: "Reflection",
     room_action_unavailable: "That action isn't available in the room.",
     room_ask_not_waiting: "The room isn't waiting for an answer.",
-    room_host_path_disallowed: "That folder is out of reach.",
+    room_host_path_disallowed: "An agent tried to open a folder outside this workspace.",
+    room_host_path_disallowed_named:
+        "An agent tried to open « {folder} ». That folder is outside this workspace.",
     room_policy_one_agent: "One agent",
     room_policy_open_floor: "Open floor",
     persona_researcher: "Researcher",
@@ -3126,7 +3130,9 @@ const FR: UiStrings = UiStrings {
     room_thinking_label: "Réflexion",
     room_action_unavailable: "Action indisponible dans le salon.",
     room_ask_not_waiting: "Le salon n'attend plus de réponse.",
-    room_host_path_disallowed: "Ce dossier est hors de portée.",
+    room_host_path_disallowed: "Un agent a tenté d'ouvrir un dossier hors de cet espace de travail.",
+    room_host_path_disallowed_named:
+        "Un agent a tenté d'ouvrir « {folder} ». Ce dossier est hors de cet espace de travail.",
     room_policy_one_agent: "Un agent",
     room_policy_open_floor: "Tout le salon",
     persona_researcher: "Chercheur",
@@ -3921,8 +3927,7 @@ pub fn format_note_hops(t: &UiStrings, hops: u32) -> String {
 
 /// Humanize relevance score for related-note rows (#239).
 pub fn format_note_relevance(t: &UiStrings, score: f32) -> String {
-    t.notes_relevance
-        .replace("{score}", &format!("{score:.2}"))
+    t.notes_relevance.replace("{score}", &format!("{score:.2}"))
 }
 
 /// Localized related-note row: title, relation, hops, relevance — no raw field names.
@@ -4157,11 +4162,7 @@ pub fn lan_worker_status_label(t: &UiStrings, worker_state: &str) -> &'static st
     }
 }
 
-pub fn lan_worker_status_message(
-    t: &UiStrings,
-    worker_state: &str,
-    worker_detail: &str,
-) -> String {
+pub fn lan_worker_status_message(t: &UiStrings, worker_state: &str, worker_detail: &str) -> String {
     match worker_state {
         "secret_missing" => t.lan_status_secret_missing.to_string(),
         "bind_failed" => {
@@ -4295,11 +4296,14 @@ mod tests {
                     "chrome must not expose {LAN_SESSION_WIRE_ID}: {s}"
                 );
             }
-            assert_eq!(t.lan_session_value, if lang == "fr" {
-                "Clé de session LAN"
-            } else {
-                "LAN session key"
-            });
+            assert_eq!(
+                t.lan_session_value,
+                if lang == "fr" {
+                    "Clé de session LAN"
+                } else {
+                    "LAN session key"
+                }
+            );
         }
     }
 
@@ -4312,7 +4316,10 @@ mod tests {
                 !msg.contains(LAN_SESSION_WIRE_ID),
                 "chrome must not expose {LAN_SESSION_WIRE_ID}"
             );
-            assert_eq!(lan_worker_status_label(&t, "secret_missing"), t.lan_status_error);
+            assert_eq!(
+                lan_worker_status_label(&t, "secret_missing"),
+                t.lan_status_error
+            );
             if lang == "en" {
                 assert_eq!(
                     msg,
@@ -4488,10 +4495,34 @@ mod tests {
             fr.chat_previous_in_progress,
             "La réponse précédente est encore en cours."
         );
-        assert_eq!(en.chat_error_agent_spawn_denied, "Couldn't launch the agent.");
-        assert_eq!(fr.chat_error_agent_spawn_denied, "Impossible de lancer l'agent.");
-        assert_eq!(en.room_ask_not_waiting, "The room isn't waiting for an answer.");
-        assert_eq!(fr.room_ask_not_waiting, "Le salon n'attend plus de réponse.");
+        assert_eq!(
+            en.chat_error_agent_spawn_denied,
+            "Couldn't launch the agent."
+        );
+        assert_eq!(
+            fr.chat_error_agent_spawn_denied,
+            "Impossible de lancer l'agent."
+        );
+        assert_eq!(
+            en.room_ask_not_waiting,
+            "The room isn't waiting for an answer."
+        );
+        assert_eq!(
+            fr.room_ask_not_waiting,
+            "Le salon n'attend plus de réponse."
+        );
+        assert_eq!(
+            en.room_host_path_disallowed,
+            "An agent tried to open a folder outside this workspace."
+        );
+        assert_eq!(
+            fr.room_host_path_disallowed,
+            "Un agent a tenté d'ouvrir un dossier hors de cet espace de travail."
+        );
+        assert!(en.room_host_path_disallowed_named.contains("{folder}"));
+        assert!(fr.room_host_path_disallowed_named.contains("{folder}"));
+        assert!(!en.room_host_path_disallowed_named.contains("out of reach"));
+        assert!(!fr.room_host_path_disallowed.contains("hors de portée"));
     }
 
     #[test]
@@ -4900,7 +4931,9 @@ mod tests {
             ] {
                 for term in FORBIDDEN {
                     assert!(
-                        !label.to_ascii_lowercase().contains(&term.to_ascii_lowercase()),
+                        !label
+                            .to_ascii_lowercase()
+                            .contains(&term.to_ascii_lowercase()),
                         "{lang} label `{label}` contains forbidden `{term}`"
                     );
                 }

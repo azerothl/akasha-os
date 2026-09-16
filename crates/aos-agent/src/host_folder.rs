@@ -1,6 +1,6 @@
 //! Demande d'accès hors sandbox via `fs.host.access` (issue #157).
 
-use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
+use crate::storage_path::{host_path_disallowed_token, is_disallowed_storage_path};
 use aos_ipc::BusClient;
 use aos_proto::host_folder::intents;
 use aos_proto::{
@@ -58,7 +58,7 @@ pub async fn try_host_folder_tool(
                 Some("ok".into())
             }
         }
-        Ok(_) | Err(_) => Some(ROOM_HOST_PATH_DISALLOWED.to_string()),
+        Ok(_) | Err(_) => Some(host_path_disallowed_token(path)),
     }
 }
 

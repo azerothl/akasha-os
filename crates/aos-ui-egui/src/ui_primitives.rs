@@ -114,11 +114,9 @@ impl Toasts {
         if msg.is_empty() {
             return;
         }
-        // Évite le spam : déduplique le dernier identique de moins de 2s.
-        if let Some(last) = self.items.last() {
-            if last.msg == msg && last.created.elapsed() < Duration::from_secs(2) {
-                return;
-            }
+        // Évite le spam : un message déjà visible n'est pas re-poussé.
+        if self.items.iter().any(|item| item.msg == msg) {
+            return;
         }
         self.items.push(ToastItem {
             kind,

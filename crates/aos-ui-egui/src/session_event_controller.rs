@@ -1,6 +1,7 @@
 //! Event handlers for session navigation and room-turn lifecycle.
 
 use crate::chat_canvas;
+use crate::chat_error_copy;
 use crate::chat_room;
 use crate::cmd::{ChatLine, Cmd};
 use crate::{designer_shot_mode, session_chat, session_nav, UiApp};
@@ -32,6 +33,21 @@ pub(crate) fn on_loaded(
             *session = meta;
         }
         return;
+    }
+
+    if !session_changed {
+        let t = crate::i18n::strings(&app.prefs.language);
+        let lines: Vec<(u64, &str)> = messages
+            .iter()
+            .map(|line| (line.ts_ms, line.text.as_str()))
+            .collect();
+        for msg in chat_error_copy::take_new_room_host_path_toasts(
+            &mut app.chat_state.runtime.toasted_host_path_notices,
+            &lines,
+            &t,
+        ) {
+            app.toasts.push_error(msg);
+        }
     }
 
     let room_turn_in_flight = app.chat_state.session_chat.is_pending(&id);
@@ -82,6 +98,15 @@ pub(crate) fn on_loaded(
     }
     if session_changed {
         app.chat_state.view.room_members_open = false;
+        app.chat_state.runtime.toasted_host_path_notices.clear();
+        let lines: Vec<(u64, &str)> = messages
+            .iter()
+            .map(|line| (line.ts_ms, line.text.as_str()))
+            .collect();
+        chat_error_copy::remember_room_host_path_notices(
+            &mut app.chat_state.runtime.toasted_host_path_notices,
+            &lines,
+        );
         let mut chat = Vec::new();
         if !designer_shot_mode() {
             let t = crate::i18n::strings(&app.prefs.language);
@@ -130,8 +155,7 @@ pub(crate) fn on_room_turn_done(
     if app.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
         app.chat_state.runtime.pending = false;
         app.chat_state.runtime.inference_id = None;
-        app.chat_state.runtime.infer_phase =
-            crate::chat_pending_status::ChatInferPhase::Preparing;
+        app.chat_state.runtime.infer_phase = crate::chat_pending_status::ChatInferPhase::Preparing;
         app.chat_state.runtime.room_turn_text = None;
         app.chat_state.runtime.room_progress = None;
         if let Some(status) = chat_room::room_turn_done_status(agent_turns, cancelled) {
