@@ -110,11 +110,16 @@
   --void: #070b14;
   --ice: #5ee7ff;
   --signal: #2ef0c8;
+  /* Fills behind text follow egui chamber_dark: diluted signal, never full neon. */
+  --signal-fill: color-mix(in srgb, var(--signal) 28%, var(--void));
+  --signal-fill-strong: color-mix(in srgb, var(--signal) 40%, var(--void));
+  --ice-ink: color-mix(in srgb, var(--ice) 42%, var(--paper));
   --hydrogen: #ff5a48;
   --paper: #e8eef6;
-  --mute: color-mix(in srgb, var(--signal) 42%, var(--void));
+  /* Secondary text is paper-gray, not cyan-washed (was signal@42%). */
+  --mute: color-mix(in srgb, var(--paper) 58%, var(--void));
   --plate: color-mix(in srgb, var(--paper) 7%, var(--void));
-  --plate-edge: color-mix(in srgb, var(--signal) 55%, var(--void));
+  --plate-edge: color-mix(in srgb, var(--signal) 32%, var(--void));
   --u: 8px;
   --measure: 42rem;
   --display: "Archivo Narrow", "Arial Narrow", sans-serif;
@@ -142,8 +147,8 @@ html[lang="fr"] [data-lang="en"] {
 }
 
 ::selection {
-  background: var(--signal);
-  color: var(--void);
+  background: var(--signal-fill-strong);
+  color: var(--paper);
 }
 
 body {
@@ -168,7 +173,7 @@ body.plate {
 }
 
 a {
-  color: var(--signal);
+  color: color-mix(in srgb, var(--signal) 62%, var(--paper));
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
@@ -192,8 +197,8 @@ a:focus-visible {
 .skip:focus {
   left: calc(var(--u) * 2);
   z-index: 40;
-  background: var(--signal);
-  color: var(--void);
+  background: var(--signal-fill-strong);
+  color: var(--paper);
   padding: var(--u) calc(var(--u) * 1.5);
 }
 
@@ -284,8 +289,8 @@ body.plate .ether {
 .lanes a[aria-current="page"],
 html[lang="en"] .lang [data-set-lang="en"],
 html[lang="fr"] .lang [data-set-lang="fr"] {
-  color: var(--void);
-  background: var(--signal);
+  color: var(--paper);
+  background: var(--signal-fill-strong);
 }
 
 .lang {
@@ -453,8 +458,8 @@ body.sky footer {
   margin: 0;
   width: 100%;
   padding: calc(var(--u) * 1.5) calc(var(--u) * 1.5);
-  color: var(--void);
-  background: var(--signal);
+  color: var(--paper);
+  background: var(--signal-fill-strong);
   font-family: var(--display);
   font-size: clamp(1.05rem, 1.6vw, 1.35rem);
   font-weight: 700;
@@ -856,10 +861,11 @@ h2 {
 .grant {
   max-width: 52rem;
   margin: calc(var(--u) * 5) 0 0;
-  padding: calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 3.5);
-  background: var(--plate);
-  border-left: 4px solid var(--signal);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--paper) 8%, transparent);
+  padding: calc(var(--u) * 3) 0 0;
+  background: transparent;
+  border-top: 1px solid color-mix(in srgb, var(--ice) 16%, var(--void));
+  border-left: 0;
+  box-shadow: none;
 }
 
 .grant:first-of-type {
@@ -870,9 +876,12 @@ h2 {
   margin: 0 0 calc(var(--u) * 2);
   max-width: none;
   padding-bottom: calc(var(--u) * 1);
-  border-bottom: 2px solid var(--plate-edge);
-  color: var(--signal);
-  font-size: 1.15rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--signal) 22%, var(--void));
+  color: var(--paper);
+  font-family: var(--display);
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .grant .hist:last-child {
@@ -883,14 +892,14 @@ h2 {
   max-width: var(--measure);
   margin: calc(var(--u) * 4) 0 calc(var(--u) * 5);
   padding: calc(var(--u) * 3);
-  background: var(--paper);
-  color: var(--void);
-  border-left: 4px solid var(--signal);
+  background: color-mix(in srgb, var(--paper) 4%, var(--void));
+  color: color-mix(in srgb, var(--paper) 88%, var(--void));
+  border: 1px solid color-mix(in srgb, var(--signal) 28%, var(--void));
 }
 
 .callout h3 {
   margin: 0 0 var(--u);
-  color: var(--void);
+  color: var(--ice-ink);
   font-family: var(--display);
   font-size: 1.05rem;
   font-weight: 700;
@@ -901,7 +910,7 @@ h2 {
 .callout p {
   margin: 0;
   max-width: none;
-  color: var(--void);
+  color: color-mix(in srgb, var(--paper) 88%, var(--void));
   line-height: 1.55;
 }
 
@@ -910,24 +919,25 @@ h2 {
 }
 
 .callout-limit {
-  border-left-color: var(--hydrogen);
+  border-color: color-mix(in srgb, var(--hydrogen) 55%, var(--void));
 }
 
 .callout a {
-  color: color-mix(in srgb, var(--void) 70%, var(--signal));
+  color: color-mix(in srgb, var(--signal) 62%, var(--paper));
 }
 
 .callout a:hover,
 .callout a:focus-visible {
-  color: var(--void);
+  color: var(--paper);
 }
 
 .section-plate {
   max-width: 52rem;
   margin: calc(var(--u) * 5) 0 0;
-  padding: calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 3.5);
-  background: var(--plate);
-  border-left: 4px solid var(--signal);
+  padding: calc(var(--u) * 3) 0 0;
+  background: transparent;
+  border-top: 1px solid color-mix(in srgb, var(--ice) 16%, var(--void));
+  border-left: 0;
 }
 
 .section-plate > h2:first-child {
@@ -968,7 +978,7 @@ h2 {
 }
 
 .log-toc a {
-  color: var(--signal);
+  color: color-mix(in srgb, var(--signal) 62%, var(--paper));
   text-decoration: none;
   font-variant-numeric: tabular-nums;
 }
@@ -1087,13 +1097,13 @@ code {
 
 .doc-band:hover,
 .doc-band:focus-visible {
-  color: var(--void);
-  background: var(--signal);
+  color: var(--paper);
+  background: var(--signal-fill-strong);
 }
 
 .doc-band:hover .band-hz,
 .doc-band:focus-visible .band-hz {
-  color: var(--void);
+  color: var(--paper);
 }
 
 .doc-band .band-hz {
@@ -1281,17 +1291,19 @@ footer p {
   }
 }
 
-/* —— Product chamber landing —— */
-body.product {
+/* —— Shared product chamber chrome (landing + inner pages) —— */
+body.product,
+body.plate {
   background:
-    radial-gradient(120% 80% at 70% -10%, color-mix(in srgb, var(--ice) 14%, transparent), transparent 55%),
-    radial-gradient(90% 60% at -10% 40%, color-mix(in srgb, var(--signal) 10%, transparent), transparent 50%),
+    radial-gradient(120% 80% at 70% -10%, color-mix(in srgb, var(--ice) 10%, transparent), transparent 55%),
+    radial-gradient(90% 60% at -10% 40%, color-mix(in srgb, var(--signal) 8%, transparent), transparent 50%),
     var(--void);
   color: var(--paper);
 }
 
-body.product .ether {
-  opacity: 0.45;
+body.product .ether,
+body.plate .ether {
+  opacity: 0.42;
 }
 
 body.product .shell > main {
@@ -1300,6 +1312,67 @@ body.product .shell > main {
   gap: 0;
 }
 
+.plate-main {
+  width: min(52rem, 100%);
+  margin: 0 auto;
+  padding: calc(var(--u) * 4) calc(var(--u) * 3) calc(var(--u) * 8);
+}
+
+.plate-main > h1 {
+  margin: 0 0 calc(var(--u) * 3);
+  max-width: 28ch;
+  font-family: var(--display);
+  font-size: clamp(1.85rem, 3.4vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  color: var(--paper);
+}
+
+.plate-main .hist,
+.plate-main > p {
+  max-width: var(--measure);
+  color: color-mix(in srgb, var(--paper) 82%, var(--void));
+}
+
+.plate-main .section-plate,
+.plate-main .grant,
+.plate-main article.section-plate {
+  margin: calc(var(--u) * 5) 0 0;
+  padding: calc(var(--u) * 3) 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--ice) 16%, var(--void));
+  border-left: 0;
+  background: transparent;
+}
+
+.plate-main .section-plate h2,
+.plate-main .grant h2,
+.plate-main h2 {
+  margin: 0 0 calc(var(--u) * 1.5);
+  font-family: var(--display);
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--paper);
+}
+
+.plate-main .callout {
+  margin: calc(var(--u) * 3) 0;
+  padding: calc(var(--u) * 2.5);
+  border: 1px solid color-mix(in srgb, var(--signal) 28%, var(--void));
+  border-left-width: 1px;
+  background: color-mix(in srgb, var(--paper) 4%, var(--void));
+}
+
+.plate-main .callout h3 {
+  margin: 0 0 calc(var(--u) * 1);
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ice-ink);
+}
+
+/* —— Product chamber landing —— */
 .hero {
   display: grid;
   grid-template-columns: minmax(18rem, 0.92fr) minmax(0, 1.35fr);
@@ -1475,7 +1548,7 @@ body.product .hero .key {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ice);
+  color: var(--ice-ink);
 }
 
 .band-shot {
@@ -1526,8 +1599,8 @@ body.product .hero .key {
   font-family: var(--display);
   font-weight: 700;
   font-size: 1.2rem;
-  color: var(--void);
-  background: var(--signal);
+  color: var(--paper);
+  background: var(--signal-fill-strong);
   width: 2.25rem;
   height: 2.25rem;
   display: grid;
