@@ -126,10 +126,11 @@ host branches.
 ## Capabilities and catalogue
 
 - Local signed catalogue: `share/modules/catalogue.yaml` + `catalogue.yaml.sig`
-  (ed25519); Settings → Modules → Install still runs per-package cap review
+  (ed25519); Settings → Local module catalogue → Install still runs per-package
+  cap review
 - Opt-in community index: signed Git `community/catalogue.yaml` (cached offline)
-- Uninstall: Settings → Installed modules; bundled apps can be removed — choice
-  persists across boots (see [FEATURES.md](FEATURES.md))
+- Uninstall: Settings → Local module catalogue → Installed modules; bundled apps
+  can be removed — choice persists across boots (see [FEATURES.md](FEATURES.md))
 
 Declared caps in `manifest.yaml` under `permissions.required_caps` must match
 actual tool and service use. The host never grants a capability because a widget

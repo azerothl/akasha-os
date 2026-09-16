@@ -255,8 +255,10 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 
 ### 14. UI de module déclarative (0.7.0 / E15)
 
-- Dans **Settings → Modules** (ou via agent) : `module.scaffold` un module script,
-  puis `module.package` et `module.install` avec revue de caps.
+- Via **Scénarios** ou Chat (pas Settings) : faire exécuter par l’agent
+  `module.scaffold` (script), puis `module.package` et `module.install` avec
+  revue de caps. Settings → **Catalogue local de modules** n’installe que les
+  paquets listés — il ne scaffold pas.
 - Après install, un nouvel onglet sous **Modules** doit apparaître (pas pour
   `notes`, `tasks` ou `ext-rt`).
 - Ouvrir l’onglet : heading, formulaire ou bouton, et table liée au résultat

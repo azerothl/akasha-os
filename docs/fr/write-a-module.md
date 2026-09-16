@@ -45,11 +45,13 @@ Sous le home Preview `var/modules/` :
 Windows : `%LOCALAPPDATA%\AgentOS-Preview`. Linux / macOS :
 `~/.local/share/agentos-preview`.
 
-## Chemin B — Settings
+## Chemin B — Settings (catalogue / désinstall)
 
-Settings → Modules : `module.scaffold` (kind `script`) →
-`module.package` → `module.install`. Même revue de caps. Désinstall :
-Settings → Installed modules (pas les quatre bundlés).
+Settings n’expose **pas** `module.scaffold` / `module.package`. L’authoring
+reste le chemin A (Scénarios ou Chat). Settings → **Catalogue local de
+modules** : installer un paquet listé (même revue de caps). **Modules
+installés** dans cette section : désinstaller les non bundlés (pas les quatre
+hôtes protégés). Réinstaller marche encore.
 
 ## Compile Rust (pas le premier)
 

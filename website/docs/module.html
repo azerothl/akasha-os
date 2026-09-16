@@ -196,21 +196,27 @@
         </article>
 
         <article class="grant">
-          <h2 data-lang="en">Path B — Settings</h2>
-          <h2 data-lang="fr">Chemin B — Settings</h2>
+          <h2 data-lang="en">Path B — Settings (catalogue / uninstall)</h2>
+          <h2 data-lang="fr">Chemin B — Settings (catalogue / désinstall)</h2>
           <p class="hist" data-lang="en">
-            Same three intents without Chat: Settings → Modules,
-            <code>module.scaffold</code> (kind <code>script</code>), then
-            <code>module.package</code>, then <code>module.install</code>. Cap
-            review is the same. Uninstall from Settings → Installed modules
-            (not the bundled four). Re-install still works.
+            Settings does <strong>not</strong> expose
+            <code>module.scaffold</code> / <code>module.package</code>. Authoring
+            stays Path A (Scenarios or Chat). In Settings →
+            <strong>Local module catalogue</strong>, install a listed package
+            (same cap review). Under
+            <strong>Installed modules</strong> in that section, uninstall
+            non-bundled modules (not the four protected hosts). Re-install still
+            works.
           </p>
           <p class="hist" data-lang="fr">
-            Les trois mêmes intents sans Chat : Settings → Modules,
-            <code>module.scaffold</code> (kind <code>script</code>), puis
-            <code>module.package</code>, puis <code>module.install</code>. Même
-            revue de caps. Désinstall depuis Settings → Installed modules (pas
-            les quatre bundlés). Réinstaller marche encore.
+            Settings n’expose <strong>pas</strong>
+            <code>module.scaffold</code> / <code>module.package</code>.
+            L’authoring reste le chemin A (Scénarios ou Chat). Dans Settings →
+            <strong>Catalogue local de modules</strong>, installez un paquet
+            listé (même revue de caps). Sous
+            <strong>Modules installés</strong> dans cette section, désinstallez
+            les modules non bundlés (pas les quatre hôtes protégés).
+            Réinstaller marche encore.
           </p>
         </article>
 
