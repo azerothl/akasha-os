@@ -94,6 +94,36 @@ pub async fn post_room_ask_timeout(
     .map_err(|e| e.to_string())
 }
 
+/// Publie la réponse humaine dans le fil (`origin: ask-reply`).
+pub async fn post_room_ask_reply(
+    bus: &BusClient,
+    session_id: &str,
+    agent_id: &str,
+    title: &str,
+    content: &str,
+) -> Result<(), String> {
+    bus.call::<ChatSessionAppendRequest, ChatSessionMessage>(
+        "chat.session.append",
+        &ChatSessionAppendRequest {
+            session_id: session_id.to_string(),
+            role: "user".into(),
+            content: content.to_string(),
+            attachments: vec![ChatAttachment::AgentRef {
+                agent_id: agent_id.to_string(),
+                title: title.to_string(),
+                origin: "ask-reply".into(),
+            }],
+            speaker_id: None,
+            speaker_name: None,
+            thinking: None,
+        },
+        vec![],
+    )
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 /// Débloque le tour salon en attente d'une réponse humaine.
 pub async fn deliver_room_ask_reply(round: &RoomRoundState, answer: String) -> bool {
     let mut slot = round.ask_reply_tx.lock().await;
@@ -105,17 +135,28 @@ pub async fn deliver_room_ask_reply(round: &RoomRoundState, answer: String) -> b
     }
 }
 
+/// Arme le waiter **avant** de publier la question, pour qu'une réponse UI
+/// immédiate ne tombe pas sur un `ask_reply_tx` encore vide.
+pub async fn arm_room_ask_reply(round: &RoomRoundState) -> oneshot::Receiver<String> {
+    let (tx, rx) = oneshot::channel();
+    let mut slot = round.ask_reply_tx.lock().await;
+    *slot = Some(tx);
+    rx
+}
+
 /// Attend la réponse utilisateur ou timeout / annulation du tour.
 pub async fn wait_room_ask_reply(round: &RoomRoundState, timeout: Duration) -> RoomAskWait {
-    let (tx, rx) = oneshot::channel();
-    {
-        let mut slot = round.ask_reply_tx.lock().await;
-        *slot = Some(tx);
-    }
+    let rx = arm_room_ask_reply(round).await;
+    wait_armed_room_ask_reply(round, rx, timeout).await
+}
 
+async fn wait_armed_room_ask_reply(
+    round: &RoomRoundState,
+    mut rx: oneshot::Receiver<String>,
+    timeout: Duration,
+) -> RoomAskWait {
     let deadline = tokio::time::Instant::now() + timeout;
     let waited_secs = timeout.as_secs();
-    let mut rx = rx;
     loop {
         if round.is_cancelled() {
             round.ask_reply_tx.lock().await.take();
@@ -178,8 +219,12 @@ pub async fn handle_room_user_ask(
         })
         .unwrap_or_default();
     let body = format_user_question(&question, &choices);
-    post_room_ask(bus, session_id, agent_id, display_name, &body).await?;
-    match wait_room_ask_reply(round, ROOM_ASK_TIMEOUT).await {
+    let rx = arm_room_ask_reply(round).await;
+    if let Err(e) = post_room_ask(bus, session_id, agent_id, display_name, &body).await {
+        round.ask_reply_tx.lock().await.take();
+        return Err(e);
+    }
+    match wait_armed_room_ask_reply(round, rx, ROOM_ASK_TIMEOUT).await {
         RoomAskWait::Answer(answer) if !answer.trim().is_empty() => {
             Ok(format!("réponse utilisateur : {answer}"))
         }
@@ -220,6 +265,20 @@ mod tests {
         let round = RoomRoundState::new();
         let (tx, rx) = oneshot::channel();
         *round.ask_reply_tx.lock().await = Some(tx);
+        assert!(deliver_room_ask_reply(&round, "ok".into()).await);
+        assert_eq!(rx.await.unwrap(), "ok");
+    }
+
+    #[tokio::test]
+    async fn deliver_without_waiter_is_false() {
+        let round = RoomRoundState::new();
+        assert!(!deliver_room_ask_reply(&round, "late".into()).await);
+    }
+
+    #[tokio::test]
+    async fn arm_allows_deliver_before_wait_loop() {
+        let round = RoomRoundState::new();
+        let rx = arm_room_ask_reply(&round).await;
         assert!(deliver_room_ask_reply(&round, "ok".into()).await);
         assert_eq!(rx.await.unwrap(), "ok");
     }

@@ -9,7 +9,7 @@ use aos_agent::mcp::{list_mcp_servers, load_servers_config, resolve_secret_place
 use aos_agent::module_discovery::{discover_module_tools, merge_skill_tools_for_modules};
 use aos_agent::persist::{self, registry_add};
 use aos_agent::prompt::optimize_prompt_request;
-use aos_agent::room_ask::deliver_room_ask_reply;
+use aos_agent::room_ask::{deliver_room_ask_reply, post_room_ask_reply};
 use aos_agent::room_personas::{self, persona_agent_id, ROOM_PERSONAS};
 use aos_agent::room_runtime::{self, RoomRoundState};
 use aos_agent::schedule::{self, ScheduleCreateRequest, ScheduleIdRequest, ScheduleListResponse};
@@ -2403,57 +2403,39 @@ async fn main() {
                         return;
                     }
                 };
-                let round = {
-                    let rt = shared.lock().await;
-                    rt.room_rounds.get(&req.session_id).cloned()
-                };
-                let Some(round) = round else {
-                    let _ = ctx
-                        .respond_error(
-                            aos_ipc::msg::Status::NotFound,
-                            "aucun tour salon en attente",
-                        )
-                        .await;
-                    return;
-                };
-                let append_ok = bus
-                    .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
-                        "chat.session.append",
-                        &ChatSessionAppendRequest {
-                            session_id: req.session_id.clone(),
-                            role: "user".into(),
-                            content: req.content.clone(),
-                            attachments: vec![ChatAttachment::AgentRef {
-                                agent_id: req.agent_id.clone(),
-                                title: req.title.clone(),
-                                origin: "ask-reply".into(),
-                            }],
-                            speaker_id: None,
-                            speaker_name: None,
-                            thinking: None,
-                        },
-                        vec![],
-                    )
-                    .await
-                    .is_ok();
-                if !append_ok {
+                if let Err(e) = post_room_ask_reply(
+                    &bus,
+                    &req.session_id,
+                    &req.agent_id,
+                    &req.title,
+                    &req.content,
+                )
+                .await
+                {
                     let _ = ctx
                         .respond_error(
                             aos_ipc::msg::Status::InternalError,
                             "impossible d'enregistrer la réponse",
                         )
                         .await;
+                    eprintln!("[aos-agentd] room ask-reply append: {e}");
                     return;
                 }
-                let delivered = deliver_room_ask_reply(round.as_ref(), req.content.clone()).await;
+                let round = {
+                    let rt = shared.lock().await;
+                    rt.room_rounds.get(&req.session_id).cloned()
+                };
+                let delivered = match round {
+                    Some(round) => {
+                        deliver_room_ask_reply(round.as_ref(), req.content.clone()).await
+                    }
+                    None => false,
+                };
                 if !delivered {
-                    let _ = ctx
-                        .respond_error(
-                            aos_ipc::msg::Status::BadRequest,
-                            "aucune question salon en attente",
-                        )
-                        .await;
-                    return;
+                    eprintln!(
+                        "[aos-agentd] room ask-reply recorded without waiter session={} agent={}",
+                        req.session_id, req.agent_id
+                    );
                 }
                 let _ = ctx.respond(aos_ipc::msg::Status::Ok, &true).await;
             }

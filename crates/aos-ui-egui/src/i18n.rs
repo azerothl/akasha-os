@@ -559,6 +559,7 @@ pub struct UiStrings {
     pub room_queue_joiner: &'static str,
     pub room_thinking_label: &'static str,
     pub room_action_unavailable: &'static str,
+    pub room_ask_not_waiting: &'static str,
     /// CM-locked toast for host paths outside `/documents`, `/downloads`, notes — empty until copy lands.
     pub room_host_path_disallowed: &'static str,
     /// Slice C (frozen copy — chooser not wired yet).
@@ -1845,6 +1846,7 @@ const EN: UiStrings = UiStrings {
     room_queue_joiner: " then ",
     room_thinking_label: "Reflection",
     room_action_unavailable: "That action isn't available in the room.",
+    room_ask_not_waiting: "The room isn't waiting for an answer.",
     room_host_path_disallowed: "That folder is out of reach.",
     room_policy_one_agent: "One agent",
     room_policy_open_floor: "Open floor",
@@ -3123,6 +3125,7 @@ const FR: UiStrings = UiStrings {
     room_queue_joiner: " puis ",
     room_thinking_label: "Réflexion",
     room_action_unavailable: "Action indisponible dans le salon.",
+    room_ask_not_waiting: "Le salon n'attend plus de réponse.",
     room_host_path_disallowed: "Ce dossier est hors de portée.",
     room_policy_one_agent: "Un agent",
     room_policy_open_floor: "Tout le salon",
@@ -4487,6 +4490,8 @@ mod tests {
         );
         assert_eq!(en.chat_error_agent_spawn_denied, "Couldn't launch the agent.");
         assert_eq!(fr.chat_error_agent_spawn_denied, "Impossible de lancer l'agent.");
+        assert_eq!(en.room_ask_not_waiting, "The room isn't waiting for an answer.");
+        assert_eq!(fr.room_ask_not_waiting, "Le salon n'attend plus de réponse.");
     }
 
     #[test]

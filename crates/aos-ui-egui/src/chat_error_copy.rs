@@ -134,6 +134,13 @@ fn is_chat_timeout_error(msg: &str) -> bool {
     lower.contains("timeout chat") || lower.contains("chat timeout")
 }
 
+fn is_room_ask_not_waiting(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("aucune question salon en attente")
+        || lower.contains("aucun tour salon en attente")
+        || lower.contains("no pending room ask")
+}
+
 fn is_advisory_construction_refusal(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
     lower.contains("évaluation/conseil")
@@ -188,6 +195,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
             cause: room_host_path_disallowed_toast(t)
                 .map(str::to_string)
                 .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string()),
+        };
+    }
+    if is_room_ask_not_waiting(raw) {
+        return ChatErrorClassified {
+            code: "room.ask_not_waiting",
+            cause: t.room_ask_not_waiting.to_string(),
         };
     }
     if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
@@ -259,6 +272,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
             };
         }
         if status_lower == "internalerror" {
+            if is_room_ask_not_waiting(ipc_body) {
+                return ChatErrorClassified {
+                    code: "room.ask_not_waiting",
+                    cause: t.room_ask_not_waiting.to_string(),
+                };
+            }
             if is_agent_spawn_error(ipc_body) {
                 return ChatErrorClassified {
                     code: "agent.create.failed",
@@ -466,6 +485,21 @@ mod tests {
             user_visible_chat_error(&fr, ROOM_ACTION_UNAVAILABLE),
             format_chat_error(&fr, &classify_chat_error(&fr, ROOM_ACTION_UNAVAILABLE))
         );
+    }
+
+    #[test]
+    fn room_ask_not_waiting_is_not_internal_error() {
+        let en = crate::i18n::strings("en");
+        let wrapped =
+            "statut InternalError: statut BadRequest: aucune question salon en attente";
+        let classified = classify_chat_error(&en, wrapped);
+        assert_eq!(classified.code, "room.ask_not_waiting");
+        let out = user_visible_chat_error(&en, wrapped);
+        assert!(out.contains(en.room_ask_not_waiting));
+        assert!(!out.contains("InternalError"));
+        assert!(!out.contains("BadRequest"));
+        let missing_round = classify_chat_error(&en, "statut NotFound: aucun tour salon en attente");
+        assert_eq!(missing_round.code, "room.ask_not_waiting");
     }
 
     #[test]
