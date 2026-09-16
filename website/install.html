@@ -61,7 +61,7 @@
             recent driver is recommended (<code>nvidia-smi -L</code>); the CUDA
             runtime ships in the package, so the driver is enough. A CPU path is
             available in Preview <span data-aos-version="0.18.0">0.18.0</span> via
-            Settings → Inference — no second zip required. The macOS build is
+            Settings → Models → Inference — no second zip required. The macOS build is
             unsigned — Gatekeeper will warn after download.
           </p>
           <p data-lang="fr">
@@ -70,9 +70,9 @@
             NVIDIA avec un pilote récent est recommandé
             (<code>nvidia-smi -L</code>) ; le runtime CUDA est fourni dans le
             paquet, le pilote suffit. Un chemin CPU est disponible en Preview
-            <span data-aos-version="0.18.0">0.18.0</span> via Réglages → Inférence — pas
-            de second zip. Le build macOS est non signé — Gatekeeper avertira
-            après le téléchargement.
+            <span data-aos-version="0.18.0">0.18.0</span> via Paramètres →
+            Modèles → Inférence — pas de second zip. Le build macOS est non
+            signé — Gatekeeper avertira après le téléchargement.
           </p>
         </aside>
 
@@ -169,11 +169,11 @@
             </li>
             <li data-lang="en">
               CPU-only works in Preview <span data-aos-version="0.18.0">0.18.0</span>
-              (Settings → Inference; no second zip)
+              (Settings → Models → Inference; no second zip)
             </li>
             <li data-lang="fr">
               CPU seul fonctionne en Preview <span data-aos-version="0.18.0">0.18.0</span>
-              (Réglages → Inférence ; pas de second zip)
+              (Paramètres → Modèles → Inférence ; pas de second zip)
             </li>
           </ul>
         </article>
@@ -375,12 +375,14 @@ var/            created at run</pre>
           <h2 data-lang="fr">Si quelque chose ne va pas</h2>
           <ul class="ticks">
             <li data-lang="en">
-              No NVIDIA (Win/Linux) → use Settings → Inference → CPU (slow is
-              OK), or a CPU-oriented archive if you downloaded one separately
+              No NVIDIA (Win/Linux) → use Settings → Models → Inference → CPU
+              (slow is OK), or a CPU-oriented archive if you downloaded one
+              separately
             </li>
             <li data-lang="fr">
-              Pas de NVIDIA (Win/Linux) → Réglages → Inférence → CPU (lent OK),
-              ou une archive orientée CPU si vous en avez téléchargé une à part
+              Pas de NVIDIA (Win/Linux) → Paramètres → Modèles → Inférence →
+              CPU (lent OK), ou une archive orientée CPU si vous en avez
+              téléchargé une à part
             </li>
             <li data-lang="en">
               Gatekeeper blocked macOS launch → run <code>./install.sh</code>

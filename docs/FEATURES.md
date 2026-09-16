@@ -445,7 +445,7 @@ Persisted in `var/run/preferences.json` (migrated from `onboarding.json` if need
 | Agents | Default model, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Interval agent fires (`schedule.*`) |
 | Secrets | Brave / GitHub / OpenAI keys → encrypted vault; master key in OS keyring |
-| Modules | Local signed catalogue (E10); opt-in community Git index; Install still requires cap review; Uninstall non-bundled modules (not `notes` / `tasks` / `ext-rt` / `canvas`) |
+| Local module catalogue | Signed local registry (E10); opt-in community Git index; Install still requires cap review; Uninstall non-bundled modules under Installed modules (not `notes` / `tasks` / `ext-rt` / `canvas`) |
 | Web | Search engine, browse max chars, fetch max bytes |
 
 ---

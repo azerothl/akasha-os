@@ -446,7 +446,7 @@ Persistés dans `var/run/preferences.json` (migration depuis `onboarding.json` s
 | Agents | Modèle par défaut, max steps (1–128), timeout (60–86400 s) |
 | Schedules | Intervalle de déclenchement agent (`schedule.*`) |
 | Secrets | Clés Brave / GitHub / OpenAI → vault chiffré ; clé maître dans le keyring OS |
-| Modules | Catalogue local signé (E10) ; index Git communautaire opt-in ; l'install demande toujours la revue de caps ; désinstall des non-bundlés (pas `notes` / `tasks` / `ext-rt` / `canvas`) |
+| Catalogue local de modules | Registre local signé (E10) ; index Git communautaire opt-in ; l'install demande toujours la revue de caps ; désinstall des non-bundlés sous Modules installés (pas `notes` / `tasks` / `ext-rt` / `canvas`) |
 | Web | Moteur de recherche, max caractères browse, max octets fetch |
 
 ---

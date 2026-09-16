@@ -109,8 +109,8 @@
             <li data-lang="fr">Terminer le réglage des modèles et le tutoriel (4 étapes).</li>
             <li data-lang="en">Chat, network off: ask “What is Akasha OS?” and wait for a streamed reply.</li>
             <li data-lang="fr">Chat, réseau off : demander « Qu’est-ce qu’Akasha OS ? » et attendre une réponse streamée.</li>
-            <li data-lang="en">Notes: title + body → Create, then Refresh.</li>
-            <li data-lang="fr">Notes : titre + corps → Créer, puis Rafraîchir.</li>
+            <li data-lang="en">Notes: title + body + tags → Create; live search / delete.</li>
+            <li data-lang="fr">Notes : titre + corps + tags → Créer ; recherche live / supprimer.</li>
             <li data-lang="en">Feedback tab → Send feedback. Keep Create a GitHub issue checked (except security).</li>
             <li data-lang="fr">Onglet Retour → Envoyer le retour. Laisser Créer une issue GitHub coché (sauf security).</li>
           </ol>
@@ -153,8 +153,8 @@
             <li data-lang="fr">Terminer le réglage des modèles et le tutoriel (4 étapes). Chat hors ligne. Changer éventuellement le modèle de session.</li>
             <li data-lang="en">Models tab: installed entries; Download an alternative if offered.</li>
             <li data-lang="fr">Onglet Models : entrées installées ; Download une alternative si proposée.</li>
-            <li data-lang="en">Notes: title + body → Create, then Refresh.</li>
-            <li data-lang="fr">Notes : titre + corps → Créer, puis Rafraîchir.</li>
+            <li data-lang="en">Notes: title + body + tags → Create; live search / delete.</li>
+            <li data-lang="fr">Notes : titre + corps + tags → Créer ; recherche live / supprimer.</li>
             <li data-lang="en">Tasks tab: create a task; an agent with <code>tasks.list</code> should see it.</li>
             <li data-lang="fr">Onglet Tasks : créer une tâche ; un agent avec <code>tasks.list</code> doit la voir.</li>
             <li data-lang="en">Agents: task such as “create a note titled cohort with content hello”. Open Detail.</li>
@@ -167,20 +167,22 @@
             <li data-lang="fr">Trois sessions Chat ; redémarrer ; les historiques reviennent.</li>
             <li data-lang="en">Memory: remember a fact, Recall, then use it in Chat.</li>
             <li data-lang="fr">Memory : remember un fait, Recall, puis l’utiliser dans Chat.</li>
-            <li data-lang="en">Settings → Secrets: save a key; restart; <code>master.backend</code> is keyring or file (no plaintext <code>master.key</code> on Windows).</li>
-            <li data-lang="fr">Settings → Secrets : enregistrer une clé ; redémarrer ; <code>master.backend</code> est keyring ou file (pas de <code>master.key</code> lisible sous Windows).</li>
+            <li data-lang="en">Settings → Secrets vault: save a key; restart; <code>master.backend</code> is keyring or file (no plaintext <code>master.key</code> on Windows).</li>
+            <li data-lang="fr">Paramètres → Coffre à secrets : enregistrer une clé ; redémarrer ; <code>master.backend</code> est keyring ou file (pas de <code>master.key</code> lisible sous Windows).</li>
             <li data-lang="en">Settings → Local module catalogue: Install a listed module (cap review). Stop a streaming chat reply; Copy a message.</li>
-            <li data-lang="fr">Settings → Catalogue local : Installer un module listé (revue de caps). Stop sur une réponse en flux ; Copier un message.</li>
-            <li data-lang="en">Scenarios (or Chat « create a module »): scaffold / package / install a script module; a <strong>Modules</strong> sidebar tab appears (not notes / tasks / ext-rt). Open it, submit once.</li>
-            <li data-lang="fr">Scénarios (ou Chat « crée un module ») : scaffolder / packager / installer un module script ; un onglet <strong>Modules</strong> apparaît (pas notes / tasks / ext-rt). L’ouvrir, soumettre une fois.</li>
+            <li data-lang="fr">Paramètres → Catalogue local de modules : Installer un module listé (revue de caps). Stop sur une réponse en flux ; Copier un message.</li>
+            <li data-lang="en">Scenarios (or Chat « create a module »): scaffold / package / install a script module; a <strong>Modules</strong> entry appears under More (not notes / tasks / ext-rt). Open it, submit once.</li>
+            <li data-lang="fr">Scénarios (ou Chat « crée un module ») : scaffolder / packager / installer un module script ; une entrée <strong>Modules</strong> apparaît sous Plus (pas notes / tasks / ext-rt). L’ouvrir, soumettre une fois.</li>
             <li data-lang="en">Network off → search fails. Network on → search (engine <code>auto</code>). Optional Browse URL / download / generate file. See <a href="network.html">network</a>.</li>
             <li data-lang="fr">Réseau off → recherche échoue. Réseau on → recherche (moteur <code>auto</code>). Browse URL / téléchargement / fichier optionnels. Voir <a href="network.html">network</a>.</li>
-            <li data-lang="en">Notes: create a note, then read it from the list (after an update, the packaged WASM must match this release).</li>
-            <li data-lang="fr">Notes : créer une note, puis la relire dans la liste (après une update, le WASM empaqueté doit correspondre à cette release).</li>
-            <li data-lang="en">Troubleshoot (Help): run diagnostics. If findings exist, a GitHub report can open.</li>
-            <li data-lang="fr">Dépannage (Aide) : lancer le diagnostic. S’il y a des anomalies, un rapport GitHub peut s’ouvrir.</li>
-            <li data-lang="en">0.8 surfaces: Uninstall a non-bundled module from Settings. Providers: add loopback (works in local_only). Optional Models Download of SD 1.5 / Piper (engine arrives with the pack) then Chat <code>/image</code> / <code>/speak</code>.</li>
-            <li data-lang="fr">Surfaces 0.8 : Désinstaller un module non bundlé depuis Settings. Providers : ajouter un loopback (marche en local_only). Download optionnel SD 1.5 / Piper (le moteur arrive avec le pack) puis Chat <code>/image</code> / <code>/speak</code>.</li>
+            <li data-lang="en">Notes: create a note with a tag, search, then delete one (after an update, the packaged WASM must match this release).</li>
+            <li data-lang="fr">Notes : créer une note avec un tag, chercher, puis en supprimer une (après une update, le WASM empaqueté doit correspondre à cette release).</li>
+            <li data-lang="en">Help → Troubleshooting: run diagnostics (includes health.snapshot). If findings exist, a GitHub report can open.</li>
+            <li data-lang="fr">Aide → Dépannage : lancer le diagnostic (inclut health.snapshot). S’il y a des anomalies, un rapport GitHub peut s’ouvrir.</li>
+            <li data-lang="en">0.18 surfaces: Memory V2 journal / Mind Palace; Chat Fork from here; Audit Health panel; instincts Create | Later under long context.</li>
+            <li data-lang="fr">Surfaces 0.18 : journal Memory V2 / Mind Palace ; Chat Créer une branche ici ; panneau Santé Audit ; instincts Créer | Plus tard sous long contexte.</li>
+            <li data-lang="en">0.8 surfaces: Settings → Local module catalogue → Installed modules: Uninstall a non-bundled module. Providers: add loopback (works in local_only). Optional Models Download of SD 1.5 / Piper (engine arrives with the pack) then Chat <code>/image</code> / <code>/speak</code>.</li>
+            <li data-lang="fr">Surfaces 0.8 : Paramètres → Catalogue local de modules → Modules installés : Désinstaller un module non bundlé. Providers : ajouter un loopback (marche en local_only). Download optionnel SD 1.5 / Piper (le moteur arrive avec le pack) puis Chat <code>/image</code> / <code>/speak</code>.</li>
           </ol>
         </article>
 
