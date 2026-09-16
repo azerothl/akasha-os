@@ -127,10 +127,12 @@ de branche hôte spécifique Create.
 ## Capabilities et catalogue
 
 - Catalogue local signé : `share/modules/catalogue.yaml` + `catalogue.yaml.sig`
-  (ed25519) ; Paramètres → Modules → Install exécute toujours la revue de caps
+  (ed25519) ; Settings → Catalogue local de modules → Install exécute toujours
+  la revue de caps
 - Index communautaire opt-in : Git signé `community/catalogue.yaml` (cache hors ligne)
-- Désinstall : Paramètres → Modules installés ; les apps bundlées peuvent être
-  retirées — le choix persiste au boot (voir [FEATURES.md](FEATURES.md))
+- Désinstall : Settings → Catalogue local de modules → Modules installés ; les
+  apps bundlées peuvent être retirées — le choix persiste au boot (voir
+  [FEATURES.md](FEATURES.md))
 
 Les caps déclarées dans `manifest.yaml` sous `permissions.required_caps` doivent
 correspondre à l’usage réel. L’hôte n’accorde jamais une cap parce qu’un widget

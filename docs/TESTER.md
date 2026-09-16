@@ -252,8 +252,10 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 
 ### 14. Declarative module UI (0.7.0 / E15)
 
-- In **Settings → Modules** (or via agent): `module.scaffold` a script module,
-  then `module.package` and `module.install` with cap review.
+- Via **Scenarios** or Chat (not Settings): have the agent run
+  `module.scaffold` (script), then `module.package` and `module.install` with
+  cap review. Settings → **Local module catalogue** only installs listed
+  packages — it does not scaffold.
 - After install, a new sidebar tab under **Modules** should appear (not for
   `notes`, `tasks`, or `ext-rt`).
 - Open the tab: you should see a heading, a form or button, and a table bound
@@ -273,7 +275,11 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 ### 16. Uninstall a module (0.8.0 / P08.7)
 
 - Scaffold + install a non-bundled module (step 14 or 15).
-- **Settings → Installed modules**: Uninstall preinstalled apps (`tasks`, `notes`, …) or agent-installed modules; confirm the banner. Tab gone when declarative, `tool.invoke:<name>` gone from Caps, audit line present. Re-install still works; `/documents/tasks/` survives Tasks uninstall.
+- **Settings → Local module catalogue → Installed modules**: Uninstall
+  preinstalled apps (`tasks`, `notes`, …) or agent-installed modules; confirm
+  the banner. Tab gone when declarative, `tool.invoke:<name>` gone from Caps,
+  audit line present. Re-install still works; `/documents/tasks/` survives
+  Tasks uninstall.
 
 ### 17. E15 widgets (0.8.0 / P08.11)
 

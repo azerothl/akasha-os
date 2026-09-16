@@ -255,8 +255,10 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 
 ### 14. UI de module déclarative (0.7.0 / E15)
 
-- Dans **Settings → Modules** (ou via agent) : `module.scaffold` un module script,
-  puis `module.package` et `module.install` avec revue de caps.
+- Via **Scénarios** ou Chat (pas Settings) : faire exécuter par l’agent
+  `module.scaffold` (script), puis `module.package` et `module.install` avec
+  revue de caps. Settings → **Catalogue local de modules** n’installe que les
+  paquets listés — il ne scaffold pas.
 - Après install, un nouvel onglet sous **Modules** doit apparaître (pas pour
   `notes`, `tasks` ou `ext-rt`).
 - Ouvrir l’onglet : heading, formulaire ou bouton, et table liée au résultat
@@ -277,8 +279,10 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 ### 16. Désinstaller un module (0.8.0)
 
 - Scaffold + install d’un module non bundlé.
-- **Réglages → Modules installés** : désinstaller (pas `notes` / `tasks` / `ext-rt`).
-- Confirmer. Onglet et caps `tool.invoke:<name>` disparus ; ligne d’audit.
+- **Settings → Catalogue local de modules → Modules installés** : désinstaller
+  les apps préinstallées (`tasks`, `notes`, …) ou un module installé via agent ;
+  confirmer. Onglet et caps `tool.invoke:<name>` disparus ; ligne d’audit.
+  Réinstaller marche encore.
 
 ### 17–20. Widgets E15, Providers, image/TTS, one-liner
 
