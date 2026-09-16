@@ -264,16 +264,28 @@ async fn wait_while_paused(
     }
 }
 
-async fn emit_step(
-    bus: &BusClient,
-    shared: &Shared,
-    spec: &AgentSpec,
+struct EmitStep<'a> {
+    bus: &'a BusClient,
+    shared: &'a Shared,
+    spec: &'a AgentSpec,
     step: u32,
-    prompt: &str,
-    result: &HarnessTurnResult,
+    prompt: &'a str,
+    result: &'a HarnessTurnResult,
     kind: HarnessKind,
     duration_ms: u64,
-) {
+}
+
+async fn emit_step(ctx: EmitStep<'_>) {
+    let EmitStep {
+        bus,
+        shared,
+        spec,
+        step,
+        prompt,
+        result,
+        kind,
+        duration_ms,
+    } = ctx;
     let tool_result = result.format_tool_result(kind);
     let short: String = prompt.chars().take(80).collect();
     let record = AgentStepRecord {
@@ -324,7 +336,11 @@ async fn emit_step(
         AgentOutputEvent::Progress {
             step,
             max_steps: spec.goal.max_steps,
-            current_task: Some(format!("{} · {}", kind.as_str(), short.chars().take(60).collect::<String>())),
+            current_task: Some(format!(
+                "{} · {}",
+                kind.as_str(),
+                short.chars().take(60).collect::<String>()
+            )),
         },
     )
     .await;
@@ -607,7 +623,17 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
         match result {
             Ok(r) => {
                 let dur = turn_started.elapsed().as_millis() as u64;
-                emit_step(bus.as_ref(), &shared, &spec, step, &prompt, &r, kind, dur).await;
+                emit_step(EmitStep {
+                    bus: bus.as_ref(),
+                    shared: &shared,
+                    spec: &spec,
+                    step,
+                    prompt: &prompt,
+                    result: &r,
+                    kind,
+                    duration_ms: dur,
+                })
+                .await;
                 if r.cancelled {
                     resume = true;
                     continue;
