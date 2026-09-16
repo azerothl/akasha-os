@@ -16,8 +16,7 @@ impl UiApp {
 
     pub(crate) fn on_secret_get_failed(&mut self, name: String, error: String) {
         self.settings_ui.secrets_reveal_pending = None;
-        self.toasts
-            .push_error(format!("{name}: {error}"));
+        self.toasts.push_error(format!("{name}: {error}"));
     }
 
     pub(crate) fn on_catalogue(&mut self, catalogue: ModuleCatalogue) {

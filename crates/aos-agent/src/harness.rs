@@ -232,7 +232,11 @@ pub struct HarnessTurnResult {
 impl HarnessTurnResult {
     pub fn format_tool_result(&self, kind: HarnessKind) -> String {
         if self.cancelled {
-            return format!("harness={} cancelled\ncwd={}", kind.as_str(), self.cwd.display());
+            return format!(
+                "harness={} cancelled\ncwd={}",
+                kind.as_str(),
+                self.cwd.display()
+            );
         }
         if self.timed_out {
             return format!(
@@ -298,9 +302,7 @@ pub async fn run_turn(
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("harness spawn err: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| format!("harness spawn err: {e}"))?;
     let mut stdout_pipe = child.stdout.take();
     let mut stderr_pipe = child.stderr.take();
     let stdout_task = tokio::spawn(async move {
@@ -320,10 +322,7 @@ pub async fn run_turn(
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_sec);
     loop {
-        if cancel
-            .as_ref()
-            .is_some_and(|c| c.load(Ordering::SeqCst))
-        {
+        if cancel.as_ref().is_some_and(|c| c.load(Ordering::SeqCst)) {
             let _ = child.kill().await;
             let _ = child.wait().await;
             let _ = stdout_task.await;
@@ -380,16 +379,7 @@ pub async fn run(args: &Value, caps: &[String]) -> String {
         Ok(v) => v,
         Err(e) => return e,
     };
-    match run_turn(
-        kind,
-        &prompt,
-        cwd_raw.as_deref(),
-        timeout_sec,
-        false,
-        None,
-    )
-    .await
-    {
+    match run_turn(kind, &prompt, cwd_raw.as_deref(), timeout_sec, false, None).await {
         Ok(r) => r.format_tool_result(kind),
         Err(e) => e,
     }

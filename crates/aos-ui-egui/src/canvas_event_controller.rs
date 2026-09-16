@@ -1,7 +1,9 @@
 //! Event handlers for canvas session metadata, snapshots, and exports.
 
 use crate::{ChatAttachment, ChatLine, UiApp};
-use aos_proto::{CanvasGuides, CanvasLayer, CanvasOp, CanvasPenStyle, CanvasSceneSpec, ChatSessionMeta};
+use aos_proto::{
+    CanvasGuides, CanvasLayer, CanvasOp, CanvasPenStyle, CanvasSceneSpec, ChatSessionMeta,
+};
 use eframe::egui;
 
 pub(crate) struct CanvasSnapshotEvent {

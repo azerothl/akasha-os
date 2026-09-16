@@ -198,7 +198,12 @@ impl ClayAnim {
 
 impl ClaySpec {
     pub fn encode(self) -> String {
-        format!("clay:{}/{}/{}", self.shape.id(), self.face.id(), self.anim.id())
+        format!(
+            "clay:{}/{}/{}",
+            self.shape.id(),
+            self.face.id(),
+            self.anim.id()
+        )
     }
 
     pub fn parse(raw: &str) -> Option<Self> {
@@ -206,10 +211,9 @@ impl ClaySpec {
         let body = s.strip_prefix("clay:")?;
         let mut parts = body.split('/');
         let shape = ClayShape::parse(parts.next()?.trim())?;
-        let face = ClayFace::parse(parts.next().unwrap_or("happy").trim())
-            .unwrap_or(ClayFace::Happy);
-        let anim = ClayAnim::parse(parts.next().unwrap_or("idle").trim())
-            .unwrap_or(ClayAnim::Idle);
+        let face =
+            ClayFace::parse(parts.next().unwrap_or("happy").trim()).unwrap_or(ClayFace::Happy);
+        let anim = ClayAnim::parse(parts.next().unwrap_or("idle").trim()).unwrap_or(ClayAnim::Idle);
         Some(Self { shape, face, anim })
     }
 
@@ -432,7 +436,11 @@ fn paint_clay(
 
     // Specular blob
     let hi_c = c + rotate(Vec2::new(-s * 0.28, -s * 0.32), pose.rot);
-    painter.circle_filled(hi_c, s * 0.22, Color32::from_rgba_unmultiplied(hi.r(), hi.g(), hi.b(), 90));
+    painter.circle_filled(
+        hi_c,
+        s * 0.22,
+        Color32::from_rgba_unmultiplied(hi.r(), hi.g(), hi.b(), 90),
+    );
     painter.circle_filled(
         hi_c + Vec2::new(-s * 0.04, -s * 0.04),
         s * 0.10,
@@ -636,7 +644,8 @@ fn paint_face(painter: &egui::Painter, c: Pos2, s: f32, face: ClayFace, pose: An
     };
 
     let left = c + Vec2::new(-eye_x, eye_y);
-    let right = c + Vec2::new(eye_x, eye_y)
+    let right = c
+        + Vec2::new(eye_x, eye_y)
         + match face {
             ClayFace::Curious => Vec2::new(s * 0.04, -s * 0.03),
             ClayFace::Shy => Vec2::new(-s * 0.02, s * 0.02),
@@ -650,7 +659,10 @@ fn paint_face(painter: &egui::Painter, c: Pos2, s: f32, face: ClayFace, pose: An
     match face {
         ClayFace::Angry => {
             painter.line_segment(
-                [left + Vec2::new(-eye_w, -eye_h * 1.6), left + Vec2::new(eye_w, -eye_h * 0.9)],
+                [
+                    left + Vec2::new(-eye_w, -eye_h * 1.6),
+                    left + Vec2::new(eye_w, -eye_h * 0.9),
+                ],
                 Stroke::new(s * 0.06, ink),
             );
             painter.line_segment(
@@ -663,7 +675,10 @@ fn paint_face(painter: &egui::Painter, c: Pos2, s: f32, face: ClayFace, pose: An
         }
         ClayFace::Sad => {
             painter.line_segment(
-                [left + Vec2::new(-eye_w, -eye_h * 0.9), left + Vec2::new(eye_w, -eye_h * 1.5)],
+                [
+                    left + Vec2::new(-eye_w, -eye_h * 0.9),
+                    left + Vec2::new(eye_w, -eye_h * 1.5),
+                ],
                 Stroke::new(s * 0.05, ink),
             );
             painter.line_segment(
@@ -676,7 +691,10 @@ fn paint_face(painter: &egui::Painter, c: Pos2, s: f32, face: ClayFace, pose: An
         }
         ClayFace::Proud => {
             painter.line_segment(
-                [left + Vec2::new(-eye_w, -eye_h * 1.5), left + Vec2::new(eye_w, -eye_h * 1.5)],
+                [
+                    left + Vec2::new(-eye_w, -eye_h * 1.5),
+                    left + Vec2::new(eye_w, -eye_h * 1.5),
+                ],
                 Stroke::new(s * 0.05, ink),
             );
             painter.line_segment(
@@ -701,12 +719,22 @@ fn paint_face(painter: &egui::Painter, c: Pos2, s: f32, face: ClayFace, pose: An
     match face {
         ClayFace::Neutral | ClayFace::Attentive | ClayFace::Curious => {
             painter.line_segment(
-                [mouth_c + Vec2::new(-s * 0.12, 0.0), mouth_c + Vec2::new(s * 0.12, 0.0)],
+                [
+                    mouth_c + Vec2::new(-s * 0.12, 0.0),
+                    mouth_c + Vec2::new(s * 0.12, 0.0),
+                ],
                 Stroke::new(s * 0.055, ink),
             );
         }
         ClayFace::Happy | ClayFace::Proud => {
-            paint_arc(painter, mouth_c, s * 0.18, 0.15, TAU * 0.35, Stroke::new(s * 0.06, ink));
+            paint_arc(
+                painter,
+                mouth_c,
+                s * 0.18,
+                0.15,
+                TAU * 0.35,
+                Stroke::new(s * 0.06, ink),
+            );
         }
         ClayFace::Laughing | ClayFace::Excited => {
             painter.circle_filled(mouth_c + Vec2::new(0.0, s * 0.02), s * 0.12, ink);
@@ -731,12 +759,22 @@ fn paint_face(painter: &egui::Painter, c: Pos2, s: f32, face: ClayFace, pose: An
         }
         ClayFace::Angry => {
             painter.line_segment(
-                [mouth_c + Vec2::new(-s * 0.14, s * 0.04), mouth_c + Vec2::new(s * 0.14, 0.0)],
+                [
+                    mouth_c + Vec2::new(-s * 0.14, s * 0.04),
+                    mouth_c + Vec2::new(s * 0.14, 0.0),
+                ],
                 Stroke::new(s * 0.06, ink),
             );
         }
         ClayFace::Sleepy => {
-            paint_arc(painter, mouth_c, s * 0.12, 0.2, TAU * 0.25, Stroke::new(s * 0.05, ink));
+            paint_arc(
+                painter,
+                mouth_c,
+                s * 0.12,
+                0.2,
+                TAU * 0.25,
+                Stroke::new(s * 0.05, ink),
+            );
         }
     }
 
@@ -1030,7 +1068,10 @@ mod tests {
     fn legacy_glyph_maps() {
         let code = ClaySpec::resolve("code");
         assert_eq!(code.shape, ClayShape::Squircle);
-        assert_eq!(ClaySpec::resolve("clay:droplet/shy/sleep").anim, ClayAnim::Sleep);
+        assert_eq!(
+            ClaySpec::resolve("clay:droplet/shy/sleep").anim,
+            ClayAnim::Sleep
+        );
     }
 
     #[test]

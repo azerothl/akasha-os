@@ -159,7 +159,11 @@ pub(crate) async fn run_troubleshoot(
                 h.steps.len(),
                 h.slo.breaches.len(),
                 h.anomaly.score,
-                if h.anomaly.fitted { "" } else { " (not fitted)" }
+                if h.anomaly.fitted {
+                    ""
+                } else {
+                    " (not fitted)"
+                }
             ));
             if !h.canary_ok {
                 findings.push("health canary failed".into());

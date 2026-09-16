@@ -37,7 +37,7 @@ entries:
     version: "1.0.0"
     kind: module
     path: share/modules/create.aospkg
-    hash: sha256:17aaf187456daab4979d91acaf1e96fec1138bd4b73f5b2d413dbc6ef0ff6771
+    hash: sha256:96d1f3e174844c62cd90279ab5d1a6b2f58da4098cb4d6e763d3c43c8add5436
     attested_caps:
       - fs.read:/documents/create/**
       - fs.write:/documents/create/**

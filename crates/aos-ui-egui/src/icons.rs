@@ -344,7 +344,8 @@ pub fn send_arrow(ui: &mut Ui, color: Color32) -> Response {
         let tail = Pos2::new(rect.left() + 1.0, y);
         let tip = Pos2::new(tip_x, y);
         let head = 4.2_f32;
-        ui.painter().line_segment([tail, Pos2::new(tip_x - head * 0.35, y)], stroke);
+        ui.painter()
+            .line_segment([tail, Pos2::new(tip_x - head * 0.35, y)], stroke);
         ui.painter().add(Shape::convex_polygon(
             vec![
                 tip,
@@ -472,7 +473,14 @@ fn default_clay_labels() -> crate::clay_avatar::ClayStudioLabels<'static> {
             "Sleepy",
         ],
         anims: [
-            "Idle", "Thinking", "Wink", "Wide eyes", "Alert", "Sleep", "Orbit", "Burst",
+            "Idle",
+            "Thinking",
+            "Wink",
+            "Wide eyes",
+            "Alert",
+            "Sleep",
+            "Orbit",
+            "Burst",
         ],
     }
 }
@@ -2028,11 +2036,8 @@ pub fn notification_button(ui: &mut Ui, emphasized: bool) -> Response {
                 crate::theme::RADIUS_SM as f32,
                 ui.visuals().widgets.hovered.bg_fill,
             );
-            ui.painter().circle_filled(
-                rect.right_top() + Vec2::new(-5.0, 5.0),
-                3.0,
-                tc.danger,
-            );
+            ui.painter()
+                .circle_filled(rect.right_top() + Vec2::new(-5.0, 5.0), 3.0, tc.danger);
         }
         paint_bell(ui, glyph_rect(rect), color);
     }
@@ -2485,10 +2490,7 @@ pub fn decl_action_button(
             text_color,
         );
     }
-    response
-        .on_hover_text(tooltip)
-        .clicked()
-        && enabled
+    response.on_hover_text(tooltip).clicked() && enabled
 }
 
 fn paint_decl_action(ui: &mut Ui, rect: Rect, icon: DeclActionIcon, color: Color32) {
@@ -2554,7 +2556,10 @@ fn paint_decl_load(ui: &mut Ui, rect: Rect, color: Color32) {
         stroke,
     ));
     painter.line_segment(
-        [Pos2::new(c.x, folder.top() - w * 0.08), Pos2::new(c.x, folder.top() - w * 0.28)],
+        [
+            Pos2::new(c.x, folder.top() - w * 0.08),
+            Pos2::new(c.x, folder.top() - w * 0.28),
+        ],
         stroke,
     );
     painter.line_segment(
@@ -2602,10 +2607,7 @@ fn paint_decl_upscale(ui: &mut Ui, rect: Rect, color: Color32) {
                 inner.bottom()
             },
         );
-        painter.line_segment(
-            [corner, corner + Vec2::new(dx * arm, dy * arm)],
-            stroke,
-        );
+        painter.line_segment([corner, corner + Vec2::new(dx * arm, dy * arm)], stroke);
     }
 }
 
@@ -2618,11 +2620,17 @@ fn paint_decl_variant(ui: &mut Ui, rect: Rect, color: Color32) {
     painter.circle_stroke(Pos2::new(c.x + r * 1.6, c.y + r), r, stroke);
     painter.circle_stroke(Pos2::new(c.x, c.y - r * 1.8), r, stroke);
     painter.line_segment(
-        [Pos2::new(c.x, c.y - r * 0.6), Pos2::new(c.x - r, c.y + r * 0.2)],
+        [
+            Pos2::new(c.x, c.y - r * 0.6),
+            Pos2::new(c.x - r, c.y + r * 0.2),
+        ],
         stroke,
     );
     painter.line_segment(
-        [Pos2::new(c.x, c.y - r * 0.6), Pos2::new(c.x + r, c.y + r * 0.2)],
+        [
+            Pos2::new(c.x, c.y - r * 0.6),
+            Pos2::new(c.x + r, c.y + r * 0.2),
+        ],
         stroke,
     );
 }
@@ -2666,7 +2674,10 @@ mod tests {
     fn decl_action_button_width_never_panics_when_row_is_narrow() {
         for available in [0.0, 1.0, 40.0, 87.9, 88.0, 120.0, 400.0] {
             let w = decl_action_button_width(available, 48.0);
-            assert!(w >= 1.0, "width must stay positive at available={available}");
+            assert!(
+                w >= 1.0,
+                "width must stay positive at available={available}"
+            );
             assert!(w <= available.clamp(1.0, 240.0) + f32::EPSILON);
         }
     }

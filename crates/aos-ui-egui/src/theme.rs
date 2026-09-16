@@ -204,7 +204,8 @@ pub fn apply_theme(
         custom.background, custom.panel, custom.text, custom.accent, custom.danger
     );
     let theme_id = egui::Id::new("aos_applied_theme");
-    let unchanged = ctx.data(|d| d.get_temp::<String>(theme_id).as_deref() == Some(cache_key.as_str()));
+    let unchanged =
+        ctx.data(|d| d.get_temp::<String>(theme_id).as_deref() == Some(cache_key.as_str()));
     if unchanged {
         return;
     }

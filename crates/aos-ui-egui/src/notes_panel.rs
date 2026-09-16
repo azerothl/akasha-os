@@ -266,8 +266,7 @@ impl NotesPanelState {
 
     pub fn apply_deleted(&mut self, path: &str, deleted_label: &str) {
         self.notes.retain(|n| n.path != path);
-        if self.selected_path.as_deref() == Some(path) || self.edit_path.as_deref() == Some(path)
-        {
+        if self.selected_path.as_deref() == Some(path) || self.edit_path.as_deref() == Some(path) {
             self.start_new();
         }
         self.status = deleted_label.to_string();
@@ -375,12 +374,8 @@ pub fn visible_notes<'a>(
                 .cmp(&a.updated_seq)
                 .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
         }),
-        NotesSort::TitleAsc => {
-            items.sort_by_key(|a| a.title.to_lowercase())
-        }
-        NotesSort::TitleDesc => {
-            items.sort_by_key(|a| std::cmp::Reverse(a.title.to_lowercase()))
-        }
+        NotesSort::TitleAsc => items.sort_by_key(|a| a.title.to_lowercase()),
+        NotesSort::TitleDesc => items.sort_by_key(|a| std::cmp::Reverse(a.title.to_lowercase())),
     }
     items
 }
@@ -477,7 +472,10 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                 }
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(!state.filter.trim().is_empty(), egui::Button::new(t.notes_search))
+                        .add_enabled(
+                            !state.filter.trim().is_empty(),
+                            egui::Button::new(t.notes_search),
+                        )
                         .clicked()
                     {
                         actions.search = Some(state.filter.clone());
@@ -532,18 +530,15 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                         state.tag_filter = NotesTagFilter::Untagged;
                     }
                     for tag in &known_tags {
-                        let selected = matches!(&state.tag_filter, NotesTagFilter::Tag(t) if t == tag);
+                        let selected =
+                            matches!(&state.tag_filter, NotesTagFilter::Tag(t) if t == tag);
                         if ui.selectable_label(selected, tag).clicked() {
                             state.tag_filter = NotesTagFilter::Tag(tag.clone());
                         }
                     }
                 });
-                let visible = visible_notes(
-                    &state.notes,
-                    &state.filter,
-                    &state.tag_filter,
-                    state.sort,
-                );
+                let visible =
+                    visible_notes(&state.notes, &state.filter, &state.tag_filter, state.sort);
                 let shown = visible.len();
                 let total = state.notes.len();
                 if shown != total {
@@ -854,11 +849,7 @@ pub fn show_notes_panel(ui: &mut Ui, state: &mut NotesPanelState, t: &UiStrings)
                             h.hops,
                             h.score,
                         );
-                        if ui
-                            .button(label)
-                            .on_hover_text(&h.excerpt)
-                            .clicked()
-                        {
+                        if ui.button(label).on_hover_text(&h.excerpt).clicked() {
                             actions.read_path = Some(h.path);
                         }
                     }
@@ -1026,7 +1017,10 @@ mod tests {
 
     #[test]
     fn parse_tags_input_dedups() {
-        assert_eq!(parse_tags_input(" Travail, travail, idées "), vec!["Travail", "idées"]);
+        assert_eq!(
+            parse_tags_input(" Travail, travail, idées "),
+            vec!["Travail", "idées"]
+        );
     }
 
     #[test]

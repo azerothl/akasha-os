@@ -22,14 +22,15 @@ use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentKind,
     AgentOutputEvent, AgentPolicyGetRequest, AgentPolicySetRequest, AgentPromptOptimizeRequest,
     AgentPromptOptimizeResponse, AgentRoomConductProgress, AgentRoomConductRequest,
-    AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse, AgentStartRequest,
-    AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, CancelRequest, CapInfo,
-    CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment, ChatMessage,
+    AgentRoomTurnRequest, AgentRosterUpdateRequest, AgentSpec, AgentSpecResponse,
+    AgentStartRequest, AgentState, AgentSteerRequest, AgentStepRecord, AgentTrace, CancelRequest,
+    CapInfo, CapListRequest, CapMintRequest, CapMintResponse, ChatAttachment, ChatMessage,
     ChatSessionAppendRequest, ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest, ChatSessionUpsertDeepPlanRequest,
-    CognitiveMode, InferParams, InferRequest, McpServerInfo, PlanAppendLogRequest, PlanCreateRequest,
-    PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest, PlanResponse,
-    PlanUpdateStepRequest, SecretGetRequest, SkillInfo, TokenEvent,
+    ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
+    ChatSessionUpsertDeepPlanRequest, CognitiveMode, InferParams, InferRequest, McpServerInfo,
+    PlanAppendLogRequest, PlanCreateRequest, PlanDelegateStepRequest, PlanGetRequest,
+    PlanReplaceTreeRequest, PlanResponse, PlanUpdateStepRequest, SecretGetRequest, SkillInfo,
+    TokenEvent,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -2875,8 +2876,7 @@ fn hydrate_persisted_agents(rt: &mut Runtime) {
                 .map(|s| s.is_empty())
                 .unwrap_or(true)
             {
-                info.fail_reason =
-                    Some(aos_agent::actions::THREAD_FAIL_STOPPED_ON_RESTART.into());
+                info.fail_reason = Some(aos_agent::actions::THREAD_FAIL_STOPPED_ON_RESTART.into());
             }
             dirty = true;
         }

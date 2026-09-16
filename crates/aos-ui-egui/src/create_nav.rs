@@ -85,10 +85,7 @@ mod tests {
             Some("from chat")
         );
         assert_eq!(
-            panel
-                .local_state
-                .get("result_path")
-                .and_then(Value::as_str),
+            panel.local_state.get("result_path").and_then(Value::as_str),
             Some("/downloads/image-1.png")
         );
         assert!(panel.pending_local_seed.is_empty());
@@ -98,7 +95,9 @@ mod tests {
     fn reentry_keeps_job_handle_when_document_not_reloaded() {
         let mut panel = DeclUiPanelState::new(MODULE_NAME);
         panel.set_document(minimal_doc());
-        panel.local_state.insert("prompt".into(), json!("still here"));
+        panel
+            .local_state
+            .insert("prompt".into(), json!("still here"));
         panel.set_job_update(
             "generate_job",
             RichJobHandle {

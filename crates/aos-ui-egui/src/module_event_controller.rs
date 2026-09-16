@@ -266,9 +266,9 @@ pub(crate) fn on_ui_invoke_done(
         } else {
             let t = crate::i18n::strings(&app.prefs.language);
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
-                Some(raw) => crate::chat_error_copy::user_visible_create_or_module_error(
-                    &t, &module, raw,
-                ),
+                Some(raw) => {
+                    crate::chat_error_copy::user_visible_create_or_module_error(&t, &module, raw)
+                }
                 None => t.decl_ui_action_failed.to_string(),
             };
         }
@@ -297,9 +297,9 @@ pub(crate) fn on_ui_service_done(
             panel.status.clear();
         } else {
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
-                Some(raw) => crate::chat_error_copy::user_visible_create_or_module_error(
-                    &t, &module, raw,
-                ),
+                Some(raw) => {
+                    crate::chat_error_copy::user_visible_create_or_module_error(&t, &module, raw)
+                }
                 None => t.decl_ui_action_failed.to_string(),
             };
         }

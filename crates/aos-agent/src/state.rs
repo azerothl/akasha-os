@@ -365,14 +365,9 @@ impl CognitiveState {
         .any(|word| title.contains(word))
         {
             3
-        } else if [
-            "ombre",
-            "shadow",
-            "finition",
-            "finish",
-        ]
-        .iter()
-        .any(|word| title.contains(word))
+        } else if ["ombre", "shadow", "finition", "finish"]
+            .iter()
+            .any(|word| title.contains(word))
         {
             2
         } else {
@@ -709,10 +704,8 @@ mod tests {
     #[test]
     fn failed_canvas_get_does_not_open_read_gate() {
         let mut st = CognitiveState::new("agent-223", vec![]);
-        assert!(!st.maybe_advance_plan_after_canvas_draw(
-            "canvas.get",
-            r#"{"error":"session missing"}"#
-        ));
+        assert!(!st
+            .maybe_advance_plan_after_canvas_draw("canvas.get", r#"{"error":"session missing"}"#));
         assert!(st.canvas_read_gate_reason("canvas.path").is_some());
     }
 
@@ -739,7 +732,10 @@ mod tests {
             "canvas.compose",
             "ok scene profile=diagram applied_count=3"
         ));
-        assert_eq!(st.current_task_title().as_deref(), Some("Export final (canvas.export)"));
+        assert_eq!(
+            st.current_task_title().as_deref(),
+            Some("Export final (canvas.export)")
+        );
         assert!(!st.canvas_plan_is_complete());
     }
 

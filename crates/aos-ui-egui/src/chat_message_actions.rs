@@ -63,8 +63,8 @@ pub(crate) fn show_hover_bar(
 
     let planned_bar = Rect::from_min_size(pos, Vec2::new(bar_w, bar_h));
     let pointer = ui.input(|i| i.pointer.hover_pos());
-    let over_bubble = bubble.hovered()
-        || pointer.is_some_and(|p| bubble.rect.expand(6.0).contains(p));
+    let over_bubble =
+        bubble.hovered() || pointer.is_some_and(|p| bubble.rect.expand(6.0).contains(p));
     let over_planned_bar = pointer.is_some_and(|p| planned_bar.expand(6.0).contains(p));
     if over_bubble || over_planned_bar {
         open_until = now + HOVER_CLOSE_GRACE_SECS;

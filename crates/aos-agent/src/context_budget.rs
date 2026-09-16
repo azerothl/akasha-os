@@ -636,7 +636,9 @@ mod tests {
             "noop",
             "aucune action JSON détectée : le modèle a bouclé sur ses marqueurs de canal/outils natifs",
         );
-        assert!(matches!(verdict, LoopVerdict::Abort(message) if message.contains("incompatibilité de format modèle")));
+        assert!(
+            matches!(verdict, LoopVerdict::Abort(message) if message.contains("incompatibilité de format modèle"))
+        );
     }
 
     #[test]

@@ -141,12 +141,7 @@ pub(crate) fn composer_field_width(
     gap: f32,
     show_stop: bool,
 ) -> f32 {
-    let end = send_w.max(COMPOSER_SEND_CAP_MIN_W)
-        + if show_stop {
-            stop_w + gap
-        } else {
-            0.0
-        };
+    let end = send_w.max(COMPOSER_SEND_CAP_MIN_W) + if show_stop { stop_w + gap } else { 0.0 };
     (row_w - attach_w - gap - end - gap).max(0.0)
 }
 

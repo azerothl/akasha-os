@@ -43,12 +43,7 @@ pub(crate) enum KeygenTarget {
 }
 
 impl KeygenTarget {
-    pub(crate) const ALL: [Self; 4] = [
-        Self::Brave,
-        Self::Github,
-        Self::Openai,
-        Self::LanSession,
-    ];
+    pub(crate) const ALL: [Self; 4] = [Self::Brave, Self::Github, Self::Openai, Self::LanSession];
 }
 
 pub(crate) const KEYGEN_LEN_MIN: usize = 8;

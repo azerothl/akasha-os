@@ -534,7 +534,9 @@ pub fn create_generation_defaults(
         width = clamp_u32(width, v.min_width, v.max_width);
         height = clamp_u32(height, v.min_height, v.max_height);
         if let Some(max_secs) = v.max_duration_secs {
-            let fps_u = fps.unwrap_or(if id.contains("wan") { 16 } else { 24 }).max(1);
+            let fps_u = fps
+                .unwrap_or(if id.contains("wan") { 16 } else { 24 })
+                .max(1);
             let mut cap = max_secs.saturating_mul(fps_u);
             // Wan / LTX expect 4n+1 frame counts.
             if (id.contains("wan") || id.contains("ltx")) && cap > 1 {
@@ -583,8 +585,7 @@ mod tests {
     #[test]
     fn ltx_balanced_matches_catalogue_aspect_not_square() {
         with_workspace_home(|| {
-            let d =
-                create_generation_defaults(Some("local:ltx2.3-dev"), Some("balanced"), "video");
+            let d = create_generation_defaults(Some("local:ltx2.3-dev"), Some("balanced"), "video");
             assert_eq!((d.width, d.height), (768, 512));
             assert_eq!(d.format, Some("custom"));
             assert_eq!(d.fps, Some(24));
@@ -596,8 +597,7 @@ mod tests {
     #[test]
     fn wan_video_defaults_use_16fps_grid() {
         with_workspace_home(|| {
-            let d =
-                create_generation_defaults(Some("local:wan2.2-t2i"), Some("balanced"), "video");
+            let d = create_generation_defaults(Some("local:wan2.2-t2i"), Some("balanced"), "video");
             assert_eq!((d.width, d.height), (832, 480));
             assert_eq!(d.fps, Some(16));
             assert_eq!(d.flow_shift, Some(3.0));
@@ -610,8 +610,7 @@ mod tests {
     #[test]
     fn minimax_keeps_cfg_one() {
         with_workspace_home(|| {
-            let d =
-                create_generation_defaults(Some("local:minimax-h3"), Some("balanced"), "video");
+            let d = create_generation_defaults(Some("local:minimax-h3"), Some("balanced"), "video");
             assert_eq!(d.cfg_scale, 1.0);
             assert_eq!(d.format, Some("custom"));
             assert_eq!(d.sd_mode, "vid_gen");
@@ -632,8 +631,7 @@ mod tests {
     #[test]
     fn wan_image_mode_honors_catalogue_vid_gen() {
         with_workspace_home(|| {
-            let d =
-                create_generation_defaults(Some("local:wan2.2-t2i"), Some("balanced"), "image");
+            let d = create_generation_defaults(Some("local:wan2.2-t2i"), Some("balanced"), "image");
             assert_eq!(d.sd_mode, "vid_gen");
             assert_eq!((d.width, d.height), (832, 480));
         });
@@ -642,8 +640,7 @@ mod tests {
     #[test]
     fn video_defaults_clamp_to_catalogue_bounds() {
         with_workspace_home(|| {
-            let d =
-                create_generation_defaults(Some("local:wan2.2-t2i"), Some("quality"), "video");
+            let d = create_generation_defaults(Some("local:wan2.2-t2i"), Some("quality"), "video");
             assert!(d.width <= 1280);
             assert!(d.height <= 1280);
             // max_duration_secs=5 @ 16fps → at most 81 frames (4n+1)

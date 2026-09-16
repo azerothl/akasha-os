@@ -1237,8 +1237,7 @@ pub fn ui_canvas_toolbar(
                 }
             }
 
-            if icons::toolbar_action_button(ui, ToolbarActionIcon::ResetView, t.canvas_reset_view)
-            {
+            if icons::toolbar_action_button(ui, ToolbarActionIcon::ResetView, t.canvas_reset_view) {
                 action = Some(CanvasUiAction::ResetView);
             }
             let grid_on = state.show_grid;
@@ -1907,7 +1906,7 @@ pub fn ui_canvas_surface(
             if !text.trim().is_empty() {
                 let (opacity, _, _) = pen_style_fields(state);
                 if let Some(edit) = state.text_edit.take() {
-            let p = maybe_snap_point(edit.pos, state.snap, state.grid_size);
+                    let p = maybe_snap_point(edit.pos, state.snap, state.grid_size);
                     action = Some(CanvasUiAction::Apply(CanvasOpBody::Text {
                         x: p.x,
                         y: p.y,
@@ -2271,11 +2270,21 @@ un shape par forme lisible. Traits fins : canvas.stroke/line. "
             ("Scène structurée", &["canvas.compose"]),
             (
                 "Pen et courbes",
-                &["canvas.set_style", "canvas.stroke", "canvas.line", "canvas.spline"],
+                &[
+                    "canvas.set_style",
+                    "canvas.stroke",
+                    "canvas.line",
+                    "canvas.spline",
+                ],
             ),
             (
                 "Silhouettes et formes",
-                &["canvas.path", "canvas.rect", "canvas.ellipse", "canvas.text"],
+                &[
+                    "canvas.path",
+                    "canvas.rect",
+                    "canvas.ellipse",
+                    "canvas.text",
+                ],
             ),
             (
                 "Calques",
@@ -2301,7 +2310,12 @@ un shape par forme lisible. Traits fins : canvas.stroke/line. "
             ),
             (
                 "Finalisation",
-                &["canvas.export", "canvas.undo", "canvas.erase", "canvas.clear"],
+                &[
+                    "canvas.export",
+                    "canvas.undo",
+                    "canvas.erase",
+                    "canvas.clear",
+                ],
             ),
         ];
         let usage = groups
@@ -2390,7 +2404,10 @@ mod routing_tests {
     fn toolbar_min_width_is_compact_floor() {
         let w = toolbar_content_min_width(false, false);
         assert!(w >= 200.0, "compact wrap floor, got {w}");
-        assert!(w < 400.0, "should no longer force a wide single row, got {w}");
+        assert!(
+            w < 400.0,
+            "should no longer force a wide single row, got {w}"
+        );
     }
 
     #[test]

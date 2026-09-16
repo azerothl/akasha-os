@@ -980,8 +980,7 @@ impl DeclUiPanelState {
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "Run".into());
                 let can_run = enabled && !pending_invoke && actions.invoke.is_none();
-                let tooltip = widget_tooltip(w, doc, language)
-                    .unwrap_or_else(|| label.clone());
+                let tooltip = widget_tooltip(w, doc, language).unwrap_or_else(|| label.clone());
                 let icon = w
                     .icon_key
                     .as_deref()
@@ -1396,8 +1395,10 @@ impl DeclUiPanelState {
                                 if response.hovered() {
                                     let scroll = ui.input(|i| i.raw_scroll_delta.y);
                                     if scroll.abs() > 0.0 {
-                                        let base_zoom = if view.zoom <= 0.0 { 1.0 } else { view.zoom };
-                                        view.zoom = (base_zoom + scroll * 0.001).clamp(ZOOM_MIN, ZOOM_MAX);
+                                        let base_zoom =
+                                            if view.zoom <= 0.0 { 1.0 } else { view.zoom };
+                                        view.zoom =
+                                            (base_zoom + scroll * 0.001).clamp(ZOOM_MIN, ZOOM_MAX);
                                     }
                                 }
                             } else {
@@ -2053,12 +2054,7 @@ fn render_table(
                                         });
                                     let clicked = if let Some(icon) = icon {
                                         icons::decl_action_button(
-                                            ui,
-                                            icon,
-                                            &label,
-                                            &label,
-                                            enabled,
-                                            false,
+                                            ui, icon, &label, &label, enabled, false,
                                         )
                                     } else {
                                         ui.add_enabled(enabled, egui::Button::new(label)).clicked()
@@ -2337,10 +2333,7 @@ fn catalog_row_label(
         if let Some(rows) = root.get(mode).and_then(Value::as_array) {
             for row in rows {
                 if row.get("id").and_then(Value::as_str) == Some(wire_id) {
-                    return row
-                        .get("label")
-                        .and_then(Value::as_str)
-                        .map(String::from);
+                    return row.get("label").and_then(Value::as_str).map(String::from);
                 }
             }
         }
@@ -2360,9 +2353,7 @@ fn resolve_catalog_selected_label(
         .position(|item| item == current)
         .and_then(|index| item_labels.get(index))
         .cloned()
-        .or_else(|| {
-            binding_id.and_then(|id| catalog_row_label(binding_cache, id, current))
-        })
+        .or_else(|| binding_id.and_then(|id| catalog_row_label(binding_cache, id, current)))
         .unwrap_or_else(|| "—".to_string())
 }
 
@@ -2469,10 +2460,9 @@ fn render_choice(
                             .or_else(|| items.first().map(String::as_str));
                         if let Some(id) = replacement {
                             current = id.to_string();
-                            actions.local_patch.insert(
-                                state_key.clone(),
-                                Value::String(current.clone()),
-                            );
+                            actions
+                                .local_patch
+                                .insert(state_key.clone(), Value::String(current.clone()));
                         }
                     }
                 }

@@ -169,12 +169,7 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
         }
         app.status = visible.clone();
         app.toasts.push_error(visible.clone());
-        record_classified_chat_error(
-            app,
-            Some(session_id.clone()),
-            &classified,
-            &visible,
-        );
+        record_classified_chat_error(app, Some(session_id.clone()), &classified, &visible);
         // Log historique même quand le transcript porte déjà le message.
         app.status_history.push_back(visible.clone());
         while app.status_history.len() > 20 {
@@ -191,12 +186,7 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
             app.chat_state.runtime.load_fail_retry = None;
         }
         app.chat_state.session_chat.mark_unread(&session_id);
-        record_classified_chat_error(
-            app,
-            Some(session_id.clone()),
-            &classified,
-            &visible,
-        );
+        record_classified_chat_error(app, Some(session_id.clone()), &classified, &visible);
     }
 }
 

@@ -257,7 +257,10 @@ pub fn document_prep_goal_from_thread(
         if content.is_empty() {
             continue;
         }
-        prior.push((role.into(), clip_chars(content, DOCUMENT_PREP_MSG_MAX_CHARS)));
+        prior.push((
+            role.into(),
+            clip_chars(content, DOCUMENT_PREP_MSG_MAX_CHARS),
+        ));
     }
     // Drop trailing duplicate of the current question (history usually includes it).
     if let Some((_, last)) = prior.last() {
@@ -300,7 +303,10 @@ fn clip_chars(s: &str, max: usize) -> String {
     if count <= max {
         return s.to_string();
     }
-    format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>())
+    format!(
+        "{}…",
+        s.chars().take(max.saturating_sub(1)).collect::<String>()
+    )
 }
 
 // Re-use canvas heuristics from the UI crate via duplicated thin checks to keep agent crate independent.
@@ -398,7 +404,8 @@ mod tests {
                 "est ce que tu peux me créer un document de specs détaillé pour ce type de module ?",
             ),
         ];
-        let q = "est ce que tu peux me créer un document de specs détaillé pour ce type de module ?";
+        let q =
+            "est ce que tu peux me créer un document de specs détaillé pour ce type de module ?";
         let goal = document_prep_goal_from_thread(&history, q);
         assert!(goal.contains("User request:"), "{goal}");
         assert!(goal.contains("Thread context"), "{goal}");

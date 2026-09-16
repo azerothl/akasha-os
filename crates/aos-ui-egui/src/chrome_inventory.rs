@@ -96,7 +96,10 @@ mod tests {
             }
             for term in HEALTH_JAIL_FORBIDDEN {
                 if line.contains(term) {
-                    out.push(format!("{file}:{}: forbidden health jargon `{term}`", i + 1));
+                    out.push(format!(
+                        "{file}:{}: forbidden health jargon `{term}`",
+                        i + 1
+                    ));
                 }
             }
         }
@@ -105,7 +108,10 @@ mod tests {
 
     #[test]
     fn health_audit_chrome_has_no_designer_jail_jargon() {
-        let files = [("ui_audit.rs", CHROME_SOURCES[1]), ("main.rs", CHROME_SOURCES[0])];
+        let files = [
+            ("ui_audit.rs", CHROME_SOURCES[1]),
+            ("main.rs", CHROME_SOURCES[0]),
+        ];
         let mut violations = Vec::new();
         for (name, src) in files {
             violations.extend(find_health_jargon_violations(src, name));
