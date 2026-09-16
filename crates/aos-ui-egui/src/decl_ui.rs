@@ -1334,6 +1334,9 @@ impl DeclUiPanelState {
                                 .text(format!("{}/{}", p.completed, p.total)),
                         );
                     }
+                    if let Some(err) = job.error.as_deref().filter(|s| !s.trim().is_empty()) {
+                        ui.colored_label(egui::Color32::from_rgb(220, 80, 80), err);
+                    }
                     if matches!(state_key, "running" | "queued") {
                         if let Some(job_id) = &job.job_id {
                             if ui.button(t.decl_job_cancel).clicked() {

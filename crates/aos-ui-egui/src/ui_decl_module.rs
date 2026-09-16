@@ -168,6 +168,10 @@ fn sync_create_generation_defaults(panel: &mut decl_ui::DeclUiPanelState) {
     } else {
         state.insert("max_vram".into(), serde_json::Value::String(String::new()));
     }
+    state.insert(
+        "sd_mode".into(),
+        serde_json::Value::String(defaults.sd_mode),
+    );
 
     // Named aspects only for image mode — video keeps catalogue pixels.
     if mode != "video" {
@@ -245,6 +249,34 @@ mod tests {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0)
                 >= 33
+        );
+        assert_eq!(
+            panel.local_state.get("sd_mode").and_then(|v| v.as_str()),
+            Some("vid_gen")
+        );
+    }
+
+    #[test]
+    fn wan_image_pack_syncs_catalogue_vid_gen_mode() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        std::env::set_var("AOS_HOME", &root);
+        let mut panel = DeclUiPanelState::new("create");
+        panel
+            .local_state
+            .insert("media_mode".into(), json!("image"));
+        panel
+            .local_state
+            .insert("model_id".into(), json!("local:wan2.2-t2i"));
+        panel
+            .local_state
+            .insert("profile".into(), json!("balanced"));
+        panel
+            .local_state
+            .insert("sd_mode".into(), json!("img_gen"));
+        sync_create_generation_defaults(&mut panel);
+        assert_eq!(
+            panel.local_state.get("sd_mode").and_then(|v| v.as_str()),
+            Some("vid_gen")
         );
     }
 }

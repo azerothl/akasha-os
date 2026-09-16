@@ -37,17 +37,29 @@ fn augment_create_catalog(mut result: Value, french: bool) -> Value {
                     .unwrap_or_else(|| model.profiles.iter().any(|profile| profile == mode))
             })
             .map(|model| {
-                let installed = crate::models_page::is_model_installed(&model.id);
-                let suffix = if installed {
-                    if french {
-                        "installé"
-                    } else {
-                        "installed"
+                let state = crate::models_page::model_install_state(&model.id);
+                let (installed, suffix) = match state {
+                    crate::models_page::ModelInstallState::Complete => {
+                        if french {
+                            (true, "installé")
+                        } else {
+                            (true, "installed")
+                        }
                     }
-                } else if french {
-                    "non installé"
-                } else {
-                    "not installed"
+                    crate::models_page::ModelInstallState::Incomplete => {
+                        if french {
+                            (false, "incomplet")
+                        } else {
+                            (false, "incomplete")
+                        }
+                    }
+                    crate::models_page::ModelInstallState::Missing => {
+                        if french {
+                            (false, "non installé")
+                        } else {
+                            (false, "not installed")
+                        }
+                    }
                 };
                 serde_json::json!({
                     "id": model.id,
@@ -253,8 +265,12 @@ pub(crate) fn on_ui_invoke_done(
             panel.status.clear();
         } else {
             let t = crate::i18n::strings(&app.prefs.language);
-            let _ = error;
-            panel.status = t.decl_ui_action_failed.to_string();
+            panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
+                Some(raw) => crate::chat_error_copy::user_visible_create_or_module_error(
+                    &t, &module, raw,
+                ),
+                None => t.decl_ui_action_failed.to_string(),
+            };
         }
     }
     if ok {
@@ -280,8 +296,12 @@ pub(crate) fn on_ui_service_done(
         if ok {
             panel.status.clear();
         } else {
-            let _ = error;
-            panel.status = t.decl_ui_action_failed.to_string();
+            panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
+                Some(raw) => crate::chat_error_copy::user_visible_create_or_module_error(
+                    &t, &module, raw,
+                ),
+                None => t.decl_ui_action_failed.to_string(),
+            };
         }
     }
     if ok {

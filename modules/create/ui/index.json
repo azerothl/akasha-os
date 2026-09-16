@@ -561,7 +561,7 @@
           "mask_image": "$local.mask_image",
           "init_image": "$local.init_image",
           "strength": "$local.strength",
-          "sd_mode": "img_gen",
+          "sd_mode": "$local.sd_mode",
           "video_frames": 1
         }
       },
@@ -674,7 +674,7 @@
           "end_image": "$local.end_image",
           "strength": "$local.strength",
           "flow_shift": "$local.flow_shift",
-          "sd_mode": "img_gen",
+          "sd_mode": "$local.sd_mode",
           "video_frames": "$local.video_frames",
           "fps": "$local.fps"
         }
@@ -720,7 +720,7 @@
           "end_image": "$local.end_image",
           "strength": "$local.strength",
           "flow_shift": "$local.flow_shift",
-          "sd_mode": "img_gen",
+          "sd_mode": "$local.sd_mode",
           "video_frames": "$local.video_frames",
           "fps": "$local.fps"
         }
