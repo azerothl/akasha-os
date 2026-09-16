@@ -482,7 +482,11 @@
             step <em>n/max</em>, tokens, duration, simple/complex badge, skills
             and MCP servers, parent / children, Sources (web / document /
             fetch), and the step timeline (<code>agent.trace</code>). Controls:
-            Pause, Resume, Retry, Kill, Steer. Schedules
+            Pause, Resume, Retry, Kill, Steer. Advanced <strong>Runtime</strong>
+            (Native vs Codex / Claude / Grok) runs allowlisted local CLIs under
+            the worker — details on GitHub
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/harness.md">docs/harness.md</a>.
+            Schedules
             (<code>schedule.create</code> / list / cancel) live under Settings;
             ticker min interval 30s; persist in <code>var/schedules/</code>.
           </p>
@@ -493,7 +497,11 @@
             live, step <em>n/max</em>, tokens, durée, badge simple/complexe,
             skills et serveurs MCP, parent / enfants, Sources (web / document /
             fetch) et la timeline (<code>agent.trace</code>). Contrôles :
-            Pause, Reprendre, Retry, Kill, Steer. Les schedules
+            Pause, Reprendre, Retry, Kill, Steer. Le <strong>Runtime</strong>
+            Avancé (Native vs Codex / Claude / Grok) lance des CLI locaux
+            allowlistés sous le worker — détail
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/harness.md">docs/fr/harness.md</a>.
+            Les schedules
             (<code>schedule.create</code> / list / cancel) sont dans Settings ;
             intervalle min 30 s ; persistance dans <code>var/schedules/</code>.
           </p>
@@ -829,23 +837,41 @@
           <h3 data-lang="en">MCP stdio</h3>
           <h3 data-lang="fr">MCP stdio</h3>
           <p class="hist" data-lang="en">
-            Copy <code>share/mcp/servers.yaml.example</code>, add stdio servers,
-            and reference vault secrets with <code>${secret:name}</code>. MCP
-            tools appear in the agent Detail panel alongside native and module
-            tools. Native <code>web.browse</code> does not run page JavaScript;
-            a headless-browser MCP you install is the Preview path for SPA /
+            <strong>As client:</strong> copy
+            <code>share/mcp/servers.yaml.example</code>, add stdio servers, and
+            reference vault secrets with <code>${secret:name}</code>. MCP tools
+            appear in the agent Detail panel alongside native and module tools.
+            Native <code>web.browse</code> does not run page JavaScript; a
+            headless-browser MCP you install is the Preview path for SPA /
             hydrated pages, and it does its own network egress (not wrapped by
             <code>net.connect</code>).
           </p>
           <p class="hist" data-lang="fr">
-            Copiez <code>share/mcp/servers.yaml.example</code>, ajoutez des
-            serveurs stdio, et référencez les secrets du vault avec
+            <strong>En client :</strong> copiez
+            <code>share/mcp/servers.yaml.example</code>, ajoutez des serveurs
+            stdio, et référencez les secrets du vault avec
             <code>${secret:name}</code>. Les outils MCP apparaissent dans le
             panneau Détail de l’agent à côté des outils natifs et modules.
             <code>web.browse</code> natif n’exécute pas le JavaScript de la
             page ; un MCP navigateur headless que vous installez est le chemin
             Preview pour les SPA / pages hydratées, et il sort sur le réseau
             tout seul (pas encadré par <code>net.connect</code>).
+          </p>
+          <p class="hist" data-lang="en">
+            <strong>As server:</strong> optional <code>bin/aos-mcpd</code>
+            (not started by session) exposes <code>akasha_models</code> /
+            <code>akasha_infer</code> / <code>akasha_mem_*</code> so Claude
+            Code, Codex, Cursor, or Copilot can use a running Preview. Example
+            config: <code>share/mcp/akasha-mcp.example.json</code>. Details:
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/mcp-server.md">docs/mcp-server.md</a>.
+          </p>
+          <p class="hist" data-lang="fr">
+            <strong>En serveur :</strong> <code>bin/aos-mcpd</code> optionnel
+            (pas démarré par la session) expose <code>akasha_models</code> /
+            <code>akasha_infer</code> / <code>akasha_mem_*</code> pour que
+            Claude Code, Codex, Cursor ou Copilot utilisent un Preview lancé.
+            Exemple : <code>share/mcp/akasha-mcp.example.json</code>. Détail :
+            <a href="https://github.com/azerothl/akasha-os/blob/main/docs/fr/mcp-server.md">docs/fr/mcp-server.md</a>.
           </p>
 
           <h3 data-lang="en">Providers as extension</h3>

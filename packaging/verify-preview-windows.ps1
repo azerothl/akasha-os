@@ -45,7 +45,10 @@ $requiredFiles = @(
     "share\modules\catalogue.yaml",
     "share\modules\catalogue.yaml.sig",
     "share\modules\catalogue.pub",
-    "share\mcp\servers.yaml.example"
+    "share\mcp\servers.yaml.example",
+    "share\mcp\akasha-mcp.example.json",
+    "docs\harness.md",
+    "docs\mcp-server.md"
 )
 
 $binaries = @(

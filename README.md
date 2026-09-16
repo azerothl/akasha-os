@@ -37,7 +37,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 | Memory | Long-term facts; memory-first agent bootstrap |
 | Notes | Human + agent-authored notes (WASM); resyncs on boot after an update |
 | Tasks | Dual-surface tasks module + Tasks tab |
-| Agents | Goal loop, skills, tools, MCP, scheduler; transparency timeline and Markdown trace export |
+| Agents | Goal loop, skills, tools, MCP (client + optional `aos-mcpd`), External CLIs / Advanced Runtime (Codex / Claude / Grok), scheduler; transparency timeline and Markdown trace export |
 | Caps | List / revoke capabilities in UI |
 | Models | Hardware-aware packs (incl. CPU); retryable failed loads; prefix-cache/speculation controls; optional image/TTS packs; live TTFT / tok/s / VRAM metrics |
 | Canvas | Layered vector drawing, grid and snapping, PNG/SVG/JSON export, agent scene checks and global geometry validation |
@@ -86,6 +86,8 @@ cargo run -p aos-session --release
 |-----|-------------|
 | [docs/STATUS.md](docs/STATUS.md) | **Project status** (phases & gates) |
 | [docs/FEATURES.md](docs/FEATURES.md) | **Shipped Preview features** |
+| [docs/harness.md](docs/harness.md) | External coding CLIs (`harness.run` / Runtime) |
+| [docs/mcp-server.md](docs/mcp-server.md) | Optional `aos-mcpd` — IDEs → Akasha |
 | [docs/INSTALL.md](docs/INSTALL.md) | Install, updates, build from source |
 | [docs/PRODUCT.md](docs/PRODUCT.md) | Product brief (Impeccable) |
 | [docs/FIRST-RUN.md](docs/FIRST-RUN.md) | First-run guide |
