@@ -343,6 +343,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "aos-mcp"
+version = "0.18.0"
+dependencies = [
+ "aos-ipc",
+ "aos-proto",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "aos-model"
 version = "0.18.0"
 dependencies = [

@@ -15,6 +15,10 @@
 #   Codex / Claude / Grok (sets AgentSpec.execution_backend). Do not add a
 #   generic shell MCP here — Akasha will not wrap arbitrary argv.
 #
+# Reverse direction (IDE → Akasha): use bin/aos-mcpd as an MCP *server* in
+# Claude Code / Codex / Cursor / Copilot. See docs/mcp-server.md and
+# share/mcp/akasha-mcp.example.json. Not configured in this file.
+#
 # servers:
 #   filesystem:
 #     command: npx

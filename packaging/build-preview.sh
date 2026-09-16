@@ -54,7 +54,7 @@ if [ "$SKIP_BUILD" != "1" ]; then
   if [ "$CPU_ONLY" = "1" ]; then
     echo "== cargo build --release (CPU-only) =="
     cargo build --release -p aos-session -p aos-ipc -p aos-agent \
-      -p aos-capkd -p aos-ui-egui -p aos-bridge
+      -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
     cargo build --release -p aos-model --no-default-features
     cargo build --release -p aos-platform --no-default-features --features embeddings
   else
@@ -62,7 +62,7 @@ if [ "$SKIP_BUILD" != "1" ]; then
     # aos-model (GitHub Release 2 GiB limit).
     echo "== cargo build --release (chrome bins sans aos-model) =="
     cargo build --release -p aos-session -p aos-ipc -p aos-agent \
-      -p aos-capkd -p aos-ui-egui -p aos-bridge
+      -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
     echo "== cargo build --release (aos-modeld CUDA/llama) =="
     cargo build --release -p aos-model
     # Build the preview's platform daemon without optional embeddings so Linux
@@ -165,7 +165,7 @@ mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/data/models" "${OUT}/var" "${OUT}/docs"
 
 for b in aos-session aos-busd aos-modeld aos-agentd aos-agent-worker \
-         aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged; do
+         aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged aos-mcpd; do
   cp -f "${CARGO_TARGET_DIR}/release/${b}" "${OUT}/bin/"
 done
 
@@ -390,6 +390,9 @@ else
 servers: {}
 EOF
 fi
+if [ -f "${ROOT}/share/mcp/akasha-mcp.example.json" ]; then
+  cp -f "${ROOT}/share/mcp/akasha-mcp.example.json" "${OUT}/share/mcp/akasha-mcp.example.json"
+fi
 
 if [ "$SKIP_MODELS" != "1" ]; then
   for m in qwen2.5-3b-instruct-q4_k_m.gguf qwen2.5-0.5b-instruct-q4_k_m.gguf; do
@@ -409,6 +412,7 @@ cp -f "${ROOT}/docs/INSTALL.md" "${OUT}/docs/INSTALL.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/docs/FIRST-RUN.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/STATUS.md" "${OUT}/docs/STATUS.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FEATURES.md" "${OUT}/docs/FEATURES.md" 2>/dev/null || true
+cp -f "${ROOT}/docs/mcp-server.md" "${OUT}/docs/mcp-server.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/I18N.md" "${OUT}/docs/I18N.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/write-a-skill.md" "${OUT}/docs/write-a-skill.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/write-a-module.md" "${OUT}/docs/write-a-module.md" 2>/dev/null || true
