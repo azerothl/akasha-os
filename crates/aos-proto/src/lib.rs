@@ -6050,6 +6050,7 @@ pub struct AgentRoomConductResponse {
 ///
 /// Phases: `preparing` | `thinking` | `generating` | `reading` | `searching` | `tools` |
 /// `waiting_user`. Optional `detail` is a tool id (e.g. `fs.read`) while tools run.
+/// `partial_text` is UI-only provisional tokens for the active speaker (never persisted).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AgentRoomConductProgress {
     pub session_id: String,
@@ -6069,6 +6070,9 @@ pub struct AgentRoomConductProgress {
     /// Current tool id while `phase` is reading/searching/tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// Provisional token buffer for the active speaker bubble (UI-only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partial_text: Option<String>,
 }
 
 /// `agent.room_turn` — inférence one-shot d'un membre du salon (sans spawn worker).

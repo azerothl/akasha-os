@@ -4561,11 +4561,24 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             let poll_ctx = egui_ctx.clone();
             let poll_sid = session_id.clone();
             let poll = tokio::spawn(async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_millis(400));
-                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-                interval.tick().await;
+                let mut slow =
+                    tokio::time::interval(std::time::Duration::from_millis(400));
+                let mut fast =
+                    tokio::time::interval(std::time::Duration::from_millis(100));
+                slow.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                fast.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                slow.tick().await;
+                fast.tick().await;
+                let mut streaming = false;
+                let mut last_session_load = std::time::Instant::now()
+                    .checked_sub(std::time::Duration::from_secs(1))
+                    .unwrap_or_else(std::time::Instant::now);
                 loop {
-                    interval.tick().await;
+                    if streaming {
+                        fast.tick().await;
+                    } else {
+                        slow.tick().await;
+                    }
                     if let Ok(progress) = poll_bus
                         .call::<ChatSessionIdRequest, AgentRoomConductProgress>(
                             agent_intents::ROOM_CONDUCT_PROGRESS,
@@ -4576,11 +4589,24 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         )
                         .await
                     {
+                        streaming = progress.active
+                            && (progress
+                                .partial_text
+                                .as_deref()
+                                .is_some_and(|s| !s.trim().is_empty())
+                                || progress.phase == "generating"
+                                || progress.phase == "thinking");
                         if progress.active {
                             let _ = poll_evt.send(Evt::RoomProgress { progress });
                         }
                     }
-                    load_session(&poll_bus, &poll_evt, &poll_sid).await;
+                    // Keep loading finished member bubbles ~every 400ms even while streaming.
+                    if !streaming
+                        || last_session_load.elapsed() >= std::time::Duration::from_millis(400)
+                    {
+                        load_session(&poll_bus, &poll_evt, &poll_sid).await;
+                        last_session_load = std::time::Instant::now();
+                    }
                     poll_ctx.request_repaint();
                 }
             });

@@ -134,6 +134,7 @@ impl RoomRoundState {
             turn_total: turn_total.max(turn_index),
             phase: phase.to_string(),
             detail: None,
+            partial_text: None,
         };
     }
 
@@ -150,6 +151,28 @@ impl RoomRoundState {
                 .filter(|s| !s.is_empty())
                 .map(str::to_string);
         }
+    }
+
+    /// Publish provisional token text for the UI.
+    pub async fn publish_partial(&self, full: &str) {
+        let trimmed = full.trim_end();
+        let mut p = self.progress.lock().await;
+        if !p.active {
+            return;
+        }
+        if trimmed.is_empty() {
+            p.partial_text = None;
+            return;
+        }
+        p.partial_text = Some(trimmed.to_string());
+        if p.phase == "thinking" || p.phase == "preparing" {
+            p.phase = "generating".into();
+        }
+    }
+
+    pub async fn clear_partial(&self) {
+        let mut p = self.progress.lock().await;
+        p.partial_text = None;
     }
 
     pub async fn clear_progress(&self) {
@@ -602,6 +625,7 @@ async fn run_infer_once(
                     .await;
                 *round.current_inference.lock().await = None;
             }
+            round.clear_partial().await;
             return Err("tour annulé".into());
         }
         // A model stream can be silent while loading or decoding. Await the
@@ -615,6 +639,7 @@ async fn run_infer_once(
                     ).await;
                     *round.current_inference.lock().await = None;
                 }
+                round.clear_partial().await;
                 return Err("tour annulé".into());
             }
         };
@@ -630,17 +655,30 @@ async fn run_infer_once(
                     .await;
                 *round.current_inference.lock().await = None;
             }
+            round.clear_partial().await;
             return Err("tour annulé".into());
         }
         match ev {
             Ok(TokenEvent::Started { inference_id }) => {
                 *round.current_inference.lock().await = Some(inference_id);
             }
-            Ok(TokenEvent::Delta { text }) => full.push_str(&text),
-            Ok(TokenEvent::Done { .. }) => break,
-            Ok(TokenEvent::Error { message }) => return Err(message),
+            Ok(TokenEvent::Delta { text }) => {
+                full.push_str(&text);
+                round.publish_partial(&full).await;
+            }
+            Ok(TokenEvent::Done { .. }) => {
+                round.publish_partial(&full).await;
+                break;
+            }
+            Ok(TokenEvent::Error { message }) => {
+                round.clear_partial().await;
+                return Err(message);
+            }
             Ok(TokenEvent::Queued { .. }) => {}
-            Err(e) => return Err(e.to_string()),
+            Err(e) => {
+                round.clear_partial().await;
+                return Err(e.to_string());
+            }
         }
     }
     *round.current_inference.lock().await = None;
@@ -796,10 +834,15 @@ async fn run_room_tool_loop(
 
         let parsed_actions = parse_actions(&raw);
         if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
+            // Keep provisional text until append_room_reply; prefer shaped body for UI.
+            if !reply.trim().is_empty() {
+                round.publish_partial(&reply).await;
+            }
             return Ok((reply, thinking, produced_artifacts));
         }
 
         if parsed_actions.is_empty() {
+            round.clear_partial().await;
             if step + 1 >= MAX_ROOM_TOOL_STEPS {
                 return Err("trop d'étapes sans réponse texte".into());
             }
@@ -815,6 +858,9 @@ async fn run_room_tool_loop(
             });
             continue;
         }
+
+        // Tool path: never leave action JSON flashing in the transcript.
+        round.clear_partial().await;
 
         let assistant_content = strip_tool_markup(&raw);
         messages.push(ChatMessage {
@@ -1011,6 +1057,9 @@ pub async fn execute_room_turn(
         }
         let raw = raw?;
         let (content, thinking) = split_room_reply(&raw);
+        if !content.trim().is_empty() {
+            round.publish_partial(&content).await;
+        }
         (content, thinking, Vec::new())
     } else {
         round.set_phase("thinking").await;
@@ -1031,6 +1080,7 @@ pub async fn execute_room_turn(
         (reply, thinking, artifacts)
     };
     if content.is_empty() && thinking.as_ref().map(|t| t.trim().is_empty()).unwrap_or(true) {
+        round.clear_partial().await;
         return Err("réponse vide".into());
     }
 
@@ -1044,6 +1094,7 @@ pub async fn execute_room_turn(
         &artifacts,
     )
     .await?;
+    round.clear_partial().await;
 
     Ok(AgentRoomTurnResponse {
         content,
@@ -1833,6 +1884,14 @@ mod tests {
 
         round.set_phase("thinking").await;
         assert_eq!(round.progress_snapshot().await.phase, "thinking");
+
+        round.publish_partial("Bonjour le salon").await;
+        let snap = round.progress_snapshot().await;
+        assert_eq!(snap.phase, "generating");
+        assert_eq!(snap.partial_text.as_deref(), Some("Bonjour le salon"));
+
+        round.clear_partial().await;
+        assert!(round.progress_snapshot().await.partial_text.is_none());
 
         round.clear_progress().await;
         assert!(!round.progress_snapshot().await.active);
