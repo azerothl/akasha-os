@@ -6,9 +6,15 @@ use eframe::egui;
 
 impl UiApp {
     pub(crate) fn ui_decl_module(&mut self, ui: &mut egui::Ui, module: &str) {
-        if !self.decl_panels.contains_key(module) {
+        let needs_load = self
+            .decl_panels
+            .get(module)
+            .map(|panel| panel.needs_ui_load())
+            .unwrap_or(true);
+        if needs_load {
             self.decl_panels
-                .insert(module.to_string(), decl_ui::DeclUiPanelState::new(module));
+                .entry(module.to_string())
+                .or_insert_with(|| decl_ui::DeclUiPanelState::new(module));
             let _ = self.cmd_tx.send(Cmd::ModuleUiLoad {
                 module: module.to_string(),
             });
