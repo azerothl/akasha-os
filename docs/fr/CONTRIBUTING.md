@@ -64,9 +64,10 @@ MIT — toujours sans octroi commercial.
 
 Procédure : [write-a-module.md](write-a-module.md) (site :
 [premier module](https://azerothl.github.io/akasha-os/docs/module.html?lang=fr)).
-Dans la Preview : Scenarios / Chat « crée un module … », ou Settings →
-Modules (`module.scaffold` kind `script` → package → install). Partage le
-`.aospkg` en Discussion (pas de CLA) ou sous
+Dans la Preview : Scenarios / Chat « crée un module … » (Settings n’expose pas
+le scaffold — **Catalogue local de modules** sert à installer les paquets
+listés ou à désinstaller sous **Modules installés**). Partage le `.aospkg` en
+Discussion (pas de CLA) ou sous
 [`community/modules/`](../../community/README.md). L’install fait toujours
 la revue de caps. SDK guest : [`modules/sdk`](../../modules/sdk)
 (Apache-2.0).

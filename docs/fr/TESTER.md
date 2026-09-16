@@ -279,8 +279,10 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 ### 16. Désinstaller un module (0.8.0)
 
 - Scaffold + install d’un module non bundlé.
-- **Réglages → Modules installés** : désinstaller (pas `notes` / `tasks` / `ext-rt`).
-- Confirmer. Onglet et caps `tool.invoke:<name>` disparus ; ligne d’audit.
+- **Settings → Catalogue local de modules → Modules installés** : désinstaller
+  les apps préinstallées (`tasks`, `notes`, …) ou un module installé via agent ;
+  confirmer. Onglet et caps `tool.invoke:<name>` disparus ; ligne d’audit.
+  Réinstaller marche encore.
 
 ### 17–20. Widgets E15, Providers, image/TTS, one-liner
 

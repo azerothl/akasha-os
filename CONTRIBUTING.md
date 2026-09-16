@@ -60,11 +60,11 @@ commercial grant.
 
 Procedure: [docs/write-a-module.md](docs/write-a-module.md) (site:
 [first module](https://azerothl.github.io/akasha-os/docs/module.html)).
-In Preview: Scenarios / Chat “create a module …”, or Settings → Modules
-(`module.scaffold` kind `script` → package → install). Share the `.aospkg`
-in a Discussion (no CLA) or under [`community/modules/`](community/README.md).
-Install still runs cap review. Guest SDK: [`modules/sdk`](modules/sdk)
-(Apache-2.0).
+In Preview: Scenarios / Chat “create a module …” (Settings does not expose
+scaffold — use **Local module catalogue** only to install listed packages or
+uninstall under **Installed modules**). Share the `.aospkg` in a Discussion
+(no CLA) or under [`community/modules/`](community/README.md). Install still
+runs cap review. Guest SDK: [`modules/sdk`](modules/sdk) (Apache-2.0).
 
 ## How to propose an ADR
 
