@@ -634,19 +634,38 @@ async fn run_media_image_generate(
             return;
         }
         if let Some(model_id) = request.model_id.as_deref().filter(|id| !id.is_empty()) {
-            if !crate::models_page::is_model_installed(model_id) {
-                let message = format!(
-                    "Le modèle {model_id} n'est pas installé. Téléchargez-le depuis Modèles avant de générer."
-                );
-                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
-                    module: module.to_string(),
-                    action_id: action_id.to_string(),
-                    ok: false,
-                    result: Value::Null,
-                    error: Some(message),
-                    refresh_binds: refresh_binds.clone(),
-                });
-                return;
+            match crate::models_page::model_install_state(model_id) {
+                crate::models_page::ModelInstallState::Complete => {}
+                crate::models_page::ModelInstallState::Missing => {
+                    let message = format!(
+                        "Le modèle {model_id} n'est pas installé. Téléchargez-le depuis Modèles avant de générer."
+                    );
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(message),
+                        refresh_binds: refresh_binds.clone(),
+                    });
+                    return;
+                }
+                crate::models_page::ModelInstallState::Incomplete => {
+                    let missing = crate::models_page::missing_model_annexes(model_id);
+                    let message = format!(
+                        "modèle incomplet : fichiers auxiliaires manquants ({})",
+                        missing.join(", ")
+                    );
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(message),
+                        refresh_binds: refresh_binds.clone(),
+                    });
+                    return;
+                }
             }
         }
     }

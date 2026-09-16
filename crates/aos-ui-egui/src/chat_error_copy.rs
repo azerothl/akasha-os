@@ -413,6 +413,36 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
     user_visible_chat_error(t, stripped)
 }
 
+/// Create DeclUI status: keep incomplete-pack / missing-annex lists readable.
+/// Bare filenames (even `.gguf`) are intentional here; absolute paths still go
+/// through the generic scrubber.
+pub(crate) fn user_visible_create_or_module_error(
+    t: &UiStrings,
+    module: &str,
+    raw: &str,
+) -> String {
+    let stripped = strip_ipc_status_prefix(raw).trim();
+    if module == "create" && is_incomplete_model_message(stripped) && !has_absolute_path(stripped) {
+        return stripped.to_string();
+    }
+    user_visible_module_error(t, module, raw)
+}
+
+fn is_incomplete_model_message(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("modèle incomplet")
+        || lower.contains("modele incomplet")
+        || lower.contains("incomplete model")
+        || lower.contains("fichiers auxiliaires")
+        || lower.contains("auxiliary")
+        || lower.contains("n'est pas installé")
+        || lower.contains("not installed")
+}
+
+fn has_absolute_path(msg: &str) -> bool {
+    msg.contains('/') || msg.contains('\\')
+}
+
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
     format_chat_error(t, &classify_chat_error(t, raw))
@@ -525,5 +555,18 @@ mod tests {
         let visible = user_visible_chat_error(&en, raw);
         assert!(visible.contains(en.chat_error_timeout));
         assert!(!visible.contains("var/run"));
+    }
+
+    #[test]
+    fn create_incomplete_model_status_keeps_annex_list() {
+        let t = crate::i18n::strings("fr");
+        let raw =
+            "modèle incomplet : fichiers auxiliaires manquants (qwen_image_vae.safetensors, foo.gguf)";
+        let visible = user_visible_create_or_module_error(&t, "create", raw);
+        assert!(
+            visible.contains("qwen_image_vae.safetensors"),
+            "expected annex list in status, got {visible}"
+        );
+        assert!(visible.contains("foo.gguf"));
     }
 }

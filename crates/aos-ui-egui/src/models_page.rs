@@ -52,6 +52,28 @@ pub struct CatalogModel {
     /// Pack-specific sd.cpp knobs (`flow-shift`, `cfg-scale`, offload flags…).
     #[serde(default)]
     pub engine_args: std::collections::HashMap<String, String>,
+    /// Required annexes (VAE, text encoder, high-noise DiT, …).
+    #[serde(default)]
+    pub extra_files: Vec<CatalogExtraFile>,
+}
+
+/// One catalogue `extra_files[]` entry (filename + optional role for subdirs).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CatalogExtraFile {
+    #[serde(default)]
+    pub filename: String,
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelInstallState {
+    /// Main weight absent (and not registered as installed).
+    Missing,
+    /// Main weight present but at least one required annex is missing.
+    Incomplete,
+    /// Main weight + every required annex on disk.
+    Complete,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -228,8 +250,8 @@ fn load_catalog_models_from(home: &Path) -> Vec<CatalogModel> {
     out
 }
 
-/// True when the offering is registered in `installed.json` or its main weight file exists on disk.
-pub fn is_model_installed(model_id: &str) -> bool {
+/// True when the main weight is registered or present on disk (annexes ignored).
+pub fn is_model_main_present(model_id: &str) -> bool {
     let path = aos_home().join("var/models/installed.json");
     if let Ok(raw) = std::fs::read_to_string(path) {
         if let Ok(reg) = serde_json::from_str::<InstalledRegistry>(&raw) {
@@ -246,6 +268,80 @@ pub fn is_model_installed(model_id: &str) -> bool {
         return false;
     }
     aos_home().join("share/models").join(&m.filename).is_file()
+}
+
+/// Filenames declared by the offering but absent from `share/models/` (and role subdirs).
+pub fn missing_model_annexes(model_id: &str) -> Vec<String> {
+    let Some(m) = catalog_model_by_id(model_id) else {
+        return Vec::new();
+    };
+    let mut missing: Vec<String> = m
+        .extra_files
+        .iter()
+        .filter_map(|f| {
+            let fname = f.filename.trim();
+            if fname.is_empty() {
+                return None;
+            }
+            if media_asset_present(fname, f.role.as_deref()) {
+                None
+            } else {
+                Some(fname.to_owned())
+            }
+        })
+        .collect();
+    for key in [
+        "diffusion-model",
+        "high-noise-diffusion-model",
+        "uncond-diffusion-model",
+        "llm",
+        "audio-vae",
+        "embeddings-connectors",
+    ] {
+        let Some(fname) = m.engine_args.get(key).map(|s| s.trim()).filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        if fname == m.filename {
+            continue;
+        }
+        if media_asset_present(fname, None) || missing.iter().any(|x| x == fname) {
+            continue;
+        }
+        missing.push(fname.to_owned());
+    }
+    missing
+}
+
+fn media_asset_present(filename: &str, role: Option<&str>) -> bool {
+    if filename.is_empty() || filename.contains("..") || filename.contains('/') || filename.contains('\\')
+    {
+        return false;
+    }
+    let root = aos_home().join("share/models");
+    if let Some(role) = role.filter(|r| !r.is_empty()) {
+        if root.join(role).join(filename).is_file() {
+            return true;
+        }
+    }
+    root.join(filename).is_file()
+}
+
+/// Install completeness for Create badges and generate gating.
+pub fn model_install_state(model_id: &str) -> ModelInstallState {
+    if !is_model_main_present(model_id) {
+        return ModelInstallState::Missing;
+    }
+    if missing_model_annexes(model_id).is_empty() {
+        ModelInstallState::Complete
+    } else {
+        ModelInstallState::Incomplete
+    }
+}
+
+/// True when the offering is ready to run: main weight + required annexes on disk.
+pub fn is_model_installed(model_id: &str) -> bool {
+    model_install_state(model_id) == ModelInstallState::Complete
 }
 
 pub fn category_of(m: &CatalogModel) -> ModelCatalogTab {
@@ -700,5 +796,29 @@ mod vision_catalog_tests {
             wan.engine_args.get("flow-shift").map(String::as_str),
             Some("3.0")
         );
+        assert!(
+            !wan.extra_files.is_empty(),
+            "wan pack must declare annexes for incomplete-install detection"
+        );
+    }
+
+    #[test]
+    fn multi_file_pack_without_annexes_is_incomplete() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        std::env::set_var("AOS_HOME", &root);
+        let missing = super::missing_model_annexes("local:ltx2.3-dev");
+        assert!(
+            !missing.is_empty(),
+            "clean tree should report missing LTX annexes"
+        );
+        let state = super::model_install_state("local:ltx2.3-dev");
+        assert!(
+            matches!(
+                state,
+                super::ModelInstallState::Incomplete | super::ModelInstallState::Missing
+            ),
+            "expected incomplete/missing, got {state:?}"
+        );
+        assert!(!super::is_model_installed("local:ltx2.3-dev"));
     }
 }

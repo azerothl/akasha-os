@@ -264,14 +264,14 @@ pub async fn run_image(
     let (model_id, weights) = sub
         .find_media_model("image", req.model_id.as_deref())
         .map_err(|e| format!("media image model unavailable: {e}"))?;
-    if is_video_request(&req.options) {
-        let missing = missing_offering_sidecars(&model_id);
-        if !missing.is_empty() {
-            return Err(format!(
-                "modèle vidéo incomplet : fichiers auxiliaires manquants ({})",
-                missing.join(", ")
-            ));
-        }
+    // Any multi-file offering (image DiT + LLM/VAE, or video packs) must have
+    // annexes on disk before we touch the GPU — same contract as AK-009 video.
+    let missing = missing_offering_sidecars(&model_id);
+    if !missing.is_empty() {
+        return Err(format!(
+            "modèle incomplet : fichiers auxiliaires manquants ({})",
+            missing.join(", ")
+        ));
     }
     if weights.exists() && aos_sd::image_engine_available() {
         sub.ensure_loaded(&model_id, PlacementProfile::Balanced, 0)
@@ -619,6 +619,20 @@ mod tests {
     }
 
     #[test]
+    fn missing_image_pack_sidecars_are_reported() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        if !root.join("share/models/catalog-offerings.json").is_file() {
+            return;
+        }
+        std::env::set_var("AOS_HOME", &root);
+        let missing = missing_offering_sidecars("local:qwen-image-2512");
+        assert!(
+            !missing.is_empty(),
+            "qwen-image should declare annexes that are absent in a clean tree"
+        );
+    }
+
+    #[test]
     fn qwen_catalog_applies_offload_when_user_leaves_option_unset() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let catalog = root.join("share/models/catalog-offerings.json");
@@ -946,8 +960,8 @@ fn apply_catalog_extras(opts: &mut aos_sd::ImageGenOpts, o: &aos_proto::MediaIma
 }
 
 /// Return sidecars declared by an offering but absent from the model store.
-/// Video packs are multi-file bundles; fail before spawning sd.cpp so the error
-/// stays actionable and avoids an unnecessary GPU initialization.
+/// Multi-file packs (video *and* heavy image DiTs) must fail before spawning
+/// sd.cpp so the error stays actionable.
 fn missing_offering_sidecars(model_id: &str) -> Vec<String> {
     let path = models_dir().join("catalog-offerings.json");
     let Ok(raw) = std::fs::read_to_string(path) else {
@@ -965,14 +979,46 @@ fn missing_offering_sidecars(model_id: &str) -> Vec<String> {
     else {
         return Vec::new();
     };
-    m.get("extra_files")
+    let mut missing: Vec<String> = m
+        .get("extra_files")
         .and_then(|e| e.as_array())
         .into_iter()
         .flatten()
-        .filter_map(|f| f.get("filename").and_then(|x| x.as_str()))
-        .filter(|fname| resolve_media_asset(None, fname).is_none())
-        .map(ToOwned::to_owned)
-        .collect()
+        .filter_map(|f| {
+            let fname = f.get("filename").and_then(|x| x.as_str())?;
+            let role = f.get("role").and_then(|x| x.as_str());
+            if resolve_media_asset(role, fname).is_none()
+                && resolve_media_asset(None, fname).is_none()
+            {
+                Some(fname.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect();
+    // Path-valued engine_args that name on-disk files (not scalars like mode/fps).
+    if let Some(args) = m.get("engine_args").and_then(|a| a.as_object()) {
+        for key in [
+            "diffusion-model",
+            "high-noise-diffusion-model",
+            "uncond-diffusion-model",
+            "llm",
+            "audio-vae",
+            "embeddings-connectors",
+        ] {
+            if let Some(fname) = args.get(key).and_then(|x| x.as_str()) {
+                let bare = fname.trim();
+                if bare.is_empty() {
+                    continue;
+                }
+                if resolve_media_asset(None, bare).is_none() && !missing.iter().any(|m| m == bare)
+                {
+                    missing.push(bare.to_owned());
+                }
+            }
+        }
+    }
+    missing
 }
 
 fn apply_upscale(

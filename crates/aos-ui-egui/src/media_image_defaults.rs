@@ -368,6 +368,8 @@ pub struct CreateGenerationDefaults {
     pub diffusion_fa: Option<bool>,
     pub max_vram: Option<String>,
     pub stream_layers: Option<bool>,
+    /// sd.cpp `-M` mode from catalogue (`img_gen` / `vid_gen` / …).
+    pub sd_mode: String,
 }
 
 fn parse_engine_f32(args: &std::collections::HashMap<String, String>, key: &str) -> Option<f32> {
@@ -380,6 +382,17 @@ fn parse_engine_bool(args: &std::collections::HashMap<String, String>, key: &str
         "0" | "false" | "False" | "no" => Some(false),
         _ => None,
     }
+}
+
+fn clamp_u32(value: u32, min: Option<u32>, max: Option<u32>) -> u32 {
+    let mut v = value;
+    if let Some(lo) = min {
+        v = v.max(lo);
+    }
+    if let Some(hi) = max {
+        v = v.min(hi);
+    }
+    v
 }
 
 fn video_frames_for_profile(model_id: &str, profile: &str, catalog_frames: Option<u32>) -> u32 {
@@ -400,6 +413,23 @@ fn video_frames_for_profile(model_id: &str, profile: &str, catalog_frames: Optio
     }
 }
 
+fn catalogue_sd_mode(
+    media_mode: &str,
+    engine: Option<&std::collections::HashMap<String, String>>,
+) -> String {
+    if media_mode == "video" {
+        return "vid_gen".into();
+    }
+    if let Some(mode) = engine
+        .and_then(|args| args.get("mode"))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return mode.to_string();
+    }
+    "img_gen".into()
+}
+
 pub fn create_generation_defaults(
     model_id: Option<&str>,
     profile: Option<&str>,
@@ -411,6 +441,7 @@ pub fn create_generation_defaults(
     let catalog = crate::models_page::catalog_model_by_id(id);
     let video = catalog.as_ref().and_then(|m| m.video_defaults.as_ref());
     let engine = catalog.as_ref().map(|m| &m.engine_args);
+    let sd_mode = catalogue_sd_mode(media_mode, engine);
 
     let mut width = base.width.unwrap_or(512);
     let mut height = base.height.unwrap_or(512);
@@ -487,6 +518,32 @@ pub fn create_generation_defaults(
         if let Some(v) = args.get("max-vram").filter(|s| !s.trim().is_empty()) {
             max_vram = Some(v.clone());
         }
+        // Wan-as-image still ships video_defaults for a sane canvas size.
+        if let Some(v) = video {
+            if let Some(w) = v.width {
+                width = w;
+            }
+            if let Some(h) = v.height {
+                height = h;
+            }
+        }
+    }
+
+    // Honour catalogue resolution / duration caps whenever present.
+    if let Some(v) = video {
+        width = clamp_u32(width, v.min_width, v.max_width);
+        height = clamp_u32(height, v.min_height, v.max_height);
+        if let Some(max_secs) = v.max_duration_secs {
+            let fps_u = fps.unwrap_or(if id.contains("wan") { 16 } else { 24 }).max(1);
+            let mut cap = max_secs.saturating_mul(fps_u);
+            // Wan / LTX expect 4n+1 frame counts.
+            if (id.contains("wan") || id.contains("ltx")) && cap > 1 {
+                cap = ((cap.saturating_sub(1)) / 4) * 4 + 1;
+            }
+            if let Some(frames) = video_frames.as_mut() {
+                *frames = (*frames).min(cap.max(1));
+            }
+        }
     }
 
     CreateGenerationDefaults {
@@ -503,6 +560,7 @@ pub fn create_generation_defaults(
         diffusion_fa,
         max_vram,
         stream_layers,
+        sd_mode,
     }
 }
 
@@ -545,6 +603,7 @@ mod tests {
             assert_eq!(d.flow_shift, Some(3.0));
             let frames = d.video_frames.unwrap_or(0);
             assert_eq!(frames % 4, 1, "Wan frames must be 4n+1, got {frames}");
+            assert_eq!(d.sd_mode, "vid_gen");
         });
     }
 
@@ -555,6 +614,7 @@ mod tests {
                 create_generation_defaults(Some("local:minimax-h3"), Some("balanced"), "video");
             assert_eq!(d.cfg_scale, 1.0);
             assert_eq!(d.format, Some("custom"));
+            assert_eq!(d.sd_mode, "vid_gen");
         });
     }
 
@@ -566,5 +626,28 @@ mod tests {
         assert!(d.video_frames.is_none());
         assert_eq!(d.steps, 24);
         assert_eq!(d.cfg_scale, 7.0);
+        assert_eq!(d.sd_mode, "img_gen");
+    }
+
+    #[test]
+    fn wan_image_mode_honors_catalogue_vid_gen() {
+        with_workspace_home(|| {
+            let d =
+                create_generation_defaults(Some("local:wan2.2-t2i"), Some("balanced"), "image");
+            assert_eq!(d.sd_mode, "vid_gen");
+            assert_eq!((d.width, d.height), (832, 480));
+        });
+    }
+
+    #[test]
+    fn video_defaults_clamp_to_catalogue_bounds() {
+        with_workspace_home(|| {
+            let d =
+                create_generation_defaults(Some("local:wan2.2-t2i"), Some("quality"), "video");
+            assert!(d.width <= 1280);
+            assert!(d.height <= 1280);
+            // max_duration_secs=5 @ 16fps → at most 81 frames (4n+1)
+            assert!(d.video_frames.unwrap_or(0) <= 81);
+        });
     }
 }
