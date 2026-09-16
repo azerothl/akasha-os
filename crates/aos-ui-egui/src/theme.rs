@@ -120,6 +120,21 @@ pub fn button_colors(ui: &egui::Ui) -> ThemeColors {
         })
 }
 
+/// Ink on a filled accent (Envoyer, primary DeclUI, selected rows).
+/// Full neon signal fails WCAG with paper/white (~1.5:1); void ink is ~13:1.
+pub fn ink_on_accent(accent: egui::Color32) -> egui::Color32 {
+    if relative_luminance(accent) >= 0.35 {
+        VOID
+    } else {
+        PAPER
+    }
+}
+
+/// Diluted signal fill for selection / active chrome behind paper text.
+pub fn signal_fill_for_text() -> egui::Color32 {
+    mix(VOID, SIGNAL, 0.32)
+}
+
 const FOCUS_STROKE_WIDTH: f32 = 2.0;
 
 fn mix(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
@@ -132,7 +147,6 @@ fn mix(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
     )
 }
 
-#[cfg(test)]
 fn relative_luminance(c: egui::Color32) -> f32 {
     fn channel(v: u8) -> f32 {
         let s = f32::from(v) / 255.0;
@@ -307,6 +321,9 @@ fn chamber_dark() -> egui::Visuals {
     v.widgets.hovered.bg_fill = mix(VOID, SIGNAL, 0.18);
     v.widgets.active.bg_fill = mix(VOID, SIGNAL, 0.28);
     base_widgets(&mut v, PAPER, SIGNAL);
+    // Full neon selection + paper text is ~1.5:1; dilute like active widgets.
+    v.selection.bg_fill = signal_fill_for_text();
+    v.selection.stroke = egui::Stroke::new(1.0_f32, mix(VOID, SIGNAL, 0.55));
     v
 }
 
@@ -392,6 +409,23 @@ mod tests {
         assert!(
             ratio >= 3.0,
             "expected signal-on-void >= 3:1 for UI accents, got {ratio:.2}"
+        );
+    }
+
+    #[test]
+    fn dark_filled_accent_uses_void_ink_not_white() {
+        assert_eq!(ink_on_accent(SIGNAL), VOID);
+        assert_eq!(ink_on_accent(ICE_TRACK), VOID);
+        let ratio = contrast_ratio(ink_on_accent(SIGNAL), SIGNAL);
+        assert!(
+            ratio >= 7.0,
+            "expected void-on-signal >= 7:1 for filled CTAs, got {ratio:.2}"
+        );
+        let fill = signal_fill_for_text();
+        let fill_ratio = contrast_ratio(PAPER, fill);
+        assert!(
+            fill_ratio >= 4.5,
+            "expected paper-on-signal-fill >= 4.5:1, got {fill_ratio:.2}"
         );
     }
 

@@ -2,16 +2,16 @@
 version: 1
 slug: "website-index-html"
 primary_target: "website/index.html"
-related_targets: ["website/404.html","website/styles.css","website/app.js","website/about.html","website/why.html","website/grant.html","website/install.html"]
+related_targets: ["website/styles.css","website/app.js","website/about.html","website/community.html","website/install.html","website/docs/whats-new.html"]
 ---
 
 # Surface brief — website landing
 
-- **Scope / mode:** `website/index.html` (+ inner routes, `website/404.html`). Persuade on landing; Read on docs.
-- **Audience / job:** Preview cohort tester at a Windows/Linux desk. Understand why this is an OS for agents, then install.
-- **Action:** Download Preview from GitHub Releases; follow tester protocol.
-- **Proof / content:** Real facts only — Preview 0.8.0 host app, capability grants, NVIDIA recommended / CPU path in the same zip, not bootable, install scripts, repo docs, dual license.
-- **Constraints:** EN/FR equivalent; never imply a bootable OS; no invented proof. Header is Akasha OS, never Station. Hydrogen only on Install/Download.
-- **Direction:** Orrery (seed c1699dbf reroll 1, pick). Ākāśa as the ether: agents on cyan rails, capabilities as rods, hydrogen winding key.
-- **Memorable moment:** Live 3D orrery (MEMORY, CAPS, GPU, AGENTS on one camera); HOST / NVIDIA / NOT BOOTABLE on a paper mill; INSTALL winds the machine.
-- **Unresolved:** WCAG target.
+- **Scope / mode:** `website/index.html` (+ shared chrome). Persuade on landing; Read on docs.
+- **Audience / job:** Preview cohort tester. Understand agent-native OS vs chat wrapper, then install.
+- **Action:** Download Preview; follow 15-minute path.
+- **Proof / content:** Real Preview UI screenshots from repo QA passes; Preview host app facts; caps/offline; no fabricated testimonials.
+- **Constraints:** EN/FR equivalent; never imply bootable OS; news/community/about kept in primary nav; hydrogen only on Install.
+- **Direction:** Product chamber (approved). Cloud chamber tokens aligned to PRODUCT.md; orrery demoted from hero.
+- **Memorable moment:** Full-bleed Create Preview plane beside brand-led Install CTA; Create section echoes catalogue defaults + incomplete annexes + sticky jobs.
+- **Unresolved:** WCAG audit pass; optional orrery accent on about.

@@ -169,7 +169,14 @@ pub fn find_harness_binary(kind: HarnessKind) -> Result<PathBuf, String> {
 }
 
 fn stem_matches(path: &Path, harness: &str) -> bool {
-    path.file_stem()
+    // PATH entries use the host separator, but unit tests (and mixed tooling)
+    // may pass Windows-style paths on Unix. Take the last `/` or `\` component
+    // before stripping the extension — otherwise `C:\Tools\claude.exe` becomes
+    // stem `C:\Tools\claude` on Linux and fails the allowlist check.
+    let raw = path.to_string_lossy();
+    let file = raw.rsplit(['/', '\\']).next().unwrap_or(raw.as_ref());
+    Path::new(file)
+        .file_stem()
         .and_then(|s| s.to_str())
         .is_some_and(|stem| stem.eq_ignore_ascii_case(harness))
 }

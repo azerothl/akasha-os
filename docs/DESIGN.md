@@ -1,10 +1,11 @@
 ---
 name: Akasha OS
-description: Orrery in the ether — agents orbit, capabilities are the rods; cyan rails; hydrogen winding key only.
+description: Product chamber — Preview UI in the cloud chamber; ice tracks, signal chrome, hydrogen Install only.
 colors:
   void: "#070b14"
-  signal: "#3ee0c4"
-  hydrogen: "#e85d4c"
+  ice: "#5ee7ff"
+  signal: "#2ef0c8"
+  hydrogen: "#ff5a48"
   paper: "#e8eef6"
   mute: "color-mix(in srgb, var(--signal) 42%, var(--void))"
   plate: "color-mix(in srgb, var(--paper) 7%, var(--void))"
