@@ -287,6 +287,7 @@ pub async fn invoke_native_tool(
         | "device.usb.read"
         | "device.usb.write"
         | "device.usb.close" => invoke_device_tool(bus, agent_id, tool, args, session_id).await,
+        "harness.run" => crate::harness::run(args, caps).await,
         other => format!("outil natif non supporté en salon: {other}"),
     }
 }
@@ -320,7 +321,7 @@ pub async fn execute_room_tool(
 
     if matches!(
         name,
-        "agent.spawn" | "agent.await" | "user.ask" | "goal.complete" | "goal.fail"
+        "agent.spawn" | "agent.await" | "user.ask" | "goal.complete" | "goal.fail" | "harness.run"
     ) {
         return format!("action {name} indisponible en tour de salon — réponds en texte");
     }

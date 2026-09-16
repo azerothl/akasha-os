@@ -1415,6 +1415,7 @@ mod tests {
             color: None,
             deep_plan: None,
             cognitive_mode: CognitiveMode::Normal,
+            execution_backend: Default::default(),
         }
     }
 

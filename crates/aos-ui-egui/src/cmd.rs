@@ -200,6 +200,9 @@ pub(crate) enum Cmd {
         avatar: String,
         /// Accent `#RRGGBB` or empty for auto hash color.
         color: String,
+        /// `native` | `codex` | `claude` | `grok`
+        execution_backend: String,
+        harness_cwd: String,
     },
     AgentKill {
         id: String,
@@ -250,6 +253,8 @@ pub(crate) enum Cmd {
         model_id: Option<String>,
         avatar: Option<String>,
         color: Option<String>,
+        execution_backend: String,
+        harness_cwd: String,
     },
     Troubleshoot {
         recent_chat_errors: Vec<(String, String)>,

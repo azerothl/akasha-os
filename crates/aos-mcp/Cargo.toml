@@ -1,0 +1,26 @@
+[package]
+name = "aos-mcp"
+description = "Akasha OS Preview — optional stdio MCP façade over the intent bus (mem + infer)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "aos_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aos-mcpd"
+path = "src/main.rs"
+
+[dependencies]
+aos-ipc = { path = "../aos-ipc" }
+aos-proto = { path = "../aos-proto" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

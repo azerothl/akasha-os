@@ -617,6 +617,7 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "device.usb.close",
         ],
     ),
+    ("harness", &["harness.run"]),
 ];
 
 fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
@@ -628,6 +629,7 @@ fn roster_tool_family_label(t: &i18n::UiStrings, family: &str) -> &'static str {
         "canvas" => t.agents_tool_family_canvas,
         "agents" => t.agents_tool_family_agents,
         "devices" => t.agents_tool_family_devices,
+        "harness" => t.agents_tool_family_harness,
         _ => "?",
     }
 }
@@ -1024,6 +1026,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             library: false,
             avatar: String::new(),
             color: String::new(),
+            execution_backend: "native".into(),
+            harness_cwd: String::new(),
         });
         self.tab = Tab::Agents;
         self.status = t.scen_module_agent_launched.into();
@@ -1278,6 +1282,8 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
                     library: false,
                     avatar: String::new(),
                     color: String::new(),
+                    execution_backend: "native".into(),
+                    harness_cwd: String::new(),
                 });
                 // Rester dans le chat — carte via Evt::AgentSpawned
             }

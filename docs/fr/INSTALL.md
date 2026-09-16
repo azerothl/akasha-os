@@ -102,7 +102,7 @@ bin/            daemons (+ runtime CUDA sur builds GPU)
 share/models/   manifest.json (GGUF téléchargés au 1er run)
 share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
 share/skills/   skills Preview (notes-writer, research, file-author, planner, tasks)
-share/mcp/      servers.yaml.example (MCP stdio)
+share/mcp/      servers.yaml.example + akasha-mcp.example.json (MCP stdio client/serveur)
 data/models/    catalog.yaml
 VERSION         semver du build
 FIRST-RUN.md    tutoriel texte

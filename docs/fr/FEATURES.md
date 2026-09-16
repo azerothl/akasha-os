@@ -21,6 +21,8 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 - **Canvas** : scènes sémantiques et guides partagés ; protocole agent lecture/revue
 - **Coffre à secrets** : générateur de clés dans Paramètres (hex / numérique / alnum / base64url) avec preset hex LAN et rejet des clés invalides à l’enregistrement
 - **Chrome Create** : actions peintes, Advanced replié, barre résultat peaufinée ; starters de prompt localisés FR
+- **CLI de code externes** : `harness.run` opt-in plus **Runtime** Agents Avancé (Codex / Claude / Grok) avec Steer / Pause / Kill
+- **Façade serveur MCP** : `aos-mcpd` optionnel expose `akasha_models` / `akasha_infer` / `akasha_mem_*` en stdio pour les IDE externes ([mcp-server.md](mcp-server.md))
 
 #### Correctifs
 
@@ -337,7 +339,9 @@ Boucle Observe / Think / Act avec caps, confirmation et audit.
 | `task.assess` | Classe le goal en **simple** ou **complex** ; complex active la skill planner |
 | Skills | Recettes déclaratives (`share/skills/`, surchargeables sous `var/skills/`) |
 | Outils | Natif, module WASM, MCP, ou runtime (plan / spawn / mémoire) |
-| MCP | Serveurs stdio optionnels (`share/mcp/servers.yaml.example`) ; un MCP navigateur headless installé par l’utilisateur peut lire les pages JS (voir §7) |
+| `harness.run` | Spawn opt-in allowlisté des CLI locaux `codex` / `claude` / `grok` (prompt seulement, act-gate même en chat autonome) |
+| Backend harness externe | Agents → Avancé → **Runtime** = Codex / Claude / Grok : les workers de tâche exécutent des tours CLI sous `aos-agent-worker` ; **Steer** continue la session (`exec resume` / `-c`), **Pause** annule le tour en cours, **Kill** arrête l’arbre worker |
+| MCP | *Client* stdio optionnel (`share/mcp/servers.yaml.example`) ; un MCP navigateur headless installé par l’utilisateur peut lire les pages JS (voir §7). *Serveur* stdio optionnel `aos-mcpd` (mem + infer) pour IDE externes ([mcp-server.md](mcp-server.md)) |
 | Sous-agents | `agent.spawn` / `agent.await` avec un brief étroit |
 | `user.ask` | Pause et question à l'utilisateur dans le chat lié ; réponse via steer |
 | Hot-grant | `cap.request` sous trust + confirmation |
@@ -487,6 +491,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Multi-GPU **hard-green** sans run 2 GPU documenté (chemin + skip 1 GPU en 0.10)
 - Scellage PCR / attestation vault
 - Merge binaire sibling / assistant-as-module
+- Gateway modèles bidirectionnelle (IDE → infer Akasha) — Providers sortants et backends CLI entrants sont séparés
 - Webview sandboxée / UI module HTML/JS (compositor E13)
 - kind `webview` (pie/scatter livrés en 0.10.1)
 - Second GGUF draft / vLLM dans le TCB / DFlash2 (E20 = prompt-lookup seulement)

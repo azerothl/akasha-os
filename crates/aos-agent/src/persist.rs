@@ -505,6 +505,7 @@ pub fn info_from_spec(agent_id: &str) -> Option<AgentInfo> {
         color: spec.color.clone(),
         deep_plan: None,
         cognitive_mode: spec.cognitive_mode,
+        execution_backend: spec.execution_backend.clone(),
     })
 }
 
@@ -645,6 +646,7 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -740,6 +742,7 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -795,6 +798,7 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };
@@ -842,6 +846,7 @@ mod tests {
             origin: None,
             deep_plan: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };

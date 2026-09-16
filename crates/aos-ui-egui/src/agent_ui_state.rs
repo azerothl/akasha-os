@@ -42,6 +42,9 @@ pub(crate) struct RosterEditDraft {
     pub(crate) color: String,
     /// Clay studio expanded in the detail panel.
     pub(crate) avatar_studio_open: bool,
+    /// `native` | `codex` | `claude` | `grok`
+    pub(crate) execution_backend: String,
+    pub(crate) harness_cwd: String,
 }
 
 /// Brouillon d'édition de politique S6 phase 2 (avant Apply).
@@ -95,6 +98,9 @@ pub(crate) struct AgentUiState {
     /// Clay studio expanded on the create form.
     pub(crate) avatar_studio_open: bool,
     pub(crate) join_room_on_create: bool,
+    /// `native` | `codex` | `claude` | `grok`
+    pub(crate) execution_backend: String,
+    pub(crate) harness_cwd: String,
     // skills / tools / MCP
     pub(crate) skill_catalog: Vec<SkillInfo>,
     pub(crate) skill_selected: Vec<String>,
@@ -145,6 +151,8 @@ impl Default for AgentUiState {
             color: String::new(),
             avatar_studio_open: false,
             join_room_on_create: false,
+            execution_backend: "native".into(),
+            harness_cwd: String::new(),
             skill_catalog: Vec::new(),
             skill_selected: Vec::new(),
             mcp_catalog: Vec::new(),
@@ -319,6 +327,12 @@ impl AgentUiState {
                     .unwrap_or_else(|| "clay:circle/happy/idle".into()),
                 color: spec.color.clone().unwrap_or_default(),
                 avatar_studio_open: false,
+                execution_backend: spec
+                    .execution_backend
+                    .harness_id()
+                    .unwrap_or("native")
+                    .to_string(),
+                harness_cwd: spec.execution_backend.cwd().unwrap_or("").to_string(),
             },
         );
     }
@@ -531,6 +545,7 @@ mod tests {
             gate_mode: "ask".into(),
             origin: None,
             cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
             avatar: None,
             color: None,
         };

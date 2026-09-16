@@ -372,7 +372,7 @@ fn build_spec_with_module_tools(
         .filter_map(|c| c.strip_prefix("tool.invoke:"))
         .map(str::to_string)
         .collect::<std::collections::HashSet<_>>();
-    let tool_ids = if installed.is_empty() {
+    let mut tool_ids = if installed.is_empty() {
         merge_skill_tools(&req.tools, &skill_docs)
     } else {
         merge_skill_tools_for_modules(&req.tools, &skill_docs, &installed)
@@ -400,6 +400,20 @@ fn build_spec_with_module_tools(
             .any(|s| s == "deep-thinking" || s == "planner")
         {
             spec.skills.push("deep-thinking".into());
+        }
+    }
+    if spec.execution_backend.is_external_harness() {
+        aos_agent::harness_backend::ensure_harness_caps(&mut spec);
+        for c in &spec.caps {
+            if !caps.contains(c) {
+                caps.push(c.clone());
+            }
+        }
+        // Merge tools that ensure_harness_caps may have added.
+        for t in &spec.tools {
+            if !tool_ids.contains(t) {
+                tool_ids.push(t.clone());
+            }
         }
     }
     spec.tools = tool_ids;
@@ -469,6 +483,12 @@ fn update_roster_from_request(spec: &mut AgentSpec, req: &AgentRosterUpdateReque
     if req.color.is_some() {
         spec.color = req.color.clone().and_then(|c| normalize_agent_color(&c));
     }
+    if let Some(backend) = req.execution_backend.clone() {
+        spec.execution_backend = backend;
+        if spec.execution_backend.is_external_harness() {
+            aos_agent::harness_backend::ensure_harness_caps(spec);
+        }
+    }
     apply_tool_caps(spec);
 }
 
@@ -513,6 +533,7 @@ fn roster_info_from_spec(spec: &AgentSpec) -> AgentInfo {
         color: spec.color.clone(),
         deep_plan: None,
         cognitive_mode: spec.cognitive_mode,
+        execution_backend: spec.execution_backend.clone(),
     }
 }
 
@@ -760,6 +781,7 @@ async fn spawn_worker(
             color: spec.color.clone(),
             deep_plan: None,
             cognitive_mode: spec.cognitive_mode,
+            execution_backend: spec.execution_backend.clone(),
         };
         let mut entry = AgentEntry::new(info, restored_trace);
         if let Some(prev) = rt.agents.remove(agent_id) {

@@ -59,7 +59,8 @@ $binaries = @(
     "aos-capkd.exe",
     "aos-auditd.exe",
     "aos-ui-egui.exe",
-    "aos-bridged.exe"
+    "aos-bridged.exe",
+    "aos-mcpd.exe"
 )
 foreach ($binary in $binaries) {
     $requiredFiles += "bin\$binary"

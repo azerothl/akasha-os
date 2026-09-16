@@ -35,7 +35,7 @@ if (-not $SkipBuild) {
     if ($CpuOnly) {
         Write-Host "  (CPU-only: aos-model/aos-llama without CUDA feature)"
         cargo build --release -p aos-session -p aos-ipc -p aos-capkd -p aos-ui-egui `
-            -p aos-agent -p aos-auditd -p aos-bridge
+            -p aos-agent -p aos-auditd -p aos-bridge -p aos-mcp
         if ($LASTEXITCODE -ne 0) { throw "build failed" }
         cargo build --release -p aos-model --no-default-features
         if ($LASTEXITCODE -ne 0) { throw "build aos-model cpu failed" }
@@ -46,7 +46,7 @@ if (-not $SkipBuild) {
         # CUDA/llama from aos-model (GitHub Release 2 GiB limit).
         Write-Host "  (chrome bins sans aos-model)"
         cargo build --release -p aos-session -p aos-ipc -p aos-agent `
-            -p aos-capkd -p aos-ui-egui -p aos-bridge
+            -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
         if ($LASTEXITCODE -ne 0) { throw "build chrome bins failed" }
         Write-Host "== cargo build --release (aos-modeld CUDA/llama) =="
         cargo build --release -p aos-model
@@ -97,7 +97,7 @@ New-Item -ItemType Directory -Force -Path `
 $bins = @(
     "aos-session.exe", "aos-busd.exe", "aos-modeld.exe", "aos-agentd.exe",
     "aos-agent-worker.exe", "aos-platformd.exe", "aos-capkd.exe",
-    "aos-auditd.exe", "aos-ui-egui.exe", "aos-bridged.exe"
+    "aos-auditd.exe", "aos-ui-egui.exe", "aos-bridged.exe", "aos-mcpd.exe"
 )
 foreach ($b in $bins) {
     $src = Join-Path $binSrc $b
@@ -301,6 +301,10 @@ if (-not $mcpCopied) {
 servers: {}
 '@ | Set-Content "$OutDir\share\mcp\servers.yaml.example" -Encoding utf8
 }
+$akashaMcpEx = Join-Path $root "share\mcp\akasha-mcp.example.json"
+if (Test-Path $akashaMcpEx) {
+    Copy-Item $akashaMcpEx "$OutDir\share\mcp\akasha-mcp.example.json" -Force
+}
 
 if (-not $SkipModels) {
     $models = @(
@@ -324,6 +328,7 @@ Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\docs\FIRST-RUN.md" -Err
 Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\FIRST-RUN.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\STATUS.md") "$OutDir\docs\STATUS.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FEATURES.md") "$OutDir\docs\FEATURES.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\mcp-server.md") "$OutDir\docs\mcp-server.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\I18N.md") "$OutDir\docs\I18N.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\write-a-skill.md") "$OutDir\docs\write-a-skill.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\write-a-module.md") "$OutDir\docs\write-a-module.md" -ErrorAction SilentlyContinue
