@@ -2959,6 +2959,21 @@ pub fn chat_user_wants_advisory(text: &str) -> bool {
         "avis sur",
         "que faire pour",
         "qu'est ce qu'il faudrait",
+        // Specs / design docs — analyse écrite, pas scaffold immédiat.
+        "spécification",
+        "specification",
+        "specs fonctionnel",
+        "specs techniques",
+        "specs technique",
+        "faire des specs",
+        "fais des specs",
+        "me faire des specs",
+        "rédige des specs",
+        "rédiger des specs",
+        "write a spec",
+        "write specs",
+        "functional spec",
+        "technical spec",
     ]
     .iter()
     .any(|p| lower.contains(p))
@@ -3334,6 +3349,18 @@ mod chat_delegation_tests {
         ));
         assert!(!chat_user_wants_module_authoring(
             "Should I build a module for large projects? Are there limitations?"
+        ));
+    }
+
+    #[test]
+    fn specs_request_is_advisory_not_authoring() {
+        let q = "est ce que tu peux me faire des specs fonctionnel et technique \
+                 pour la création d'un module de développement dans akasha-os ?";
+        assert!(chat_user_wants_advisory(q));
+        assert!(!chat_user_wants_module_authoring(q));
+        assert!(chat_user_wants_advisory("write a functional spec for a module"));
+        assert!(!chat_user_wants_module_authoring(
+            "write a functional spec for a module"
         ));
     }
 
