@@ -706,7 +706,13 @@ fn room_reply_from_model(
     }
     let (visible, thinking) = split_room_reply(text);
     if visible.trim().is_empty() {
-        None
+        // Thought-only: still surface a short placeholder so the turn can append
+        // with thinking attached (UI shows the Reflection toggle).
+        if thinking.as_ref().is_some_and(|t| !t.trim().is_empty()) {
+            Some((String::new(), thinking))
+        } else {
+            None
+        }
     } else {
         Some((visible, thinking))
     }
@@ -725,7 +731,7 @@ async fn run_room_tool_loop(
     caps: &[String],
     mcp_servers: &[String],
     images: &[String],
-) -> Result<(String, Vec<ProducedArtifact>), String> {
+) -> Result<(String, Option<String>, Vec<ProducedArtifact>), String> {
     let (mut mcp_sessions, _) = open_mcp_tools_with_secrets(mcp_servers, &HashMap::new()).await;
     let trace_base = format!(
         "room-{agent_id}-{}",
@@ -789,8 +795,8 @@ async fn run_room_tool_loop(
         }
 
         let parsed_actions = parse_actions(&raw);
-        if let Some((reply, _thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
-            return Ok((reply, produced_artifacts));
+        if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
+            return Ok((reply, thinking, produced_artifacts));
         }
 
         if parsed_actions.is_empty() {
@@ -1008,7 +1014,7 @@ pub async fn execute_room_turn(
         (content, thinking, Vec::new())
     } else {
         round.set_phase("thinking").await;
-        let (reply, artifacts) = run_room_tool_loop(
+        let (reply, thinking, artifacts) = run_room_tool_loop(
             bus,
             round,
             &req.agent_id,
@@ -1022,9 +1028,9 @@ pub async fn execute_room_turn(
             &images,
         )
         .await?;
-        (reply, None, artifacts)
+        (reply, thinking, artifacts)
     };
-    if content.is_empty() {
+    if content.is_empty() && thinking.as_ref().map(|t| t.trim().is_empty()).unwrap_or(true) {
         return Err("réponse vide".into());
     }
 

@@ -248,9 +248,12 @@ pub fn roster_display_name(
 
 /// Visible salon bubble text (UTF-8 safe, no raw thought JSON).
 pub fn format_room_visible_bubble(text: &str) -> String {
-    let (visible, _) = aos_agent::room_reply::split_room_reply(text);
+    let (visible, thinking) = aos_agent::room_reply::split_room_reply(text);
     if !visible.is_empty() {
         visible
+    } else if thinking.is_some() {
+        // Thought-only envelope: keep protocol JSON out of the body.
+        String::new()
     } else {
         text.trim().to_string()
     }
@@ -1799,7 +1802,8 @@ fn paint_wrapped_prose_block(ui: &mut egui::Ui, text: &str, max_w: f32) {
     );
 }
 
-/// Collapsible thinking block inside a salon speaker bubble.
+/// Collapsible thinking block inside a salon / assistant bubble.
+/// Chevron + label affordance; collapsed by default.
 pub fn room_thinking_toggle(
     ui: &mut egui::Ui,
     t: &UiStrings,
@@ -1808,14 +1812,19 @@ pub fn room_thinking_toggle(
     open: &mut std::collections::HashSet<usize>,
 ) {
     let expanded = open.contains(&line_index);
-    let response = ui.add(
-        egui::Label::new(
-            egui::RichText::new(t.room_thinking_label)
-                .small()
-                .color(ui.visuals().weak_text_color()),
+    let chevron = if expanded { "▼" } else { "▶" };
+    let label = format!("{chevron} {}", t.room_thinking_label);
+    let response = ui
+        .add(
+            egui::Label::new(
+                egui::RichText::new(label)
+                    .small()
+                    .strong()
+                    .color(ui.visuals().weak_text_color()),
+            )
+            .sense(egui::Sense::click()),
         )
-        .sense(egui::Sense::click()),
-    );
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
     if response.clicked() {
         if expanded {
             open.remove(&line_index);
@@ -2180,6 +2189,16 @@ mod tests {
         assert_eq!(visible, "Voici la réponse.");
         assert!(!visible.contains("thought"));
     }
+
+    #[test]
+    fn format_room_visible_promotes_question_envelope() {
+        let raw = r#"{"thought":"synthèse","action":"","args":{"question":"Voici mon avis **markdown**.","choices":["a"]}}"#;
+        let visible = format_room_visible_bubble(raw);
+        assert_eq!(visible, "Voici mon avis **markdown**.");
+        assert!(!visible.contains("thought"));
+        assert!(!visible.contains("choices"));
+    }
+
     #[test]
     fn room_thinking_label_is_muted_noun_not_action() {
         let en = i18n::strings("en");
