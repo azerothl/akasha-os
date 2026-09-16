@@ -1485,6 +1485,10 @@ body.product .hero .key {
   border: 1px solid color-mix(in srgb, var(--signal) 28%, var(--void));
 }
 
+.surfaces .band-shot + .band-shot {
+  margin-top: calc(var(--u) * 2);
+}
+
 .band-shot img {
   display: block;
   width: 100%;
