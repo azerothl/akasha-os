@@ -4,7 +4,7 @@
 
 > Date: 23/08/2026 · Preview **0.11.0**  
 > Status: live adapter (`aos-bridged`) with full `mem.*` parity + JSON Schema export  
-> Related: [competitive-landscape.md](competitive-landscape.md), [evolution-roadmap.md](evolution-roadmap.md) E8, [docs/bridge/](bridge/)
+> Related: [competitive-landscape.md](competitive-landscape.md), [evolution-roadmap.md](evolution-roadmap.md) E8, [docs/bridge/](bridge/), stdio MCP façade [mcp-server.md](mcp-server.md)
 
 ## Principle
 
@@ -89,3 +89,7 @@ Wire note: OS daemons speak **CBOR**. The adapter transcodes JSON ↔ CBOR
 
 1. Optional: package a thin “assistant façade” as a dual-surface module once
    ABIs stabilize.
+
+See also: optional stdio MCP server for IDEs ([mcp-server.md](mcp-server.md)) —
+separate from this HTTP bridge; and pulling coding CLIs into agents
+([harness.md](harness.md)).

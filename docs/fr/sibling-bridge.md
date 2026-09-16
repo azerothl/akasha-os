@@ -4,7 +4,7 @@
 
 > Date : 23/08/2026 · Preview **0.11.0**  
 > Statut : adaptateur live (`aos-bridged`) avec parité `mem.*` complète + export JSON Schema  
-> Lié : [paysage-concurrentiel.md](paysage-concurrentiel.md), [plan-evolutions.md](plan-evolutions.md) E8, [docs/bridge/](../bridge/)
+> Lié : [paysage-concurrentiel.md](paysage-concurrentiel.md), [plan-evolutions.md](plan-evolutions.md) E8, [docs/bridge/](../bridge/), façade MCP stdio [mcp-server.md](mcp-server.md)
 
 ## Principe
 
@@ -78,3 +78,7 @@ Note fil : les daemons OS parlent **CBOR**. L’adaptateur transcode JSON ↔ CB
 ## Suite
 
 1. Option : façade assistant en module dual-surface une fois les ABI stables.
+
+Voir aussi : serveur MCP stdio pour IDE ([mcp-server.md](mcp-server.md)) —
+distinct de ce bridge HTTP ; et CLI de code dans les agents
+([harness.md](harness.md)).

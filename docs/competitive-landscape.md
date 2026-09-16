@@ -215,6 +215,8 @@ Legend: **yes** / **partial** / **no** / **vision**. Column **Akasha** = sibling
 
 **Akasha OS is not behind on “agentic OS” in the kernel sense.** On that definition (caps, semantic IPC, GPU-as-service, audit, dual-surface WASM, seL4), the only public peer is agentOS — and Akasha OS has a more complete human Preview.
 
+**Preview also ships opt-in bridges to coding ecosystems** without becoming an IDE: allowlisted local Codex / Claude / Grok CLI turns inside agents ([harness.md](harness.md)), and an optional stdio MCP server (`aos-mcpd`) so external IDEs can call mem/infer on a running Preview ([mcp-server.md](mcp-server.md)). That is narrower than Hermes multi-backend sandboxes or OpenClaw channel sprawl — deliberate scope.
+
 **The “personal assistant” lag (layer C)** vs OpenClaw / Hermes is largely **already covered by the sibling Akasha** (channels, 24/7 daemon, vault, calendar, voice, CPU/Ollama). That is not a family gap; it is a *deliberate* Akasha OS gap if the thesis stays the kernel.
 
 Four structural deltas:

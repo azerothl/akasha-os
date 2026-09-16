@@ -10,11 +10,13 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 **Preview :** 0.18.0 — Memory V2 par défaut, **P18 / E22** instincts en session,
 **P19 / E23** plan de santé runtime, Notes tags/recherche/suppression, fork/continue
 chat, scènes/guides Canvas, générateur de clés coffre, chrome Create peaufiné,
-correctifs LAN/santé/Deep Thinking. S’appuie sur l’espace Create 0.17.x et le
-chrome UI peint. Pas un OS bootable. Gate cohorte encore ouverte
-(**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de 15 minutes).
-**Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand planifié ; E9
-hard-green après un run 2 GPU documenté.
+correctifs LAN/santé/Deep Thinking ; CLI de code externes opt-in (`harness.run` +
+Runtime Agents) et façade MCP optionnelle **`aos-mcpd`**
+([harness.md](harness.md), [mcp-server.md](mcp-server.md)). S’appuie sur
+l’espace Create 0.17.x et le chrome UI peint. Pas un OS bootable. Gate cohorte
+encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de
+15 minutes). **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand
+planifié ; E9 hard-green après un run 2 GPU documenté.
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait
 
@@ -24,7 +26,8 @@ hard-green après un run 2 GPU documenté.
 | P20.2 | Livrer P18 (E22 instincts) + P19 (E23 santé) dans le tag | fait |
 | P20.3 | Notes tags / recherche live / delete ; fork/continue chat ; scènes/guides Canvas | fait |
 | P20.4 | Keygen coffre ; chrome Create ; polish LAN/santé/Deep Thinking | fait |
-| P20.5 | Version, docs, site et packaging release | fait |
+| P20.5 | CLI externes (`harness.run` + Runtime) + `aos-mcpd` optionnel ([harness.md](harness.md), [mcp-server.md](mcp-server.md)) | fait |
+| P20.6 | Version, docs, site et packaging release | fait |
 
 ## P19 — E23 plan de santé runtime — fait
 

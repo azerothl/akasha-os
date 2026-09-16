@@ -329,6 +329,7 @@ Copy-Item (Join-Path $root "docs\FIRST-RUN.md") "$OutDir\FIRST-RUN.md" -ErrorAct
 Copy-Item (Join-Path $root "docs\STATUS.md") "$OutDir\docs\STATUS.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\FEATURES.md") "$OutDir\docs\FEATURES.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\mcp-server.md") "$OutDir\docs\mcp-server.md" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "docs\harness.md") "$OutDir\docs\harness.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\I18N.md") "$OutDir\docs\I18N.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\write-a-skill.md") "$OutDir\docs\write-a-skill.md" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "docs\write-a-module.md") "$OutDir\docs\write-a-module.md" -ErrorAction SilentlyContinue
@@ -380,7 +381,7 @@ Akasha OS Preview $Version (Windows x64 ; NVIDIA ou CPU)
    Données stables : %LOCALAPPDATA%\AgentOS-Preview (sessions, mémoire, notes).
    Lancer bin\aos-session.exe depuis ce zip synchronise aussi vers ce préfixe.
 3. Premier lancement : télécharge les modèles si besoin, puis ouvre le tutoriel
-4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
+4. Agents agentic : skills (share/skills), MCP client (var/mcp/servers.yaml), CLI externes / Runtime (docs/harness.md), aos-mcpd optionnel (docs/mcp-server.md)
 5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)
 "@ | Set-Content "$OutDir\README.txt" -Encoding utf8
 

@@ -303,6 +303,8 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Wan/LTX = expérimental (pas requis pour la cohorte).
 - `var/secrets/master.backend` peut être `tpm` seulement si la clé a été scellée via Platform Crypto (blob `TPM2`) ; la seule présence d’un TPM ne suffit pas. Sinon `keyring` / `file`.
 - Optionnel : `aos-bridged` depuis `bin/` en loopback ; health + `mem.context` / `mem.stats` / `mem.list` OK ; `secrets.get` avec from agent → 403. Smoke : `.\demo\smoke-bridge.ps1`.
+- Optionnel (0.18.0) : CLI `codex` / `claude` / `grok` dans le PATH → agent avec **Runtime** ≠ Native ou outil `harness.run` ; act-gate au 1er spawn ; Steer / Pause / Kill ([harness.md](harness.md)).
+- Optionnel (0.18.0) : Preview lancé → client MCP vers `bin/aos-mcpd` ; `akasha_models` / `akasha_mem_stats` OK ([mcp-server.md](mcp-server.md), `share/mcp/akasha-mcp.example.json`).
 - Settings : **Télécharger les mises à jour automatiquement** (off par défaut) → `pending.json` + bandeau « relancer ».
 - Studio : **Partir d'une image** + force → Generate (img2img). Inpaint/mask non requis.
 

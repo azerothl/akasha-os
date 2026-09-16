@@ -51,7 +51,7 @@ Catalogue : `share/models/catalog-offerings.json`.
 | Chat / Sessions | Modèle **par session** ; slash (`/help`, `/agent`, `/image`, `/speak`…) |
 | Mémoire | Faits long terme ; injection `mem.context` ; mémorisation auto opt-in depuis le chat (Settings) |
 | Notes | Humaines + via agent (module WASM) |
-| Agents | Goal, skills, outils, MCP ; **modèle** à la création ; **Détail** |
+| Agents | Goal, skills, outils, MCP (client + serveur `aos-mcpd` optionnel), CLI externes / **Runtime** Avancé (Codex / Claude / Grok) ; **modèle** à la création ; **Détail** |
 | Models | Liste / load / download ; packs image/TTS optionnels (pas dans le zip ; Download installe aussi `bin/sd` / `bin/piper`) |
 | Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Audit | Événements signés ; tuer auditd (le superviseur le relance) |
@@ -63,7 +63,9 @@ Catalogue : `share/models/catalog-offerings.json`.
 ### Détail agent
 
 Carte chat ou onglet Agents → **Détail** : état, badge simple/complex, sources,
-timeline, Pause / Reprendre / Relancer / Kill / Steer.
+timeline, Pause / Reprendre / Relancer / Kill / Steer. **Runtime** Avancé
+(Native vs Codex / Claude / Grok) et CLI externes : [harness.md](harness.md) ;
+IDE → Preview : [mcp-server.md](mcp-server.md).
 
 ### Settings
 

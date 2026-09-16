@@ -69,3 +69,4 @@ Akasha’s MCP client in `aos-agent`.
 - HTTP mem/secrets sibling: [sibling-bridge.md](sibling-bridge.md) (`aos-bridged`)
 - Akasha as MCP *client*: `share/mcp/servers.yaml.example`
 - Pull external coding CLIs *into* Akasha: Agents → `harness.run` / Runtime
+  ([harness.md](harness.md))

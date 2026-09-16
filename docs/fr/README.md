@@ -36,7 +36,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 | Mémoire | Faits long terme ; bootstrap mémoire d'abord |
 | Notes | Humaines + agents (module WASM) ; resync au boot après une update |
 | Tâches | Module dual-surface + onglet Tasks |
-| Agents | Goal, skills, outils, MCP, scheduler ; timeline et export Markdown des traces |
+| Agents | Goal, skills, outils, MCP (client + `aos-mcpd` optionnel), CLI externes / Runtime Avancé (Codex / Claude / Grok), scheduler ; timeline et export Markdown des traces |
 | Caps | Liste / révocation dans l'UI |
 | Modèles | Packs selon le matériel (dont CPU) ; nouvelle tentative après erreur de chargement ; contrôles cache de préfixe/spéculation ; packs image/TTS optionnels ; métriques live TTFT / tok/s / VRAM |
 | Canvas | Dessin vectoriel avec calques, grille, édition, exports PNG/SVG/JSON et validation géométrique globale des agents |
@@ -81,6 +81,8 @@ cargo run -p aos-session --release
 |-----|-------------|
 | [STATUS.md](STATUS.md) | **État d'avancement** |
 | [FEATURES.md](FEATURES.md) | **Fonctionnalités Preview livrées** |
+| [harness.md](harness.md) | CLI de code externes (`harness.run` / Runtime) |
+| [mcp-server.md](mcp-server.md) | `aos-mcpd` optionnel — IDE → Akasha |
 | [INSTALL.md](INSTALL.md) | Installation, mises à jour, build depuis les sources |
 | [FIRST-RUN.md](FIRST-RUN.md) | Premier lancement |
 | [../functional-specs.md](../functional-specs.md) | Specs fonctionnelles (EN) |

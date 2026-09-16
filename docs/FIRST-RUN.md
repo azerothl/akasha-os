@@ -50,7 +50,7 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 | Chat / Sessions | Parallel sessions; **per-session model**; slash (`/help`, `/agent`, `/image`, `/speak`…) |
 | Memory | Long-term facts (remember / recall); injected as `mem.context`; optional auto-remember from chat (Settings) |
 | Notes | Human notes + via agent (WASM module) |
-| Agents | Goal loop, skills, tools, MCP; **model** at create; **Detail** timeline |
+| Agents | Goal loop, skills, tools, MCP (client + optional `aos-mcpd` server), External CLIs / Advanced **Runtime** (Codex / Claude / Grok); **model** at create; **Detail** timeline |
 | Models | List / load / download offerings; optional image/TTS packs (not in the zip; Download also installs `bin/sd` / `bin/piper`) |
 | Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Audit | Signed events; kill auditd (supervisor restarts it) |
@@ -62,7 +62,10 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 ### Agent detail
 
 Open **Detail** on an agent card or the Agents tab: live state, simple/complex
-badge, sources, step timeline, Pause / Resume / Retry / Kill / Steer.
+badge, sources, step timeline, Pause / Resume / Retry / Kill / Steer. Advanced
+**Runtime** (Native vs Codex / Claude / Grok) and External CLIs are documented
+in [harness.md](harness.md); pointing IDEs at Preview uses
+[mcp-server.md](mcp-server.md).
 
 ### Settings
 

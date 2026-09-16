@@ -413,6 +413,7 @@ cp -f "${ROOT}/docs/FIRST-RUN.md" "${OUT}/docs/FIRST-RUN.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/STATUS.md" "${OUT}/docs/STATUS.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/FEATURES.md" "${OUT}/docs/FEATURES.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/mcp-server.md" "${OUT}/docs/mcp-server.md" 2>/dev/null || true
+cp -f "${ROOT}/docs/harness.md" "${OUT}/docs/harness.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/I18N.md" "${OUT}/docs/I18N.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/write-a-skill.md" "${OUT}/docs/write-a-skill.md" 2>/dev/null || true
 cp -f "${ROOT}/docs/write-a-module.md" "${OUT}/docs/write-a-module.md" 2>/dev/null || true
@@ -436,7 +437,7 @@ Akasha OS Preview ${VERSION} (Linux x64 ; NVIDIA ou CPU)
    Données stables : ~/.local/share/agentos-preview (sessions, mémoire, notes).
    Lancer bin/aos-session depuis cette archive synchronise aussi vers ce préfixe.
 3. Premier lancement : télécharge les modèles si besoin, puis le tutoriel
-4. Agents agentic : skills (share/skills), MCP (var/mcp/servers.yaml), sous-agents
+4. Agents agentic : skills (share/skills), MCP client (var/mcp/servers.yaml), CLI externes / Runtime (docs/harness.md), aos-mcpd optionnel (docs/mcp-server.md)
 5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)
 EOF
 
