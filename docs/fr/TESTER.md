@@ -354,6 +354,19 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
   entre les configurations. Les métriques Modèles/barre doivent montrer le mode
   réellement sélectionné ; rétablir `auto` après la comparaison.
 
+## Parcours utilisateur automatisés (équipe)
+
+Sur une machine de release avec poids SD/LTX réels, lancer la suite bus
+(sessions + image/vidéo + redémarrage + captures site optionnelles) :
+
+```powershell
+.\demo\run-user-journeys.ps1 -Screenshots
+```
+
+Détails, fixtures et checklist UI manuelle courte :
+[USER-JOURNEYS.md](../USER-JOURNEYS.md). Cela **ne remplace pas** le chemin
+court cohorte ci-dessus.
+
 ## Critères de succès (équipe)
 
 - **Gate :** 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon suivent le

@@ -1,0 +1,1 @@
+{"fixture_id":"j2-image-generate","intent":"media.image.generate","request":{"prompt":"A red ceramic teapot on a pale wooden table, soft daylight, product photography, no text","path":"/downloads/images/journey-teapot.png","model_id":"local:sd-v1-5","options":{"width":512,"height":512,"steps":12,"seed":42},"actor":"human:ui","caps":[],"trace_id":"user-journey-j2"}}

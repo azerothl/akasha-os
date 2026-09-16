@@ -1,0 +1,11 @@
+{"fixture_id":"j1-create-a","intent":"chat.session.create","request":{"title":"Journey A — contexte théière"}}
+{"fixture_id":"j1-create-b","intent":"chat.session.create","request":{"title":"Journey B — contexte voyage"}}
+{"fixture_id":"j1-create-c","intent":"chat.session.create","request":{"title":"Journey C — contexte code"}}
+{"fixture_id":"j1-append-a-user","intent":"chat.session.append","request":{"session_id":"{{session_a}}","role":"user","content":"Retiens : ma couleur préférée est le rouge carmin."}}
+{"fixture_id":"j1-append-a-assistant","intent":"chat.session.append","request":{"session_id":"{{session_a}}","role":"assistant","content":"Noté : tu préfères le rouge carmin."}}
+{"fixture_id":"j1-append-b-user","intent":"chat.session.append","request":{"session_id":"{{session_b}}","role":"user","content":"Retiens : destination Tokyo en novembre."}}
+{"fixture_id":"j1-append-b-assistant","intent":"chat.session.append","request":{"session_id":"{{session_b}}","role":"assistant","content":"Noté : Tokyo en novembre."}}
+{"fixture_id":"j1-append-c-user","intent":"chat.session.append","request":{"session_id":"{{session_c}}","role":"user","content":"Retiens : on utilise Rust et egui pour Preview."}}
+{"fixture_id":"j1-append-c-assistant","intent":"chat.session.append","request":{"session_id":"{{session_c}}","role":"assistant","content":"Noté : stack Rust + egui."}}
+{"fixture_id":"j1-get-a-after-switch","intent":"chat.session.get","request":{"session_id":"{{session_a}}"}}
+{"fixture_id":"j1-list","intent":"chat.session.list","request":null}

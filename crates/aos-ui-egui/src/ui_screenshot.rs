@@ -8,6 +8,7 @@
 //! 5. Chat sidebar Web / fichiers painted checkbox (unchecked + checked)
 //! 6. Create layer list with painted z-order / visibility / grip icons (FR)
 
+use crate::cmd::ChatLine;
 use crate::decl_ui::DeclUiPanelState;
 use crate::prefs::save_preferences;
 use crate::{Tab, UiApp};
@@ -15,7 +16,7 @@ use aos_proto::create_contract::MODULE_NAME;
 use aos_proto::decl_ui::DeclUiDocument;
 use aos_proto::rich_app_contract::UI_CONTRACT_V2;
 use aos_proto::rich_composition::{layers_to_value, RichLayer};
-use aos_proto::ModuleInfo;
+use aos_proto::{ChatSessionMeta, ModuleInfo};
 use eframe::egui::{self, ColorImage, Event, UserData};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -308,6 +309,194 @@ fn screenshot_focus_create_layout() -> bool {
     )
 }
 
+fn screenshot_focus_marketing() -> bool {
+    matches!(
+        std::env::var("AOS_UI_SCREENSHOT_FOCUS").ok().as_deref(),
+        Some("marketing")
+    )
+}
+
+fn screenshot_result_path() -> String {
+    std::env::var("AOS_UI_SCREENSHOT_RESULT")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "/downloads/images/journey-teapot.png".into())
+}
+
+/// Minimal Create surface for marketing: prompt + result preview + history cue.
+const MARKETING_CREATE_DOC: &str = r#"{
+  "type": "declarative_ui",
+  "contract": 2,
+  "title": "Create",
+  "title_key": "app_title",
+  "labels": {
+    "fallback": "fr",
+    "fr": {
+      "app_title": "Créer",
+      "prompt_label": "Invite",
+      "generate_label": "Générer",
+      "result_section": "Résultat",
+      "history_section": "Historique"
+    },
+    "en": {
+      "app_title": "Create",
+      "prompt_label": "Prompt",
+      "generate_label": "Generate",
+      "result_section": "Result",
+      "history_section": "History"
+    }
+  },
+  "root": {
+    "kind": "split",
+    "split_ratio": 0.42,
+    "children": [
+      {
+        "kind": "column",
+        "children": [
+          {
+            "kind": "textarea",
+            "state_key": "prompt",
+            "label_key": "prompt_label"
+          },
+          {
+            "kind": "row",
+            "toolbar": true,
+            "children": [
+              {
+                "kind": "button",
+                "action": "generate_image",
+                "label_key": "generate_label"
+              }
+            ]
+          },
+          {
+            "kind": "section",
+            "label_key": "history_section",
+            "children": [
+              {
+                "kind": "text",
+                "text": "théière rouge · il y a un instant"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "column",
+        "children": [
+          {
+            "kind": "section",
+            "label_key": "result_section",
+            "children": [
+              {
+                "kind": "image_view",
+                "resource": "$local.result_path"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}"#;
+
+/// Seed Chat + Create for website marketing captures (FR copy).
+pub fn seed_screenshot_marketing_chat(app: &mut UiApp) {
+    seed_screenshot_modules(app);
+    app.prefs.language = "fr".into();
+    save_preferences(&app.prefs);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    app.chat_state.sessions = vec![
+        ChatSessionMeta {
+            id: "shot-a".into(),
+            title: "Théière — atelier".into(),
+            created_ms: now.saturating_sub(120_000),
+            updated_ms: now,
+            archived: false,
+            pinned: true,
+            message_count: 2,
+            model_id: Some("local:qwen3.5-9b-instruct".into()),
+            mode: Default::default(),
+            members: vec![],
+            conductor_policy: Default::default(),
+            canvas_open: false,
+            canvas_aspect: Default::default(),
+        },
+        ChatSessionMeta {
+            id: "shot-b".into(),
+            title: "Voyage Tokyo".into(),
+            created_ms: now.saturating_sub(90_000),
+            updated_ms: now.saturating_sub(30_000),
+            archived: false,
+            pinned: false,
+            message_count: 2,
+            model_id: None,
+            mode: Default::default(),
+            members: vec![],
+            conductor_policy: Default::default(),
+            canvas_open: false,
+            canvas_aspect: Default::default(),
+        },
+        ChatSessionMeta {
+            id: "shot-c".into(),
+            title: "Notes Rust".into(),
+            created_ms: now.saturating_sub(60_000),
+            updated_ms: now.saturating_sub(45_000),
+            archived: false,
+            pinned: false,
+            message_count: 1,
+            model_id: None,
+            mode: Default::default(),
+            members: vec![],
+            conductor_policy: Default::default(),
+            canvas_open: false,
+            canvas_aspect: Default::default(),
+        },
+    ];
+    app.chat_state.active_session = Some("shot-a".into());
+    app.chat = vec![
+        ChatLine::plain(
+            "user",
+            "Peux-tu m’aider à décrire une théière rouge pour Create ?",
+        ),
+        ChatLine::plain(
+            "assistant",
+            "Oui — lumière douce, table en bois clair, photo produit, sans texte. Tu peux lancer Générer dans Créer.",
+        ),
+    ];
+    app.tab = Tab::Chat;
+}
+
+pub fn seed_screenshot_marketing_create(app: &mut UiApp) {
+    seed_screenshot_modules(app);
+    let panel = app
+        .decl_panels
+        .entry(MODULE_NAME.into())
+        .or_insert_with(|| DeclUiPanelState::new(MODULE_NAME));
+    match DeclUiDocument::parse_json_with_contract(MARKETING_CREATE_DOC.as_bytes(), UI_CONTRACT_V2)
+    {
+        Ok(doc) => {
+            panel.set_document(doc);
+            panel.seed_local(
+                "prompt",
+                json!(
+                    "A red ceramic teapot on a pale wooden table, soft daylight, product photography, no text"
+                ),
+            );
+            panel.seed_local("result_path", json!(screenshot_result_path()));
+        }
+        Err(err) => {
+            eprintln!("seed_screenshot_marketing_create: parse failed: {err}");
+        }
+    }
+    app.prefs.language = "fr".into();
+    save_preferences(&app.prefs);
+    app.open_module_tab(MODULE_NAME.into());
+}
+
 pub struct UiScreenshotHarness {
     dir: PathBuf,
     /// Settle frames before requesting the next capture.
@@ -315,6 +504,7 @@ pub struct UiScreenshotHarness {
     step: u8,
     waiting: bool,
     focus_create_layout: bool,
+    focus_marketing: bool,
 }
 
 impl UiScreenshotHarness {
@@ -325,6 +515,7 @@ impl UiScreenshotHarness {
             step: 0,
             waiting: false,
             focus_create_layout: screenshot_focus_create_layout(),
+            focus_marketing: screenshot_focus_marketing(),
         }
     }
 
@@ -381,6 +572,36 @@ impl UiScreenshotHarness {
                 }
                 _ => {
                     eprintln!("AOS_UI_SCREENSHOT_DIR: create-layout capture complete — exiting");
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+            return;
+        }
+
+        if self.focus_marketing {
+            match self.step {
+                0 => {
+                    seed_screenshot_marketing_chat(app);
+                    app.chat_state.sidebar.tools_open = false;
+                    self.request(ctx, "m1-rail");
+                    self.step = 1;
+                    self.settle_left = 5;
+                }
+                1 => {
+                    seed_screenshot_marketing_chat(app);
+                    app.chat_state.sidebar.tools_open = true;
+                    self.request(ctx, "m2-chat");
+                    self.step = 2;
+                    self.settle_left = 5;
+                }
+                2 => {
+                    seed_screenshot_marketing_create(app);
+                    self.request(ctx, "m3-create");
+                    self.step = 3;
+                    self.settle_left = 8;
+                }
+                _ => {
+                    eprintln!("AOS_UI_SCREENSHOT_DIR: marketing captures complete — exiting");
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }
