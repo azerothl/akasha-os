@@ -110,16 +110,17 @@
   --void: #070b14;
   --ice: #5ee7ff;
   --signal: #2ef0c8;
-  /* Fills behind text follow egui chamber_dark: diluted signal, never full neon. */
-  --signal-fill: color-mix(in srgb, var(--signal) 28%, var(--void));
-  --signal-fill-strong: color-mix(in srgb, var(--signal) 40%, var(--void));
-  --ice-ink: color-mix(in srgb, var(--ice) 42%, var(--paper));
+  /* Explicit hex (not only color-mix) so filled chrome stays readable in all browsers.
+     Approx signal@28% / @40% into void — paper ink on these fills stays ≥4.5:1. */
+  --signal-fill: #114b46;
+  --signal-fill-strong: #16665c;
+  --ice-ink: #b6e7f2;
   --hydrogen: #ff5a48;
   --paper: #e8eef6;
   /* Secondary text is paper-gray, not cyan-washed (was signal@42%). */
-  --mute: color-mix(in srgb, var(--paper) 58%, var(--void));
-  --plate: color-mix(in srgb, var(--paper) 7%, var(--void));
-  --plate-edge: color-mix(in srgb, var(--signal) 32%, var(--void));
+  --mute: #878c96;
+  --plate: #181c24;
+  --plate-edge: #1f5e55;
   --u: 8px;
   --measure: 42rem;
   --display: "Archivo Narrow", "Arial Narrow", sans-serif;
@@ -289,7 +290,8 @@ body.plate .ether {
 .lanes a[aria-current="page"],
 html[lang="en"] .lang [data-set-lang="en"],
 html[lang="fr"] .lang [data-set-lang="fr"] {
-  color: var(--paper);
+  /* Void ink on diluted signal — same rule as Preview Envoyer CTAs. */
+  color: var(--void);
   background: var(--signal-fill-strong);
 }
 
@@ -458,7 +460,7 @@ body.sky footer {
   margin: 0;
   width: 100%;
   padding: calc(var(--u) * 1.5) calc(var(--u) * 1.5);
-  color: var(--paper);
+  color: var(--void);
   background: var(--signal-fill-strong);
   font-family: var(--display);
   font-size: clamp(1.05rem, 1.6vw, 1.35rem);
