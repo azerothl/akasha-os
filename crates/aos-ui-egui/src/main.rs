@@ -362,7 +362,7 @@ fn agent_completion_chat_text(
                 let body: String = out.chars().take(8000).collect();
                 let body = if let Some(tr) = trace {
                     let sources = aos_agent::sources::aggregate_trace_sources(&tr.steps);
-                    aos_agent::sources::append_sources_footer(&body, &sources)
+                    aos_agent::sources::finalize_summary_with_sources(&body, &sources)
                 } else {
                     body
                 };

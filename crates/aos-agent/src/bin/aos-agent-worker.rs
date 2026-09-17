@@ -59,7 +59,7 @@ use aos_proto::{
     ModuleInvokeRequest, ModuleInvokeResponse, NetFetchRequest, PlanAppendLogRequest,
     PlanCreateRequest, PlanDelegateStepRequest, PlanGetRequest, PlanReplaceTreeRequest,
     PlanResponse, PlanStep, PlanStepStatus, PlanUpdateStepRequest, TaskNode, TaskNodeStatus,
-    TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchHit, WebSearchRequest,
+    TokenEvent, WebBrowseRequest, WebBrowseResponse, WebSearchRequest,
     WebSearchResponse,
 };
 use std::collections::{HashMap, HashSet};
@@ -2275,7 +2275,7 @@ async fn execute_action(
             };
             let summary =
                 aos_agent::actions::resolve_goal_complete_summary(args, &action.thought, &prior);
-            let summary = aos_agent::sources::append_sources_footer(&summary, &sources);
+            let summary = aos_agent::sources::finalize_summary_with_sources(&summary, &sources);
             ActResult::Complete(summary)
         }
         "goal.fail" => {
@@ -3776,6 +3776,15 @@ async fn invoke_native(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            if aos_agent::sources::is_weak_search_query(&query) {
+                return format!(
+                    "web.search refusée : « {query} » n'est pas une requête thématique. \
+                     Cherche le sujet de la tâche (ex. « agentic OS », « agentic operating system »), \
+                     pas un mot de dictionnaire (définition, qu', ce, est…). \
+                     Format: {{\"action\":\"web.search\",\"args\":{{\"query\":\"…\"}}}} \
+                     (pas « parameters »)."
+                );
+            }
             let engine = args
                 .get("engine")
                 .and_then(|v| v.as_str())
@@ -3806,7 +3815,7 @@ async fn invoke_native(
                          ou web.browse sur une URL connue."
                     )
                 }
-                Ok(r) => serde_json::to_string(&r.results).unwrap_or_default(),
+                Ok(r) => aos_agent::sources::format_search_hits_for_agent(&r.results),
                 Err(e) => format!(
                     "web.search err: {e}. Si le réseau est online, réessaie avec \
                      une autre requête ou web.browse sur une URL."
@@ -5333,18 +5342,18 @@ fn extract_child_id(action: &str, outcome: &str, args: &serde_json::Value) -> Op
 fn collect_sources(action: &str, args: &serde_json::Value, outcome: &str) -> Vec<AgentSource> {
     match action {
         "web.search" => {
-            if let Ok(hits) = serde_json::from_str::<Vec<WebSearchHit>>(outcome) {
-                return hits
-                    .into_iter()
-                    .map(|h| AgentSource {
-                        kind: "web".into(),
-                        title: h.title,
-                        locator: h.url,
-                        snippet: h.snippet,
-                    })
-                    .collect();
+            let hits = aos_agent::sources::parse_web_search_hits(outcome);
+            if hits.is_empty() {
+                return Vec::new();
             }
-            Vec::new()
+            hits.into_iter()
+                .map(|h| AgentSource {
+                    kind: "web".into(),
+                    title: h.title,
+                    locator: h.url,
+                    snippet: h.snippet,
+                })
+                .collect()
         }
         "web.browse" => {
             let url = args

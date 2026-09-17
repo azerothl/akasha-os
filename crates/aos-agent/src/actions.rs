@@ -597,6 +597,7 @@ const ACTION_WRAPPER_KEYS: &[&str] = &[
     "action",
     "args",
     "params",
+    "parameters",
     "action_input",
     "thought",
     "thinking",
@@ -632,7 +633,11 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
         .get("action_input")
         .and_then(|value| value.as_object())
         .cloned();
-    let mut args = match obj.get("args").or_else(|| obj.get("params")) {
+    let mut args = match obj
+        .get("args")
+        .or_else(|| obj.get("params"))
+        .or_else(|| obj.get("parameters"))
+    {
         Some(a) if a.is_object() => a.clone(),
         Some(a) if !a.is_null() => serde_json::json!({ "value": a.clone() }),
         _ => action_input
@@ -642,11 +647,23 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
     };
 
     if let Some(map) = args.as_object_mut() {
-        // A few local templates call the argument envelope `params`; accept
-        // both spellings so a valid tool call does not arrive as `{}`.
-        if let Some(params) = obj.get("params").and_then(|v| v.as_object()) {
-            for (k, v) in params {
-                map.entry(k.clone()).or_insert_with(|| v.clone());
+        // Local templates / some models use `params` or `parameters` for the
+        // argument envelope; accept both so a valid tool call does not arrive
+        // as `{parameters:{…}}` with an empty top-level `query`.
+        for key in ["params", "parameters"] {
+            if let Some(nested) = obj.get(key).and_then(|v| v.as_object()) {
+                for (k, v) in nested {
+                    map.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+            // Also unwrap if the envelope was already nested under args.
+            if let Some(nested) = map.remove(key).and_then(|v| match v {
+                serde_json::Value::Object(m) => Some(m),
+                _ => None,
+            }) {
+                for (k, v) in nested {
+                    map.entry(k).or_insert(v);
+                }
             }
         }
         if let Some(input) = action_input {
@@ -832,6 +849,30 @@ mod tests {
         let a = parse_action(text).unwrap();
         assert_eq!(a.args["title"], "x");
         assert_eq!(a.args["content"], "y");
+    }
+
+    #[test]
+    fn parse_parameters_alias_as_tool_args() {
+        // Common model spelling (agent-242 loop): parameters instead of args.
+        let text = r#"{
+  "action": "web.search",
+  "parameters": {"query": "agentic operating system"}
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.action, "web.search");
+        assert_eq!(a.args["query"], "agentic operating system");
+        assert!(a.args.get("parameters").is_none());
+    }
+
+    #[test]
+    fn unwrap_nested_parameters_under_args() {
+        let text = r#"{
+  "action": "web.search",
+  "args": {"parameters": {"query": "agentic OS"}}
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.args["query"], "agentic OS");
+        assert!(a.args.get("parameters").is_none());
     }
 
     #[test]

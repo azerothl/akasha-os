@@ -820,6 +820,8 @@ mod canvas_completion_tests {
         assert!(text.contains("Les agents agentiques progressent."));
         assert!(text.contains("## Sources"));
         assert!(text.contains("[Agentic Survey](https://example.com/survey)"));
+        // Runtime injects [1] when the body had no markers (single-sentence → footer only,
+        // or multi-sentence fallback). Single short sentence may not get a body marker.
     }
 
     #[test]

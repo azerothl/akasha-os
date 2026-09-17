@@ -16,10 +16,10 @@ tools:
 
 1. Clarify the question (current node / brief, not the whole goal if a plan exists).
 2. `memory.recall` with that query before any external search.
-3. `web.search` with a precise query (engine `auto` tries Brave→SearXNG→DuckDuckGo→Bing).
+3. `web.search` with **one topical query that names the subject** (e.g. `agentic OS` / `agentic operating system`). Never dictionary lookups of stopwords (`définition`, `qu'`, `ce`, `est`, `what`, `is`). Prefer the English jargon when the topic is English tech.
 4. `web.browse` on 1–3 relevant URLs to read page text (prefer over `net.fetch` for HTML).
 5. Synthesize and `memory.remember` key facts.
-6. Cite sources in the final summary: prefer inline markdown links `[title](url)` next to claims; end with a short **Sources** list of the URLs you used. Never invent URLs.
+6. Cite only sources that support the claims: put `[1]`, `[2]`, … after each grounded fact, then a **Sources** list. Never invent URLs; never cite dictionary pages for an unrelated topic.
 
 If search fails, try a simpler query or `web.browse` a known URL. Do not assume Bing/DuckDuckGo HTML will succeed.
 
