@@ -131,7 +131,20 @@ impl UiApp {
                     let attachments = self.chat[i].attachments.clone();
                     let speaker_id = self.chat[i].speaker_id.clone();
                     let speaker_name = self.chat[i].speaker_name.clone();
-                    let thinking = self.chat[i].thinking.clone();
+                    let mut thinking = self.chat[i].thinking.clone();
+                    if thinking
+                        .as_ref()
+                        .map(|s| s.trim().is_empty())
+                        .unwrap_or(true)
+                    {
+                        let (_, derived) = aos_agent::room_reply::split_room_reply(&text);
+                        if derived
+                            .as_ref()
+                            .is_some_and(|s| !s.trim().is_empty())
+                        {
+                            thinking = derived;
+                        }
+                    }
                     let ts_ms = self.chat[i].ts_ms;
                     let duration_ms = self.chat[i].duration_ms;
                     let line_model_id = self.chat[i].model_id.clone();
@@ -342,11 +355,23 @@ impl UiApp {
                                     &mut self.chat_state.view.room_thinking_open,
                                 );
                             }
-                        } else if !meta.is_empty()
-                            && (role == "assistant" || role == "user" || role == "vous")
-                            && kind == ChatBubbleKind::Assistant
-                        {
-                            ui.weak(egui::RichText::new(&meta).small());
+                        } else if kind == ChatBubbleKind::Assistant {
+                            if !meta.is_empty()
+                                && (role == "assistant" || role == "user" || role == "vous")
+                            {
+                                ui.weak(egui::RichText::new(&meta).small());
+                            }
+                            if let Some(th) =
+                                thinking.as_deref().filter(|s| !s.trim().is_empty())
+                            {
+                                chat_room::room_thinking_toggle(
+                                    ui,
+                                    t,
+                                    i,
+                                    th,
+                                    &mut self.chat_state.view.room_thinking_open,
+                                );
+                            }
                         }
                         if !text.is_empty() {
                             if room_mode && kind == ChatBubbleKind::User {

@@ -12,7 +12,7 @@ pub fn split_room_reply(raw: &str) -> (String, Option<String>) {
 
     work = strip_speaker_label_prefix(&work);
 
-    while let Some((thought, rest)) = take_thought_json_object(&work) {
+    while let Some((thought, rest)) = take_shaped_agent_envelope(&work) {
         if !thought.is_empty() {
             thinking.push(thought);
         }
@@ -48,35 +48,88 @@ fn strip_speaker_label_prefix(text: &str) -> String {
     after.to_string()
 }
 
-fn take_thought_json_object(text: &str) -> Option<(String, String)> {
+/// Peel one agent-protocol JSON object into thinking + remaining visible text.
+///
+/// - Empty/`user.ask`-like envelopes with `args.question` / `args.summary` → promote that
+///   string as visible prose and stash `thought` as thinking.
+/// - Thought-only envelopes (empty or absent args) → strip JSON, keep thought.
+/// - Real plan payloads (`args.nodes`, etc.) → leave untouched for display.
+fn take_shaped_agent_envelope(text: &str) -> Option<(String, String)> {
     let start = text.find('{')?;
     let obj = extract_first_json_object(&text[start..])?;
     let value: serde_json::Value = serde_json::from_str(&obj).ok()?;
     let obj_map = value.as_object()?;
-    if has_substantive_plan_args(obj_map.get("args")) {
+
+    if is_plan_display_args(obj_map.get("args")) {
         return None;
     }
-    let thought = obj_map
-        .get("thought")
-        .or_else(|| obj_map.get("thinking"))
-        .or_else(|| obj_map.get("reasoning"))
+
+    let thought = envelope_thought(obj_map);
+    let action = obj_map
+        .get("action")
         .and_then(|v| v.as_str())
         .unwrap_or("")
-        .trim()
-        .to_string();
-    if thought.is_empty() {
+        .trim();
+
+    // Only peel display envelopes (empty action / user.ask). Real tools stay intact.
+    let promote_ok = action.is_empty() || action == "user.ask";
+    let promoted = if promote_ok {
+        promote_conversational_args(obj_map.get("args"))
+    } else {
+        None
+    };
+
+    if !promote_ok {
+        // Thought-only with a real tool action still belongs to the tool loop.
         return None;
     }
-    let obj_start = start;
+
+    if thought.is_empty() && promoted.is_none() {
+        return None;
+    }
+
     let obj_end = start + obj.len();
     let mut rest = String::new();
-    rest.push_str(text[..obj_start].trim_end());
+    rest.push_str(text[..start].trim_end());
+    if let Some(ref body) = promoted {
+        if !rest.is_empty() {
+            rest.push_str("\n\n");
+        }
+        rest.push_str(body);
+    }
     let tail = text[obj_end..].trim_start();
     if !rest.is_empty() && !tail.is_empty() {
         rest.push_str("\n\n");
     }
     rest.push_str(tail);
     Some((thought, rest.trim().to_string()))
+}
+
+fn envelope_thought(obj: &serde_json::Map<String, serde_json::Value>) -> String {
+    obj.get("thought")
+        .or_else(|| obj.get("thinking"))
+        .or_else(|| obj.get("reasoning"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+fn promote_conversational_args(args: Option<&serde_json::Value>) -> Option<String> {
+    let map = args?.as_object()?;
+    if map.is_empty() || is_plan_display_args(args) {
+        return None;
+    }
+    // Prefer ask/summary fields only — avoid promoting tool payloads like notes `content`.
+    for key in ["question", "summary", "message"] {
+        if let Some(s) = map.get(key).and_then(|v| v.as_str()) {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn visible_prose(text: &str) -> String {
@@ -100,12 +153,22 @@ fn visible_prose(text: &str) -> String {
     )))
 }
 
-fn has_substantive_plan_args(args: Option<&serde_json::Value>) -> bool {
-    match args {
-        Some(serde_json::Value::Object(map)) => !map.is_empty(),
-        Some(serde_json::Value::Array(arr)) => !arr.is_empty(),
-        _ => false,
-    }
+/// True when args look like a salon plan / canvas payload that should stay visible as JSON.
+fn is_plan_display_args(args: Option<&serde_json::Value>) -> bool {
+    let Some(serde_json::Value::Object(map)) = args else {
+        return false;
+    };
+    const PLAN_KEYS: &[&str] = &[
+        "nodes",
+        "edges",
+        "phases",
+        "steps",
+        "plan",
+        "canvas",
+        "widgets",
+        "scene",
+    ];
+    PLAN_KEYS.iter().any(|k| map.contains_key(*k))
 }
 
 fn is_internal_agent_envelope(value: &serde_json::Value) -> bool {
@@ -119,7 +182,17 @@ fn is_internal_agent_envelope(value: &serde_json::Value) -> bool {
     if !has_thought {
         return false;
     }
-    !has_substantive_plan_args(obj.get("args"))
+    if is_plan_display_args(obj.get("args")) {
+        return false;
+    }
+    // Thought-only, or conversational args already peeled by take_shaped_agent_envelope.
+    let args = obj.get("args");
+    match args {
+        None => true,
+        Some(serde_json::Value::Object(m)) if m.is_empty() => true,
+        Some(serde_json::Value::Null) => true,
+        _ => promote_conversational_args(args).is_some(),
+    }
 }
 
 /// Extract the first balanced `{…}` JSON object substring from `text`.
@@ -280,6 +353,51 @@ Suite."#;
         let (visible, thinking) = split_room_reply(raw);
         assert!(visible.contains("\"nodes\""));
         assert!(visible.contains("\"thought\""));
+        assert!(thinking.is_none());
+    }
+
+    #[test]
+    fn empty_action_question_promotes_to_visible_and_folds_thought() {
+        let raw = r#"{
+  "thought": "Je synthétise en tant que Critic.",
+  "action": "",
+  "args": {
+    "question": "La recommandation manque de preuve d'adoption.",
+    "choices": ["Accepter", "Chercher une preuve"]
+  }
+}"#;
+        let (visible, thinking) = split_room_reply(raw);
+        assert_eq!(visible, "La recommandation manque de preuve d'adoption.");
+        assert!(!visible.contains("\"thought\""));
+        assert!(!visible.contains("\"choices\""));
+        assert_eq!(
+            thinking.as_deref(),
+            Some("Je synthétise en tant que Critic.")
+        );
+    }
+
+    #[test]
+    fn user_ask_action_question_also_promotes_for_display() {
+        let raw = r#"{"thought":"besoin d'avis","action":"user.ask","args":{"question":"On continue ?","choices":["oui","non"]}}"#;
+        let (visible, thinking) = split_room_reply(raw);
+        assert_eq!(visible, "On continue ?");
+        assert_eq!(thinking.as_deref(), Some("besoin d'avis"));
+    }
+
+    #[test]
+    fn summary_args_promoted_when_question_absent() {
+        let raw = r#"{"thought":"fin","action":"","args":{"summary":"**Bilan** du tour."}}"#;
+        let (visible, thinking) = split_room_reply(raw);
+        assert_eq!(visible, "**Bilan** du tour.");
+        assert_eq!(thinking.as_deref(), Some("fin"));
+    }
+
+    #[test]
+    fn real_tool_action_envelope_left_for_tool_loop() {
+        let raw = r#"{"thought":"je note","action":"notes.create","args":{"title":"x","content":"y"}}"#;
+        let (visible, thinking) = split_room_reply(raw);
+        // Not peeled as salon prose — stays as JSON for the tool path / display.
+        assert!(visible.contains("notes.create") || visible.contains("\"title\""));
         assert!(thinking.is_none());
     }
 
