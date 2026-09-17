@@ -1850,7 +1850,7 @@ const EN: UiStrings = UiStrings {
     room_turn_cancelled: "Room turn cancelled",
     room_member_fallback: "Member",
     room_queue_joiner: " then ",
-    room_thinking_label: "Reflection",
+    room_thinking_label: "Thinking",
     room_action_unavailable: "That action isn't available in the room.",
     room_ask_failed_toast: "Couldn't ask that question. Try again.",
     room_ask_not_waiting: "The room isn't waiting for an answer.",
