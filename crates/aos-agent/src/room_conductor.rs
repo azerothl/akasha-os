@@ -317,20 +317,42 @@ fn reply_is_thanks_only(reply: &str) -> bool {
     if reply.contains('?') || reply.contains('？') {
         return false;
     }
+    // True (thanks-only) only when no request wording remains alongside thanks.
+    !reply_has_request_marker(&lower)
+}
+
+fn reply_has_request_marker(lower: &str) -> bool {
     const REQUEST_MARKERS: &[&str] = &[
         "peux-tu",
         "peux tu",
         "pourrais-tu",
+        "pourriez-vous",
+        "pouvez-vous",
         "can you",
         "could you",
+        "would you",
         "please",
+        "s'il te plaît",
+        "s'il te plait",
+        "s'il vous plaît",
+        "s'il vous plait",
         "confirmes",
+        "confirme",
         "confirm",
-        "ton avis",
+        "acceptes",
+        "acceptez",
+        "accept",
+        "valide",
+        "dis-moi",
+        "tell me",
         "your thoughts",
+        "ton avis",
+        "your view",
         "weigh in",
+        "est-ce que",
+        "peux-tu confirmer",
     ];
-    !REQUEST_MARKERS.iter().any(|m| lower.contains(m))
+    REQUEST_MARKERS.iter().any(|m| lower.contains(m))
 }
 
 /// True when an agent reply expects a peer to answer (question or explicit request).
@@ -920,6 +942,36 @@ mod tests {
             vec!["agent-beta".to_string()]
         );
         assert!(peers_requesting_response(reply, &m, "agent-alpha").is_empty());
+    }
+
+    #[test]
+    fn thanks_plus_request_markers_still_request_peer() {
+        let m = members();
+        let fr = "Merci @Beta, s'il te plaît verify this";
+        assert_eq!(
+            peers_requesting_response(fr, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+        let en = "Thanks @Beta, would you check the sources";
+        assert_eq!(
+            peers_requesting_response(en, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+        let please = "Merci @Beta, please confirm the numbers";
+        assert_eq!(
+            peers_requesting_response(please, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
+    }
+
+    #[test]
+    fn polite_request_without_thanks_requests_peer() {
+        let m = members();
+        let reply = "@Beta s'il te plaît verify this";
+        assert_eq!(
+            peers_requesting_response(reply, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
     }
 
     #[test]
