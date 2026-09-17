@@ -99,9 +99,176 @@ pub fn user_requested_note(text: &str) -> bool {
     MARKERS.iter().any(|m| lower.contains(m))
 }
 
+/// User asked for live host machine specs (GPU/VRAM/RAM/disk) — not a sandbox path.
+pub fn user_requested_hardware(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    if lower.contains("system.hardware") {
+        return true;
+    }
+    const MARKERS: &[&str] = &[
+        // FR
+        "état de la machine",
+        "etat de la machine",
+        "état machine",
+        "etat machine",
+        "specs de la machine",
+        "spécifications de la machine",
+        "specifications de la machine",
+        "caractéristiques de la machine",
+        "caracteristiques de la machine",
+        "matériel de la machine",
+        "materiel de la machine",
+        "ma machine",
+        "mon pc",
+        "mon gpu",
+        "ma vram",
+        "combien de vram",
+        "combien de ram",
+        "snapshot matériel",
+        "snapshot materiel",
+        // EN
+        "machine state",
+        "host hardware",
+        "hardware snapshot",
+        "system specs",
+        "machine specs",
+        "how much vram",
+        "how much ram",
+        "my gpu",
+        "my vram",
+    ];
+    if MARKERS.iter().any(|m| lower.contains(m)) {
+        return true;
+    }
+    // Short asks: "VRAM ?", "GPU/RAM", "état GPU"
+    let compact = lower.replace(['?', '!', '.'], " ");
+    let tokens: Vec<&str> = compact.split_whitespace().collect();
+    let has = |w: &str| tokens.iter().any(|t| *t == w);
+    (has("vram") || has("gpu") || has("ram"))
+        && (has("état")
+            || has("etat")
+            || has("state")
+            || has("specs")
+            || has("combien")
+            || has("how")
+            || has("quelle")
+            || has("quel")
+            || has("dispo")
+            || has("disponible")
+            || has("libre")
+            || has("free"))
+}
+
+fn summary_str(summary: &serde_json::Value, key: &str) -> Option<String> {
+    summary.get(key).and_then(|v| match v {
+        serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    })
+}
+
+fn mib_to_gib_label(mib: u64) -> String {
+    let gib = (mib as f64) / 1024.0;
+    if gib >= 10.0 {
+        format!("{:.0} Go ({mib} MiB)", gib)
+    } else {
+        format!("{:.1} Go ({mib} MiB)", gib)
+    }
+}
+
+/// Human-readable machine report from a `system.hardware` summary JSON.
+/// Prefer this over asking a small chat model to paraphrase the snapshot.
+pub fn format_hardware_user_reply(summary: &serde_json::Value) -> String {
+    let os = summary_str(summary, "os").unwrap_or_else(|| "?".into());
+    let arch = summary_str(summary, "arch").unwrap_or_else(|| "?".into());
+    let gpu = summary_str(summary, "gpu_name").unwrap_or_else(|| "inconnu".into());
+    let tier = summary_str(summary, "tier").unwrap_or_else(|| "?".into());
+    let driver = summary_str(summary, "driver_version").unwrap_or_default();
+    let vram_mib = summary
+        .get("vram_mib")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let vram_used = summary.get("vram_used_mib").and_then(|v| v.as_u64());
+    let vram_free = summary.get("vram_free_mib").and_then(|v| v.as_u64());
+    let ram_mib = summary.get("ram_mib").and_then(|v| v.as_u64()).unwrap_or(0);
+    let disk = summary
+        .get("disk_free_gib")
+        .and_then(|v| v.as_f64())
+        .map(|g| format!("{g:.1} Go libres"))
+        .unwrap_or_else(|| "?".into());
+
+    let mut lines = vec![
+        "**État machine (snapshot frais)**".to_string(),
+        format!("- **OS / arch** : {os} ({arch})"),
+        format!("- **GPU** : {gpu}"),
+        format!("- **VRAM** : {}", mib_to_gib_label(vram_mib)),
+    ];
+    match (vram_used, vram_free) {
+        (Some(u), Some(f)) => {
+            lines.push(format!(
+                "- **VRAM utilisée / libre** : {} / {}",
+                mib_to_gib_label(u),
+                mib_to_gib_label(f)
+            ));
+        }
+        (None, Some(f)) => {
+            lines.push(format!("- **VRAM libre** : {}", mib_to_gib_label(f)));
+        }
+        (Some(u), None) => {
+            lines.push(format!("- **VRAM utilisée** : {}", mib_to_gib_label(u)));
+        }
+        _ => {}
+    }
+    lines.push(format!("- **RAM** : {}", mib_to_gib_label(ram_mib)));
+    lines.push(format!("- **Disque (AOS_HOME)** : {disk}"));
+    lines.push(format!("- **Tier placement** : {tier}"));
+    if !driver.is_empty() {
+        lines.push(format!("- **Driver GPU** : {driver}"));
+    }
+    if let Some(thermal) = summary.get("thermal") {
+        let temp = thermal
+            .get("temperature_c")
+            .and_then(|v| v.as_f64())
+            .map(|t| format!("{t:.0} °C"));
+        let power = thermal
+            .get("power_w")
+            .and_then(|v| v.as_f64())
+            .map(|p| format!("{p:.0} W"));
+        let throttle = thermal
+            .get("throttling")
+            .and_then(|v| v.as_bool())
+            .map(|b| if b { "oui" } else { "non" });
+        let parts: Vec<String> = [temp, power, throttle.map(|t| format!("throttling: {t}"))]
+            .into_iter()
+            .flatten()
+            .collect();
+        if !parts.is_empty() {
+            lines.push(format!("- **Thermique** : {}", parts.join(" · ")));
+        }
+    }
+    if let Some(npu) = summary.get("npu") {
+        if let Some(name) = npu.get("name").and_then(|v| v.as_str()) {
+            lines.push(format!("- **NPU** : {name}"));
+        }
+    }
+    lines.join("\n")
+}
+
+/// Prompt block so salon agents answer from a fresh probe without inventing gaps.
+pub fn format_hardware_context_block(summary: &serde_json::Value) -> String {
+    let prose = format_hardware_user_reply(summary);
+    let body = serde_json::to_string_pretty(summary).unwrap_or_else(|_| summary.to_string());
+    format!(
+        "\n## Snapshot machine (frais, system.hardware)\n{prose}\n\nJSON:\n{body}\n\
+         Reproduis **tous** les champs ci-dessus (GPU, VRAM totale/utilisée/libre, RAM, disque, tier, thermique). \
+         N'affirme jamais que tu n'as pas accès au matériel ni que `system.hardware` est indisponible.\n"
+    )
+}
+
 /// Document or note delivery that should invoke salon tools — not prose-only talk.
 pub fn user_implies_room_tool_action(text: &str) -> bool {
-    user_requested_document(text) || user_requested_note(text)
+    user_requested_document(text) || user_requested_note(text) || user_requested_hardware(text)
 }
 
 /// Ensure `file-author` + `files.generate` so a document ask can land under `/downloads/`.
@@ -382,6 +549,29 @@ mod tests {
         assert!(user_implies_room_tool_action(
             "prepare a document about rust"
         ));
+        assert!(user_requested_hardware("donne moi l'etat de la machine"));
+        assert!(user_requested_hardware("re essai avec l'outil system.hardware"));
+        assert!(user_requested_hardware("how much VRAM do I have?"));
+        assert!(!user_requested_hardware("what is the state of the art?"));
+        assert!(user_implies_room_tool_action("état de la machine"));
+        let reply = format_hardware_user_reply(&serde_json::json!({
+            "os": "windows",
+            "arch": "x86_64",
+            "gpu_name": "NVIDIA GeForce RTX 4080 SUPER",
+            "vram_mib": 16376,
+            "vram_used_mib": 10000,
+            "vram_free_mib": 6000,
+            "ram_mib": 63092,
+            "disk_free_gib": 120.5,
+            "tier": "mid",
+            "driver_version": "560.94",
+            "thermal": {"temperature_c": 52.0, "power_w": 80.0, "throttling": false}
+        }));
+        assert!(reply.contains("RTX 4080 SUPER"), "{reply}");
+        assert!(reply.contains("VRAM"), "{reply}");
+        assert!(reply.contains("RAM"), "{reply}");
+        assert!(reply.contains("120.5"), "{reply}");
+        assert!(reply.contains("52"), "{reply}");
     }
 
     #[test]

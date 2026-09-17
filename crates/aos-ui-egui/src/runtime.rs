@@ -47,10 +47,10 @@ use aos_proto::{
     NetModeRequest, PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
     SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
-    SystemMetrics, TokenEvent, TrustGetRequest, TrustProfile, TrustSetRequest, UnloadRequest,
-    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
-    UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
-    WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
+    SystemHardwareRequest, SystemHardwareResponse, SystemMetrics, TokenEvent, TrustGetRequest,
+    TrustProfile, TrustSetRequest, UnloadRequest, UserLibraryAddRequest, UserLibraryAddResponse,
+    UserLibraryListResponse, UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest,
+    WebBrowseResponse, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -647,6 +647,54 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             deep_thinking,
                         )
                         .await;
+                        return;
+                    }
+                }
+            }
+
+            // Direct chat has tools: [] — answer hardware asks from a fresh probe
+            // deterministically (small instruct models truncate JSON snapshots to OS/arch).
+            if aos_agent::research_detect::user_requested_hardware(&user_text) {
+                match bus
+                    .call::<SystemHardwareRequest, SystemHardwareResponse>(
+                        "system.hardware",
+                        &SystemHardwareRequest {
+                            refresh: Some(true),
+                        },
+                        vec![],
+                    )
+                    .await
+                {
+                    Ok(hw) => {
+                        let reply =
+                            aos_agent::research_detect::format_hardware_user_reply(&hw.summary);
+                        let _ = bus
+                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                "chat.session.append",
+                                &ChatSessionAppendRequest {
+                                    session_id: session_id.clone(),
+                                    role: "assistant".into(),
+                                    content: reply.clone(),
+                                    attachments: vec![],
+                                    speaker_id: None,
+                                    speaker_name: None,
+                                    thinking: None,
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let _ = evt_tx.send(Evt::Done {
+                            text: reply,
+                            session_id,
+                            attachments: vec![],
+                        });
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ChatError {
+                            session_id: session_id.clone(),
+                            message: format!("system.hardware: {e}"),
+                        });
                         return;
                     }
                 }

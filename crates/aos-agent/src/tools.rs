@@ -1396,6 +1396,8 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
         "module.uninstall",
         "module.list",
         "module.describe",
+        // Live host snapshot — always on so models stop inventing "no access".
+        "system.hardware",
     ];
     let mut always: Vec<&str> = always_base.to_vec();
     if deep {
@@ -1813,6 +1815,7 @@ mod tests {
         assert!(t.iter().any(|x| x.name == "goal.complete"));
         assert!(t.iter().any(|x| x.name == "user.ask"));
         assert!(t.iter().any(|x| x.name == "notes.create"));
+        assert!(t.iter().any(|x| x.name == "system.hardware"));
     }
 
     #[test]

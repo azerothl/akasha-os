@@ -30,7 +30,9 @@ use crate::room_conductor::{
     format_roster_for_prompt, initial_schedule, peers_requesting_response, pop_next_scheduled_turn,
     sanitize_member_queue,
 };
-use crate::room_reply::{merge_room_thinking, split_room_reply, stream_visible_partial};
+use crate::room_reply::{
+    merge_room_thinking, split_room_reply, stream_visible_partial, try_close_unbalanced_json_object,
+};
 use crate::skills::load_skills;
 use crate::storage_path::{is_host_path_disallowed_outcome, post_room_host_path_notice};
 use crate::tool_exec::execute_room_tool;
@@ -95,7 +97,7 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - Notes du carnet interne pour la réflexion ou si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
 - `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
-- Matériel local (VRAM/RAM/disque) : `system.hardware` — snapshot frais ; n'invente pas meminfo ni chemins hors sandbox.
+- Matériel local (VRAM/RAM/disque) : `system.hardware` — toujours dans ton catalogue (0 args). Appelle-le ; ne dis jamais qu'il est indisponible ni que tu n'as pas accès au matériel. N'invente pas meminfo ni chemins hors sandbox.
 - Pas de `agent.spawn` ni collègues inventés."#;
 
 /// État d'un tour de salon en cours (annulation cooperative + progrès UI).
@@ -356,6 +358,11 @@ pub fn assemble_room_member_tools(
             skills.push("notes-writer".into());
         }
     }
+    // Always expose a live host snapshot in salon — even custom/persona specs that
+    // ship a narrow tools list (otherwise models invent meminfo / fs host paths).
+    if !base_tools.iter().any(|t| t == "system.hardware") {
+        base_tools.push("system.hardware".into());
+    }
     let had_files_generate = base_tools.iter().any(|t| t == "files.generate");
     if crate::research_detect::user_requested_document(user_message) {
         crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
@@ -384,6 +391,7 @@ pub fn assemble_room_member_tools(
             }
         }
     }
+    // system.hardware requires no caps — do not expand always-tool caps here.
     (tool_ids, caps)
 }
 
@@ -785,6 +793,27 @@ fn room_reply_from_model(
     }
 }
 
+/// Repair truncated trailing agent JSON so `parse_actions` can still run user.ask / tools.
+fn repair_room_tool_json(raw: &str) -> String {
+    let Some(start) = raw.rfind('{') else {
+        return raw.to_string();
+    };
+    let tail = &raw[start..];
+    if !tail.contains("\"action\"") {
+        return raw.to_string();
+    }
+    if crate::room_reply::extract_first_json_object(tail).is_some() {
+        return raw.to_string();
+    }
+    if let Some(repaired) = try_close_unbalanced_json_object(tail) {
+        let mut out = String::new();
+        out.push_str(&raw[..start]);
+        out.push_str(&repaired);
+        return out;
+    }
+    raw.to_string()
+}
+
 #[allow(clippy::too_many_arguments)] // Runtime context is explicit at this orchestration boundary.
 async fn run_room_tool_loop(
     bus: &BusClient,
@@ -869,7 +898,8 @@ async fn run_room_tool_loop(
             accumulated_thinking.push(t);
         }
 
-        let parsed_actions = parse_actions(&raw);
+        let raw_for_parse = repair_room_tool_json(&raw);
+        let parsed_actions = parse_actions(&raw_for_parse);
         if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
             if let Some(t) = thinking.filter(|s| !s.trim().is_empty()) {
                 if !accumulated_thinking.iter().any(|p| p == &t) {
@@ -1038,7 +1068,7 @@ pub async fn execute_room_turn(
         None
     };
 
-    let system = build_room_system_prompt(
+    let mut system = build_room_system_prompt(
         &spec,
         display_name,
         &session.meta.members,
@@ -1047,6 +1077,22 @@ pub async fn execute_room_turn(
         &req.session_id,
         canvas_digest.as_deref(),
     );
+    if crate::research_detect::user_requested_hardware(user_message) {
+        if let Ok(hw) = bus
+            .call::<aos_proto::SystemHardwareRequest, aos_proto::SystemHardwareResponse>(
+                "system.hardware",
+                &aos_proto::SystemHardwareRequest {
+                    refresh: Some(true),
+                },
+                vec![],
+            )
+            .await
+        {
+            system.push_str(&crate::research_detect::format_hardware_context_block(
+                &hw.summary,
+            ));
+        }
+    }
     let mut messages = format_transcript_messages(&session, &system);
     append_room_turn_nudge(&mut messages, display_name);
 
@@ -1939,6 +1985,7 @@ mod tests {
             &empty_discovered(),
         );
         assert!(ids.iter().any(|x| x == "web.search"));
+        assert!(ids.iter().any(|x| x == "system.hardware"));
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!ids.iter().any(|x| x == "notes.create"));
         assert_eq!(caps, vec!["net.connect:*:*".to_string()]);
