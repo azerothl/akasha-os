@@ -3,6 +3,7 @@
 use crate::i18n::UiStrings;
 use aos_agent::room_runtime::ROOM_ACTION_UNAVAILABLE;
 use aos_agent::storage_path::ROOM_HOST_PATH_DISALLOWED;
+use std::collections::HashSet;
 
 /// Stable machine code (audit only) + localized short human cause for chat chrome.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,23 +50,84 @@ pub(crate) fn leaks_filesystem_path(msg: &str) -> bool {
 
 /// True when the runtime posted the host-path sentinel (toast hook only).
 pub(crate) fn is_room_host_path_sentinel(msg: &str) -> bool {
-    msg.trim() == ROOM_HOST_PATH_DISALLOWED
+    aos_agent::storage_path::is_host_path_disallowed_outcome(msg)
 }
 
-/// CM-locked toast copy for disallowed host paths (no raw path in the message).
-pub(crate) fn room_host_path_disallowed_toast(t: &UiStrings) -> Option<&'static str> {
-    if t.room_host_path_disallowed.is_empty() {
-        None
-    } else {
-        Some(t.room_host_path_disallowed)
+/// Last-segment folder from `room_host_path_disallowed:{folder}`, if safe.
+pub(crate) fn room_host_path_folder(msg: &str) -> Option<&str> {
+    let rest = msg.trim().strip_prefix(ROOM_HOST_PATH_DISALLOWED)?;
+    let name = rest.strip_prefix(':')?.trim();
+    if name.is_empty() || name == "?" {
+        return None;
     }
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_'))
+    {
+        return None;
+    }
+    Some(name)
+}
+
+/// Localized toast: an agent tried to open a folder outside the workspace.
+pub(crate) fn room_host_path_disallowed_toast(t: &UiStrings, folder: Option<&str>) -> String {
+    if let Some(folder) = folder {
+        if !t.room_host_path_disallowed_named.is_empty() {
+            return t
+                .room_host_path_disallowed_named
+                .replace("{folder}", folder);
+        }
+    }
+    t.room_host_path_disallowed.to_string()
+}
+
+pub(crate) fn room_host_path_notice_key(ts_ms: u64, text: &str) -> String {
+    format!("{ts_ms}\u{1e}{}", text.trim())
+}
+
+/// Remember historical sentinels so reopening a session does not toast them.
+pub(crate) fn remember_room_host_path_notices(
+    toasted: &mut HashSet<String>,
+    lines: &[(u64, &str)],
+) {
+    for (ts, text) in lines {
+        if is_room_host_path_sentinel(text) {
+            toasted.insert(room_host_path_notice_key(*ts, text));
+        }
+    }
+}
+
+/// Toast copy for sentinels not yet seen this session (one per unique token per ingest).
+pub(crate) fn take_new_room_host_path_toasts(
+    toasted: &mut HashSet<String>,
+    lines: &[(u64, &str)],
+    t: &UiStrings,
+) -> Vec<String> {
+    let mut batch = HashSet::new();
+    let mut out = Vec::new();
+    for (ts, text) in lines {
+        if !is_room_host_path_sentinel(text) {
+            continue;
+        }
+        if !toasted.insert(room_host_path_notice_key(*ts, text)) {
+            continue;
+        }
+        let trimmed = text.trim();
+        if !batch.insert(trimmed.to_string()) {
+            continue;
+        }
+        out.push(room_host_path_disallowed_toast(
+            t,
+            room_host_path_folder(text),
+        ));
+    }
+    out
 }
 
 /// True when the runtime error indicates a quarantined Tasks module.
 pub(crate) fn is_tasks_quarantine_error(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
-    lower.contains("tasks")
-        && (lower.contains("quarantaine") || lower.contains("quarantined"))
+    lower.contains("tasks") && (lower.contains("quarantaine") || lower.contains("quarantined"))
 }
 
 /// True when a Tasks open/install failure should use locked human chrome copy.
@@ -118,7 +180,9 @@ fn strip_ipc_status_prefix(msg: &str) -> &str {
 
 fn ipc_status_body(msg: &str) -> (Option<&str>, &str) {
     let trimmed = msg.trim();
-    let rest = trimmed.strip_prefix("statut ").or_else(|| trimmed.strip_prefix("Statut "));
+    let rest = trimmed
+        .strip_prefix("statut ")
+        .or_else(|| trimmed.strip_prefix("Statut "));
     if let Some(rest) = rest {
         if let Some(colon) = rest.find(':') {
             let status = rest[..colon].trim();
@@ -132,6 +196,13 @@ fn ipc_status_body(msg: &str) -> (Option<&str>, &str) {
 fn is_chat_timeout_error(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
     lower.contains("timeout chat") || lower.contains("chat timeout")
+}
+
+fn is_room_ask_not_waiting(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("aucune question salon en attente")
+        || lower.contains("aucun tour salon en attente")
+        || lower.contains("no pending room ask")
 }
 
 fn is_advisory_construction_refusal(msg: &str) -> bool {
@@ -162,7 +233,9 @@ fn is_module_scaffold_error(msg: &str) -> bool {
 
 fn is_cap_or_policy_denial(msg: &str) -> Option<&'static str> {
     let lower = msg.to_ascii_lowercase();
-    if lower.contains("permissiondenied") || lower.contains("cap.deny") || lower.contains("cap deny")
+    if lower.contains("permissiondenied")
+        || lower.contains("cap.deny")
+        || lower.contains("cap deny")
     {
         return Some("cap.denied");
     }
@@ -172,10 +245,21 @@ fn is_cap_or_policy_denial(msg: &str) -> Option<&'static str> {
     None
 }
 
+/// CM-locked toast when a salon ask-reply cannot be delivered.
+pub(crate) fn room_ask_unmatched_toast(t: &UiStrings) -> String {
+    t.room_ask_failed_toast.to_string()
+}
+
 /// Designer chrome: fallback headline plus optional cause line (no wire codes).
 pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified) -> String {
     if classified.code == "chat.error" {
         return t.chat_error_generic.to_string();
+    }
+    if classified.code == "room.ask_not_waiting" {
+        return format!(
+            "{}\n{}",
+            t.room_ask_failed_toast, classified.cause
+        );
     }
     format!("{}\n{}", t.chat_error_generic, classified.cause)
 }
@@ -185,9 +269,13 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
     if is_room_host_path_sentinel(raw) {
         return ChatErrorClassified {
             code: "room.path_denied",
-            cause: room_host_path_disallowed_toast(t)
-                .map(str::to_string)
-                .unwrap_or_else(|| ROOM_HOST_PATH_DISALLOWED.to_string()),
+            cause: room_host_path_disallowed_toast(t, room_host_path_folder(raw)),
+        };
+    }
+    if is_room_ask_not_waiting(raw) {
+        return ChatErrorClassified {
+            code: "room.ask_not_waiting",
+            cause: t.room_ask_not_waiting.to_string(),
         };
     }
     if raw == ROOM_ACTION_UNAVAILABLE || raw.contains(ROOM_ACTION_UNAVAILABLE) {
@@ -259,6 +347,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
             };
         }
         if status_lower == "internalerror" {
+            if is_room_ask_not_waiting(ipc_body) {
+                return ChatErrorClassified {
+                    code: "room.ask_not_waiting",
+                    cause: t.room_ask_not_waiting.to_string(),
+                };
+            }
             if is_agent_spawn_error(ipc_body) {
                 return ChatErrorClassified {
                     code: "agent.create.failed",
@@ -375,40 +469,58 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
 pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) -> String {
     let stripped = strip_ipc_status_prefix(raw);
     if module == "tasks" && is_tasks_quarantine_error(stripped) {
-        return format_chat_error(t, &ChatErrorClassified {
-            code: "tasks.quarantined",
-            cause: t.chat_error_tasks_quarantined.to_string(),
-        });
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "tasks.quarantined",
+                cause: t.chat_error_tasks_quarantined.to_string(),
+            },
+        );
     }
     if is_tasks_quarantine_error(stripped) {
-        return format_chat_error(t, &ChatErrorClassified {
-            code: "tasks.quarantined",
-            cause: t.chat_error_tasks_quarantined.to_string(),
-        });
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "tasks.quarantined",
+                cause: t.chat_error_tasks_quarantined.to_string(),
+            },
+        );
     }
     if module == "tasks" && is_tasks_open_or_install_error(stripped) {
-        return format_chat_error(t, &ChatErrorClassified {
-            code: "tasks.open_failed",
-            cause: t.chat_error_tasks_open.to_string(),
-        });
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "tasks.open_failed",
+                cause: t.chat_error_tasks_open.to_string(),
+            },
+        );
     }
     if is_tasks_open_or_install_error(stripped) {
-        return format_chat_error(t, &ChatErrorClassified {
-            code: "tasks.open_failed",
-            cause: t.chat_error_tasks_open.to_string(),
-        });
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "tasks.open_failed",
+                cause: t.chat_error_tasks_open.to_string(),
+            },
+        );
     }
     if module == "create" && is_create_install_error(stripped) {
-        return format_chat_error(t, &ChatErrorClassified {
-            code: "create.install_failed",
-            cause: t.chat_error_create_install.to_string(),
-        });
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "create.install_failed",
+                cause: t.chat_error_create_install.to_string(),
+            },
+        );
     }
     if is_create_install_error(stripped) {
-        return format_chat_error(t, &ChatErrorClassified {
-            code: "create.install_failed",
-            cause: t.chat_error_create_install.to_string(),
-        });
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "create.install_failed",
+                cause: t.chat_error_create_install.to_string(),
+            },
+        );
     }
     user_visible_chat_error(t, stripped)
 }
@@ -453,6 +565,64 @@ mod tests {
     use super::*;
 
     #[test]
+    fn host_path_sentinel_copy_names_folder_without_path() {
+        let en = crate::i18n::strings("en");
+        let named = room_host_path_disallowed_toast(&en, Some("agents"));
+        assert!(named.contains("agents"));
+        assert!(named.contains("agent"));
+        assert!(!named.contains("e:/"));
+        assert!(!named.contains("out of reach"));
+        assert_eq!(
+            room_host_path_folder("room_host_path_disallowed:agents"),
+            Some("agents")
+        );
+        assert_eq!(
+            room_host_path_folder("room_host_path_disallowed:C:\\Windows"),
+            None
+        );
+        assert!(is_room_host_path_sentinel("room_host_path_disallowed"));
+        assert!(is_room_host_path_sentinel(
+            "room_host_path_disallowed:agents"
+        ));
+        assert!(!is_room_host_path_sentinel(
+            "room_host_path_disallowed_other"
+        ));
+    }
+
+    #[test]
+    fn host_path_toasts_once_per_sentinel_then_stick() {
+        let en = crate::i18n::strings("en");
+        let mut toasted = HashSet::new();
+        let first = take_new_room_host_path_toasts(
+            &mut toasted,
+            &[(1, "room_host_path_disallowed:agents")],
+            &en,
+        );
+        assert_eq!(first.len(), 1);
+        assert!(first[0].contains("agents"));
+        let second = take_new_room_host_path_toasts(
+            &mut toasted,
+            &[
+                (1, "room_host_path_disallowed:agents"),
+                (1, "room_host_path_disallowed:agents"),
+            ],
+            &en,
+        );
+        assert!(second.is_empty());
+        let mut remembered = HashSet::new();
+        remember_room_host_path_notices(
+            &mut remembered,
+            &[(9, "room_host_path_disallowed:agents")],
+        );
+        let historical = take_new_room_host_path_toasts(
+            &mut remembered,
+            &[(9, "room_host_path_disallowed:agents")],
+            &en,
+        );
+        assert!(historical.is_empty());
+    }
+
+    #[test]
     fn room_action_unavailable_maps_to_locked_copy() {
         let en = crate::i18n::strings("en");
         let fr = crate::i18n::strings("fr");
@@ -466,6 +636,23 @@ mod tests {
             user_visible_chat_error(&fr, ROOM_ACTION_UNAVAILABLE),
             format_chat_error(&fr, &classify_chat_error(&fr, ROOM_ACTION_UNAVAILABLE))
         );
+    }
+
+    #[test]
+    fn room_ask_not_waiting_is_not_internal_error() {
+        let en = crate::i18n::strings("en");
+        let wrapped = "statut InternalError: statut BadRequest: aucune question salon en attente";
+        let classified = classify_chat_error(&en, wrapped);
+        assert_eq!(classified.code, "room.ask_not_waiting");
+        let out = user_visible_chat_error(&en, wrapped);
+        assert!(out.starts_with(en.room_ask_failed_toast));
+        assert!(out.contains(en.room_ask_not_waiting));
+        assert!(!out.contains("InternalError"));
+        assert!(!out.contains("BadRequest"));
+        assert_eq!(room_ask_unmatched_toast(&en), en.room_ask_failed_toast);
+        let missing_round =
+            classify_chat_error(&en, "statut NotFound: aucun tour salon en attente");
+        assert_eq!(missing_round.code, "room.ask_not_waiting");
     }
 
     #[test]

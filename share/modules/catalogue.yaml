@@ -49,5 +49,5 @@ entries:
     version: "1.0.0"
     kind: mcp
     path: share/mcp/servers.yaml.example
-    hash: sha256:0976835a5b7fc91238d41c49e4c479e04f184268b49ff961b2c5ccd156565092
+    hash: sha256:39bfb8f3ea6ff6eae02e6c8a3fa141c305f83b8087d2b7adcef0ef532ff381e1
     attested_caps: []

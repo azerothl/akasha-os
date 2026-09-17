@@ -333,63 +333,63 @@ impl UiApp {
                         egui::CollapsingHeader::new(t.settings_colors_applied)
                             .default_open(false)
                             .show(ui, |ui| {
-                        egui::Grid::new("custom_theme_colors")
-                            .num_columns(3)
-                            .spacing([12.0, 8.0])
-                            .show(ui, |ui| {
-                                let mut changed = false;
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_background,
-                                    &mut self.prefs.custom_theme.background,
-                                );
-                                ui.end_row();
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_panel,
-                                    &mut self.prefs.custom_theme.panel,
-                                );
-                                ui.end_row();
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_text,
-                                    &mut self.prefs.custom_theme.text,
-                                );
-                                ui.end_row();
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_accent,
-                                    &mut self.prefs.custom_theme.accent,
-                                );
-                                ui.end_row();
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_danger,
-                                    &mut self.prefs.custom_theme.danger,
-                                );
-                                ui.end_row();
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_success,
-                                    &mut self.prefs.custom_theme.success,
-                                );
-                                ui.end_row();
-                                changed |= edit_theme_color(
-                                    ui,
-                                    t.settings_color_warning,
-                                    &mut self.prefs.custom_theme.warning,
-                                );
-                                ui.end_row();
-                                if changed {
-                                    // Defer disk write until pointer release — saving every
-                                    // color-drag frame freezes Settings (custom theme + Inter).
-                                    if !ui.ctx().input(|i| i.pointer.any_down()) {
-                                        save_preferences(&self.prefs);
-                                    } else {
-                                        ui.ctx().request_repaint();
-                                    }
-                                }
-                            });
+                                egui::Grid::new("custom_theme_colors")
+                                    .num_columns(3)
+                                    .spacing([12.0, 8.0])
+                                    .show(ui, |ui| {
+                                        let mut changed = false;
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_background,
+                                            &mut self.prefs.custom_theme.background,
+                                        );
+                                        ui.end_row();
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_panel,
+                                            &mut self.prefs.custom_theme.panel,
+                                        );
+                                        ui.end_row();
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_text,
+                                            &mut self.prefs.custom_theme.text,
+                                        );
+                                        ui.end_row();
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_accent,
+                                            &mut self.prefs.custom_theme.accent,
+                                        );
+                                        ui.end_row();
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_danger,
+                                            &mut self.prefs.custom_theme.danger,
+                                        );
+                                        ui.end_row();
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_success,
+                                            &mut self.prefs.custom_theme.success,
+                                        );
+                                        ui.end_row();
+                                        changed |= edit_theme_color(
+                                            ui,
+                                            t.settings_color_warning,
+                                            &mut self.prefs.custom_theme.warning,
+                                        );
+                                        ui.end_row();
+                                        if changed {
+                                            // Defer disk write until pointer release — saving every
+                                            // color-drag frame freezes Settings (custom theme + Inter).
+                                            if !ui.ctx().input(|i| i.pointer.any_down()) {
+                                                save_preferences(&self.prefs);
+                                            } else {
+                                                ui.ctx().request_repaint();
+                                            }
+                                        }
+                                    });
                             });
                         ui.end_row();
                     }
@@ -603,7 +603,8 @@ impl UiApp {
                     .inner;
                 if status_clicked {
                     status_open = !status_open;
-                    ui.ctx().data_mut(|d| d.insert_temp(status_open_id, status_open));
+                    ui.ctx()
+                        .data_mut(|d| d.insert_temp(status_open_id, status_open));
                     crate::lan_trace::log(
                         "ui.lan_status.toggle",
                         &format!(
@@ -712,10 +713,7 @@ impl UiApp {
                             for node in &response.nodes {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.monospace(&node.node_id);
-                                    ui.label(format!(
-                                        "{} · {}",
-                                        node.display_name, node.address
-                                    ));
+                                    ui.label(format!("{} · {}", node.display_name, node.address));
                                     ui.weak(&node.trust);
                                     if node.trust == "paired" {
                                         if ui.button(t.lan_revoke).clicked() {
@@ -752,9 +750,8 @@ impl UiApp {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(t.lan_layer_pipeline_status);
                             let cluster = self.models_ui.lan_cluster.as_ref();
-                            let worker_ready = cluster
-                                .map(|c| c.worker_state == "ready")
-                                .unwrap_or(false);
+                            let worker_ready =
+                                cluster.map(|c| c.worker_state == "ready").unwrap_or(false);
                             let ready = status.enabled && status.adapter_ready && worker_ready;
                             ui.colored_label(
                                 if ready {
@@ -1374,7 +1371,10 @@ impl UiApp {
             });
         }
 
-        if section_visible("secrets", &["secret", "clé", "token", "api", "générer", "generate"]) {
+        if section_visible(
+            "secrets",
+            &["secret", "clé", "token", "api", "générer", "generate"],
+        ) {
             show_settings_section(ui, show_section_heading, t.settings_secrets, |ui| {
                 ui.weak(t.settings_secrets_blurb);
                 ui.add_space(6.0);
@@ -1539,10 +1539,7 @@ impl UiApp {
                                         .push_error(t.settings_secret_lan_invalid.to_string());
                                 } else {
                                     let name = self.prefs.lan_session_key_secret.clone();
-                                    let _ = self.cmd_tx.send(Cmd::SecretSet {
-                                        name,
-                                        value,
-                                    });
+                                    let _ = self.cmd_tx.send(Cmd::SecretSet { name, value });
                                     self.settings_ui.secret_lan_session.clear();
                                 }
                             }
@@ -1567,8 +1564,7 @@ impl UiApp {
                                 .hint_text(t.settings_secret_custom_value),
                             );
                             if ui.button(t.settings_secret_save).clicked() {
-                                let name =
-                                    self.settings_ui.secret_custom_name.trim().to_string();
+                                let name = self.settings_ui.secret_custom_name.trim().to_string();
                                 if !is_valid_secret_name(&name) {
                                     self.toasts
                                         .push_error(t.settings_secret_name_invalid.to_string());
@@ -1598,20 +1594,16 @@ impl UiApp {
                     ui.label(t.settings_secret_reveal_create);
                     ui.horizontal(|ui| {
                         ui.add(
-                            egui::TextEdit::singleline(
-                                &mut self.settings_ui.secrets_pin_entry,
-                            )
-                            .password(true)
-                            .desired_width(120.0)
-                            .hint_text(t.settings_secret_reveal_pin),
+                            egui::TextEdit::singleline(&mut self.settings_ui.secrets_pin_entry)
+                                .password(true)
+                                .desired_width(120.0)
+                                .hint_text(t.settings_secret_reveal_pin),
                         );
                         ui.add(
-                            egui::TextEdit::singleline(
-                                &mut self.settings_ui.secrets_pin_confirm,
-                            )
-                            .password(true)
-                            .desired_width(120.0)
-                            .hint_text(t.settings_secret_reveal_pin_confirm),
+                            egui::TextEdit::singleline(&mut self.settings_ui.secrets_pin_confirm)
+                                .password(true)
+                                .desired_width(120.0)
+                                .hint_text(t.settings_secret_reveal_pin_confirm),
                         );
                         if ui.button(t.settings_secret_reveal_set).clicked() {
                             let pin = self.settings_ui.secrets_pin_entry.clone();
@@ -1623,8 +1615,7 @@ impl UiApp {
                                 self.toasts
                                     .push_error(t.settings_secret_reveal_mismatch.to_string());
                             } else {
-                                self.prefs.secrets_reveal_pin_hash =
-                                    hash_secrets_reveal_pin(&pin);
+                                self.prefs.secrets_reveal_pin_hash = hash_secrets_reveal_pin(&pin);
                                 save_preferences(&self.prefs);
                                 self.settings_ui
                                     .unlock_secrets_reveal(now, SECRETS_REVEAL_TTL_SECS);
@@ -1636,12 +1627,10 @@ impl UiApp {
                     ui.horizontal(|ui| {
                         ui.label(t.settings_secret_reveal_unlock);
                         ui.add(
-                            egui::TextEdit::singleline(
-                                &mut self.settings_ui.secrets_pin_entry,
-                            )
-                            .password(true)
-                            .desired_width(140.0)
-                            .hint_text(t.settings_secret_reveal_pin),
+                            egui::TextEdit::singleline(&mut self.settings_ui.secrets_pin_entry)
+                                .password(true)
+                                .desired_width(140.0)
+                                .hint_text(t.settings_secret_reveal_pin),
                         );
                         if ui.button(t.settings_secret_reveal_enter).clicked() {
                             if secrets_reveal_pin_matches(
@@ -1691,12 +1680,8 @@ impl UiApp {
                                 }
                             } else {
                                 ui.weak("••••••••");
-                                if unlocked
-                                    && ui.button(t.settings_secret_reveal_show).clicked()
-                                {
-                                    let _ = self.cmd_tx.send(Cmd::SecretGet {
-                                        name: name.clone(),
-                                    });
+                                if unlocked && ui.button(t.settings_secret_reveal_show).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::SecretGet { name: name.clone() });
                                 }
                             }
                             if ui.button(t.settings_secret_reveal_delete).clicked() {

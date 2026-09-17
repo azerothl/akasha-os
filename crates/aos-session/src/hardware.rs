@@ -174,9 +174,25 @@ fn parse_thermal_line(line: &str) -> Option<ThermalSnapshot> {
     let fields: Vec<_> = line.split(',').map(str::trim).collect();
     let temperature_c = fields.first()?.parse::<f32>().ok()?;
     let power_w = fields.get(1).and_then(|value| value.parse::<f32>().ok());
-    let throttling = fields
-        .get(3)
-        .is_some_and(|value| !value.is_empty() && *value != "0x0000000000000000");
+    // nvidia-smi `clocks_throttle_reasons.active` is a bit mask. Bit 0 (GPU Idle)
+    // and bit 1 (applications clocks) are normal parked-clock states — treating
+    // them as throttling forces Quiet → MemorySaver (0 VRAM layers) and makes
+    // CUDA look slower than CPU. Only real slowdown bits demote placement.
+    const GPU_IDLE: u64 = 0x1;
+    const APP_CLOCKS: u64 = 0x2;
+    const IGNORE: u64 = GPU_IDLE | APP_CLOCKS;
+    let throttling = fields.get(3).is_some_and(|value| {
+        let raw = value.trim();
+        if raw.is_empty() {
+            return false;
+        }
+        let mask = if let Some(hex) = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")) {
+            u64::from_str_radix(hex, 16).unwrap_or(0)
+        } else {
+            raw.parse::<u64>().unwrap_or(0)
+        };
+        mask & !IGNORE != 0
+    });
     Some(ThermalSnapshot {
         temperature_c: Some(temperature_c),
         sustained_temperature_c: None,
@@ -363,7 +379,11 @@ mod tests {
         assert_eq!(cool.power_w, Some(118.4));
         assert!(!cool.throttling);
 
-        let hot = parse_thermal_line("87, 220.0, 300, 0x0000000000000001").unwrap();
+        // Bit 0 = GPU Idle — not a performance demotion signal.
+        let idle = parse_thermal_line("40, 8.0, 210, 0x0000000000000001").unwrap();
+        assert!(!idle.throttling);
+
+        let hot = parse_thermal_line("87, 220.0, 300, 0x0000000000000020").unwrap();
         assert!(hot.throttling);
         assert!(parse_thermal_line("not-a-number, 1, 2, 0").is_none());
     }

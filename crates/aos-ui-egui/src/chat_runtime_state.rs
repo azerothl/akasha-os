@@ -4,6 +4,7 @@ use crate::chat_error_recovery::ChatErrorRecovery;
 use crate::chat_pending_status::ChatInferPhase;
 use crate::cmd::ChatRetryTurn;
 use aos_proto::AgentRoomConductProgress;
+use std::collections::HashSet;
 
 #[derive(Debug, Default)]
 pub(crate) struct ChatRuntimeState {
@@ -26,6 +27,8 @@ pub(crate) struct ChatRuntimeState {
     pub(crate) started_ms: u64,
     /// Live inference phase while pending (before first token).
     pub(crate) infer_phase: ChatInferPhase,
+    /// Host-path sentinel keys already toasted for the active session (dismiss must stick).
+    pub(crate) toasted_host_path_notices: HashSet<String>,
 }
 
 impl ChatRuntimeState {
@@ -61,14 +64,8 @@ mod tests {
             streaming: "partial".into(),
             pending: false,
             inference_id: Some(42),
-            room_turn_text: None,
-            room_progress: None,
-            outgoing_turn: None,
-            load_fail_retry: None,
-            chat_error_recovery: None,
-            continue_retry: None,
-            started_ms: 0,
             infer_phase: ChatInferPhase::WaitingFirstToken,
+            ..Default::default()
         };
 
         state.begin_turn(Some("question".into()));

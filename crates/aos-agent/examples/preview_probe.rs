@@ -22,14 +22,17 @@ async fn main() {
         let summary = std::env::var("AOS_PROBE_RESPONSE_SUMMARY").ok().as_deref() == Some("1");
         let mut results = Vec::new();
         for (index, line) in content.lines().enumerate() {
-            if line.trim().is_empty() { continue; }
+            if line.trim().is_empty() {
+                continue;
+            }
             let operation_start = std::time::Instant::now();
             let entry: Value = serde_json::from_str(line).expect("batch entry JSON");
             let intent = entry["intent"].as_str().expect("batch intent");
             let request = entry.get("request").cloned().unwrap_or(Value::Null);
             let fixture_id = entry.get("fixture_id").cloned().unwrap_or(Value::Null);
             let result = if intent == "model.infer" {
-                let req: InferRequest = serde_json::from_value(request).expect("model.infer request");
+                let req: InferRequest =
+                    serde_json::from_value(request).expect("model.infer request");
                 match tokio::time::timeout(
                     timeout,
                     bus.call_stream::<InferRequest, TokenEvent>(intent, &req, vec![]),
@@ -44,7 +47,11 @@ async fn main() {
                         while let Some(event) = rx.recv().await {
                             match event {
                                 Ok(TokenEvent::Delta { text: delta }) => text.push_str(&delta),
-                                Ok(TokenEvent::Done { ttft_ms: t, tok_s: s, .. }) => {
+                                Ok(TokenEvent::Done {
+                                    ttft_ms: t,
+                                    tok_s: s,
+                                    ..
+                                }) => {
                                     ttft_ms = t;
                                     tok_s = s;
                                 }
@@ -72,7 +79,12 @@ async fn main() {
                     Err(_) => Err("timeout".into()),
                 }
             } else {
-                match tokio::time::timeout(timeout, bus.call::<Value, Value>(intent, &request, vec![])).await {
+                match tokio::time::timeout(
+                    timeout,
+                    bus.call::<Value, Value>(intent, &request, vec![]),
+                )
+                .await
+                {
                     Ok(Ok(response)) => Ok(response),
                     Ok(Err(error)) => Err(error.to_string()),
                     Err(_) => Err("timeout".into()),

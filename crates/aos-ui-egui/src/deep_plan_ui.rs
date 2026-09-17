@@ -100,12 +100,7 @@ pub(crate) fn apply_command_to_attachment(att: &mut ChatAttachment, cmd: &DeepPl
 }
 
 fn plan_step_display_status(status: PlanStepStatus, agent_interrupted: bool) -> PlanStepStatus {
-    if agent_interrupted
-        && matches!(
-            status,
-            PlanStepStatus::Pending | PlanStepStatus::InProgress
-        )
-    {
+    if agent_interrupted && matches!(status, PlanStepStatus::Pending | PlanStepStatus::InProgress) {
         PlanStepStatus::Blocked
     } else {
         status

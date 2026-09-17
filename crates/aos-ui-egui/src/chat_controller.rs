@@ -83,7 +83,8 @@ impl UiApp {
             }
         }
         if aos_agent::storage_path::text_contains_disallowed_storage_path(&text) {
-            if let Some(msg) = chat_error_copy::room_host_path_disallowed_toast(&t) {
+            let msg = chat_error_copy::room_host_path_disallowed_toast(&t, None);
+            if !msg.is_empty() {
                 self.toasts.push_error(msg);
             }
         }
@@ -446,21 +447,13 @@ impl UiApp {
         self.scenario_ui.chat = true;
     }
 
-    pub(crate) fn offer_partial_continuation(
-        &mut self,
-        retry: ChatRetryTurn,
-        partial: String,
-    ) {
+    pub(crate) fn offer_partial_continuation(&mut self, retry: ChatRetryTurn, partial: String) {
         self.set_partial_continuation(retry, partial, true);
     }
 
     /// Arm recovery when the cancellation handler has already placed the
     /// partial answer in the visible transcript.
-    pub(crate) fn arm_partial_continuation(
-        &mut self,
-        retry: ChatRetryTurn,
-        partial: String,
-    ) {
+    pub(crate) fn arm_partial_continuation(&mut self, retry: ChatRetryTurn, partial: String) {
         self.set_partial_continuation(retry, partial, false);
     }
 
@@ -482,7 +475,8 @@ impl UiApp {
         }
         let t = i18n::strings(&self.prefs.language);
         if append_to_chat {
-            self.chat.push(ChatLine::plain("assistant", display.clone()));
+            self.chat
+                .push(ChatLine::plain("assistant", display.clone()));
         }
         let _ = self.cmd_tx.send(Cmd::SessionAppend {
             session_id: retry.session_id.clone(),

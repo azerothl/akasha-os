@@ -126,9 +126,6 @@ impl UiApp {
                     let role = self.chat[i].role.clone();
                     let mut text = self.chat[i].text.clone();
                     if chat_error_copy::is_room_host_path_sentinel(&text) {
-                        if let Some(msg) = chat_error_copy::room_host_path_disallowed_toast(t) {
-                            self.toasts.push_error(msg);
-                        }
                         continue;
                     }
                     let attachments = self.chat[i].attachments.clone();
@@ -605,8 +602,7 @@ impl UiApp {
                                     agent_id,
                                     state,
                                 } => {
-                                    let info =
-                                        self.agents.iter().find(|a| a.agent_id == *agent_id);
+                                    let info = self.agents.iter().find(|a| a.agent_id == *agent_id);
                                     let trace = self.agent_ui.traces.get(agent_id);
                                     let action = research_choice::render_document_progress(
                                         ui, t, question, agent_id, state, info, trace,
@@ -726,9 +722,10 @@ impl UiApp {
                                             steps,
                                             expand_step_ids,
                                             show_logs_step_id: show_logs_step_id.as_deref(),
-                                            agent_interrupted: crate::deep_plan_ui::agent_plan_interrupted(
-                                                agent_state.as_ref(),
-                                            ),
+                                            agent_interrupted:
+                                                crate::deep_plan_ui::agent_plan_interrupted(
+                                                    agent_state.as_ref(),
+                                                ),
                                             t,
                                         },
                                         &mut self.chat_state.view.deep_plan_open,
@@ -798,10 +795,8 @@ impl UiApp {
                         }
                         if can_branch {
                             if ui.button(t.chat_fork_here).clicked() {
-                                session_branch_action = Some((
-                                    session_chat::persisted_prefix_len(&self.chat, i),
-                                    true,
-                                ));
+                                session_branch_action =
+                                    Some((session_chat::persisted_prefix_len(&self.chat, i), true));
                                 ui.close_menu();
                             }
                             if ui.button(t.chat_return_here).clicked() {
@@ -1027,8 +1022,7 @@ impl UiApp {
                     .clone()
                     .filter(|_| self.chat_state.active_session.is_some())
                 {
-                    match crate::chat_error_recovery::render_chat_error_recovery(ui, t, &recovery)
-                    {
+                    match crate::chat_error_recovery::render_chat_error_recovery(ui, t, &recovery) {
                         crate::chat_error_recovery::ChatErrorRecoveryAction::Retry => {
                             self.retry_chat_error_turn();
                         }

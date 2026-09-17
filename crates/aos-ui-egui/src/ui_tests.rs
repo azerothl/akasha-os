@@ -102,9 +102,8 @@ mod delegate_tests {
 
     #[test]
     fn chat_kit_document_ask_includes_files_generate() {
-        let (skills, tools) = crate::chat_delegate::chat_agent_kit(
-            "fais moi un document sur les modules Akasha",
-        );
+        let (skills, tools) =
+            crate::chat_delegate::chat_agent_kit("fais moi un document sur les modules Akasha");
         assert!(skills.iter().any(|s| s == "file-author"));
         assert!(tools.iter().any(|t| t == "files.generate"));
         // Notes remain available as scratchpad / handoff.
@@ -166,7 +165,12 @@ mod delegate_tests {
             ASPECT,
             &full_canvas_exported(),
         );
-        let ChatDelegateSpec { brief, tools, prose, .. } = spec.expect("doit déléguer");
+        let ChatDelegateSpec {
+            brief,
+            tools,
+            prose,
+            ..
+        } = spec.expect("doit déléguer");
         assert_eq!(brief, "crée un module ping");
         assert!(tools.iter().any(|x| x == "module.scaffold"));
         assert!(prose.contains("agent"));
@@ -250,7 +254,13 @@ mod delegate_tests {
             ASPECT,
             &full_canvas_exported(),
         );
-        let ChatDelegateSpec { brief, skills, tools, prose, .. } = spec.expect("doit déléguer canvas");
+        let ChatDelegateSpec {
+            brief,
+            skills,
+            tools,
+            prose,
+            ..
+        } = spec.expect("doit déléguer canvas");
         assert_eq!(brief, "dessine sur le canvas une maison");
         assert!(!brief.contains("toit + murs"));
         assert!(tools.iter().any(|x| x == "canvas.stroke"));
@@ -883,7 +893,10 @@ mod layout_tests {
         let field = composer_field_width(280.0, send_w, icons::ATTACH_BTN_W, stop_w, gap, true);
         let send_reserved = send_w.max(composer_layout::COMPOSER_SEND_CAP_MIN_W);
         let used = field + icons::ATTACH_BTN_W + gap + send_reserved + stop_w + gap + gap;
-        assert!(field > 40.0, "narrow pane still keeps a usable field ({field})");
+        assert!(
+            field > 40.0,
+            "narrow pane still keeps a usable field ({field})"
+        );
         assert!(
             used <= 280.0 + 0.01,
             "attach+field+send+stop must fit in 280: used={used}"

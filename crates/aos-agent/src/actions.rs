@@ -284,8 +284,7 @@ fn parse_tool_markup_actions(text: &str) -> Vec<AgentAction> {
 }
 
 fn normalize_native_tool_markup(text: &str) -> String {
-    text.replace("<|\"|>", "\"")
-        .replace("<｜\"｜>", "\"")
+    text.replace("<|\"|>", "\"").replace("<｜\"｜>", "\"")
 }
 
 fn parse_colon_call_actions(text: &str) -> Vec<AgentAction> {

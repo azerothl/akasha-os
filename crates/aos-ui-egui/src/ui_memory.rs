@@ -92,9 +92,7 @@ impl UiApp {
                 .memory_ui
                 .objects
                 .iter()
-                .filter(|object| {
-                    matches!(&object.kind, aos_proto::MemoryObjectKind::Decision)
-                })
+                .filter(|object| matches!(&object.kind, aos_proto::MemoryObjectKind::Decision))
                 .take(32)
                 .collect();
             if decisions.is_empty() {

@@ -234,7 +234,10 @@ fn is_ephemeral_ui_line(line: &ChatLine) -> bool {
 }
 
 fn content_message_count(lines: &[ChatLine]) -> usize {
-    lines.iter().filter(|line| !is_ephemeral_ui_line(line)).count()
+    lines
+        .iter()
+        .filter(|line| !is_ephemeral_ui_line(line))
+        .count()
 }
 
 /// How many persisted transcript messages to keep when branching from UI index

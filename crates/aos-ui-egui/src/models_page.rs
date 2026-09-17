@@ -298,7 +298,11 @@ pub fn missing_model_annexes(model_id: &str) -> Vec<String> {
         "audio-vae",
         "embeddings-connectors",
     ] {
-        let Some(fname) = m.engine_args.get(key).map(|s| s.trim()).filter(|s| !s.is_empty())
+        let Some(fname) = m
+            .engine_args
+            .get(key)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
         else {
             continue;
         };
@@ -314,7 +318,10 @@ pub fn missing_model_annexes(model_id: &str) -> Vec<String> {
 }
 
 fn media_asset_present(filename: &str, role: Option<&str>) -> bool {
-    if filename.is_empty() || filename.contains("..") || filename.contains('/') || filename.contains('\\')
+    if filename.is_empty()
+        || filename.contains("..")
+        || filename.contains('/')
+        || filename.contains('\\')
     {
         return false;
     }

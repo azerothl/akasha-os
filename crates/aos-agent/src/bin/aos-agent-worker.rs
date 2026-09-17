@@ -4,15 +4,14 @@
 //!          [--restore]`
 
 use aos_agent::actions::{
-    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
-    AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
+    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup, AgentAction,
+    THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason,
     canvas_critic_approved, canvas_critic_system_prompt, canvas_draw_tool_applies_trait,
-    canvas_goal_prefers_scene, canvas_op_succeeded,
-    canvas_reflect_user_content,
+    canvas_goal_prefers_scene, canvas_op_succeeded, canvas_reflect_user_content,
     canvas_repeat_stroke_verdict, canvas_scene_prompt_block, canvas_text_only_critic_system_prompt,
     canvas_tool_mutates_scene, canvas_visual_fingerprint, canvas_visual_progress,
     canvas_visual_progress_note, end_canvas_vision, fetch_canvas_aspect,
@@ -43,9 +42,9 @@ use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
     canonicalize_tool_name, canvas_draw_strategy_hint, canvas_tool_denied_by_allowlist,
     canvas_tools_from_module_list, caps_for_tools, caps_subset, chat_template_tool_definitions,
-    classify_action,
-    normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool, restrict_canvas_tools,
-    select_tools, select_tools_mode, strip_canvas_blocked_runtime_tools, ToolBackend, ToolDesc,
+    classify_action, normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool,
+    restrict_canvas_tools, select_tools, select_tools_mode, strip_canvas_blocked_runtime_tools,
+    ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
@@ -1854,9 +1853,7 @@ async fn main() {
                         None
                     };
                     if has_visual_critic
-                        && !visual_review
-                            .as_deref()
-                            .is_some_and(canvas_critic_approved)
+                        && !visual_review.as_deref().is_some_and(canvas_critic_approved)
                     {
                         final_canvas_visual_review_pending = true;
                         let feedback = visual_review.unwrap_or_else(|| {
@@ -1865,11 +1862,7 @@ async fn main() {
                         let feedback = format!(
                             "{feedback}\nLe contrôle visuel final n'est pas approuvé : corrige une seule pièce distinctive puis exporte à nouveau."
                         );
-                        shared
-                            .state
-                            .lock()
-                            .await
-                            .push_user(&feedback);
+                        shared.state.lock().await.push_user(&feedback);
                         report(
                             &bus,
                             &agent_id,
@@ -3746,23 +3739,25 @@ async fn invoke_native(
                 Err(e) => format!("err: {e}"),
             }
         }
-        service if matches!(
-            service,
-            "mem.object.create"
-                | "mem.object.get"
-                | "mem.object.list"
-                | "mem.object.update"
-                | "mem.object.relate"
-                | "mem.graph.query"
-                | "mem.timeline"
-                | "mem.explain"
-                | "mem.revalidate"
-                | "mem.decision.get"
-                | "mem.narrative.generate"
-                | "mem.mind_palace.query"
-                | "mem.shadow.metrics"
-                | "mem.migration.status"
-        ) => {
+        service
+            if matches!(
+                service,
+                "mem.object.create"
+                    | "mem.object.get"
+                    | "mem.object.list"
+                    | "mem.object.update"
+                    | "mem.object.relate"
+                    | "mem.graph.query"
+                    | "mem.timeline"
+                    | "mem.explain"
+                    | "mem.revalidate"
+                    | "mem.decision.get"
+                    | "mem.narrative.generate"
+                    | "mem.mind_palace.query"
+                    | "mem.shadow.metrics"
+                    | "mem.migration.status"
+            ) =>
+        {
             match bus
                 .call::<serde_json::Value, serde_json::Value>(service, args, vec![])
                 .await

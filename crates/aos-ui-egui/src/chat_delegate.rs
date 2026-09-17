@@ -215,9 +215,7 @@ fn tools_fully_covered(have: &[String], need: &[String]) -> bool {
 }
 
 fn skill_overlap(have: &[String], need: &[String]) -> usize {
-    need.iter()
-        .filter(|s| have.iter().any(|h| h == *s))
-        .count()
+    need.iter().filter(|s| have.iter().any(|h| h == *s)).count()
 }
 
 /// Pick a library roster (or library Task) profile to clone into a new worker.
@@ -297,7 +295,12 @@ pub(crate) fn apply_roster_binding(req: &mut AgentCreateRequest, binding: &Roste
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        match req.system_prompt.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        match req
+            .system_prompt
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             Some(host) => {
                 req.system_prompt = Some(format!("{prompt}\n\n{host}"));
             }
@@ -705,14 +708,18 @@ pub(crate) fn canvas_model_id(selected: Option<String>, available: &[ModelInfo])
     };
 
     match selected {
-        Some(id) if available.iter().any(|model| {
-            model.id == id
-                && model.has_vision
-                && matches!(
-                    model.state,
-                    ModelState::Loaded | ModelState::PartiallyOffloaded
-                )
-        }) => Some(id),
+        Some(id)
+            if available.iter().any(|model| {
+                model.id == id
+                    && model.has_vision
+                    && matches!(
+                        model.state,
+                        ModelState::Loaded | ModelState::PartiallyOffloaded
+                    )
+            }) =>
+        {
+            Some(id)
+        }
         // A text-only chat model cannot critique pixels. Prefer a resident
         // vision model for canvas delegation while retaining the selected
         // model as a last resort when the machine has no vision model.
@@ -1050,12 +1057,9 @@ pub(crate) async fn spawn_chat_delegate_agent(
         .await
         .unwrap_or_default();
     let mut prose = prose;
-    if let Some(mut binding) = match_roster_for_delegate(
-        &agents,
-        &req.skills,
-        &req.tools,
-        roster_id.as_deref(),
-    ) {
+    if let Some(mut binding) =
+        match_roster_for_delegate(&agents, &req.skills, &req.tools, roster_id.as_deref())
+    {
         if let Ok(spec_resp) = bus
             .call::<AgentIdRequest, AgentSpecResponse>(
                 aos_agent::intents::SPEC_GET,
@@ -1439,13 +1443,7 @@ mod tests {
                 &["notes.create"],
                 &["notes"],
             ),
-            sample_agent(
-                "persona-coder",
-                AgentKind::Roster,
-                None,
-                &[],
-                &[],
-            ),
+            sample_agent("persona-coder", AgentKind::Roster, None, &[], &[]),
         ];
         let hit = match_roster_for_delegate(
             &agents,
@@ -1460,13 +1458,7 @@ mod tests {
     #[test]
     fn match_by_tool_overlap() {
         let agents = vec![
-            sample_agent(
-                "persona-coder",
-                AgentKind::Roster,
-                None,
-                &[],
-                &[],
-            ),
+            sample_agent("persona-coder", AgentKind::Roster, None, &[], &[]),
             sample_agent(
                 "agent-mod",
                 AgentKind::Roster,
@@ -1494,13 +1486,7 @@ mod tests {
     #[test]
     fn skip_empty_tools_and_ephemeral() {
         let agents = vec![
-            sample_agent(
-                "persona-coder",
-                AgentKind::Roster,
-                None,
-                &[],
-                &[],
-            ),
+            sample_agent("persona-coder", AgentKind::Roster, None, &[], &[]),
             sample_agent(
                 "agent-ephemeral",
                 AgentKind::Task,
@@ -1563,4 +1549,3 @@ mod tests {
         assert_eq!(spec.roster_id.as_deref(), Some("agent-notes"));
     }
 }
-

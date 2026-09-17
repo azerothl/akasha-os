@@ -263,25 +263,23 @@ pub fn seed_screenshot_create_layout(app: &mut UiApp) {
         .decl_panels
         .entry(MODULE_NAME.into())
         .or_insert_with(|| DeclUiPanelState::new(MODULE_NAME));
-    match DeclUiDocument::parse_json_with_contract(CREATE_LAYOUT_SHOT_DOC.as_bytes(), UI_CONTRACT_V2)
-    {
+    match DeclUiDocument::parse_json_with_contract(
+        CREATE_LAYOUT_SHOT_DOC.as_bytes(),
+        UI_CONTRACT_V2,
+    ) {
         Ok(doc) => {
             panel.set_document(doc);
             panel
                 .local_state
                 .insert("advanced_open".into(), json!(true));
-            panel
-                .local_state
-                .insert("upscale_open".into(), json!(true));
+            panel.local_state.insert("upscale_open".into(), json!(true));
             panel
                 .local_state
                 .insert("saved_preset_name".into(), json!("demo-preset"));
             panel
                 .local_state
                 .insert("upscale_model".into(), json!("realesrgan"));
-            panel
-                .local_state
-                .insert("upscale_repeats".into(), json!(1));
+            panel.local_state.insert("upscale_repeats".into(), json!(1));
             panel
                 .local_state
                 .insert("upscale_tile_size".into(), json!(128));

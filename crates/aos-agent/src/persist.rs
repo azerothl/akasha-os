@@ -129,8 +129,7 @@ pub fn export_fail_reason(
         // Keep actionable protocol diagnostics visible. The generic canvas
         // copy is useful for exhausted-step failures, but it hid the real
         // cause when the model emitted no parseable action at all.
-        if reason.contains("aucune action JSON détectée")
-            || reason.contains("boucle détectée")
+        if reason.contains("aucune action JSON détectée") || reason.contains("boucle détectée")
         {
             return reason.to_string();
         }
@@ -872,12 +871,30 @@ mod tests {
 
     #[test]
     fn export_fail_reason_stopped_on_restart_localized() {
-        let sentinel = export_fail_reason("en", crate::actions::THREAD_FAIL_STOPPED_ON_RESTART, None, None, None);
+        let sentinel = export_fail_reason(
+            "en",
+            crate::actions::THREAD_FAIL_STOPPED_ON_RESTART,
+            None,
+            None,
+            None,
+        );
         assert_eq!(sentinel, "Stopped on restart.");
         assert!(!sentinel.contains("arrêté"));
-        let legacy = export_fail_reason("en", crate::actions::LEGACY_FAIL_STOPPED_ON_RESTART, None, None, None);
+        let legacy = export_fail_reason(
+            "en",
+            crate::actions::LEGACY_FAIL_STOPPED_ON_RESTART,
+            None,
+            None,
+            None,
+        );
         assert_eq!(legacy, "Stopped on restart.");
-        let fr = export_fail_reason("fr", crate::actions::THREAD_FAIL_STOPPED_ON_RESTART, None, None, None);
+        let fr = export_fail_reason(
+            "fr",
+            crate::actions::THREAD_FAIL_STOPPED_ON_RESTART,
+            None,
+            None,
+            None,
+        );
         assert_eq!(fr, "Arrêté au redémarrage.");
     }
 

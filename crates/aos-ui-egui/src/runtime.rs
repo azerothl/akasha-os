@@ -1,5 +1,6 @@
 //! Background bus runtime: poll + `handle_cmd`.
 
+use crate::chat_delegate::format_roster_for_delegation_prompt;
 use crate::chat_room;
 use crate::cmd::{Cmd, Evt};
 use crate::i18n;
@@ -10,7 +11,6 @@ use crate::{
     load_module_ui, load_session, run_troubleshoot, session_has_running_canvas_agent,
     spawn_chat_delegate_agent, spawn_document_prep_agent, CHAT_AGENT_MAX_SUBAGENTS,
 };
-use crate::chat_delegate::format_roster_for_delegation_prompt;
 use aos_agent::intents as agent_intents;
 use aos_agent::schedule::{
     ScheduleCreateRequest, ScheduleEntry, ScheduleIdRequest, ScheduleListResponse,
@@ -23,15 +23,13 @@ use aos_proto::{
     AgentPolicySetRequest, AgentPromptOptimizeRequest, AgentPromptOptimizeResponse,
     AgentRoomConductProgress, AgentRosterUpdateRequest, AgentSpecResponse, AgentState,
     AgentSteerRequest, AgentTrace, AuditAppendRequest, AuditEvent, AuditQueryRequest,
-    CancelRequest, CapInfo,
-    CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage, ChatRoomMember,
-    ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionForkRequest,
-    ChatSessionGetResponse, ChatSessionIdRequest,
-    ChatSessionMembersAddRequest, ChatSessionMembersRemoveRequest, ChatSessionMeta,
-    ChatSessionRenameRequest, ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest,
-    ChatSessionRoomTurnRequest, ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest,
-    ChatSessionTruncateRequest,
-    ChatSessionSetModeRequest, ChatSessionSetModelRequest, ChatSessionSetPinnedRequest,
+    CancelRequest, CapInfo, CapListRequest, CapRevokeRequest, ChatAttachment, ChatMessage,
+    ChatRoomMember, ChatSessionAppendRequest, ChatSessionCreateRequest, ChatSessionForkRequest,
+    ChatSessionGetResponse, ChatSessionIdRequest, ChatSessionMembersAddRequest,
+    ChatSessionMembersRemoveRequest, ChatSessionMeta, ChatSessionRenameRequest,
+    ChatSessionRoomAskReplyRequest, ChatSessionRoomTurnCancelRequest, ChatSessionRoomTurnRequest,
+    ChatSessionRoomTurnResponse, ChatSessionSetArchivedRequest, ChatSessionSetModeRequest,
+    ChatSessionSetModelRequest, ChatSessionSetPinnedRequest, ChatSessionTruncateRequest,
     ConfirmResponseRequest, DeviceCaptureStopRequest, DevicePermissionRevokeRequest,
     FeedbackSubmitRequest, FeedbackSubmitResponse, FilesGenerateRequest, FilesGenerateResponse,
     FsDeleteRequest, FsEntry, FsListRequest, FsReadRequest, FsReadResponse, FsSetClassRequest,
@@ -41,10 +39,10 @@ use aos_proto::{
     LanClusterStageLocalModelRequest, LanClusterStageLocalModelResponse, LoadRequest, LoadResponse,
     McpServerInfo, MediaAudioGenerateRequest, MediaGenerateResponse, MediaImageGenerateRequest,
     MediaImageUpscaleRequest, MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest,
-    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemObjectListRequest,
-    MemMindPalaceRequest, MemMindPalaceResponse, MemRememberResponse, MemoryObject,
-    MemSweepStatus, MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest,
-    MemWorkingRequest, MigrateRequest, MigrateResponse, ModelInfo, ModelState, ModuleCatalogue,
+    MemExtractRequest, MemExtractResponse, MemHit, MemListRequest, MemMindPalaceRequest,
+    MemMindPalaceResponse, MemObjectListRequest, MemRememberResponse, MemSweepStatus,
+    MemUpdateRequest, MemUserRecallRequest, MemUserRememberRequest, MemWorkingRequest,
+    MemoryObject, MigrateRequest, MigrateResponse, ModelInfo, ModelState, ModuleCatalogue,
     ModuleInfo, ModuleInstallRequest, ModuleUninstallRequest, NetFetchRequest, NetFetchResponse,
     NetModeRequest, PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
@@ -628,7 +626,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 if let Some(spec) = delegate {
                     let canvas_delegate = spec.tools.iter().any(|t| t.starts_with("canvas."));
-                    if !(canvas_delegate && session_has_running_canvas_agent(&bus, &session_id).await)
+                    if !(canvas_delegate
+                        && session_has_running_canvas_agent(&bus, &session_id).await)
                     {
                         spawn_chat_delegate_agent(
                             bus.clone(),
@@ -806,7 +805,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             ));
                         }
                         if let Some(spec) = delegate {
-                            let canvas_delegate = spec.tools.iter().any(|t| t.starts_with("canvas."));
+                            let canvas_delegate =
+                                spec.tools.iter().any(|t| t.starts_with("canvas."));
                             if canvas_delegate && session_has_running_canvas_agent(&bus, &sid).await
                             {
                                 let _ = bus
@@ -999,7 +999,11 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::MemMindPalace { namespace, project, root_id } => {
+        Cmd::MemMindPalace {
+            namespace,
+            project,
+            root_id,
+        } => {
             let request = MemMindPalaceRequest {
                 namespace: namespace.filter(|value| !value.trim().is_empty()),
                 project: project.filter(|value| !value.trim().is_empty()),
@@ -2572,7 +2576,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             Err(e) => {
                 let _ = evt_tx.send(Evt::Error(e.to_string()));
             }
-        }
+        },
         Cmd::AuditAppend {
             action,
             target,
@@ -2591,7 +2595,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     vec![],
                 )
                 .await;
-        },
+        }
         Cmd::CapList { holder } => {
             if let Some(agent_id) = holder.strip_prefix("agent:") {
                 // Ensure logical agent caps are present in aos-capkd before listing.
@@ -4653,10 +4657,10 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     load_session(&bus, &evt_tx, &session_id).await;
                 }
                 Err(e) => {
-                    let _ = evt_tx.send(Evt::ChatError {
-                        session_id,
-                        message: e.to_string(),
-                    });
+                    load_session(&bus, &evt_tx, &session_id).await;
+                    // Do not ChatError: that finishes the in-flight room turn.
+                    // A late / unmatched ask-reply must not kill the conductor.
+                    let _ = evt_tx.send(Evt::Error(e.to_string()));
                 }
             }
         }

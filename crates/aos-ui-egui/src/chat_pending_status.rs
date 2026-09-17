@@ -113,9 +113,9 @@ fn room_phase_label<'a>(t: &'a UiStrings, phase: &str) -> &'a str {
 fn format_phase_status(t: &UiStrings, phase: ChatInferPhase) -> String {
     match phase {
         ChatInferPhase::Preparing => t.chat_pending_preparing.to_string(),
-        ChatInferPhase::Queued { position } => t
-            .chat_pending_queued
-            .replace("{n}", &position.to_string()),
+        ChatInferPhase::Queued { position } => {
+            t.chat_pending_queued.replace("{n}", &position.to_string())
+        }
         ChatInferPhase::WaitingFirstToken => t.chat_pending_waiting_tokens.to_string(),
     }
 }
@@ -338,7 +338,14 @@ mod tests {
     #[test]
     fn falls_back_to_phase_without_session_agents() {
         let t = en();
-        let agents = vec![agent("a1", "other", AgentState::Running, 1, 5, Some("Nope"))];
+        let agents = vec![agent(
+            "a1",
+            "other",
+            AgentState::Running,
+            1,
+            5,
+            Some("Nope"),
+        )];
         let status = format_pending_assistant_status(
             &t,
             ChatInferPhase::WaitingFirstToken,

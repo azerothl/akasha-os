@@ -111,9 +111,7 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     if !input.tools.is_empty() {
         let native_tools = uses_gemma4_native_tools(input.spec, input.tools);
         let mut tools_block = if native_tools {
-            String::from(
-                "## Catalogue d'outils (déclarations natives fournies par le template)\n",
-            )
+            String::from("## Catalogue d'outils (déclarations natives fournies par le template)\n")
         } else {
             String::from("## Catalogue d'outils (utilise uniquement ceux-ci)\n")
         };

@@ -228,7 +228,12 @@ impl UiApp {
                 ui.label(t.agents_harness_cwd);
                 ui.text_edit_singleline(&mut self.agent_ui.harness_cwd);
                 ui.weak(t.agents_harness_cwd_hint);
-                if !self.agent_ui.tool_selected.iter().any(|x| x == "harness.run") {
+                if !self
+                    .agent_ui
+                    .tool_selected
+                    .iter()
+                    .any(|x| x == "harness.run")
+                {
                     self.agent_ui.tool_selected.push("harness.run".into());
                 }
             }

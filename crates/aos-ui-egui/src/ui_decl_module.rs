@@ -270,9 +270,7 @@ mod tests {
         panel
             .local_state
             .insert("profile".into(), json!("balanced"));
-        panel
-            .local_state
-            .insert("sd_mode".into(), json!("img_gen"));
+        panel.local_state.insert("sd_mode".into(), json!("img_gen"));
         sync_create_generation_defaults(&mut panel);
         assert_eq!(
             panel.local_state.get("sd_mode").and_then(|v| v.as_str()),

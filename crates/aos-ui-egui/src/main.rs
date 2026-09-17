@@ -24,7 +24,6 @@ mod chat_ask;
 mod chat_bubble;
 mod chat_canvas;
 mod chat_code;
-mod clay_avatar;
 mod chat_composer_state;
 mod chat_controller;
 mod chat_delegate;
@@ -41,6 +40,7 @@ mod chat_sidebar_state;
 mod chat_state;
 mod chat_view_state;
 mod chrome_inventory;
+mod clay_avatar;
 mod cmd;
 mod composer_drafts;
 mod composer_layout;
@@ -3142,7 +3142,8 @@ impl eframe::App for UiApp {
                     );
                 }
                 Evt::RoomProgress { progress } => {
-                    if self.chat_state.active_session.as_deref() == Some(progress.session_id.as_str())
+                    if self.chat_state.active_session.as_deref()
+                        == Some(progress.session_id.as_str())
                         && self.chat_state.runtime.pending
                     {
                         self.chat_state.runtime.room_progress = Some(progress);
@@ -3575,7 +3576,11 @@ impl eframe::App for UiApp {
                                     "Permission requests pending"
                                 },
                                 if self.prefs.ui_layout.notifications_open {
-                                    if self.prefs.language == "fr" { "masquer" } else { "hide" }
+                                    if self.prefs.language == "fr" {
+                                        "masquer"
+                                    } else {
+                                        "hide"
+                                    }
                                 } else if self.prefs.language == "fr" {
                                     "afficher"
                                 } else {
@@ -3610,9 +3615,7 @@ impl eframe::App for UiApp {
                                 .iter()
                                 .map(|e| (e.code.clone(), e.cause.clone()))
                                 .collect();
-                            let _ = self.cmd_tx.send(Cmd::Troubleshoot {
-                                recent_chat_errors,
-                            });
+                            let _ = self.cmd_tx.send(Cmd::Troubleshoot { recent_chat_errors });
                             self.on_tab_open(Tab::Feedback);
                             self.status = t.troubleshooting_status.into();
                             ui.close_menu();

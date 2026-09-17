@@ -32,7 +32,7 @@ use crate::room_conductor::{
 };
 use crate::room_reply::split_room_reply;
 use crate::skills::load_skills;
-use crate::storage_path::{post_room_host_path_notice, ROOM_HOST_PATH_DISALLOWED};
+use crate::storage_path::{is_host_path_disallowed_outcome, post_room_host_path_notice};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
     canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools,
@@ -47,7 +47,7 @@ use aos_proto::{
     ChatSessionIdRequest, ChatSessionMessage, ChatSessionMode, InferParams, InferRequest,
     ModuleInfo, TokenEvent,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
@@ -84,6 +84,7 @@ pub struct RoomRoundState {
     pub cancel_notify: Notify,
     pub current_inference: Mutex<Option<u64>>,
     pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+    posted_host_path_notices: Mutex<HashSet<String>>,
     progress: Mutex<AgentRoomConductProgress>,
 }
 
@@ -100,6 +101,7 @@ impl RoomRoundState {
             cancel_notify: Notify::new(),
             current_inference: Mutex::new(None),
             ask_reply_tx: Mutex::new(None),
+            posted_host_path_notices: Mutex::new(HashSet::new()),
             progress: Mutex::new(AgentRoomConductProgress::default()),
         }
     }
@@ -156,6 +158,14 @@ impl RoomRoundState {
 
     pub async fn progress_snapshot(&self) -> AgentRoomConductProgress {
         self.progress.lock().await.clone()
+    }
+
+    /// True the first time this host-path sentinel is posted in the round.
+    pub async fn should_post_host_path_notice(&self, token: &str) -> bool {
+        self.posted_host_path_notices
+            .lock()
+            .await
+            .insert(token.to_string())
     }
 }
 
@@ -857,8 +867,10 @@ async fn run_room_tool_loop(
                     produced_artifacts.push(art);
                 }
             }
-            if outcome == ROOM_HOST_PATH_DISALLOWED {
-                let _ = post_room_host_path_notice(bus, session_id).await;
+            if is_host_path_disallowed_outcome(&outcome)
+                && round.should_post_host_path_notice(&outcome).await
+            {
+                let _ = post_room_host_path_notice(bus, session_id, &outcome).await;
             }
 
             messages.push(ChatMessage {

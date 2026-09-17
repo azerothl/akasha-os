@@ -61,9 +61,8 @@ fn parse_kind(backend: &AgentExecutionBackend) -> Result<(HarnessKind, Option<St
     match backend {
         AgentExecutionBackend::Native => Err("backend native".into()),
         AgentExecutionBackend::ExternalHarness { harness, cwd } => {
-            let kind = HarnessKind::parse(harness).ok_or_else(|| {
-                format!("harness backend inconnu: {harness} (codex|claude|grok)")
-            })?;
+            let kind = HarnessKind::parse(harness)
+                .ok_or_else(|| format!("harness backend inconnu: {harness} (codex|claude|grok)"))?;
             Ok((kind, cwd.clone()))
         }
     }
@@ -347,21 +346,14 @@ async fn emit_step(ctx: EmitStep<'_>) {
     report(
         bus,
         &spec.agent_id,
-        AgentOutputEvent::Log {
-            line: tool_result,
-        },
+        AgentOutputEvent::Log { line: tool_result },
     )
     .await;
     report(bus, &spec.agent_id, AgentOutputEvent::Step(record)).await;
 }
 
 async fn fail_fast(bus: &BusClient, agent_id: &str, message: String) {
-    report(
-        bus,
-        agent_id,
-        AgentOutputEvent::Error { message },
-    )
-    .await;
+    report(bus, agent_id, AgentOutputEvent::Error { message }).await;
     report(
         bus,
         agent_id,
@@ -458,9 +450,7 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
                             .await;
                         ControlResp::Ack
                     }
-                    ControlCmd::Snapshot => {
-                        ControlResp::State(shared.state.lock().await.clone())
-                    }
+                    ControlCmd::Snapshot => ControlResp::State(shared.state.lock().await.clone()),
                     ControlCmd::GrantCap { cap } => {
                         let mut st = shared.state.lock().await;
                         if !st.cap_set_snapshot.contains(&cap) {
@@ -518,11 +508,17 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
 
     loop {
         if started.elapsed() > timeout {
-            fail_fast(bus.as_ref(), &agent_id, "timeout goal (backend harness)".into()).await;
+            fail_fast(
+                bus.as_ref(),
+                &agent_id,
+                "timeout goal (backend harness)".into(),
+            )
+            .await;
             return;
         }
 
-        if let Some(steer) = wait_while_paused(bus.as_ref(), &shared, &mut cmd_rx, &agent_id).await {
+        if let Some(steer) = wait_while_paused(bus.as_ref(), &shared, &mut cmd_rx, &agent_id).await
+        {
             next_prompt = Some(steer);
             resume = true;
         }
@@ -530,7 +526,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
         let prompt = match next_prompt.take() {
             Some(p) if !p.trim().is_empty() => p,
             _ => {
-                report(bus.as_ref(),
+                report(
+                    bus.as_ref(),
                     &agent_id,
                     AgentOutputEvent::Log {
                         line: "en attente d'un steer…".into(),
@@ -545,7 +542,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
                     Some(BackendCmd::Resume) => continue,
                     Some(BackendCmd::ActDecision { .. }) => continue,
                     None => {
-                        report(bus.as_ref(),
+                        report(
+                            bus.as_ref(),
                             &agent_id,
                             AgentOutputEvent::StateChanged {
                                 state: AgentState::Killed,
@@ -565,7 +563,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
                 fail_fast(bus.as_ref(), &agent_id, "lancement harness refusé".into()).await;
                 return;
             }
-            report(bus.as_ref(),
+            report(
+                bus.as_ref(),
                 &agent_id,
                 AgentOutputEvent::StateChanged {
                     state: AgentState::Running,
@@ -575,7 +574,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
         }
 
         if step >= max_steps {
-            report(bus.as_ref(),
+            report(
+                bus.as_ref(),
                 &agent_id,
                 AgentOutputEvent::StateChanged {
                     state: AgentState::Done,
@@ -603,21 +603,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
         });
 
         let turn_started = Instant::now();
-        let secs = turn_timeout.min(
-            timeout
-                .saturating_sub(started.elapsed())
-                .as_secs()
-                .max(15),
-        );
-        let result = run_turn(
-            kind,
-            &prompt,
-            cwd.as_deref(),
-            secs,
-            resume,
-            Some(cancel),
-        )
-        .await;
+        let secs = turn_timeout.min(timeout.saturating_sub(started.elapsed()).as_secs().max(15));
+        let result = run_turn(kind, &prompt, cwd.as_deref(), secs, resume, Some(cancel)).await;
         watcher.abort();
 
         match result {
@@ -639,7 +626,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
                     continue;
                 }
                 if r.timed_out || !r.ok() {
-                    report(bus.as_ref(),
+                    report(
+                        bus.as_ref(),
                         &agent_id,
                         AgentOutputEvent::StateChanged {
                             state: AgentState::Failed,
@@ -650,7 +638,8 @@ pub async fn run(bus: Arc<BusClient>, bus_addr: String, mut spec: AgentSpec, res
                 }
                 resume = true;
                 if step >= max_steps {
-                    report(bus.as_ref(),
+                    report(
+                        bus.as_ref(),
                         &agent_id,
                         AgentOutputEvent::StateChanged {
                             state: AgentState::Done,

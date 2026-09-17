@@ -4,7 +4,7 @@ use crate::device_tools::invoke_device_tool;
 use crate::host_folder::try_host_folder_tool;
 use crate::mcp::McpSession;
 use crate::module_discovery::{module_fallback_allowed, tool_in_catalog, tool_unavailable_message};
-use crate::storage_path::{is_disallowed_storage_path, ROOM_HOST_PATH_DISALLOWED};
+use crate::storage_path::{host_path_disallowed_token, is_disallowed_storage_path};
 use crate::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, normalize_tool_args,
     resolve_tool_backend, ToolBackend, ToolDesc,
@@ -108,7 +108,7 @@ pub async fn invoke_native_tool(
                 {
                     return out;
                 }
-                return ROOM_HOST_PATH_DISALLOWED.to_string();
+                return host_path_disallowed_token(path);
             }
             read_fs(bus, path, agent_id, caps).await
         }
@@ -123,7 +123,7 @@ pub async fn invoke_native_tool(
                 {
                     return out;
                 }
-                return ROOM_HOST_PATH_DISALLOWED.to_string();
+                return host_path_disallowed_token(&path);
             }
             let content = args
                 .get("content")
@@ -160,7 +160,7 @@ pub async fn invoke_native_tool(
                 {
                     return out;
                 }
-                return ROOM_HOST_PATH_DISALLOWED.to_string();
+                return host_path_disallowed_token(&prefix);
             }
             match bus
                 .call::<FsListRequest, Vec<aos_proto::FsEntry>>(
@@ -246,7 +246,7 @@ pub async fn invoke_native_tool(
                 {
                     return out;
                 }
-                return ROOM_HOST_PATH_DISALLOWED.to_string();
+                return host_path_disallowed_token(&path);
             }
             let format = args
                 .get("format")
@@ -315,7 +315,7 @@ pub async fn execute_room_tool(
             if let Some(out) = try_host_folder_tool(bus, agent_id, name, args, session_id).await {
                 return out;
             }
-            return ROOM_HOST_PATH_DISALLOWED.to_string();
+            return host_path_disallowed_token(path);
         }
     }
 

@@ -1459,8 +1459,12 @@ mod tests {
     fn illustration_goals_prefer_scene_but_technical_drawings_keep_primitives() {
         assert!(canvas_goal_prefers_scene("dessine un chat stylisé"));
         assert!(canvas_goal_prefers_scene("create a house illustration"));
-        assert!(!canvas_goal_prefers_scene("dessine un graphe d'architecture"));
-        assert!(!canvas_goal_prefers_scene("représentation graphique mathématique"));
+        assert!(!canvas_goal_prefers_scene(
+            "dessine un graphe d'architecture"
+        ));
+        assert!(!canvas_goal_prefers_scene(
+            "représentation graphique mathématique"
+        ));
     }
 
     #[test]
@@ -1645,7 +1649,9 @@ mod tests {
             Some("stop")
         );
         assert!(!canvas_critic_approved("The image looks good enough."));
-        assert!(canvas_critic_approved("ACTION: stop\nSEQUENCES: none\nNOTE: done"));
+        assert!(canvas_critic_approved(
+            "ACTION: stop\nSEQUENCES: none\nNOTE: done"
+        ));
         assert_eq!(canvas_critic_action("ACTION: maybe"), None);
     }
 
