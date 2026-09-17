@@ -791,6 +791,66 @@ mod canvas_completion_tests {
         let text = agent_completion_chat_text(&ag, &t, None, Some(&trace), false, 0);
         assert!(text.is_empty());
     }
+
+    #[test]
+    fn completion_chat_appends_sources_footer_from_trace() {
+        let t = i18n::strings("fr");
+        let mut ag = canvas_agent("research-1");
+        ag.state = AgentState::Done;
+        ag.tools = vec!["web.search".into(), "web.browse".into()];
+        ag.skills = vec!["research".into()];
+        ag.fail_reason = None;
+        ag.last_output = "Les agents agentiques progressent.".into();
+        let trace = AgentTrace {
+            agent_id: "research-1".into(),
+            steps: vec![aos_proto::AgentStepRecord {
+                step: 1,
+                action: "web.browse".into(),
+                sources: vec![aos_proto::AgentSource {
+                    kind: "web".into(),
+                    title: "Agentic Survey".into(),
+                    locator: "https://example.com/survey".into(),
+                    snippet: "…".into(),
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let text = agent_completion_chat_text(&ag, &t, None, Some(&trace), false, 0);
+        assert!(text.contains("Les agents agentiques progressent."));
+        assert!(text.contains("## Sources"));
+        assert!(text.contains("[Agentic Survey](https://example.com/survey)"));
+        // Runtime injects [1] when the body had no markers (single-sentence → footer only,
+        // or multi-sentence fallback). Single short sentence may not get a body marker.
+    }
+
+    #[test]
+    fn completion_chat_does_not_duplicate_sources_already_in_output() {
+        let t = i18n::strings("en");
+        let mut ag = canvas_agent("research-2");
+        ag.state = AgentState::Done;
+        ag.tools = vec!["web.search".into()];
+        ag.fail_reason = None;
+        ag.last_output =
+            "Done.\n\n## Sources\n\n1. [Survey](https://example.com/survey)\n".into();
+        let trace = AgentTrace {
+            agent_id: "research-2".into(),
+            steps: vec![aos_proto::AgentStepRecord {
+                step: 1,
+                action: "web.browse".into(),
+                sources: vec![aos_proto::AgentSource {
+                    kind: "web".into(),
+                    title: "Survey".into(),
+                    locator: "https://example.com/survey".into(),
+                    snippet: String::new(),
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let text = agent_completion_chat_text(&ag, &t, None, Some(&trace), false, 0);
+        assert_eq!(text.matches("## Sources").count(), 1);
+    }
 }
 
 #[cfg(test)]

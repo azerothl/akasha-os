@@ -183,6 +183,13 @@ pub async fn invoke_native_tool(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            if crate::sources::is_weak_search_query(&query) {
+                return format!(
+                    "web.search refusée : « {query} » n'est pas une requête thématique. \
+                     Cherche le sujet de la tâche (ex. « agentic OS »), \
+                     pas un mot de dictionnaire (définition, qu', ce, est…)."
+                );
+            }
             let engine = args
                 .get("engine")
                 .and_then(|v| v.as_str())
@@ -205,7 +212,7 @@ pub async fn invoke_native_tool(
                 )
                 .await
             {
-                Ok(r) => serde_json::to_string(&r.results).unwrap_or_default(),
+                Ok(r) => crate::sources::format_search_hits_for_agent(&r.results),
                 Err(e) => format!("web.search err: {e}"),
             }
         }

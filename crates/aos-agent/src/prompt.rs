@@ -219,6 +219,7 @@ IMPORTANT :
 - Après `agent.spawn`, le runtime injecte `[child-done]` quand le sous-agent termine. Tu peux `agent.await` ou poursuivre dès que tu vois ce résultat — ne reste pas bloqué à attendre. Si `agent.await` dit « toujours en cours », **réessaie** : l'enfant travaille encore (pas bloqué) — ne duplique pas son travail.
 - Après une découverte utile : `memory.remember`.
 - Avant une recherche web ou un fetch : `memory.recall` sur la requête courante si le contexte mémoire n'est pas déjà suffisant.
+- `web.search` : une requête **thématique** nommant le sujet (ex. « agentic OS »), jamais un mot de dictionnaire (définition, qu', ce, est…).
 - Pour lire une page HTML utilise `web.browse` (texte). `net.fetch` ne fait que télécharger un fichier.
 - `harness.run` (si au catalogue) : CLI allowlisté `codex` / `claude` / `grok` — prompt seulement, jamais de shell ni d'argv extra. Confirmation utilisateur.
 
@@ -232,7 +233,7 @@ Actions runtime (toujours `{"action":"…","args":{…}}` — ne mets pas brief/
 - memory.remember : {"text":"..."}
 - memory.recall : {"query":"..."}
 - docs.read : {"path":"..."}
-- goal.complete : {"summary":"..."} — summary obligatoire : le résultat lisible pour l'utilisateur (pas vide, pas seulement « terminé »)
+- goal.complete : {"summary":"..."} — summary obligatoire : le résultat lisible pour l'utilisateur (pas vide, pas seulement « terminé »). Après `web.search` / `web.browse`, place des marqueurs `[1]`, `[2]`… juste après chaque fait (numéros = résultats outils), puis une liste Sources en bas.
 - goal.fail : {"reason":"..."}
 
 Extensions OS (si limitation) :
@@ -274,7 +275,7 @@ Exemples :
 - plan.create : {"action":"plan.create","args":{"task":"…","steps":[{"id":"1","label":"Analyse","children":[{"id":"1.1","label":"Contexte"}]}]}}
 - plan.update_step : {"action":"plan.update_step","args":{"step_id":"1","status":"done"}}
 - plan.delegate_step : {"action":"plan.delegate_step","args":{"step_id":"2.1","brief":"Extraire README et Cargo.toml","tools":["fs.read","fs.list"]}}
-- goal.complete : {"summary":"…"} — summary obligatoire (résultat lisible pour l'utilisateur)
+- goal.complete : {"summary":"…"} — summary obligatoire (résultat lisible). Après recherche web : marqueurs `[n]` dans le texte + liste Sources.
 "#;
 
 const GEMMA4_NATIVE_TOOL_PROTOCOL: &str = r#"## Format d'outils du modèle courant

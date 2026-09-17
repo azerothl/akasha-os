@@ -360,6 +360,12 @@ fn agent_completion_chat_text(
                 format!("Agent « {title} » terminé.")
             } else {
                 let body: String = out.chars().take(8000).collect();
+                let body = if let Some(tr) = trace {
+                    let sources = aos_agent::sources::aggregate_trace_sources(&tr.steps);
+                    aos_agent::sources::finalize_summary_with_sources(&body, &sources)
+                } else {
+                    body
+                };
                 format!("**Résultat — {title}**\n\n{body}")
             }
         }
