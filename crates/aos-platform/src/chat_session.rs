@@ -313,6 +313,19 @@ impl ChatSessionStore {
         } else {
             spec.brief = doc.brief.clone();
         }
+        for (i, part) in spec.parts.iter_mut().enumerate() {
+            if part.id.trim().is_empty() {
+                part.id = if part.role.trim().is_empty() {
+                    format!("part{i}")
+                } else {
+                    format!("{}_{i}", part.role.trim())
+                };
+            }
+            if !part.outline && !part.fill {
+                part.fill = true;
+                part.outline = true;
+            }
+        }
         // Force palette from brief look if still default-mismatched lightly
         if spec.brief.palette == aos_proto::IllustrationPaletteId::default() {
             spec.brief.palette = doc.brief.look.default_palette();

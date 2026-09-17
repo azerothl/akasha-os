@@ -1,12 +1,11 @@
 //! Illustration surface — semantic scene + look/palette (skill-inspired), separate from whiteboard ops.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::CanvasPoint;
 
 /// Hand-drawn look (one finish per still / shot).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IllustrationLook {
     #[default]
     Ink,
@@ -24,6 +23,17 @@ impl IllustrationLook {
             Self::Screen => "screen",
             Self::Pencil => "pencil",
             Self::Blueprint => "blueprint",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "ink" | "encre" => Some(Self::Ink),
+            "riso" => Some(Self::Riso),
+            "screen" | "serigraphie" | "sérigraphie" => Some(Self::Screen),
+            "pencil" | "crayon" => Some(Self::Pencil),
+            "blueprint" | "plan" => Some(Self::Blueprint),
+            _ => None,
         }
     }
 
@@ -47,9 +57,21 @@ impl IllustrationLook {
     }
 }
 
+impl Serialize for IllustrationLook {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for IllustrationLook {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self::parse(&s).unwrap_or_default())
+    }
+}
+
 /// Named palette presets (no free hex in scenes).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IllustrationPaletteId {
     #[default]
     PaperInk,
@@ -72,13 +94,33 @@ impl IllustrationPaletteId {
 
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim() {
-            "paperInk" | "paper_ink" => Some(Self::PaperInk),
-            "risoPop" | "riso_pop" => Some(Self::RisoPop),
-            "screenSea" | "screen_sea" => Some(Self::ScreenSea),
-            "pencilMinimal" | "pencil_minimal" => Some(Self::PencilMinimal),
-            "blueprintNight" | "blueprint_night" => Some(Self::BlueprintNight),
+            "paperInk" | "paper_ink" | "ink" => Some(Self::PaperInk),
+            "risoPop" | "riso_pop" | "riso" => Some(Self::RisoPop),
+            "screenSea" | "screen_sea" | "screen" => Some(Self::ScreenSea),
+            "pencilMinimal" | "pencil_minimal" | "pencil" => Some(Self::PencilMinimal),
+            "blueprintNight" | "blueprint_night" | "blueprint" | "night" => {
+                Some(Self::BlueprintNight)
+            }
             _ => None,
         }
+    }
+
+    /// Unknown agent names fall back to the look's default preset.
+    pub fn parse_or(s: &str, look: IllustrationLook) -> Self {
+        Self::parse(s).unwrap_or_else(|| look.default_palette())
+    }
+}
+
+impl Serialize for IllustrationPaletteId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for IllustrationPaletteId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self::parse_or(&s, IllustrationLook::Ink))
     }
 }
 
@@ -298,6 +340,7 @@ fn default_true() -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IllustrationPart {
+    #[serde(default)]
     pub id: String,
     #[serde(default)]
     pub role: String,
@@ -306,11 +349,22 @@ pub struct IllustrationPart {
     pub fill_index: u8,
     #[serde(default = "default_true")]
     pub fill: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub outline: bool,
     #[serde(default)]
     pub seed: u32,
+    #[serde(default = "default_part_geometry")]
     pub geometry: IllustrationPartGeometry,
+}
+
+fn default_part_geometry() -> IllustrationPartGeometry {
+    IllustrationPartGeometry::Ellipse {
+        x: 0.3,
+        y: 0.3,
+        w: 0.4,
+        h: 0.4,
+        rotation: 0.0,
+    }
 }
 
 impl Default for IllustrationPart {
@@ -728,5 +782,22 @@ mod tests {
         let r = review_illustration(&IllustrationDoc::default());
         assert!(r.score < 0.5);
         assert!(r.issues.iter().any(|i| i.kind == "missing_brief"));
+    }
+
+    #[test]
+    fn palette_unknown_falls_back() {
+        let raw = "\"warm_sunny_beach\"";
+        let p: IllustrationPaletteId = serde_json::from_str(raw).unwrap();
+        assert_eq!(p, IllustrationPaletteId::PaperInk);
+        assert_eq!(
+            serde_json::to_string(&IllustrationPaletteId::RisoPop).unwrap(),
+            "\"risoPop\""
+        );
+    }
+
+    #[test]
+    fn look_aliases_parse() {
+        let look: IllustrationLook = serde_json::from_str("\"encre\"").unwrap();
+        assert_eq!(look, IllustrationLook::Ink);
     }
 }

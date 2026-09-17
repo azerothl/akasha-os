@@ -232,6 +232,7 @@ impl UiApp {
                                                 .with_cross_justify(true),
                                             |ui| {
                                                 if let Some(ref sid) = active_sid {
+                                                    self.illust_poll_if_due(ui, sid);
                                                     self.ui_illustration_panel(ui, t, sid);
                                                 }
                                             },
@@ -263,6 +264,7 @@ impl UiApp {
                                             .with_cross_justify(true),
                                         |ui| {
                                             if let Some(ref sid) = active_sid {
+                                                self.illust_poll_if_due(ui, sid);
                                                 self.ui_illustration_panel(ui, t, sid);
                                             }
                                         },

@@ -1211,24 +1211,78 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.set_brief",
-            "Fixer subject/look/palette/anchor avant compose (look: ink|riso|screen|pencil|blueprint)",
+            "Fixer subject/look/palette/anchor avant compose. look: ink|riso|screen|pencil|blueprint. palette: paperInk|risoPop|screenSea|pencilMinimal|blueprintNight (jamais de hex libres).",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "session_id":sid(),
-                    "brief":{"type":"object"}
+                    "brief":{
+                        "type":"object",
+                        "properties":{
+                            "subject":{"type":"string"},
+                            "look":{"type":"string","enum":["ink","riso","screen","pencil","blueprint"]},
+                            "palette":{"type":"string","enum":["paperInk","risoPop","screenSea","pencilMinimal","blueprintNight"]},
+                            "anchor":{"type":"string"},
+                            "beats":{"type":"array","items":{"type":"string"}}
+                        },
+                        "required":["subject"]
+                    },
+                    "subject":{"type":"string","description":"alias flat — préférer brief.subject"},
+                    "look":{"type":"string"},
+                    "palette":{"type":"string"},
+                    "anchor":{"type":"string"}
                 },
                 "required":["brief"]
             }),
         ),
         (
             "illust.compose",
-            "Composer une IllustrationSpec complète (parts 3–8, roles body/main, fill+outline). Remplace la scène.",
+            "Composer une IllustrationSpec (parts 3–8). Coords geometry en 0..1 (pas 0..100 ni pixels). Préférer kind ellipse|rect avec x,y,w,h. Éviter kind path sauf si points[] (≥2) est fourni. Chaque part: id, role (body/main/background). Remplace la scène. Succès = doc avec last_png — enchaîner review/export, ne pas basculer en description texte.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "session_id":sid(),
-                    "spec":{"type":"object"}
+                    "spec":{
+                        "type":"object",
+                        "properties":{
+                            "brief":{"type":"object"},
+                            "parts":{
+                                "type":"array",
+                                "items":{
+                                    "type":"object",
+                                    "properties":{
+                                        "id":{"type":"string"},
+                                        "role":{"type":"string"},
+                                        "fill":{"type":"boolean"},
+                                        "outline":{"type":"boolean"},
+                                        "fill_index":{"type":"integer"},
+                                        "seed":{"type":"integer"},
+                                        "geometry":{
+                                            "type":"object",
+                                            "properties":{
+                                                "kind":{"type":"string","enum":["ellipse","rect","path"]},
+                                                "x":{"type":"number"},
+                                                "y":{"type":"number"},
+                                                "w":{"type":"number"},
+                                                "h":{"type":"number"},
+                                                "points":{
+                                                    "type":"array",
+                                                    "items":{
+                                                        "type":"object",
+                                                        "properties":{"x":{"type":"number"},"y":{"type":"number"}},
+                                                        "required":["x","y"]
+                                                    }
+                                                }
+                                            },
+                                            "required":["kind"]
+                                        }
+                                    },
+                                    "required":["id","role","geometry"]
+                                }
+                            }
+                        },
+                        "required":["parts"]
+                    }
                 },
                 "required":["spec"]
             }),
@@ -1327,8 +1381,9 @@ pub fn explicit_illust_intent(text: &str) -> bool {
 /// Short strategy for illustration agents.
 pub fn illust_draw_strategy_hint() -> String {
     "PROTOCOLE Illustration : illust.get → illust.set_brief (subject, look, palette, anchor) → \
-     illust.compose (parts 3–8, role body sur la masse) → illust.render_sheet → illust.review → \
-     corrige via compose si besoin → illust.export. Pour animer : illust.animate après compose. \
+     illust.compose (parts 3–8, role body sur la masse ; geometry ellipse/rect en coords 0..1 — pas 0..100/pixels, pas de path sans points) → \
+     si last_png présent : illust.render_sheet → illust.review → corrige via compose si besoin → illust.export. \
+     Ne jamais remplacer une scène rendue par une description texte. Pour animer : illust.animate après compose. \
      Couleurs = palette preset uniquement (pas de hex libres). Fill ≠ outline (raster applique wob+finish)."
         .into()
 }
@@ -1897,7 +1952,380 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
             }
         }
     }
+    if name.starts_with("illust.") {
+        normalize_illust_tool_args(name, obj);
+    }
     out
+}
+
+/// Coerce flat / alias LLM shapes into the Illust* request contracts.
+fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serde_json::Value>) {
+    if name == "illust.set_brief" {
+        let mut brief = match obj.get("brief") {
+            Some(serde_json::Value::Object(m)) => m.clone(),
+            Some(serde_json::Value::String(s)) => {
+                let mut m = serde_json::Map::new();
+                m.insert("subject".into(), serde_json::Value::String(s.clone()));
+                m
+            }
+            _ => serde_json::Map::new(),
+        };
+        for (src, dst) in [
+            ("subject", "subject"),
+            ("look", "look"),
+            ("palette", "palette"),
+            ("anchor", "anchor"),
+        ] {
+            if !brief.contains_key(dst) {
+                if let Some(v) = obj.get(src).cloned() {
+                    brief.insert(dst.into(), v);
+                }
+            }
+        }
+        // Coerce unknown palette names via look default (serde also falls back).
+        let look = brief
+            .get("look")
+            .and_then(|v| v.as_str())
+            .and_then(aos_proto::IllustrationLook::parse)
+            .unwrap_or_default();
+        if let Some(p) = brief.get("palette").and_then(|v| v.as_str()) {
+            let coerced = aos_proto::IllustrationPaletteId::parse_or(p, look);
+            brief.insert("palette".into(), serde_json::json!(coerced.as_str()));
+        } else {
+            brief.insert(
+                "palette".into(),
+                serde_json::json!(look.default_palette().as_str()),
+            );
+        }
+        if let Some(l) = brief.get("look").and_then(|v| v.as_str()) {
+            let coerced = aos_proto::IllustrationLook::parse(l).unwrap_or_default();
+            brief.insert("look".into(), serde_json::json!(coerced.as_str()));
+        }
+        obj.insert("brief".into(), serde_json::Value::Object(brief));
+        for k in ["subject", "look", "palette", "anchor", "beats"] {
+            obj.remove(k);
+        }
+    }
+    if name == "illust.compose" {
+        // Flat parts at top-level → wrap as spec.
+        if !obj.contains_key("spec") {
+            if obj.contains_key("parts") {
+                let mut spec = serde_json::Map::new();
+                for k in [
+                    "parts",
+                    "pose",
+                    "camera",
+                    "mode",
+                    "brief",
+                    "seed",
+                    "show_construction",
+                ] {
+                    if let Some(v) = obj.remove(k) {
+                        spec.insert(k.into(), v);
+                    }
+                }
+                obj.insert("spec".into(), serde_json::Value::Object(spec));
+            }
+        }
+        if let Some(serde_json::Value::Object(spec)) = obj.get_mut("spec") {
+            // Flat subject/look/palette on spec → nested brief.
+            let mut brief = match spec.get("brief") {
+                Some(serde_json::Value::Object(m)) => m.clone(),
+                Some(serde_json::Value::String(s)) => {
+                    let mut m = serde_json::Map::new();
+                    m.insert("subject".into(), serde_json::Value::String(s.clone()));
+                    m
+                }
+                _ => serde_json::Map::new(),
+            };
+            for key in ["subject", "look", "palette", "anchor", "beats"] {
+                if !brief.contains_key(key) {
+                    if let Some(v) = spec.remove(key) {
+                        brief.insert(key.into(), v);
+                    }
+                } else {
+                    spec.remove(key);
+                }
+            }
+            let look = brief
+                .get("look")
+                .and_then(|v| v.as_str())
+                .and_then(aos_proto::IllustrationLook::parse)
+                .unwrap_or_default();
+            if let Some(p) = brief.get("palette").and_then(|v| v.as_str()) {
+                let coerced = aos_proto::IllustrationPaletteId::parse_or(p, look);
+                brief.insert("palette".into(), serde_json::json!(coerced.as_str()));
+            }
+            if let Some(l) = brief.get("look").and_then(|v| v.as_str()) {
+                let coerced = aos_proto::IllustrationLook::parse(l).unwrap_or_default();
+                brief.insert("look".into(), serde_json::json!(coerced.as_str()));
+            }
+            if !brief.is_empty() {
+                spec.insert("brief".into(), serde_json::Value::Object(brief));
+            }
+
+            if let Some(serde_json::Value::Array(parts)) = spec.get_mut("parts") {
+                let n = parts.len().max(1);
+                for (i, part) in parts.iter_mut().enumerate() {
+                    let Some(p) = part.as_object_mut() else {
+                        continue;
+                    };
+                    let role = p
+                        .get("role")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if p.get("id").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
+                        let id = if role.is_empty() {
+                            format!("part{i}")
+                        } else {
+                            format!("{role}_{i}")
+                        };
+                        p.insert("id".into(), serde_json::Value::String(id));
+                    }
+                    if let Some(geom) = p.get_mut("geometry").and_then(|g| g.as_object_mut()) {
+                        if !geom.contains_key("kind") {
+                            if let Some(t) = geom.remove("type") {
+                                geom.insert("kind".into(), t);
+                            }
+                        }
+                        normalize_illust_part_geometry(geom, &role, i, n);
+                    } else {
+                        // Models often send role+description only — invent a readable layout.
+                        let (x, y, w, h) = layout_for_illust_role(&role, i, n);
+                        p.insert(
+                            "geometry".into(),
+                            serde_json::json!({
+                                "kind": "ellipse",
+                                "x": x,
+                                "y": y,
+                                "w": w,
+                                "h": h,
+                                "rotation": 0.0
+                            }),
+                        );
+                    }
+                    if !p.contains_key("fill") {
+                        p.insert("fill".into(), serde_json::json!(true));
+                    }
+                    if !p.contains_key("outline") {
+                        p.insert("outline".into(), serde_json::json!(true));
+                    }
+                    if !p.contains_key("fill_index") {
+                        let id = p
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        p.insert(
+                            "fill_index".into(),
+                            serde_json::json!(default_illust_fill_index(&role, &id, i)),
+                        );
+                    }
+                    if !p.contains_key("seed") {
+                        p.insert("seed".into(), serde_json::json!(i as u32 + 1));
+                    }
+                    // Drop free-text fields the schema rejects.
+                    p.remove("description");
+                    p.remove("label");
+                    p.remove("name");
+                }
+            }
+        }
+    }
+}
+
+/// Fix LLM geometry shapes before CBOR encode (path without points, missing bbox, …).
+fn normalize_illust_part_geometry(
+    geom: &mut serde_json::Map<String, serde_json::Value>,
+    role: &str,
+    index: usize,
+    total: usize,
+) {
+    let kind = geom
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("ellipse")
+        .to_string();
+    let points_ok = geom
+        .get("points")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len() >= 2)
+        .unwrap_or(false);
+
+    // Models often emit `path` with only a bbox (x/y/w/h) and no `points`.
+    if kind == "path" && !points_ok {
+        let (lx, ly, lw, lh) = layout_for_illust_role(role, index, total);
+        let x = num_f32(geom.get("x")).unwrap_or(lx);
+        let y = num_f32(geom.get("y")).unwrap_or(ly);
+        let w = num_f32(geom.get("w")).unwrap_or(lw);
+        let h = num_f32(geom.get("h")).unwrap_or(lh);
+        let rot = num_f32(geom.get("rotation")).unwrap_or(0.0);
+        geom.clear();
+        geom.insert("kind".into(), serde_json::json!("ellipse"));
+        geom.insert("x".into(), serde_json::json!(x));
+        geom.insert("y".into(), serde_json::json!(y));
+        geom.insert("w".into(), serde_json::json!(w));
+        geom.insert("h".into(), serde_json::json!(h));
+        geom.insert("rotation".into(), serde_json::json!(rot));
+        rescale_illust_bbox_fields(geom);
+        return;
+    }
+
+    if kind == "path" && points_ok {
+        rescale_illust_path_points(geom);
+        return;
+    }
+
+    if matches!(kind.as_str(), "ellipse" | "rect") {
+        let (lx, ly, lw, lh) = layout_for_illust_role(role, index, total);
+        if num_f32(geom.get("x")).is_none() {
+            geom.insert("x".into(), serde_json::json!(lx));
+        }
+        if num_f32(geom.get("y")).is_none() {
+            geom.insert("y".into(), serde_json::json!(ly));
+        }
+        if num_f32(geom.get("w")).is_none() {
+            geom.insert("w".into(), serde_json::json!(lw));
+        }
+        if num_f32(geom.get("h")).is_none() {
+            geom.insert("h".into(), serde_json::json!(lh));
+        }
+        if !geom.contains_key("rotation") {
+            geom.insert("rotation".into(), serde_json::json!(0.0));
+        }
+        rescale_illust_bbox_fields(geom);
+    }
+}
+
+/// LLMs often send 0..100 (%) or ~1024px instead of normalized 0..1.
+fn illust_coord_divisor(samples: &[f32]) -> f32 {
+    let max_abs = samples
+        .iter()
+        .copied()
+        .map(f32::abs)
+        .fold(0.0f32, f32::max);
+    if !max_abs.is_finite() || max_abs <= 1.5 {
+        1.0
+    } else if max_abs <= 100.5 {
+        100.0
+    } else if max_abs <= 2048.0 {
+        1024.0
+    } else {
+        max_abs
+    }
+}
+
+fn rescale_illust_bbox_fields(geom: &mut serde_json::Map<String, serde_json::Value>) {
+    let x = num_f32(geom.get("x")).unwrap_or(0.0);
+    let y = num_f32(geom.get("y")).unwrap_or(0.0);
+    let w = num_f32(geom.get("w")).unwrap_or(0.1);
+    let h = num_f32(geom.get("h")).unwrap_or(0.1);
+    let div = illust_coord_divisor(&[x, y, w, h, x + w, y + h]);
+    if (div - 1.0).abs() < f32::EPSILON {
+        return;
+    }
+    geom.insert("x".into(), serde_json::json!(x / div));
+    geom.insert("y".into(), serde_json::json!(y / div));
+    geom.insert("w".into(), serde_json::json!((w / div).max(0.01)));
+    geom.insert("h".into(), serde_json::json!((h / div).max(0.01)));
+}
+
+fn rescale_illust_path_points(geom: &mut serde_json::Map<String, serde_json::Value>) {
+    let Some(serde_json::Value::Array(pts)) = geom.get("points").cloned() else {
+        return;
+    };
+    let mut samples = Vec::new();
+    for p in &pts {
+        if let Some(o) = p.as_object() {
+            if let Some(x) = num_f32(o.get("x")) {
+                samples.push(x);
+            }
+            if let Some(y) = num_f32(o.get("y")) {
+                samples.push(y);
+            }
+        }
+    }
+    let div = illust_coord_divisor(&samples);
+    if (div - 1.0).abs() < f32::EPSILON {
+        return;
+    }
+    let scaled: Vec<serde_json::Value> = pts
+        .into_iter()
+        .map(|p| {
+            let Some(mut o) = p.as_object().cloned() else {
+                return p;
+            };
+            if let Some(x) = num_f32(o.get("x")) {
+                o.insert("x".into(), serde_json::json!(x / div));
+            }
+            if let Some(y) = num_f32(o.get("y")) {
+                o.insert("y".into(), serde_json::json!(y / div));
+            }
+            serde_json::Value::Object(o)
+        })
+        .collect();
+    geom.insert("points".into(), serde_json::Value::Array(scaled));
+}
+
+fn default_illust_fill_index(role: &str, id: &str, index: usize) -> u64 {
+    let s = format!("{role} {id}").to_ascii_lowercase();
+    if s.contains("sand") || s.contains("sable") || s.contains("beach") || s.contains("plage") {
+        3
+    } else if s.contains("sea") || s.contains("mer") || s.contains("ocean") || s.contains("eau") {
+        1
+    } else if s.contains("sky") || s.contains("ciel") {
+        0
+    } else if s.contains("sun") || s.contains("soleil") || s.contains("helmet") || s.contains("casque")
+    {
+        5
+    } else if s.contains("bike") || s.contains("velo") || s.contains("vélo") || s.contains("wheel")
+    {
+        7
+    } else if matches!(
+        role.to_ascii_lowercase().as_str(),
+        "background" | "bg"
+    ) {
+        0
+    } else {
+        (index as u64 % 4).max(1)
+    }
+}
+
+fn num_f32(v: Option<&serde_json::Value>) -> Option<f32> {
+    match v? {
+        serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
+        serde_json::Value::String(s) => s.parse::<f32>().ok(),
+        _ => None,
+    }
+}
+
+fn layout_for_illust_role(role: &str, index: usize, total: usize) -> (f32, f32, f32, f32) {
+    let r = role.to_ascii_lowercase();
+    match r.as_str() {
+        "background" | "bg" | "sky" | "plage" | "beach" | "ocean" | "mer" => {
+            (0.05, 0.55, 0.9, 0.4)
+        }
+        "ground" | "sable" | "sand" => (0.05, 0.7, 0.9, 0.25),
+        "sun" | "soleil" | "moon" => (0.72, 0.08, 0.16, 0.16),
+        "body" | "main" | "subject" | "masse" => (0.32, 0.28, 0.36, 0.42),
+        "bike" | "velo" | "vélo" | "cycle" => (0.22, 0.48, 0.56, 0.28),
+        "wheel" | "roue" => {
+            if index % 2 == 0 {
+                (0.24, 0.58, 0.16, 0.16)
+            } else {
+                (0.58, 0.58, 0.16, 0.16)
+            }
+        }
+        _ => {
+            let col = (index % 3) as f32;
+            let row = (index / 3) as f32;
+            let cols = 3.0_f32.min(total as f32).max(1.0);
+            let x = 0.12 + col * (0.7 / cols);
+            let y = 0.18 + row * 0.28;
+            (x, y, 0.22, 0.22)
+        }
+    }
 }
 
 /// Vérifie que child_caps ⊆ parent_caps.
@@ -2390,5 +2818,127 @@ mod tests {
         assert!(!canvas_tool_denied_by_allowlist("canvas.path", &tools));
         assert!(canvas_tool_denied_by_allowlist("canvas.fill", &tools));
         assert!(!canvas_tool_denied_by_allowlist("notes.create", &tools));
+    }
+
+    #[test]
+    fn illust_set_brief_normalizes_flat_string_brief_and_unknown_palette() {
+        let args = normalize_tool_args(
+            "illust.set_brief",
+            &serde_json::json!({
+                "brief": "Un pingouin sur un vélo",
+                "look": "ink",
+                "palette": "warm_sunny_beach"
+            }),
+        );
+        assert_eq!(args["brief"]["subject"], "Un pingouin sur un vélo");
+        assert_eq!(args["brief"]["look"], "ink");
+        assert_eq!(args["brief"]["palette"], "paperInk");
+        assert!(args.get("look").is_none());
+        assert!(args.get("palette").is_none());
+    }
+
+    #[test]
+    fn illust_compose_wraps_flat_parts_and_geometry_type() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "parts": [{
+                    "id": "body",
+                    "role": "body",
+                    "geometry": {"type": "ellipse", "x": 0.2, "y": 0.2, "w": 0.4, "h": 0.5}
+                }]
+            }),
+        );
+        assert!(args.get("spec").is_some());
+        assert_eq!(args["spec"]["parts"][0]["geometry"]["kind"], "ellipse");
+    }
+
+    #[test]
+    fn illust_compose_synthesizes_id_and_geometry_from_description_parts() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "subject": "pingouin sur un vélo",
+                    "look": "pencil",
+                    "palette": "pencilMinimal",
+                    "parts": [
+                        {"role":"main","description":"pingouin"},
+                        {"role":"body","description":"vélo"},
+                        {"role":"background","description":"plage"}
+                    ]
+                }
+            }),
+        );
+        let parts = args["spec"]["parts"].as_array().unwrap();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[0]["id"], "main_0");
+        assert_eq!(parts[0]["geometry"]["kind"], "ellipse");
+        assert!(parts[0].get("description").is_none());
+        assert_eq!(args["spec"]["brief"]["subject"], "pingouin sur un vélo");
+        assert_eq!(args["spec"]["brief"]["palette"], "pencilMinimal");
+        assert!(args["spec"].get("subject").is_none());
+    }
+
+    #[test]
+    fn illust_compose_coerces_path_bbox_without_points_to_ellipse() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "parts": [{
+                        "id": "1",
+                        "role": "body",
+                        "geometry": {"kind":"path","x":0.3,"y":0.4,"w":0.25,"h":0.25}
+                    }]
+                }
+            }),
+        );
+        let g = &args["spec"]["parts"][0]["geometry"];
+        assert_eq!(g["kind"], "ellipse");
+        assert!((g["x"].as_f64().unwrap() - 0.3).abs() < 1e-6);
+        assert!((g["w"].as_f64().unwrap() - 0.25).abs() < 1e-6);
+        assert!(g.get("points").is_none());
+    }
+
+    #[test]
+    fn illust_compose_rescales_percent_coords_to_unit() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "parts": [
+                        {"id":"bg_sky","role":"background","geometry":{"kind":"rect","x":0,"y":0,"w":100,"h":60}},
+                        {"id":"penguin_body","role":"main","geometry":{"kind":"ellipse","x":45,"y":40,"w":10,"h":20}}
+                    ]
+                }
+            }),
+        );
+        let sky = &args["spec"]["parts"][0]["geometry"];
+        let penguin = &args["spec"]["parts"][1]["geometry"];
+        assert!((sky["w"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+        assert!((sky["h"].as_f64().unwrap() - 0.6).abs() < 1e-6);
+        assert!((penguin["x"].as_f64().unwrap() - 0.45).abs() < 1e-6);
+        assert!((penguin["w"].as_f64().unwrap() - 0.1).abs() < 1e-6);
+        assert_eq!(args["spec"]["parts"][0]["fill_index"], 0);
+        assert_eq!(args["spec"]["parts"][1]["fill_index"], 1);
+    }
+
+    #[test]
+    fn illust_compose_rescales_pixel_coords_to_unit() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "parts": [{
+                        "id":"penguin","role":"main",
+                        "geometry":{"kind":"rect","x":350,"y":350,"w":320,"h":280}
+                    }]
+                }
+            }),
+        );
+        let g = &args["spec"]["parts"][0]["geometry"];
+        assert!((g["x"].as_f64().unwrap() - 350.0 / 1024.0).abs() < 1e-5);
+        assert!((g["w"].as_f64().unwrap() - 320.0 / 1024.0).abs() < 1e-5);
     }
 }

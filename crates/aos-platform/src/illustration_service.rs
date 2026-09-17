@@ -100,6 +100,37 @@ pub fn export_still(
     }))
 }
 
+/// Write a still preview without releasing the illustration lock (compose refresh).
+pub fn export_preview(
+    s: &PlatformSubsystem,
+    session_id: &str,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Result<String, String> {
+    let (meta, doc) = s
+        .sessions
+        .lock()
+        .unwrap()
+        .illustration_get(session_id)
+        .map_err(|e| e.to_string())?;
+    let w = width.unwrap_or(720);
+    let h = height.unwrap_or(720);
+    let stamp = stamp_ms();
+    let bytes = illustration_raster::export_png(&doc, w, h)?;
+    let path = default_download_path(
+        DownloadKind::Canvas,
+        &format!("illust-preview-{}-{}.png", meta.id, stamp),
+    );
+    let path = normalize_download_path(&path, DownloadKind::Canvas);
+    write_download(s, &path, &bytes)?;
+    let _ = s
+        .sessions
+        .lock()
+        .unwrap()
+        .illustration_set_paths(session_id, Some(path.clone()), None, None);
+    Ok(path)
+}
+
 pub fn render_sheet(
     s: &PlatformSubsystem,
     session_id: &str,

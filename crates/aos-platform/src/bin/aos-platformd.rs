@@ -2976,9 +2976,12 @@ async fn main() {
                             }
                         }
                     }
-                    Err(_) => {
+                    Err(e) => {
                         let _ = ctx
-                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                &format!("payload invalide: {e}"),
+                            )
                             .await;
                     }
                 }
@@ -2998,7 +3001,16 @@ async fn main() {
                             req.spec,
                         );
                         match result {
-                            Ok((meta, doc)) => {
+                            Ok((meta, mut doc)) => {
+                                // Still preview so the Illustration panel updates immediately.
+                                if let Ok(path) = aos_platform::illustration_service::export_preview(
+                                    &s,
+                                    &req.session_id,
+                                    Some(720),
+                                    Some(720),
+                                ) {
+                                    doc.last_png = Some(path);
+                                }
                                 let _ = ctx
                                     .respond(
                                         aos_ipc::msg::Status::Ok,
@@ -3016,9 +3028,12 @@ async fn main() {
                             }
                         }
                     }
-                    Err(_) => {
+                    Err(e) => {
                         let _ = ctx
-                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                &format!("payload invalide: {e}"),
+                            )
                             .await;
                     }
                 }

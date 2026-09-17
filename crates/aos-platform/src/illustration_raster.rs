@@ -292,10 +292,11 @@ fn part_poly(
             h: bh,
             rotation,
         } => {
-            let cx = *x + *bw * 0.5;
-            let cy = *y + *bh * 0.5;
-            let rx = *bw * 0.5;
-            let ry = *bh * 0.5;
+            let (x, y, bw, bh) = unitize_bbox(*x, *y, *bw, *bh);
+            let cx = x + bw * 0.5;
+            let cy = y + bh * 0.5;
+            let rx = bw * 0.5;
+            let ry = bh * 0.5;
             let n = 44;
             let mut pts = Vec::with_capacity(n);
             for i in 0..n {
@@ -317,13 +318,14 @@ fn part_poly(
             h: bh,
             rotation,
         } => {
-            let cx = *x + *bw * 0.5;
-            let cy = *y + *bh * 0.5;
+            let (x, y, bw, bh) = unitize_bbox(*x, *y, *bw, *bh);
+            let cx = x + bw * 0.5;
+            let cy = y + bh * 0.5;
             let corners = [
-                (*x, *y),
-                (*x + *bw, *y),
-                (*x + *bw, *y + *bh),
-                (*x, *y + *bh),
+                (x, y),
+                (x + bw, y),
+                (x + bw, y + bh),
+                (x, y + bh),
             ];
             corners
                 .into_iter()
@@ -337,9 +339,45 @@ fn part_poly(
                 .collect()
         }
         IllustrationPartGeometry::Path { points, .. } => {
-            points.iter().map(|p| map(p.x, p.y)).collect()
+            let scale = path_unit_scale(points);
+            points
+                .iter()
+                .map(|p| map(p.x / scale, p.y / scale))
+                .collect()
         }
     }
+}
+
+/// Agents often emit 0..100 (%) or ~1024px; raster expects 0..1.
+fn unit_coord_divisor(samples: &[f32]) -> f32 {
+    let max_abs = samples
+        .iter()
+        .copied()
+        .map(f32::abs)
+        .fold(0.0f32, f32::max);
+    if !max_abs.is_finite() || max_abs <= 1.5 {
+        1.0
+    } else if max_abs <= 100.5 {
+        100.0
+    } else if max_abs <= 2048.0 {
+        1024.0
+    } else {
+        max_abs
+    }
+}
+
+fn unitize_bbox(x: f32, y: f32, w: f32, h: f32) -> (f32, f32, f32, f32) {
+    let div = unit_coord_divisor(&[x, y, w, h, x + w, y + h]);
+    (x / div, y / div, (w / div).max(0.01), (h / div).max(0.01))
+}
+
+fn path_unit_scale(points: &[aos_proto::CanvasPoint]) -> f32 {
+    let mut samples = Vec::with_capacity(points.len() * 2);
+    for p in points {
+        samples.push(p.x);
+        samples.push(p.y);
+    }
+    unit_coord_divisor(&samples)
 }
 
 fn fill_poly(img: &mut RgbImage, poly: &[(i32, i32)], color: Rgb<u8>, alpha: f32) {

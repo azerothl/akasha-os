@@ -112,9 +112,18 @@ pub(crate) fn chat_is_partial_continuation(text: &str) -> bool {
 pub(crate) fn deep_thinking_force_delegate(
     user_text: &str,
     canvas_open: bool,
+    illustration_open: bool,
     canvas_exported: &[String],
 ) -> ChatDelegateSpec {
-    let (mut skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+    let use_illust = chat_canvas::chat_wants_illust_agent(user_text, illustration_open);
+    let (mut skills, mut tools) = chat_delegate_kit(
+        user_text,
+        canvas_open,
+        illustration_open,
+        false,
+        use_illust,
+        canvas_exported,
+    );
     skills.retain(|s| s != "planner");
     if !skills.iter().any(|s| s == "deep-thinking") {
         skills.push("deep-thinking".into());
@@ -376,16 +385,24 @@ fn merge_named_args(dst: &mut Vec<String>, args: &serde_json::Value, key: &str) 
     }
 }
 
-/// Retire les outils incompatibles avec le kit canvas (vectoriel) vs pixel (diffusion).
-fn strip_delegate_kit_tools(tools: &mut Vec<String>, skills: &mut Vec<String>, use_canvas: bool) {
+/// Retire les outils incompatibles avec le kit canvas (vectoriel) / Illustration / pixel.
+fn strip_delegate_kit_tools(
+    tools: &mut Vec<String>,
+    skills: &mut Vec<String>,
+    use_canvas: bool,
+    use_illust: bool,
+) {
     if use_canvas {
         tools.retain(|t| t.starts_with("canvas.") || t == "plan.update");
         // A canvas author needs a compact geometric context. Notes/tasks and
         // their long skill instructions caused the model to archive the
         // drawing mid-run instead of continuing the composition.
         skills.clear();
+    } else if use_illust {
+        tools.retain(|t| t.starts_with("illust.") || t == "plan.update");
+        skills.clear();
     } else {
-        tools.retain(|t| !t.starts_with("canvas."));
+        tools.retain(|t| !t.starts_with("canvas.") && !t.starts_with("illust."));
     }
 }
 
@@ -731,12 +748,18 @@ pub(crate) fn canvas_model_id(selected: Option<String>, available: &[ModelInfo])
 pub(crate) fn chat_delegate_kit(
     brief: &str,
     canvas_open: bool,
+    illustration_open: bool,
     use_canvas: bool,
+    use_illust: bool,
     canvas_exported: &[String],
 ) -> (Vec<String>, Vec<String>) {
-    let (mut skills, mut tools) =
-        chat_agent_kit_ex(brief, canvas_open || use_canvas, canvas_exported);
-    strip_delegate_kit_tools(&mut tools, &mut skills, use_canvas);
+    let (mut skills, mut tools) = chat_agent_kit_ex(
+        brief,
+        canvas_open || use_canvas,
+        illustration_open || use_illust,
+        canvas_exported,
+    );
+    strip_delegate_kit_tools(&mut tools, &mut skills, use_canvas, use_illust);
     (skills, tools)
 }
 
@@ -745,6 +768,7 @@ pub(crate) fn chat_delegate_agent_spec(
     user_text: &str,
     model_output: &str,
     canvas_open: bool,
+    illustration_open: bool,
     _canvas_aspect: aos_proto::CanvasAspect,
     canvas_exported: &[String],
 ) -> Option<ChatDelegateSpec> {
@@ -752,6 +776,7 @@ pub(crate) fn chat_delegate_agent_spec(
         return None;
     }
     let canvas_intent = chat_canvas::chat_wants_canvas_agent(user_text, canvas_open);
+    let illust_intent = chat_canvas::chat_wants_illust_agent(user_text, illustration_open);
     if let Some(action) = aos_agent::actions::parse_action(model_output) {
         let spawn = action.action == "agent.spawn" || action.action == "agent.create";
         let self_tool = chat_action_is_self_tool(&action.action);
@@ -780,26 +805,45 @@ pub(crate) fn chat_delegate_agent_spec(
             };
             let use_canvas = chat_canvas::chat_wants_canvas_agent(user_text, canvas_open)
                 || chat_canvas::chat_wants_canvas_agent(&brief, canvas_open);
-            let mut brief = if use_canvas && !self_tool {
+            let use_illust = !use_canvas
+                && (chat_canvas::chat_wants_illust_agent(user_text, illustration_open)
+                    || chat_canvas::chat_wants_illust_agent(&brief, illustration_open));
+            let mut brief = if (use_canvas || use_illust) && !self_tool {
                 user_text.to_string()
             } else {
                 brief
             };
-            let (mut skills, mut tools) =
-                chat_delegate_kit(&brief, canvas_open, use_canvas, canvas_exported);
+            let (mut skills, mut tools) = chat_delegate_kit(
+                &brief,
+                canvas_open,
+                illustration_open,
+                use_canvas,
+                use_illust,
+                canvas_exported,
+            );
             merge_named_args(&mut skills, &action.args, "skills");
             merge_named_args(&mut tools, &action.args, "tools");
             if use_canvas {
                 // Ensure canvas tools even if model passed a non-canvas tools list.
-                let (_, canvas_tools) = chat_agent_kit_ex(&brief, true, canvas_exported);
+                let (_, canvas_tools) =
+                    chat_agent_kit_ex(&brief, true, false, canvas_exported);
                 for t in canvas_tools {
                     if !tools.iter().any(|x| x == &t) {
                         tools.push(t);
                     }
                 }
-                strip_delegate_kit_tools(&mut tools, &mut skills, true);
+                strip_delegate_kit_tools(&mut tools, &mut skills, true, false);
+            } else if use_illust {
+                let (_, illust_tools) =
+                    chat_agent_kit_ex(&brief, false, true, canvas_exported);
+                for t in illust_tools {
+                    if !tools.iter().any(|x| x == &t) {
+                        tools.push(t);
+                    }
+                }
+                strip_delegate_kit_tools(&mut tools, &mut skills, false, true);
             } else {
-                strip_delegate_kit_tools(&mut tools, &mut skills, false);
+                strip_delegate_kit_tools(&mut tools, &mut skills, false, false);
             }
             if let Some(intent) =
                 chat_device_capture_intent(user_text).or_else(|| chat_device_capture_intent(&brief))
@@ -837,6 +881,8 @@ pub(crate) fn chat_delegate_agent_spec(
                     "Je lance un agent pour créer le module.".into()
                 } else if use_canvas {
                     "Je lance un agent pour dessiner sur le canvas.".into()
+                } else if use_illust {
+                    "Je lance un agent pour illustrer la scène.".into()
                 } else if let Some(intent) = chat_device_capture_intent(user_text) {
                     device_capture_ack(intent)
                 } else if chat_device_usb_intent(user_text) || chat_device_usb_intent(&brief) {
@@ -861,7 +907,14 @@ pub(crate) fn chat_delegate_agent_spec(
             || model_output.to_lowercase().contains("relance")
             || model_output.to_lowercase().contains("agent"))
     {
-        let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true, canvas_exported);
+        let (skills, tools) = chat_delegate_kit(
+            user_text,
+            canvas_open,
+            illustration_open,
+            true,
+            false,
+            canvas_exported,
+        );
         return Some(ChatDelegateSpec {
             brief: user_text.to_string(),
             skills,
@@ -881,7 +934,14 @@ pub(crate) fn chat_delegate_agent_spec(
         });
     }
     if canvas_intent {
-        let (skills, tools) = chat_delegate_kit(user_text, canvas_open, true, canvas_exported);
+        let (skills, tools) = chat_delegate_kit(
+            user_text,
+            canvas_open,
+            illustration_open,
+            true,
+            false,
+            canvas_exported,
+        );
         return Some(ChatDelegateSpec {
             brief: user_text.to_string(),
             skills,
@@ -890,8 +950,32 @@ pub(crate) fn chat_delegate_agent_spec(
             roster_id: None,
         });
     }
-    if chat_canvas::chat_user_wants_pixel_draw(user_text, canvas_open) {
-        let (skills, tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+    if illust_intent {
+        let (skills, tools) = chat_delegate_kit(
+            user_text,
+            canvas_open,
+            illustration_open,
+            false,
+            true,
+            canvas_exported,
+        );
+        return Some(ChatDelegateSpec {
+            brief: user_text.to_string(),
+            skills,
+            tools,
+            prose: "Je lance un agent pour illustrer la scène.".into(),
+            roster_id: None,
+        });
+    }
+    if chat_canvas::chat_user_wants_pixel_draw(user_text, canvas_open, illustration_open) {
+        let (skills, tools) = chat_delegate_kit(
+            user_text,
+            canvas_open,
+            illustration_open,
+            false,
+            false,
+            canvas_exported,
+        );
         return Some(ChatDelegateSpec {
             brief: user_text.to_string(),
             skills,
@@ -901,7 +985,14 @@ pub(crate) fn chat_delegate_agent_spec(
         });
     }
     if let Some(intent) = chat_device_capture_intent(user_text) {
-        let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+        let (skills, mut tools) = chat_delegate_kit(
+            user_text,
+            canvas_open,
+            illustration_open,
+            false,
+            false,
+            canvas_exported,
+        );
         push_device_capture_tools(&mut tools, intent);
         return Some(ChatDelegateSpec {
             brief: user_text.to_string(),
@@ -912,7 +1003,14 @@ pub(crate) fn chat_delegate_agent_spec(
         });
     }
     if chat_device_usb_intent(user_text) {
-        let (skills, mut tools) = chat_delegate_kit(user_text, canvas_open, false, canvas_exported);
+        let (skills, mut tools) = chat_delegate_kit(
+            user_text,
+            canvas_open,
+            illustration_open,
+            false,
+            false,
+            canvas_exported,
+        );
         let mut brief = user_text.to_string();
         push_device_usb_tools_and_brief(&mut brief, user_text, &mut tools);
         return Some(ChatDelegateSpec {
@@ -1264,12 +1362,13 @@ pub(crate) async fn spawn_document_prep_agent(
 }
 
 pub(crate) fn chat_agent_kit(task: &str) -> (Vec<String>, Vec<String>) {
-    chat_agent_kit_ex(task, false, &[])
+    chat_agent_kit_ex(task, false, false, &[])
 }
 
 fn chat_agent_kit_ex(
     task: &str,
     canvas_open: bool,
+    illustration_open: bool,
     canvas_exported: &[String],
 ) -> (Vec<String>, Vec<String>) {
     let lower = task.to_lowercase();
@@ -1352,9 +1451,11 @@ fn chat_agent_kit_ex(
     {
         tools.push("media.audio.generate".into());
     }
+    let wants_illust =
+        illustration_open || aos_agent::tools::explicit_illust_intent(task);
     if !chat_canvas::chat_user_wants_explicit_canvas(task)
         && !canvas_open
-        && !aos_agent::tools::explicit_illust_intent(task)
+        && !wants_illust
         && chat_device_capture_intent(task).is_none()
         && !chat_device_usb_intent(task)
         && (lower.contains("image")
@@ -1373,9 +1474,10 @@ fn chat_agent_kit_ex(
             }
         }
     }
-    if aos_agent::tools::explicit_illust_intent(task) {
+    if wants_illust {
         aos_agent::tools::merge_illust_tools(&mut tools, true);
-        // Prefer Illustration surface over diffusion when intent is explicit.
+        // Prefer Illustration surface over diffusion when the panel is open
+        // or the intent is explicit.
         tools.retain(|t| t != "media.image.generate");
     }
     if let Some(intent) = chat_device_capture_intent(task) {
@@ -1544,11 +1646,7 @@ mod tests {
     fn parse_spawn_roster_id_arg() {
         let out = r#"Je m'en occupe.
 {"action":"agent.spawn","args":{"brief":"créer une note","roster_id":"agent-notes"}}"#;
-        let spec = chat_delegate_agent_spec(
-            "crée une note",
-            out,
-            false,
-            aos_proto::CanvasAspect::Square,
+        let spec = chat_delegate_agent_spec("crée une note", out, false, false, aos_proto::CanvasAspect::Square,
             &[],
         )
         .expect("delegate");

@@ -555,6 +555,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             routing,
             language,
             canvas_open,
+            illustration_open,
             canvas_aspect,
             deep_thinking,
             skip_session_append,
@@ -614,6 +615,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     &user_text,
                     "",
                     canvas_open,
+                    illustration_open,
                     canvas_aspect,
                     &canvas_exported,
                 );
@@ -621,6 +623,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
                         &user_text,
                         canvas_open,
+                        illustration_open,
                         &canvas_exported,
                     ));
                 }
@@ -839,6 +842,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             &user_text,
                             &full,
                             canvas_open,
+                            illustration_open,
                             canvas_aspect,
                             &canvas_exported,
                         );
@@ -849,6 +853,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
                                 &user_text,
                                 canvas_open,
+                                illustration_open,
                                 &canvas_exported,
                             ));
                         }

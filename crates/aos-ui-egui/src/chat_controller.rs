@@ -212,6 +212,13 @@ impl UiApp {
             || (self.chat_state.active_session.as_deref() == Some(session_id.as_str())
                 && (!self.chat_state.view.canvas.ops.is_empty()
                     || self.chat_state.view.canvas.next_seq > 1));
+        let illustration_open = self
+            .chat_state
+            .sessions
+            .iter()
+            .find(|s| s.id == session_id)
+            .map(|s| s.illustration_open)
+            .unwrap_or(false);
         let canvas_aspect = self
             .chat_state
             .sessions
@@ -252,6 +259,7 @@ impl UiApp {
                     routing: self.prefs.routing.clone(),
                     language: self.prefs.language.clone(),
                     canvas_open,
+                    illustration_open,
                     canvas_aspect,
                     deep_thinking: self.chat_state.composer.deep_thinking,
                     choice_id,
@@ -309,6 +317,7 @@ impl UiApp {
             routing: self.prefs.routing.clone(),
             language: self.prefs.language.clone(),
             canvas_open,
+            illustration_open,
             canvas_aspect,
             deep_thinking: self.chat_state.composer.deep_thinking,
         };
@@ -327,6 +336,7 @@ impl UiApp {
             routing: self.prefs.routing.clone(),
             language: self.prefs.language.clone(),
             canvas_open,
+            illustration_open,
             canvas_aspect,
             deep_thinking: self.chat_state.composer.deep_thinking,
             skip_session_append: false,
@@ -418,6 +428,7 @@ impl UiApp {
             routing: retry.routing.clone(),
             language: retry.language.clone(),
             canvas_open: retry.canvas_open,
+            illustration_open: retry.illustration_open,
             canvas_aspect: retry.canvas_aspect,
             deep_thinking: retry.deep_thinking,
         });

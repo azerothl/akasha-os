@@ -13,6 +13,9 @@ pub struct IllustrationUiState {
     pub pending_preview: Option<egui::ColorImage>,
     pub texture: Option<egui::TextureHandle>,
     pub animate_enabled: bool,
+    /// Host path of the PNG currently loaded into `texture`.
+    pub texture_path: String,
+    pub poll_due: f64,
 }
 
 impl UiApp {
@@ -144,6 +147,7 @@ impl UiApp {
         );
         ui.painter().rect_filled(rect, 4.0, paper);
 
+        self.refresh_illust_texture(ui.ctx());
         if let Some(img) = self.illust_ui.pending_preview.take() {
             self.illust_ui.texture =
                 Some(ui.ctx().load_texture("illust_preview", img, Default::default()));
@@ -176,6 +180,35 @@ impl UiApp {
         ui.small(t.illust_hint);
     }
 
+    pub(crate) fn illust_poll_if_due(&mut self, ui: &egui::Ui, session_id: &str) {
+        let now = ui.input(|i| i.time);
+        if now >= self.illust_ui.poll_due {
+            self.illust_ui.poll_due = now + 0.45;
+            let _ = self.cmd_tx.send(Cmd::IllustGet {
+                session_id: session_id.to_string(),
+            });
+        }
+    }
+
+    fn refresh_illust_texture(&mut self, ctx: &egui::Context) {
+        let logical = self
+            .illust_ui
+            .doc
+            .last_png
+            .as_deref()
+            .or(self.illust_ui.doc.last_sheet_png.as_deref());
+        let Some(logical) = logical else {
+            return;
+        };
+        if logical == self.illust_ui.texture_path && self.illust_ui.texture.is_some() {
+            return;
+        }
+        if let Some(tex) = crate::decl_ui::try_load_png(ctx, logical) {
+            self.illust_ui.texture = Some(tex);
+            self.illust_ui.texture_path = logical.to_string();
+        }
+    }
+
     fn push_illust_brief(&mut self, session_id: &str) {
         let brief = self.illust_ui.doc.brief.clone();
         let _ = self.cmd_tx.send(Cmd::IllustSetBrief {
@@ -185,8 +218,14 @@ impl UiApp {
     }
 
     pub(crate) fn apply_illust_doc(&mut self, doc: IllustrationDoc) {
+        let path_changed = doc.last_png != self.illust_ui.doc.last_png
+            || doc.last_sheet_png != self.illust_ui.doc.last_sheet_png;
         self.illust_ui.doc = doc;
         self.illust_ui.last_error.clear();
+        if path_changed {
+            self.illust_ui.texture = None;
+            self.illust_ui.texture_path.clear();
+        }
     }
 }
 
