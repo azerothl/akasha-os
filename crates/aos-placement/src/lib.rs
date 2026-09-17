@@ -24,6 +24,7 @@ pub mod discovery;
 pub mod distributed;
 pub mod gguf;
 pub mod hardware;
+pub mod host_probe;
 pub mod layer_pipeline;
 pub mod layer_rpc;
 pub mod low_bit;
@@ -72,6 +73,7 @@ pub use hardware::{
     CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,
     WebGpuCapabilities,
 };
+pub use host_probe::{probe as probe_host_hardware, HardwareInfo, HardwareTier};
 pub use layer_pipeline::{
     partition_layer_stages, LayerPipelineExecutor, LayerPipelineMetrics, LayerPipelinePlan,
     LayerStage,

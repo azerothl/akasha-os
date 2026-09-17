@@ -585,7 +585,13 @@ const ROSTER_TOOL_GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "files",
-        &["fs.read", "fs.write", "fs.list", "files.generate"],
+        &[
+            "fs.read",
+            "fs.write",
+            "fs.list",
+            "files.generate",
+            "system.hardware",
+        ],
     ),
     ("web", &["web.search", "web.browse", "net.fetch"]),
     (

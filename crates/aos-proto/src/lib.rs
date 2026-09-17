@@ -21,6 +21,7 @@ pub mod mem_extract;
 pub mod rich_app_contract;
 pub mod rich_composition;
 pub mod rich_decl_ui;
+pub mod system_hardware;
 pub mod tasks_contract;
 
 pub use rich_app_contract::{
@@ -79,6 +80,7 @@ pub use host_folder::{
     HostFolderPermission, HostFolderPermissionInfo, HostFolderPermissionRevokeRequest,
     HOST_FOLDER_ACCESS_ACTION,
 };
+pub use system_hardware::{SystemHardwareRequest, SystemHardwareResponse};
 
 pub use canvas_layers::{
     align_canvas_op_body, canvas_hit_test, canvas_layer_by_id, canvas_layer_effective_locked,

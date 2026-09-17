@@ -287,6 +287,19 @@ pub async fn invoke_native_tool(
         | "device.usb.read"
         | "device.usb.write"
         | "device.usb.close" => invoke_device_tool(bus, agent_id, tool, args, session_id).await,
+        "system.hardware" => match bus
+            .call::<aos_proto::SystemHardwareRequest, aos_proto::SystemHardwareResponse>(
+                "system.hardware",
+                &aos_proto::SystemHardwareRequest {
+                    refresh: Some(true),
+                },
+                vec![],
+            )
+            .await
+        {
+            Ok(resp) => resp.summary.to_string(),
+            Err(e) => format!("system.hardware err: {e}"),
+        },
         "harness.run" => crate::harness::run(args, caps).await,
         other => format!("outil natif non supporté en salon: {other}"),
     }

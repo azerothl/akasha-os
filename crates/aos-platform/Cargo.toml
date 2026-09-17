@@ -10,6 +10,7 @@ aos-agent = { path = "../aos-agent" }
 aos-caps = { path = "../aos-caps" }
 aos-ipc = { path = "../aos-ipc" }
 aos-llama = { path = "../aos-llama", optional = true, default-features = false }
+aos-placement = { path = "../aos-placement" }
 aos-proto = { path = "../aos-proto" }
 serde.workspace = true
 serde_json.workspace = true

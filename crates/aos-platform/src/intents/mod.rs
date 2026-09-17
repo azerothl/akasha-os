@@ -7,6 +7,7 @@ pub mod fs;
 pub mod health;
 pub mod helpers;
 pub mod host_folder;
+pub mod system_hardware;
 
 use crate::subsystem::PlatformSubsystem;
 use aos_ipc::BusService;
@@ -17,6 +18,7 @@ pub fn register_audit_and_fs(svc: &mut BusService, sub: &Arc<PlatformSubsystem>)
     device::register(svc, sub.clone());
     device_usb::register(svc, sub.clone());
     host_folder::register(svc, sub.clone());
+    system_hardware::register(svc, sub.clone());
     fs::register(svc, sub.clone());
     health::register(svc, sub.clone());
 }

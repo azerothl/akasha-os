@@ -95,6 +95,7 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - Notes du carnet interne pour la réflexion ou si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
 - `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
+- Matériel local (VRAM/RAM/disque) : `system.hardware` — snapshot frais ; n'invente pas meminfo ni chemins hors sandbox.
 - Pas de `agent.spawn` ni collègues inventés."#;
 
 /// État d'un tour de salon en cours (annulation cooperative + progrès UI).
@@ -237,6 +238,8 @@ pub fn room_tool_progress_phase(action: &str) -> &'static str {
         || name.contains("search")
     {
         "searching"
+    } else if name == "system.hardware" {
+        "reading"
     } else {
         "tools"
     }
@@ -1892,6 +1895,7 @@ mod tests {
     #[test]
     fn room_action_protocol_allows_user_ask_not_spawn() {
         assert!(ROOM_ACTION_PROTOCOL.contains("user.ask"));
+        assert!(ROOM_ACTION_PROTOCOL.contains("system.hardware"));
         assert!(!ROOM_ACTION_PROTOCOL.contains("agent.spawn :"));
         assert!(ROOM_ACTION_PROTOCOL.contains("Pas de `agent.spawn`"));
     }
