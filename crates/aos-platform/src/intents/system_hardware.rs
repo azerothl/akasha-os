@@ -21,10 +21,9 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
     svc.on(intents::HARDWARE, move |ctx| {
         let s = s.clone();
         async move {
-            let req = match ctx.payload::<SystemHardwareRequest>() {
-                Ok(r) => r,
-                Err(_) => SystemHardwareRequest::default(),
-            };
+            let req = ctx
+                .payload::<SystemHardwareRequest>()
+                .unwrap_or_default();
             let _ = req.refresh; // always fresh; reserved for future cache TTL
             let home = aos_home();
             let info = probe_host_hardware(&home);

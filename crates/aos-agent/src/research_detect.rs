@@ -143,7 +143,7 @@ pub fn user_requested_hardware(text: &str) -> bool {
     // Short asks: "VRAM ?", "GPU/RAM", "état GPU"
     let compact = lower.replace(['?', '!', '.'], " ");
     let tokens: Vec<&str> = compact.split_whitespace().collect();
-    let has = |w: &str| tokens.iter().any(|t| *t == w);
+    let has = |w: &str| tokens.contains(&w);
     (has("vram") || has("gpu") || has("ram"))
         && (has("état")
             || has("etat")
