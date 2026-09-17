@@ -3107,7 +3107,14 @@ impl eframe::App for UiApp {
                 Evt::ScheduleUpdated(entry) => {
                     schedule_event_controller::on_schedule_updated(self, entry);
                 }
-                Evt::Confirms(c) => self.confirmations_ui.replace(c),
+                Evt::Confirms(c) => {
+                    let had = !c.is_empty();
+                    self.confirmations_ui.replace(c);
+                    if had && !self.prefs.ui_layout.notifications_open {
+                        self.prefs.ui_layout.notifications_open = true;
+                        save_preferences(&self.prefs);
+                    }
+                }
                 Evt::FeedbackOk(r) => {
                     feedback_event_controller::on_feedback_ok(self, r);
                 }

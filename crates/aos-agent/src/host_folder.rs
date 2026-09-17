@@ -1,6 +1,8 @@
 //! Demande d'accès hors sandbox via `fs.host.access` (issue #157).
 
-use crate::storage_path::{host_path_disallowed_token, is_disallowed_storage_path};
+use crate::storage_path::{
+    host_path_disallowed_token, is_disallowed_storage_path, is_host_folder_candidate,
+};
 use aos_ipc::BusClient;
 use aos_proto::host_folder::intents;
 use aos_proto::{
@@ -18,6 +20,14 @@ pub async fn try_host_folder_tool(
     let path = storage_path_arg(tool, args)?;
     if !is_disallowed_storage_path(path) {
         return None;
+    }
+    // Relative junk (`meminfo`) or fake drives (`mem:info`) must not open a
+    // folder-grant dialog — return a clear tool error instead.
+    if !is_host_folder_candidate(path) {
+        return Some(format!(
+            "chemin hôte invalide `{path}` — utilise un chemin absolu \
+             (ex. C:/Users/…/fichier) ou /documents|/downloads dans l'espace de travail"
+        ));
     }
     let session_id = session_id.filter(|s| !s.is_empty())?;
     let (operation, content, format) = match tool {
@@ -58,7 +68,21 @@ pub async fn try_host_folder_tool(
                 Some("ok".into())
             }
         }
-        Ok(_) | Err(_) => Some(host_path_disallowed_token(path)),
+        Ok(resp) => {
+            // Prefer platform message (deny / io / invalid) over the generic
+            // "outside workspace" sentinel — especially after the user allowed once.
+            if let Some(msg) = resp.message.filter(|m| !m.trim().is_empty()) {
+                if msg == "room_host_path_disallowed" || msg.starts_with("room_host_path_disallowed:")
+                {
+                    Some(host_path_disallowed_token(path))
+                } else {
+                    Some(format!("fs.host.access: {msg}"))
+                }
+            } else {
+                Some(host_path_disallowed_token(path))
+            }
+        }
+        Err(e) => Some(format!("fs.host.access: {e}")),
     }
 }
 
@@ -82,6 +106,7 @@ mod tests {
         let args = serde_json::json!({ "path": "e:/test/test/out.md" });
         assert!(storage_path_arg("fs.write", &args).is_some());
         assert!(is_disallowed_storage_path("e:/test/test/out.md"));
+        assert!(is_host_folder_candidate("e:/test/test/out.md"));
     }
 
     #[test]
@@ -90,5 +115,13 @@ mod tests {
         let args = serde_json::json!({ "path": "/downloads/x.md" });
         assert!(storage_path_arg("fs.write", &args).is_some());
         assert!(!is_disallowed_storage_path("/downloads/x.md"));
+    }
+
+    #[test]
+    fn junk_relative_paths_are_not_host_folder_candidates() {
+        assert!(is_disallowed_storage_path("meminfo"));
+        assert!(!is_host_folder_candidate("meminfo"));
+        assert!(is_disallowed_storage_path("mem:info"));
+        assert!(!is_host_folder_candidate("mem:info"));
     }
 }

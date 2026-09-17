@@ -120,18 +120,38 @@ pub fn normalize_folder_key(path: &str) -> String {
 }
 
 /// True pour un chemin disque hôte (Windows ou Unix absolu hors sandbox logique).
+///
+/// Windows drives must be a **single** letter (`C:/…`). Labels like `mem:info`
+/// are not host paths and must not open a folder-grant dialog.
+/// On Windows, Unix-style `/proc/…` paths are also rejected (not host folders).
 pub fn looks_like_host_path(path: &str) -> bool {
     let trimmed = path.trim();
-    let bytes = trimmed.as_bytes();
+    if trimmed.is_empty() {
+        return false;
+    }
     if trimmed.contains('\\') {
-        return true;
+        let bytes = trimmed.as_bytes();
+        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+            return bytes.len() == 2 || bytes[2] == b'\\' || bytes[2] == b'/';
+        }
+        return trimmed.starts_with("\\\\");
     }
+    let bytes = trimmed.as_bytes();
     if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-        return true;
+        // `C:` or `C:/…` / `C:\…` only — reject `mem:info`.
+        return bytes.len() == 2 || bytes[2] == b'/' || bytes[2] == b'\\';
     }
-    trimmed.starts_with('/')
-        && !trimmed.starts_with("/documents")
-        && !trimmed.starts_with("/downloads")
+    #[cfg(windows)]
+    {
+        let _ = trimmed;
+        false
+    }
+    #[cfg(not(windows))]
+    {
+        trimmed.starts_with('/')
+            && !trimmed.starts_with("/documents")
+            && !trimmed.starts_with("/downloads")
+    }
 }
 
 #[cfg(test)]
@@ -153,5 +173,23 @@ mod tests {
     #[test]
     fn normalize_folder_key_lowercases_drive() {
         assert_eq!(normalize_folder_key("E:/Test/Test"), "e:/Test/Test");
+    }
+
+    #[test]
+    fn looks_like_host_path_requires_real_drive_or_unix_root() {
+        assert!(looks_like_host_path(r"C:\Users\me\file.txt"));
+        assert!(looks_like_host_path("e:/test/test/out.md"));
+        assert!(!looks_like_host_path("mem:info"));
+        assert!(!looks_like_host_path("meminfo"));
+        assert!(!looks_like_host_path("/documents/notes/a.md"));
+        assert!(!looks_like_host_path("/downloads/x.md"));
+        #[cfg(windows)]
+        {
+            assert!(!looks_like_host_path("/proc/meminfo"));
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(looks_like_host_path("/proc/meminfo"));
+        }
     }
 }

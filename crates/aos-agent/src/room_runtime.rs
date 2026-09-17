@@ -922,9 +922,22 @@ async fn run_room_tool_loop(
                 tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
                 let tool_name = canonicalize_tool_name(&action.action);
-                round
-                    .set_activity(room_tool_progress_phase(&tool_name), Some(&tool_name))
-                    .await;
+                let host_path = match tool_name.as_str() {
+                    "fs.read" | "fs.write" | "files.generate" => {
+                        action.args.get("path").and_then(|v| v.as_str())
+                    }
+                    "fs.list" => action.args.get("prefix").and_then(|v| v.as_str()),
+                    _ => None,
+                };
+                if host_path.is_some_and(crate::storage_path::is_host_folder_candidate) {
+                    // Blocked on folder-grant confirmation — surface as waiting_user
+                    // so the salon status is not a silent "Read file…".
+                    round.set_phase("waiting_user").await;
+                } else {
+                    round
+                        .set_activity(room_tool_progress_phase(&tool_name), Some(&tool_name))
+                        .await;
+                }
                 let mut outcome = execute_room_tool(
                     bus,
                     agent_id,
