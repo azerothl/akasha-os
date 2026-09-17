@@ -40,6 +40,22 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
                         .await;
                     return;
                 }
+                if !aos_proto::host_folder::looks_like_host_path(&req.path) {
+                    let _ = ctx
+                        .respond(
+                            aos_ipc::msg::Status::BadRequest,
+                            &HostFolderAccessResponse {
+                                ok: false,
+                                content: None,
+                                entries: None,
+                                message: Some(
+                                    "chemin hôte invalide — pas un dossier disque absolu".into(),
+                                ),
+                            },
+                        )
+                        .await;
+                    return;
+                }
                 let display = folder_display_name(&folder_key);
                 let actor = agent_id.clone();
                 s.audit(AuditAppendRequest {

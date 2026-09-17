@@ -126,18 +126,31 @@ pub async fn post_room_ask_reply(
 
 /// Débloque le tour salon en attente d'une réponse humaine.
 pub async fn deliver_room_ask_reply(round: &RoomRoundState, answer: String) -> bool {
-    let mut slot = round.ask_reply_tx.lock().await;
-    if let Some(tx) = slot.take() {
-        let _ = tx.send(answer);
-        true
-    } else {
-        false
+    let sent = {
+        let mut slot = round.ask_reply_tx.lock().await;
+        if let Some(tx) = slot.take() {
+            tx.send(answer.clone()).is_ok()
+        } else {
+            false
+        }
+    };
+    if sent {
+        return true;
     }
+    // Keep the answer for a waiter that arms a moment later, or one whose
+    // oneshot was already dropped — do not lose the human reply.
+    *round.pending_ask_reply.lock().await = Some(answer);
+    false
 }
 
 /// Arme le waiter **avant** de publier la question, pour qu'une réponse UI
 /// immédiate ne tombe pas sur un `ask_reply_tx` encore vide.
 pub async fn arm_room_ask_reply(round: &RoomRoundState) -> oneshot::Receiver<String> {
+    if let Some(answer) = round.pending_ask_reply.lock().await.take() {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(answer);
+        return rx;
+    }
     let (tx, rx) = oneshot::channel();
     let mut slot = round.ask_reply_tx.lock().await;
     *slot = Some(tx);
@@ -162,6 +175,10 @@ async fn wait_armed_room_ask_reply(
             round.ask_reply_tx.lock().await.take();
             return RoomAskWait::Cancelled;
         }
+        if let Some(answer) = round.pending_ask_reply.lock().await.take() {
+            round.ask_reply_tx.lock().await.take();
+            return RoomAskWait::Answer(answer);
+        }
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
             round.ask_reply_tx.lock().await.take();
@@ -170,10 +187,33 @@ async fn wait_armed_room_ask_reply(
         let tick = remaining.min(Duration::from_millis(200));
         tokio::select! {
             result = &mut rx => {
-                return match result {
-                    Ok(answer) => RoomAskWait::Answer(answer),
-                    Err(_) => RoomAskWait::Cancelled,
-                };
+                match result {
+                    Ok(answer) => return RoomAskWait::Answer(answer),
+                    Err(_) => {
+                        // Sender dropped while we still wait — often a race with
+                        // deliver writing the mailbox a moment later. Prefer
+                        // mailbox over treating this as a hard cancel.
+                        if let Some(answer) = round.pending_ask_reply.lock().await.take() {
+                            return RoomAskWait::Answer(answer);
+                        }
+                        for _ in 0..10 {
+                            if round.is_cancelled() {
+                                round.ask_reply_tx.lock().await.take();
+                                return RoomAskWait::Cancelled;
+                            }
+                            tokio::time::sleep(Duration::from_millis(20)).await;
+                            if let Some(answer) = round.pending_ask_reply.lock().await.take() {
+                                return RoomAskWait::Answer(answer);
+                            }
+                        }
+                        if round.is_cancelled() {
+                            round.ask_reply_tx.lock().await.take();
+                            return RoomAskWait::Cancelled;
+                        }
+                        // Keep waiting on a fresh oneshot until timeout/cancel.
+                        rx = arm_room_ask_reply(round).await;
+                    }
+                }
             }
             _ = tokio::time::sleep(tick) => {}
         }
@@ -226,6 +266,11 @@ pub async fn handle_room_user_ask(
     }
     match wait_armed_room_ask_reply(round, rx, ROOM_ASK_TIMEOUT).await {
         RoomAskWait::Answer(answer) if !answer.trim().is_empty() => {
+            eprintln!(
+                "[aos-agentd] room ask answered session={session_id} agent={agent_id} chars={}",
+                answer.len()
+            );
+            let _ = std::io::Write::flush(&mut std::io::stderr());
             Ok(format!("réponse utilisateur : {answer}"))
         }
         RoomAskWait::Answer(_) => Ok(
@@ -238,7 +283,21 @@ pub async fn handle_room_user_ask(
                 "(aucune réponse après {mins} min — continue avec les infos disponibles ; ne repose pas la même question tout de suite)"
             ))
         }
-        RoomAskWait::Cancelled => Err("tour annulé".into()),
+        RoomAskWait::Cancelled => {
+            if round.is_cancelled() {
+                Err("tour annulé".into())
+            } else {
+                // Spurious waiter drop must not kill the whole salon turn.
+                eprintln!(
+                    "[aos-agentd] room ask waiter dropped without cancel session={session_id} agent={agent_id}"
+                );
+                let _ = std::io::Write::flush(&mut std::io::stderr());
+                Ok(
+                    "(réponse utilisateur indisponible — continue avec les infos disponibles)"
+                        .into(),
+                )
+            }
+        }
     }
 }
 
@@ -273,6 +332,27 @@ mod tests {
     async fn deliver_without_waiter_is_false() {
         let round = RoomRoundState::new();
         assert!(!deliver_room_ask_reply(&round, "late".into()).await);
+    }
+
+    #[tokio::test]
+    async fn mailbox_delivers_before_arm() {
+        let round = RoomRoundState::new();
+        assert!(!deliver_room_ask_reply(&round, "early".into()).await);
+        let rx = arm_room_ask_reply(&round).await;
+        assert_eq!(rx.await.unwrap(), "early");
+    }
+
+    #[tokio::test]
+    async fn mailbox_recovers_when_oneshot_dropped() {
+        let round = RoomRoundState::new();
+        let rx = arm_room_ask_reply(&round).await;
+        // Drop the armed sender without delivering (simulates replace/cancel race).
+        round.ask_reply_tx.lock().await.take();
+        assert!(!deliver_room_ask_reply(&round, "via-mailbox".into()).await);
+        match wait_armed_room_ask_reply(&round, rx, Duration::from_secs(1)).await {
+            RoomAskWait::Answer(a) => assert_eq!(a, "via-mailbox"),
+            other => panic!("expected mailbox answer, got {other:?}"),
+        }
     }
 
     #[tokio::test]

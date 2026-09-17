@@ -1,7 +1,7 @@
 //! Logical storage paths allowed in salon / agent tools (`/documents`, `/downloads`, notes).
 
 use aos_ipc::BusClient;
-use aos_proto::host_folder::folder_display_name;
+use aos_proto::host_folder::{folder_display_name, looks_like_host_path};
 use aos_proto::{ChatSessionAppendRequest, ChatSessionMessage};
 
 /// Sentinel posted to the transcript — UI maps it to host-path toast copy (never a bubble).
@@ -60,15 +60,9 @@ pub fn is_disallowed_storage_path(path: &str) -> bool {
     true
 }
 
-fn looks_like_host_path(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    if path.contains('\\') {
-        return true;
-    }
-    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-        return true;
-    }
-    false
+/// True when the path is a real host absolute path eligible for `fs.host.access`.
+pub fn is_host_folder_candidate(path: &str) -> bool {
+    looks_like_host_path(path.trim())
 }
 
 /// Scan free text for a disallowed storage path token (user message or `user.ask` question).
@@ -141,6 +135,9 @@ mod tests {
     fn other_logical_prefixes_disallowed() {
         assert!(is_disallowed_storage_path("/home/user/x"));
         assert!(is_disallowed_storage_path("/var/tmp/x"));
+        assert!(!is_host_folder_candidate("meminfo"));
+        assert!(!is_host_folder_candidate("mem:info"));
+        assert!(is_host_folder_candidate("e:/test/test"));
     }
 
     #[test]

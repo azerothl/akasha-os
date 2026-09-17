@@ -11,12 +11,34 @@ pub fn split_room_reply(raw: &str) -> (String, Option<String>) {
     }
 
     work = strip_speaker_label_prefix(&work);
+    // Peel fenced agent envelopes before shaping so ```json markers do not linger.
+    work = strip_agent_json_fences(&work);
 
     while let Some((thought, rest)) = take_shaped_agent_envelope(&work) {
         if !thought.is_empty() {
             thinking.push(thought);
         }
         work = rest;
+    }
+
+    // Tool envelopes keep `thought` even when action is a real tool — fold it
+    // into Reflection without painting the JSON as the live bubble.
+    if let Some(obj) = extract_first_json_object(&work) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&obj) {
+            if let Some(map) = value.as_object() {
+                let action = map
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                if !action.is_empty() && action != "user.ask" {
+                    let thought = envelope_thought(map);
+                    if !thought.is_empty() {
+                        thinking.push(thought);
+                    }
+                }
+            }
+        }
     }
 
     let visible = visible_prose(&work);
@@ -26,6 +48,74 @@ pub fn split_room_reply(raw: &str) -> (String, Option<String>) {
         Some(thinking.join("\n\n"))
     };
     (visible, thinking_text)
+}
+
+/// Live salon preview: only stable visible prose — never incomplete or tool JSON.
+///
+/// Returns `None` while the model is still emitting a thought/tool envelope so the
+/// UI stays on a status line instead of flashing JSON that then clears.
+pub fn stream_visible_partial(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Incomplete `{…}` — wait for a balanced object before shaping.
+    if trimmed.starts_with('{') && extract_first_json_object(trimmed).is_none() {
+        return None;
+    }
+
+    if let Some(obj) = extract_first_json_object(trimmed) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&obj) {
+            if let Some(map) = value.as_object() {
+                let action = map
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                let has_thought = map.contains_key("thought")
+                    || map.contains_key("thinking")
+                    || map.contains_key("reasoning");
+                // Real tool call (or thought-only / ask envelope): don't stream JSON.
+                if has_thought || !action.is_empty() {
+                    let (visible, _) = split_room_reply(raw);
+                    let visible = visible.trim();
+                    if visible.is_empty() || visible.starts_with('{') {
+                        return None;
+                    }
+                    return Some(visible.to_string());
+                }
+            }
+        }
+    }
+
+    let (visible, _) = split_room_reply(raw);
+    let visible = visible.trim();
+    if visible.is_empty() {
+        None
+    } else {
+        Some(visible.to_string())
+    }
+}
+
+/// Merge thinking fragments from multiple tool-loop steps into one Reflection body.
+pub fn merge_room_thinking(parts: &[String]) -> Option<String> {
+    let mut out = Vec::new();
+    for part in parts {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if out.iter().any(|p: &String| p == trimmed) {
+            continue;
+        }
+        out.push(trimmed.to_string());
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out.join("\n\n"))
+    }
 }
 
 fn strip_speaker_label_prefix(text: &str) -> String {
@@ -56,7 +146,8 @@ fn strip_speaker_label_prefix(text: &str) -> String {
 /// - Real plan payloads (`args.nodes`, etc.) → leave untouched for display.
 fn take_shaped_agent_envelope(text: &str) -> Option<(String, String)> {
     let start = text.find('{')?;
-    let obj = extract_first_json_object(&text[start..])?;
+    let obj = extract_first_json_object(&text[start..])
+        .or_else(|| try_close_unbalanced_json_object(&text[start..]))?;
     let value: serde_json::Value = serde_json::from_str(&obj).ok()?;
     let obj_map = value.as_object()?;
 
@@ -88,7 +179,14 @@ fn take_shaped_agent_envelope(text: &str) -> Option<(String, String)> {
         return None;
     }
 
-    let obj_end = start + obj.len();
+    // When we repaired missing braces, consume from `start` through the original
+    // unbalanced span (usually to end of string for truncated tool JSON).
+    let raw_span = if let Some(balanced) = extract_first_json_object(&text[start..]) {
+        balanced.len()
+    } else {
+        text.len().saturating_sub(start)
+    };
+    let obj_end = start + raw_span;
     let mut rest = String::new();
     rest.push_str(text[..start].trim_end());
     if let Some(ref body) = promoted {
@@ -97,7 +195,11 @@ fn take_shaped_agent_envelope(text: &str) -> Option<(String, String)> {
         }
         rest.push_str(body);
     }
-    let tail = text[obj_end..].trim_start();
+    let tail = if obj_end < text.len() {
+        text[obj_end..].trim_start()
+    } else {
+        ""
+    };
     if !rest.is_empty() && !tail.is_empty() {
         rest.push_str("\n\n");
     }
@@ -134,6 +236,8 @@ fn promote_conversational_args(args: Option<&serde_json::Value>) -> Option<Strin
 
 fn visible_prose(text: &str) -> String {
     let mut out = strip_tool_markup_tags(text);
+    out = strip_agent_json_fences(&out);
+    out = strip_trailing_incomplete_agent_envelope(&out);
     while let Some(obj) = extract_first_json_object(&out) {
         let keep = serde_json::from_str::<serde_json::Value>(&obj)
             .ok()
@@ -151,6 +255,176 @@ fn visible_prose(text: &str) -> String {
     collapse_blank_lines(&sanitize_visible_chars(&strip_salon_transcript_prefix(
         &out,
     )))
+}
+
+/// Drop ```json fences that wrap agent protocol envelopes (thought/action).
+fn strip_agent_json_fences(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    loop {
+        let lower = rest.to_ascii_lowercase();
+        let Some(fence_at) = lower.find("```") else {
+            out.push_str(rest);
+            break;
+        };
+        out.push_str(&rest[..fence_at]);
+        let after_ticks = fence_at + 3;
+        let (body_start, json_fence) = if lower[after_ticks..].starts_with("json") {
+            let mut i = after_ticks + 4;
+            while rest.as_bytes().get(i).copied().is_some_and(|b| b == b' ' || b == b'\t') {
+                i += 1;
+            }
+            if rest.as_bytes().get(i).copied() == Some(b'\n')
+                || rest.as_bytes().get(i).copied() == Some(b'\r')
+            {
+                i += 1;
+                if rest.as_bytes().get(i - 1).copied() == Some(b'\r')
+                    && rest.as_bytes().get(i).copied() == Some(b'\n')
+                {
+                    i += 1;
+                }
+            }
+            (i, true)
+        } else {
+            (after_ticks, false)
+        };
+        let Some(rel_end) = rest[body_start..].find("```") else {
+            let body = rest[body_start..].trim_start();
+            if json_fence && body_looks_like_agent_envelope(body) {
+                out.push_str(&fence_body_replacement(body));
+            } else {
+                out.push_str(&rest[fence_at..]);
+            }
+            break;
+        };
+        let body = rest[body_start..body_start + rel_end].trim();
+        let after = &rest[body_start + rel_end + 3..];
+        if (json_fence || body_looks_like_agent_envelope(body))
+            && body_looks_like_agent_envelope(body)
+        {
+            out.push_str(&fence_body_replacement(body));
+            rest = after.trim_start();
+            continue;
+        }
+        // Keep non-agent fences intact.
+        out.push_str(&rest[fence_at..body_start + rel_end + 3]);
+        rest = after;
+    }
+    out
+}
+
+fn fence_body_replacement(body: &str) -> String {
+    if let Some(obj) = extract_first_json_object(body)
+        .or_else(|| try_close_unbalanced_json_object(body))
+    {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&obj) {
+            if let Some(map) = value.as_object() {
+                if let Some(q) = promote_conversational_args(map.get("args")) {
+                    return format!("\n\n{q}\n\n");
+                }
+            }
+        }
+    }
+    "\n\n".into()
+}
+
+fn body_looks_like_agent_envelope(body: &str) -> bool {
+    let trimmed = body.trim_start();
+    if !(trimmed.starts_with('{')
+        && (trimmed.contains("\"action\"")
+            || trimmed.contains("\"thought\"")
+            || trimmed.contains("\"thinking\"")))
+    {
+        return false;
+    }
+    if let Some(obj) = extract_first_json_object(trimmed)
+        .or_else(|| try_close_unbalanced_json_object(trimmed))
+    {
+        return serde_json::from_str::<serde_json::Value>(&obj)
+            .ok()
+            .is_some_and(|v| is_internal_agent_envelope(&v) || action_is_user_ask(&v));
+    }
+    // Incomplete trailing envelope still must not paint in the bubble.
+    true
+}
+
+fn action_is_user_ask(value: &serde_json::Value) -> bool {
+    value
+        .get("action")
+        .and_then(|v| v.as_str())
+        .is_some_and(|a| a.trim() == "user.ask")
+}
+
+/// Models often truncate the closing `}` on long user.ask envelopes — hide the tail.
+fn strip_trailing_incomplete_agent_envelope(text: &str) -> String {
+    let markers = [
+        "{\"thought\"",
+        "{\"action\"",
+        "{ \"thought\"",
+        "{ \"action\"",
+    ];
+    let mut cut: Option<usize> = None;
+    for marker in markers {
+        if let Some(idx) = text.rfind(marker) {
+            let slice = &text[idx..];
+            if extract_first_json_object(slice).is_some() {
+                continue;
+            }
+            if try_close_unbalanced_json_object(slice).is_some() {
+                // Repairable — leave for peel/promote; still strip if peel fails later.
+                continue;
+            }
+            if slice.contains("\"action\"") || slice.contains("\"thought\"") {
+                cut = Some(match cut {
+                    Some(prev) => prev.min(idx),
+                    None => idx,
+                });
+            }
+        }
+    }
+    match cut {
+        Some(idx) => text[..idx].trim_end().to_string(),
+        None => text.to_string(),
+    }
+}
+
+/// If a leading `{…` fragment is missing closing braces, try to repair it (depth ≤ 3).
+pub fn try_close_unbalanced_json_object(text: &str) -> Option<String> {
+    let start = text.find('{')?;
+    let fragment = &text[start..];
+    if extract_first_json_object(fragment).is_some() {
+        return extract_first_json_object(fragment);
+    }
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut escape = false;
+    for ch in fragment.chars() {
+        if in_str {
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_str = true,
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+    }
+    if depth <= 0 || depth > 3 || in_str {
+        return None;
+    }
+    let mut repaired = fragment.to_string();
+    for _ in 0..depth {
+        repaired.push('}');
+    }
+    serde_json::from_str::<serde_json::Value>(&repaired).ok()?;
+    Some(repaired)
 }
 
 /// True when args look like a salon plan / canvas payload that should stay visible as JSON.
@@ -176,6 +450,9 @@ fn is_internal_agent_envelope(value: &serde_json::Value) -> bool {
         Some(obj) => obj,
         None => return false,
     };
+    if action_is_user_ask(value) {
+        return !is_plan_display_args(obj.get("args"));
+    }
     let has_thought = obj.contains_key("thought")
         || obj.contains_key("thinking")
         || obj.contains_key("reasoning");
@@ -398,7 +675,36 @@ Suite."#;
         let (visible, thinking) = split_room_reply(raw);
         // Not peeled as salon prose — stays as JSON for the tool path / display.
         assert!(visible.contains("notes.create") || visible.contains("\"title\""));
-        assert!(thinking.is_none());
+        // Thought is folded into Reflection so tool passes do not lose reasoning.
+        assert_eq!(thinking.as_deref(), Some("je note"));
+    }
+
+    #[test]
+    fn stream_partial_suppresses_incomplete_and_tool_json() {
+        assert!(stream_visible_partial(r#"{"thought":"enc"#).is_none());
+        assert!(stream_visible_partial(
+            r#"{"thought":"je cherche","action":"web.search","args":{"query":"x"}}"#
+        )
+        .is_none());
+        assert_eq!(
+            stream_visible_partial("Voici la synthèse finale du salon."),
+            Some("Voici la synthèse finale du salon.".into())
+        );
+        assert_eq!(
+            stream_visible_partial(
+                r#"{"thought":"ok","action":"","args":{"question":"On continue ?"}}"#
+            ),
+            Some("On continue ?".into())
+        );
+    }
+
+    #[test]
+    fn merge_room_thinking_dedupes() {
+        assert_eq!(
+            merge_room_thinking(&["a".into(), "a".into(), "b".into()]).as_deref(),
+            Some("a\n\nb")
+        );
+        assert!(merge_room_thinking(&["  ".into()]).is_none());
     }
 
     #[test]
@@ -407,5 +713,35 @@ Suite."#;
         let (visible, thinking) = split_room_reply(raw);
         assert_eq!(visible, raw);
         assert!(thinking.is_none());
+    }
+
+    #[test]
+    fn truncated_user_ask_json_not_shown_in_visible_bubble() {
+        let prose = "Je lance une interrogation à l'utilisateur.";
+        let raw = format!(
+            "{prose}\n{{\"thought\":\"x\",\"action\":\"user.ask\",\"args\":{{\"question\":\"Temp OK ?\",\"choices\":[\"oui\",\"non\"]}}"
+        );
+        let (visible, thinking) = split_room_reply(&raw);
+        assert!(!visible.contains("\"action\""));
+        assert!(!visible.contains("user.ask"));
+        assert!(visible.contains(prose) || visible.contains("Temp OK ?"));
+        assert!(thinking.is_some());
+    }
+
+    #[test]
+    fn json_fence_user_ask_stripped_from_visible() {
+        let raw = "Voici ma proposition.\n```json\n{\"thought\":\"ask\",\"action\":\"user.ask\",\"args\":{\"question\":\"On continue ?\",\"choices\":[\"oui\",\"non\"]}}\n```";
+        let (visible, _) = split_room_reply(raw);
+        assert!(!visible.contains("```"));
+        assert!(!visible.contains("\"action\""));
+        assert!(visible.contains("Voici ma proposition") || visible.contains("On continue ?"));
+    }
+
+    #[test]
+    fn try_close_unbalanced_repairs_missing_brace() {
+        let frag = r#"{"thought":"x","action":"user.ask","args":{"question":"OK?","choices":["a","b"]}"#;
+        let repaired = try_close_unbalanced_json_object(frag).expect("repair");
+        let v: serde_json::Value = serde_json::from_str(&repaired).unwrap();
+        assert_eq!(v["action"], "user.ask");
     }
 }

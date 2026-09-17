@@ -30,7 +30,9 @@ use crate::room_conductor::{
     format_roster_for_prompt, initial_schedule, peers_requesting_response, pop_next_scheduled_turn,
     sanitize_member_queue,
 };
-use crate::room_reply::split_room_reply;
+use crate::room_reply::{
+    merge_room_thinking, split_room_reply, stream_visible_partial, try_close_unbalanced_json_object,
+};
 use crate::skills::load_skills;
 use crate::storage_path::{is_host_path_disallowed_outcome, post_room_host_path_notice};
 use crate::tool_exec::execute_room_tool;
@@ -63,6 +65,26 @@ const ROOM_INFER_PRIORITY: u8 = 1;
 /// Sentinel returned to the UI when a salon turn cannot invoke the tools an ask requires.
 pub const ROOM_ACTION_UNAVAILABLE: &str = "room_action_unavailable";
 
+/// Member-turn failures that should not abort the whole salon round.
+fn is_soft_room_member_failure(err: &str) -> bool {
+    if is_hard_room_conduct_failure(err) {
+        return false;
+    }
+    // Cancel is handled separately as Ok(cancelled).
+    if err == "tour annulé" {
+        return false;
+    }
+    // Default: one member blip (post-ask infer, empty reply, bus hiccup, …)
+    // must not kill the rest of the roster.
+    true
+}
+
+fn is_hard_room_conduct_failure(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("mode salon")
+        || lower.contains("sans membres")
+        || lower.contains("introuvable")
+}
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
 Quand tu dois utiliser un outil, réponds par un objet JSON unique :
@@ -75,6 +97,7 @@ Quand tu dois utiliser un outil, réponds par un objet JSON unique :
 - Notes du carnet interne pour la réflexion ou si l'utilisateur demande une *note* — sinon livrable fichier.
 - Quand tu as fini (y compris après des outils), réponds en texte libre SANS JSON — c'est ta réplique visible dans le salon.
 - `user.ask` : {"question":"...","choices":["option A","option B"]} — pause le tour jusqu'à la réponse humaine dans le fil.
+- Matériel local (VRAM/RAM/disque) : `system.hardware` — toujours dans ton catalogue (0 args). Appelle-le ; ne dis jamais qu'il est indisponible ni que tu n'as pas accès au matériel. N'invente pas meminfo ni chemins hors sandbox.
 - Pas de `agent.spawn` ni collègues inventés."#;
 
 /// État d'un tour de salon en cours (annulation cooperative + progrès UI).
@@ -84,6 +107,8 @@ pub struct RoomRoundState {
     pub cancel_notify: Notify,
     pub current_inference: Mutex<Option<u64>>,
     pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+    /// Ask-reply that arrived when no oneshot was armed yet (or after it was dropped).
+    pub pending_ask_reply: Mutex<Option<String>>,
     posted_host_path_notices: Mutex<HashSet<String>>,
     progress: Mutex<AgentRoomConductProgress>,
 }
@@ -101,6 +126,7 @@ impl RoomRoundState {
             cancel_notify: Notify::new(),
             current_inference: Mutex::new(None),
             ask_reply_tx: Mutex::new(None),
+            pending_ask_reply: Mutex::new(None),
             posted_host_path_notices: Mutex::new(HashSet::new()),
             progress: Mutex::new(AgentRoomConductProgress::default()),
         }
@@ -134,6 +160,7 @@ impl RoomRoundState {
             turn_total: turn_total.max(turn_index),
             phase: phase.to_string(),
             detail: None,
+            partial_text: None,
         };
     }
 
@@ -150,6 +177,31 @@ impl RoomRoundState {
                 .filter(|s| !s.is_empty())
                 .map(str::to_string);
         }
+    }
+
+    /// Publish provisional token text for the UI (visible prose only).
+    pub async fn publish_partial(&self, full: &str) {
+        let mut p = self.progress.lock().await;
+        if !p.active {
+            return;
+        }
+        match stream_visible_partial(full) {
+            Some(visible) => {
+                p.partial_text = Some(visible);
+                if p.phase == "thinking" || p.phase == "preparing" {
+                    p.phase = "generating".into();
+                }
+            }
+            None => {
+                // Incomplete / tool JSON: keep status phase, do not flash tokens.
+                p.partial_text = None;
+            }
+        }
+    }
+
+    pub async fn clear_partial(&self) {
+        let mut p = self.progress.lock().await;
+        p.partial_text = None;
     }
 
     pub async fn clear_progress(&self) {
@@ -188,6 +240,8 @@ pub fn room_tool_progress_phase(action: &str) -> &'static str {
         || name.contains("search")
     {
         "searching"
+    } else if name == "system.hardware" {
+        "reading"
     } else {
         "tools"
     }
@@ -304,6 +358,11 @@ pub fn assemble_room_member_tools(
             skills.push("notes-writer".into());
         }
     }
+    // Always expose a live host snapshot in salon — even custom/persona specs that
+    // ship a narrow tools list (otherwise models invent meminfo / fs host paths).
+    if !base_tools.iter().any(|t| t == "system.hardware") {
+        base_tools.push("system.hardware".into());
+    }
     let had_files_generate = base_tools.iter().any(|t| t == "files.generate");
     if crate::research_detect::user_requested_document(user_message) {
         crate::research_detect::ensure_document_file_tools(&mut skills, &mut base_tools);
@@ -332,6 +391,7 @@ pub fn assemble_room_member_tools(
             }
         }
     }
+    // system.hardware requires no caps — do not expand always-tool caps here.
     (tool_ids, caps)
 }
 
@@ -602,6 +662,7 @@ async fn run_infer_once(
                     .await;
                 *round.current_inference.lock().await = None;
             }
+            round.clear_partial().await;
             return Err("tour annulé".into());
         }
         // A model stream can be silent while loading or decoding. Await the
@@ -615,6 +676,7 @@ async fn run_infer_once(
                     ).await;
                     *round.current_inference.lock().await = None;
                 }
+                round.clear_partial().await;
                 return Err("tour annulé".into());
             }
         };
@@ -630,17 +692,30 @@ async fn run_infer_once(
                     .await;
                 *round.current_inference.lock().await = None;
             }
+            round.clear_partial().await;
             return Err("tour annulé".into());
         }
         match ev {
             Ok(TokenEvent::Started { inference_id }) => {
                 *round.current_inference.lock().await = Some(inference_id);
             }
-            Ok(TokenEvent::Delta { text }) => full.push_str(&text),
-            Ok(TokenEvent::Done { .. }) => break,
-            Ok(TokenEvent::Error { message }) => return Err(message),
+            Ok(TokenEvent::Delta { text }) => {
+                full.push_str(&text);
+                round.publish_partial(&full).await;
+            }
+            Ok(TokenEvent::Done { .. }) => {
+                round.publish_partial(&full).await;
+                break;
+            }
+            Ok(TokenEvent::Error { message }) => {
+                round.clear_partial().await;
+                return Err(message);
+            }
             Ok(TokenEvent::Queued { .. }) => {}
-            Err(e) => return Err(e.to_string()),
+            Err(e) => {
+                round.clear_partial().await;
+                return Err(e.to_string());
+            }
         }
     }
     *round.current_inference.lock().await = None;
@@ -718,6 +793,27 @@ fn room_reply_from_model(
     }
 }
 
+/// Repair truncated trailing agent JSON so `parse_actions` can still run user.ask / tools.
+fn repair_room_tool_json(raw: &str) -> String {
+    let Some(start) = raw.rfind('{') else {
+        return raw.to_string();
+    };
+    let tail = &raw[start..];
+    if !tail.contains("\"action\"") {
+        return raw.to_string();
+    }
+    if crate::room_reply::extract_first_json_object(tail).is_some() {
+        return raw.to_string();
+    }
+    if let Some(repaired) = try_close_unbalanced_json_object(tail) {
+        let mut out = String::new();
+        out.push_str(&raw[..start]);
+        out.push_str(&repaired);
+        return out;
+    }
+    raw.to_string()
+}
+
 #[allow(clippy::too_many_arguments)] // Runtime context is explicit at this orchestration boundary.
 async fn run_room_tool_loop(
     bus: &BusClient,
@@ -744,6 +840,7 @@ async fn run_room_tool_loop(
     let mut pending_device_png: Option<String> = None;
     let mut infer_model = model_id.clone();
     let mut produced_artifacts: Vec<ProducedArtifact> = Vec::new();
+    let mut accumulated_thinking: Vec<String> = Vec::new();
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
         let module_tools = discover_module_tools(bus).await;
@@ -775,6 +872,8 @@ async fn run_room_tool_loop(
                 let lower = p.to_ascii_lowercase();
                 lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
             });
+        // Fresh status line each infer pass — avoid flashing prior tool JSON.
+        round.clear_partial().await;
         round.set_phase("thinking").await;
         let raw_result = run_infer(
             bus,
@@ -794,12 +893,29 @@ async fn run_room_tool_loop(
             return Err("réponse vide".into());
         }
 
-        let parsed_actions = parse_actions(&raw);
+        let (_, step_thinking) = split_room_reply(&raw);
+        if let Some(t) = step_thinking.filter(|s| !s.trim().is_empty()) {
+            accumulated_thinking.push(t);
+        }
+
+        let raw_for_parse = repair_room_tool_json(&raw);
+        let parsed_actions = parse_actions(&raw_for_parse);
         if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
-            return Ok((reply, thinking, produced_artifacts));
+            if let Some(t) = thinking.filter(|s| !s.trim().is_empty()) {
+                if !accumulated_thinking.iter().any(|p| p == &t) {
+                    accumulated_thinking.push(t);
+                }
+            }
+            let merged = merge_room_thinking(&accumulated_thinking);
+            // Keep provisional text until append_room_reply; prefer shaped body for UI.
+            if !reply.trim().is_empty() {
+                round.publish_partial(&reply).await;
+            }
+            return Ok((reply, merged, produced_artifacts));
         }
 
         if parsed_actions.is_empty() {
+            round.clear_partial().await;
             if step + 1 >= MAX_ROOM_TOOL_STEPS {
                 return Err("trop d'étapes sans réponse texte".into());
             }
@@ -815,6 +931,9 @@ async fn run_room_tool_loop(
             });
             continue;
         }
+
+        // Tool path: never leave action JSON flashing in the transcript.
+        round.clear_partial().await;
 
         let assistant_content = strip_tool_markup(&raw);
         messages.push(ChatMessage {
@@ -836,9 +955,22 @@ async fn run_room_tool_loop(
                 tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
                 let tool_name = canonicalize_tool_name(&action.action);
-                round
-                    .set_activity(room_tool_progress_phase(&tool_name), Some(&tool_name))
-                    .await;
+                let host_path = match tool_name.as_str() {
+                    "fs.read" | "fs.write" | "files.generate" => {
+                        action.args.get("path").and_then(|v| v.as_str())
+                    }
+                    "fs.list" => action.args.get("prefix").and_then(|v| v.as_str()),
+                    _ => None,
+                };
+                if host_path.is_some_and(crate::storage_path::is_host_folder_candidate) {
+                    // Blocked on folder-grant confirmation — surface as waiting_user
+                    // so the salon status is not a silent "Read file…".
+                    round.set_phase("waiting_user").await;
+                } else {
+                    round
+                        .set_activity(room_tool_progress_phase(&tool_name), Some(&tool_name))
+                        .await;
+                }
                 let mut outcome = execute_room_tool(
                     bus,
                     agent_id,
@@ -936,7 +1068,7 @@ pub async fn execute_room_turn(
         None
     };
 
-    let system = build_room_system_prompt(
+    let mut system = build_room_system_prompt(
         &spec,
         display_name,
         &session.meta.members,
@@ -945,6 +1077,22 @@ pub async fn execute_room_turn(
         &req.session_id,
         canvas_digest.as_deref(),
     );
+    if crate::research_detect::user_requested_hardware(user_message) {
+        if let Ok(hw) = bus
+            .call::<aos_proto::SystemHardwareRequest, aos_proto::SystemHardwareResponse>(
+                "system.hardware",
+                &aos_proto::SystemHardwareRequest {
+                    refresh: Some(true),
+                },
+                vec![],
+            )
+            .await
+        {
+            system.push_str(&crate::research_detect::format_hardware_context_block(
+                &hw.summary,
+            ));
+        }
+    }
     let mut messages = format_transcript_messages(&session, &system);
     append_room_turn_nudge(&mut messages, display_name);
 
@@ -1011,6 +1159,9 @@ pub async fn execute_room_turn(
         }
         let raw = raw?;
         let (content, thinking) = split_room_reply(&raw);
+        if !content.trim().is_empty() {
+            round.publish_partial(&content).await;
+        }
         (content, thinking, Vec::new())
     } else {
         round.set_phase("thinking").await;
@@ -1031,6 +1182,7 @@ pub async fn execute_room_turn(
         (reply, thinking, artifacts)
     };
     if content.is_empty() && thinking.as_ref().map(|t| t.trim().is_empty()).unwrap_or(true) {
+        round.clear_partial().await;
         return Err("réponse vide".into());
     }
 
@@ -1044,6 +1196,7 @@ pub async fn execute_room_turn(
         &artifacts,
     )
     .await?;
+    round.clear_partial().await;
 
     Ok(AgentRoomTurnResponse {
         content,
@@ -1141,7 +1294,25 @@ pub async fn execute_room_conduct(
                     cancelled: true,
                 });
             }
+            Err(e) if is_soft_room_member_failure(&e) => {
+                eprintln!(
+                    "[aos-agentd] room member {} soft-fail (continuing): {e}",
+                    member.agent_id
+                );
+                let _ = std::io::Write::flush(&mut std::io::stderr());
+                if turn.peer_followup {
+                    peer_followups_run += 1;
+                } else {
+                    initial_done.insert(agent_id);
+                }
+                continue;
+            }
             Err(e) => {
+                eprintln!(
+                    "[aos-agentd] room_conduct fail session={} member={}: {e}",
+                    req.session_id, member.agent_id
+                );
+                let _ = std::io::Write::flush(&mut std::io::stderr());
                 round.clear_progress().await;
                 return Err(e);
             }
@@ -1770,6 +1941,7 @@ mod tests {
     #[test]
     fn room_action_protocol_allows_user_ask_not_spawn() {
         assert!(ROOM_ACTION_PROTOCOL.contains("user.ask"));
+        assert!(ROOM_ACTION_PROTOCOL.contains("system.hardware"));
         assert!(!ROOM_ACTION_PROTOCOL.contains("agent.spawn :"));
         assert!(ROOM_ACTION_PROTOCOL.contains("Pas de `agent.spawn`"));
     }
@@ -1813,9 +1985,22 @@ mod tests {
             &empty_discovered(),
         );
         assert!(ids.iter().any(|x| x == "web.search"));
+        assert!(ids.iter().any(|x| x == "system.hardware"));
         assert!(!ids.iter().any(|x| x.starts_with("canvas.")));
         assert!(!ids.iter().any(|x| x == "notes.create"));
         assert_eq!(caps, vec!["net.connect:*:*".to_string()]);
+    }
+
+    #[test]
+    fn soft_room_member_failure_matches_empty_and_limits() {
+        assert!(is_soft_room_member_failure("réponse vide"));
+        assert!(is_soft_room_member_failure("limite d'outils salon atteinte"));
+        assert!(is_soft_room_member_failure(ROOM_ACTION_UNAVAILABLE));
+        assert!(is_soft_room_member_failure("transport: connection reset"));
+        assert!(is_soft_room_member_failure("modeld unavailable"));
+        assert!(!is_soft_room_member_failure("tour annulé"));
+        assert!(!is_soft_room_member_failure("session n'est pas en mode salon"));
+        assert!(!is_soft_room_member_failure("salon sans membres"));
     }
 
     #[tokio::test]
@@ -1833,6 +2018,22 @@ mod tests {
 
         round.set_phase("thinking").await;
         assert_eq!(round.progress_snapshot().await.phase, "thinking");
+
+        round.publish_partial("Bonjour le salon").await;
+        let snap = round.progress_snapshot().await;
+        assert_eq!(snap.phase, "generating");
+        assert_eq!(snap.partial_text.as_deref(), Some("Bonjour le salon"));
+
+        // Tool / thought JSON must not flash in the live bubble.
+        round.set_phase("thinking").await;
+        round
+            .publish_partial(r#"{"thought":"je cherche","action":"web.search","args":{"query":"x"}}"#)
+            .await;
+        assert!(round.progress_snapshot().await.partial_text.is_none());
+        assert_eq!(round.progress_snapshot().await.phase, "thinking");
+
+        round.clear_partial().await;
+        assert!(round.progress_snapshot().await.partial_text.is_none());
 
         round.clear_progress().await;
         assert!(!round.progress_snapshot().await.active);

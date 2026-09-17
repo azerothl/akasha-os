@@ -1038,6 +1038,33 @@ impl UiApp {
                             self.chat_state.runtime.room_progress.as_ref(),
                         );
                         ui.weak(&pending_status);
+                        if room_mode {
+                            if let Some(partial) = self
+                                .chat_state
+                                .runtime
+                                .room_progress
+                                .as_ref()
+                                .and_then(|p| p.partial_text.as_deref())
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                            {
+                                let preview =
+                                    agent_panel::format_chat_streaming_preview(partial, t);
+                                if !preview.trim().is_empty() && preview != "…" {
+                                    ui.add_space(4.0);
+                                    ui.push_id(("room_stream", n), |ui| {
+                                        show_chat_markdown(
+                                            ui,
+                                            &mut self.chat_md_cache,
+                                            &preview,
+                                        );
+                                    });
+                                } else if preview == "…" {
+                                    ui.add_space(2.0);
+                                    ui.weak(egui::RichText::new("…").italics());
+                                }
+                            }
+                        }
                     });
                 }
                 if let Some(recovery) = self

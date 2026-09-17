@@ -47,10 +47,10 @@ use aos_proto::{
     NetModeRequest, PendingConfirmation, ProviderIdRequest, ProviderListResponse, ProviderRecord,
     ProviderTestResponse, ProviderUpsertRequest, SecretListRequest, SecretListResponse,
     SecretSetRequest, SetRoutingRequest, SkillInfo, SkillPassPendingOffer, SkillPassRequest,
-    SystemMetrics, TokenEvent, TrustGetRequest, TrustProfile, TrustSetRequest, UnloadRequest,
-    UserLibraryAddRequest, UserLibraryAddResponse, UserLibraryListResponse,
-    UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest, WebBrowseResponse,
-    WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
+    SystemHardwareRequest, SystemHardwareResponse, SystemMetrics, TokenEvent, TrustGetRequest,
+    TrustProfile, TrustSetRequest, UnloadRequest, UserLibraryAddRequest, UserLibraryAddResponse,
+    UserLibraryListResponse, UserLibraryRemoveRequest, UserLibraryRemoveResponse, WebBrowseRequest,
+    WebBrowseResponse, WebSearchRequest, WebSearchResponse, CHAT_DELEGATION_PROMPT,
 };
 use eframe::egui;
 use std::process::Stdio;
@@ -647,6 +647,54 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             deep_thinking,
                         )
                         .await;
+                        return;
+                    }
+                }
+            }
+
+            // Direct chat has tools: [] — answer hardware asks from a fresh probe
+            // deterministically (small instruct models truncate JSON snapshots to OS/arch).
+            if aos_agent::research_detect::user_requested_hardware(&user_text) {
+                match bus
+                    .call::<SystemHardwareRequest, SystemHardwareResponse>(
+                        "system.hardware",
+                        &SystemHardwareRequest {
+                            refresh: Some(true),
+                        },
+                        vec![],
+                    )
+                    .await
+                {
+                    Ok(hw) => {
+                        let reply =
+                            aos_agent::research_detect::format_hardware_user_reply(&hw.summary);
+                        let _ = bus
+                            .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                                "chat.session.append",
+                                &ChatSessionAppendRequest {
+                                    session_id: session_id.clone(),
+                                    role: "assistant".into(),
+                                    content: reply.clone(),
+                                    attachments: vec![],
+                                    speaker_id: None,
+                                    speaker_name: None,
+                                    thinking: None,
+                                },
+                                vec![],
+                            )
+                            .await;
+                        let _ = evt_tx.send(Evt::Done {
+                            text: reply,
+                            session_id,
+                            attachments: vec![],
+                        });
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ChatError {
+                            session_id: session_id.clone(),
+                            message: format!("system.hardware: {e}"),
+                        });
                         return;
                     }
                 }
@@ -4561,11 +4609,24 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             let poll_ctx = egui_ctx.clone();
             let poll_sid = session_id.clone();
             let poll = tokio::spawn(async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_millis(400));
-                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-                interval.tick().await;
+                let mut slow =
+                    tokio::time::interval(std::time::Duration::from_millis(400));
+                let mut fast =
+                    tokio::time::interval(std::time::Duration::from_millis(100));
+                slow.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                fast.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                slow.tick().await;
+                fast.tick().await;
+                let mut streaming = false;
+                let mut last_session_load = std::time::Instant::now()
+                    .checked_sub(std::time::Duration::from_secs(1))
+                    .unwrap_or_else(std::time::Instant::now);
                 loop {
-                    interval.tick().await;
+                    if streaming {
+                        fast.tick().await;
+                    } else {
+                        slow.tick().await;
+                    }
                     if let Ok(progress) = poll_bus
                         .call::<ChatSessionIdRequest, AgentRoomConductProgress>(
                             agent_intents::ROOM_CONDUCT_PROGRESS,
@@ -4576,11 +4637,24 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         )
                         .await
                     {
+                        streaming = progress.active
+                            && (progress
+                                .partial_text
+                                .as_deref()
+                                .is_some_and(|s| !s.trim().is_empty())
+                                || progress.phase == "generating"
+                                || progress.phase == "thinking");
                         if progress.active {
                             let _ = poll_evt.send(Evt::RoomProgress { progress });
                         }
                     }
-                    load_session(&poll_bus, &poll_evt, &poll_sid).await;
+                    // Keep loading finished member bubbles ~every 400ms even while streaming.
+                    if !streaming
+                        || last_session_load.elapsed() >= std::time::Duration::from_millis(400)
+                    {
+                        load_session(&poll_bus, &poll_evt, &poll_sid).await;
+                        last_session_load = std::time::Instant::now();
+                    }
                     poll_ctx.request_repaint();
                 }
             });
@@ -4658,9 +4732,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     load_session(&bus, &evt_tx, &session_id).await;
-                    // Do not ChatError: that finishes the in-flight room turn.
-                    // A late / unmatched ask-reply must not kill the conductor.
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                    // Status/toast only: never ChatError/Error chrome that claims
+                    // the in-flight room turn stopped — the conductor may still be live.
+                    let _ = evt_tx.send(Evt::Status(format!("salon ask-reply: {e}")));
                 }
             }
         }

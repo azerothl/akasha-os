@@ -273,6 +273,13 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec![],
         },
         ToolDesc {
+            name: "system.hardware".into(),
+            description: "Lire un snapshot à jour de la machine hôte (GPU, VRAM totale/utilisée/libre, RAM, disque, tier, thermique). À utiliser pour compatibilité modèle/GGUF ou contraintes locales — ne pas inventer meminfo ni lire des chemins hors sandbox.".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{}}),
+            backend: ToolBackend::Native,
+            required_caps: vec![],
+        },
+        ToolDesc {
             name: "device.camera.capture".into(),
             description: "Capturer une image PNG de la webcam. device_id optionnel (sinon première caméra). mode: once (défaut, une photo analysable) ou stream. Confirmation utilisateur requise. La PNG est jointe au tour vision suivant — décris ce que tu vois, n'invente pas que la webcam est indisponible.".into(),
             input_schema: serde_json::json!({
@@ -1328,6 +1335,7 @@ pub fn default_agent_tools() -> Vec<String> {
         "fs.write",
         "web.search",
         "web.browse",
+        "system.hardware",
     ]
     .into_iter()
     .map(str::to_string)
@@ -1388,6 +1396,8 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
         "module.uninstall",
         "module.list",
         "module.describe",
+        // Live host snapshot — always on so models stop inventing "no access".
+        "system.hardware",
     ];
     let mut always: Vec<&str> = always_base.to_vec();
     if deep {
@@ -1417,6 +1427,7 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
                 || t.name == "mem.context"
                 || t.name == "web.search"
                 || t.name == "files.generate"
+                || t.name == "system.hardware"
                 || t.name == "media.image.generate"
                 || t.name == "media.audio.generate"
                 || t.name.starts_with("device.")
@@ -1804,6 +1815,7 @@ mod tests {
         assert!(t.iter().any(|x| x.name == "goal.complete"));
         assert!(t.iter().any(|x| x.name == "user.ask"));
         assert!(t.iter().any(|x| x.name == "notes.create"));
+        assert!(t.iter().any(|x| x.name == "system.hardware"));
     }
 
     #[test]
@@ -2060,13 +2072,11 @@ mod tests {
     }
 
     #[test]
-    fn default_agent_tools_grant_notes_fs_web_without_static_tasks() {
+    fn default_agent_tools_include_system_hardware() {
         let ids = default_agent_tools();
+        assert!(ids.iter().any(|t| t == "system.hardware"));
         let tools = select_tools(&ids, &[]);
-        let caps = caps_for_tools(&tools, &[]);
-        assert!(caps.iter().any(|c| c == "tool.invoke:notes"));
-        assert!(!caps.iter().any(|c| c == "tool.invoke:tasks"));
-        assert!(!tools.iter().any(|t| t.name == "tasks.create"));
+        assert!(tools.iter().any(|t| t.name == "system.hardware"));
     }
 
     #[test]

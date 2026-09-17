@@ -20,10 +20,8 @@ pub(crate) enum ChatInferPhase {
 
 /// Format the weak status line under the pending assistant header.
 ///
-/// In room (salon) mode there is no `model.infer` phase stream: the UI waits on a
-/// single `chat.session.room.turn` that runs the conductor + each member’s reply.
-/// Prefer live `AgentRoomConductProgress` (speaker + phase); otherwise a generic
-/// room label. Chat phase labels apply only outside room mode.
+/// In room (salon) mode the UI polls `AgentRoomConductProgress` (speaker + phase +
+/// optional `partial_text` for live tokens). Chat phase labels apply only outside room mode.
 pub(crate) fn format_pending_assistant_status(
     t: &UiStrings,
     phase: ChatInferPhase,
@@ -100,7 +98,7 @@ fn room_activity_label(t: &UiStrings, progress: &AgentRoomConductProgress) -> St
 fn room_phase_label<'a>(t: &'a UiStrings, phase: &str) -> &'a str {
     match phase {
         "thinking" => t.chat_pending_room_phase_thinking,
-        "generating" => t.chat_pending_room_phase_thinking, // legacy: room infer is reflection
+        "generating" => t.chat_pending_room_phase_generating,
         "reading" => t.chat_pending_room_phase_reading,
         "searching" => t.chat_pending_room_phase_searching,
         "tools" => t.chat_pending_room_phase_tools,
@@ -419,6 +417,7 @@ mod tests {
             turn_total: 4,
             phase: "thinking".into(),
             detail: None,
+            partial_text: None,
         };
         let status = format_pending_assistant_status(
             &t,
@@ -446,6 +445,7 @@ mod tests {
             turn_total: 4,
             phase: "reading".into(),
             detail: Some("fs.read".into()),
+            partial_text: None,
         };
         let status = format_pending_assistant_status(
             &t,

@@ -387,6 +387,7 @@ dependencies = [
  "memmap2",
  "rand 0.8.8",
  "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "tokio",
 ]
@@ -400,6 +401,7 @@ dependencies = [
  "aos-caps",
  "aos-ipc",
  "aos-llama",
+ "aos-placement",
  "aos-proto",
  "base64",
  "chacha20poly1305",

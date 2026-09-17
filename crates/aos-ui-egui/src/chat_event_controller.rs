@@ -205,6 +205,12 @@ pub(crate) fn on_status(app: &mut UiApp, message: String) {
         && app.agent_ui.consume_document_prep_kill_ok()
     {
         // swallow kill-ok banner for document-prep stop
+    } else if let Some(detail) = message.strip_prefix("salon ask-reply: ") {
+        let t = crate::i18n::strings(&app.prefs.language);
+        let classified = chat_error_copy::classify_chat_error(&t, detail);
+        let visible = classified.cause;
+        app.toasts.push_error(visible.clone());
+        app.push_status(visible);
     } else {
         app.push_status(message);
     }
