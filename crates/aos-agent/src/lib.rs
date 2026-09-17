@@ -31,6 +31,7 @@ pub mod room_runtime;
 pub mod schedule;
 pub mod schedule_parse;
 pub mod skills;
+pub mod sources;
 pub mod state;
 pub mod storage_path;
 pub mod tool_exec;

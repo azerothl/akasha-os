@@ -2263,15 +2263,19 @@ async fn execute_action(
                 }),
         ),
         "goal.complete" => {
-            let prior = {
+            let (prior, sources) = {
                 let st = shared.state.lock().await;
-                st.trace
+                let prior = st
+                    .trace
                     .last()
                     .map(|s| s.tool_result.clone())
-                    .unwrap_or_default()
+                    .unwrap_or_default();
+                let sources = aos_agent::sources::aggregate_trace_sources(&st.trace);
+                (prior, sources)
             };
             let summary =
                 aos_agent::actions::resolve_goal_complete_summary(args, &action.thought, &prior);
+            let summary = aos_agent::sources::append_sources_footer(&summary, &sources);
             ActResult::Complete(summary)
         }
         "goal.fail" => {

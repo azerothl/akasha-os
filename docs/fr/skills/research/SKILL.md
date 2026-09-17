@@ -19,7 +19,7 @@ tools:
 3. `web.search` avec une requête précise (`engine` auto : Brave→SearXNG→DuckDuckGo→Bing).
 4. `web.browse` sur 1–3 URLs pertinentes pour lire le texte (préférer à `net.fetch` pour le HTML).
 5. Synthétise et `memory.remember` les faits clés.
-6. Cite les sources dans le résumé final.
+6. Cite les sources dans le résumé final : préfère des liens markdown `[titre](url)` à côté des faits ; termine par une courte liste **Sources** des URLs utilisées. N’invente jamais d’URL.
 
 Si la recherche échoue, réessaie avec une requête plus simple ou `web.browse` une URL connue. Ne suppose pas que Bing/DuckDuckGo HTML réussira.
 
