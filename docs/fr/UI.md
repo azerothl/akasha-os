@@ -56,6 +56,8 @@ Les **sessions chat** restent sous l’onglet Chat — pas un nouvel onglet rail
 
 Le **canvas chat** est une surface de dessin vectoriel partagée sur la session (pas Créer / pas de diffusion). Basculer avec les toggles **Salon** / **Canvas** de la barre de session (ou `/canvas`). Un « dessine » seul part vers **Créer** ; le canvas vectoriel sert quand le toggle Canvas est ouvert ou que le message dit « sur le canvas » / « au trait ». L’humain dessine (Sélect., crayon, gomme, ligne, courbe, silhouette, rectangle, ellipse) ; calques nommés au-dessus du plateau (masquer / verrouiller / opacité). Les agents n’ont les outils `canvas.*` que lorsque Canvas est ouvert. Les traits apparaissent en direct (peinture optimiste + poll ~200 ms). Export PNG / SVG / JSON sous `/downloads`, distinct de `media.image.generate`. Pas de seau dans la barre : le flood-fill n’existe que sur le raster PNG d’ops `Fill` héritées.
 
+**Illustration** est une surface séparée inspirée du skill (pas un fork du whiteboard) : brief sémantique + look/palette + parts puppet, verrou exclusif agent, raster papier/finish (encre/riso/screen/crayon), planche PNG + checklist, export still, et animation procédurale optionnelle (12→24 fps via ffmpeg). Toggle **Illustration** à côté de Canvas ; les agents utilisent `illust.*` quand le panneau est ouvert (ou sur un intent explicite « illustre / style encre|riso / anime cette scène »).
+
 ### Ce qui sort de la liste plate d’onglets
 
 Avant cette spec, ~13 onglets latéraux traitaient Chat, Scénarios, Retour, Caps et Providers à égalité. Après :

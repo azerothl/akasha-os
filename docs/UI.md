@@ -46,6 +46,8 @@ bar. Canvas has a focus mode that temporarily hides the surrounding panels.
 
 **Chat canvas** is a shared vector drawing surface on the same session (not Create / not diffusion). Toggle with the session bar **Salon** / **Canvas** toggles (or `/canvas`). Bare “draw” / “dessine” routes to **Create**; vector canvas is used when the Canvas toggle is open or the message says “sur le canvas” / “au trait”. Humans draw with Select, Pan (drag) + scroll zoom, pen, eraser, line, spline, path, rect, and ellipse; per-op opacity, dashed strokes, and optional linear gradient fills; named layers sit above the board (hide / lock / opacity). Agents use `canvas.*` tools only while Canvas is open. Strokes appear live (optimistic human paint + ~200 ms poll for agent ops). Export PNG / SVG / JSON under `/downloads`; import JSON sidecar to restore a prior export. Flood-fill exists only on PNG raster of leftover `Fill` ops — not a human toolbar tool.
 
+**Illustration** is a separate skill-inspired surface (not a whiteboard fork): semantic brief + look/palette + puppet parts, exclusive agent lock, paper/finish raster (ink/riso/screen/pencil), PNG style sheet + checklist review, still export, and optional procedural animation (12→24 fps via ffmpeg). Toggle **Illustration** next to Canvas; agents use `illust.*` while it is open (or on explicit “illustre / style encre|riso / anime cette scène”).
+
 **Create** is the installable declarative Create package (`Tab::Module("create")`).
 Generation, progress, cancellation, preview, history, and save are package
 surfaces backed by host media services; expert sd.cpp controls stay behind the

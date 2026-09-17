@@ -345,6 +345,26 @@ pub fn assemble_room_member_tools(
     installed_modules: &std::collections::HashSet<String>,
     module_tools: &[ToolDesc],
 ) -> (Vec<String>, Vec<String>) {
+    assemble_room_member_tools_ex(
+        spec,
+        canvas_open,
+        false,
+        canvas_exported,
+        user_message,
+        installed_modules,
+        module_tools,
+    )
+}
+
+pub fn assemble_room_member_tools_ex(
+    spec: &AgentSpec,
+    canvas_open: bool,
+    illustration_open: bool,
+    canvas_exported: &[String],
+    user_message: &str,
+    installed_modules: &std::collections::HashSet<String>,
+    module_tools: &[ToolDesc],
+) -> (Vec<String>, Vec<String>) {
     let spec_tools_empty = spec.tools.is_empty();
     let mut skills = spec.skills.clone();
     let mut base_tools = spec.tools.clone();
@@ -374,6 +394,12 @@ pub fn assemble_room_member_tools(
     let canvas_granted = base_tools.iter().any(|t| t.starts_with("canvas."));
     if canvas_open && (canvas_granted || spec_tools_empty) {
         merge_canvas_tools(&mut tool_ids, true, canvas_exported);
+    }
+    let illust_granted = base_tools.iter().any(|t| t.starts_with("illust."));
+    if (illustration_open || crate::tools::explicit_illust_intent(user_message))
+        && (illust_granted || spec_tools_empty || illustration_open)
+    {
+        crate::tools::merge_illust_tools(&mut tool_ids, true);
     }
     let tools = select_tools(&tool_ids, module_tools);
     let mut caps = spec.caps.clone();
@@ -991,6 +1017,17 @@ async fn run_room_tool_loop(
                         pending_canvas_png = Some(png);
                     }
                 }
+                {
+                    let illust = canonicalize_tool_name(&action.action);
+                    if matches!(
+                        illust.as_str(),
+                        "illust.render_sheet" | "illust.export"
+                    ) {
+                        if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                            pending_canvas_png = Some(path);
+                        }
+                    }
+                }
                 if canonicalize_tool_name(&action.action).starts_with("device.camera") {
                     if let Some(path) = capture_png_path_from_tool_result(&outcome) {
                         pending_device_png = Some(path);
@@ -1048,9 +1085,10 @@ pub async fn execute_room_turn(
         .unwrap_or_default();
     let installed_modules = active_module_names(&module_list);
     let module_tools = discover_module_tools(bus).await;
-    let (tool_ids, caps) = assemble_room_member_tools(
+    let (tool_ids, caps) = assemble_room_member_tools_ex(
         &spec,
         session.meta.canvas_open,
+        session.meta.illustration_open,
         &canvas_exported,
         user_message,
         &installed_modules,
@@ -1077,6 +1115,13 @@ pub async fn execute_room_turn(
         &req.session_id,
         canvas_digest.as_deref(),
     );
+    if session.meta.illustration_open
+        || tool_descs.iter().any(|t| t.name.starts_with("illust."))
+    {
+        system.push_str("\n");
+        system.push_str(&crate::tools::illust_draw_strategy_hint());
+        system.push('\n');
+    }
     if crate::research_detect::user_requested_hardware(user_message) {
         if let Ok(hw) = bus
             .call::<aos_proto::SystemHardwareRequest, aos_proto::SystemHardwareResponse>(
@@ -1384,6 +1429,7 @@ mod tests {
                 conductor_policy: ChatRoomConductorPolicy::default(),
                 canvas_open: false,
                 canvas_aspect: aos_proto::CanvasAspect::Square,
+                illustration_open: false,
             },
             messages: vec![ChatSessionMessage {
                 role: "user".into(),

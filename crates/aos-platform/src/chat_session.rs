@@ -51,6 +51,8 @@ struct MetaFile {
     canvas_open: bool,
     #[serde(default)]
     canvas_aspect: CanvasAspect,
+    #[serde(default)]
+    illustration_open: bool,
 }
 
 /// Magasin de sessions chat sous `var/sessions/<id>/`.
@@ -112,7 +114,255 @@ impl ChatSessionStore {
             conductor_policy: m.conductor_policy,
             canvas_open: m.canvas_open,
             canvas_aspect: m.canvas_aspect,
+            illustration_open: m.illustration_open,
         }
+    }
+
+    fn illustration_path(&self, id: &str) -> PathBuf {
+        self.dir(id).join("illustration.json")
+    }
+
+    fn load_illustration(&self, id: &str) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let p = self.illustration_path(id);
+        if !p.exists() {
+            return Ok(aos_proto::IllustrationDoc {
+                session_id: id.into(),
+                ..Default::default()
+            });
+        }
+        let raw = fs::read_to_string(&p).map_err(|e| SessionError::Io(e.to_string()))?;
+        let mut doc: aos_proto::IllustrationDoc =
+            serde_json::from_str(&raw).map_err(|e| SessionError::Io(e.to_string()))?;
+        if doc.session_id.is_empty() {
+            doc.session_id = id.into();
+        }
+        Ok(doc)
+    }
+
+    fn save_illustration(&self, doc: &aos_proto::IllustrationDoc) -> Result<(), SessionError> {
+        let dir = self.dir(&doc.session_id);
+        fs::create_dir_all(&dir).map_err(|e| SessionError::Io(e.to_string()))?;
+        let raw = serde_json::to_string_pretty(doc).map_err(|e| SessionError::Io(e.to_string()))?;
+        fs::write(self.illustration_path(&doc.session_id), raw)
+            .map_err(|e| SessionError::Io(e.to_string()))
+    }
+
+    fn now_ms_u64() -> u64 {
+        Self::now_ms()
+    }
+
+    fn lock_valid(lock: &aos_proto::IllustrationLock) -> bool {
+        lock.expires_ms > Self::now_ms_u64()
+    }
+
+    fn require_illust_lock(
+        doc: &aos_proto::IllustrationDoc,
+        holder: &str,
+    ) -> Result<(), SessionError> {
+        let Some(lock) = doc.lock.as_ref() else {
+            return Err(SessionError::BadRequest(
+                "illustration lock requis (illust.lock.acquire)".into(),
+            ));
+        };
+        if !Self::lock_valid(lock) {
+            return Err(SessionError::BadRequest(
+                "illustration lock expiré — acquire à nouveau".into(),
+            ));
+        }
+        if lock.holder != holder {
+            return Err(SessionError::BadRequest(format!(
+                "illustration verrouillé par {} — Take over ou attendre",
+                lock.holder
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn illustration_get(
+        &self,
+        id: &str,
+    ) -> Result<(ChatSessionMeta, aos_proto::IllustrationDoc), SessionError> {
+        let meta = self.to_public(self.load_meta(id)?);
+        let mut doc = self.load_illustration(id)?;
+        if let Some(lock) = doc.lock.as_ref() {
+            if !Self::lock_valid(lock) {
+                doc.lock = None;
+                self.save_illustration(&doc)?;
+            }
+        }
+        Ok((meta, doc))
+    }
+
+    pub fn illustration_set_open(
+        &self,
+        id: &str,
+        open: bool,
+    ) -> Result<ChatSessionMeta, SessionError> {
+        let mut meta = self.load_meta(id)?;
+        meta.illustration_open = open;
+        meta.updated_ms = Self::now_ms();
+        self.save_meta(&meta)?;
+        if open {
+            let doc = self.load_illustration(id)?;
+            self.save_illustration(&doc)?;
+        }
+        Ok(self.to_public(meta))
+    }
+
+    pub fn illustration_lock_acquire(
+        &self,
+        id: &str,
+        holder: &str,
+        reason: &str,
+        ttl_ms: u64,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        if holder.trim().is_empty() {
+            return Err(SessionError::BadRequest("holder requis".into()));
+        }
+        let _ = self.load_meta(id)?;
+        let mut doc = self.load_illustration(id)?;
+        doc.session_id = id.into();
+        if let Some(lock) = doc.lock.as_ref() {
+            if Self::lock_valid(lock) && lock.holder != holder {
+                return Err(SessionError::BadRequest(format!(
+                    "déjà verrouillé par {}",
+                    lock.holder
+                )));
+            }
+        }
+        let ttl = if ttl_ms == 0 { 120_000 } else { ttl_ms };
+        doc.lock = Some(aos_proto::IllustrationLock {
+            holder: holder.into(),
+            expires_ms: Self::now_ms().saturating_add(ttl),
+            reason: reason.into(),
+        });
+        self.save_illustration(&doc)?;
+        let mut meta = self.load_meta(id)?;
+        if !meta.illustration_open {
+            meta.illustration_open = true;
+            meta.updated_ms = Self::now_ms();
+            self.save_meta(&meta)?;
+        }
+        Ok(doc)
+    }
+
+    pub fn illustration_lock_release(
+        &self,
+        id: &str,
+        holder: &str,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        if let Some(lock) = doc.lock.as_ref() {
+            if lock.holder != holder && Self::lock_valid(lock) {
+                return Err(SessionError::BadRequest(format!(
+                    "lock détenu par {}",
+                    lock.holder
+                )));
+            }
+        }
+        doc.lock = None;
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    /// Human take-over: force-clear lock regardless of holder.
+    pub fn illustration_lock_takeover(
+        &self,
+        id: &str,
+        human_holder: &str,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        doc.lock = Some(aos_proto::IllustrationLock {
+            holder: human_holder.into(),
+            expires_ms: Self::now_ms().saturating_add(300_000),
+            reason: "human takeover".into(),
+        });
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_set_brief(
+        &self,
+        id: &str,
+        holder: &str,
+        brief: aos_proto::IllustrationBrief,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        Self::require_illust_lock(&doc, holder)?;
+        doc.brief = brief;
+        doc.revision = doc.revision.saturating_add(1);
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_compose(
+        &self,
+        id: &str,
+        holder: &str,
+        mut spec: aos_proto::IllustrationSpec,
+    ) -> Result<(ChatSessionMeta, aos_proto::IllustrationDoc), SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        Self::require_illust_lock(&doc, holder)?;
+        if doc.brief.subject.trim().is_empty() && spec.brief.subject.trim().is_empty() {
+            return Err(SessionError::BadRequest(
+                "brief.subject requis (illust.set_brief) avant compose".into(),
+            ));
+        }
+        if !spec.brief.subject.trim().is_empty() {
+            doc.brief = spec.brief.clone();
+        } else {
+            spec.brief = doc.brief.clone();
+        }
+        // Force palette from brief look if still default-mismatched lightly
+        if spec.brief.palette == aos_proto::IllustrationPaletteId::default() {
+            spec.brief.palette = doc.brief.look.default_palette();
+            doc.brief.palette = spec.brief.palette;
+        }
+        doc.spec = Some(spec);
+        doc.revision = doc.revision.saturating_add(1);
+        self.save_illustration(&doc)?;
+        let mut meta = self.load_meta(id)?;
+        if !meta.illustration_open {
+            meta.illustration_open = true;
+            meta.updated_ms = Self::now_ms();
+            self.save_meta(&meta)?;
+        }
+        Ok((self.to_public(meta), doc))
+    }
+
+    pub fn illustration_set_paths(
+        &self,
+        id: &str,
+        png: Option<String>,
+        sheet: Option<String>,
+        mp4: Option<String>,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        if let Some(p) = png {
+            doc.last_png = Some(p);
+        }
+        if let Some(p) = sheet {
+            doc.last_sheet_png = Some(p);
+        }
+        if let Some(p) = mp4 {
+            doc.last_mp4 = Some(p);
+        }
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_set_timeline(
+        &self,
+        id: &str,
+        holder: &str,
+        timeline: aos_proto::IllustrationTimeline,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        Self::require_illust_lock(&doc, holder)?;
+        doc.timeline = timeline;
+        doc.revision = doc.revision.saturating_add(1);
+        self.save_illustration(&doc)?;
+        Ok(doc)
     }
 
     fn canvas_path(&self, id: &str) -> PathBuf {
@@ -690,6 +940,7 @@ impl ChatSessionStore {
             conductor_policy: ChatRoomConductorPolicy::default(),
             canvas_open: false,
             canvas_aspect: CanvasAspect::default(),
+            illustration_open: false,
         };
         self.save_meta(&meta)?;
         let _ = fs::write(self.dir(&id).join("messages.jsonl"), "");

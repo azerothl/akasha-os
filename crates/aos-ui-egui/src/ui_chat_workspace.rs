@@ -43,6 +43,12 @@ impl UiApp {
                 )
                 .map(|m| m.canvas_open)
                 .unwrap_or(false);
+                let illustration_open = chat_room::active_session_meta(
+                    &self.chat_state.sessions,
+                    self.chat_state.active_session.as_deref(),
+                )
+                .map(|m| m.illustration_open)
+                .unwrap_or(false);
                 let canvas_aspect = chat_room::active_session_meta(
                     &self.chat_state.sessions,
                     self.chat_state.active_session.as_deref(),
@@ -190,6 +196,74 @@ impl UiApp {
                                                 );
                                                 self.dispatch_canvas_ui_action(action, sid);
                                                 self.canvas_poll_if_due(ui, sid);
+                                            }
+                                        },
+                                    );
+                                }
+                            }
+                        } else if illustration_open {
+                            let split_gap = 8.0_f32;
+                            let total_w = ui.available_width();
+                            match chat_canvas_layout(total_w, content_h, split_gap) {
+                                ChatCanvasLayout::SideBySide {
+                                    transcript_w,
+                                    canvas_w,
+                                } => {
+                                    ui.horizontal(|ui| {
+                                        ui.set_min_height(content_h);
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(transcript_w, content_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                self.ui_chat_transcript(
+                                                    ui,
+                                                    t,
+                                                    room_mode,
+                                                    &room_members,
+                                                    room_conductor_policy.as_ref(),
+                                                );
+                                            },
+                                        );
+                                        ui.add_space(split_gap);
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(canvas_w, content_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                if let Some(ref sid) = active_sid {
+                                                    self.ui_illustration_panel(ui, t, sid);
+                                                }
+                                            },
+                                        );
+                                    });
+                                }
+                                ChatCanvasLayout::Stacked {
+                                    transcript_h,
+                                    canvas_h,
+                                } => {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(total_w, transcript_h),
+                                        egui::Layout::top_down(egui::Align::Min)
+                                            .with_cross_justify(true),
+                                        |ui| {
+                                            self.ui_chat_transcript(
+                                                ui,
+                                                t,
+                                                room_mode,
+                                                &room_members,
+                                                room_conductor_policy.as_ref(),
+                                            );
+                                        },
+                                    );
+                                    ui.add_space(split_gap);
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(total_w, canvas_h),
+                                        egui::Layout::top_down(egui::Align::Min)
+                                            .with_cross_justify(true),
+                                        |ui| {
+                                            if let Some(ref sid) = active_sid {
+                                                self.ui_illustration_panel(ui, t, sid);
                                             }
                                         },
                                     );

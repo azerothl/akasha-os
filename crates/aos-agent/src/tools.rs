@@ -1194,7 +1194,143 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec!["tool.invoke:canvas".into()],
         });
     }
+    v.extend(illust_tool_descs());
     v
+}
+
+/// Illustration surface tools (native platform intents).
+pub fn illust_tool_descs() -> Vec<ToolDesc> {
+    let sid = || {
+        serde_json::json!({"type":"string","description":"omis — le runtime force session_id"})
+    };
+    let tools = [
+        (
+            "illust.get",
+            "Lire brief/spec/digest Illustration (toujours en premier)",
+            serde_json::json!({"type":"object","properties":{"session_id":sid()}}),
+        ),
+        (
+            "illust.set_brief",
+            "Fixer subject/look/palette/anchor avant compose (look: ink|riso|screen|pencil|blueprint)",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "brief":{"type":"object"}
+                },
+                "required":["brief"]
+            }),
+        ),
+        (
+            "illust.compose",
+            "Composer une IllustrationSpec complète (parts 3–8, roles body/main, fill+outline). Remplace la scène.",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "spec":{"type":"object"}
+                },
+                "required":["spec"]
+            }),
+        ),
+        (
+            "illust.render_sheet",
+            "Rendre la planche style (sujet @0.6/1/1.8 + swatches) → PNG sous /downloads/canvas",
+            serde_json::json!({"type":"object","properties":{"session_id":sid(),"width":{"type":"integer"}}}),
+        ),
+        (
+            "illust.review",
+            "Checklist déterministe (brief, parts, anchor, silhouette)",
+            serde_json::json!({"type":"object","properties":{"session_id":sid()}}),
+        ),
+        (
+            "illust.export",
+            "Exporter le still PNG (ou json) et libérer le lock agent",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "path":{"type":"string"},
+                    "width":{"type":"integer"},
+                    "height":{"type":"integer"},
+                    "format":{"type":"string"}
+                }
+            }),
+        ),
+        (
+            "illust.animate",
+            "Animer la scène (timeline optionnelle) → frames 12fps + mp4 24fps si ffmpeg",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "timeline":{"type":"object"},
+                    "width":{"type":"integer"},
+                    "path":{"type":"string"}
+                }
+            }),
+        ),
+    ];
+    tools
+        .into_iter()
+        .map(|(name, desc, schema)| ToolDesc {
+            name: name.into(),
+            description: desc.into(),
+            input_schema: schema,
+            backend: ToolBackend::Native,
+            required_caps: vec!["tool.invoke:illust".into()],
+        })
+        .collect()
+}
+
+pub const ILLUST_TOOL_IDS: &[&str] = &[
+    "illust.get",
+    "illust.set_brief",
+    "illust.compose",
+    "illust.render_sheet",
+    "illust.review",
+    "illust.export",
+    "illust.animate",
+];
+
+pub fn merge_illust_tools(tool_ids: &mut Vec<String>, include: bool) {
+    if !include {
+        return;
+    }
+    for t in ILLUST_TOOL_IDS {
+        if !tool_ids.iter().any(|x| x == t) {
+            tool_ids.push((*t).to_string());
+        }
+    }
+}
+
+pub fn explicit_illust_intent(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "/illust",
+        "/illustration",
+        "illustre",
+        "illustration",
+        "style encre",
+        "style riso",
+        "hand-drawn",
+        "dessin animé",
+        "anime cette scène",
+        "anime la scène",
+        "paper ink",
+        "look ink",
+        "look riso",
+    ];
+    MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Short strategy for illustration agents.
+pub fn illust_draw_strategy_hint() -> String {
+    "PROTOCOLE Illustration : illust.get → illust.set_brief (subject, look, palette, anchor) → \
+     illust.compose (parts 3–8, role body sur la masse) → illust.render_sheet → illust.review → \
+     corrige via compose si besoin → illust.export. Pour animer : illust.animate après compose. \
+     Couleurs = palette preset uniquement (pas de hex libres). Fill ≠ outline (raster applique wob+finish)."
+        .into()
 }
 
 /// Canvas tool ids (session vector drawing) — never part of `default_agent_tools`.

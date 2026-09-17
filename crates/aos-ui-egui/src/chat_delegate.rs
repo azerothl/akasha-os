@@ -1354,6 +1354,7 @@ fn chat_agent_kit_ex(
     }
     if !chat_canvas::chat_user_wants_explicit_canvas(task)
         && !canvas_open
+        && !aos_agent::tools::explicit_illust_intent(task)
         && chat_device_capture_intent(task).is_none()
         && !chat_device_usb_intent(task)
         && (lower.contains("image")
@@ -1371,6 +1372,11 @@ fn chat_agent_kit_ex(
                 tools.push(t);
             }
         }
+    }
+    if aos_agent::tools::explicit_illust_intent(task) {
+        aos_agent::tools::merge_illust_tools(&mut tools, true);
+        // Prefer Illustration surface over diffusion when intent is explicit.
+        tools.retain(|t| t != "media.image.generate");
     }
     if let Some(intent) = chat_device_capture_intent(task) {
         push_device_capture_tools(&mut tools, intent);

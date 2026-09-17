@@ -520,6 +520,7 @@ impl UiApp {
         let meta = chat_room::active_session_meta(&self.chat_state.sessions, Some(sid.as_str()));
         let room = chat_room::session_is_room(meta);
         let canvas_open = meta.map(|m| m.canvas_open).unwrap_or(false);
+        let illustration_open = meta.map(|m| m.illustration_open).unwrap_or(false);
         let members_vec = meta.map(|m| m.members.clone()).unwrap_or_default();
         let members = members_vec.as_slice();
         let model_id = meta.and_then(|m| m.model_id.clone());
@@ -539,7 +540,15 @@ impl UiApp {
             self.ui_session_bar_left(ui, t, &g, room, &count_line, !members.is_empty());
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open, true);
+                    self.ui_session_bar_toggles(
+                        ui,
+                        t,
+                        &sid,
+                        room,
+                        canvas_open,
+                        illustration_open,
+                        true,
+                    );
                 });
             });
         } else {
@@ -561,7 +570,15 @@ impl UiApp {
                     egui::vec2(toggle_w.min(full_w), ui.available_height()),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        self.ui_session_bar_toggles(ui, t, &sid, room, canvas_open, tuck_secondary);
+                        self.ui_session_bar_toggles(
+                            ui,
+                            t,
+                            &sid,
+                            room,
+                            canvas_open,
+                            illustration_open,
+                            tuck_secondary,
+                        );
                     },
                 );
             });
@@ -720,6 +737,7 @@ impl UiApp {
         sid: &str,
         room: bool,
         canvas_open: bool,
+        illustration_open: bool,
         tuck_secondary: bool,
     ) {
         if icons::session_chrome_toggle(
@@ -736,6 +754,26 @@ impl UiApp {
                 session_id: sid.to_string(),
                 open: new_open,
             });
+        }
+        if icons::session_chrome_toggle(
+            ui,
+            illustration_open,
+            icons::SessionChromeIcon::Illustration,
+            t.session_toggle_illustration,
+        )
+        .clicked()
+        {
+            let new_open = !illustration_open;
+            self.set_illustration_open_local(sid, new_open);
+            let _ = self.cmd_tx.send(Cmd::IllustSetOpen {
+                session_id: sid.to_string(),
+                open: new_open,
+            });
+            if new_open {
+                let _ = self.cmd_tx.send(Cmd::IllustGet {
+                    session_id: sid.to_string(),
+                });
+            }
         }
         if tuck_secondary {
             let _ = icons::overflow_menu(ui, "session_more_toggles", t.session_toggle_deep, |ui| {

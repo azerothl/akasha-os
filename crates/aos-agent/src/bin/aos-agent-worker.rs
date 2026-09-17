@@ -1380,6 +1380,17 @@ async fn main() {
                             }
                         }
                     }
+                    {
+                        let illust = canonicalize_tool_name(&action.action);
+                        if matches!(
+                            illust.as_str(),
+                            "illust.render_sheet" | "illust.export"
+                        ) {
+                            if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                                last_canvas_scene_png = Some(path);
+                            }
+                        }
+                    }
                     if canonicalize_tool_name(&action.action).starts_with("device.camera") {
                         if let Some(path) = capture_png_path_from_tool_result(&outcome) {
                             last_device_capture_png = Some(path);
@@ -4325,8 +4336,77 @@ async fn invoke_native(
             Ok(resp) => resp.summary.to_string(),
             Err(e) => format!("system.hardware err: {e}"),
         },
+        t if t.starts_with("illust.") => {
+            invoke_illust_tool(bus, agent_id, tool, args, session_id).await
+        }
         "harness.run" => aos_agent::harness::run(args, caps).await,
         other => format!("natif non implémenté: {other}"),
+    }
+}
+
+async fn invoke_illust_tool(
+    bus: &BusClient,
+    agent_id: &str,
+    tool: &str,
+    args: &serde_json::Value,
+    session_id: Option<&str>,
+) -> String {
+    let Some(sid) = session_id.filter(|s| !s.is_empty()) else {
+        return "ERREUR outil: illust.* requiert un session_id lié".into();
+    };
+    let holder = agent_id.to_string();
+    // Auto-acquire lock for mutating tools
+    let mutating = matches!(
+        tool,
+        "illust.set_brief"
+            | "illust.compose"
+            | "illust.render_sheet"
+            | "illust.export"
+            | "illust.animate"
+    );
+    if mutating {
+        let _ = bus
+            .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
+                "illust.lock.acquire",
+                &aos_proto::IllustLockAcquireRequest {
+                    session_id: sid.to_string(),
+                    holder: holder.clone(),
+                    reason: format!("auto:{tool}"),
+                    ttl_ms: Some(180_000),
+                },
+                vec![],
+            )
+            .await;
+    }
+    let mut payload = args.clone();
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("session_id".into(), serde_json::json!(sid));
+        obj.insert("holder".into(), serde_json::json!(holder));
+    }
+    match bus
+        .call::<serde_json::Value, serde_json::Value>(tool, &payload, vec![])
+        .await
+    {
+        Ok(v) => {
+            let mut out = v.to_string();
+            if matches!(
+                tool,
+                "illust.get" | "illust.review" | "illust.compose" | "illust.render_sheet"
+            ) {
+                if let Some(digest) = v.get("digest").and_then(|d| d.as_str()) {
+                    out.push_str(&format!("\n[illust digest]\n{digest}"));
+                }
+            }
+            if tool == "illust.render_sheet" {
+                if let Some(path) = v.get("path").and_then(|p| p.as_str()) {
+                    out.push_str(&format!(
+                        "\n[illust sheet] PNG planche jointe au prochain tour vision si modèle VL: {path}"
+                    ));
+                }
+            }
+            out
+        }
+        Err(e) => format!("ERREUR illust: {e}"),
     }
 }
 

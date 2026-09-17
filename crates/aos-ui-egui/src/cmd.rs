@@ -486,6 +486,26 @@ pub(crate) enum Cmd {
         session_id: String,
         open: bool,
     },
+    IllustSetOpen {
+        session_id: String,
+        open: bool,
+    },
+    IllustGet {
+        session_id: String,
+    },
+    IllustSetBrief {
+        session_id: String,
+        brief: aos_proto::IllustrationBrief,
+    },
+    IllustExport {
+        session_id: String,
+    },
+    IllustAnimate {
+        session_id: String,
+    },
+    IllustTakeover {
+        session_id: String,
+    },
     CanvasSetAspect {
         session_id: String,
         aspect: aos_proto::CanvasAspect,
@@ -714,6 +734,16 @@ pub(crate) enum Evt {
     },
     CanvasExported {
         path: String,
+        session_id: String,
+    },
+    IllustDoc(aos_proto::IllustrationDoc),
+    IllustExported {
+        path: String,
+        message: String,
+    },
+    IllustError(String),
+    /// UI hint to re-fetch illustration after open/export.
+    IllustGetHint {
         session_id: String,
     },
     MemHits(Vec<MemHit>),
