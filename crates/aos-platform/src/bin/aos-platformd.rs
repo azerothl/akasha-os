@@ -1963,6 +1963,9 @@ async fn main() {
                                     )
                                     .await;
                             }
+                            Err(aos_ipc::CallError::Status { status, message }) => {
+                                let _ = ctx.respond_error(status, &message).await;
+                            }
                             Err(e) => {
                                 let _ = ctx
                                     .respond_error(

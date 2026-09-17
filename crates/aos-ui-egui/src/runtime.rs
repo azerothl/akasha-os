@@ -4684,9 +4684,9 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     load_session(&bus, &evt_tx, &session_id).await;
-                    // Do not ChatError: that finishes the in-flight room turn.
-                    // A late / unmatched ask-reply must not kill the conductor.
-                    let _ = evt_tx.send(Evt::Error(e.to_string()));
+                    // Status/toast only: never ChatError/Error chrome that claims
+                    // the in-flight room turn stopped — the conductor may still be live.
+                    let _ = evt_tx.send(Evt::Status(format!("salon ask-reply: {e}")));
                 }
             }
         }

@@ -359,6 +359,14 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
                     cause: t.chat_error_agent_create_failed.to_string(),
                 };
             }
+            // Prefer a specific classification of the agent/platform body over a
+            // generic "internal error" that hides actionable room failures.
+            if !ipc_body.trim().is_empty() {
+                let inner = classify_chat_error(t, ipc_body);
+                if inner.code != "chat.error" && inner.code != "chat.internal_error" {
+                    return inner;
+                }
+            }
             return ChatErrorClassified {
                 code: "chat.internal_error",
                 cause: t.chat_error_internal.to_string(),

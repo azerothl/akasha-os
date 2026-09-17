@@ -19,6 +19,26 @@ pub fn split_room_reply(raw: &str) -> (String, Option<String>) {
         work = rest;
     }
 
+    // Tool envelopes keep `thought` even when action is a real tool — fold it
+    // into Reflection without painting the JSON as the live bubble.
+    if let Some(obj) = extract_first_json_object(&work) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&obj) {
+            if let Some(map) = value.as_object() {
+                let action = map
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                if !action.is_empty() && action != "user.ask" {
+                    let thought = envelope_thought(map);
+                    if !thought.is_empty() {
+                        thinking.push(thought);
+                    }
+                }
+            }
+        }
+    }
+
     let visible = visible_prose(&work);
     let thinking_text = if thinking.is_empty() {
         None
@@ -26,6 +46,74 @@ pub fn split_room_reply(raw: &str) -> (String, Option<String>) {
         Some(thinking.join("\n\n"))
     };
     (visible, thinking_text)
+}
+
+/// Live salon preview: only stable visible prose — never incomplete or tool JSON.
+///
+/// Returns `None` while the model is still emitting a thought/tool envelope so the
+/// UI stays on a status line instead of flashing JSON that then clears.
+pub fn stream_visible_partial(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Incomplete `{…}` — wait for a balanced object before shaping.
+    if trimmed.starts_with('{') && extract_first_json_object(trimmed).is_none() {
+        return None;
+    }
+
+    if let Some(obj) = extract_first_json_object(trimmed) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&obj) {
+            if let Some(map) = value.as_object() {
+                let action = map
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                let has_thought = map.contains_key("thought")
+                    || map.contains_key("thinking")
+                    || map.contains_key("reasoning");
+                // Real tool call (or thought-only / ask envelope): don't stream JSON.
+                if has_thought || !action.is_empty() {
+                    let (visible, _) = split_room_reply(raw);
+                    let visible = visible.trim();
+                    if visible.is_empty() || visible.starts_with('{') {
+                        return None;
+                    }
+                    return Some(visible.to_string());
+                }
+            }
+        }
+    }
+
+    let (visible, _) = split_room_reply(raw);
+    let visible = visible.trim();
+    if visible.is_empty() {
+        None
+    } else {
+        Some(visible.to_string())
+    }
+}
+
+/// Merge thinking fragments from multiple tool-loop steps into one Reflection body.
+pub fn merge_room_thinking(parts: &[String]) -> Option<String> {
+    let mut out = Vec::new();
+    for part in parts {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if out.iter().any(|p: &String| p == trimmed) {
+            continue;
+        }
+        out.push(trimmed.to_string());
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out.join("\n\n"))
+    }
 }
 
 fn strip_speaker_label_prefix(text: &str) -> String {
@@ -398,7 +486,36 @@ Suite."#;
         let (visible, thinking) = split_room_reply(raw);
         // Not peeled as salon prose — stays as JSON for the tool path / display.
         assert!(visible.contains("notes.create") || visible.contains("\"title\""));
-        assert!(thinking.is_none());
+        // Thought is folded into Reflection so tool passes do not lose reasoning.
+        assert_eq!(thinking.as_deref(), Some("je note"));
+    }
+
+    #[test]
+    fn stream_partial_suppresses_incomplete_and_tool_json() {
+        assert!(stream_visible_partial(r#"{"thought":"enc"#).is_none());
+        assert!(stream_visible_partial(
+            r#"{"thought":"je cherche","action":"web.search","args":{"query":"x"}}"#
+        )
+        .is_none());
+        assert_eq!(
+            stream_visible_partial("Voici la synthèse finale du salon."),
+            Some("Voici la synthèse finale du salon.".into())
+        );
+        assert_eq!(
+            stream_visible_partial(
+                r#"{"thought":"ok","action":"","args":{"question":"On continue ?"}}"#
+            ),
+            Some("On continue ?".into())
+        );
+    }
+
+    #[test]
+    fn merge_room_thinking_dedupes() {
+        assert_eq!(
+            merge_room_thinking(&["a".into(), "a".into(), "b".into()]).as_deref(),
+            Some("a\n\nb")
+        );
+        assert!(merge_room_thinking(&["  ".into()]).is_none());
     }
 
     #[test]

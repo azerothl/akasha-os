@@ -30,7 +30,7 @@ use crate::room_conductor::{
     format_roster_for_prompt, initial_schedule, peers_requesting_response, pop_next_scheduled_turn,
     sanitize_member_queue,
 };
-use crate::room_reply::split_room_reply;
+use crate::room_reply::{merge_room_thinking, split_room_reply, stream_visible_partial};
 use crate::skills::load_skills;
 use crate::storage_path::{is_host_path_disallowed_outcome, post_room_host_path_notice};
 use crate::tool_exec::execute_room_tool;
@@ -63,6 +63,26 @@ const ROOM_INFER_PRIORITY: u8 = 1;
 /// Sentinel returned to the UI when a salon turn cannot invoke the tools an ask requires.
 pub const ROOM_ACTION_UNAVAILABLE: &str = "room_action_unavailable";
 
+/// Member-turn failures that should not abort the whole salon round.
+fn is_soft_room_member_failure(err: &str) -> bool {
+    if is_hard_room_conduct_failure(err) {
+        return false;
+    }
+    // Cancel is handled separately as Ok(cancelled).
+    if err == "tour annulé" {
+        return false;
+    }
+    // Default: one member blip (post-ask infer, empty reply, bus hiccup, …)
+    // must not kill the rest of the roster.
+    true
+}
+
+fn is_hard_room_conduct_failure(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("mode salon")
+        || lower.contains("sans membres")
+        || lower.contains("introuvable")
+}
 const ROOM_ACTION_PROTOCOL: &str = r#"## Protocole d'actions (salon)
 
 Quand tu dois utiliser un outil, réponds par un objet JSON unique :
@@ -84,6 +104,8 @@ pub struct RoomRoundState {
     pub cancel_notify: Notify,
     pub current_inference: Mutex<Option<u64>>,
     pub ask_reply_tx: Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+    /// Ask-reply that arrived when no oneshot was armed yet (or after it was dropped).
+    pub pending_ask_reply: Mutex<Option<String>>,
     posted_host_path_notices: Mutex<HashSet<String>>,
     progress: Mutex<AgentRoomConductProgress>,
 }
@@ -101,6 +123,7 @@ impl RoomRoundState {
             cancel_notify: Notify::new(),
             current_inference: Mutex::new(None),
             ask_reply_tx: Mutex::new(None),
+            pending_ask_reply: Mutex::new(None),
             posted_host_path_notices: Mutex::new(HashSet::new()),
             progress: Mutex::new(AgentRoomConductProgress::default()),
         }
@@ -153,20 +176,23 @@ impl RoomRoundState {
         }
     }
 
-    /// Publish provisional token text for the UI.
+    /// Publish provisional token text for the UI (visible prose only).
     pub async fn publish_partial(&self, full: &str) {
-        let trimmed = full.trim_end();
         let mut p = self.progress.lock().await;
         if !p.active {
             return;
         }
-        if trimmed.is_empty() {
-            p.partial_text = None;
-            return;
-        }
-        p.partial_text = Some(trimmed.to_string());
-        if p.phase == "thinking" || p.phase == "preparing" {
-            p.phase = "generating".into();
+        match stream_visible_partial(full) {
+            Some(visible) => {
+                p.partial_text = Some(visible);
+                if p.phase == "thinking" || p.phase == "preparing" {
+                    p.phase = "generating".into();
+                }
+            }
+            None => {
+                // Incomplete / tool JSON: keep status phase, do not flash tokens.
+                p.partial_text = None;
+            }
         }
     }
 
@@ -782,6 +808,7 @@ async fn run_room_tool_loop(
     let mut pending_device_png: Option<String> = None;
     let mut infer_model = model_id.clone();
     let mut produced_artifacts: Vec<ProducedArtifact> = Vec::new();
+    let mut accumulated_thinking: Vec<String> = Vec::new();
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
         let module_tools = discover_module_tools(bus).await;
@@ -813,6 +840,8 @@ async fn run_room_tool_loop(
                 let lower = p.to_ascii_lowercase();
                 lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg")
             });
+        // Fresh status line each infer pass — avoid flashing prior tool JSON.
+        round.clear_partial().await;
         round.set_phase("thinking").await;
         let raw_result = run_infer(
             bus,
@@ -832,13 +861,24 @@ async fn run_room_tool_loop(
             return Err("réponse vide".into());
         }
 
+        let (_, step_thinking) = split_room_reply(&raw);
+        if let Some(t) = step_thinking.filter(|s| !s.trim().is_empty()) {
+            accumulated_thinking.push(t);
+        }
+
         let parsed_actions = parse_actions(&raw);
         if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
+            if let Some(t) = thinking.filter(|s| !s.trim().is_empty()) {
+                if !accumulated_thinking.iter().any(|p| p == &t) {
+                    accumulated_thinking.push(t);
+                }
+            }
+            let merged = merge_room_thinking(&accumulated_thinking);
             // Keep provisional text until append_room_reply; prefer shaped body for UI.
             if !reply.trim().is_empty() {
                 round.publish_partial(&reply).await;
             }
-            return Ok((reply, thinking, produced_artifacts));
+            return Ok((reply, merged, produced_artifacts));
         }
 
         if parsed_actions.is_empty() {
@@ -1192,7 +1232,25 @@ pub async fn execute_room_conduct(
                     cancelled: true,
                 });
             }
+            Err(e) if is_soft_room_member_failure(&e) => {
+                eprintln!(
+                    "[aos-agentd] room member {} soft-fail (continuing): {e}",
+                    member.agent_id
+                );
+                let _ = std::io::Write::flush(&mut std::io::stderr());
+                if turn.peer_followup {
+                    peer_followups_run += 1;
+                } else {
+                    initial_done.insert(agent_id);
+                }
+                continue;
+            }
             Err(e) => {
+                eprintln!(
+                    "[aos-agentd] room_conduct fail session={} member={}: {e}",
+                    req.session_id, member.agent_id
+                );
+                let _ = std::io::Write::flush(&mut std::io::stderr());
                 round.clear_progress().await;
                 return Err(e);
             }
@@ -1869,6 +1927,18 @@ mod tests {
         assert_eq!(caps, vec!["net.connect:*:*".to_string()]);
     }
 
+    #[test]
+    fn soft_room_member_failure_matches_empty_and_limits() {
+        assert!(is_soft_room_member_failure("réponse vide"));
+        assert!(is_soft_room_member_failure("limite d'outils salon atteinte"));
+        assert!(is_soft_room_member_failure(ROOM_ACTION_UNAVAILABLE));
+        assert!(is_soft_room_member_failure("transport: connection reset"));
+        assert!(is_soft_room_member_failure("modeld unavailable"));
+        assert!(!is_soft_room_member_failure("tour annulé"));
+        assert!(!is_soft_room_member_failure("session n'est pas en mode salon"));
+        assert!(!is_soft_room_member_failure("salon sans membres"));
+    }
+
     #[tokio::test]
     async fn speaker_progress_roundtrip() {
         let round = RoomRoundState::new();
@@ -1889,6 +1959,14 @@ mod tests {
         let snap = round.progress_snapshot().await;
         assert_eq!(snap.phase, "generating");
         assert_eq!(snap.partial_text.as_deref(), Some("Bonjour le salon"));
+
+        // Tool / thought JSON must not flash in the live bubble.
+        round.set_phase("thinking").await;
+        round
+            .publish_partial(r#"{"thought":"je cherche","action":"web.search","args":{"query":"x"}}"#)
+            .await;
+        assert!(round.progress_snapshot().await.partial_text.is_none());
+        assert_eq!(round.progress_snapshot().await.phase, "thinking");
 
         round.clear_partial().await;
         assert!(round.progress_snapshot().await.partial_text.is_none());

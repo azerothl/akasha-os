@@ -286,16 +286,51 @@ pub fn detect_peer_addresses(
         .collect()
 }
 
-/// Pairs `@` mentionnés quand la réplique pose une question ou formule une demande.
+/// Pairs `@` mentionnés : toute mention roster invite une relance (sauf remerciement seul).
 pub fn peers_requesting_response(
     reply: &str,
     members: &[ChatRoomMember],
     exclude_agent_id: &str,
 ) -> Vec<String> {
-    if !reply_invites_peer_response(reply) {
+    if !reply.contains('@') {
+        return Vec::new();
+    }
+    // Pure thanks to a peer should not bounce the debate forever.
+    if reply_is_thanks_only(reply) {
         return Vec::new();
     }
     detect_peer_addresses(reply, members, exclude_agent_id)
+}
+
+/// True when the reply is essentially a thank-you (no further peer work).
+fn reply_is_thanks_only(reply: &str) -> bool {
+    let lower = reply.to_ascii_lowercase();
+    let thanks = lower.contains("merci")
+        || lower.contains("thanks")
+        || lower.contains("thank you")
+        || lower.contains("got it")
+        || lower.contains("bien noté");
+    if !thanks {
+        return false;
+    }
+    // If they also ask/request, it is not thanks-only.
+    if reply.contains('?') || reply.contains('？') {
+        return false;
+    }
+    const REQUEST_MARKERS: &[&str] = &[
+        "peux-tu",
+        "peux tu",
+        "pourrais-tu",
+        "can you",
+        "could you",
+        "please",
+        "confirmes",
+        "confirm",
+        "ton avis",
+        "your thoughts",
+        "weigh in",
+    ];
+    !REQUEST_MARKERS.iter().any(|m| lower.contains(m))
 }
 
 /// True when an agent reply expects a peer to answer (question or explicit request).
@@ -303,47 +338,11 @@ pub fn reply_invites_peer_response(reply: &str) -> bool {
     if !reply.contains('@') {
         return false;
     }
-    if reply.contains('?') || reply.contains('？') {
-        return true;
-    }
-    let lower = reply.to_ascii_lowercase();
-    if lower.contains("merci")
-        || lower.contains("thanks")
-        || lower.contains("thank you")
-        || lower.contains("got it")
-        || lower.contains("bien noté")
-    {
+    if reply_is_thanks_only(reply) {
         return false;
     }
-    const REQUEST_MARKERS: &[&str] = &[
-        "peux-tu",
-        "peux tu",
-        "pourrais-tu",
-        "pourriez-vous",
-        "pouvez-vous",
-        "can you",
-        "could you",
-        "would you",
-        "please",
-        "s'il te plaît",
-        "s'il vous plaît",
-        "confirmes",
-        "confirme",
-        "confirm",
-        "acceptes",
-        "acceptez",
-        "accept",
-        "valide",
-        "dis-moi",
-        "tell me",
-        "your thoughts",
-        "ton avis",
-        "your view",
-        "weigh in",
-        "est-ce que",
-        "peux-tu confirmer",
-    ];
-    REQUEST_MARKERS.iter().any(|m| lower.contains(m))
+    // Any roster-directed @ is an invite; keep this helper for tests / callers.
+    true
 }
 
 /// Premier membre mentionné (compat tests / appels simples).
@@ -937,10 +936,21 @@ mod tests {
     fn reply_invites_peer_response_for_questions_and_requests() {
         assert!(reply_invites_peer_response("@Beta, peux-tu détailler ?"));
         assert!(reply_invites_peer_response("@Beta, please share sources."));
+        assert!(reply_invites_peer_response("@Beta looking at this."));
         assert!(!reply_invites_peer_response(
             "Merci @Beta pour la synthèse."
         ));
         assert!(!reply_invites_peer_response("I agree with the direction."));
+    }
+
+    #[test]
+    fn bare_roster_mention_requests_peer_without_question_mark() {
+        let m = members();
+        let bare = "@Beta voici mon analyse.";
+        assert_eq!(
+            peers_requesting_response(bare, &m, "agent-alpha"),
+            vec!["agent-beta".to_string()]
+        );
     }
 
     #[test]
