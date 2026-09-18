@@ -800,7 +800,8 @@ mod canvas_completion_tests {
         ag.tools = vec!["web.search".into(), "web.browse".into()];
         ag.skills = vec!["research".into()];
         ag.fail_reason = None;
-        ag.last_output = "Les agents agentiques progressent.".into();
+        ag.last_output =
+            "Les agents agentiques progressent selon les dernières enquêtes.".into();
         let trace = AgentTrace {
             agent_id: "research-1".into(),
             steps: vec![aos_proto::AgentStepRecord {
@@ -810,18 +811,25 @@ mod canvas_completion_tests {
                     kind: "web".into(),
                     title: "Agentic Survey".into(),
                     locator: "https://example.com/survey".into(),
-                    snippet: "…".into(),
+                    snippet: "Les agents agentiques progressent dans les systèmes modernes."
+                        .into(),
                 }],
                 ..Default::default()
             }],
             ..Default::default()
         };
         let text = agent_completion_chat_text(&ag, &t, None, Some(&trace), false, 0);
-        assert!(text.contains("Les agents agentiques progressent."));
-        assert!(text.contains("## Sources"));
+        assert!(
+            text.contains("Les agents agentiques progressent"),
+            "body missing in: {text}"
+        );
+        assert!(text.contains("## Sources"), "footer missing in: {text}");
         assert!(text.contains("[Agentic Survey](https://example.com/survey)"));
-        // Runtime injects [1] when the body had no markers (single-sentence → footer only,
-        // or multi-sentence fallback). Single short sentence may not get a body marker.
+        // Relevance filter + citation pass may inject [n] before the trailing period.
+        assert!(
+            text.contains("[1]"),
+            "expected inline citation marker in: {text}"
+        );
     }
 
     #[test]
