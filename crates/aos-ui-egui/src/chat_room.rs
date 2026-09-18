@@ -2203,7 +2203,7 @@ mod tests {
     fn room_thinking_label_is_muted_noun_not_action() {
         let en = i18n::strings("en");
         let fr = i18n::strings("fr");
-        assert_eq!(en.room_thinking_label, "Reflection");
+        assert_eq!(en.room_thinking_label, "Thinking");
         assert_eq!(fr.room_thinking_label, "Réflexion");
         assert!(!en.room_thinking_label.to_ascii_lowercase().contains("show"));
         assert!(!en.room_thinking_label.to_ascii_lowercase().contains("hide"));
