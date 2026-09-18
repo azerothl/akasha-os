@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -270,6 +271,107 @@ pub fn parse_thermal_line(line: &str) -> Option<ThermalSnapshot> {
     })
 }
 
+/// One NVIDIA card from `nvidia-smi --query-gpu`. `None` fields are `[N/A]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuLiveSample {
+    pub index: u32,
+    pub name: String,
+    pub util_percent: Option<f32>,
+    pub vram_used_mib: Option<u64>,
+    pub vram_total_mib: Option<u64>,
+    pub temp_c: Option<f32>,
+    pub power_w: Option<f32>,
+}
+
+/// Cached ~1s so `model.metrics` does not spawn `nvidia-smi` on every bus call.
+/// Failure and a missing binary both return an empty list (no invented zeros).
+pub fn gpu_live_snapshot() -> Vec<GpuLiveSample> {
+    const TTL: Duration = Duration::from_secs(1);
+    static CACHE: Mutex<Option<(Instant, Vec<GpuLiveSample>)>> = Mutex::new(None);
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, gpus)) = guard.as_ref() {
+        if at.elapsed() < TTL {
+            return gpus.clone();
+        }
+    }
+    let gpus = query_gpu_live();
+    *guard = Some((Instant::now(), gpus.clone()));
+    gpus
+}
+
+fn query_gpu_live() -> Vec<GpuLiveSample> {
+    let output = Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
+            "--format=csv,noheader,nounits",
+        ])
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    parse_gpu_live_csv(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Parse `nvidia-smi` CSV (`noheader,nounits`). Names may contain commas;
+/// the last five columns are the counters.
+pub fn parse_gpu_live_csv(text: &str) -> Vec<GpuLiveSample> {
+    text.lines()
+        .filter_map(|line| parse_gpu_live_line(line.trim()))
+        .collect()
+}
+
+fn parse_gpu_live_line(line: &str) -> Option<GpuLiveSample> {
+    if line.is_empty() {
+        return None;
+    }
+    let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+    if parts.len() < 7 {
+        return None;
+    }
+    let index = parts[0].parse::<u32>().ok()?;
+    let tail = &parts[parts.len() - 5..];
+    let name = parts[1..parts.len() - 5].join(", ");
+    if name.is_empty() {
+        return None;
+    }
+    Some(GpuLiveSample {
+        index,
+        name,
+        util_percent: parse_optional_f32(tail[0]),
+        vram_used_mib: parse_optional_u64(tail[1]),
+        vram_total_mib: parse_optional_u64(tail[2]),
+        temp_c: parse_optional_f32(tail[3]),
+        power_w: parse_optional_f32(tail[4]),
+    })
+}
+
+fn parse_optional_f32(raw: &str) -> Option<f32> {
+    let raw = raw.trim();
+    if nvidia_missing(raw) {
+        return None;
+    }
+    raw.parse().ok()
+}
+
+fn parse_optional_u64(raw: &str) -> Option<u64> {
+    let raw = raw.trim();
+    if nvidia_missing(raw) {
+        return None;
+    }
+    raw.parse::<f64>().ok().map(|v| v as u64)
+}
+
+fn nvidia_missing(raw: &str) -> bool {
+    raw.is_empty()
+        || raw.eq_ignore_ascii_case("n/a")
+        || raw.eq_ignore_ascii_case("[n/a]")
+        || raw.eq_ignore_ascii_case("[not supported]")
+        || raw.eq_ignore_ascii_case("not supported")
+}
+
 /// Apple Silicon unified memory — no discrete VRAM; report chip GPU name + RAM budget heuristic.
 #[cfg(target_os = "macos")]
 fn probe_apple_gpu() -> (String, u64, String) {
@@ -461,5 +563,37 @@ mod tests {
         let hot = parse_thermal_line("87, 220.0, 300, 0x0000000000000020").unwrap();
         assert!(hot.throttling);
         assert!(parse_thermal_line("not-a-number, 1, 2, 0").is_none());
+    }
+
+    #[test]
+    fn parses_gpu_live_csv_and_skips_bad_lines() {
+        let text = "\
+0, NVIDIA GeForce RTX 4080 SUPER, 12, 4200, 16376, 54, 85.2
+not a gpu line
+1, Tesla P100-PCIE-16GB, [N/A], 100, 16384, 41, N/A
+";
+        let gpus = parse_gpu_live_csv(text);
+        assert_eq!(gpus.len(), 2);
+        assert_eq!(gpus[0].index, 0);
+        assert_eq!(gpus[0].name, "NVIDIA GeForce RTX 4080 SUPER");
+        assert_eq!(gpus[0].util_percent, Some(12.0));
+        assert_eq!(gpus[0].vram_used_mib, Some(4200));
+        assert_eq!(gpus[0].vram_total_mib, Some(16376));
+        assert_eq!(gpus[0].temp_c, Some(54.0));
+        assert_eq!(gpus[0].power_w, Some(85.2));
+        assert_eq!(gpus[1].util_percent, None);
+        assert_eq!(gpus[1].power_w, None);
+        assert_eq!(gpus[1].vram_total_mib, Some(16384));
+        assert!(parse_gpu_live_csv("").is_empty());
+        assert!(parse_gpu_live_csv("failed").is_empty());
+    }
+
+    #[test]
+    fn gpu_live_name_may_contain_commas() {
+        let gpus = parse_gpu_live_csv("0, NVIDIA, RTX, 3, 10, 20, 30, 40\n");
+        assert_eq!(gpus.len(), 1);
+        assert_eq!(gpus[0].name, "NVIDIA, RTX");
+        assert_eq!(gpus[0].util_percent, Some(3.0));
+        assert_eq!(gpus[0].power_w, Some(40.0));
     }
 }

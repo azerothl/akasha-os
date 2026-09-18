@@ -22,6 +22,7 @@ pub enum TabKind {
     Library,
     Files,
     Models,
+    Studio,
     Settings,
     Caps,
     Audit,
@@ -41,9 +42,11 @@ impl TabKind {
     /// (Chat/Agents/Create/Memory) are excluded — they never render in More.
     pub fn nav_group(self) -> Option<NavGroup> {
         match self {
-            TabKind::Notes | TabKind::Library | TabKind::Files | TabKind::Models => {
-                Some(NavGroup::Daily)
-            }
+            TabKind::Notes
+            | TabKind::Library
+            | TabKind::Files
+            | TabKind::Models
+            | TabKind::Studio => Some(NavGroup::Daily),
             TabKind::Providers => Some(NavGroup::System),
             TabKind::Caps
             | TabKind::Audit
@@ -117,6 +120,7 @@ pub fn tab_kind(tab: &Tab) -> TabKind {
         Tab::Library => TabKind::Library,
         Tab::Files => TabKind::Files,
         Tab::Models => TabKind::Models,
+        Tab::Studio => TabKind::Studio,
         Tab::Settings => TabKind::Settings,
         Tab::Caps => TabKind::Caps,
         Tab::Audit => TabKind::Audit,
@@ -208,6 +212,7 @@ mod tests {
         assert_eq!(TabKind::Notes.nav_group(), Some(NavGroup::Daily));
         assert_eq!(TabKind::Files.nav_group(), Some(NavGroup::Daily));
         assert_eq!(TabKind::Models.nav_group(), Some(NavGroup::Daily));
+        assert_eq!(TabKind::Studio.nav_group(), Some(NavGroup::Daily));
         assert_eq!(TabKind::Providers.nav_group(), Some(NavGroup::System));
         assert_eq!(TabKind::Caps.nav_group(), Some(NavGroup::Admin));
         assert_eq!(TabKind::Chat.nav_group(), None);
