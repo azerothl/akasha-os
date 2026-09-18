@@ -65,6 +65,47 @@ fn fill_rect(img: &mut RgbImage, color: Rgb<u8>) {
 
 /// Rasterize the current illustration still.
 pub fn export_png(doc: &IllustrationDoc, width: u32, height: u32) -> Result<Vec<u8>, String> {
+    rasterize(doc, width, height, None)
+}
+
+/// Same still, drawn up to `progress` (0..1). Subject parts appear in order:
+/// outline first, fill once the stroke has closed. `progress >= 1` matches `export_png`.
+pub fn export_png_progress(
+    doc: &IllustrationDoc,
+    width: u32,
+    height: u32,
+    progress: f32,
+) -> Result<Vec<u8>, String> {
+    let progress = progress.clamp(0.0, 1.0);
+    rasterize(
+        doc,
+        width,
+        height,
+        if progress >= 0.999 {
+            None
+        } else {
+            Some(progress)
+        },
+    )
+}
+
+/// How long the panel should take to play the current subject, in seconds.
+pub fn draw_in_seconds(spec: &IllustrationSpec) -> f32 {
+    let n = spec
+        .parts
+        .iter()
+        .filter(|p| !part_is_background(p))
+        .count()
+        .max(1);
+    (n as f32 * 0.5).clamp(1.8, 8.0)
+}
+
+fn rasterize(
+    doc: &IllustrationDoc,
+    width: u32,
+    height: u32,
+    progress: Option<f32>,
+) -> Result<Vec<u8>, String> {
     let w = width.max(64);
     let h = height.max(64);
     let palette_id = doc.brief.palette;
@@ -86,7 +127,7 @@ pub fn export_png(doc: &IllustrationDoc, width: u32, height: u32) -> Result<Vec<
     }
 
     if let Some(spec) = doc.spec.as_ref() {
-        paint_spec(&mut img, spec, &colors, night);
+        paint_spec(&mut img, spec, &colors, night, progress);
     }
 
     encode_png(&img)
@@ -152,7 +193,7 @@ fn blit_scaled_subject(
     let mut scaled = spec.clone();
     // Keep camera; scale is applied by painting into a smaller logical frame via camera zoom.
     scaled.camera.zoom *= scale.clamp(0.3, 2.5);
-    paint_spec(&mut tile, &scaled, colors, false);
+    paint_spec(&mut tile, &scaled, colors, false, None);
     let pad = ((cell - sub_w) / 2) as i32;
     for y in 0..sub_h {
         for x in 0..sub_w {
@@ -215,6 +256,7 @@ fn paint_spec(
     spec: &IllustrationSpec,
     colors: &IllustrationPaletteColors,
     blueprint: bool,
+    progress: Option<f32>,
 ) {
     let w = img.width() as f32;
     let h = img.height() as f32;
@@ -236,7 +278,8 @@ fn paint_spec(
     }
 
     // Skill riso path: separate plates per ink, then printPlate (multiply halftone).
-    if !blueprint && finish == IllustrationFinish::Riso && !colors.inks.is_empty() {
+    // Progressive playback uses the stroke loop so each part can draw in.
+    if progress.is_none() && !blueprint && finish == IllustrationFinish::Riso && !colors.inks.is_empty() {
         paint_riso_plates(img, spec, colors, cam);
         for part in &spec.parts {
             if part_is_background(part) {
@@ -262,6 +305,7 @@ fn paint_spec(
                     } else {
                         1.0
                     },
+                    1.0,
                 );
             }
             if spec.scribble_part.as_deref() == Some(part.id.as_str()) {
@@ -272,12 +316,41 @@ fn paint_spec(
         return;
     }
 
+    let subject_n = spec
+        .parts
+        .iter()
+        .filter(|p| !part_is_background(p))
+        .count()
+        .max(1);
+    let reveal = progress.map(|p| {
+        let x = p.clamp(0.0, 0.9999) * subject_n as f32;
+        (x.floor() as usize, x - x.floor())
+    });
+    let mut subject_i = 0usize;
+
     for part in &spec.parts {
         let poly = part_poly(part, w, h, cam);
+        let bg = part_is_background(part);
         if poly.len() < 3 {
+            if !bg {
+                subject_i += 1;
+            }
             continue;
         }
-        let bg = part_is_background(part);
+        let mut stroke_frac = 1.0f32;
+        let mut allow_fill = true;
+        if !bg {
+            if let Some((done, stroke)) = reveal {
+                if subject_i > done {
+                    break;
+                }
+                if subject_i == done {
+                    stroke_frac = stroke;
+                    allow_fill = stroke > 0.78;
+                }
+            }
+            subject_i += 1;
+        }
         let fill_c = if blueprint {
             parse_hex(&colors.night)
         } else if bg {
@@ -304,10 +377,10 @@ fn paint_spec(
                 0.16,
             )
         };
-        if !blueprint && (part.id == "body" || part.id.contains("paw")) {
+        if !blueprint && allow_fill && (part.id == "body" || part.id.contains("paw")) {
             contact_shadow(img, &poly, parse_hex(&colors.shade));
         }
-        if part.fill && !blueprint {
+        if part.fill && !blueprint && allow_fill {
             fill_poly(img, &poly, fill_c, 1.0);
             if bg {
                 grain(img, Some(&poly), 220, shade(fill_c, 0.45), 0.12, part.seed);
@@ -339,7 +412,7 @@ fn paint_spec(
             }
         }
         if !bg && (part.outline || blueprint) {
-            if blueprint {
+            if blueprint && stroke_frac >= 0.995 {
                 wob_outline(img, &poly, outline_color, 1.2, 2.6, part.seed.wrapping_add(7), true);
             } else {
                 let eye = part.id.contains("eye") || part.role == "eye";
@@ -360,13 +433,14 @@ fn paint_spec(
                     } else {
                         1.0
                     },
+                    stroke_frac,
                 );
             }
         }
-        if !bg && part.fill && part.id.contains("eye") && !blueprint {
+        if !bg && allow_fill && part.fill && part.id.contains("eye") && !blueprint {
             ink_pupil(img, &poly, outline_color);
         }
-        if !bg && spec.scribble_part.as_deref() == Some(part.id.as_str()) && !blueprint {
+        if !bg && allow_fill && spec.scribble_part.as_deref() == Some(part.id.as_str()) && !blueprint {
             scribble_ink(img, &poly, colors, part.seed.wrapping_add(99));
         }
     }
@@ -891,8 +965,9 @@ fn draw_wob_outline(
     finish: IllustrationFinish,
     seed: u32,
     amp_scale: f32,
+    stroke_frac: f32,
 ) {
-    if poly.len() < 3 {
+    if poly.len() < 3 || stroke_frac <= 0.001 {
         return;
     }
     let span = poly_span(poly);
@@ -903,12 +978,56 @@ fn draw_wob_outline(
         IllustrationFinish::Flat => (span * 0.04, 1.15, 1),
     };
     let amp = (amp * amp_scale).clamp(2.2, 28.0);
+    let close = stroke_frac >= 0.995;
     for k in 0..passes {
         let pts = wob_contour(poly, amp * (1.0 + k as f32 * 0.12), seed.wrapping_add(k * 11));
+        let pts = if close {
+            pts
+        } else {
+            clip_ring(&pts, stroke_frac)
+        };
+        if pts.len() < 2 {
+            continue;
+        }
         let al = if k == 0 { 0.92 } else { 0.34 };
         let w = if k == 0 { width } else { width * 0.65 };
-        stroke_polyline(img, &pts, color, al, w, true);
+        stroke_polyline(img, &pts, color, al, w, close);
     }
+}
+
+/// Walk a closed ring until `frac` of its perimeter, leaving the stroke open.
+fn clip_ring(pts: &[(f32, f32)], frac: f32) -> Vec<(f32, f32)> {
+    let n = pts.len();
+    if n < 2 {
+        return Vec::new();
+    }
+    let mut lens = Vec::with_capacity(n + 1);
+    lens.push(0.0f32);
+    for i in 0..n {
+        let a = pts[i];
+        let b = pts[(i + 1) % n];
+        lens.push(lens[i] + (b.0 - a.0).hypot(b.1 - a.1));
+    }
+    let total = *lens.last().unwrap_or(&0.0);
+    if total < 1.0 {
+        return pts.to_vec();
+    }
+    let budget = total * frac.clamp(0.0, 1.0);
+    let mut out = vec![pts[0]];
+    for i in 0..n {
+        let a = pts[i];
+        let b = pts[(i + 1) % n];
+        let l1 = lens[i + 1];
+        if l1 <= budget + 0.01 {
+            out.push(b);
+            continue;
+        }
+        let seg = (l1 - lens[i]).max(0.001);
+        let t = ((budget - lens[i]) / seg).clamp(0.0, 1.0);
+        out.push((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
+        break;
+    }
+    out
 }
 
 fn ink_pupil(img: &mut RgbImage, poly: &[(i32, i32)], ink: Rgb<u8>) {
@@ -1346,5 +1465,64 @@ mod tests {
             max - min > 4.0,
             "wob should vary radius, got {min:.1}..{max:.1}"
         );
+    }
+
+    #[test]
+    fn progress_draws_less_than_the_still() {
+        let mut doc = IllustrationDoc {
+            brief: IllustrationBrief {
+                subject: "blob".into(),
+                look: IllustrationLook::Pencil,
+                palette: IllustrationPaletteId::PencilMinimal,
+                anchor: "blob".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        doc.spec = Some(IllustrationSpec {
+            parts: vec![
+                IllustrationPart {
+                    id: "body".into(),
+                    role: "body".into(),
+                    fill_index: 0,
+                    fill: true,
+                    outline: true,
+                    seed: 3,
+                    geometry: IllustrationPartGeometry::Ellipse {
+                        x: 0.2,
+                        y: 0.25,
+                        w: 0.45,
+                        h: 0.35,
+                        rotation: 0.0,
+                    },
+                },
+                IllustrationPart {
+                    id: "head".into(),
+                    role: "head".into(),
+                    fill_index: 1,
+                    fill: true,
+                    outline: true,
+                    seed: 9,
+                    geometry: IllustrationPartGeometry::Ellipse {
+                        x: 0.48,
+                        y: 0.18,
+                        w: 0.28,
+                        h: 0.24,
+                        rotation: 0.0,
+                    },
+                },
+            ],
+            ..Default::default()
+        });
+        let early = export_png_progress(&doc, 160, 160, 0.12).unwrap();
+        let mid = export_png_progress(&doc, 160, 160, 0.55).unwrap();
+        let full = export_png(&doc, 160, 160).unwrap();
+        let done = export_png_progress(&doc, 160, 160, 1.0).unwrap();
+        assert_ne!(early, mid);
+        assert_ne!(mid, full);
+        assert_eq!(done, full);
+        let open = clip_ring(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)], 0.25);
+        assert!(open.len() >= 2);
+        assert!(open.len() < 5);
     }
 }

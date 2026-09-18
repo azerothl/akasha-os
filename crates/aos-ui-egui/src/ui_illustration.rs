@@ -6,6 +6,13 @@ use crate::{chat_room, i18n, UiApp};
 use aos_proto::{IllustrationDoc, IllustrationLook, IllustrationPaletteId};
 use eframe::egui;
 
+#[derive(Clone, Copy)]
+struct DrawIn {
+    t0: f64,
+    duration: f32,
+    last_step: i32,
+}
+
 #[derive(Clone, Default)]
 pub struct IllustrationUiState {
     pub doc: IllustrationDoc,
@@ -16,6 +23,9 @@ pub struct IllustrationUiState {
     /// Host path of the PNG currently loaded into `texture`.
     pub texture_path: String,
     pub poll_due: f64,
+    /// Replay strokes when the spec changes (compose / enrich), not only the final PNG.
+    pending_draw: bool,
+    draw: Option<DrawIn>,
 }
 
 impl UiApp {
@@ -147,10 +157,13 @@ impl UiApp {
         );
         ui.painter().rect_filled(rect, 4.0, paper);
 
-        self.refresh_illust_texture(ui.ctx());
-        if let Some(img) = self.illust_ui.pending_preview.take() {
-            self.illust_ui.texture =
-                Some(ui.ctx().load_texture("illust_preview", img, Default::default()));
+        self.tick_illust_draw(ui.ctx());
+        if self.illust_ui.draw.is_none() {
+            self.refresh_illust_texture(ui.ctx());
+            if let Some(img) = self.illust_ui.pending_preview.take() {
+                self.illust_ui.texture =
+                    Some(ui.ctx().load_texture("illust_preview", img, Default::default()));
+            }
         }
         if let Some(tex) = &self.illust_ui.texture {
             ui.painter().image(
@@ -190,6 +203,56 @@ impl UiApp {
         }
     }
 
+    fn tick_illust_draw(&mut self, ctx: &egui::Context) {
+        let now = ctx.input(|i| i.time);
+        if self.illust_ui.pending_draw {
+            self.illust_ui.pending_draw = false;
+            let duration = self
+                .illust_ui
+                .doc
+                .spec
+                .as_ref()
+                .map(aos_platform::illustration_raster::draw_in_seconds)
+                .unwrap_or(2.4);
+            self.illust_ui.draw = Some(DrawIn {
+                t0: now,
+                duration,
+                last_step: -1,
+            });
+        }
+        let Some(draw) = self.illust_ui.draw else {
+            return;
+        };
+        let u = ((now - draw.t0) / draw.duration as f64) as f32;
+        if u >= 1.0 {
+            self.illust_ui.draw = None;
+            self.illust_ui.texture_path.clear();
+            ctx.request_repaint();
+            return;
+        }
+        let step = (u * 28.0) as i32;
+        if step != draw.last_step || self.illust_ui.texture.is_none() {
+            if let Some(draw) = self.illust_ui.draw.as_mut() {
+                draw.last_step = step;
+            }
+            self.paint_illust_progress(ctx, u.clamp(0.0, 0.999));
+        }
+        ctx.request_repaint_after(std::time::Duration::from_millis(32));
+    }
+
+    fn paint_illust_progress(&mut self, ctx: &egui::Context, progress: f32) {
+        let doc = self.illust_ui.doc.clone();
+        let Ok(bytes) = aos_platform::illustration_raster::export_png_progress(&doc, 480, 480, progress)
+        else {
+            return;
+        };
+        let Some(img) = png_bytes_to_color_image(&bytes) else {
+            return;
+        };
+        self.illust_ui.texture = Some(ctx.load_texture("illust_draw", img, Default::default()));
+        self.illust_ui.texture_path.clear();
+    }
+
     fn refresh_illust_texture(&mut self, ctx: &egui::Context) {
         let logical = self
             .illust_ui
@@ -218,15 +281,33 @@ impl UiApp {
     }
 
     pub(crate) fn apply_illust_doc(&mut self, doc: IllustrationDoc) {
+        let spec_changed = doc.spec != self.illust_ui.doc.spec;
         let path_changed = doc.last_png != self.illust_ui.doc.last_png
             || doc.last_sheet_png != self.illust_ui.doc.last_sheet_png;
+        let has_parts = doc
+            .spec
+            .as_ref()
+            .map(|s| !s.parts.is_empty())
+            .unwrap_or(false);
         self.illust_ui.doc = doc;
         self.illust_ui.last_error.clear();
-        if path_changed {
+        if spec_changed && has_parts {
+            self.illust_ui.pending_draw = true;
+            self.illust_ui.draw = None;
+            self.illust_ui.texture = None;
+            self.illust_ui.texture_path.clear();
+        } else if path_changed && self.illust_ui.draw.is_none() && !self.illust_ui.pending_draw {
             self.illust_ui.texture = None;
             self.illust_ui.texture_path.clear();
         }
     }
+}
+
+fn png_bytes_to_color_image(bytes: &[u8]) -> Option<egui::ColorImage> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let rgba = img.to_rgba8();
+    let size = [rgba.width() as usize, rgba.height() as usize];
+    Some(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
 }
 
 /// Ensure session bar knows illustration_open from meta.
