@@ -88,7 +88,10 @@ mod tests {
 
     #[test]
     fn kind_dirs_and_defaults() {
-        assert_eq!(downloads_kind_dir(DownloadKind::Documents), "/downloads/documents");
+        assert_eq!(
+            downloads_kind_dir(DownloadKind::Documents),
+            "/downloads/documents"
+        );
         assert_eq!(
             default_download_path(DownloadKind::Images, "image-1.png"),
             "/downloads/images/image-1.png"
