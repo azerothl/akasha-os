@@ -97,15 +97,15 @@ pub use canvas_style::{
     CanvasLinearGradient,
 };
 pub use illustration::{
-    illustration_digest, review_illustration, IllustAnimateRequest, IllustAnimateResponse,
-    IllustComposeRequest, IllustComposeResponse, IllustExportRequest, IllustGetRequest,
-    IllustGetResponse, IllustLockAcquireRequest, IllustLockReleaseRequest, IllustLockStatusRequest,
-    IllustLockStatusResponse, IllustRenderSheetRequest, IllustReviewIssue, IllustReviewRequest,
-    IllustReviewResponse, IllustSetBriefRequest, IllustSetOpenRequest, IllustrationBrief,
-    IllustrationCamera, IllustrationDoc, IllustrationFinish, IllustrationLock, IllustrationLook,
-    IllustrationPaletteColors, IllustrationPaletteId, IllustrationPart, IllustrationPartGeometry,
-    IllustrationPose, IllustrationRenderMode, IllustrationSpec, IllustrationTimeline,
-    IllustrationTimelineBeat,
+    enrich_illustration_puppet, illustration_digest, review_illustration, IllustAnimateRequest,
+    IllustAnimateResponse, IllustComposeRequest, IllustComposeResponse, IllustExportRequest,
+    IllustGetRequest, IllustGetResponse, IllustLockAcquireRequest, IllustLockReleaseRequest,
+    IllustLockStatusRequest, IllustLockStatusResponse, IllustRenderSheetRequest, IllustReviewIssue,
+    IllustReviewRequest, IllustReviewResponse, IllustSetBriefRequest, IllustSetOpenRequest,
+    IllustrationBrief, IllustrationCamera, IllustrationDoc, IllustrationFinish, IllustrationLock,
+    IllustrationLook, IllustrationPaletteColors, IllustrationPaletteId, IllustrationPart,
+    IllustrationPartGeometry, IllustrationPose, IllustrationRenderMode, IllustrationSpec,
+    IllustrationTimeline, IllustrationTimelineBeat,
 };
 
 // ---------------------------------------------------------------------------

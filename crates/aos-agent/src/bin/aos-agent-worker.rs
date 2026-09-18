@@ -40,11 +40,12 @@ use aos_agent::skills::{
 };
 use aos_agent::tool_exec::format_module_invoke_result;
 use aos_agent::tools::{
-    canonicalize_tool_name, canvas_draw_strategy_hint, canvas_tool_denied_by_allowlist,
-    canvas_tools_from_module_list, caps_for_tools, caps_subset, chat_template_tool_definitions,
-    classify_action, normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool,
-    restrict_canvas_tools, select_tools, select_tools_mode, strip_canvas_blocked_runtime_tools,
-    ToolBackend, ToolDesc,
+    agent_has_illust_tools, canonicalize_illust_alias, canonicalize_tool_name,
+    canvas_draw_strategy_hint, canvas_tool_denied_by_allowlist, canvas_tools_from_module_list,
+    caps_for_tools, caps_subset, chat_template_tool_definitions, classify_action,
+    illust_draw_strategy_hint, normalize_tool_args, resolve_tool_backend, resolve_usb_io_cap_tool,
+    restrict_canvas_tools, select_illust_turn_action, select_tools, select_tools_mode,
+    strip_canvas_blocked_runtime_tools, strip_illust_blocked_runtime_tools, ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService};
@@ -366,6 +367,7 @@ async fn main() {
     module_tools.extend(mcp_tools.clone());
     let mut tools = select_tools_mode(&tool_ids, &module_tools, deep);
     strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
+    strip_illust_blocked_runtime_tools(&mut tools, &spec.tools);
     // Enrich caps from tools if create didn't set them all
     let derived = caps_for_tools(&tools, &spec.mcp_servers);
     for c in derived {
@@ -534,6 +536,7 @@ async fn main() {
                 let mut st = shared.state.lock().await;
                 if assess.is_complex() {
                     let canvas_draw = agent_has_canvas_tools(&spec.tools);
+                    let illust_draw = agent_has_illust_tools(&spec.tools);
                     let msg = if canvas_draw {
                         format!(
                             "Goal à accomplir : {}\nCritères : {:?}\n\
@@ -545,6 +548,18 @@ async fn main() {
                             spec.goal.success_criteria,
                             assess.reason,
                             canvas_draw_strategy_hint(&canvas_exported)
+                        )
+                    } else if illust_draw {
+                        format!(
+                            "Goal à accomplir : {}\nCritères : {:?}\n\
+                             Classification : complex — {}. \
+                             Illustration : un seul auteur (toi). Pas de agent.spawn — \
+                             {} \
+                             media.image.generate interdit.",
+                            spec.goal.statement,
+                            spec.goal.success_criteria,
+                            assess.reason,
+                            illust_draw_strategy_hint()
                         )
                     } else if st.deep_thinking || spec.cognitive_mode.is_deep_thinking() {
                         format!(
@@ -919,6 +934,7 @@ async fn main() {
             spec.cognitive_mode.is_deep_thinking(),
         );
         strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
+        strip_illust_blocked_runtime_tools(&mut tools, &spec.tools);
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
         let mut stall_retries = 0u32;
@@ -1128,6 +1144,21 @@ async fn main() {
                 "[runtime] Canvas : une seule opération par tour. L'opération a été exécutée ; relis la capture et le digest avant la suivante.",
             );
         }
+        let illust_agent = agent_has_illust_tools(&spec.tools);
+        if illust_agent {
+            for action in &mut batch_actions {
+                action.action = canonicalize_illust_alias(&action.action);
+            }
+            if batch_actions.len() > 1 {
+                let pick = select_illust_turn_action(&batch_actions);
+                let chosen = batch_actions.swap_remove(pick);
+                batch_actions.clear();
+                batch_actions.push(chosen);
+                shared.state.lock().await.push_user(
+                    "[runtime] Illustration : une seule action JSON par tour. Les autres ont été ignorées — enchaîne après le résultat.",
+                );
+            }
+        }
         if batch_actions.is_empty() {
             let prose = full_text.trim();
             let device_png_attached = last_device_capture_png
@@ -1287,11 +1318,34 @@ async fn main() {
                 let st = shared.state.lock().await;
                 canvas_action_near_duplicate_reason(&st.trace, &canonical_action, &action.args)
             };
+            let illust_sheet_repeat = if canonical_action == "illust.render_sheet"
+                && agent_has_illust_tools(&spec.tools)
+            {
+                let st = shared.state.lock().await;
+                let already = st.trace.iter().rev().take(4).any(|rec| {
+                    canonicalize_tool_name(&rec.action) == "illust.render_sheet"
+                        && !rec.tool_result.starts_with("ERREUR")
+                });
+                if already {
+                    Some(
+                        "[runtime] Planche déjà rendue dans ce run. Interdit de re-appeler \
+                         illust.render_sheet. Prochaine action EXACTE : \
+                         {\"thought\":\"review\",\"action\":\"illust.review\",\"args\":{}}"
+                            .to_string(),
+                    )
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let one = if let Some(reason) = canvas_stage_block {
                 ActResult::Continue(reason)
             } else if let Some(reason) = canvas_scene_block {
                 ActResult::Continue(reason.into())
             } else if let Some(reason) = duplicate_canvas_op {
+                ActResult::Continue(reason)
+            } else if let Some(reason) = illust_sheet_repeat {
                 ActResult::Continue(reason)
             } else if should_gate_action(&spec, &action.action) {
                 match gate_action(
@@ -1388,6 +1442,51 @@ async fn main() {
                         ) {
                             if let Some(path) = capture_png_path_from_tool_result(&outcome) {
                                 last_canvas_scene_png = Some(path);
+                            }
+                        }
+                        if matches!(
+                            illust.as_str(),
+                            "illust.set_brief"
+                                | "illust.compose"
+                                | "illust.render_sheet"
+                                | "illust.review"
+                                | "illust.export"
+                        ) && !outcome.starts_with("ERREUR")
+                        {
+                            let mut st = shared.state.lock().await;
+                            if st.complete_current_plan_node() {
+                                let _ = report(
+                                    &bus,
+                                    &agent_id,
+                                    AgentOutputEvent::PlanUpdated {
+                                        nodes: st.task_graph.clone(),
+                                    },
+                                )
+                                .await;
+                            }
+                            let nudge = match illust.as_str() {
+                                "illust.set_brief" => Some(
+                                    "[runtime] Brief OK. Prochaine action EXACTE (une ligne JSON) : \
+                                     {\"thought\":\"compose\",\"action\":\"illust.compose\",\"args\":{\"spec\":{\"parts\":[]}}}",
+                                ),
+                                "illust.compose" => Some(
+                                    "[runtime] Compose OK. Prochaine action EXACTE : \
+                                     {\"thought\":\"sheet\",\"action\":\"illust.render_sheet\",\"args\":{}} \
+                                     — une seule planche, puis illust.review.",
+                                ),
+                                "illust.render_sheet" => Some(
+                                    "[runtime] Planche OK. Interdit de re-appeler render_sheet. \
+                                     Prochaine action EXACTE : \
+                                     {\"thought\":\"review\",\"action\":\"illust.review\",\"args\":{}}",
+                                ),
+                                "illust.review" => Some(
+                                    "[runtime] Si review a des errors (ellipse_only/not_stretched/center_coords) : \
+                                     illust.compose args {\"spec\":{\"parts\":[]}}. Sinon illust.export.",
+                                ),
+                                _ => None,
+                            };
+                            if let Some(msg) = nudge {
+                                st.push_user(msg);
                             }
                         }
                     }
@@ -2204,7 +2303,11 @@ async fn execute_action(
     mcp_sessions: &mut HashMap<String, McpSession>,
     action: &AgentAction,
 ) -> ActResult {
-    let canonical = canonicalize_tool_name(&action.action);
+    let mut action_name = action.action.clone();
+    if agent_has_illust_tools(&spec.tools) {
+        action_name = canonicalize_illust_alias(&action_name);
+    }
+    let canonical = canonicalize_tool_name(&action_name);
     let (resolved_name, resolved_args) =
         match resolve_usb_io_cap_tool(canonical.as_str(), &action.args) {
             Ok(pair) => pair,
@@ -2436,6 +2539,13 @@ async fn execute_action(
                      ne spawn pas des sous-agents pour le même dessin (un seul auteur, traits séquentiels)."
                 ));
             }
+            if agent_has_illust_tools(&spec.tools) {
+                return ActResult::Continue(
+                    "illustration : exécute toi-même illust.set_brief → compose → review → export — \
+                     ne spawn pas de sous-agents (un seul holder du lock illust)."
+                        .into(),
+                );
+            }
             // Profondeur max 2 : un sous-agent ne spawn pas.
             if spec.parent_id.is_some() {
                 return ActResult::Continue(
@@ -2558,6 +2668,37 @@ async fn execute_action(
             ActResult::Continue(agent_await_still_running_message(&child_id, await_secs))
         }
         other => {
+            // Runtime terminals must never be refused as "absent du catalogue"
+            // (models sometimes flatten args; keep a hard fallback).
+            if other == "goal.complete" {
+                let (prior, sources) = {
+                    let st = shared.state.lock().await;
+                    let prior = st
+                        .trace
+                        .last()
+                        .map(|s| s.tool_result.clone())
+                        .unwrap_or_default();
+                    let sources = aos_agent::sources::aggregate_trace_sources(&st.trace);
+                    (prior, sources)
+                };
+                let summary = aos_agent::actions::resolve_goal_complete_summary(
+                    args,
+                    &action.thought,
+                    &prior,
+                );
+                let summary =
+                    aos_agent::sources::finalize_summary_with_sources(&summary, &sources);
+                return ActResult::Complete(summary);
+            }
+            if other == "goal.fail" {
+                let reason = args
+                    .get("reason")
+                    .or_else(|| args.get("summary"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("échec")
+                    .to_string();
+                return ActResult::Fail(reason);
+            }
             // S6 phase 2 : politique par agent (fail-closed, refus explicite).
             {
                 let policy = shared.policy.lock().await;
@@ -4381,9 +4522,9 @@ async fn invoke_illust_tool(
     let mut payload = args.clone();
     if let Some(obj) = payload.as_object_mut() {
         obj.insert("session_id".into(), serde_json::json!(sid));
-        obj.insert("holder".into(), serde_json::json!(holder));
+        obj.insert("holder".into(), serde_json::json!(holder.clone()));
     }
-    match bus
+    let result = match bus
         .call::<serde_json::Value, serde_json::Value>(tool, &payload, vec![])
         .await
     {
@@ -4407,7 +4548,23 @@ async fn invoke_illust_tool(
             out
         }
         Err(e) => format!("ERREUR illust: {e}"),
+    };
+    // Release after each mutating call so sibling/parent agents (and the next
+    // step of the same agent) are not stuck behind a stale lock. Export also
+    // releases for agent holders — double-release is harmless.
+    if mutating && tool != "illust.export" {
+        let _ = bus
+            .call::<aos_proto::IllustLockReleaseRequest, aos_proto::IllustrationDoc>(
+                "illust.lock.release",
+                &aos_proto::IllustLockReleaseRequest {
+                    session_id: sid.to_string(),
+                    holder,
+                },
+                vec![],
+            )
+            .await;
     }
+    result
 }
 
 async fn read_fs(bus: &BusClient, path: &str, agent_id: &str, caps: &[String]) -> String {
@@ -4477,6 +4634,7 @@ async fn maybe_enable_document_delivery(
         spec.cognitive_mode.is_deep_thinking(),
     );
     strip_canvas_blocked_runtime_tools(tools, &spec.tools);
+    strip_illust_blocked_runtime_tools(tools, &spec.tools);
     let derived = caps_for_tools(tools, &spec.mcp_servers);
     for c in derived {
         if !spec.caps.contains(&c) {
@@ -4527,6 +4685,10 @@ async fn install_system_prompt(
                 system.push_str(&canvas_scene_prompt_block(&digest));
             }
         }
+    }
+    if tools.iter().any(|t| t.name.starts_with("illust.")) {
+        system.push_str("\n\n");
+        system.push_str(&illust_draw_strategy_hint());
     }
     let mut st = shared.state.lock().await;
     if st.working_memory.is_empty() || st.working_memory[0].0 != "system" {
@@ -4631,13 +4793,25 @@ async fn apply_assess_to_runtime(
             if need_mem {
                 st.plan_memory_recalled = true;
             }
-            Some((nodes, need_mem))
+            Some(("canvas", nodes, need_mem))
+        } else if assess.is_complex()
+            && agent_has_illust_tools(&spec.tools)
+            && !st.deep_thinking
+            && st.task_graph.is_empty()
+        {
+            let nodes = CognitiveState::canonical_illust_composition_plan();
+            st.set_plan(nodes.clone());
+            let need_mem = st.needs_plan && !st.plan_memory_recalled;
+            if need_mem {
+                st.plan_memory_recalled = true;
+            }
+            Some(("illust", nodes, need_mem))
         } else {
             None
         }
     };
 
-    if let Some((nodes, need_mem)) = seeded_canvas_plan {
+    if let Some((kind, nodes, need_mem)) = seeded_canvas_plan {
         report(
             bus,
             &spec.agent_id,
@@ -4655,12 +4829,17 @@ async fn apply_assess_to_runtime(
                 .map(|n| n.title.clone())
                 .or_else(|| nodes.first().map(|n| n.title.clone()))
                 .unwrap_or_else(|| spec.goal.statement.clone());
+            let reason = if kind == "illust" {
+                "après plan Illustration automatique"
+            } else {
+                "après plan Canvas automatique"
+            };
             bootstrap_memory_recall(
                 bus,
                 shared,
                 &spec.agent_id,
                 &query,
-                "après plan Canvas automatique",
+                reason,
             )
             .await;
         }
@@ -4672,7 +4851,7 @@ async fn apply_assess_to_runtime(
             .iter()
             .any(|s| s == "planner" || s == "deep-thinking")
     {
-        if agent_has_canvas_tools(&spec.tools) {
+        if agent_has_canvas_tools(&spec.tools) || agent_has_illust_tools(&spec.tools) {
             install_system_prompt(bus, shared, spec, skill_docs, tools).await;
             return;
         }
@@ -4691,6 +4870,7 @@ async fn apply_assess_to_runtime(
             spec.cognitive_mode.is_deep_thinking(),
         );
         strip_canvas_blocked_runtime_tools(tools, &spec.tools);
+        strip_illust_blocked_runtime_tools(tools, &spec.tools);
         let derived = caps_for_tools(tools, &spec.mcp_servers);
         for c in derived {
             if !spec.caps.contains(&c) {
@@ -5022,9 +5202,10 @@ async fn bootstrap_memory_recall(
 }
 
 async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<String> {
-    let (progress, canvas_sid, canvas_draw, deep) = {
+    let (progress, canvas_sid, canvas_draw, illust_draw, deep) = {
         let st = shared.state.lock().await;
         let canvas_draw = agent_has_canvas_tools(&spec.tools);
+        let illust_draw = agent_has_illust_tools(&spec.tools);
         let deep = st.deep_thinking || spec.cognitive_mode.is_deep_thinking();
         let progress = if canvas_draw {
             canvas_reflect_user_content(
@@ -5034,6 +5215,12 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
                 &st.plan_stack,
                 &st.trace,
                 &spec.tools,
+            )
+        } else if illust_draw {
+            format!(
+                "step {}/{} goal={} plan={:?} — protocole illust.* uniquement \
+                 (set_brief→compose parts=[]→review→export). Interdit : prompt diffusion, agent.spawn, texte à la place de l'image.",
+                st.step, spec.goal.max_steps, spec.goal.statement, st.plan_stack
             )
         } else if deep {
             // Placeholder — remplacé après fetch du Deep Plan (plan_stack legacy est vide).
@@ -5052,7 +5239,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         } else {
             None
         };
-        (progress, canvas_sid, canvas_draw, deep)
+        (progress, canvas_sid, canvas_draw, illust_draw, deep)
     };
     let progress = if deep {
         let plan = fetch_deep_plan_for_critic(bus, shared, spec).await;
@@ -5085,6 +5272,11 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         } else {
             canvas_text_only_critic_system_prompt()
         }
+    } else if illust_draw {
+        "Tu es un critique Illustration. En 2 phrases FR : \
+         l'agent doit appeler illust.* (compose avec spec.parts=[], puis export). \
+         Interdit de suggérer un prompt diffusion, une description texte, ou agent.spawn. \
+         Cite l'action JSON exacte suivante si le brief est déjà posé."
     } else if deep {
         aos_agent::deep_thinking::deep_thinking_critic_system_prompt()
     } else {

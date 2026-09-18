@@ -1237,7 +1237,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.compose",
-            "Composer une IllustrationSpec (parts 3–8). Coords geometry en 0..1 (pas 0..100 ni pixels). Préférer kind ellipse|rect avec x,y,w,h. Éviter kind path sauf si points[] (≥2) est fourni. Chaque part: id, role (body/main/background). Remplace la scène. Succès = doc avec last_png — enchaîner review/export, ne pas basculer en description texte.",
+            "Composer une IllustrationSpec puppet (6–8 parts qui se chevauchent : body+head+ears+eyes, plus décor). Coords 0..1. Préférer ellipse|rect. Succès = last_png — enchaîner review/export.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1358,6 +1358,23 @@ pub fn merge_illust_tools(tool_ids: &mut Vec<String>, include: bool) {
     }
 }
 
+pub fn agent_has_illust_tools(tool_ids: &[String]) -> bool {
+    tool_ids.iter().any(|t| t.starts_with("illust."))
+}
+
+/// Illustration agents must not inherit spawn / user.ask from select_tools "always".
+pub fn strip_illust_blocked_runtime_tools(tools: &mut Vec<ToolDesc>, spec_tool_ids: &[String]) {
+    if !agent_has_illust_tools(spec_tool_ids) {
+        return;
+    }
+    for blocked in ["user.ask", "agent.spawn", "agent.await"] {
+        if spec_tool_ids.iter().any(|t| t == blocked) {
+            continue;
+        }
+        tools.retain(|t| t.name != blocked);
+    }
+}
+
 pub fn explicit_illust_intent(text: &str) -> bool {
     let lower = text.to_lowercase();
     const MARKERS: &[&str] = &[
@@ -1380,12 +1397,59 @@ pub fn explicit_illust_intent(text: &str) -> bool {
 
 /// Short strategy for illustration agents.
 pub fn illust_draw_strategy_hint() -> String {
-    "PROTOCOLE Illustration : illust.get → illust.set_brief (subject, look, palette, anchor) → \
-     illust.compose (parts 3–8, role body sur la masse ; geometry ellipse/rect en coords 0..1 — pas 0..100/pixels, pas de path sans points) → \
-     si last_png présent : illust.render_sheet → illust.review → corrige via compose si besoin → illust.export. \
-     Ne jamais remplacer une scène rendue par une description texte. Pour animer : illust.animate après compose. \
-     Couleurs = palette preset uniquement (pas de hex libres). Fill ≠ outline (raster applique wob+finish)."
+    "PROTOCOLE Illustration (skill) : un seul auteur, INTERDIT agent.spawn. \
+     Format : UNE seule ligne JSON par tour {\"thought\":\"…\",\"action\":\"illust.…\",\"args\":{…}}. \
+     Enchaîne set_brief → compose avec {\"spec\":{\"parts\":[]}} (puppet auto) → \
+     render_sheet → review (score≥0.7, pas d'error) → export. \
+     Interdit d'empiler plusieurs JSON dans le même tour. \
+     Alias acceptés : set_brief/compose/review/export (préfixe illust. ajouté). \
+     Règle skill : si ça ne se lit pas sur la planche 240px, recomposer — ne pas décorer. \
+     Jamais de prompt diffusion ni description texte à la place de l'image."
         .into()
+}
+
+/// Pipeline rank for illustration tools (higher = further along).
+pub fn illust_pipeline_rank(action: &str) -> u8 {
+    match canonicalize_tool_name(action).as_str() {
+        "illust.set_brief" | "illust.get" => 1,
+        "illust.compose" => 2,
+        "illust.render_sheet" => 3,
+        "illust.review" => 4,
+        "illust.export" | "illust.animate" => 5,
+        "goal.complete" => 6,
+        "goal.fail" => 0,
+        _ => 0,
+    }
+}
+
+/// When the model dumps the whole pipeline, keep one action. Prefer advancing
+/// past a repeated leading `render_sheet` toward review/export.
+pub fn select_illust_turn_action(actions: &[crate::actions::AgentAction]) -> usize {
+    if actions.len() <= 1 {
+        return 0;
+    }
+    let first = canonicalize_tool_name(&actions[0].action);
+    // Stuck-loop pattern: sheet is listed first, then review/export in the same dump.
+    if first == "illust.render_sheet" {
+        if let Some(i) = actions.iter().position(|a| {
+            matches!(
+                canonicalize_tool_name(&a.action).as_str(),
+                "illust.review" | "illust.export"
+            )
+        }) {
+            return i;
+        }
+    }
+    // Never finish the goal before the earlier pipeline steps in the same dump.
+    if first == "goal.complete" || first == "goal.fail" {
+        if let Some(i) = actions.iter().position(|a| {
+            let n = canonicalize_tool_name(&a.action);
+            n.starts_with("illust.")
+        }) {
+            return i;
+        }
+    }
+    0
 }
 
 /// Canvas tool ids (session vector drawing) — never part of `default_agent_tools`.
@@ -1804,7 +1868,31 @@ pub fn canonicalize_tool_name(name: &str) -> String {
         "usb.write" => "device.usb.write".into(),
         "usb.close" => "device.usb.close".into(),
         "usb.io" | "device.usb.io" => "device.usb.io".into(),
+        // Illustration aliases models invent after reading digests / memory.
+        "illust.set" | "illust.brief" | "illust.setbrief" | "illustration.set_brief"
+        | "illustration.set" => "illust.set_brief".into(),
+        "illust.compose_scene" | "illust.draw" | "illust.run" | "illust.generate"
+        | "illustration.compose" | "illustration.run" => "illust.compose".into(),
+        "illust.sheet" | "illust.style_sheet" => "illust.render_sheet".into(),
+        "illust.check" | "illust.validate" => "illust.review".into(),
+        "illust.save" | "illustration.export" => "illust.export".into(),
         other => other.to_string(),
+    }
+}
+
+/// Bare names models invent once they drop the `illust.` prefix mid-loop.
+/// Only apply when the agent actually has illustration tools.
+pub fn canonicalize_illust_alias(name: &str) -> String {
+    let trimmed = name.trim();
+    match trimmed {
+        "set_brief" | "setbrief" | "brief" => "illust.set_brief".into(),
+        "compose" | "draw" | "run" | "generate" => "illust.compose".into(),
+        "render_sheet" | "style_sheet" | "sheet" => "illust.render_sheet".into(),
+        "review" | "review_illustration" | "check" | "validate" => "illust.review".into(),
+        "export" | "export_still" | "export_png" | "save" => "illust.export".into(),
+        "abort" | "cancel" | "give_up" => "goal.fail".into(),
+        "get" | "status" => "illust.get".into(),
+        other => canonicalize_tool_name(other),
     }
 }
 
@@ -1835,6 +1923,8 @@ pub fn reserved_tool_prefix(prefix: &str) -> bool {
             | "usb"
             | "shell"
             | "harness"
+            | "illust"
+            | "canvas"
     )
 }
 
@@ -1982,6 +2072,20 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                 }
             }
         }
+        // Beats may be strings or {type,desc} objects from the model.
+        if !brief.contains_key("beats") {
+            if let Some(v) = obj.get("beats").cloned() {
+                brief.insert("beats".into(), coerce_illust_beats(v));
+            }
+        } else if let Some(v) = brief.get("beats").cloned() {
+            brief.insert("beats".into(), coerce_illust_beats(v));
+        }
+        let partial = brief
+            .get("subject")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .is_empty();
         // Coerce unknown palette names via look default (serde also falls back).
         let look = brief
             .get("look")
@@ -1991,7 +2095,7 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
         if let Some(p) = brief.get("palette").and_then(|v| v.as_str()) {
             let coerced = aos_proto::IllustrationPaletteId::parse_or(p, look);
             brief.insert("palette".into(), serde_json::json!(coerced.as_str()));
-        } else {
+        } else if !partial {
             brief.insert(
                 "palette".into(),
                 serde_json::json!(look.default_palette().as_str()),
@@ -2001,9 +2105,66 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
             let coerced = aos_proto::IllustrationLook::parse(l).unwrap_or_default();
             brief.insert("look".into(), serde_json::json!(coerced.as_str()));
         }
+        // Prefer look/palette keywords in subject when the model leaves the UI defaults.
+        let subject_l = brief
+            .get("subject")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let look_hint = if subject_l.contains("pencil") || subject_l.contains("crayon") {
+            Some(aos_proto::IllustrationLook::Pencil)
+        } else if subject_l.contains("riso") {
+            Some(aos_proto::IllustrationLook::Riso)
+        } else if subject_l.contains("screen") || subject_l.contains("sérigraphie") {
+            Some(aos_proto::IllustrationLook::Screen)
+        } else if subject_l.contains("blueprint") || subject_l.contains("plan ") {
+            Some(aos_proto::IllustrationLook::Blueprint)
+        } else if subject_l.contains("ink") || subject_l.contains("encre") {
+            Some(aos_proto::IllustrationLook::Ink)
+        } else {
+            None
+        };
+        if let Some(look) = look_hint {
+            brief.insert("look".into(), serde_json::json!(look.as_str()));
+            let pal = brief
+                .get("palette")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let pal_l = pal.to_ascii_lowercase();
+            let pal_mismatched = pal.is_empty()
+                || (look == aos_proto::IllustrationLook::Pencil && !pal_l.contains("pencil"))
+                || (look == aos_proto::IllustrationLook::Riso && !pal_l.contains("riso"))
+                || (look == aos_proto::IllustrationLook::Screen && !pal_l.contains("screen"))
+                || (look == aos_proto::IllustrationLook::Blueprint && !pal_l.contains("blueprint"));
+            if pal_mismatched {
+                brief.insert(
+                    "palette".into(),
+                    serde_json::json!(look.default_palette().as_str()),
+                );
+            }
+        }
+        // Partial updates (beats/anchor only) must not invent empty subject/look defaults.
+        if partial {
+            brief.remove("subject");
+            if !obj.contains_key("look") {
+                brief.remove("look");
+            }
+            if !obj.contains_key("palette") {
+                brief.remove("palette");
+            }
+        }
         obj.insert("brief".into(), serde_json::Value::Object(brief));
         for k in ["subject", "look", "palette", "anchor", "beats"] {
             obj.remove(k);
+        }
+    }
+    // illust.run / generate aliases land on compose — ensure empty parts so enrich synthesizes.
+    if name == "illust.compose" {
+        if !obj.contains_key("spec") && !obj.contains_key("parts") {
+            obj.insert(
+                "spec".into(),
+                serde_json::json!({ "parts": [] }),
+            );
         }
     }
     if name == "illust.compose" {
@@ -2132,6 +2293,44 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                 }
             }
         }
+    }
+}
+
+fn coerce_illust_beats(v: serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Array(items) => {
+            let out: Vec<serde_json::Value> = items
+                .into_iter()
+                .map(|item| match item {
+                    serde_json::Value::String(s) => serde_json::Value::String(s),
+                    serde_json::Value::Object(m) => {
+                        let ty = m
+                            .get("type")
+                            .or_else(|| m.get("role"))
+                            .or_else(|| m.get("id"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("beat");
+                        let desc = m
+                            .get("desc")
+                            .or_else(|| m.get("description"))
+                            .or_else(|| m.get("text"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        if desc.is_empty() {
+                            serde_json::Value::String(ty.to_string())
+                        } else {
+                            serde_json::Value::String(format!("{ty}: {desc}"))
+                        }
+                    }
+                    other => serde_json::Value::String(other.to_string()),
+                })
+                .collect();
+            serde_json::Value::Array(out)
+        }
+        serde_json::Value::String(s) => {
+            serde_json::Value::Array(vec![serde_json::Value::String(s)])
+        }
+        other => serde_json::Value::Array(vec![serde_json::Value::String(other.to_string())]),
     }
 }
 
@@ -2438,6 +2637,17 @@ mod tests {
         assert!(!tools.iter().any(|t| t.name == "user.ask"));
         assert!(!tools.iter().any(|t| t.name == "agent.spawn"));
         assert!(tools.iter().any(|t| t.name == "canvas.set_style"));
+    }
+
+    #[test]
+    fn strip_illust_blocked_runtime_tools_removes_spawn() {
+        let spec = vec!["illust.get".into(), "illust.set_brief".into()];
+        let mut tools = select_tools_mode(&spec, &[], true);
+        assert!(tools.iter().any(|t| t.name == "agent.spawn"));
+        strip_illust_blocked_runtime_tools(&mut tools, &spec);
+        assert!(!tools.iter().any(|t| t.name == "agent.spawn"));
+        assert!(!tools.iter().any(|t| t.name == "user.ask"));
+        assert!(tools.iter().any(|t| t.name == "illust.set_brief"));
     }
 
     #[test]
@@ -2940,5 +3150,110 @@ mod tests {
         let g = &args["spec"]["parts"][0]["geometry"];
         assert!((g["x"].as_f64().unwrap() - 350.0 / 1024.0).abs() < 1e-5);
         assert!((g["w"].as_f64().unwrap() - 320.0 / 1024.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn illust_set_aliases_canonicalize() {
+        assert_eq!(canonicalize_tool_name("illust.set"), "illust.set_brief");
+        assert_eq!(canonicalize_tool_name("illust.brief"), "illust.set_brief");
+        assert_eq!(canonicalize_tool_name("illustration.compose"), "illust.compose");
+        assert_eq!(canonicalize_tool_name("illust.run"), "illust.compose");
+        assert_eq!(canonicalize_tool_name("illust.generate"), "illust.compose");
+    }
+
+    #[test]
+    fn illust_bare_aliases_only_via_illust_helper() {
+        assert_eq!(canonicalize_illust_alias("set_brief"), "illust.set_brief");
+        assert_eq!(canonicalize_illust_alias("compose"), "illust.compose");
+        assert_eq!(canonicalize_illust_alias("review"), "illust.review");
+        assert_eq!(canonicalize_illust_alias("export"), "illust.export");
+        assert_eq!(canonicalize_illust_alias("abort"), "goal.fail");
+        // Global canonicalize must not steal bare names from other agents.
+        assert_eq!(canonicalize_tool_name("compose"), "compose");
+        assert_eq!(canonicalize_tool_name("export"), "export");
+    }
+
+    #[test]
+    fn select_illust_turn_skips_leading_sheet_when_review_present() {
+        let actions = vec![
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.render_sheet".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.review".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.export".into(),
+                args: serde_json::json!({}),
+            },
+        ];
+        assert_eq!(select_illust_turn_action(&actions), 1);
+    }
+
+    #[test]
+    fn select_illust_turn_keeps_leading_set_brief() {
+        let actions = vec![
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.set_brief".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.compose".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "goal.complete".into(),
+                args: serde_json::json!({}),
+            },
+        ];
+        assert_eq!(select_illust_turn_action(&actions), 0);
+    }
+
+    #[test]
+    fn illust_run_empty_args_become_empty_compose_spec() {
+        let args = normalize_tool_args("illust.compose", &serde_json::json!({}));
+        assert!(args["spec"]["parts"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn illust_set_brief_partial_beats_omit_empty_subject() {
+        let args = normalize_tool_args(
+            "illust.set_brief",
+            &serde_json::json!({
+                "beats": [
+                    {"type":"body","desc":"Corps allongé","pos":"center","weight":0.9},
+                    {"type":"head","desc":"Tête posée","pos":"lower_left"}
+                ]
+            }),
+        );
+        assert!(args["brief"].get("subject").is_none());
+        let beats = args["brief"]["beats"].as_array().unwrap();
+        assert_eq!(beats.len(), 2);
+        assert!(beats[0].as_str().unwrap().contains("body"));
+        assert!(beats[1].as_str().unwrap().contains("head"));
+    }
+
+    #[test]
+    fn illust_set_brief_infers_pencil_from_subject() {
+        let args = normalize_tool_args(
+            "illust.set_brief",
+            &serde_json::json!({
+                "brief": {
+                    "subject": "chat qui s'étire sur un coussin style pencil",
+                    "look": "ink",
+                    "palette": "paperInk"
+                }
+            }),
+        );
+        assert_eq!(args["brief"]["look"], "pencil");
+        assert_eq!(args["brief"]["palette"], "pencilMinimal");
     }
 }

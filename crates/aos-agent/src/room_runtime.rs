@@ -37,9 +37,9 @@ use crate::skills::load_skills;
 use crate::storage_path::{is_host_path_disallowed_outcome, post_room_host_path_notice};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools,
-    chat_template_tool_definitions, default_agent_tools, merge_canvas_tools, select_tools,
-    ToolDesc,
+    agent_has_illust_tools, canonicalize_illust_alias, canonicalize_tool_name,
+    canvas_tools_from_module_list, caps_for_tools, chat_template_tool_definitions,
+    default_agent_tools, merge_canvas_tools, select_illust_turn_action, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -925,7 +925,18 @@ async fn run_room_tool_loop(
         }
 
         let raw_for_parse = repair_room_tool_json(&raw);
-        let parsed_actions = parse_actions(&raw_for_parse);
+        let mut parsed_actions = parse_actions(&raw_for_parse);
+        if agent_has_illust_tools(tool_ids) {
+            for action in &mut parsed_actions {
+                action.action = canonicalize_illust_alias(&action.action);
+            }
+            if parsed_actions.len() > 1 {
+                let pick = select_illust_turn_action(&parsed_actions);
+                let chosen = parsed_actions.swap_remove(pick);
+                parsed_actions.clear();
+                parsed_actions.push(chosen);
+            }
+        }
         if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
             if let Some(t) = thinking.filter(|s| !s.trim().is_empty()) {
                 if !accumulated_thinking.iter().any(|p| p == &t) {
@@ -977,7 +988,12 @@ async fn run_room_tool_loop(
                 round.set_phase("waiting_user").await;
                 handle_room_user_ask(bus, round, session_id, agent_id, display_name, &action.args)
                     .await?
-            } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs) {
+            } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs)
+                && !matches!(
+                    canonicalize_tool_name(&action.action).as_str(),
+                    "goal.complete" | "goal.fail" | "user.ask" | "noop"
+                )
+            {
                 tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
                 let tool_name = canonicalize_tool_name(&action.action);

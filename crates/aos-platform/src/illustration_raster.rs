@@ -4,7 +4,7 @@ use aos_proto::{
     IllustrationDoc, IllustrationFinish, IllustrationLook, IllustrationPaletteColors,
     IllustrationPart, IllustrationPartGeometry, IllustrationRenderMode, IllustrationSpec,
 };
-use image::{ImageBuffer, Rgb, RgbImage};
+use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
 use std::f32::consts::TAU;
 
 /// Seeded PRNG (xorshift-like), matching skill: no Math.random.
@@ -230,8 +230,46 @@ fn paint_spec(
         parse_hex(&colors.ink)
     };
 
-    if spec.show_construction && !blueprint {
+    // Construction guides only in blueprint / explicit construction mode — never neon fringe on stills.
+    if blueprint && spec.show_construction {
         construction(img, cam.x * w, cam.y * h, w.min(h) * 0.28, 11, parse_hex(&colors.guide));
+    }
+
+    // Skill riso path: separate plates per ink, then printPlate (multiply halftone).
+    if !blueprint && finish == IllustrationFinish::Riso && !colors.inks.is_empty() {
+        paint_riso_plates(img, spec, colors, cam);
+        for part in &spec.parts {
+            if part_is_background(part) {
+                continue;
+            }
+            let poly = part_poly(part, w, h, cam);
+            if poly.len() < 3 {
+                continue;
+            }
+            if part.outline {
+                let eye = part.id.contains("eye") || part.role == "eye";
+                let authored = matches!(part.geometry, IllustrationPartGeometry::Path { .. });
+                draw_wob_outline(
+                    img,
+                    &poly,
+                    outline_color,
+                    IllustrationFinish::Riso,
+                    part.seed.wrapping_add(7),
+                    if eye {
+                        0.35
+                    } else if authored {
+                        0.28
+                    } else {
+                        1.0
+                    },
+                );
+            }
+            if spec.scribble_part.as_deref() == Some(part.id.as_str()) {
+                scribble_ink(img, &poly, colors, part.seed.wrapping_add(99));
+            }
+        }
+        let _ = (spec.pose.twitch, spec.pose.tilt);
+        return;
     }
 
     for part in &spec.parts {
@@ -239,28 +277,274 @@ fn paint_spec(
         if poly.len() < 3 {
             continue;
         }
+        let bg = part_is_background(part);
         let fill_c = if blueprint {
             parse_hex(&colors.night)
+        } else if bg {
+            // Full-frame bg uses paper wash, not a loud fill[0] (skill: paper first).
+            mix(parse_hex(&colors.paper), parse_hex(&colors.fills[0]), 0.22)
+        } else if part.id.contains("eye") {
+            parse_hex(&colors.light)
+        } else if part_is_furniture(part) {
+            mix(
+                parse_hex(&colors.paper),
+                parse_hex(colors.fills.get(idx_fill(part, colors)).unwrap_or(&colors.fills[0])),
+                0.42,
+            )
+        } else if part.id.contains("snout") {
+            mix(
+                parse_hex(&colors.light),
+                parse_hex(colors.fills.get(idx_fill(part, colors)).unwrap_or(&colors.fills[0])),
+                0.35,
+            )
         } else {
-            let idx = part.fill_index as usize % colors.fills.len().max(1);
-            parse_hex(colors.fills.get(idx).unwrap_or(&colors.fills[0]))
+            mix(
+                parse_hex(colors.fills.get(idx_fill(part, colors)).unwrap_or(&colors.fills[0])),
+                parse_hex(&colors.shade),
+                0.16,
+            )
         };
+        if !blueprint && (part.id == "body" || part.id.contains("paw")) {
+            contact_shadow(img, &poly, parse_hex(&colors.shade));
+        }
         if part.fill && !blueprint {
             fill_poly(img, &poly, fill_c, 1.0);
-            surface(img, &poly, finish, parse_hex(&colors.shade), part.seed);
+            if bg {
+                grain(img, Some(&poly), 220, shade(fill_c, 0.45), 0.12, part.seed);
+            } else if !part.id.contains("eye") {
+                let furniture = part_is_furniture(part);
+                let angle = if furniture {
+                    1.35
+                } else if part.id.contains("ear") {
+                    1.15
+                } else {
+                    0.4
+                };
+                let density = if furniture { 0.42 } else { 0.85 };
+                surface_ex(
+                    img,
+                    &poly,
+                    finish,
+                    parse_hex(&colors.shade),
+                    part.seed,
+                    angle,
+                    density,
+                );
+                form_shade(
+                    img,
+                    &poly,
+                    parse_hex(&colors.shade),
+                    if furniture { 0.4 } else { 1.0 },
+                );
+            }
         }
-        if part.outline || blueprint {
-            let amp = if blueprint { 1.2 } else { 2.2 };
-            let width = if blueprint { 2.6 } else { 2.2 };
-            wob_outline(img, &poly, outline_color, amp, width, part.seed.wrapping_add(7), true);
+        if !bg && (part.outline || blueprint) {
+            if blueprint {
+                wob_outline(img, &poly, outline_color, 1.2, 2.6, part.seed.wrapping_add(7), true);
+            } else {
+                let eye = part.id.contains("eye") || part.role == "eye";
+                let authored = matches!(
+                    part.geometry,
+                    IllustrationPartGeometry::Path { .. }
+                );
+                draw_wob_outline(
+                    img,
+                    &poly,
+                    outline_color,
+                    finish,
+                    part.seed.wrapping_add(7),
+                    if eye {
+                        0.35
+                    } else if authored {
+                        0.28
+                    } else {
+                        1.0
+                    },
+                );
+            }
         }
-        if spec.scribble_part.as_deref() == Some(part.id.as_str()) && !blueprint {
-            scribble(img, &poly, colors, part.seed.wrapping_add(99));
+        if !bg && part.fill && part.id.contains("eye") && !blueprint {
+            ink_pupil(img, &poly, outline_color);
+        }
+        if !bg && spec.scribble_part.as_deref() == Some(part.id.as_str()) && !blueprint {
+            scribble_ink(img, &poly, colors, part.seed.wrapping_add(99));
         }
     }
 
-    // Pose tilt: subtle — already baked if agent offsets geometry; apply global rotation hint via grain pulse
     let _ = (spec.pose.twitch, spec.pose.tilt);
+}
+
+fn part_is_furniture(part: &IllustrationPart) -> bool {
+    let id = part.id.to_ascii_lowercase();
+    let role = part.role.to_ascii_lowercase();
+    role == "furniture"
+        || id.contains("sofa")
+        || id.contains("couch")
+        || id.contains("canap")
+        || id.contains("cushion")
+        || id.contains("coussin")
+}
+
+fn idx_fill(part: &IllustrationPart, colors: &IllustrationPaletteColors) -> usize {
+    let n = colors.fills.len().max(1);
+    part.fill_index as usize % n
+}
+
+fn part_is_background(part: &IllustrationPart) -> bool {
+    let id = part.id.to_ascii_lowercase();
+    let role = part.role.to_ascii_lowercase();
+    role == "background"
+        || role == "bg"
+        || id.starts_with("bg")
+        || id.contains("sky")
+        || id.contains("ciel")
+        || id.contains("sand")
+        || id.contains("sable")
+        || id.contains("sea")
+        || id.contains("mer")
+        || id.contains("ground")
+        || id.contains("room")
+}
+
+/// Skill-style colour separations: black coverage on white plates → rotated dot screens.
+fn paint_riso_plates(
+    img: &mut RgbImage,
+    spec: &IllustrationSpec,
+    colors: &IllustrationPaletteColors,
+    cam: &aos_proto::IllustrationCamera,
+) {
+    let w = img.width();
+    let h = img.height();
+    let n_inks = colors.inks.len().min(4).max(1);
+    let mut plates: Vec<GrayImage> = (0..n_inks)
+        .map(|_| ImageBuffer::from_pixel(w, h, Luma([255u8])))
+        .collect();
+
+    for part in &spec.parts {
+        if !part.fill {
+            continue;
+        }
+        if part_is_background(part) {
+            let (_, _, bw, bh) = match &part.geometry {
+                IllustrationPartGeometry::Ellipse { w, h, .. }
+                | IllustrationPartGeometry::Rect { w, h, .. } => (0.0, 0.0, *w, *h),
+                IllustrationPartGeometry::Path { .. } => (0.0, 0.0, 1.0, 1.0),
+            };
+            // Full-bleed bg stays as paper stock; don't flood a whole plate.
+            if bw * bh > 0.85 {
+                continue;
+            }
+        }
+        let poly = part_poly(part, w as f32, h as f32, cam);
+        if poly.len() < 3 {
+            continue;
+        }
+        let plate_i = part.fill_index as usize % n_inks;
+        fill_poly_gray(&mut plates[plate_i], &poly, 0);
+    }
+
+    let angles = [0.26f32, 1.31, 0.0, 0.78];
+    for (k, plate) in plates.iter().enumerate() {
+        let ink = parse_hex(&colors.inks[k]);
+        print_plate(
+            img,
+            plate,
+            ink,
+            7.0,
+            angles[k % angles.len()],
+            0.2,
+            30 + k as u32,
+            1.0,
+            0.78,
+            0.95,
+        );
+    }
+}
+
+fn fill_poly_gray(img: &mut GrayImage, poly: &[(i32, i32)], value: u8) {
+    if poly.is_empty() {
+        return;
+    }
+    let min_x = poly.iter().map(|p| p.0).min().unwrap().max(0);
+    let max_x = poly
+        .iter()
+        .map(|p| p.0)
+        .max()
+        .unwrap()
+        .min(img.width() as i32 - 1);
+    let min_y = poly.iter().map(|p| p.1).min().unwrap().max(0);
+    let max_y = poly
+        .iter()
+        .map(|p| p.1)
+        .max()
+        .unwrap()
+        .min(img.height() as i32 - 1);
+    if min_x > max_x || min_y > max_y {
+        return;
+    }
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            if point_in_poly(x, y, poly) {
+                img.put_pixel(x as u32, y as u32, Luma([value]));
+            }
+        }
+    }
+}
+
+/// Downsample coverage + rotated halftone dots in ink (multiply onto paper).
+fn print_plate(
+    img: &mut RgbImage,
+    coverage: &GrayImage,
+    ink: Rgb<u8>,
+    cell: f32,
+    angle: f32,
+    jitter: f32,
+    seed: u32,
+    gain: f32,
+    max_cov: f32,
+    alpha: f32,
+) {
+    let w = img.width() as i32;
+    let h = img.height() as i32;
+    let sw = ((w as f32) / cell).ceil().max(1.0) as u32;
+    let sh = ((h as f32) / cell).ceil().max(1.0) as u32;
+    let mut cov_small: GrayImage = ImageBuffer::new(sw, sh);
+    for y in 0..sh {
+        for x in 0..sw {
+            let sx = ((x as f32 + 0.5) * cell).min((w - 1) as f32) as u32;
+            let sy = ((y as f32 + 0.5) * cell).min((h - 1) as f32) as u32;
+            let Luma([v]) = *coverage.get_pixel(sx, sy);
+            cov_small.put_pixel(x, y, Luma([v]));
+        }
+    }
+
+    let mut r = rng(seed);
+    let cx = w as f32 * 0.5;
+    let cy = h as f32 * 0.5;
+    let radius = ((w * w + h * h) as f32).sqrt() * 0.5;
+    let ca = angle.cos();
+    let sa = angle.sin();
+    let mut v = -radius;
+    while v <= radius {
+        let mut u = -radius;
+        while u <= radius {
+            let x = cx + ca * u - sa * v + (r() - 0.5) * jitter * cell;
+            let y = cy + sa * u + ca * v + (r() - 0.5) * jitter * cell;
+            if x >= 0.0 && y >= 0.0 && x < w as f32 && y < h as f32 {
+                let ix = (x / cell).floor().clamp(0.0, (sw - 1) as f32) as u32;
+                let iy = (y / cell).floor().clamp(0.0, (sh - 1) as f32) as u32;
+                let Luma([lum]) = *cov_small.get_pixel(ix, iy);
+                let cov = ((1.0 - lum as f32 / 255.0) * gain).clamp(0.0, max_cov);
+                if cov >= 0.03 {
+                    let rad = (cell * 0.62 * cov.sqrt()).round().max(1.0) as i32;
+                    // Multiply blend via put with ink over paper.
+                    fill_circle(img, x.round() as i32, y.round() as i32, rad, ink, alpha * cov);
+                }
+            }
+            u += cell;
+        }
+        v += cell;
+    }
 }
 
 fn part_poly(
@@ -429,29 +713,89 @@ fn point_in_poly(x: i32, y: i32, poly: &[(i32, i32)]) -> bool {
     inside
 }
 
-fn surface(
+fn surface_ex(
     img: &mut RgbImage,
     poly: &[(i32, i32)],
     finish: IllustrationFinish,
     shade_c: Rgb<u8>,
     seed: u32,
+    angle: f32,
+    density: f32,
 ) {
+    let density = density.clamp(0.2, 1.4);
     match finish {
         IllustrationFinish::Ink => {
-            hatch(img, poly, 1.2, 4.5, 9.0, shade_c, 0.35, seed);
+            hatch(img, poly, angle, 4.5, 9.0, shade_c, 0.35 * density, seed);
             grain(img, Some(poly), 140, shade_c, 0.3, seed.wrapping_add(1));
         }
         IllustrationFinish::Pencil => {
-            hatch(img, poly, 1.1, 9.0, 30.0, shade_c, 0.22, seed);
-            grain(img, Some(poly), 40, shade_c, 0.25, seed.wrapping_add(1));
+            let gap = 9.0 / density;
+            hatch(
+                img,
+                poly,
+                angle,
+                gap,
+                16.0,
+                shade_c,
+                0.2 * density,
+                seed,
+            );
+            grain(img, Some(poly), 50, shade_c, 0.16, seed.wrapping_add(1));
         }
         IllustrationFinish::Riso => {
-            dot_screen(img, poly, 7.0, shade_c, 0.55, 0.26, 0.35, seed);
+            dot_screen(img, poly, 7.0, shade_c, 0.55 * density, 0.26, 0.35, seed);
         }
         IllustrationFinish::Screen => {
             dot_screen(img, poly, 6.0, shade_c, 0.5, 0.0, 0.06, seed);
         }
         IllustrationFinish::Flat => {}
+    }
+}
+
+/// Darker toward the bottom of a part so a flat fill reads as volume.
+fn form_shade(img: &mut RgbImage, poly: &[(i32, i32)], shade: Rgb<u8>, weight: f32) {
+    if poly.len() < 3 || weight < 0.01 {
+        return;
+    }
+    let min_x = poly.iter().map(|p| p.0).min().unwrap_or(0);
+    let max_x = poly.iter().map(|p| p.0).max().unwrap_or(0);
+    let min_y = poly.iter().map(|p| p.1).min().unwrap_or(0);
+    let max_y = poly.iter().map(|p| p.1).max().unwrap_or(0);
+    let span = (max_y - min_y).max(1) as f32;
+    for y in min_y..=max_y {
+        let t = (y - min_y) as f32 / span;
+        let a = ((t - 0.45) * 0.38).clamp(0.0, 0.22) * weight;
+        if a < 0.02 {
+            continue;
+        }
+        for x in min_x..=max_x {
+            if point_in_poly(x, y, poly) {
+                put(img, x, y, shade, a);
+            }
+        }
+    }
+}
+
+fn contact_shadow(img: &mut RgbImage, poly: &[(i32, i32)], shade: Rgb<u8>) {
+    if poly.is_empty() {
+        return;
+    }
+    let min_x = poly.iter().map(|p| p.0).min().unwrap_or(0);
+    let max_x = poly.iter().map(|p| p.0).max().unwrap_or(0);
+    let max_y = poly.iter().map(|p| p.1).max().unwrap_or(0);
+    let cx = (min_x + max_x) / 2;
+    let rx = ((max_x - min_x) / 2).max(6);
+    let ry = (rx / 5).max(3);
+    let cy = max_y + ry / 2;
+    for y in (cy - ry)..=(cy + ry) {
+        for x in (cx - rx)..=(cx + rx) {
+            let nx = (x - cx) as f32 / rx as f32;
+            let ny = (y - cy) as f32 / ry as f32;
+            let d = nx * nx + ny * ny;
+            if d <= 1.0 {
+                put(img, x, y, shade, (1.0 - d) * 0.32);
+            }
+        }
     }
 }
 
@@ -538,6 +882,150 @@ fn fill_circle(img: &mut RgbImage, cx: i32, cy: i32, r: i32, color: Rgb<u8>, al:
     }
 }
 
+/// Skill rule 3: fill stays the geometric part; the stroke is a separately
+/// resampled polyline pushed outward so it does not ride the fill edge.
+fn draw_wob_outline(
+    img: &mut RgbImage,
+    poly: &[(i32, i32)],
+    color: Rgb<u8>,
+    finish: IllustrationFinish,
+    seed: u32,
+    amp_scale: f32,
+) {
+    if poly.len() < 3 {
+        return;
+    }
+    let span = poly_span(poly);
+    let (amp, width, passes) = match finish {
+        IllustrationFinish::Pencil => (span * 0.06, 1.65, 1u32),
+        IllustrationFinish::Ink | IllustrationFinish::Screen => (span * 0.12, 2.15, 2),
+        IllustrationFinish::Riso => (span * 0.11, 2.5, 3),
+        IllustrationFinish::Flat => (span * 0.04, 1.15, 1),
+    };
+    let amp = (amp * amp_scale).clamp(2.2, 28.0);
+    for k in 0..passes {
+        let pts = wob_contour(poly, amp * (1.0 + k as f32 * 0.12), seed.wrapping_add(k * 11));
+        let al = if k == 0 { 0.92 } else { 0.34 };
+        let w = if k == 0 { width } else { width * 0.65 };
+        stroke_polyline(img, &pts, color, al, w, true);
+    }
+}
+
+fn ink_pupil(img: &mut RgbImage, poly: &[(i32, i32)], ink: Rgb<u8>) {
+    if poly.is_empty() {
+        return;
+    }
+    let cx = poly.iter().map(|p| p.0).sum::<i32>() / poly.len() as i32;
+    let cy = poly.iter().map(|p| p.1).sum::<i32>() / poly.len() as i32;
+    let min_x = poly.iter().map(|p| p.0).min().unwrap_or(cx);
+    let max_x = poly.iter().map(|p| p.0).max().unwrap_or(cx);
+    let r = ((max_x - min_x) / 5).max(2);
+    fill_circle(img, cx, cy + r / 3, r, ink, 0.95);
+}
+
+fn poly_span(poly: &[(i32, i32)]) -> f32 {
+    let min_x = poly.iter().map(|p| p.0).min().unwrap_or(0);
+    let max_x = poly.iter().map(|p| p.0).max().unwrap_or(0);
+    let min_y = poly.iter().map(|p| p.1).min().unwrap_or(0);
+    let max_y = poly.iter().map(|p| p.1).max().unwrap_or(0);
+    ((max_x - min_x).min(max_y - min_y) as f32).max(8.0)
+}
+
+/// Even samples around a closed polygon, offset along the outward radial
+/// with a low-frequency wave so a circle does not stay a circle.
+fn wob_contour(poly: &[(i32, i32)], amp: f32, seed: u32) -> Vec<(f32, f32)> {
+    let n = poly.len().clamp(36, 84);
+    let sampled = resample_closed(poly, n);
+    if sampled.len() < 3 {
+        return sampled;
+    }
+    let cx = sampled.iter().map(|p| p.0).sum::<f32>() / sampled.len() as f32;
+    let cy = sampled.iter().map(|p| p.1).sum::<f32>() / sampled.len() as f32;
+    let mut r = rng(seed);
+    let phase = r() * TAU;
+    let lobes = 2.0 + r() * 2.0;
+    sampled
+        .into_iter()
+        .enumerate()
+        .map(|(i, (x, y))| {
+            let dx = x - cx;
+            let dy = y - cy;
+            let len = dx.hypot(dy).max(1.0);
+            let nx = dx / len;
+            let ny = dy / len;
+            let t = i as f32 / n as f32;
+            let wave = (t * TAU * lobes + phase).sin();
+            let jitter = (r() - 0.5) * 2.0;
+            let off = amp * (0.7 + 0.4 * wave) + amp * 0.22 * jitter;
+            let tang = amp * 0.16 * (r() - 0.5) * 2.0;
+            (x + nx * off - ny * tang, y + ny * off + nx * tang)
+        })
+        .collect()
+}
+
+fn resample_closed(poly: &[(i32, i32)], n: usize) -> Vec<(f32, f32)> {
+    if n == 0 || poly.is_empty() {
+        return Vec::new();
+    }
+    let mut pts: Vec<(f32, f32)> = poly.iter().map(|p| (p.0 as f32, p.1 as f32)).collect();
+    if let (Some(a), Some(b)) = (pts.first().copied(), pts.last().copied()) {
+        if (a.0 - b.0).abs() > 0.5 || (a.1 - b.1).abs() > 0.5 {
+            pts.push(a);
+        }
+    }
+    if pts.len() < 2 {
+        return pts;
+    }
+    let mut lens = vec![0.0f32];
+    for w in pts.windows(2) {
+        let d = (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1);
+        lens.push(lens.last().copied().unwrap_or(0.0) + d);
+    }
+    let total = *lens.last().unwrap_or(&0.0);
+    if total < 1.0 {
+        return pts;
+    }
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let target = total * (i as f32 / n as f32);
+        let seg = lens
+            .iter()
+            .position(|l| *l >= target)
+            .unwrap_or(lens.len() - 1)
+            .max(1);
+        let l0 = lens[seg - 1];
+        let l1 = lens[seg];
+        let t = if l1 > l0 {
+            (target - l0) / (l1 - l0)
+        } else {
+            0.0
+        };
+        let a = pts[seg - 1];
+        let b = pts[seg.min(pts.len() - 1)];
+        out.push((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
+    }
+    out
+}
+
+fn stroke_polyline(
+    img: &mut RgbImage,
+    pts: &[(f32, f32)],
+    color: Rgb<u8>,
+    al: f32,
+    width: f32,
+    close: bool,
+) {
+    if pts.len() < 2 {
+        return;
+    }
+    let last = if close { pts.len() } else { pts.len() - 1 };
+    for i in 0..last {
+        let a = pts[i];
+        let b = pts[(i + 1) % pts.len()];
+        draw_line(img, a.0, a.1, b.0, b.1, color, al, width);
+    }
+}
+
 fn wob_outline(
     img: &mut RgbImage,
     poly: &[(i32, i32)],
@@ -572,32 +1060,39 @@ fn wob_outline(
     }
 }
 
-fn scribble(
+fn scribble_ink(
     img: &mut RgbImage,
     poly: &[(i32, i32)],
     colors: &IllustrationPaletteColors,
     seed: u32,
 ) {
+    // One quiet ink scribble on the main mass — never neon accents (skill accents are sparks, not outlines).
     let mut r = rng(seed);
     let cx = poly.iter().map(|p| p.0).sum::<i32>() as f32 / poly.len().max(1) as f32;
     let cy = poly.iter().map(|p| p.1).sum::<i32>() as f32 / poly.len().max(1) as f32;
-    for accent in colors.accents.iter().take(3) {
-        let ox = (r() - 0.5) * 10.0;
-        let oy = (r() - 0.5) * 10.0;
-        let shifted: Vec<(i32, i32)> = poly
-            .iter()
-            .map(|(x, y)| {
-                let dx = *x as f32 - cx;
-                let dy = *y as f32 - cy;
-                let s = 1.0 + (r() - 0.5) * 0.08;
-                (
-                    (cx + dx * s + ox).round() as i32,
-                    (cy + dy * s + oy).round() as i32,
-                )
-            })
-            .collect();
-        wob_outline(img, &shifted, parse_hex(accent), 1.5, 1.1, seed, true);
-    }
+    let ox = (r() - 0.5) * 8.0;
+    let oy = (r() - 0.5) * 8.0;
+    let shifted: Vec<(i32, i32)> = poly
+        .iter()
+        .map(|(x, y)| {
+            let dx = *x as f32 - cx;
+            let dy = *y as f32 - cy;
+            let s = 1.0 + (r() - 0.5) * 0.06;
+            (
+                (cx + dx * s + ox).round() as i32,
+                (cy + dy * s + oy).round() as i32,
+            )
+        })
+        .collect();
+    wob_outline(
+        img,
+        &shifted,
+        parse_hex(&colors.ink),
+        2.2,
+        1.2,
+        seed,
+        true,
+    );
 }
 
 fn construction(img: &mut RgbImage, cx: f32, cy: f32, radius: f32, seed: u32, color: Rgb<u8>) {
@@ -667,15 +1162,20 @@ fn draw_line(
     width: f32,
 ) {
     let steps = ((x1 - x0).hypot(y1 - y0) as i32).max(1);
-    let half = (width * 0.5).max(0.5) as i32;
+    let half = width * 0.5;
+    let radius = half.ceil() as i32 + 1;
     for i in 0..=steps {
         let t = i as f32 / steps as f32;
-        let x = (x0 + (x1 - x0) * t).round() as i32;
-        let y = (y0 + (y1 - y0) * t).round() as i32;
-        for dy in -half..=half {
-            for dx in -half..=half {
-                if dx * dx + dy * dy <= half * half + 1 {
-                    put(img, x + dx, y + dy, color, al);
+        let x = x0 + (x1 - x0) * t;
+        let y = y0 + (y1 - y0) * t;
+        let ix = x.round() as i32;
+        let iy = y.round() as i32;
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                let d = ((ix + dx) as f32 - x).hypot((iy + dy) as f32 - y);
+                let cover = (half + 0.65 - d).clamp(0.0, 1.0);
+                if cover > 0.04 {
+                    put(img, ix + dx, iy + dy, color, al * cover);
                 }
             }
         }
@@ -784,5 +1284,67 @@ mod tests {
         assert!(png.len() > 500);
         let sheet = export_sheet_png(&doc, 200).unwrap();
         assert!(sheet.starts_with(&[0x89, b'P', b'N', b'G']));
+    }
+
+    #[test]
+    fn raster_riso_print_plates_with_puppet() {
+        let mut spec = IllustrationSpec {
+            brief: IllustrationBrief {
+                subject: "chat sur un coussin".into(),
+                look: IllustrationLook::Ink,
+                palette: IllustrationPaletteId::RisoPop,
+                ..Default::default()
+            },
+            parts: vec![IllustrationPart {
+                id: "blob".into(),
+                role: "main".into(),
+                fill_index: 1,
+                fill: true,
+                outline: true,
+                seed: 1,
+                geometry: IllustrationPartGeometry::Ellipse {
+                    x: 0.3,
+                    y: 0.3,
+                    w: 0.4,
+                    h: 0.4,
+                    rotation: 0.0,
+                },
+            }],
+            ..Default::default()
+        };
+        aos_proto::enrich_illustration_puppet(&mut spec);
+        let doc = IllustrationDoc {
+            brief: spec.brief.clone(),
+            spec: Some(spec),
+            ..Default::default()
+        };
+        let png = export_png(&doc, 256, 256).unwrap();
+        assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+        assert!(png.len() > 800);
+    }
+
+    #[test]
+    fn wob_contour_breaks_perfect_circle() {
+        let n = 48;
+        let poly: Vec<(i32, i32)> = (0..n)
+            .map(|i| {
+                let a = i as f32 / n as f32 * TAU;
+                (
+                    (128.0 + a.cos() * 60.0).round() as i32,
+                    (128.0 + a.sin() * 60.0).round() as i32,
+                )
+            })
+            .collect();
+        let wob = wob_contour(&poly, 8.0, 7);
+        let radii: Vec<f32> = wob
+            .iter()
+            .map(|(x, y)| (x - 128.0).hypot(y - 128.0))
+            .collect();
+        let min = radii.iter().copied().fold(f32::MAX, f32::min);
+        let max = radii.iter().copied().fold(0.0f32, f32::max);
+        assert!(
+            max - min > 4.0,
+            "wob should vary radius, got {min:.1}..{max:.1}"
+        );
     }
 }

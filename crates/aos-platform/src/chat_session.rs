@@ -289,7 +289,37 @@ impl ChatSessionStore {
     ) -> Result<aos_proto::IllustrationDoc, SessionError> {
         let mut doc = self.load_illustration(id)?;
         Self::require_illust_lock(&doc, holder)?;
-        doc.brief = brief;
+        // Merge partial updates. Serde fills missing fields with defaults (empty
+        // subject / ink look), so a beats-only illust.set must not wipe subject.
+        if !brief.subject.trim().is_empty() {
+            doc.brief.subject = brief.subject;
+            doc.brief.look = brief.look;
+            doc.brief.palette = brief.palette;
+        }
+        if !brief.anchor.trim().is_empty() {
+            doc.brief.anchor = brief.anchor;
+        }
+        if !brief.beats.is_empty() {
+            doc.brief.beats = brief.beats;
+        }
+        doc.revision = doc.revision.saturating_add(1);
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    /// Auto-synthesize / repair puppet parts when the agent skipped or botched compose.
+    pub fn illustration_ensure_composed(
+        &self,
+        id: &str,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        if doc.brief.subject.trim().is_empty() {
+            return Ok(doc);
+        }
+        let mut spec = doc.spec.take().unwrap_or_default();
+        spec.brief = doc.brief.clone();
+        aos_proto::enrich_illustration_puppet(&mut spec);
+        doc.spec = Some(spec);
         doc.revision = doc.revision.saturating_add(1);
         self.save_illustration(&doc)?;
         Ok(doc)
@@ -331,6 +361,7 @@ impl ChatSessionStore {
             spec.brief.palette = doc.brief.look.default_palette();
             doc.brief.palette = spec.brief.palette;
         }
+        aos_proto::enrich_illustration_puppet(&mut spec);
         doc.spec = Some(spec);
         doc.revision = doc.revision.saturating_add(1);
         self.save_illustration(&doc)?;

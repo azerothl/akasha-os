@@ -1059,6 +1059,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
     deep_thinking: bool,
 ) {
     let canvas_delegate = tools.iter().any(|t| t.starts_with("canvas."));
+    let illust_delegate = tools.iter().any(|t| t.starts_with("illust."));
     let device_camera_delegate = tools.iter().any(|t| t == "device.camera.capture");
     let advisory = chat_user_wants_advisory(&user_text);
     let mut skills = skills;
@@ -1069,7 +1070,7 @@ pub(crate) async fn spawn_chat_delegate_agent(
             strip_advisory_notes_tools(&mut skills, &mut tools);
         }
     }
-    let goal_statement = if canvas_delegate || advisory {
+    let goal_statement = if canvas_delegate || illust_delegate || advisory {
         // Advisory: garder la question utilisateur (pas un brief « Créer… »).
         user_text.trim().to_string()
     } else {
@@ -1108,19 +1109,21 @@ pub(crate) async fn spawn_chat_delegate_agent(
             canvas_aspect,
             &exported,
         ));
+    } else if illust_delegate {
+        req.system_prompt = Some(aos_agent::tools::illust_draw_strategy_hint());
     }
     req.goal = Some(AgentGoal {
         statement: goal_statement.clone(),
         success_criteria: vec![],
         max_steps,
-        max_subagents: if canvas_delegate {
+        max_subagents: if canvas_delegate || illust_delegate {
             0
         } else {
             CHAT_AGENT_MAX_SUBAGENTS
         },
         timeout_secs: 3600,
     });
-    if !canvas_delegate {
+    if !canvas_delegate && !illust_delegate {
         req.caps.push("tool.invoke:notes".into());
     }
     if req.skills.iter().any(|s| s.contains("task"))
@@ -1141,6 +1144,10 @@ pub(crate) async fn spawn_chat_delegate_agent(
     }
     if req.tools.iter().any(|t| t.starts_with("canvas.")) {
         req.caps.push("tool.invoke:canvas".into());
+        req.caps.push("fs.write:/downloads/**".into());
+    }
+    if req.tools.iter().any(|t| t.starts_with("illust.")) {
+        req.caps.push("tool.invoke:illust".into());
         req.caps.push("fs.write:/downloads/**".into());
     }
     if req.tools.iter().any(|t| t == "device.camera.capture") {

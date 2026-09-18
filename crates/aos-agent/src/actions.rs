@@ -75,7 +75,13 @@ fn find_ignore_ascii_case(hay: &str, needle: &str) -> Option<usize> {
 pub fn parse_actions(text: &str) -> Vec<AgentAction> {
     let (reasoning, clean) = split_reasoning(text);
     let mut actions = parse_tool_markup_actions(&clean);
-    if actions.is_empty() {
+    // `parse_tool_markup_actions` falls back to a single clean JSON object.
+    // Models often dump the whole illust/canvas pipeline as consecutive
+    // objects — expand when that yields more actions.
+    let consecutive = parse_consecutive_json_actions(&clean);
+    if consecutive.len() > actions.len() {
+        actions = consecutive;
+    } else if actions.is_empty() {
         if let Some(a) = parse_action_clean(&clean) {
             actions.push(a);
         }
@@ -574,10 +580,21 @@ fn parse_action_clean(text: &str) -> Option<AgentAction> {
         if let Some(a) = action_from_json_str(json) {
             return Some(a);
         }
+        if let Some(repaired) = repair_truncated_action_json(json) {
+            if let Some(a) = action_from_json_str(&repaired) {
+                return Some(a);
+            }
+        }
     }
     // 2. Premier objet JSON dans le texte
     if let Some(obj) = extract_first_json_object(text) {
         if let Some(a) = action_from_json_str(&obj) {
+            return Some(a);
+        }
+    }
+    // 2b. Objet tronqué (souvent une `}` manquante en fin de génération).
+    if let Some(repaired) = repair_truncated_action_json(text) {
+        if let Some(a) = action_from_json_str(&repaired) {
             return Some(a);
         }
     }
@@ -592,16 +609,41 @@ fn parse_action_clean(text: &str) -> Option<AgentAction> {
     None
 }
 
+/// Close unbalanced braces starting at the outer action/tool envelope (not an
+/// inner `"brief":{…}` object), so a missing final `}` still parses.
+fn repair_truncated_action_json(text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    for key in ["\"action\"", "\"tool\""] {
+        let Some(key_pos) = lower.find(key) else {
+            continue;
+        };
+        let Some(start) = text[..=key_pos].rfind('{') else {
+            continue;
+        };
+        if let Some(repaired) =
+            crate::room_reply::try_close_unbalanced_json_object(&text[start..])
+        {
+            return Some(repaired);
+        }
+    }
+    let start = text.find('{')?;
+    crate::room_reply::try_close_unbalanced_json_object(&text[start..])
+}
+
 /// Clés réservées du wrapper d'action — tout le reste peut être un arg aplati.
 const ACTION_WRAPPER_KEYS: &[&str] = &[
     "action",
+    "tool",
+    "name",
     "args",
     "params",
     "parameters",
+    "arguments",
     "action_input",
     "thought",
     "thinking",
     "reasoning",
+    "status",
 ];
 
 /// Parse un objet JSON en `AgentAction`, en remontant les champs frères dans `args`.
@@ -618,7 +660,7 @@ fn action_from_json_str(json: &str) -> Option<AgentAction> {
 
 fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
     let obj = value.as_object()?;
-    let action = obj.get("action")?.as_str()?.trim().to_string();
+    let (action, nested_from_action) = resolve_action_name(obj)?;
     if action.is_empty() {
         return None;
     }
@@ -633,10 +675,12 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
         .get("action_input")
         .and_then(|value| value.as_object())
         .cloned();
-    let mut args = match obj
-        .get("args")
+    let mut args = match nested_from_action
+        .as_ref()
+        .or_else(|| obj.get("args"))
         .or_else(|| obj.get("params"))
         .or_else(|| obj.get("parameters"))
+        .or_else(|| obj.get("arguments"))
     {
         Some(a) if a.is_object() => a.clone(),
         Some(a) if !a.is_null() => serde_json::json!({ "value": a.clone() }),
@@ -650,7 +694,7 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
         // Local templates / some models use `params` or `parameters` for the
         // argument envelope; accept both so a valid tool call does not arrive
         // as `{parameters:{…}}` with an empty top-level `query`.
-        for key in ["params", "parameters"] {
+        for key in ["params", "parameters", "arguments"] {
             if let Some(nested) = obj.get(key).and_then(|v| v.as_object()) {
                 for (k, v) in nested {
                     map.entry(k.clone()).or_insert_with(|| v.clone());
@@ -686,6 +730,49 @@ fn coerce_action_from_value(value: serde_json::Value) -> Option<AgentAction> {
     })
 }
 
+/// Accepts canonical `action:"tool.name"` plus common model aliases:
+/// `tool:"…"`, `action:{name,arguments}`, OpenAI-ish `name:"…"`.
+fn resolve_action_name(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<(String, Option<serde_json::Value>)> {
+    if let Some(s) = obj.get("action").and_then(|v| v.as_str()) {
+        let name = s.trim().to_string();
+        if !name.is_empty() {
+            return Some((name, None));
+        }
+    }
+    if let Some(act) = obj.get("action").and_then(|v| v.as_object()) {
+        let name = act
+            .get("name")
+            .or_else(|| act.get("tool"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?
+            .to_string();
+        let nested = act
+            .get("arguments")
+            .or_else(|| act.get("args"))
+            .or_else(|| act.get("params"))
+            .or_else(|| act.get("parameters"))
+            .cloned();
+        return Some((name, nested));
+    }
+    if let Some(s) = obj.get("tool").and_then(|v| v.as_str()) {
+        let name = s.trim().to_string();
+        if !name.is_empty() {
+            return Some((name, None));
+        }
+    }
+    if let Some(s) = obj.get("name").and_then(|v| v.as_str()) {
+        let name = s.trim();
+        // Tool ids are dotted (`illust.compose`); skip bare display names.
+        if name.contains('.') {
+            return Some((name.to_string(), None));
+        }
+    }
+    None
+}
+
 fn truncate_chars(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
@@ -702,7 +789,14 @@ fn extract_json_fence(text: &str) -> Option<&str> {
 }
 
 fn extract_first_json_object(text: &str) -> Option<String> {
-    let start = text.find('{')?;
+    extract_json_object_at(text, 0).map(|(_, obj)| obj)
+}
+
+/// Scan `text` from `from` for the next balanced `{…}` object.
+fn extract_json_object_at(text: &str, from: usize) -> Option<(usize, String)> {
+    let slice = text.get(from..)?;
+    let rel = slice.find('{')?;
+    let start = from + rel;
     let mut depth = 0i32;
     let mut in_str = false;
     let mut escape = false;
@@ -723,13 +817,42 @@ fn extract_first_json_object(text: &str) -> Option<String> {
             '}' => {
                 depth -= 1;
                 if depth == 0 {
-                    return Some(text[start..start + i + 1].to_string());
+                    let end = start + i + 1;
+                    return Some((end, text[start..end].to_string()));
                 }
             }
             _ => {}
         }
     }
     None
+}
+
+/// Consecutive top-level JSON action objects (no tool markup wrappers).
+fn parse_consecutive_json_actions(text: &str) -> Vec<AgentAction> {
+    let mut actions = Vec::new();
+    let mut cursor = 0usize;
+    while let Some((end, obj)) = extract_json_object_at(text, cursor) {
+        if let Some(a) = action_from_json_str(&obj) {
+            actions.push(a);
+            cursor = end;
+            // Only keep scanning while objects are packed back-to-back
+            // (optional whitespace). Stop on prose so we don't pick up
+            // nested examples later in the message.
+            let rest = text[cursor..].trim_start();
+            if rest.starts_with('{') {
+                cursor = text.len() - rest.len();
+                continue;
+            }
+            break;
+        }
+        // Not an action object — advance past this `{` to avoid infinite loop.
+        cursor = end;
+        if actions.is_empty() {
+            // First object wasn't an action; fall back to single-object path.
+            break;
+        }
+    }
+    actions
 }
 
 pub fn parse_tool_line(text: &str) -> Option<(String, serde_json::Value)> {
@@ -757,6 +880,7 @@ pub fn resolve_goal_complete_summary(
 ) -> String {
     if let Some(s) = args
         .get("summary")
+        .or_else(|| args.get("reason"))
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty() && !is_placeholder_complete_summary(s))
@@ -822,6 +946,27 @@ mod tests {
     }
 
     #[test]
+    fn parse_consecutive_json_actions_keeps_pipeline() {
+        let text = r#"{"action":"illust.render_sheet","args":{}}
+{"action":"illust.review","args":{}}
+{"action":"illust.export","args":{"path":"/downloads/x.png"}}"#;
+        let actions = parse_actions(text);
+        assert_eq!(actions.len(), 3);
+        assert_eq!(actions[0].action, "illust.render_sheet");
+        assert_eq!(actions[1].action, "illust.review");
+        assert_eq!(actions[2].action, "illust.export");
+    }
+
+    #[test]
+    fn resolve_goal_complete_summary_accepts_reason() {
+        let args = serde_json::json!({"reason": "outils indisponibles"});
+        assert_eq!(
+            resolve_goal_complete_summary(&args, "", ""),
+            "outils indisponibles"
+        );
+    }
+
+    #[test]
     fn parse_flat_agent_spawn_lifts_brief_and_tools() {
         // Forme courante : args aplatis au top-level (pas sous "args").
         let text = r#"{
@@ -862,6 +1007,40 @@ mod tests {
         assert_eq!(a.action, "web.search");
         assert_eq!(a.args["query"], "agentic operating system");
         assert!(a.args.get("parameters").is_none());
+    }
+
+    #[test]
+    fn parse_tool_key_alias_for_illust_compose() {
+        let text = r#"{
+  "tool": "illust.compose",
+  "args": {"spec": {"parts": []}}
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.action, "illust.compose");
+        assert!(a.args["spec"]["parts"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_nested_action_object_name_arguments() {
+        let text = r#"{
+  "thought": "compose",
+  "action": {
+    "type": "tool",
+    "name": "illust.compose",
+    "arguments": {"spec": {"parts": []}}
+  }
+}"#;
+        let a = parse_action(text).unwrap();
+        assert_eq!(a.action, "illust.compose");
+        assert!(a.args["spec"]["parts"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_truncated_missing_closing_brace() {
+        let text = r#"{"thought":"brief","action":"illust.set_brief","args":{"brief":{"subject":"chat","look":"pencil"}}"#;
+        let a = parse_action(text).expect("repaired truncated JSON");
+        assert_eq!(a.action, "illust.set_brief");
+        assert_eq!(a.args["brief"]["subject"], "chat");
     }
 
     #[test]

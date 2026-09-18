@@ -40,7 +40,7 @@ pub fn export_still(
     height: Option<u32>,
     format: &str,
 ) -> Result<serde_json::Value, String> {
-    let (meta, doc) = s
+    let (meta, mut doc) = s
         .sessions
         .lock()
         .unwrap()
@@ -53,6 +53,50 @@ pub fn export_still(
             .unwrap_or(0);
         if lock.expires_ms > now && lock.holder != holder && !holder.starts_with("human") {
             return Err(format!("illustration verrouillé par {}", lock.holder));
+        }
+    }
+    // Agents often skip compose or emit unreadable LLM snowmen. Re-run puppet
+    // enrich before raster so known subjects (cat+cushion, …) get the recipe.
+    if !doc.brief.subject.trim().is_empty() {
+        doc = s
+            .sessions
+            .lock()
+            .unwrap()
+            .illustration_ensure_composed(session_id)
+            .map_err(|e| e.to_string())?;
+    }
+    // Skill loop: contact sheet + structural review before agent export.
+    if holder.starts_with("agent") {
+        let review = aos_proto::review_illustration(&doc);
+        let blocking: Vec<&str> = review
+            .issues
+            .iter()
+            .filter(|i| i.severity == "error" && i.kind != "missing_contact_sheet")
+            .map(|i| i.kind.as_str())
+            .collect();
+        if !blocking.is_empty() {
+            return Err(format!(
+                "export refusé (review score={:.2}): {} — illust.compose avec parts=[] puis illust.render_sheet + illust.review",
+                review.score,
+                blocking.join(", ")
+            ));
+        }
+        if doc
+            .last_sheet_png
+            .as_ref()
+            .map(|p| p.trim().is_empty())
+            .unwrap_or(true)
+        {
+            // Auto-build contact sheet once, then require the agent to review next time
+            // if they skipped the skill step entirely.
+            let _ = render_sheet(s, session_id, Some(240))?;
+            doc = s
+                .sessions
+                .lock()
+                .unwrap()
+                .illustration_get(session_id)
+                .map(|( _m, d)| d)
+                .map_err(|e| e.to_string())?;
         }
     }
     let w = width.unwrap_or(1024);
