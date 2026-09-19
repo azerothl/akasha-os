@@ -277,9 +277,7 @@ mod tests {
     fn annonce_wildcard_prend_l_ip_source_lan() {
         let mut ad = advertisement();
         ad.address = "0.0.0.0:9001".into();
-        let node = ad
-            .validate_from("10.0.0.8:47821".parse().unwrap())
-            .unwrap();
+        let node = ad.validate_from("10.0.0.8:47821".parse().unwrap()).unwrap();
         assert_eq!(node.address, "10.0.0.8:9001");
     }
 

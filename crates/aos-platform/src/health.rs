@@ -920,12 +920,15 @@ mod tests {
                 draft_disabled: false,
                 draft_disable_reason: None,
                 draft_verify_ms: None,
+                n_ctx: None,
+                ctx_used: None,
             }],
             ram_total: 1,
             ram_used: 0,
             ram_free: 1,
             cpu_percent: 0.0,
             agents_active: 0,
+            gpus: vec![],
         };
         assert!(should_skip_infer(&busy));
         let idle = SystemMetrics {
@@ -935,6 +938,7 @@ mod tests {
             ram_free: 1,
             cpu_percent: 0.0,
             agents_active: 0,
+            gpus: vec![],
         };
         assert!(!should_skip_infer(&idle));
     }

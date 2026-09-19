@@ -123,6 +123,7 @@ mod ui_scenarios;
 mod ui_screenshot;
 mod ui_security;
 mod ui_settings;
+mod ui_studio;
 mod ui_workspace;
 mod workspace_controller;
 mod workspace_ui_state;
@@ -205,6 +206,7 @@ enum Tab {
     Scenarios,
     Feedback,
     Settings,
+    Studio,
     Files,
     Module(String),
 }
@@ -524,6 +526,8 @@ struct UiApp {
     memory_ui: memory_ui_state::MemoryUiState,
     settings_ui: settings_ui_state::SettingsUiState,
     metrics: Option<SystemMetrics>,
+    studio_focus: Option<String>,
+    studio_history: ui_studio::StudioHistory,
     /// Live agent roster (shared with chat / ask / room membership).
     agents: Vec<AgentInfo>,
     confirmations_ui: confirmation_ui_state::ConfirmationUiState,
@@ -675,6 +679,7 @@ impl UiApp {
             Tab::Library => t.tab_library,
             Tab::Agents => t.tab_agents,
             Tab::Models => t.tab_models,
+            Tab::Studio => t.tab_studio,
             Tab::Providers => t.tab_providers,
             Tab::Audit => t.tab_audit,
             Tab::Caps => t.tab_caps,
@@ -838,6 +843,8 @@ impl UiApp {
             memory_ui: memory_ui_state::MemoryUiState::default(),
             settings_ui: settings_ui_state::SettingsUiState::default(),
             metrics: None,
+            studio_focus: None,
+            studio_history: ui_studio::StudioHistory::default(),
             agents: Vec::new(),
             confirmations_ui: confirmation_ui_state::ConfirmationUiState::default(),
             workspace_ui: workspace_ui_state::WorkspaceUiState::default(),
@@ -2001,6 +2008,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             Tab::Library => icons::OverflowNavIcon::Library,
             Tab::Files => icons::OverflowNavIcon::Files,
             Tab::Models => icons::OverflowNavIcon::Models,
+            Tab::Studio => icons::OverflowNavIcon::Studio,
             Tab::Providers => icons::OverflowNavIcon::Providers,
             Tab::Settings => icons::OverflowNavIcon::Settings,
             Tab::Caps => icons::OverflowNavIcon::Caps,
@@ -2038,6 +2046,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
         daily.extend([
             (Tab::Files, t.tab_files, t.tab_hint_files),
             (Tab::Models, t.tab_models, t.tab_hint_models),
+            (Tab::Studio, t.tab_studio, t.tab_hint_studio),
         ]);
         for (tab, label, hint) in daily {
             let icon = Self::overflow_icon_for(&tab);
@@ -2770,6 +2779,7 @@ Puis module.list pour confirmer que cohortmod est installé. Termine avec goal.c
             destinations.extend([
                 (t.tab_files, Tab::Files),
                 (t.tab_models, Tab::Models),
+                (t.tab_studio, Tab::Studio),
                 (t.tab_settings, Tab::Settings),
                 (t.tab_caps, Tab::Caps),
                 (t.tab_audit, Tab::Audit),
@@ -3058,7 +3068,10 @@ impl eframe::App for UiApp {
                     self.update_skill_offer_state(&pattern_id, "created");
                 }
                 Evt::ChatSystem(m) => self.chat.push(ChatLine::plain("système", m)),
-                Evt::Metrics(m) => self.metrics = Some(m),
+                Evt::Metrics(m) => {
+                    self.studio_history.push(&m);
+                    self.metrics = Some(m);
+                }
                 Evt::Health(h) => {
                     let prev = self.security_ui.health_canary_was_ok;
                     // Empty steps = canary not run yet — never toast a false failure.
@@ -3738,6 +3751,7 @@ impl eframe::App for UiApp {
             Tab::Library => overflow_scroll(ui, "library", |ui| self.ui_library(ui)),
             Tab::Agents => overflow_scroll(ui, "agents", |ui| self.ui_agents(ui)),
             Tab::Models => overflow_scroll(ui, "models", |ui| self.ui_models(ui, ctx)),
+            Tab::Studio => overflow_scroll(ui, "studio", |ui| self.ui_studio(ui)),
             Tab::Providers => overflow_scroll(ui, "providers", |ui| self.ui_providers(ui)),
             Tab::Audit => overflow_scroll(ui, "audit", |ui| self.ui_audit(ui)),
             Tab::Caps => overflow_scroll(ui, "caps", |ui| self.ui_caps(ui)),

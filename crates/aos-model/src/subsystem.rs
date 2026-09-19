@@ -125,6 +125,10 @@ pub struct ModelRuntime {
     pub last_prefix_hit: Option<u32>,
     /// Chemin choisi pour la dernière inférence (`standard`, `speculative`, `batch`).
     pub last_inference_mode: Option<String>,
+    /// Context window passed to llama.cpp at the last successful load.
+    pub n_ctx: Option<u32>,
+    pub last_prompt_tokens: Option<u32>,
+    pub last_generated_tokens: Option<u32>,
     /// Dernier état KV après un C1 (prefix cache / migrate).
     warm: Option<WarmPrefix>,
     /// Image/video generation in flight (sd.cpp).
@@ -162,6 +166,9 @@ impl ModelRuntime {
             last_draft_verify_ms: None,
             last_prefix_hit: None,
             last_inference_mode: None,
+            n_ctx: None,
+            last_prompt_tokens: None,
+            last_generated_tokens: None,
             warm: None,
             media_step: None,
             media_total_steps: None,
@@ -235,6 +242,21 @@ pub fn resume_messages(messages: &[(String, String)], generated: &str) -> Vec<(S
         out.push(("assistant".into(), generated.to_string()));
     }
     out
+}
+
+fn gpu_live_metrics() -> Vec<aos_proto::GpuLive> {
+    aos_placement::gpu_live_snapshot()
+        .into_iter()
+        .map(|gpu| aos_proto::GpuLive {
+            index: gpu.index,
+            name: gpu.name,
+            util_percent: gpu.util_percent,
+            vram_used_mib: gpu.vram_used_mib,
+            vram_total_mib: gpu.vram_total_mib,
+            temp_c: gpu.temp_c,
+            power_w: gpu.power_w,
+        })
+        .collect()
 }
 
 impl ModelSubsystem {
@@ -465,6 +487,7 @@ impl ModelSubsystem {
                         m.plan = None;
                         m.inference_plan = None;
                         m.ctx = None;
+                        m.n_ctx = None;
                         m.model = None;
                         m.warm = None;
                         m.loading = true;
@@ -524,6 +547,7 @@ impl ModelSubsystem {
                     m.state = ModelState::Error;
                     m.load_error = Some(e.clone());
                     m.ctx = None;
+                    m.n_ctx = None;
                     m.model = None;
                     m.plan = None;
                     m.inference_plan = None;
@@ -820,6 +844,7 @@ impl ModelSubsystem {
             m.plan = Some(plan);
             m.profile = adaptive_plan.placement;
             m.inference_plan = Some(adaptive_plan);
+            m.n_ctx = Some(opts.n_ctx);
             m.model = Some(model);
             m.ctx = Some(Arc::new(StdMutex::new(ctx)));
             m.ctx_abort = Some(abort);
@@ -1146,6 +1171,7 @@ impl ModelSubsystem {
         runtime.path = Some(path);
         runtime.state = ModelState::OnDisk;
         runtime.ctx = None;
+        runtime.n_ctx = None;
         runtime.model = None;
         runtime.plan = None;
         runtime.inference_plan = None;
@@ -1767,6 +1793,8 @@ impl ModelSubsystem {
                                     if let Some(m) = g.models.get_mut(&mid) {
                                         m.last_ttft_ms = Some(stats.ttft_ms);
                                         m.last_tok_s = Some(stats.tok_s);
+                                        m.last_prompt_tokens = Some(stats.prompt_tokens);
+                                        m.last_generated_tokens = Some(stats.generated_tokens);
                                         m.last_draft_accept = stats.draft_accept_avg();
                                         m.last_draft_acceptance_rate =
                                             stats.draft_acceptance_rate();
@@ -2040,6 +2068,8 @@ impl ModelSubsystem {
                         if let Some(m) = g.models.get_mut(&model_id) {
                             m.last_ttft_ms = Some(stats.ttft_ms);
                             m.last_tok_s = Some(stats.tok_s);
+                            m.last_prompt_tokens = Some(stats.prompt_tokens);
+                            m.last_generated_tokens = Some(stats.generated_tokens);
                             m.last_inference_mode = Some("batch".into());
                         }
                         g.job_aborts.remove(&io.job_id);
@@ -2236,6 +2266,7 @@ impl ModelSubsystem {
                 .get_mut(model_id)
                 .ok_or_else(|| format!("modèle inconnu: {model_id}"))?;
             m.ctx = None;
+            m.n_ctx = None;
             m.model = None;
             m.ctx_abort = None;
             m.state = ModelState::OnDisk;
@@ -2303,6 +2334,7 @@ impl ModelSubsystem {
             match g.models.get_mut(model_id) {
                 Some(m) if m.active == 0 && m.pending == 0 && !m.loading => {
                     m.ctx = None;
+                    m.n_ctx = None;
                     m.model = None;
                     m.ctx_abort = None;
                     m.state = ModelState::OnDisk;
@@ -2498,6 +2530,11 @@ impl ModelSubsystem {
                 draft_disabled: m.last_draft_disabled,
                 draft_disable_reason: m.last_draft_disable_reason.clone(),
                 draft_verify_ms: m.last_draft_verify_ms,
+                n_ctx: m.n_ctx,
+                ctx_used: m
+                    .last_prompt_tokens
+                    .zip(m.last_generated_tokens)
+                    .map(|(prompt, generated)| prompt.saturating_add(generated)),
             })
             .collect();
         SystemMetrics {
@@ -2507,6 +2544,7 @@ impl ModelSubsystem {
             ram_free: ram.0.saturating_sub(ram.1),
             cpu_percent,
             agents_active: 0,
+            gpus: gpu_live_metrics(),
         }
     }
 
@@ -2703,11 +2741,55 @@ fn resolve_mmproj_for_model(model_id: &str, weights_path: &std::path::Path) -> O
 mod tests {
     use super::{
         classify_workload, resolve_infer_image_path, resolve_mmproj_for_model, resume_messages,
-        should_use_lookup_speculation, should_use_vision_infer,
+        should_use_lookup_speculation, should_use_vision_infer, ModelRuntime, ModelSubsystem,
     };
+    use crate::config::ModeldConfig;
     use aos_llama::StopReason;
-    use aos_placement::WorkloadKind;
+    use aos_placement::{ModelDesc, PrivacyClass, WorkloadKind};
+    use aos_proto::ModelState;
+    use aos_registry::ModelRegistry;
     use std::path::PathBuf;
+
+    #[test]
+    fn metrics_exposes_context_window_after_infer() {
+        let config: ModeldConfig = serde_yaml::from_str("gpu: false\n").unwrap();
+        let registry = ModelRegistry::from_yaml("models: []\n").unwrap();
+        let sub = ModelSubsystem::new(config, &registry, 8 << 30);
+        let mut runtime = ModelRuntime::new(
+            ModelDesc {
+                id: "local:tiny".into(),
+                name: "Tiny".into(),
+                n_layers: 4,
+                n_params: 1.0e8,
+                weights_bytes: 1_000_000,
+                embed_bytes: 10_000,
+                kv_bytes_per_token: 100,
+                context_length: 4096,
+                supports_layer_offload: true,
+                privacy_class: PrivacyClass::Local,
+                quantization: Default::default(),
+                backends_compatible: vec![],
+            },
+            None,
+        );
+        runtime.state = ModelState::Loaded;
+        runtime.n_ctx = Some(8192);
+        runtime.last_prompt_tokens = Some(100);
+        runtime.last_generated_tokens = Some(28);
+        sub.inner
+            .lock()
+            .unwrap()
+            .models
+            .insert("local:tiny".into(), runtime);
+        let metrics = sub.metrics((8 << 30, 1 << 30), 1.0);
+        let model = metrics
+            .models
+            .iter()
+            .find(|m| m.model_id == "local:tiny")
+            .expect("fixture model");
+        assert_eq!(model.n_ctx, Some(8192));
+        assert_eq!(model.ctx_used, Some(128));
+    }
 
     #[test]
     fn prefix_replay_keeps_history_and_appends_assistant() {

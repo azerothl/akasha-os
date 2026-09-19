@@ -1695,6 +1695,7 @@ pub enum OverflowNavIcon {
     Tasks,
     Files,
     Models,
+    Studio,
     Documents,
     Providers,
     Settings,
@@ -1834,6 +1835,10 @@ fn paint_overflow_nav(ui: &mut Ui, rect: Rect, icon: OverflowNavIcon, color: Col
                 ],
                 stroke,
             );
+        }
+        OverflowNavIcon::Studio => {
+            painter.circle_stroke(c, s * 0.9, stroke);
+            painter.line_segment([c, c + Vec2::new(s * 0.35, -s * 0.55)], stroke);
         }
         OverflowNavIcon::Documents => {
             let page = Rect::from_center_size(

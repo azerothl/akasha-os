@@ -1429,18 +1429,16 @@ impl LanTcpListener {
             return Err(error);
         }
 
-        let frame = match read_frame_from_stream(
-            &mut stream,
-            LanTcpTransport::DEFAULT_MAX_FRAME_BYTES,
-        )
-        .await
-        {
-            Ok(frame) => frame,
-            Err(error) => {
-                let _ = write_lan_reject(&mut stream, &error).await;
-                return Err(error);
-            }
-        };
+        let frame =
+            match read_frame_from_stream(&mut stream, LanTcpTransport::DEFAULT_MAX_FRAME_BYTES)
+                .await
+            {
+                Ok(frame) => frame,
+                Err(error) => {
+                    let _ = write_lan_reject(&mut stream, &error).await;
+                    return Err(error);
+                }
+            };
         if frame.node_id != peer_node_id || frame.work_id.trim().is_empty() {
             let reason = "première trame LAN inattendue".to_string();
             let _ = write_lan_reject(&mut stream, &reason).await;
@@ -1690,7 +1688,8 @@ async fn read_frame_from_stream(
         let reason_len = stream
             .read_u32()
             .await
-            .map_err(|e| map_lan_io_error("lecture de refus LAN", e))? as usize;
+            .map_err(|e| map_lan_io_error("lecture de refus LAN", e))?
+            as usize;
         if reason_len == 0 || reason_len > LAN_REJECT_MAX_REASON_BYTES {
             return Err("refus LAN distant illisible".into());
         }

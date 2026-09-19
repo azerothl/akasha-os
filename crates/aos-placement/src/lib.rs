@@ -73,7 +73,9 @@ pub use hardware::{
     CpuIsa, CpuTopology, GpuBackend, GpuDevice, HardwareProfile, NpuCapabilities, ThermalSnapshot,
     WebGpuCapabilities,
 };
-pub use host_probe::{probe as probe_host_hardware, HardwareInfo, HardwareTier};
+pub use host_probe::{
+    gpu_live_snapshot, probe as probe_host_hardware, GpuLiveSample, HardwareInfo, HardwareTier,
+};
 pub use layer_pipeline::{
     partition_layer_stages, LayerPipelineExecutor, LayerPipelineMetrics, LayerPipelinePlan,
     LayerStage,

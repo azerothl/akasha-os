@@ -138,10 +138,7 @@ impl UiApp {
                         .unwrap_or(true)
                     {
                         let (_, derived) = aos_agent::room_reply::split_room_reply(&text);
-                        if derived
-                            .as_ref()
-                            .is_some_and(|s| !s.trim().is_empty())
-                        {
+                        if derived.as_ref().is_some_and(|s| !s.trim().is_empty()) {
                             thinking = derived;
                         }
                     }
@@ -361,9 +358,7 @@ impl UiApp {
                             {
                                 ui.weak(egui::RichText::new(&meta).small());
                             }
-                            if let Some(th) =
-                                thinking.as_deref().filter(|s| !s.trim().is_empty())
-                            {
+                            if let Some(th) = thinking.as_deref().filter(|s| !s.trim().is_empty()) {
                                 chat_room::room_thinking_toggle(
                                     ui,
                                     t,
@@ -1053,11 +1048,7 @@ impl UiApp {
                                 if !preview.trim().is_empty() && preview != "…" {
                                     ui.add_space(4.0);
                                     ui.push_id(("room_stream", n), |ui| {
-                                        show_chat_markdown(
-                                            ui,
-                                            &mut self.chat_md_cache,
-                                            &preview,
-                                        );
+                                        show_chat_markdown(ui, &mut self.chat_md_cache, &preview);
                                     });
                                 } else if preview == "…" {
                                     ui.add_space(2.0);

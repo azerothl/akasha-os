@@ -10,19 +10,18 @@ use serde_json::{json, Map, Value};
 use crate::{
     decl_ui::{DeclUiDocument, DeclUiLabels, DeclUiRowAction, DeclUiWidget, ModuleUiResponse},
     MemContextRequest, MemContextResponse, MemEpisodicDeleteRequest, MemEpisodicQueryRequest,
-    MemEpisodicWriteRequest, MemExtractOutcome, MemExtractOutcomeKind, MemExtractRequest,
-    MemExtractResponse, MemExtractedFact, MemExplainRequest, MemExplanation, MemGraphQueryRequest,
-    MemGraphResponse, MemHit, MemListRequest, MemNarrativeRequest, MemNeighborsRequest,
+    MemEpisodicWriteRequest, MemExplainRequest, MemExplanation, MemExtractOutcome,
+    MemExtractOutcomeKind, MemExtractRequest, MemExtractResponse, MemExtractedFact,
+    MemGraphQueryRequest, MemGraphResponse, MemHit, MemListRequest, MemMigrationReport,
+    MemMindPalaceRequest, MemMindPalaceResponse, MemNarrativeRequest, MemNeighborsRequest,
     MemObjectCreateRequest, MemObjectGetRequest, MemObjectListRequest, MemObjectRelateRequest,
-    MemObjectUpdateRequest, MemRevalidateRequest,
-    MemRelateRequest, MemRelation, MemRelationKind, MemRememberResponse, MemSharedReadRequest,
+    MemObjectUpdateRequest, MemRelateRequest, MemRelation, MemRelationKind, MemRememberResponse,
+    MemRevalidateRequest, MemShadowComparison, MemShadowMetrics, MemSharedReadRequest,
     MemSharedWriteRequest, MemStats, MemSweepRequest, MemSweepResponse, MemSweepStatus,
     MemTimelineRequest, MemTimelineResponse, MemUnrelateRequest, MemUpdateRequest,
     MemUserRecallRequest, MemUserRememberRequest, MemWorkingRequest, MemoryObject,
     MemoryObjectKind, MemoryObjectStatus, MemoryRelationKind, MemoryRelationV2, MemorySourceRef,
-    MemoryTemporal, MemMindPalaceRequest, MemMindPalaceResponse, MemMigrationReport,
-    MemShadowComparison, MemShadowMetrics, SecretGetRequest, SecretListRequest, SecretListResponse,
-    SecretSetRequest,
+    MemoryTemporal, SecretGetRequest, SecretListRequest, SecretListResponse, SecretSetRequest,
 };
 
 const SCHEMA_META: &str = "http://json-schema.org/draft-07/schema#";

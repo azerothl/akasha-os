@@ -839,8 +839,7 @@ mod canvas_completion_tests {
         ag.state = AgentState::Done;
         ag.tools = vec!["web.search".into()];
         ag.fail_reason = None;
-        ag.last_output =
-            "Done.\n\n## Sources\n\n1. [Survey](https://example.com/survey)\n".into();
+        ag.last_output = "Done.\n\n## Sources\n\n1. [Survey](https://example.com/survey)\n".into();
         let trace = AgentTrace {
             agent_id: "research-2".into(),
             steps: vec![aos_proto::AgentStepRecord {

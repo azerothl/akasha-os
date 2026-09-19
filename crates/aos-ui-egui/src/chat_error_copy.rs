@@ -256,10 +256,7 @@ pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified)
         return t.chat_error_generic.to_string();
     }
     if classified.code == "room.ask_not_waiting" {
-        return format!(
-            "{}\n{}",
-            t.room_ask_failed_toast, classified.cause
-        );
+        return format!("{}\n{}", t.room_ask_failed_toast, classified.cause);
     }
     format!("{}\n{}", t.chat_error_generic, classified.cause)
 }

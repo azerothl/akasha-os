@@ -935,6 +935,31 @@ pub struct ModelMetrics {
     pub draft_disable_reason: Option<String>,
     #[serde(default)]
     pub draft_verify_ms: Option<f64>,
+    /// llama.cpp context window actually passed at load (`n_ctx`).
+    #[serde(default)]
+    pub n_ctx: Option<u32>,
+    /// Last completed request: prompt tokens + generated tokens.
+    /// Not live KV occupancy — llama.cpp does not export that here.
+    #[serde(default)]
+    pub ctx_used: Option<u32>,
+}
+
+/// One NVIDIA GPU sample from `nvidia-smi` (`model.metrics`).
+/// Missing counters stay `None`; an absent driver yields an empty list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GpuLive {
+    pub index: u32,
+    pub name: String,
+    #[serde(default)]
+    pub util_percent: Option<f32>,
+    #[serde(default)]
+    pub vram_used_mib: Option<u64>,
+    #[serde(default)]
+    pub vram_total_mib: Option<u64>,
+    #[serde(default)]
+    pub temp_c: Option<f32>,
+    #[serde(default)]
+    pub power_w: Option<f32>,
 }
 
 /// Métriques système agrégées.
@@ -946,6 +971,9 @@ pub struct SystemMetrics {
     pub ram_free: u64,
     pub cpu_percent: f32,
     pub agents_active: u32,
+    /// Live NVIDIA cards. Empty when `nvidia-smi` is missing or fails.
+    #[serde(default)]
+    pub gpus: Vec<GpuLive>,
 }
 
 impl SystemMetrics {

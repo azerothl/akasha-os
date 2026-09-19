@@ -4609,10 +4609,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             let poll_ctx = egui_ctx.clone();
             let poll_sid = session_id.clone();
             let poll = tokio::spawn(async move {
-                let mut slow =
-                    tokio::time::interval(std::time::Duration::from_millis(400));
-                let mut fast =
-                    tokio::time::interval(std::time::Duration::from_millis(100));
+                let mut slow = tokio::time::interval(std::time::Duration::from_millis(400));
+                let mut fast = tokio::time::interval(std::time::Duration::from_millis(100));
                 slow.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 fast.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 slow.tick().await;
