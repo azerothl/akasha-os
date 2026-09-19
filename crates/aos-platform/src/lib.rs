@@ -9,6 +9,8 @@
 pub mod audit;
 pub mod boot_index;
 pub mod canvas_raster;
+pub mod illustration_raster;
+pub mod illustration_service;
 pub mod catalogue;
 pub mod chat_session;
 pub mod confirm;

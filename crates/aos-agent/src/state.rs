@@ -199,6 +199,25 @@ impl CognitiveState {
         .collect()
     }
 
+    /// Fixed sequential plan for Illustration surface (no sub-agent fan-out).
+    pub fn canonical_illust_composition_plan() -> Vec<TaskNode> {
+        [
+            "Brief (illust.set_brief sujet+look)",
+            "Compose (illust.compose / puppet)",
+            "Review (illust.render_sheet + illust.review)",
+            "Export (illust.export)",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, title)| TaskNode {
+            id: (index + 1).to_string(),
+            title: (*title).to_string(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        })
+        .collect()
+    }
+
     /// Mark the first Pending/Running plan node Done.
     pub fn complete_current_plan_node(&mut self) -> bool {
         let Some(idx) = self.task_graph.iter().position(|n| {

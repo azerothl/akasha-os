@@ -418,6 +418,7 @@ fn seed_marketing_sessions(app: &mut UiApp) {
             conductor_policy: Default::default(),
             canvas_open: false,
             canvas_aspect: Default::default(),
+            illustration_open: false,
         },
         ChatSessionMeta {
             id: "shot-b".into(),
@@ -433,6 +434,7 @@ fn seed_marketing_sessions(app: &mut UiApp) {
             conductor_policy: Default::default(),
             canvas_open: false,
             canvas_aspect: Default::default(),
+            illustration_open: false,
         },
         ChatSessionMeta {
             id: "shot-c".into(),
@@ -448,6 +450,7 @@ fn seed_marketing_sessions(app: &mut UiApp) {
             conductor_policy: Default::default(),
             canvas_open: false,
             canvas_aspect: Default::default(),
+            illustration_open: false,
         },
     ];
     app.chat_state.active_session = Some("shot-a".into());

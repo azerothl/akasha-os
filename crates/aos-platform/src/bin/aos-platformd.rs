@@ -2722,6 +2722,452 @@ async fn main() {
         });
     }
 
+    // --- illust.* (Illustration surface, skill-inspired) ---
+    {
+        let s = sub.clone();
+        svc.on("illust.set_open", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustSetOpenRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .illustration_set_open(&req.session_id, req.open);
+                        match result {
+                            Ok(meta) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &meta).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.get", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustGetRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .illustration_get(&req.session_id);
+                        match result {
+                            Ok((meta, doc)) => {
+                                let digest = illustration_digest(&doc);
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &IllustGetResponse {
+                                            session_id: meta.id,
+                                            illustration_open: meta.illustration_open,
+                                            digest,
+                                            doc,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.lock.acquire", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustLockAcquireRequest>() {
+                    Ok(req) => {
+                        let ttl = req.ttl_ms.unwrap_or(120_000);
+                        let result = s.sessions.lock().unwrap().illustration_lock_acquire(
+                            &req.session_id,
+                            &req.holder,
+                            &req.reason,
+                            ttl,
+                        );
+                        match result {
+                            Ok(doc) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.lock.release", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustLockReleaseRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .illustration_lock_release(&req.session_id, &req.holder);
+                        match result {
+                            Ok(doc) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.lock.takeover", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustLockAcquireRequest>() {
+                    Ok(req) => {
+                        let holder = if req.holder.trim().is_empty() {
+                            "human:ui".to_string()
+                        } else {
+                            req.holder.clone()
+                        };
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .illustration_lock_takeover(&req.session_id, &holder);
+                        match result {
+                            Ok(doc) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.lock.status", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustLockStatusRequest>() {
+                    Ok(req) => {
+                        let result = s
+                            .sessions
+                            .lock()
+                            .unwrap()
+                            .illustration_get(&req.session_id);
+                        match result {
+                            Ok((meta, doc)) => {
+                                let locked = doc
+                                    .lock
+                                    .as_ref()
+                                    .map(|l| {
+                                        let now = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .map(|d| d.as_millis() as u64)
+                                            .unwrap_or(0);
+                                        l.expires_ms > now
+                                    })
+                                    .unwrap_or(false);
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &IllustLockStatusResponse {
+                                            session_id: meta.id,
+                                            lock: doc.lock,
+                                            locked,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::NotFound, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.set_brief", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustSetBriefRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().illustration_set_brief(
+                            &req.session_id,
+                            &req.holder,
+                            req.brief,
+                        );
+                        match result {
+                            Ok(doc) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                &format!("payload invalide: {e}"),
+                            )
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.compose", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustComposeRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().illustration_compose(
+                            &req.session_id,
+                            &req.holder,
+                            req.spec,
+                        );
+                        match result {
+                            Ok((meta, mut doc)) => {
+                                // Still preview so the Illustration panel updates immediately.
+                                if let Ok(path) = aos_platform::illustration_service::export_preview(
+                                    &s,
+                                    &req.session_id,
+                                    Some(720),
+                                    Some(720),
+                                ) {
+                                    doc.last_png = Some(path);
+                                }
+                                let _ = ctx
+                                    .respond(
+                                        aos_ipc::msg::Status::Ok,
+                                        &IllustComposeResponse {
+                                            illustration_open: meta.illustration_open,
+                                            doc,
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond_error(
+                                aos_ipc::msg::Status::BadRequest,
+                                &format!("payload invalide: {e}"),
+                            )
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.render_sheet", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustRenderSheetRequest>() {
+                    Ok(req) => {
+                        match aos_platform::illustration_service::render_sheet(
+                            &s,
+                            &req.session_id,
+                            req.width,
+                        ) {
+                            Ok(v) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.export", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustExportRequest>() {
+                    Ok(req) => {
+                        let format = req.format.as_deref().unwrap_or("png");
+                        match aos_platform::illustration_service::export_still(
+                            &s,
+                            &req.session_id,
+                            &req.holder,
+                            req.path,
+                            req.width,
+                            req.height,
+                            format,
+                        ) {
+                            Ok(v) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.review", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustReviewRequest>() {
+                    Ok(req) => match aos_platform::illustration_service::review(&s, &req.session_id)
+                    {
+                        Ok(v) => {
+                            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                        }
+                        Err(e) => {
+                            let _ = ctx
+                                .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.animate", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustAnimateRequest>() {
+                    Ok(req) => {
+                        match aos_platform::illustration_service::animate(
+                            &s,
+                            &req.session_id,
+                            &req.holder,
+                            req.timeline,
+                            req.width,
+                            req.path,
+                        ) {
+                            Ok(v) => {
+                                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &v).await;
+                            }
+                            Err(e) => {
+                                let _ = ctx
+                                    .respond_error(aos_ipc::msg::Status::InternalError, &e)
+                                    .await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
     // --- web.search / net.fetch / files.generate / fs.*_bytes (PC.8–9) ---
     {
         let s = sub.clone();

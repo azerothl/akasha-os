@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub mod bridge;
 mod canvas_layers;
 mod canvas_style;
+mod illustration;
 pub mod chat_document;
 pub mod downloads_layout;
 pub mod create_contract;
@@ -94,6 +95,17 @@ pub use canvas_style::{
     parse_canvas_sidecar_json, parse_rgb, resolve_canvas_op_style_ex, sample_linear_gradient,
     set_canvas_op_body_dash, set_canvas_op_body_gradient, set_canvas_op_body_opacity,
     CanvasLinearGradient,
+};
+pub use illustration::{
+    enrich_illustration_puppet, illustration_digest, review_illustration, IllustAnimateRequest,
+    IllustAnimateResponse, IllustComposeRequest, IllustComposeResponse, IllustExportRequest,
+    IllustGetRequest, IllustGetResponse, IllustLockAcquireRequest, IllustLockReleaseRequest,
+    IllustLockStatusRequest, IllustLockStatusResponse, IllustRenderSheetRequest, IllustReviewIssue,
+    IllustReviewRequest, IllustReviewResponse, IllustSetBriefRequest, IllustSetOpenRequest,
+    IllustrationBrief, IllustrationCamera, IllustrationDoc, IllustrationFinish, IllustrationLock,
+    IllustrationLook, IllustrationPaletteColors, IllustrationPaletteId, IllustrationPart,
+    IllustrationPartGeometry, IllustrationPose, IllustrationRenderMode, IllustrationSpec,
+    IllustrationTimeline, IllustrationTimelineBeat,
 };
 
 // ---------------------------------------------------------------------------
@@ -4378,6 +4390,9 @@ pub struct ChatSessionMeta {
     /// Proportions du canvas de session (défaut carré 1:1).
     #[serde(default)]
     pub canvas_aspect: CanvasAspect,
+    /// Surface Illustration (skill-inspired) ouverte — séparée du whiteboard.
+    #[serde(default)]
+    pub illustration_open: bool,
 }
 
 /// Point normalisé 0..1 sur le canvas de session.
@@ -7104,6 +7119,7 @@ mod chat_session_room_tests {
             },
             canvas_open: false,
             canvas_aspect: CanvasAspect::Square,
+            illustration_open: false,
         };
         let json = serde_json::to_string(&m).unwrap();
         let back: ChatSessionMeta = serde_json::from_str(&json).unwrap();

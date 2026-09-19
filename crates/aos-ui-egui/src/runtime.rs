@@ -555,6 +555,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             routing,
             language,
             canvas_open,
+            illustration_open,
             canvas_aspect,
             deep_thinking,
             skip_session_append,
@@ -614,6 +615,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     &user_text,
                     "",
                     canvas_open,
+                    illustration_open,
                     canvas_aspect,
                     &canvas_exported,
                 );
@@ -621,6 +623,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
                         &user_text,
                         canvas_open,
+                        illustration_open,
                         &canvas_exported,
                     ));
                 }
@@ -839,6 +842,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             &user_text,
                             &full,
                             canvas_open,
+                            illustration_open,
                             canvas_aspect,
                             &canvas_exported,
                         );
@@ -849,6 +853,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             delegate = Some(crate::chat_delegate::deep_thinking_force_delegate(
                                 &user_text,
                                 canvas_open,
+                                illustration_open,
                                 &canvas_exported,
                             ));
                         }
@@ -4781,6 +4786,185 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
                 Err(e) => {
                     let _ = evt_tx.send(Evt::Error(e.to_string()));
+                }
+            }
+        }
+        Cmd::IllustSetOpen { session_id, open } => {
+            match bus
+                .call::<aos_proto::IllustSetOpenRequest, ChatSessionMeta>(
+                    "illust.set_open",
+                    &aos_proto::IllustSetOpenRequest {
+                        session_id: session_id.clone(),
+                        open,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(meta) => {
+                    let _ = evt_tx.send(Evt::CanvasMeta(meta));
+                    if open {
+                        let _ = evt_tx.send(Evt::IllustGetHint { session_id });
+                    }
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::IllustError(e.to_string()));
+                }
+            }
+        }
+        Cmd::IllustGet { session_id } => {
+            match bus
+                .call::<aos_proto::IllustGetRequest, aos_proto::IllustGetResponse>(
+                    "illust.get",
+                    &aos_proto::IllustGetRequest { session_id },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::IllustDoc(resp.doc));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::IllustError(e.to_string()));
+                }
+            }
+        }
+        Cmd::IllustSetBrief { session_id, brief } => {
+            let _ = bus
+                .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
+                    "illust.lock.acquire",
+                    &aos_proto::IllustLockAcquireRequest {
+                        session_id: session_id.clone(),
+                        holder: "human:ui".into(),
+                        reason: "brief edit".into(),
+                        ttl_ms: Some(300_000),
+                    },
+                    vec![],
+                )
+                .await;
+            match bus
+                .call::<aos_proto::IllustSetBriefRequest, aos_proto::IllustrationDoc>(
+                    "illust.set_brief",
+                    &aos_proto::IllustSetBriefRequest {
+                        session_id,
+                        holder: "human:ui".into(),
+                        brief,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(doc) => {
+                    let _ = evt_tx.send(Evt::IllustDoc(doc));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::IllustError(e.to_string()));
+                }
+            }
+        }
+        Cmd::IllustExport { session_id } => {
+            let _ = bus
+                .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
+                    "illust.lock.acquire",
+                    &aos_proto::IllustLockAcquireRequest {
+                        session_id: session_id.clone(),
+                        holder: "human:ui".into(),
+                        reason: "export".into(),
+                        ttl_ms: Some(60_000),
+                    },
+                    vec![],
+                )
+                .await;
+            match bus
+                .call::<aos_proto::IllustExportRequest, serde_json::Value>(
+                    "illust.export",
+                    &aos_proto::IllustExportRequest {
+                        session_id: session_id.clone(),
+                        holder: "human:ui".into(),
+                        path: None,
+                        width: Some(1024),
+                        height: Some(1024),
+                        format: Some("png".into()),
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(v) => {
+                    let path = v
+                        .get("path")
+                        .and_then(|p| p.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let _ = evt_tx.send(Evt::IllustExported {
+                        path,
+                        message: "exported".into(),
+                    });
+                    let _ = evt_tx.send(Evt::IllustGetHint { session_id });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::IllustError(e.to_string()));
+                }
+            }
+        }
+        Cmd::IllustAnimate { session_id } => {
+            let _ = bus
+                .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
+                    "illust.lock.acquire",
+                    &aos_proto::IllustLockAcquireRequest {
+                        session_id: session_id.clone(),
+                        holder: "human:ui".into(),
+                        reason: "animate".into(),
+                        ttl_ms: Some(300_000),
+                    },
+                    vec![],
+                )
+                .await;
+            match bus
+                .call::<aos_proto::IllustAnimateRequest, aos_proto::IllustAnimateResponse>(
+                    "illust.animate",
+                    &aos_proto::IllustAnimateRequest {
+                        session_id: session_id.clone(),
+                        holder: "human:ui".into(),
+                        timeline: None,
+                        width: Some(720),
+                        path: None,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(resp) => {
+                    let _ = evt_tx.send(Evt::IllustDoc(resp.doc));
+                    let _ = evt_tx.send(Evt::IllustExported {
+                        path: resp.mp4_path.unwrap_or(resp.frames_dir),
+                        message: resp.message,
+                    });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::IllustError(e.to_string()));
+                }
+            }
+        }
+        Cmd::IllustTakeover { session_id } => {
+            match bus
+                .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
+                    "illust.lock.takeover",
+                    &aos_proto::IllustLockAcquireRequest {
+                        session_id,
+                        holder: "human:ui".into(),
+                        reason: "takeover".into(),
+                        ttl_ms: None,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(doc) => {
+                    let _ = evt_tx.send(Evt::IllustDoc(doc));
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::IllustError(e.to_string()));
                 }
             }
         }

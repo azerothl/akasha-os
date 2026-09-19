@@ -2139,10 +2139,12 @@ pub fn ui_canvas_surface(
 
 // ── Frozen routing (designer) ───────────────────────────────────────────────
 // 1. Canvas OPEN + dessine/draw/sketch → board (`canvas.*`).
-// 2. Canvas CLOSED + dessine/draw/sketch → Create (`media.image.generate`).
-// 3. Explicit phrase (dans/sur le canvas, au trait, /canvas, …) → board; opens face even if closed.
-// 4. « encore » / « vas-y » alone → not enough for canvas or face.
-// 5. Lone « canvas » → not enough.
+// 2. Illustration OPEN + dessine/draw/sketch → Illustration (`illust.*`), not Create.
+// 3. Both closed + dessine/draw/sketch → Create (`media.image.generate`).
+// 4. Explicit phrase (dans/sur le canvas, au trait, /canvas, …) → board; opens face even if closed.
+// 5. Explicit illustre / style encre|riso /anime cette scène → Illustration even if panel closed.
+// 6. « encore » / « vas-y » alone → not enough for canvas or face.
+// 7. Lone « canvas » → not enough.
 
 /// Phrases that beat Create/image routing — lone « canvas » is not enough.
 const EXPLICIT_CANVAS_MARKERS: &[&str] = &[
@@ -2218,9 +2220,17 @@ fn chat_is_canvas_followup_steal(text: &str) -> bool {
     .any(|k| trimmed == *k)
 }
 
-/// Bare draw / sketch → Image Studio only when the session canvas is closed.
-pub fn chat_user_wants_pixel_draw(text: &str, canvas_open: bool) -> bool {
-    if chat_user_wants_explicit_canvas(text) || canvas_open {
+/// Bare draw / sketch → Image Studio only when canvas and Illustration are closed.
+pub fn chat_user_wants_pixel_draw(
+    text: &str,
+    canvas_open: bool,
+    illustration_open: bool,
+) -> bool {
+    if chat_user_wants_explicit_canvas(text)
+        || canvas_open
+        || illustration_open
+        || aos_agent::tools::explicit_illust_intent(text)
+    {
         return false;
     }
     chat_user_has_draw_wording(text)
@@ -2232,6 +2242,18 @@ pub fn chat_wants_canvas_agent(text: &str, canvas_open: bool) -> bool {
         return true;
     }
     canvas_open && chat_user_has_draw_wording(text) && !chat_is_canvas_followup_steal(text)
+}
+
+/// Déléguer un agent Illustration : intent explicite, ou dessin nu avec le panneau ouvert.
+/// Explicit canvas markers always win (vector board).
+pub fn chat_wants_illust_agent(text: &str, illustration_open: bool) -> bool {
+    if chat_user_wants_explicit_canvas(text) {
+        return false;
+    }
+    if aos_agent::tools::explicit_illust_intent(text) {
+        return true;
+    }
+    illustration_open && chat_user_has_draw_wording(text) && !chat_is_canvas_followup_steal(text)
 }
 
 fn canvas_aspect_chip_labels(t: &UiStrings) -> [(&'static str, CanvasAspect); 5] {
@@ -2481,14 +2503,14 @@ mod routing_tests {
 
     #[test]
     fn bare_draw_is_pixel_not_canvas_when_closed() {
-        assert!(chat_user_wants_pixel_draw("dessine une maison", false));
+        assert!(chat_user_wants_pixel_draw("dessine une maison", false, false));
         assert!(!chat_user_wants_explicit_canvas("dessine une maison"));
         assert!(!chat_wants_canvas_agent("dessine une maison", false));
     }
 
     #[test]
     fn bare_draw_uses_canvas_when_board_open() {
-        assert!(!chat_user_wants_pixel_draw("dessine une maison", true));
+        assert!(!chat_user_wants_pixel_draw("dessine une maison", true, false));
         assert!(chat_wants_canvas_agent("dessine une maison", true));
         assert!(chat_wants_canvas_agent("dessine moi un chat", true));
     }
@@ -2503,9 +2525,9 @@ mod routing_tests {
         assert!(chat_user_wants_explicit_canvas("dessine sur le canevas"));
         assert!(chat_user_wants_explicit_canvas("ajoute au trait une porte"));
         assert!(chat_user_wants_explicit_canvas("/canvas"));
-        assert!(!chat_user_wants_pixel_draw("dessine sur le canvas", false));
-        assert!(!chat_user_wants_pixel_draw("dessine dans le canvas", false));
-        assert!(!chat_user_wants_pixel_draw("dessine sur le canvas", true));
+        assert!(!chat_user_wants_pixel_draw("dessine sur le canvas", false, false));
+        assert!(!chat_user_wants_pixel_draw("dessine dans le canvas", false, false));
+        assert!(!chat_user_wants_pixel_draw("dessine sur le canvas", true, false));
     }
 
     #[test]
@@ -2523,20 +2545,20 @@ mod routing_tests {
                 "lone or bare canvas must not route: {msg}"
             );
         }
-        assert!(chat_user_wants_pixel_draw("dessine sur canvas", false));
-        assert!(chat_user_wants_pixel_draw("draw on canvas", false));
-        assert!(!chat_user_wants_pixel_draw("dessine sur canvas", true));
+        assert!(chat_user_wants_pixel_draw("dessine sur canvas", false, false));
+        assert!(chat_user_wants_pixel_draw("draw on canvas", false, false));
+        assert!(!chat_user_wants_pixel_draw("dessine sur canvas", true, false));
     }
 
     #[test]
     fn dans_le_canvas_routes_canvas_not_image() {
         assert!(chat_wants_canvas_agent("dessine dans le canvas", false));
-        assert!(!chat_user_wants_pixel_draw("dessine dans le canvas", false));
+        assert!(!chat_user_wants_pixel_draw("dessine dans le canvas", false, false));
     }
 
     #[test]
     fn bare_dessine_still_routes_image_when_closed() {
-        assert!(chat_user_wants_pixel_draw("dessine une maison", false));
+        assert!(chat_user_wants_pixel_draw("dessine une maison", false, false));
         assert!(!chat_user_wants_explicit_canvas("dessine une maison"));
         assert!(!chat_wants_canvas_agent("dessine une maison", false));
     }
@@ -2553,7 +2575,7 @@ mod routing_tests {
 
     #[test]
     fn withdraw_does_not_match_draw() {
-        assert!(!chat_user_wants_pixel_draw("withdraw funds", false));
+        assert!(!chat_user_wants_pixel_draw("withdraw funds", false, false));
     }
 
     fn sample_agent_line(seq: u64) -> CanvasOp {
@@ -2666,12 +2688,21 @@ mod routing_tests {
         // OPEN + dessine/draw/sketch → board (canvas tools).
         for msg in ["dessine une maison", "draw a cat", "sketch a tree"] {
             assert!(chat_wants_canvas_agent(msg, true), "open board: {msg}");
-            assert!(!chat_user_wants_pixel_draw(msg, true), "open board: {msg}");
+            assert!(!chat_user_wants_pixel_draw(msg, true, false), "open board: {msg}");
         }
         // CLOSED + dessine → Create (image).
         for msg in ["dessine une maison", "draw a cat", "sketch a tree"] {
-            assert!(chat_user_wants_pixel_draw(msg, false), "closed: {msg}");
+            assert!(chat_user_wants_pixel_draw(msg, false, false), "closed: {msg}");
             assert!(!chat_wants_canvas_agent(msg, false), "closed: {msg}");
+            assert!(!chat_wants_illust_agent(msg, false), "closed not illust: {msg}");
+        }
+        // Illustration OPEN + dessine → illust, not Create.
+        for msg in ["dessine une maison", "draw a cat", "sketch a tree"] {
+            assert!(chat_wants_illust_agent(msg, true), "illust open: {msg}");
+            assert!(
+                !chat_user_wants_pixel_draw(msg, false, true),
+                "illust open not Create: {msg}"
+            );
         }
         // Explicit phrase → canvas even when closed; also opens the face.
         for msg in [
@@ -2690,7 +2721,7 @@ mod routing_tests {
                 "explicit routes canvas: {msg}"
             );
             assert!(
-                !chat_user_wants_pixel_draw(msg, false),
+                !chat_user_wants_pixel_draw(msg, false, false),
                 "explicit not image: {msg}"
             );
         }

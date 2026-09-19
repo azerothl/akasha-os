@@ -37,9 +37,9 @@ use crate::skills::load_skills;
 use crate::storage_path::{is_host_path_disallowed_outcome, post_room_host_path_notice};
 use crate::tool_exec::execute_room_tool;
 use crate::tools::{
-    canonicalize_tool_name, canvas_tools_from_module_list, caps_for_tools,
-    chat_template_tool_definitions, default_agent_tools, merge_canvas_tools, select_tools,
-    ToolDesc,
+    agent_has_illust_tools, canonicalize_illust_alias, canonicalize_tool_name,
+    canvas_tools_from_module_list, caps_for_tools, chat_template_tool_definitions,
+    default_agent_tools, merge_canvas_tools, select_illust_turn_action, select_tools, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
@@ -345,6 +345,26 @@ pub fn assemble_room_member_tools(
     installed_modules: &std::collections::HashSet<String>,
     module_tools: &[ToolDesc],
 ) -> (Vec<String>, Vec<String>) {
+    assemble_room_member_tools_ex(
+        spec,
+        canvas_open,
+        false,
+        canvas_exported,
+        user_message,
+        installed_modules,
+        module_tools,
+    )
+}
+
+pub fn assemble_room_member_tools_ex(
+    spec: &AgentSpec,
+    canvas_open: bool,
+    illustration_open: bool,
+    canvas_exported: &[String],
+    user_message: &str,
+    installed_modules: &std::collections::HashSet<String>,
+    module_tools: &[ToolDesc],
+) -> (Vec<String>, Vec<String>) {
     let spec_tools_empty = spec.tools.is_empty();
     let mut skills = spec.skills.clone();
     let mut base_tools = spec.tools.clone();
@@ -374,6 +394,12 @@ pub fn assemble_room_member_tools(
     let canvas_granted = base_tools.iter().any(|t| t.starts_with("canvas."));
     if canvas_open && (canvas_granted || spec_tools_empty) {
         merge_canvas_tools(&mut tool_ids, true, canvas_exported);
+    }
+    let illust_granted = base_tools.iter().any(|t| t.starts_with("illust."));
+    if (illustration_open || crate::tools::explicit_illust_intent(user_message))
+        && (illust_granted || spec_tools_empty || illustration_open)
+    {
+        crate::tools::merge_illust_tools(&mut tool_ids, true);
     }
     let tools = select_tools(&tool_ids, module_tools);
     let mut caps = spec.caps.clone();
@@ -899,7 +925,18 @@ async fn run_room_tool_loop(
         }
 
         let raw_for_parse = repair_room_tool_json(&raw);
-        let parsed_actions = parse_actions(&raw_for_parse);
+        let mut parsed_actions = parse_actions(&raw_for_parse);
+        if agent_has_illust_tools(tool_ids) {
+            for action in &mut parsed_actions {
+                action.action = canonicalize_illust_alias(&action.action);
+            }
+            if parsed_actions.len() > 1 {
+                let pick = select_illust_turn_action(&parsed_actions);
+                let chosen = parsed_actions.swap_remove(pick);
+                parsed_actions.clear();
+                parsed_actions.push(chosen);
+            }
+        }
         if let Some((reply, thinking)) = room_reply_from_model(&raw, parsed_actions.first()) {
             if let Some(t) = thinking.filter(|s| !s.trim().is_empty()) {
                 if !accumulated_thinking.iter().any(|p| p == &t) {
@@ -951,7 +988,12 @@ async fn run_room_tool_loop(
                 round.set_phase("waiting_user").await;
                 handle_room_user_ask(bus, round, session_id, agent_id, display_name, &action.args)
                     .await?
-            } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs) {
+            } else if !tool_in_catalog(&canonicalize_tool_name(&action.action), &tool_descs)
+                && !matches!(
+                    canonicalize_tool_name(&action.action).as_str(),
+                    "goal.complete" | "goal.fail" | "user.ask" | "noop"
+                )
+            {
                 tool_unavailable_message(&action.action, "absent du catalogue modules actif")
             } else {
                 let tool_name = canonicalize_tool_name(&action.action);
@@ -989,6 +1031,17 @@ async fn run_room_tool_loop(
                     outcome = scene.text;
                     if let Some(png) = scene.png_path {
                         pending_canvas_png = Some(png);
+                    }
+                }
+                {
+                    let illust = canonicalize_tool_name(&action.action);
+                    if matches!(
+                        illust.as_str(),
+                        "illust.render_sheet" | "illust.export"
+                    ) {
+                        if let Some(path) = capture_png_path_from_tool_result(&outcome) {
+                            pending_canvas_png = Some(path);
+                        }
                     }
                 }
                 if canonicalize_tool_name(&action.action).starts_with("device.camera") {
@@ -1048,9 +1101,10 @@ pub async fn execute_room_turn(
         .unwrap_or_default();
     let installed_modules = active_module_names(&module_list);
     let module_tools = discover_module_tools(bus).await;
-    let (tool_ids, caps) = assemble_room_member_tools(
+    let (tool_ids, caps) = assemble_room_member_tools_ex(
         &spec,
         session.meta.canvas_open,
+        session.meta.illustration_open,
         &canvas_exported,
         user_message,
         &installed_modules,
@@ -1077,6 +1131,13 @@ pub async fn execute_room_turn(
         &req.session_id,
         canvas_digest.as_deref(),
     );
+    if session.meta.illustration_open
+        || tool_descs.iter().any(|t| t.name.starts_with("illust."))
+    {
+        system.push_str("\n");
+        system.push_str(&crate::tools::illust_draw_strategy_hint());
+        system.push('\n');
+    }
     if crate::research_detect::user_requested_hardware(user_message) {
         if let Ok(hw) = bus
             .call::<aos_proto::SystemHardwareRequest, aos_proto::SystemHardwareResponse>(
@@ -1384,6 +1445,7 @@ mod tests {
                 conductor_policy: ChatRoomConductorPolicy::default(),
                 canvas_open: false,
                 canvas_aspect: aos_proto::CanvasAspect::Square,
+                illustration_open: false,
             },
             messages: vec![ChatSessionMessage {
                 role: "user".into(),

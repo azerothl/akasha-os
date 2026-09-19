@@ -34,6 +34,8 @@ pub(crate) enum Cmd {
         language: String,
         /// Session canvas panel open — enables draw/revise agent delegation.
         canvas_open: bool,
+        /// Illustration surface open — bare « dessine » routes to illust.* not Create.
+        illustration_open: bool,
         canvas_aspect: aos_proto::CanvasAspect,
         /// Composer chip: force Deep Thinking cognitive mode on delegated agents.
         deep_thinking: bool,
@@ -486,6 +488,26 @@ pub(crate) enum Cmd {
         session_id: String,
         open: bool,
     },
+    IllustSetOpen {
+        session_id: String,
+        open: bool,
+    },
+    IllustGet {
+        session_id: String,
+    },
+    IllustSetBrief {
+        session_id: String,
+        brief: aos_proto::IllustrationBrief,
+    },
+    IllustExport {
+        session_id: String,
+    },
+    IllustAnimate {
+        session_id: String,
+    },
+    IllustTakeover {
+        session_id: String,
+    },
     CanvasSetAspect {
         session_id: String,
         aspect: aos_proto::CanvasAspect,
@@ -716,6 +738,16 @@ pub(crate) enum Evt {
         path: String,
         session_id: String,
     },
+    IllustDoc(aos_proto::IllustrationDoc),
+    IllustExported {
+        path: String,
+        message: String,
+    },
+    IllustError(String),
+    /// UI hint to re-fetch illustration after open/export.
+    IllustGetHint {
+        session_id: String,
+    },
     MemHits(Vec<MemHit>),
     MemObjects(Vec<aos_proto::MemoryObject>),
     MemPalace(aos_proto::MemMindPalaceResponse),
@@ -924,6 +956,7 @@ pub(crate) struct ChatRetryTurn {
     pub(crate) routing: String,
     pub(crate) language: String,
     pub(crate) canvas_open: bool,
+    pub(crate) illustration_open: bool,
     pub(crate) canvas_aspect: aos_proto::CanvasAspect,
     pub(crate) deep_thinking: bool,
 }
@@ -943,6 +976,7 @@ impl ChatRetryTurn {
             routing: self.routing.clone(),
             language: self.language.clone(),
             canvas_open: self.canvas_open,
+            illustration_open: self.illustration_open,
             canvas_aspect: self.canvas_aspect,
             deep_thinking: self.deep_thinking,
             skip_session_append,
