@@ -302,6 +302,17 @@ impl ChatSessionStore {
         if !brief.beats.is_empty() {
             doc.brief.beats = brief.beats;
         }
+        if !brief.photo.trim().is_empty() {
+            doc.brief.photo = brief.photo;
+        }
+        if !brief.video.trim().is_empty() {
+            doc.brief.video = brief.video;
+        }
+        if brief.engine != aos_proto::IllustrationEngine::Flat {
+            doc.brief.engine = brief.engine;
+        }
+        aos_proto::apply_prompt_defaults(&mut doc.brief);
+        doc.image_run = None;
         doc.revision = doc.revision.saturating_add(1);
         self.save_illustration(&doc)?;
         Ok(doc)
@@ -313,13 +324,14 @@ impl ChatSessionStore {
         id: &str,
     ) -> Result<aos_proto::IllustrationDoc, SessionError> {
         let mut doc = self.load_illustration(id)?;
-        if doc.brief.subject.trim().is_empty() {
+        if doc.brief.subject.trim().is_empty() || doc.image_run.is_some() {
             return Ok(doc);
         }
         let mut spec = doc.spec.take().unwrap_or_default();
         spec.brief = doc.brief.clone();
         aos_proto::enrich_illustration_puppet(&mut spec);
         doc.spec = Some(spec);
+        doc.image_run = None;
         doc.revision = doc.revision.saturating_add(1);
         self.save_illustration(&doc)?;
         Ok(doc)
@@ -343,6 +355,8 @@ impl ChatSessionStore {
         } else {
             spec.brief = doc.brief.clone();
         }
+        aos_proto::apply_prompt_defaults(&mut spec.brief);
+        doc.brief = spec.brief.clone();
         for (i, part) in spec.parts.iter_mut().enumerate() {
             if part.id.trim().is_empty() {
                 part.id = if part.role.trim().is_empty() {
@@ -364,6 +378,7 @@ impl ChatSessionStore {
         aos_proto::enrich_illustration_puppet(&mut spec);
         doc.spec = Some(spec);
         doc.revision = doc.revision.saturating_add(1);
+        doc.image_run = None;
         self.save_illustration(&doc)?;
         let mut meta = self.load_meta(id)?;
         if !meta.illustration_open {
@@ -391,6 +406,119 @@ impl ChatSessionStore {
         if let Some(p) = mp4 {
             doc.last_mp4 = Some(p);
         }
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_publish_pass(
+        &self,
+        id: &str,
+        phase: aos_proto::IllustrationConstructionPhase,
+        revision: u64,
+        path: String,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        if !doc.pass_previews.iter().any(|(_, _, existing)| existing == &path) {
+            doc.pass_previews.push((phase, revision, path.clone()));
+        }
+        // A slower render must not replace the preview of a newer composition.
+        if doc.revision == revision {
+            doc.last_png = Some(path);
+        }
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_begin_image_run(
+        &self, id: &str, holder: &str, run_id: String, editing: bool, frame_subject: Option<String>, seed: u32, pose_reference_png: Option<String>,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        Self::require_illust_lock(&doc, holder)?;
+        if doc.brief.subject.trim().is_empty() {
+            return Err(SessionError::BadRequest("brief.subject requis".into()));
+        }
+        doc.revision = doc.revision.saturating_add(1);
+        doc.spec = None; // Raster passes must never trigger procedural enrichment.
+        if !editing { doc.last_png = None; }
+        doc.last_sheet_png = None;
+        doc.last_model_sheet_png = None;
+        doc.last_mp4 = None;
+        let seed = if editing {
+            doc.image_run.as_ref().and_then(|r| r.seed).unwrap_or(42)
+        } else { seed };
+        let frame_subject = if editing {
+            doc.image_run.as_ref().and_then(|r| r.frame_subject.clone())
+        } else { frame_subject };
+        let pose_reference_png = if editing {
+            doc.image_run.as_ref().and_then(|r| r.pose_reference_png.clone())
+        } else { pose_reference_png };
+        doc.image_run = Some(aos_proto::IllustrationImageRun {
+            id: run_id, source_revision: doc.revision,
+            phase: if editing { aos_proto::IllustrationConstructionPhase::Final } else { aos_proto::IllustrationConstructionPhase::Skeleton },
+            status: aos_proto::IllustrationImageStatus::Running, error: None,
+            source_png: if editing { doc.last_png.clone() } else { None },
+            candidate_png: None, candidate_selected: None,
+            frame_subject, seed: Some(seed), pose_reference_png,
+        });
+        self.save_illustration(&doc)?;
+        let mut meta = self.load_meta(id)?;
+        meta.illustration_open = true;
+        self.save_meta(&meta)?;
+        Ok(doc)
+    }
+
+    /// CAS publication: a late image may not overwrite a new brief/composition.
+    pub fn illustration_update_image_run(
+        &self, id: &str, run_id: &str, revision: u64,
+        phase: aos_proto::IllustrationConstructionPhase,
+        path: Option<String>, status: aos_proto::IllustrationImageStatus,
+        error: Option<String>,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        if doc.revision != revision || !doc.image_run.as_ref().is_some_and(|r|
+            r.id == run_id && r.source_revision == revision && r.status == aos_proto::IllustrationImageStatus::Running) {
+            return Err(SessionError::BadRequest("génération illustration remplacée ou terminée".into()));
+        }
+        if let Some(path) = path {
+            doc.pass_previews.push((phase, revision, path.clone()));
+            if doc.image_run.as_ref().unwrap().source_png.is_some() {
+                doc.image_run.as_mut().unwrap().candidate_png = Some(path);
+            } else {
+                doc.last_png = Some(path);
+            }
+        }
+        let run = doc.image_run.as_mut().unwrap();
+        run.phase = phase;
+        run.status = status;
+        run.error = error;
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_resolve_image(
+        &self, id: &str, holder: &str, run_id: &str, keep_candidate: bool,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        Self::require_illust_lock(&doc, holder)?;
+        let run = doc.image_run.as_mut().ok_or_else(|| SessionError::BadRequest("aucune retouche".into()))?;
+        if run.id != run_id || run.source_revision != doc.revision || run.status != aos_proto::IllustrationImageStatus::NeedsReview {
+            return Err(SessionError::BadRequest("retouche remplacée ou non terminée".into()));
+        }
+        let source = run.source_png.as_ref().ok_or_else(|| SessionError::BadRequest("pas d'image source de retouche".into()))?;
+        let candidate = run.candidate_png.as_ref().ok_or_else(|| SessionError::BadRequest("retouche absente".into()))?;
+        doc.last_png = Some(if keep_candidate { candidate } else { source }.clone());
+        run.candidate_selected = Some(keep_candidate);
+        self.save_illustration(&doc)?;
+        Ok(doc)
+    }
+
+    pub fn illustration_set_model_sheet_path(
+        &self,
+        id: &str,
+        path: String,
+    ) -> Result<aos_proto::IllustrationDoc, SessionError> {
+        let mut doc = self.load_illustration(id)?;
+        doc.last_model_sheet_png = Some(path);
         self.save_illustration(&doc)?;
         Ok(doc)
     }
@@ -1515,6 +1643,84 @@ fn restyle_op_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn illustration_pass_history_preserves_current_revision() {
+        use aos_proto::IllustrationConstructionPhase as Phase;
+        let dir = std::env::temp_dir().join(format!("aos-pass-history-{}-{}",
+            std::process::id(), ChatSessionStore::now_ms()));
+        let store = ChatSessionStore::open(&dir).unwrap();
+        let meta = store.create(Some("passes".into()), None).unwrap();
+        let mut doc = store.load_illustration(&meta.id).unwrap();
+        doc.revision = 2;
+        store.save_illustration(&doc).unwrap();
+        store.illustration_publish_pass(&meta.id, Phase::Volumes, 2, "/downloads/new.png".into()).unwrap();
+        store.illustration_publish_pass(&meta.id, Phase::Skeleton, 1, "/downloads/old.png".into()).unwrap();
+        store.illustration_publish_pass(&meta.id, Phase::Skeleton, 1, "/downloads/old.png".into()).unwrap();
+        let reloaded = store.load_illustration(&meta.id).unwrap();
+        assert_eq!(reloaded.last_png.as_deref(), Some("/downloads/new.png"));
+        assert_eq!(reloaded.pass_previews.len(), 2);
+        assert_eq!(reloaded.pass_previews[1].0, Phase::Skeleton);
+    }
+
+    #[test]
+    fn illustration_image_run_rejects_stale_and_terminal_publications() {
+        use aos_proto::{IllustrationConstructionPhase as Phase, IllustrationImageStatus as Status};
+        let dir = std::env::temp_dir().join(format!("aos-image-run-{}", rand::random::<u64>()));
+        let store = ChatSessionStore::open(&dir).unwrap();
+        let meta = store.create(Some("image passes".into()), None).unwrap();
+        let mut doc = store.load_illustration(&meta.id).unwrap();
+        doc.brief.subject = "a sleeping cat".into();
+        doc.lock = Some(aos_proto::IllustrationLock {
+            holder: "test".into(), expires_ms: ChatSessionStore::now_ms_u64() + 60000, reason: "test".into(),
+        });
+        store.save_illustration(&doc).unwrap();
+        let started = store.illustration_begin_image_run(&meta.id, "test", "first".into(), false, Some("one sleeping cat".into()), 7, Some("/downloads/illustration/first-pose.png".into())).unwrap();
+        assert_eq!(started.image_run.as_ref().unwrap().seed, Some(7));
+        assert!(started.spec.is_none());
+        assert!(store.illustration_get(&meta.id).unwrap().0.illustration_open);
+        let rev = started.revision;
+        store.illustration_update_image_run(&meta.id, "first", rev, Phase::Skeleton,
+            Some("/downloads/pose.png".into()), Status::Running, None).unwrap();
+        let preserved = store.illustration_ensure_composed(&meta.id).unwrap();
+        assert!(preserved.spec.is_none());
+        assert_eq!(preserved.revision, rev);
+        store.illustration_update_image_run(&meta.id, "first", rev, Phase::Final,
+            Some("/downloads/final.png".into()), Status::NeedsReview, None).unwrap();
+        assert!(store.illustration_update_image_run(&meta.id, "first", rev, Phase::Volumes,
+            Some("/downloads/late.png".into()), Status::Running, None).is_err());
+        let editing = store.illustration_begin_image_run(&meta.id, "test", "edit".into(), true, None, 123, None).unwrap();
+        assert_eq!(editing.image_run.as_ref().unwrap().pose_reference_png.as_deref(), Some("/downloads/illustration/first-pose.png"));
+        assert_eq!(editing.image_run.as_ref().unwrap().seed, Some(7));
+        assert_eq!(editing.image_run.as_ref().unwrap().frame_subject.as_deref(), Some("one sleeping cat"));
+        assert_eq!(editing.brief.subject, "a sleeping cat");
+        assert_eq!(editing.last_png.as_deref(), Some("/downloads/final.png"));
+        assert_eq!(editing.pass_previews.len(), 2);
+        assert_eq!(editing.image_run.as_ref().unwrap().phase, Phase::Final);
+        assert!(store.illustration_resolve_image(&meta.id, "test", "edit", true).is_err());
+        let candidate = store.illustration_update_image_run(&meta.id, "edit", editing.revision,
+            Phase::Final, Some("/downloads/candidate.png".into()), Status::NeedsReview, None).unwrap();
+        assert_eq!(candidate.last_png.as_deref(), Some("/downloads/final.png"));
+        assert_eq!(candidate.image_run.as_ref().unwrap().candidate_png.as_deref(), Some("/downloads/candidate.png"));
+        assert!(store.illustration_resolve_image(&meta.id, "intruder", "edit", true).is_err());
+        assert!(store.illustration_resolve_image(&meta.id, "test", "first", true).is_err());
+        let rejected = store.illustration_resolve_image(&meta.id, "test", "edit", false).unwrap();
+        assert_eq!(rejected.last_png.as_deref(), Some("/downloads/final.png"));
+        assert_eq!(rejected.image_run.as_ref().unwrap().candidate_selected, Some(false));
+        let accepted = store.illustration_resolve_image(&meta.id, "test", "edit", true).unwrap();
+        assert_eq!(accepted.last_png.as_deref(), Some("/downloads/candidate.png"));
+        assert_eq!(store.load_illustration(&meta.id).unwrap().last_png, accepted.last_png);
+        let next = store.illustration_begin_image_run(&meta.id, "test", "second".into(), false, None, 123, None).unwrap();
+        assert!(next.image_run.as_ref().unwrap().pose_reference_png.is_none());
+        assert_eq!(next.image_run.as_ref().unwrap().seed, Some(123));
+        assert!(next.last_png.is_none());
+        assert!(store.illustration_resolve_image(&meta.id, "test", "edit", true).is_err());
+        assert!(store.illustration_update_image_run(&meta.id, "first", rev, Phase::Final,
+            None, Status::Failed, Some("old error".into())).is_err());
+        let reloaded = store.load_illustration(&meta.id).unwrap();
+        assert_eq!(reloaded.image_run.unwrap().id, "second");
+        assert_eq!(reloaded.pass_previews.len(), 3);
+    }
 
     #[test]
     fn upsert_deep_plan_updates_in_place() {

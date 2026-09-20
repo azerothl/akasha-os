@@ -103,6 +103,8 @@ pub struct ModelRuntime {
     pub profile: PlacementProfile,
     pub model: Option<Arc<LlamaModel>>,
     pub ctx: Option<Arc<StdMutex<LlamaContext>>>,
+    /// Confirmed by the configured provider, never inferred from its model name.
+    remote_has_vision: bool,
     pub ctx_abort: Option<Arc<AtomicBool>>,
     /// Inférences dans le batch GPU courant.
     pub active: u32,
@@ -145,6 +147,7 @@ impl ModelRuntime {
             profile: PlacementProfile::Balanced,
             model: None,
             ctx: None,
+            remote_has_vision: false,
             ctx_abort: None,
             active: 0,
             pending: 0,
@@ -350,7 +353,7 @@ impl ModelSubsystem {
     }
 
     fn info_of(rt: &ModelRuntime) -> ModelInfo {
-        let has_vision = rt
+        let has_vision = (matches!(rt.state, ModelState::Remote) && rt.remote_has_vision) || rt
             .ctx
             .as_ref()
             .is_some_and(|ctx| ctx.lock().unwrap().has_vision());
@@ -2365,6 +2368,7 @@ impl ModelSubsystem {
         g.remote_backends.insert(model_id.into(), backend);
         if let Some(m) = g.models.get_mut(model_id) {
             m.state = ModelState::Remote;
+            m.remote_has_vision = false;
         } else {
             let desc = ModelDesc {
                 id: model_id.to_string(),
@@ -2392,6 +2396,21 @@ impl ModelSubsystem {
         if model_id.starts_with("remote:") || model_id.starts_with("provider:") {
             g.models.remove(model_id);
         }
+    }
+
+    pub fn set_remote_vision(&self, model_id: &str, supported: bool) {
+        let mut g = self.inner.lock().unwrap();
+        if let Some(model) = g.models.get_mut(model_id) {
+            if matches!(model.state, ModelState::Remote) {
+                model.remote_has_vision = supported;
+            }
+        }
+    }
+
+    pub fn enable_transient_ollama(&self, model_id: &str) -> Result<(), String> {
+        self.inner.lock().unwrap().remote_backends.get_mut(model_id)
+            .ok_or_else(|| "provider absent".to_string())?
+            .enable_transient_ollama().map_err(|e| e.to_string())
     }
 
     pub fn remove_provider_models(&self, provider_id: &str) {
@@ -2640,7 +2659,7 @@ fn should_use_vision_infer(has_vision: bool, images: &[String]) -> bool {
     has_vision && !images.is_empty()
 }
 
-fn resolve_infer_image_path(raw: &str) -> String {
+pub(crate) fn resolve_infer_image_path(raw: &str) -> String {
     let direct = std::path::Path::new(raw);
     if direct.is_file() {
         return raw.to_string();

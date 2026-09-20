@@ -12,6 +12,7 @@ aos-ipc = { path = "../aos-ipc" }
 aos-llama = { path = "../aos-llama", optional = true, default-features = false }
 aos-placement = { path = "../aos-placement" }
 aos-proto = { path = "../aos-proto" }
+aos-sd = { path = "../aos-sd" }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
@@ -24,7 +25,7 @@ hmac = "0.12"
 base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
 url = "2"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 printpdf = "0.7"
 chacha20poly1305 = "0.10"
 rand = "0.8"

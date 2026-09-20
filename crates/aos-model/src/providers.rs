@@ -81,13 +81,32 @@ fn sanitize(id: &str) -> String {
 }
 
 pub fn endpoint_is_loopback(endpoint: &str) -> bool {
-    let host = endpoint
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .split(['/', ':'])
-        .next()
-        .unwrap_or("");
-    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
+    reqwest::Url::parse(endpoint).ok().is_some_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && url.username().is_empty() && url.password().is_none()
+            && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1" | "[::1]"))
+    })
+}
+
+/// Query only explicitly configured local Ollama providers; no model-name guesses,
+/// remote discovery, model download, or inference is performed here.
+async fn ollama_model_has_vision(p: &ProviderRecord, model: &str) -> bool {
+    if !matches!(p.preset.as_str(), "ollama" | "ollama-transient") || !endpoint_is_loopback(&p.endpoint) {
+        return false;
+    }
+    let Ok(mut url) = reqwest::Url::parse(&p.endpoint) else { return false; };
+    if url.path().trim_end_matches('/') != "/v1" { return false; }
+    url.set_path("/api/show");
+    url.set_query(None);
+    url.set_fragment(None);
+    let Ok(client) = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(3)).build() else { return false; };
+    let Ok(response) = client.post(url).json(&serde_json::json!({"model":model})).send().await else { return false; };
+    if !response.status().is_success() { return false; }
+    let Ok(body) = response.json::<serde_json::Value>().await else { return false; };
+    body.get("capabilities").and_then(|v| v.as_array())
+        .is_some_and(|caps| caps.iter().any(|v| v.as_str() == Some("vision")))
 }
 
 pub async fn fetch_provider_secret(bus: &aos_ipc::BusClient, name: Option<&str>) -> Option<String> {
@@ -118,6 +137,14 @@ pub async fn apply_provider_models(
     for m in models {
         let id = format!("provider:{}:{}", p.id, m);
         sub.add_remote_backend(&id, &p.endpoint, &m, key.clone());
+        if p.preset == "ollama-transient" {
+            if let Err(error) = sub.enable_transient_ollama(&id) {
+                eprintln!("[providers] profil temporaire refusé : {error}");
+                sub.remove_remote_backend(&id);
+                continue;
+            }
+        }
+        sub.set_remote_vision(&id, ollama_model_has_vision(p, &m).await);
     }
 }
 
@@ -148,6 +175,10 @@ mod tests {
     fn loopback_presets() {
         assert!(endpoint_is_loopback("http://127.0.0.1:11434/v1"));
         assert!(!endpoint_is_loopback("https://api.openai.com/v1"));
+        assert!(endpoint_is_loopback("http://[::1]:11434/v1"));
+        assert!(!endpoint_is_loopback("http://localhost:password@example.com/v1"));
+        assert!(!endpoint_is_loopback("http://127.0.0.1.example.com/v1"));
+        assert!(!endpoint_is_loopback("file://localhost/v1"));
     }
 
     #[test]

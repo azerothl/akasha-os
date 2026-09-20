@@ -11,6 +11,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 
+pub mod illustration;
+
 static MEDIA_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Error)]
@@ -221,6 +223,9 @@ pub struct ImageGenOpts {
     pub audio_vae_path: Option<PathBuf>,
     /// Host path for sd.cpp `--init-img` (img2img).
     pub init_image_path: Option<PathBuf>,
+    /// Editing-model references (`-r`), distinct from img2img initialization.
+    /// The backend selects the reference encoding for the loaded architecture.
+    pub reference_image_paths: Vec<PathBuf>,
     /// sd.cpp `--end-img` final frame (FL2V-capable video models).
     pub end_image_path: Option<PathBuf>,
     /// sd.cpp `--strength` (0..=1) when `init_image_path` is set.
@@ -270,6 +275,7 @@ impl Default for ImageGenOpts {
             init_image_path: None,
             end_image_path: None,
             strength: None,
+            reference_image_paths: Vec::new(),
             mask_image_path: None,
         }
     }
@@ -543,6 +549,10 @@ fn collect_image_args(
             }
         }
     }
+    for p in &opts.reference_image_paths {
+        a.push("-r".into());
+        a.push(p.to_string_lossy().into_owned());
+    }
     if let Some(p) = &opts.init_image_path {
         if p.exists() {
             a.push("--init-img".into());
@@ -600,6 +610,46 @@ pub fn generate_image_opts_progress<F>(
 where
     F: FnMut(u32, u32) + Send + 'static,
 {
+    generate_image_with_policy(weights, prompt, dest, opts, on_progress, true)
+}
+
+/// Real generation only. Intended for workflows whose output is presented as
+/// artwork, where a missing backend must never become a successful placeholder.
+pub fn generate_image_strict_progress<F>(
+    weights: &Path,
+    prompt: &str,
+    dest: &Path,
+    opts: &ImageGenOpts,
+    on_progress: F,
+) -> Result<MediaEngine, MediaError>
+where F: FnMut(u32, u32) + Send + 'static {
+    generate_image_with_policy(weights, prompt, dest, opts, on_progress, false)
+}
+
+fn generate_image_with_policy<F>(
+    weights: &Path,
+    prompt: &str,
+    dest: &Path,
+    opts: &ImageGenOpts,
+    on_progress: F,
+    allow_stub: bool,
+) -> Result<MediaEngine, MediaError>
+where F: FnMut(u32, u32) + Send + 'static {
+    // Never silently turn a guided edit into an unrelated text-to-image job.
+    for path in opts.reference_image_paths.iter().chain(opts.init_image_path.iter()) {
+        if !path.is_file() {
+            return Err(MediaError::EngineFailed {
+                engine: "sd.cpp".into(),
+                detail: format!("guidance image missing: {}", path.display()),
+            });
+        }
+    }
+    let unavailable = stub_forced() || look_image_bin().is_none() || !weights.is_file();
+    if unavailable && !allow_stub {
+        return Err(MediaError::EngineMissing(
+            "real image generation requires sd.cpp, model weights and AOS_MEDIA_STUB disabled".into()
+        ));
+    }
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -608,7 +658,7 @@ where
         _ => prompt.to_string(),
     };
     let (prompt, lora_model_dir) = prepare_lora_prompt(prompt, opts);
-    if stub_forced() || look_image_bin().is_none() || !weights.exists() {
+    if unavailable {
         std::fs::write(dest, visible_stub_png(&prompt))?;
         return Ok(MediaEngine::Stub);
     }
@@ -978,6 +1028,40 @@ mod tests {
     use std::sync::Mutex;
 
     static MEDIA_STUB_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn editing_references_are_not_img2img_initializers() {
+        let opts = ImageGenOpts {
+            reference_image_paths: vec![PathBuf::from("previous pass.png"), PathBuf::from("pose.png")],
+            ..Default::default()
+        };
+        let args = collect_image_args(Path::new("model.gguf"), "refine", Path::new("out.png"), &opts, None);
+        assert_eq!(args.iter().filter(|arg| arg.as_str() == "-r").count(), 2);
+        assert!(args.windows(2).any(|pair| pair == ["-r", "previous pass.png"]));
+        assert!(!args.iter().any(|arg| arg == "--init-img" || arg == "--strength"));
+    }
+
+    #[test]
+    fn missing_reference_fails_before_generation() {
+        let missing = std::env::temp_dir().join(format!("missing-reference-{}-{}.png", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let opts = ImageGenOpts { reference_image_paths: vec![missing], ..Default::default() };
+        let result = generate_image_strict_progress(Path::new("missing.gguf"), "refine",
+            Path::new("unused-output.png"), &opts, |_, _| {});
+        assert!(matches!(result, Err(MediaError::EngineFailed { detail, .. }) if detail.contains("guidance image missing")));
+    }
+
+    #[test]
+    fn strict_generation_never_writes_placeholder_for_missing_weights() {
+        let dir = std::env::temp_dir().join(format!("aos-strict-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let dest = dir.join("art.png");
+        let result = generate_image_strict_progress(&dir.join("missing.gguf"), "a gardener",
+            &dest, &ImageGenOpts::default(), |_, _| {});
+        assert!(matches!(result, Err(MediaError::EngineMissing(_))));
+        assert!(!dest.exists());
+        assert!(!dir.exists());
+    }
 
     #[test]
     fn stub_png_est_un_png() {

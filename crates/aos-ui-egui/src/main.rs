@@ -3213,12 +3213,24 @@ impl eframe::App for UiApp {
                     self.apply_illust_doc(doc);
                 }
                 Evt::IllustExported { path, message } => {
-                    self.status = format!("{message}: {path}");
+                    if self.illust_ui.animate_busy {
+                        self.illust_ui.animate_busy = false;
+                        let notice = if path.is_empty() {
+                            message
+                        } else {
+                            format!("{message}\n{path}")
+                        };
+                        self.status = notice.clone();
+                        self.illust_ui.animate_notice = notice;
+                    } else {
+                        self.status = format!("{message}: {path}");
+                    }
                     if let Some(sid) = self.chat_state.active_session.clone() {
                         let _ = self.cmd_tx.send(Cmd::IllustGet { session_id: sid });
                     }
                 }
                 Evt::IllustError(e) => {
+                    self.illust_ui.animate_busy = false;
                     self.illust_ui.last_error = e;
                 }
                 Evt::IllustGetHint { session_id } => {
@@ -3677,6 +3689,7 @@ impl eframe::App for UiApp {
         });
 
         self.ui_notifications_popup(ctx, &t);
+        self.ui_illust_animate_popups(ctx, &t);
 
         let show_sidebar = matches!(
             self.prefs.ui_presentation,

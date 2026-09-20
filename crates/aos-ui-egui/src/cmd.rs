@@ -502,8 +502,14 @@ pub(crate) enum Cmd {
     IllustExport {
         session_id: String,
     },
+    IllustResolveImage {
+        session_id: String,
+        run_id: String,
+        keep_candidate: bool,
+    },
     IllustAnimate {
         session_id: String,
+        duration_s: f32,
     },
     IllustTakeover {
         session_id: String,

@@ -2990,6 +2990,56 @@ async fn main() {
     }
     {
         let s = sub.clone();
+        svc.on("illust.resolve_image", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<aos_proto::IllustResolveImageRequest>() {
+                    Ok(req) => {
+                        let result = s.sessions.lock().unwrap().illustration_resolve_image(
+                            &req.session_id, &req.holder, &req.run_id, req.keep_candidate,
+                        );
+                        match result {
+                            Ok(doc) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await; }
+                            Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string()).await; }
+                        }
+                    }
+                    Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string()).await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.refine_image", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustRefineImageRequest>() {
+                    Ok(req) => match aos_platform::illustration_image::refine(s, req) {
+                        Ok(doc) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await; }
+                        Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                    },
+                    Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string()).await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on("illust.generate_image", move |ctx| {
+            let s = s.clone();
+            async move {
+                match ctx.payload::<IllustGenerateImageRequest>() {
+                    Ok(req) => match aos_platform::illustration_image::start(s, req) {
+                        Ok(doc) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &doc).await; }
+                        Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e).await; }
+                    },
+                    Err(e) => { let _ = ctx.respond_error(aos_ipc::msg::Status::BadRequest, &e.to_string()).await; }
+                }
+            }
+        });
+    }
+    {
+        let s = sub.clone();
         svc.on("illust.compose", move |ctx| {
             let s = s.clone();
             async move {
@@ -3140,11 +3190,12 @@ async fn main() {
             async move {
                 match ctx.payload::<IllustAnimateRequest>() {
                     Ok(req) => {
-                        match aos_platform::illustration_service::animate(
+                            match aos_platform::illustration_service::animate(
                             &s,
                             &req.session_id,
                             &req.holder,
                             req.timeline,
+                            req.duration_s,
                             req.width,
                             req.path,
                         ) {
@@ -5060,7 +5111,14 @@ async fn main() {
             async move {
                 match ctx.payload::<FsClassRequest>() {
                     Ok(req) => {
-                        let class = s.fs.lock().unwrap().class_of(&req.path).unwrap_or_default();
+                        let class = s.fs.lock().unwrap().class_of(&req.path);
+                        let Some(class) = class else {
+                            let _ = ctx.respond_error(
+                                aos_ipc::msg::Status::NotFound,
+                                "classification inconnue : chemin absent de l'index",
+                            ).await;
+                            return;
+                        };
                         let _ = ctx
                             .respond(
                                 aos_ipc::msg::Status::Ok,

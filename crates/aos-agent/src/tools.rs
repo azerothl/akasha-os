@@ -1211,7 +1211,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.set_brief",
-            "Fixer subject/look/palette/anchor avant compose. look: ink|riso|screen|pencil|blueprint. palette: paperInk|risoPop|screenSea|pencilMinimal|blueprintNight (jamais de hex libres).",
+            "Fixer subject/look/palette/anchor avant compose. look: ink|riso|screen|pencil|blueprint|doodle. engine: laisser flat. sand, paper ou found seulement si l'utilisateur demande du sable, un livre pop-up, ou une vidéo. Ne jamais mettre paper pour un chat ou un dessin.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1220,10 +1220,13 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
                         "type":"object",
                         "properties":{
                             "subject":{"type":"string"},
-                            "look":{"type":"string","enum":["ink","riso","screen","pencil","blueprint"]},
+                            "look":{"type":"string","enum":["ink","riso","screen","pencil","blueprint","doodle"]},
                             "palette":{"type":"string","enum":["paperInk","risoPop","screenSea","pencilMinimal","blueprintNight"]},
                             "anchor":{"type":"string"},
-                            "beats":{"type":"array","items":{"type":"string"}}
+                            "beats":{"type":"array","items":{"type":"string"}},
+                            "engine":{"type":"string","enum":["flat","sand","paper","found"]},
+                            "photo":{"type":"string","description":"chemin local pour le look doodle"},
+                            "video":{"type":"string","description":"refusé: pas de traceur rotoscope"}
                         },
                         "required":["subject"]
                     },
@@ -1236,8 +1239,29 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
             }),
         ),
         (
+            "illust.resolve_image",
+            "Après comparaison visuelle de image_run.source_png et image_run.candidate_png, choisir la retouche (keep_candidate=true) ou conserver l'original (false). Fournir l'id courant image_run.id comme run_id. Obligatoire avant export ou nouvelle retouche. Cette sélection ne constitue pas une validation artistique.",
+            serde_json::json!({"type":"object","properties":{
+                "session_id":sid(),"run_id":{"type":"string"},"keep_candidate":{"type":"boolean"}},"required":["run_id","keep_candidate"]}),
+        ),
+        (
+            "illust.refine_image",
+            "Retouche le dernier rendu image terminé. Après inspection visuelle, décris une correction précise dans correction (anatomie, contact, repères résiduels, détail manquant). Conserve le sujet et la composition. Exécution en arrière-plan; illust.get expose le nouveau résultat, l'historique et l'état. Ne pas appeler pendant running. needs_review ne vaut pas approbation artistique.",
+            serde_json::json!({"type":"object","properties":{
+                "session_id":sid(),"correction":{"type":"string"}},"required":["correction"]}),
+        ),
+        (
+            "illust.generate_image",
+            "Lance les passes de dessin par moteur d'édition local en arrière-plan. Après set_brief, fournis construction : description concise de la pose, de l'espèce, du cadrage, des appuis et des relations spatiales; pas de vêtements, visage, texture ou couleur à ce stade. Chaque passe reprend l'image précédente et devient visible dans Illustration. Consulte illust.get pour suivre image_run; ne relance pas tant que running. needs_review signifie terminé mais NON validé visuellement. Aucun fallback en formes procédurales si le moteur est absent.",
+            serde_json::json!({"type":"object","properties":{
+                "session_id":sid(),"seed":{"type":"integer","minimum":0,"maximum":u32::MAX,"description":"Optionnel : graine à reproduire. Omettre pour une nouvelle variante; image_run.seed conserve la valeur utilisée. Une nouvelle variante ne garantit pas une amélioration."},
+                "pose_reference_png":{"type":"string","description":"Optionnel : chemin existant d'un guide de pose PNG dans /downloads Akasha, maximum 2048x2048 et 16 Mio. Inspecter le guide et vérifier son adéquation au sujet avant utilisation. Guide la première passe seulement; ce n'est pas une garantie anatomique. Ne jamais inventer un chemin ni fournir un chemin du système hôte."},
+                "construction":{"type":"string","description":"Pose, espèce, masses et relations spatiales de l'image-clé. Préciser les rapports de taille plausibles entre sujets et mobilier, les appuis, les occlusions et la surface de contact exacte. Pour un mouvement vers un support, décrire la phase du geste, la direction du centre de masse et la proximité des points de contact avec la surface cible; éviter une pose suspendue sans interaction lisible. Reporter ces contraintes dans frame_subject."},
+                "frame_subject":{"type":"string","description":"Description complète de l'unique image-clé représentée : sujets et leur nombre, détails distinctifs, style et une seule action. Pour une demande séquentielle, omettre les actions précédentes/suivantes plutôt que demander de les ignorer. La construction doit représenter ce même instant. La demande originale reste intacte dans brief.subject; cette image ne vaut pas animation complète."}},"required":["construction","frame_subject"]}),
+        ),
+        (
             "illust.compose",
-            "Composer une IllustrationSpec puppet (6–8 parts qui se chevauchent : body+head+ears+eyes, plus décor). Coords 0..1. Préférer ellipse|rect. Succès = last_png — enchaîner review/export.",
+            "Publie une passe réelle de dessin et son aperçu last_png. Utilise construction_phase dans l'ordre skeleton, volumes, contours, details, final. Chaque spec remplace la précédente : conserve les données des passes déjà construites. Pose et proportions dans skeleton, masses dans volumes, contours visibles dans contours, habillage dans details. Pour final, assemble explicitement parts avec les chevauchements corrects. Coordonnées normalisées 0..1 ; x/y est le coin haut-gauche pour ellipse/rect. Maintiens contacts, proportions, orientation et identité entre les passes. Une construction explicite est préservée par le moteur. Après le rendu final : render_sheet puis review/export. Le score de review est structurel, pas une mesure de qualité artistique.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1267,6 +1291,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
                                                 "h":{"type":"number"},
                                                 "points":{
                                                     "type":"array",
+                                                    "minItems":8,
                                                     "items":{
                                                         "type":"object",
                                                         "properties":{"x":{"type":"number"},"y":{"type":"number"}},
@@ -1279,7 +1304,44 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
                                     },
                                     "required":["id","role","geometry"]
                                 }
-                            }
+                            },
+                            "key_drawings":{
+                                "type":"array",
+                                "description":"Dessins complets de remplacement, un par beat nommé; chaque dessin contient tous ses parts et conserve ses chevauchements.",
+                                "items":{
+                                    "type":"object",
+                                    "properties":{
+                                        "id":{"type":"string"},
+                                        "pose":{"type":"object"},
+                                        "parts":{"type":"array"}
+                                    },
+                                    "required":["id","parts"]
+                                }
+                            },
+                            "construction":{
+                                "type":"object",
+                                "description":"Plan multi-passes : ligne d'action, point focal, valeurs, orientation, silhouette et model sheet.",
+                                "properties":{
+                                    "archetype":{"type":"string"},
+                                    "passes":{"type":"array","items":{"type":"string"}},
+                                    "must_read":{"type":"array","items":{"type":"string"}},
+                                    "relations":{"type":"array","items":{"type":"string"}},
+                                    "action_line":{"type":"string"},
+                                    "focal_point":{"type":"string"},
+                                    "value_groups":{"type":"array","items":{"type":"string"}},
+                                    "head_orientation":{"type":"string"},
+                                    "silhouette_test":{"type":"boolean"},
+                                    "model_sheet":{"type":"array","items":{"type":"string"}},
+                                    "material_pass":{"type":"string"}
+                                }
+                            },
+                            "construction_phase":{"type":"string","enum":["skeleton","volumes","contours","details","final"]},
+                            "skeleton":{"type":"array","description":"Articulations et relations parent/enfant de la pose.","items":{"type":"object"}},
+                            "contacts":{"type":"object","description":"Contacts nommés : [racine, articulation intermédiaire, extrémité, cible]. Exemple prise_pipe:[epaule,coude,main,prise_pipe]. Ajouter la cible au skeleton. Le moteur conserve les longueurs, ajuste le coude et place la main sur la cible avant de résoudre joint_bindings. Racines et cibles fixes, chaînes indépendantes ; une cible hors de portée produit une erreur à corriger.","additionalProperties":{"type":"array","items":{"type":"string"},"minItems":4,"maxItems":4}},
+                            "joint_bindings":{"type":"object","description":"Associe un id de path ou volume à [articulation origine, articulation axe]. Coordonnées locales : (0,0)=origine, (1,0)=axe, y perpendiculaire en longueurs du segment. Applicable à parts, contours, details et volumes (x/y/w/h locaux, rotation relative en radians). Attacher masses, manches et détails aux mêmes articulations pour suivre la pose.","additionalProperties":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":2}},
+                            "volumes":{"type":"array","description":"Volumes simples avant contour.","items":{"type":"object"}},
+                            "contours":{"type":"array","description":"Contours principaux issus des volumes.","items":{"type":"object"}},
+                            "details":{"type":"array","description":"Détails identitaires appliqués après la silhouette.","items":{"type":"object"}}
                         },
                         "required":["parts"]
                     }
@@ -1289,7 +1351,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.render_sheet",
-            "Rendre la planche style (sujet @0.6/1/1.8 + swatches) → PNG sous /downloads/canvas",
+            "Rendre la planche style (sujet @0.6/1/1.8 + swatches) et la model sheet (face/profil/3-4/dos/expression/pose) → PNG sous /downloads/illustration",
             serde_json::json!({"type":"object","properties":{"session_id":sid(),"width":{"type":"integer"}}}),
         ),
         (
@@ -1299,7 +1361,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.export",
-            "Exporter le still PNG (ou json) et libérer le lock agent",
+            "Exporter le still PNG (ou json) sous /downloads/illustration et libérer le lock agent",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1313,7 +1375,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.animate",
-            "Animer la scène (timeline optionnelle) → frames 12fps + mp4 24fps si ffmpeg",
+            "Animer la scène (timeline optionnelle) → dessins à 24fps + mp4 24fps si ffmpeg",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1341,6 +1403,9 @@ pub const ILLUST_TOOL_IDS: &[&str] = &[
     "illust.get",
     "illust.set_brief",
     "illust.compose",
+    "illust.generate_image",
+    "illust.refine_image",
+    "illust.resolve_image",
     "illust.render_sheet",
     "illust.review",
     "illust.export",
@@ -1397,14 +1462,15 @@ pub fn explicit_illust_intent(text: &str) -> bool {
 
 /// Short strategy for illustration agents.
 pub fn illust_draw_strategy_hint() -> String {
-    "PROTOCOLE Illustration (skill) : un seul auteur, INTERDIT agent.spawn. \
+    "PROTOCOLE Illustration : pour une illustration raster, set_brief puis illust.generate_image avec une description de construction adaptée au sujet (pose, proportions, appuis, contacts, composition). L'outil publie les passes en arrière-plan; illust.get donne image_run et pass_previews. Ne pas relancer une génération running. needs_review ne prouve pas la qualité : inspecter visuellement le PNG et signaler les défauts. Ne pas utiliser le score vectoriel pour accepter ce rendu. Si le moteur est absent, rapporter l'erreur sans le remplacer par une recette. Pour une demande explicitement vectorielle, utiliser compose. Un seul auteur, INTERDIT agent.spawn. \
      Format : UNE seule ligne JSON par tour {\"thought\":\"…\",\"action\":\"illust.…\",\"args\":{…}}. \
-     Enchaîne set_brief → compose avec {\"spec\":{\"parts\":[]}} (puppet auto) → \
-     render_sheet → review (score≥0.7, pas d'error) → export. \
+     Pour la branche vectorielle seulement : set_brief → compose avec une scène complète de contours path (silhouette, \
+     masses, appendices, détails distinctifs et accessoires; au moins 8 points par contour) → \
+     render_sheet → review structurelle → inspection visuelle → export. \
      Interdit d'empiler plusieurs JSON dans le même tour. \
      Alias acceptés : set_brief/compose/review/export (préfixe illust. ajouté). \
-     Règle skill : si ça ne se lit pas sur la planche 240px, recomposer — ne pas décorer. \
-     Jamais de prompt diffusion ni description texte à la place de l'image."
+     Règle skill : si ça ne se lit pas sur la planche 240px, redessiner les contours et la composition — ne pas décorer ni demander au puppet de réparer. \
+     Après inspection d'un rendu image, corrige ses défauts par illust.refine_image avec une consigne ciblée; compare ensuite image_run.source_png et image_run.candidate_png. Appelle illust.resolve_image avec run_id=image_run.id et keep_candidate=false si la retouche dégrade le rendu, true seulement si elle l'améliore sans perdre de détails demandés. last_png reste l'original jusqu'à ce choix. Ne jamais présenter une description texte comme une image produite."
         .into()
 }
 
@@ -1412,9 +1478,9 @@ pub fn illust_draw_strategy_hint() -> String {
 pub fn illust_pipeline_rank(action: &str) -> u8 {
     match canonicalize_tool_name(action).as_str() {
         "illust.set_brief" | "illust.get" => 1,
-        "illust.compose" => 2,
+        "illust.compose" | "illust.generate_image" | "illust.refine_image" => 2,
         "illust.render_sheet" => 3,
-        "illust.review" => 4,
+        "illust.review" | "illust.resolve_image" => 4,
         "illust.export" | "illust.animate" => 5,
         "goal.complete" => 6,
         "goal.fail" => 0,
@@ -2065,6 +2131,9 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
             ("look", "look"),
             ("palette", "palette"),
             ("anchor", "anchor"),
+            ("engine", "engine"),
+            ("photo", "photo"),
+            ("video", "video"),
         ] {
             if !brief.contains_key(dst) {
                 if let Some(v) = obj.get(src).cloned() {
@@ -2158,7 +2227,9 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
             obj.remove(k);
         }
     }
-    // illust.run / generate aliases land on compose — ensure empty parts so enrich synthesizes.
+    // Backward-compatible fallback for callers that omit a spec entirely. New
+    // illustration runs should provide authored path parts instead of relying
+    // on the procedural puppet recipes.
     if name == "illust.compose" {
         if !obj.contains_key("spec") && !obj.contains_key("parts") {
             obj.insert(
@@ -2174,6 +2245,7 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                 let mut spec = serde_json::Map::new();
                 for k in [
                     "parts",
+                    "key_drawings",
                     "pose",
                     "camera",
                     "mode",
@@ -2225,6 +2297,10 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                 spec.insert("brief".into(), serde_json::Value::Object(brief));
             }
 
+            let bound_ids: std::collections::HashSet<String> = spec.get("joint_bindings")
+                .and_then(|v| v.as_object())
+                .map(|bindings| bindings.keys().cloned().collect())
+                .unwrap_or_default();
             if let Some(serde_json::Value::Array(parts)) = spec.get_mut("parts") {
                 let n = parts.len().max(1);
                 for (i, part) in parts.iter_mut().enumerate() {
@@ -2244,13 +2320,19 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                         };
                         p.insert("id".into(), serde_json::Value::String(id));
                     }
+                    let bound = p.get("id").and_then(|v| v.as_str())
+                        .map(|id| bound_ids.contains(id)).unwrap_or(false);
                     if let Some(geom) = p.get_mut("geometry").and_then(|g| g.as_object_mut()) {
                         if !geom.contains_key("kind") {
                             if let Some(t) = geom.remove("type") {
                                 geom.insert("kind".into(), t);
                             }
                         }
-                        normalize_illust_part_geometry(geom, &role, i, n);
+                        // Local joint coordinates may legitimately exceed 1 or
+                        // be negative. They are not pixel/percentage coordinates.
+                        if !bound {
+                            normalize_illust_part_geometry(geom, &role, i, n);
+                        }
                     } else {
                         // Models often send role+description only — invent a readable layout.
                         let (x, y, w, h) = layout_for_illust_role(&role, i, n);
@@ -3112,6 +3194,17 @@ mod tests {
     }
 
     #[test]
+    fn illust_compose_preserves_joint_local_coordinates() {
+        let geometry = serde_json::json!({"kind":"path", "closed":true,
+            "points":[{"x":0.0,"y":-0.1},{"x":12.0,"y":0.1},{"x":1.0,"y":0.2}]});
+        let normalized = normalize_tool_args("illust.compose", &serde_json::json!({
+            "spec": {"joint_bindings":{"sleeve":["elbow","wrist"]},
+            "parts":[{"id":"sleeve","role":"clothing","geometry":geometry.clone()}]}
+        }));
+        assert_eq!(normalized["spec"]["parts"][0]["geometry"], geometry);
+    }
+
+    #[test]
     fn illust_compose_rescales_percent_coords_to_unit() {
         let args = normalize_tool_args(
             "illust.compose",
@@ -3150,6 +3243,20 @@ mod tests {
         let g = &args["spec"]["parts"][0]["geometry"];
         assert!((g["x"].as_f64().unwrap() - 350.0 / 1024.0).abs() < 1e-5);
         assert!((g["w"].as_f64().unwrap() - 320.0 / 1024.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn illust_image_tool_is_available_without_becoming_vector_compose() {
+        let mut ids = Vec::new();
+        merge_illust_tools(&mut ids, true);
+        assert!(ids.iter().any(|id| id == "illust.generate_image"));
+        assert_eq!(canonicalize_tool_name("illust.generate_image"), "illust.generate_image");
+        let args = serde_json::json!({"construction":"quadruped curled on a cushion"});
+        assert_eq!(normalize_tool_args("illust.generate_image", &args), args);
+        assert!(ids.iter().any(|id| id == "illust.refine_image"));
+        assert!(ids.iter().any(|id| id == "illust.resolve_image"));
+        let args = serde_json::json!({"correction":"remove construction circles"});
+        assert_eq!(normalize_tool_args("illust.refine_image", &args), args);
     }
 
     #[test]

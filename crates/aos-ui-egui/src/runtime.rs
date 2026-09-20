@@ -70,8 +70,13 @@ pub(crate) async fn runtime_main(
     // aos-session starts the bus and platform services in sequence.  The UI
     // can therefore win the startup race; keep the runtime alive and retry
     // until the bus is ready instead of leaving a permanent empty/error shell.
+    // Isolated development sessions may use another loopback bus without
+    // connecting the test UI to the user's running desktop services.
+    let bus_addr = std::env::var("AOS_BUS_ADDR")
+        .ok().filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "127.0.0.1:24701".into());
     let bus = loop {
-        match BusClient::connect("127.0.0.1:24701", "ui-egui").await {
+        match BusClient::connect(&bus_addr, "ui-egui").await {
             Ok(b) => break b,
             Err(e) => {
                 let _ = evt_tx.send(Evt::Status(format!("Connexion au bus… ({e})")));
@@ -4864,6 +4869,27 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
+        Cmd::IllustResolveImage { session_id, run_id, keep_candidate } => {
+            let result = async {
+                bus.call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
+                    "illust.lock.acquire",
+                    &aos_proto::IllustLockAcquireRequest {
+                        session_id: session_id.clone(), holder: "human:ui".into(),
+                        reason: "compare image revision".into(), ttl_ms: Some(300_000),
+                    }, vec![],
+                ).await?;
+                bus.call::<aos_proto::IllustResolveImageRequest, aos_proto::IllustrationDoc>(
+                    "illust.resolve_image",
+                    &aos_proto::IllustResolveImageRequest {
+                        session_id, holder: "human:ui".into(), run_id, keep_candidate,
+                    }, vec![],
+                ).await
+            }.await;
+            match result {
+                Ok(doc) => { let _ = evt_tx.send(Evt::IllustDoc(doc)); }
+                Err(e) => { let _ = evt_tx.send(Evt::IllustError(e.to_string())); }
+            }
+        }
         Cmd::IllustExport { session_id } => {
             let _ = bus
                 .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
@@ -4909,7 +4935,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
-        Cmd::IllustAnimate { session_id } => {
+        Cmd::IllustAnimate { session_id, duration_s } => {
             let _ = bus
                 .call::<aos_proto::IllustLockAcquireRequest, aos_proto::IllustrationDoc>(
                     "illust.lock.acquire",
@@ -4931,6 +4957,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         timeline: None,
                         width: Some(720),
                         path: None,
+                        duration_s: Some(duration_s),
                     },
                     vec![],
                 )

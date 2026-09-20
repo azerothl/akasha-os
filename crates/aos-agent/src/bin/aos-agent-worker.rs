@@ -647,6 +647,9 @@ async fn main() {
         terminal = Some(AgentState::Failed);
     }
     let mut last_canvas_scene_png: Option<String> = None;
+    let mut pending_illustration_refs: Vec<String> = Vec::new();
+    let mut pending_illustration_run: Option<String> = None;
+    let mut illustration_wait_marker = String::new();
     let mut last_device_capture_png: Option<String> = None;
     let mut device_describe_hinted = false;
     let mut device_no_vision_hinted = false;
@@ -806,6 +809,44 @@ async fn main() {
         }
         drain_child_finished_into_memory(&bus, &agent_id, &shared).await;
 
+        // Rendering is asynchronous. Poll its state without another model turn,
+        // keeping pause/steer and the goal deadline responsive between polls.
+        if started.elapsed() < timeout {
+            if let (Some(run_id), Some(sid)) = (pending_illustration_run.as_deref(), spec.session_id.as_deref()) {
+                let status = tokio::time::timeout(Duration::from_secs(3),
+                    bus.call::<_, aos_proto::IllustGetResponse>("illust.get",
+                        &aos_proto::IllustGetRequest { session_id: sid.into() }, vec![])).await;
+                match status {
+                    Ok(Ok(response)) if aos_agent::device_tools::illustration_run_is_pending(&response.doc, run_id) => {
+                        let marker = format!("Illustration : passe {:?} en cours", response.doc.image_run.as_ref().unwrap().phase);
+                        if marker != illustration_wait_marker {
+                            report(&bus, &agent_id, AgentOutputEvent::Log {line:marker.clone()}).await;
+                            illustration_wait_marker = marker;
+                        }
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        continue;
+                    }
+                    Ok(Ok(response)) => {
+                        let outcome = serde_json::to_string(&response).unwrap_or_default();
+                        pending_illustration_refs = aos_agent::device_tools::illustration_image_refs(&outcome);
+                        let mut st = shared.state.lock().await;
+                        st.push_tool("illust.get", &outcome);
+                        if st.advance_illust_image_plan("illust.get", &outcome) {
+                            report(&bus, &agent_id, AgentOutputEvent::PlanUpdated {nodes:st.task_graph.clone()}).await;
+                        }
+                        pending_illustration_run = None;
+                        illustration_wait_marker.clear();
+                    }
+                    _ => {
+                        // A failed observation is not a failed render and must not
+                        // cause regeneration or another GPU inference.
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        continue;
+                    }
+                }
+            }
+        }
+
         let step = {
             let mut st = shared.state.lock().await;
             st.step += 1;
@@ -954,6 +995,20 @@ async fn main() {
                 {
                     step_refs = merge_canvas_vision_refs(&step_refs, &png);
                 }
+            }
+        }
+        if !pending_illustration_refs.is_empty() {
+            let attached = session_model_has_vision(&bus, spec.model_id.as_deref()).await;
+            if let Some(feedback) = aos_agent::device_tools::illustration_vision_feedback(
+                pending_illustration_refs.len(), attached,
+            ) {
+                shared.state.lock().await.push_user(feedback);
+            }
+            if attached {
+                step_refs = merge_canvas_vision_refs(&step_refs, "");
+                step_refs.append(&mut pending_illustration_refs);
+            } else {
+                pending_illustration_refs.clear();
             }
         }
         let mut infer_spec = spec.clone();
@@ -1436,25 +1491,28 @@ async fn main() {
                     }
                     {
                         let illust = canonicalize_tool_name(&action.action);
-                        if matches!(
-                            illust.as_str(),
-                            "illust.render_sheet" | "illust.export"
-                        ) {
-                            if let Some(path) = capture_png_path_from_tool_result(&outcome) {
-                                last_canvas_scene_png = Some(path);
-                            }
+                        if matches!(illust.as_str(), "illust.generate_image" | "illust.refine_image" | "illust.get") {
+                            pending_illustration_run = aos_agent::device_tools::illustration_running_run(&outcome);
                         }
                         if matches!(
+                            illust.as_str(),
+                            "illust.render_sheet" | "illust.export" | "illust.get" | "illust.review"
+                        ) {
+                            pending_illustration_refs = aos_agent::device_tools::illustration_image_refs(&outcome);
+                        }
+                        if (matches!(
                             illust.as_str(),
                             "illust.set_brief"
                                 | "illust.compose"
                                 | "illust.render_sheet"
                                 | "illust.review"
                                 | "illust.export"
-                        ) && !outcome.starts_with("ERREUR")
+                        ) || (spec.tools.iter().any(|t| t == "illust.generate_image")
+                            && matches!(illust.as_str(), "illust.generate_image" | "illust.get"))) && !outcome.starts_with("ERREUR")
                         {
                             let mut st = shared.state.lock().await;
-                            if st.complete_current_plan_node() {
+                            let image_pipeline = spec.tools.iter().any(|t| t == "illust.generate_image");
+                            if if image_pipeline { st.advance_illust_image_plan(&illust, &outcome) } else { st.complete_current_plan_node() } {
                                 let _ = report(
                                     &bus,
                                     &agent_id,
@@ -1466,13 +1524,10 @@ async fn main() {
                             }
                             let nudge = match illust.as_str() {
                                 "illust.set_brief" => Some(
-                                    "[runtime] Brief OK. Prochaine action EXACTE (une ligne JSON) : \
-                                     {\"thought\":\"compose\",\"action\":\"illust.compose\",\"args\":{\"spec\":{\"parts\":[]}}}",
+                                    "[runtime] Pour le moteur image, appelle illust.generate_image avec construction décrivant pose, appuis, contacts, espèce et composition, sans détails de finition. Les passes seront publiées progressivement. Consulte ensuite illust.get; needs_review exige une inspection visuelle. Si le moteur est absent, signale l'erreur. Réserve illust.compose aux demandes vectorielles explicites.",
                                 ),
                                 "illust.compose" => Some(
-                                    "[runtime] Compose OK. Prochaine action EXACTE : \
-                                     {\"thought\":\"sheet\",\"action\":\"illust.render_sheet\",\"args\":{}} \
-                                     — une seule planche, puis illust.review.",
+                                    "[runtime] Aperçu de la passe publié. Si construction_phase n'est pas final, continue la construction avec illust.compose en conservant la pose et les passes précédentes. Vérifie les proportions, contacts et chevauchements avant les détails. Pour final, fournis parts avec les contours visibles et l'habillage complet, puis illust.render_sheet et illust.review. Un score structurel ne valide pas la qualité visuelle.",
                                 ),
                                 "illust.render_sheet" => Some(
                                     "[runtime] Planche OK. Interdit de re-appeler render_sheet. \
@@ -1480,8 +1535,7 @@ async fn main() {
                                      {\"thought\":\"review\",\"action\":\"illust.review\",\"args\":{}}",
                                 ),
                                 "illust.review" => Some(
-                                    "[runtime] Si review a des errors (ellipse_only/not_stretched/center_coords) : \
-                                     illust.compose args {\"spec\":{\"parts\":[]}}. Sinon illust.export.",
+                                    "[runtime] Si review a des errors (no_authored_contour/ellipse_only/not_stretched/center_coords), redessine la scène avec des paths complets et conserve les détails demandés. Sinon illust.export.",
                                 ),
                                 _ => None,
                             };
@@ -1668,6 +1722,19 @@ async fn main() {
                         last_device_capture_png = Some(path);
                     }
                 }
+                if matches!(canonicalize_tool_name(&action.action).as_str(),
+                    "illust.render_sheet" | "illust.export" | "illust.get" | "illust.review" | "illust.resolve_image") {
+                    pending_illustration_refs = aos_agent::device_tools::illustration_image_refs(&outcome);
+                }
+                if matches!(canonicalize_tool_name(&action.action).as_str(), "illust.generate_image" | "illust.refine_image" | "illust.get") {
+                    pending_illustration_run = aos_agent::device_tools::illustration_running_run(&outcome);
+                }
+                if spec.tools.iter().any(|t| t == "illust.generate_image") {
+                    let mut st = shared.state.lock().await;
+                    if st.advance_illust_image_plan(&canonicalize_tool_name(&action.action), &outcome) {
+                        report(&bus, &agent_id, AgentOutputEvent::PlanUpdated { nodes: st.task_graph.clone() }).await;
+                    }
+                }
                 tool_result = outcome.clone();
                 step_child_id = extract_child_id(&action.action, &outcome, &action.args);
                 step_sources = collect_sources(&action.action, &action.args, &outcome);
@@ -1842,6 +1909,7 @@ async fn main() {
         let skip_device_critic = !canvas_agent && agent_has_device_capture_tools(&spec.tools);
         let skip_advisory_critic = aos_proto::chat_user_wants_advisory(&spec.goal.statement);
         let model_reflection = if terminal.is_none()
+            && pending_illustration_run.is_none()
             && !skip_device_critic
             && !skip_advisory_critic
             && should_run_canvas_critic(canvas_agent, canvas_scene_changed, step)
@@ -2377,6 +2445,19 @@ async fn execute_action(
                 }),
         ),
         "goal.complete" => {
+            if spec.tools.iter().any(|t| t == "illust.generate_image") {
+                let Some(sid) = spec.session_id.as_deref() else {
+                    return ActResult::Continue("Illustration : session absente, résultat non vérifiable. Signale l'échec avec goal.fail.".into());
+                };
+                match bus.call::<_, aos_proto::IllustGetResponse>("illust.get", &aos_proto::IllustGetRequest {session_id:sid.into()}, vec![]).await {
+                    Ok(response) => {
+                        if let Some(reason) = aos_agent::device_tools::illustration_completion_error(&response.doc) {
+                            return ActResult::Continue(reason);
+                        }
+                    }
+                    Err(error) => return ActResult::Continue(format!("Illustration : impossible de vérifier le rendu ({error}). Ne pas annoncer de succès.")),
+                }
+            }
             let (prior, sources) = {
                 let st = shared.state.lock().await;
                 let prior = st
@@ -4500,6 +4581,9 @@ async fn invoke_illust_tool(
     let mutating = matches!(
         tool,
         "illust.set_brief"
+            | "illust.generate_image"
+            | "illust.refine_image"
+            | "illust.resolve_image"
             | "illust.compose"
             | "illust.render_sheet"
             | "illust.export"
@@ -4799,7 +4883,9 @@ async fn apply_assess_to_runtime(
             && !st.deep_thinking
             && st.task_graph.is_empty()
         {
-            let nodes = CognitiveState::canonical_illust_composition_plan();
+            let nodes = if spec.tools.iter().any(|t| t == "illust.generate_image") {
+                CognitiveState::canonical_illust_image_plan()
+            } else { CognitiveState::canonical_illust_composition_plan() };
             st.set_plan(nodes.clone());
             let need_mem = st.needs_plan && !st.plan_memory_recalled;
             if need_mem {

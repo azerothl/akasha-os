@@ -3,9 +3,10 @@
 use crate::illustration_raster;
 use crate::subsystem::PlatformSubsystem;
 use aos_proto::{
-    default_download_path, illustration_digest, normalize_download_path, review_illustration,
-    DownloadKind, IllustAnimateResponse, IllustrationPose, IllustrationRenderMode,
-    IllustrationTimeline,
+    action_timeline, default_download_path, ease_io, illustration_digest, lerp_pose,
+    normalize_download_path, resolve_timeline, review_illustration, sign_off_word,
+    video_trace_error, DownloadKind, IllustAnimateResponse, IllustrationEngine,
+    IllustrationPose, IllustrationRenderMode, IllustrationTimeline,
 };
 use std::process::Command;
 
@@ -16,7 +17,19 @@ fn stamp_ms() -> u128 {
         .unwrap_or(0)
 }
 
-fn write_download(
+/// Illustration artefacts live under `/downloads/illustration`, even if a caller
+/// still passes a canvas or video path.
+fn illustration_download_path(path: &str) -> String {
+    let path = normalize_download_path(path, DownloadKind::Illustration);
+    for legacy in ["/downloads/canvas/", "/downloads/video/", "/downloads/images/"] {
+        if let Some(rest) = path.strip_prefix(legacy) {
+            return format!("/downloads/illustration/{rest}");
+        }
+    }
+    path
+}
+
+pub(crate) fn write_download(
     s: &PlatformSubsystem,
     logical: &str,
     bytes: &[u8],
@@ -55,6 +68,26 @@ pub fn export_still(
             return Err(format!("illustration verrouillé par {}", lock.holder));
         }
     }
+    if let Some(run) = &doc.image_run {
+        if run.candidate_png.is_some() && run.candidate_selected.is_none() {
+            return Err("comparer la retouche à sa source puis choisir ou rejeter via illust.resolve_image avant export".into());
+        }
+        if run.status != aos_proto::IllustrationImageStatus::NeedsReview {
+            return Err("rendu image incomplet : attendre la fin ou corriger l'erreur".into());
+        }
+        if format != "png" { return Err("le moteur image exporte un PNG, pas de géométrie vectorielle".into()); }
+        let source = doc.last_png.as_deref().ok_or("PNG final absent")?;
+        let (bytes, _, _) = s.fs.lock().unwrap().read_bytes(source, &["fs.read:/downloads/**".into()])
+            .map_err(|e| e.to_string())?;
+        let path = illustration_download_path(&path.unwrap_or_else(|| default_download_path(
+            DownloadKind::Illustration, &format!("illust-{}-{}.png", meta.id, stamp_ms()))));
+        write_download(s, &path, &bytes)?;
+        if holder.starts_with("agent") {
+            let _ = s.sessions.lock().unwrap().illustration_lock_release(session_id, holder);
+        }
+        return Ok(serde_json::json!({"path":path,"format":"png","visual_review":"required",
+            "note":"rendu natif 768px; export ne vaut pas validation artistique"}));
+    }
     // Agents often skip compose or emit unreadable LLM snowmen. Re-run puppet
     // enrich before raster so known subjects (cat+cushion, …) get the recipe.
     if !doc.brief.subject.trim().is_empty() {
@@ -76,7 +109,7 @@ pub fn export_still(
             .collect();
         if !blocking.is_empty() {
             return Err(format!(
-                "export refusé (review score={:.2}): {} — illust.compose avec parts=[] puis illust.render_sheet + illust.review",
+                "export refusé (score structurel={:.2}): {} — corriger la construction avec illust.compose, fournir les parts du rendu final et construction_phase=final, puis illust.render_sheet + illust.review",
                 review.score,
                 blocking.join(", ")
             ));
@@ -106,22 +139,22 @@ pub fn export_still(
         let bytes = illustration_raster::export_sidecar_json(&doc)?;
         let path = path.unwrap_or_else(|| {
             default_download_path(
-                DownloadKind::Canvas,
+                DownloadKind::Illustration,
                 &format!("illust-{}-{}.json", meta.id, stamp),
             )
         });
-        let path = normalize_download_path(&path, DownloadKind::Canvas);
+        let path = illustration_download_path(&path);
         write_download(s, &path, &bytes)?;
         return Ok(serde_json::json!({ "path": path, "format": "json" }));
     }
     let bytes = illustration_raster::export_png(&doc, w, h)?;
     let path = path.unwrap_or_else(|| {
         default_download_path(
-            DownloadKind::Canvas,
+            DownloadKind::Illustration,
             &format!("illust-{}-{}.png", meta.id, stamp),
         )
     });
-    let path = normalize_download_path(&path, DownloadKind::Canvas);
+    let path = illustration_download_path(&path);
     write_download(s, &path, &bytes)?;
     let doc = s
         .sessions
@@ -162,16 +195,22 @@ pub fn export_preview(
     let stamp = stamp_ms();
     let bytes = illustration_raster::export_png(&doc, w, h)?;
     let path = default_download_path(
-        DownloadKind::Canvas,
+        DownloadKind::Illustration,
         &format!("illust-preview-{}-{}.png", meta.id, stamp),
     );
-    let path = normalize_download_path(&path, DownloadKind::Canvas);
+    let path = illustration_download_path(&path);
     write_download(s, &path, &bytes)?;
     let _ = s
         .sessions
         .lock()
         .unwrap()
-        .illustration_set_paths(session_id, Some(path.clone()), None, None);
+        .illustration_publish_pass(
+            session_id,
+            doc.spec.as_ref().map(|spec| spec.construction_phase).unwrap_or_default(),
+            doc.revision,
+            path.clone(),
+        )
+        .map_err(|e| e.to_string())?;
     Ok(path)
 }
 
@@ -186,23 +225,37 @@ pub fn render_sheet(
         .unwrap()
         .illustration_get(session_id)
         .map_err(|e| e.to_string())?;
+    if doc.image_run.is_some() { return Err("rendu image : consulter les pass_previews, pas la planche vectorielle".into()); }
     let cell = width.unwrap_or(240);
     let bytes = illustration_raster::export_sheet_png(&doc, cell)?;
+    let model_bytes = illustration_raster::export_model_sheet_png(&doc, cell)?;
     let stamp = stamp_ms();
     let path = default_download_path(
-        DownloadKind::Canvas,
+        DownloadKind::Illustration,
         &format!("illust-sheet-{}-{}.png", meta.id, stamp),
     );
-    let path = normalize_download_path(&path, DownloadKind::Canvas);
+    let path = illustration_download_path(&path);
     write_download(s, &path, &bytes)?;
-    let doc = s
+    let model_path = illustration_download_path(&default_download_path(
+        DownloadKind::Illustration,
+        &format!("illust-model-sheet-{}-{}.png", meta.id, stamp),
+    ));
+    write_download(s, &model_path, &model_bytes)?;
+    let _ = s
         .sessions
         .lock()
         .unwrap()
         .illustration_set_paths(session_id, None, Some(path.clone()), None)
         .map_err(|e| e.to_string())?;
+    let doc = s
+        .sessions
+        .lock()
+        .unwrap()
+        .illustration_set_model_sheet_path(session_id, model_path.clone())
+        .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({
         "path": path,
+        "model_sheet_path": model_path,
         "digest": illustration_digest(&doc),
     }))
 }
@@ -214,6 +267,11 @@ pub fn review(s: &PlatformSubsystem, session_id: &str) -> Result<serde_json::Val
         .unwrap()
         .illustration_get(session_id)
         .map_err(|e| e.to_string())?;
+    if let Some(run) = &doc.image_run {
+        return Ok(serde_json::json!({"image_run":run,"path":doc.last_png,
+            "visual_review":"required","accepted":false,
+            "note":"les scores structurels vectoriels ne valident pas une image générée"}));
+    }
     let report = review_illustration(&doc);
     serde_json::to_value(report).map_err(|e| e.to_string())
 }
@@ -237,6 +295,7 @@ pub fn animate(
     session_id: &str,
     holder: &str,
     timeline: Option<IllustrationTimeline>,
+    duration_s: Option<f32>,
     width: Option<u32>,
     path: Option<String>,
 ) -> Result<IllustAnimateResponse, String> {
@@ -249,6 +308,10 @@ pub fn animate(
     if doc.spec.is_none() {
         return Err("compose une scène avant illust.animate".into());
     }
+    if let Some(msg) = video_trace_error(&doc.brief) {
+        return Err(msg.into());
+    }
+    aos_proto::apply_prompt_defaults(&mut doc.brief);
     if let Some(tl) = timeline {
         doc = s
             .sessions
@@ -257,27 +320,16 @@ pub fn animate(
             .illustration_set_timeline(session_id, holder, tl)
             .map_err(|e| e.to_string())?;
     }
-    if doc.timeline.beats.is_empty() {
-        doc.timeline.beats = vec![
-            aos_proto::IllustrationTimelineBeat {
-                name: "hold".into(),
-                dur_s: 1.5,
-                pose: IllustrationPose::default(),
-                camera: None,
-                mode: None,
-            },
-            aos_proto::IllustrationTimelineBeat {
-                name: "twitch".into(),
-                dur_s: 1.0,
-                pose: IllustrationPose {
-                    twitch: 1.0,
-                    tilt: 0.3,
-                    ..Default::default()
-                },
-                camera: None,
-                mode: None,
-            },
-        ];
+    if let Some(secs) = duration_s {
+        doc.timeline.beats = resolve_timeline(&doc.timeline.beats, secs, &doc.brief);
+        doc = s
+            .sessions
+            .lock()
+            .unwrap()
+            .illustration_set_timeline(session_id, holder, doc.timeline.clone())
+            .map_err(|e| e.to_string())?;
+    } else if doc.timeline.beats.is_empty() {
+        doc.timeline.beats = action_timeline(&doc.brief, 4.0);
         doc = s
             .sessions
             .lock()
@@ -288,13 +340,15 @@ pub fn animate(
 
     let w = width.unwrap_or(720);
     let h = w;
-    let fps_draw = 12.0f32;
+    // Use a real 24 fps drawing timebase. The previous 12 fps sequence was
+    // only duplicated by ffmpeg, which could not improve motion quality.
+    let fps_draw = 24.0f32;
     let stamp = stamp_ms();
     let frames_logical = default_download_path(
-        DownloadKind::Video,
+        DownloadKind::Illustration,
         &format!("illust-frames-{}-{}", session_id, stamp),
     );
-    let frames_logical = normalize_download_path(&frames_logical, DownloadKind::Video);
+    let frames_logical = illustration_download_path(&frames_logical);
 
     let host_frames = s
         .fs
@@ -316,42 +370,107 @@ pub fn animate(
         .map(|sp| sp.mode)
         .unwrap_or(IllustrationRenderMode::Normal);
 
-    for beat in &doc.timeline.beats {
+    let frames_total: u32 = doc
+        .timeline
+        .beats
+        .iter()
+        .map(|b| (b.dur_s * fps_draw).round().max(1.0) as u32)
+        .sum::<u32>()
+        .max(1);
+    resolve_photo_host(s, &mut doc);
+    let engine = doc.brief.engine;
+    let sign_word = sign_off_word(&doc.brief);
+    let beats = doc.timeline.beats.clone();
+    let mut prev_pose = IllustrationPose::default();
+
+    for (bi, beat) in beats.iter().enumerate() {
         let n = (beat.dur_s * fps_draw).round().max(1.0) as u32;
-        let cam = beat.camera.clone().unwrap_or_else(|| base_cam.clone());
+        let key_drawing = doc
+            .spec
+            .as_ref()
+            .and_then(|spec| spec.key_drawings.iter().find(|drawing| drawing.id == beat.name))
+            .cloned();
+        let mut cam = beat.camera.clone().unwrap_or_else(|| base_cam.clone());
+        if bi == 0 {
+            cam.zoom = (cam.zoom * 1.08).clamp(0.3, 2.5);
+        }
         let mode = beat.mode.unwrap_or(base_mode);
+        let look_changed = bi > 0 && beat.mode.is_some() && beats[bi - 1].mode != beat.mode;
+        let sign = beat.name == "signoff";
         for k in 0..n {
-            let t = if n <= 1 {
-                1.0
-            } else {
-                k as f32 / (n - 1) as f32
+            let local = (k as f32 + 1.0) / n as f32;
+            let pose = lerp_pose(&prev_pose, &beat.pose, ease_io(local));
+            let png = match engine {
+                IllustrationEngine::Sand => {
+                    let t = frame_i as f32 / frames_total as f32;
+                    crate::illustration_sand::render_sand_png(w, h, t)?
+                }
+                IllustrationEngine::Paper => {
+                    let t = frame_i as f32 / frames_total as f32;
+                    crate::illustration_paper::render_paper_png(w, h, t)?
+                }
+                IllustrationEngine::Flat | IllustrationEngine::Found => {
+                    let mut frame_doc = doc.clone();
+                    let mut fx = illustration_raster::IllustrationFrameFx {
+                        speed: pose.walk.abs(),
+                        preserve_drawing: key_drawing.is_some(),
+                        ..Default::default()
+                    };
+                    if let (Some(spec), Some(drawing)) = (frame_doc.spec.as_mut(), key_drawing.as_ref()) {
+                        // A key drawing is a complete cel. Keep the base brief,
+                        // camera and timeline, but replace every visible part.
+                        spec.parts = drawing.parts.clone();
+                        spec.pose = drawing.pose.clone();
+                    }
+                    if bi == 0 && !sign {
+                        fx.progress = Some(local);
+                    }
+                    if look_changed {
+                        let iris_n = n.min(12);
+                        if k < iris_n {
+                            fx.iris = Some((k as f32 + 1.0) / iris_n as f32);
+                        }
+                    }
+                    if sign {
+                        fx.sign_off = Some(sign_word.clone());
+                        fx.sign_progress = (local / 0.65).min(1.0);
+                    }
+                    illustration_raster::export_frame_fx(
+                        &frame_doc,
+                        &pose,
+                        &cam,
+                        mode,
+                        w,
+                        h,
+                        &fx,
+                    )?
+                }
             };
-            let pose = lerp_pose(&IllustrationPose::default(), &beat.pose, t);
-            let png = illustration_raster::export_frame_png(&doc, &pose, &cam, mode, w, h)?;
             let name = format!("{:04}.png", frame_i);
             std::fs::write(host_frames.join(&name), &png).map_err(|e| e.to_string())?;
             frame_i += 1;
         }
+        prev_pose = beat.pose.clone();
     }
 
     let contact_logical = default_download_path(
-        DownloadKind::Canvas,
+        DownloadKind::Illustration,
         &format!("illust-contact-{}-{}.png", session_id, stamp),
     );
-    let contact_logical = normalize_download_path(&contact_logical, DownloadKind::Canvas);
+    let contact_logical = illustration_download_path(&contact_logical);
     let contact_bytes = build_contact_sheet(&host_frames, frame_i, 6)?;
     write_download(s, &contact_logical, &contact_bytes)?;
 
     let mut mp4_path = None;
-    let mut message = format!("{frame_i} drawn frames @ 12fps in {frames_logical}");
+    let mut message = format!("{frame_i} drawn frames @ 24fps in {frames_logical}");
     if let Some(ff) = find_ffmpeg() {
         let out_logical = path.unwrap_or_else(|| {
             default_download_path(
-                DownloadKind::Video,
+                DownloadKind::Illustration,
                 &format!("illust-{}-{}.mp4", session_id, stamp),
             )
         });
-        let out_logical = normalize_download_path(&out_logical, DownloadKind::Video);
+        let out_logical = illustration_download_path(&out_logical);
         let host_mp4 = s
             .fs
             .lock()
@@ -366,7 +485,7 @@ pub fn animate(
             .args([
                 "-y",
                 "-framerate",
-                "12",
+                "24",
                 "-i",
                 &pattern.to_string_lossy(),
                 "-r",
@@ -384,11 +503,16 @@ pub fn animate(
                 let _ = write_download(s, &out_logical, &bytes);
                 mp4_path = Some(out_logical.clone());
                 message.push_str(&format!("; mp4 {out_logical}"));
+                if let Some(scored) = mux_score(s, &ff, &host_mp4, &out_logical, &doc.timeline.beats)
+                {
+                    mp4_path = Some(scored);
+                    message.push_str(" + score");
+                }
                 let _ = s.sessions.lock().unwrap().illustration_set_paths(
                     session_id,
                     None,
                     None,
-                    Some(out_logical),
+                    mp4_path.clone(),
                 );
             }
             Ok(st) => message.push_str(&format!("; ffmpeg exit {st}")),
@@ -415,16 +539,63 @@ pub fn animate(
     })
 }
 
-fn lerp_pose(a: &IllustrationPose, b: &IllustrationPose, t: f32) -> IllustrationPose {
-    let l = |x: f32, y: f32| x + (y - x) * t;
-    IllustrationPose {
-        walk: l(a.walk, b.walk),
-        twitch: l(a.twitch, b.twitch),
-        wing: l(a.wing, b.wing),
-        flap: l(a.flap, b.flap),
-        tuck: l(a.tuck, b.tuck),
-        tilt: l(a.tilt, b.tilt),
+fn resolve_photo_host(s: &PlatformSubsystem, doc: &mut aos_proto::IllustrationDoc) {
+    let path = doc.brief.photo.trim().to_string();
+    if path.is_empty() || std::path::Path::new(&path).exists() {
+        return;
     }
+    let Ok(host) = s.fs.lock().unwrap().resolve_host(&path) else {
+        return;
+    };
+    if host.exists() {
+        doc.brief.photo = host.to_string_lossy().to_string();
+    }
+}
+
+fn mux_score(
+    s: &PlatformSubsystem,
+    ffmpeg: &str,
+    host_mp4: &std::path::Path,
+    mp4_logical: &str,
+    beats: &[aos_proto::IllustrationTimelineBeat],
+) -> Option<String> {
+    let wav = crate::illustration_score::score_wav(beats);
+    let wav_logical = mp4_logical.trim_end_matches(".mp4").to_string() + ".wav";
+    let wav_logical = if wav_logical.ends_with(".wav") {
+        wav_logical
+    } else {
+        format!("{mp4_logical}.wav")
+    };
+    let host_wav = s.fs.lock().unwrap().resolve_host(&wav_logical).ok()?;
+    if let Some(parent) = host_wav.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&host_wav, &wav).ok()?;
+    let _ = write_download(s, &wav_logical, &wav);
+    let muxed = host_mp4.with_extension("scored.mp4");
+    let status = Command::new(ffmpeg)
+        .args([
+            "-y",
+            "-i",
+            &host_mp4.to_string_lossy(),
+            "-i",
+            &host_wav.to_string_lossy(),
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-shortest",
+            &muxed.to_string_lossy(),
+        ])
+        .status()
+        .ok()?;
+    if !status.success() {
+        return Some(mp4_logical.to_string());
+    }
+    let bytes = std::fs::read(&muxed).ok()?;
+    let final_logical = mp4_logical.trim_end_matches(".mp4").to_string() + "-final.mp4";
+    write_download(s, &final_logical, &bytes).ok()?;
+    Some(final_logical)
 }
 
 fn build_contact_sheet(
@@ -464,4 +635,42 @@ fn build_contact_sheet(
         .write_to(&mut cursor, image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
     Ok(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use aos_proto::{resolve_timeline, IllustrationBrief, IllustrationTimelineBeat};
+
+    #[test]
+    fn duration_builds_and_scales() {
+        let built = resolve_timeline(&[], 4.0, &IllustrationBrief::default());
+        let sum: f32 = built.iter().map(|b| b.dur_s).sum();
+        assert!((sum - 4.0).abs() < 0.08, "{sum}");
+        assert!(built.len() >= 2);
+        assert!(built.iter().any(|b| b.name == "signoff"));
+
+        let scaled = resolve_timeline(
+            &[
+                IllustrationTimelineBeat {
+                    name: "a".into(),
+                    dur_s: 1.0,
+                    pose: Default::default(),
+                    camera: None,
+                    mode: None,
+                },
+                IllustrationTimelineBeat {
+                    name: "b".into(),
+                    dur_s: 1.0,
+                    pose: Default::default(),
+                    camera: None,
+                    mode: None,
+                },
+            ],
+            6.0,
+            &IllustrationBrief::default(),
+        );
+        let sum: f32 = scaled.iter().map(|b| b.dur_s).sum();
+        assert!((sum - 6.0).abs() < 0.05, "{sum}");
+        assert_eq!(scaled[0].name, "a");
+    }
 }

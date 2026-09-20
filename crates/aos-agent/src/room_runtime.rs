@@ -863,12 +863,42 @@ async fn run_room_tool_loop(
             .unwrap_or(0)
     );
     let mut pending_canvas_png: Option<String> = None;
+    let mut pending_illustration_refs: Vec<String> = Vec::new();
+    let mut pending_illustration_run: Option<String> = None;
     let mut pending_device_png: Option<String> = None;
     let mut infer_model = model_id.clone();
     let mut produced_artifacts: Vec<ProducedArtifact> = Vec::new();
     let mut accumulated_thinking: Vec<String> = Vec::new();
 
     for step in 0..MAX_ROOM_TOOL_STEPS {
+        if let Some(run_id) = pending_illustration_run.take() {
+            let wait_started = std::time::Instant::now();
+            loop {
+                if round.is_cancelled() { return Err("tour annulé".into()); }
+                if wait_started.elapsed() > std::time::Duration::from_secs(600) {
+                    return Err("délai d'observation Illustration atteint ; la génération reste consultable dans Illustration".into());
+                }
+                round.set_activity("illustration", Some("illust.get")).await;
+                let request = aos_proto::IllustGetRequest {session_id:session_id.into()};
+                let observed = tokio::select! {
+                    _ = round.cancel_notify.notified() => return Err("tour annulé".into()),
+                    result = tokio::time::timeout(std::time::Duration::from_secs(3),
+                        bus.call::<_, aos_proto::IllustGetResponse>("illust.get", &request, vec![])) => result,
+                };
+                if let Ok(Ok(response)) = observed {
+                    if !crate::device_tools::illustration_run_is_pending(&response.doc, &run_id) {
+                        let outcome = serde_json::to_string(&response).map_err(|e| e.to_string())?;
+                        pending_illustration_refs = crate::device_tools::illustration_image_refs(&outcome);
+                        messages.push(ChatMessage {role:"user".into(), content:format!("[illust.get après attente]\n{outcome}")});
+                        break;
+                    }
+                }
+                tokio::select! {
+                    _ = round.cancel_notify.notified() => return Err("tour annulé".into()),
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
+                }
+            }
+        }
         let module_tools = discover_module_tools(bus).await;
         let tool_descs = select_tools(tool_ids, &module_tools);
         let has_canvas = tool_descs.iter().any(|t| t.name.starts_with("canvas."));
@@ -883,6 +913,20 @@ async fn run_room_tool_loop(
                 begin_canvas_vision(bus, session_id, aspect, infer_model.as_deref()).await
             {
                 step_refs = merge_canvas_vision_refs(&step_refs, &png);
+            }
+        }
+        if !pending_illustration_refs.is_empty() {
+            let attached = session_model_has_vision(bus, infer_model.as_deref()).await;
+            if let Some(feedback) = crate::device_tools::illustration_vision_feedback(
+                pending_illustration_refs.len(), attached,
+            ) {
+                messages.push(ChatMessage { role: "user".into(), content: feedback.into() });
+            }
+            if attached {
+                step_refs = merge_canvas_vision_refs(&step_refs, "");
+                step_refs.append(&mut pending_illustration_refs);
+            } else {
+                pending_illustration_refs.clear();
             }
         }
         if let Some(ref png) = pending_device_png {
@@ -1035,13 +1079,14 @@ async fn run_room_tool_loop(
                 }
                 {
                     let illust = canonicalize_tool_name(&action.action);
+                    if matches!(illust.as_str(), "illust.generate_image" | "illust.refine_image" | "illust.get") {
+                        pending_illustration_run = crate::device_tools::illustration_running_run(&outcome);
+                    }
                     if matches!(
                         illust.as_str(),
-                        "illust.render_sheet" | "illust.export"
+                        "illust.render_sheet" | "illust.export" | "illust.get" | "illust.review"
                     ) {
-                        if let Some(path) = capture_png_path_from_tool_result(&outcome) {
-                            pending_canvas_png = Some(path);
-                        }
+                        pending_illustration_refs = crate::device_tools::illustration_image_refs(&outcome);
                     }
                 }
                 if canonicalize_tool_name(&action.action).starts_with("device.camera") {
