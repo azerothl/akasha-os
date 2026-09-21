@@ -326,6 +326,9 @@ pub struct DeclUiWidget {
     /// Local state key that supplies the live frame height for `layer_canvas`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aspect_h_key: Option<String>,
+    /// SceneGraph JSON/YAML state key for `scene3d` / `scene_tree`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_key: Option<String>,
     /// When true, table renders rows without a header band.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_headers: Option<bool>,

@@ -92,6 +92,11 @@ No `aos-scene` crate lands until automated golden tests cover at least:
 Tolerances and fixture paths live with the crate when it appears; this ADR
 only freezes **which** cases exist.
 
+> **Implementation note (foundation MVP):** `crates/aos-scene` lands the
+> SceneGraph + YAML project format and covers identity / axis rotations /
+> parenting / camera forward / load-save golden tests. Rig rest pose, IK
+> fixture, and glTF↔backend round-trips remain deferred.
+
 ## Consequences
 
 - P0-A is closed: SceneGraph / `aos-scene` design must cite this ADR.

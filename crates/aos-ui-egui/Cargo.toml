@@ -11,6 +11,7 @@ winres = "0.1"
 [dependencies]
 aos-ipc = { path = "../aos-ipc" }
 aos-proto = { path = "../aos-proto" }
+aos-scene = { path = "../aos-scene" }
 aos-agent = { path = "../aos-agent" }
 aos-model = { path = "../aos-model", default-features = false }
 aos-placement = { path = "../aos-placement" }
@@ -22,6 +23,7 @@ eframe = "0.31"
 egui_commonmark = { version = "0.20", default-features = false, features = ["pulldown_cmark", "better_syntax_highlighting"] }
 egui_plot = "0.31"
 image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
 rfd = "0.15"
 sha2 = "0.10"
 getrandom = "0.2"

@@ -563,6 +563,18 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 )));
             }
         }
+        "scene3d" | "scene_tree" => {
+            if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "scene_key",
+                )));
+            }
+            if w.selected_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "selected_key",
+                )));
+            }
+        }
         "spacer" => {}
         other => {
             // Delegate v1 widget rules.
@@ -593,6 +605,22 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             {
                 return Err(RichDeclUiError::MissingCapability(
                     "fs.read:/downloads/**".into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::RENDER_STUB_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::RENDER_STUB_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::RENDER_STUB_CAP.into(),
+                ));
+            }
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ILLUSTRATION_FS_WRITE_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ILLUSTRATION_FS_WRITE_CAP.into(),
                 ));
             }
             Ok(())
@@ -920,6 +948,8 @@ mod tests {
         assert!(kinds.contains(&"layer_canvas"));
         assert!(kinds.contains(&"layer_list"));
         assert!(kinds.contains(&"undo_redo"));
+        assert!(kinds.contains(&"scene3d"));
+        assert!(kinds.contains(&"scene_tree"));
     }
 
     #[test]
@@ -1005,6 +1035,52 @@ mod tests {
             .expect("parse");
         let tools = ["gallery-demo.preview.ensure", "gallery-demo.preview.get"];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &[]).expect("gallery-demo ui valid");
+    }
+
+    #[test]
+    fn illustration_studio_ui_document_validates() {
+        let raw = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../modules/illustration-studio/ui/index.json"),
+        )
+        .expect("illustration-studio ui");
+        let doc = DeclUiDocument::parse_json_with_contract(raw.as_bytes(), UI_CONTRACT_V2)
+            .expect("parse");
+        let tools = [
+            "illustration.project.load",
+            "illustration.project.save",
+            "illustration.project.ensure",
+            "illustration.document.load",
+            "illustration.document.save",
+        ];
+        let caps = vec![
+            crate::ILLUSTRATION_FS_READ_CAP.into(),
+            crate::ILLUSTRATION_FS_WRITE_CAP.into(),
+            crate::RENDER_STUB_CAP.into(),
+        ];
+        validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
+            .expect("illustration-studio ui valid");
+    }
+
+    #[test]
+    fn render_stub_service_requires_caps() {
+        let action = RichAction {
+            id: "stub".into(),
+            tool: None,
+            service: Some(crate::RENDER_STUB_SERVICE.into()),
+            input: Some(serde_json::json!({"path": "/documents/illustrations/beauty-stub.png"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        let err = action.validate(&HashSet::new(), &[]).unwrap_err();
+        assert!(matches!(err, RichDeclUiError::MissingCapability(_)));
+        let caps = vec![
+            crate::RENDER_STUB_CAP.into(),
+            crate::ILLUSTRATION_FS_WRITE_CAP.into(),
+        ];
+        action
+            .validate(&HashSet::new(), &caps)
+            .expect("stub with caps");
     }
 
     #[test]

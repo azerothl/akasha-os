@@ -2,7 +2,7 @@
 resolver = "2"
 members = ["crates/aos-agent", "crates/aos-auditd", "crates/aos-bridge", "crates/aos-capkd",
     "crates/aos-caps", "crates/aos-ipc", "crates/aos-llama", "crates/aos-mcp", "crates/aos-model",
-    "crates/aos-placement", "crates/aos-platform", "crates/aos-proto",
+    "crates/aos-placement", "crates/aos-platform", "crates/aos-proto", "crates/aos-scene",
     "crates/aos-registry", "crates/aos-sel4-abi", "crates/aos-sel4-capkd",
     "crates/aos-session", "crates/aos-sd", "crates/aos-sim", "crates/aos-ui", "crates/aos-ui-egui",
     "crates/aos-ui-iced",
@@ -15,6 +15,7 @@ exclude = [
     "modules/canvas",
     "modules/ext-rt",
     "modules/sdk",
+    "modules/illustration-studio",
 ]
 
 [workspace.package]

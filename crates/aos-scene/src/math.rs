@@ -1,0 +1,323 @@
+//! Minimal f32 linear algebra for ADR 0011 SceneGraph math.
+
+use serde::{Deserialize, Serialize};
+
+pub const EPSILON: f32 = 1e-5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Vec3 {
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const ONE: Self = Self {
+        x: 1.0,
+        y: 1.0,
+        z: 1.0,
+    };
+    pub const UNIT_X: Self = Self {
+        x: 1.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const UNIT_Y: Self = Self {
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+    };
+    pub const UNIT_Z: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 1.0,
+    };
+
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
+
+    pub fn from_array(a: [f32; 3]) -> Self {
+        Self {
+            x: a[0],
+            y: a[1],
+            z: a[2],
+        }
+    }
+
+    pub fn to_array(self) -> [f32; 3] {
+        [self.x, self.y, self.z]
+    }
+
+    pub fn length(self) -> f32 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+
+    pub fn normalized(self) -> Option<Self> {
+        let len = self.length();
+        if len < EPSILON {
+            None
+        } else {
+            Some(Self {
+                x: self.x / len,
+                y: self.y / len,
+                z: self.z / len,
+            })
+        }
+    }
+
+    pub fn cross(self, rhs: Self) -> Self {
+        Self {
+            x: self.y * rhs.z - self.z * rhs.y,
+            y: self.z * rhs.x - self.x * rhs.z,
+            z: self.x * rhs.y - self.y * rhs.x,
+        }
+    }
+
+    pub fn dot(self, rhs: Self) -> f32 {
+        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
+    }
+
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
+    }
+}
+
+impl std::ops::Add for Vec3 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+
+impl std::ops::Sub for Vec3 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
+impl std::ops::Mul<f32> for Vec3 {
+    type Output = Self;
+    fn mul(self, s: f32) -> Self {
+        Self {
+            x: self.x * s,
+            y: self.y * s,
+            z: self.z * s,
+        }
+    }
+}
+
+impl std::ops::Neg for Vec3 {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}
+
+/// Unit quaternion stored as **`[x, y, z, w]`** (ADR 0011).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Quat {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl Quat {
+    pub const IDENTITY: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        w: 1.0,
+    };
+
+    pub fn from_xyzw(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+
+    pub fn from_array(a: [f32; 4]) -> Self {
+        Self {
+            x: a[0],
+            y: a[1],
+            z: a[2],
+            w: a[3],
+        }
+    }
+
+    pub fn to_array(self) -> [f32; 4] {
+        [self.x, self.y, self.z, self.w]
+    }
+
+    pub fn length(self) -> f32 {
+        (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt()
+    }
+
+    pub fn normalized(self) -> Option<Self> {
+        let len = self.length();
+        if !len.is_finite() || len < EPSILON {
+            None
+        } else {
+            Some(Self {
+                x: self.x / len,
+                y: self.y / len,
+                z: self.z / len,
+                w: self.w / len,
+            })
+        }
+    }
+
+    /// Axis-angle; `axis` need not be unit; `angle` in **radians**.
+    pub fn from_axis_angle(axis: Vec3, angle: f32) -> Self {
+        let axis = axis.normalized().unwrap_or(Vec3::UNIT_Y);
+        let half = angle * 0.5;
+        let s = half.sin();
+        Self {
+            x: axis.x * s,
+            y: axis.y * s,
+            z: axis.z * s,
+            w: half.cos(),
+        }
+        .normalized()
+        .unwrap_or(Self::IDENTITY)
+    }
+
+    pub fn rotate_vec(self, v: Vec3) -> Vec3 {
+        // q * (0,v) * q^{-1}
+        let qv = Vec3::new(self.x, self.y, self.z);
+        let uv = qv.cross(v);
+        let uuv = qv.cross(uv);
+        v + (uv * (2.0 * self.w)) + (uuv * 2.0)
+    }
+
+    pub fn mul(self, rhs: Self) -> Self {
+        Self {
+            x: self.w * rhs.x + self.x * rhs.w + self.y * rhs.z - self.z * rhs.y,
+            y: self.w * rhs.y - self.x * rhs.z + self.y * rhs.w + self.z * rhs.x,
+            z: self.w * rhs.z + self.x * rhs.y - self.y * rhs.x + self.z * rhs.w,
+            w: self.w * rhs.w - self.x * rhs.x - self.y * rhs.y - self.z * rhs.z,
+        }
+        .normalized()
+        .unwrap_or(Self::IDENTITY)
+    }
+
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
+    }
+}
+
+/// Column-major 4×4 matrix (`M * v` with column vectors).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mat4 {
+    /// Column-major storage: index `col * 4 + row`.
+    pub m: [f32; 16],
+}
+
+impl Mat4 {
+    pub const IDENTITY: Self = Self {
+        m: [
+            1.0, 0.0, 0.0, 0.0, //
+            0.0, 1.0, 0.0, 0.0, //
+            0.0, 0.0, 1.0, 0.0, //
+            0.0, 0.0, 0.0, 1.0,
+        ],
+    };
+
+    pub fn from_cols(c0: [f32; 4], c1: [f32; 4], c2: [f32; 4], c3: [f32; 4]) -> Self {
+        let mut m = [0.0; 16];
+        for i in 0..4 {
+            m[i] = c0[i];
+            m[4 + i] = c1[i];
+            m[8 + i] = c2[i];
+            m[12 + i] = c3[i];
+        }
+        Self { m }
+    }
+
+    pub fn mul(self, rhs: Self) -> Self {
+        let mut out = [0.0; 16];
+        for col in 0..4 {
+            for row in 0..4 {
+                let mut s = 0.0;
+                for k in 0..4 {
+                    s += self.m[k * 4 + row] * rhs.m[col * 4 + k];
+                }
+                out[col * 4 + row] = s;
+            }
+        }
+        Self { m: out }
+    }
+
+    pub fn transform_point(self, p: Vec3) -> Vec3 {
+        let x = self.m[0] * p.x + self.m[4] * p.y + self.m[8] * p.z + self.m[12];
+        let y = self.m[1] * p.x + self.m[5] * p.y + self.m[9] * p.z + self.m[13];
+        let z = self.m[2] * p.x + self.m[6] * p.y + self.m[10] * p.z + self.m[14];
+        let w = self.m[3] * p.x + self.m[7] * p.y + self.m[11] * p.z + self.m[15];
+        if w.abs() < EPSILON {
+            Vec3::new(x, y, z)
+        } else {
+            Vec3::new(x / w, y / w, z / w)
+        }
+    }
+
+    pub fn transform_vector(self, v: Vec3) -> Vec3 {
+        Vec3::new(
+            self.m[0] * v.x + self.m[4] * v.y + self.m[8] * v.z,
+            self.m[1] * v.x + self.m[5] * v.y + self.m[9] * v.z,
+            self.m[2] * v.x + self.m[6] * v.y + self.m[10] * v.z,
+        )
+    }
+
+    /// TRS: scale, then rotate, then translate (`T * R * S`).
+    pub fn from_trs(translation: Vec3, rotation: Quat, scale: Vec3) -> Self {
+        let r = rotation;
+        // Rotation matrix from quaternion (column-major).
+        let xx = r.x * r.x;
+        let yy = r.y * r.y;
+        let zz = r.z * r.z;
+        let xy = r.x * r.y;
+        let xz = r.x * r.z;
+        let yz = r.y * r.z;
+        let wx = r.w * r.x;
+        let wy = r.w * r.y;
+        let wz = r.w * r.z;
+
+        let c0 = [
+            (1.0 - 2.0 * (yy + zz)) * scale.x,
+            (2.0 * (xy + wz)) * scale.x,
+            (2.0 * (xz - wy)) * scale.x,
+            0.0,
+        ];
+        let c1 = [
+            (2.0 * (xy - wz)) * scale.y,
+            (1.0 - 2.0 * (xx + zz)) * scale.y,
+            (2.0 * (yz + wx)) * scale.y,
+            0.0,
+        ];
+        let c2 = [
+            (2.0 * (xz + wy)) * scale.z,
+            (2.0 * (yz - wx)) * scale.z,
+            (1.0 - 2.0 * (xx + yy)) * scale.z,
+            0.0,
+        ];
+        let c3 = [translation.x, translation.y, translation.z, 1.0];
+        Self::from_cols(c0, c1, c2, c3)
+    }
+}

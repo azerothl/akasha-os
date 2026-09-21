@@ -2,6 +2,9 @@
 
 use crate::icons;
 use crate::rich_composition_ui::{patch_to_local_map, LayerCanvasHostState};
+use crate::scene3d_ui::{
+    patch_to_local_map as scene_patch_to_local_map, Scene3dHostState,
+};
 use crate::rich_decl::{
     init_state_from_schema, ImageViewInteractionState, JobProgressThrottle, RichDeclSubscriptions,
 };
@@ -55,6 +58,7 @@ pub struct DeclUiPanelState {
     pub subscriptions: RichDeclSubscriptions,
     pub image_views: HashMap<String, ImageViewInteractionState>,
     pub layer_canvases: HashMap<String, LayerCanvasHostState>,
+    pub scene3d_viewports: HashMap<String, Scene3dHostState>,
     pub job_throttle: JobProgressThrottle,
     pub form_fields: HashMap<String, String>,
     pub status: String,
@@ -120,6 +124,7 @@ impl DeclUiPanelState {
         self.job_throttle.clear();
         self.image_views.clear();
         self.layer_canvases.clear();
+        self.scene3d_viewports.clear();
         self.binding_cache.clear();
     }
 
@@ -146,6 +151,12 @@ impl DeclUiPanelState {
             if let Some(path) = result.get("path").and_then(Value::as_str) {
                 self.local_state
                     .insert("result_path".into(), Value::String(path.into()));
+            }
+        }
+        if tool == "illustration.project.load" || tool == "illustration.project.ensure" {
+            if let Some(yaml) = result.get("yaml").and_then(Value::as_str) {
+                self.local_state
+                    .insert("scene".into(), Value::String(yaml.into()));
             }
         }
         self.bind_cache.insert(tool.to_string(), result);
@@ -226,6 +237,7 @@ impl DeclUiPanelState {
             &self.subscriptions,
             &mut self.image_views,
             &mut self.layer_canvases,
+            &mut self.scene3d_viewports,
             &mut self.form_fields,
             &self.tool_schemas,
             self.pending_invoke,
@@ -247,6 +259,7 @@ impl DeclUiPanelState {
         subscriptions: &RichDeclSubscriptions,
         image_views: &mut HashMap<String, ImageViewInteractionState>,
         layer_canvases: &mut HashMap<String, LayerCanvasHostState>,
+        scene3d_viewports: &mut HashMap<String, Scene3dHostState>,
         form_fields: &mut HashMap<String, String>,
         tool_schemas: &HashMap<String, Value>,
         pending_invoke: bool,
@@ -299,6 +312,7 @@ impl DeclUiPanelState {
                                         subscriptions,
                                         image_views,
                                         layer_canvases,
+                                        scene3d_viewports,
                                         form_fields,
                                         tool_schemas,
                                         pending_invoke,
@@ -328,6 +342,7 @@ impl DeclUiPanelState {
                                 subscriptions,
                                 image_views,
                                 layer_canvases,
+                                scene3d_viewports,
                                 form_fields,
                                 tool_schemas,
                                 pending_invoke,
@@ -381,6 +396,7 @@ impl DeclUiPanelState {
                                     subscriptions,
                                     image_views,
                                     layer_canvases,
+                                    scene3d_viewports,
                                     form_fields,
                                     tool_schemas,
                                     pending_invoke,
@@ -409,6 +425,7 @@ impl DeclUiPanelState {
                                     subscriptions,
                                     image_views,
                                     layer_canvases,
+                                    scene3d_viewports,
                                     form_fields,
                                     tool_schemas,
                                     pending_invoke,
@@ -1114,6 +1131,7 @@ impl DeclUiPanelState {
                                     subscriptions,
                                     image_views,
                                     layer_canvases,
+                                    scene3d_viewports,
                                     form_fields,
                                     tool_schemas,
                                     pending_invoke,
@@ -1160,6 +1178,7 @@ impl DeclUiPanelState {
                                             subscriptions,
                                             image_views,
                                             layer_canvases,
+                                            scene3d_viewports,
                                             form_fields,
                                             tool_schemas,
                                             pending_invoke,
@@ -1186,6 +1205,7 @@ impl DeclUiPanelState {
                                             subscriptions,
                                             image_views,
                                             layer_canvases,
+                                            scene3d_viewports,
                                             form_fields,
                                             tool_schemas,
                                             pending_invoke,
@@ -1243,6 +1263,7 @@ impl DeclUiPanelState {
                                 subscriptions,
                                 image_views,
                                 layer_canvases,
+                                scene3d_viewports,
                                 form_fields,
                                 tool_schemas,
                                 pending_invoke,
@@ -1536,6 +1557,41 @@ impl DeclUiPanelState {
                     }
                 }
             }
+
+            "scene3d" => {
+                let viewport_id = w
+                    .canvas_id
+                    .clone()
+                    .or_else(|| w.scene_key.clone())
+                    .unwrap_or_else(|| "scene3d".into());
+                let host = scene3d_viewports.entry(viewport_id).or_default();
+                if let Some(patch) = crate::scene3d_ui::ui_scene3d(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                    host,
+                ) {
+                    for (k, v) in scene_patch_to_local_map(&patch) {
+                        actions.local_patch.insert(k, v);
+                    }
+                }
+            }
+            "scene_tree" => {
+                if let Some(patch) = crate::scene3d_ui::ui_scene_tree(
+                    ui,
+                    w,
+                    doc,
+                    language,
+                    local_state,
+                ) {
+                    for (k, v) in scene_patch_to_local_map(&patch) {
+                        actions.local_patch.insert(k, v);
+                    }
+                }
+            }
+
             _ => {
                 ui.colored_label(
                     egui::Color32::RED,
