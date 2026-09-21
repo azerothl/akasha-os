@@ -945,18 +945,30 @@ mod tests {
 
     #[test]
     fn isolation_forest_flags_ttft_spike() {
+        // Training cloud: dim0 ~ [0, 0.79], remaining dims constant.
+        // `extended-isolation-forest` uses thread_rng (no seed API), so a single
+        // forest fit can occasionally rank a far OOD probe below an in-cloud
+        // probe — average several fits and use a moderate spike (not 5000)
+        // so the inequality stays stable under CI RNG.
         let mut samples = Vec::new();
         for i in 0..80 {
             let noise = (i as f64) * 0.01;
             samples.push([noise, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.3]);
         }
         let normal = [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.3];
-        let spike = [5000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.3];
-        let s_n = isolation_score_for_test(&samples, &normal).expect("fit");
-        let s_s = isolation_score_for_test(&samples, &spike).expect("fit");
+        let spike = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.3];
+        const TRIALS: usize = 24;
+        let mut sum_n = 0.0;
+        let mut sum_s = 0.0;
+        for _ in 0..TRIALS {
+            sum_n += isolation_score_for_test(&samples, &normal).expect("fit");
+            sum_s += isolation_score_for_test(&samples, &spike).expect("fit");
+        }
+        let s_n = sum_n / TRIALS as f64;
+        let s_s = sum_s / TRIALS as f64;
         assert!(
-            s_s > s_n,
-            "spike score {s_s} should exceed normal {s_n}"
+            s_s > s_n + 0.02,
+            "spike score {s_s} should exceed normal {s_n} with margin"
         );
         // IF never flips canary_ok — only a score.
         let mut snap = HealthSnapshot {
