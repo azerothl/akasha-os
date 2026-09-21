@@ -625,6 +625,48 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::RENDER_SUBMIT_SERVICE => {
+            // Backend-specific cap checked at runtime; require write + at least one render cap.
+            let has_render = granted_caps.iter().any(|c| {
+                c == crate::RENDER_STUB_CAP || c == crate::RENDER_CPU_CAP
+            });
+            if !has_render {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::RENDER_STUB_CAP.into(),
+                ));
+            }
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ILLUSTRATION_FS_WRITE_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ILLUSTRATION_FS_WRITE_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::RENDER_STATUS_SERVICE | crate::RENDER_RESULT_SERVICE => {
+            let has_render = granted_caps.iter().any(|c| {
+                c == crate::RENDER_STUB_CAP || c == crate::RENDER_CPU_CAP
+            });
+            if !has_render {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::RENDER_STUB_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::ASSET_INSTANTIATE_SERVICE => {
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ASSET_ILLUSTRATION_READ_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ASSET_ILLUSTRATION_READ_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -1057,6 +1099,8 @@ mod tests {
             crate::ILLUSTRATION_FS_READ_CAP.into(),
             crate::ILLUSTRATION_FS_WRITE_CAP.into(),
             crate::RENDER_STUB_CAP.into(),
+            crate::RENDER_CPU_CAP.into(),
+            crate::ASSET_ILLUSTRATION_READ_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
             .expect("illustration-studio ui valid");
@@ -1081,6 +1125,53 @@ mod tests {
         action
             .validate(&HashSet::new(), &caps)
             .expect("stub with caps");
+    }
+
+    #[test]
+    fn render_submit_and_asset_services_require_caps() {
+        let submit = RichAction {
+            id: "cpu".into(),
+            tool: None,
+            service: Some(crate::RENDER_SUBMIT_SERVICE.into()),
+            input: Some(serde_json::json!({
+                "backend": "cpu",
+                "path": "/documents/illustrations/beauty-cpu.png"
+            })),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        assert!(matches!(
+            submit.validate(&HashSet::new(), &[]).unwrap_err(),
+            RichDeclUiError::MissingCapability(_)
+        ));
+        submit
+            .validate(
+                &HashSet::new(),
+                &[
+                    crate::RENDER_CPU_CAP.into(),
+                    crate::ILLUSTRATION_FS_WRITE_CAP.into(),
+                ],
+            )
+            .expect("submit with cpu cap");
+
+        let asset = RichAction {
+            id: "inst".into(),
+            tool: None,
+            service: Some(crate::ASSET_INSTANTIATE_SERVICE.into()),
+            input: Some(serde_json::json!({"asset_id": "humanoid.placeholder"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        assert!(matches!(
+            asset.validate(&HashSet::new(), &[]).unwrap_err(),
+            RichDeclUiError::MissingCapability(_)
+        ));
+        asset
+            .validate(
+                &HashSet::new(),
+                &[crate::ASSET_ILLUSTRATION_READ_CAP.into()],
+            )
+            .expect("asset with read cap");
     }
 
     #[test]

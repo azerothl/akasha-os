@@ -1,0 +1,57 @@
+# Illustration Studio — core primitives asset pack (ADR 0011).
+# Logical path: /assets/illustration/primitives/pack.yaml
+# Cap: asset.read:/assets/illustration/**
+format_version: 1
+pack_id: illustration-primitives-v0
+conventions: ADR-0011
+entries:
+  - kind: mesh_box
+    id: prop.box
+    name: Box
+    size: [1.0, 1.0, 1.0]
+  - kind: prefab
+    id: humanoid.placeholder
+    name: Humanoid
+    nodes:
+      # Root empty at origin; body parts as MeshBox children (metres, Y-up).
+      - id: humanoid
+        name: Humanoid
+        kind: empty
+        translation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+      - id: torso
+        name: Torso
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.0, 1.0, 0.0]
+        scale: [0.45, 0.55, 0.25]
+      - id: head
+        name: Head
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.0, 1.55, 0.0]
+        scale: [0.22, 0.22, 0.22]
+      - id: leg_l
+        name: LegL
+        parent: humanoid
+        kind: mesh_box
+        translation: [-0.12, 0.35, 0.0]
+        scale: [0.14, 0.7, 0.14]
+      - id: leg_r
+        name: LegR
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.12, 0.35, 0.0]
+        scale: [0.14, 0.7, 0.14]
+      - id: arm_l
+        name: ArmL
+        parent: humanoid
+        kind: mesh_box
+        translation: [-0.38, 1.05, 0.0]
+        scale: [0.12, 0.5, 0.12]
+      - id: arm_r
+        name: ArmR
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.38, 1.05, 0.0]
+        scale: [0.12, 0.5, 0.12]

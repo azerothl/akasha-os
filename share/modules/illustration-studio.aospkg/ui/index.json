@@ -11,10 +11,12 @@
       "scene_label": "Scene",
       "save_label": "Save project",
       "load_label": "Load project",
-      "stub_render_label": "Stub beauty pass",
-      "about_body": "Foundation slice: editable SceneGraph, host scene3d orbit/select/TRS, YAML save/load. No AI, no Blender.",
+      "stub_render_label": "Stub beauty",
+      "cpu_render_label": "CPU beauty",
+      "add_humanoid_label": "Add humanoid",
+      "about_body": "Product suite: SceneGraph + RenderService (stub/CPU) + primitives pack. Offline, no Blender.",
       "beauty_empty": "No beauty pass yet",
-      "preview_label": "Beauty (stub)"
+      "preview_label": "Beauty pass"
     },
     "fr": {
       "app_title": "Studio Illustration",
@@ -22,10 +24,12 @@
       "scene_label": "Scène",
       "save_label": "Enregistrer le projet",
       "load_label": "Charger le projet",
-      "stub_render_label": "Rendu stub (beauté)",
-      "about_body": "Tranche fondation : SceneGraph éditable, scene3d hôte (orbite/sélection/TRS), save/load YAML. Pas d'IA, pas de Blender.",
+      "stub_render_label": "Beauté stub",
+      "cpu_render_label": "Beauté CPU",
+      "add_humanoid_label": "Ajouter humanoïde",
+      "about_body": "Suite produit : SceneGraph + RenderService (stub/CPU) + pack primitives. Hors-ligne, sans Blender.",
       "beauty_empty": "Pas encore de rendu beauté",
-      "preview_label": "Beauté (stub)"
+      "preview_label": "Rendu beauté"
     }
   },
   "state": {
@@ -64,12 +68,39 @@
     },
     {
       "id": "stub_beauty",
-      "service": "render.stub.beauty",
+      "service": "render.submit",
       "input": {
+        "backend": "stub",
+        "pass": "beauty",
         "path": "/documents/illustrations/beauty-stub.png",
+        "scene_yaml": "$local.scene",
         "r": 48,
         "g": 72,
         "b": 96
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "cpu_beauty",
+      "service": "render.submit",
+      "input": {
+        "backend": "cpu",
+        "pass": "beauty",
+        "path": "/documents/illustrations/beauty-cpu.png",
+        "scene_yaml": "$local.scene",
+        "width": 256,
+        "height": 192
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_humanoid",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "humanoid.placeholder",
+        "parent_id": "root",
+        "prefix": "h_",
+        "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
     }
@@ -99,6 +130,16 @@
             "kind": "button",
             "label_key": "stub_render_label",
             "action": "stub_beauty"
+          },
+          {
+            "kind": "button",
+            "label_key": "cpu_render_label",
+            "action": "cpu_beauty"
+          },
+          {
+            "kind": "button",
+            "label_key": "add_humanoid_label",
+            "action": "instantiate_humanoid"
           }
         ]
       },

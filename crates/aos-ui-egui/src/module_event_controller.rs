@@ -298,12 +298,30 @@ pub(crate) fn on_ui_service_done(
         if ok {
             panel.status.clear();
             if module == "illustration-studio"
-                && (action_id == "stub_beauty" || action_id == aos_proto::RENDER_STUB_SERVICE)
+                && (action_id == "stub_beauty"
+                    || action_id == "cpu_beauty"
+                    || action_id == aos_proto::RENDER_STUB_SERVICE
+                    || action_id == aos_proto::RENDER_SUBMIT_SERVICE)
             {
                 if let Some(path) = result.get("path").and_then(|p| p.as_str()) {
                     panel
                         .local_state
                         .insert("beauty_path".into(), Value::String(path.to_string()));
+                }
+            }
+            if module == "illustration-studio"
+                && (action_id == "instantiate_humanoid"
+                    || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE)
+            {
+                if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("scene".into(), Value::String(yaml.to_string()));
+                }
+                if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("selected_id".into(), Value::String(root.to_string()));
                 }
             }
         } else {

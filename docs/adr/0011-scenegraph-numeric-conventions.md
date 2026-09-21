@@ -96,6 +96,10 @@ only freezes **which** cases exist.
 > SceneGraph + YAML project format and covers identity / axis rotations /
 > parenting / camera forward / load-save golden tests. Rig rest pose, IK
 > fixture, and glTF↔backend round-trips remain deferred.
+>
+> **Implementation note (product suite):** `RenderService` (submit/status/result)
+> + stub/CPU backends and a minimal asset pack (`humanoid.placeholder`) land
+> without Blender. ADR numeric contract is unchanged.
 
 ## Consequences
 
