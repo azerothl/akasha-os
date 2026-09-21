@@ -1,0 +1,12 @@
+Illustration Renderer Pack — third-party notices
+================================================
+
+This optional pack is separate from the Akasha OS AGPL host and Apache-2.0
+guest modules.
+
+- Blender binary (if redistributed): GPL-2.0-or-later / Blender Foundation terms
+- adapters/akasha_beauty.py: GPL-3.0-or-later
+- Akasha SceneGraph export JSON and render PNG outputs: not GPL by virtue of
+  rendering (Blender FAQ: program output / artist creations)
+
+Do not copy adapters into crates/ or modules/.

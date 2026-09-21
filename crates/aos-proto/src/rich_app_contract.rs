@@ -162,6 +162,9 @@ pub const RENDER_STUB_CAP: &str = "render.stub";
 /// Cap: host CPU SceneGraph wireframe / beauty backend (no Blender / no wgpu).
 pub const RENDER_CPU_CAP: &str = "render.cpu";
 
+/// Cap: isolated Blender beauty backend (Renderer Pack process or deterministic mock).
+pub const RENDER_BLENDER_CAP: &str = "render.blender";
+
 /// Cap: read Illustration Studio asset packs under `/assets/illustration/**`.
 pub const ASSET_ILLUSTRATION_READ_CAP: &str = "asset.read:/assets/illustration/**";
 

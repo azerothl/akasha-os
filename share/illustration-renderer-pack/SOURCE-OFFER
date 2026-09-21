@@ -1,0 +1,14 @@
+Source offer (Illustration Renderer Pack)
+=========================================
+
+If you redistribute a **modified** Blender binary with this pack, you must
+provide corresponding source under the GPL.
+
+For **unmodified official** Blender builds obtained from blender.org, pointing
+users at https://www.blender.org/download/ and the matching source archives
+published by the Blender Foundation is the intended information path.
+
+Adapter scripts in `adapters/` are included in this tree in source form.
+
+This file is an engineering placeholder — public redistribution still needs
+OSS counsel review (see P0-C checklist).

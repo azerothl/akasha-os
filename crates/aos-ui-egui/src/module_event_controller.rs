@@ -300,6 +300,7 @@ pub(crate) fn on_ui_service_done(
             if module == "illustration-studio"
                 && (action_id == "stub_beauty"
                     || action_id == "cpu_beauty"
+                    || action_id == "blender_beauty"
                     || action_id == aos_proto::RENDER_STUB_SERVICE
                     || action_id == aos_proto::RENDER_SUBMIT_SERVICE)
             {

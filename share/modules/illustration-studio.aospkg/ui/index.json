@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Orbit drag · click to select · drag to move. wgpu edit viewport (not beauty). Stub/CPU beauty via RenderService.",
+      "tip_body": "Orbit drag · click to select · drag to move. wgpu edit viewport (not beauty). Stub/CPU/Blender beauty via RenderService.",
       "assets_section": "Assets",
       "project_section": "Project",
       "render_section": "Beauty pass",
@@ -18,14 +18,15 @@
       "load_label": "Load",
       "stub_render_label": "Stub beauty",
       "cpu_render_label": "CPU beauty",
+      "blender_render_label": "Blender beauty",
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
-      "beauty_empty": "No beauty pass yet — run Stub or CPU beauty.",
+      "beauty_empty": "No beauty pass yet — run Stub, CPU, or Blender beauty.",
       "preview_label": "Beauty preview"
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Orbite glisser · clic pour sélectionner · glisser pour déplacer. Fenêtre d’édition wgpu (pas beauté). Beauté stub/CPU via RenderService.",
+      "tip_body": "Orbite glisser · clic pour sélectionner · glisser pour déplacer. Fenêtre d’édition wgpu (pas beauté). Beauté stub/CPU/Blender via RenderService.",
       "assets_section": "Assets",
       "project_section": "Projet",
       "render_section": "Rendu beauté",
@@ -36,9 +37,10 @@
       "load_label": "Charger",
       "stub_render_label": "Beauté stub",
       "cpu_render_label": "Beauté CPU",
+      "blender_render_label": "Beauté Blender",
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
-      "beauty_empty": "Pas encore de rendu beauté — lancez Stub ou CPU.",
+      "beauty_empty": "Pas encore de rendu beauté — lancez Stub, CPU ou Blender.",
       "preview_label": "Aperçu beauté"
     }
   },
@@ -100,6 +102,19 @@
         "scene_yaml": "$local.scene",
         "width": 320,
         "height": 240
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "blender_beauty",
+      "service": "render.submit",
+      "input": {
+        "backend": "blender",
+        "pass": "beauty",
+        "path": "/documents/illustrations/beauty-blender.png",
+        "scene_yaml": "$local.scene",
+        "width": 256,
+        "height": 192
       },
       "refresh_binds": []
     },
@@ -180,6 +195,11 @@
                 "kind": "button",
                 "label_key": "stub_render_label",
                 "action": "stub_beauty"
+              },
+              {
+                "kind": "button",
+                "label_key": "blender_render_label",
+                "action": "blender_beauty"
               }
             ]
           }

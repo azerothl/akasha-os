@@ -1,0 +1,4 @@
+GPL-3.0-or-later — see https://www.gnu.org/licenses/gpl-3.0.html
+
+Full license text is intentionally not duplicated here; ship the complete
+GPL text with any public redistribution of this pack.

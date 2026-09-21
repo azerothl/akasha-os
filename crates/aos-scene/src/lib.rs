@@ -6,8 +6,9 @@
 //!
 //! Backends convert; this crate never speaks Blender Z-up.
 //!
-//! Product suite: backend-agnostic [`RenderService`] (stub + CPU wireframe)
-//! and minimal [`assets`] pack format — no Blender binary / no GPL pack.
+//! Product suite: backend-agnostic [`RenderService`] (stub + CPU + optional
+//! Blender-isolated beauty) and minimal [`assets`] pack format. Blender / `bpy`
+//! stay in the separate Renderer Pack — never linked here.
 //!
 //! Edit viewport: [`viewport`] is a wgpu lit MeshBox view of the same SceneGraph
 //! (DeclUI `scene3d`). It is **not** a beauty / NPR RenderService backend.
@@ -32,9 +33,11 @@ pub use math::{Mat4, Quat, Vec3, EPSILON};
 pub use ops::{SceneOp, UndoStack};
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use render::{
-    parse_backend, parse_pass, CpuWireframeBackend, JobState, RenderBackend, RenderBackendId,
+    isolation_matrix, parse_backend, parse_pass, AkashaSceneExport, BlenderRenderBackend,
+    BlenderRunMode, CpuWireframeBackend, IsolationRow, JobState, RenderBackend, RenderBackendId,
     RenderError, RenderJobStatus, RenderOutput, RenderPassKind, RenderRequest, RenderResult,
-    RenderService, RenderSubmit, StubRenderBackend, DEFAULT_RENDER_BACKEND,
+    RenderService, RenderSubmit, StubRenderBackend, AKASHA_SCENE_EXPORT_VERSION,
+    DEFAULT_BLENDER_BEAUTY_PATH, DEFAULT_RENDER_BACKEND,
 };
 pub use render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 pub use scene::{
@@ -54,6 +57,8 @@ pub const ILLUSTRATION_FS_WRITE_CAP: &str = "fs.write:/documents/illustrations/*
 pub const RENDER_STUB_CAP: &str = "render.stub";
 /// Cap: run the host CPU SceneGraph wireframe / beauty backend.
 pub const RENDER_CPU_CAP: &str = "render.cpu";
+/// Cap: run the isolated Blender beauty backend (Renderer Pack or mock).
+pub const RENDER_BLENDER_CAP: &str = "render.blender";
 
 /// Host DeclUI service id for the stub beauty pass (legacy thin wrapper).
 pub const RENDER_STUB_SERVICE: &str = "render.stub.beauty";

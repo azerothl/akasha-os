@@ -3,6 +3,7 @@
 use super::backend::{
     RenderBackend, RenderBackendId, RenderError, RenderPassKind, RenderRequest,
 };
+use super::blender::BlenderRenderBackend;
 use super::cpu::CpuWireframeBackend;
 use super::stub::StubRenderBackend;
 use crate::scene::{SceneGraph, ILLUSTRATIONS_DOCUMENTS_PREFIX};
@@ -90,6 +91,7 @@ impl RenderService {
         let mut backends: HashMap<RenderBackendId, Arc<dyn RenderBackend>> = HashMap::new();
         backends.insert(RenderBackendId::Stub, Arc::new(StubRenderBackend));
         backends.insert(RenderBackendId::Cpu, Arc::new(CpuWireframeBackend));
+        backends.insert(RenderBackendId::Blender, Arc::new(BlenderRenderBackend::default()));
         Self {
             backends,
             default_backend: RenderBackendId::Stub,
@@ -311,5 +313,25 @@ mod tests {
             .expect("cpu");
         assert_eq!(res.backend, RenderBackendId::Cpu);
         assert_eq!(res.width, 96);
+    }
+
+    #[test]
+    fn blender_backend_registered() {
+        let svc = RenderService::default();
+        assert!(svc.has_backend(RenderBackendId::Blender));
+        // Auto/mock path must succeed without a Blender binary.
+        let res = svc
+            .submit_and_result(RenderSubmit {
+                scene: SceneGraph::demo_scene(),
+                backend: RenderBackendId::Blender,
+                pass: RenderPassKind::Beauty,
+                width: 80,
+                height: 60,
+                output_path: "/documents/illustrations/beauty-blender.png".into(),
+                stub_rgb: (0, 0, 0),
+            })
+            .expect("blender auto/mock");
+        assert_eq!(res.backend, RenderBackendId::Blender);
+        assert!(res.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
     }
 }

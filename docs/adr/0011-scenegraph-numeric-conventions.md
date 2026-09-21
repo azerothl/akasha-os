@@ -99,7 +99,9 @@ only freezes **which** cases exist.
 >
 > **Implementation note (product suite):** `RenderService` (submit/status/result)
 > + stub/CPU backends and a minimal asset pack (`humanoid.placeholder`) land
-> without Blender. ADR numeric contract is unchanged.
+> without requiring Blender. Optional `blender` backend exports ADR 0011 JSON and
+> isolates a Renderer Pack child (or deterministic mock for CI). ADR numeric
+> contract is unchanged.
 >
 > **Implementation note (wgpu edit viewport):** DeclUI `scene3d` paints via
 > `aos-scene::viewport` (wgpu lit MeshBox). That path is an approximate

@@ -55,6 +55,7 @@ entries:
       - fs.write:/documents/illustrations/**
       - render.stub
       - render.cpu
+      - render.blender
       - asset.read:/assets/illustration/**
       - tool.invoke:illustration-studio
   - name: mcp-example
