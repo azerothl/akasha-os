@@ -774,6 +774,7 @@ async fn run_render_submit(
     let render_cap = match backend {
         RenderBackendId::Stub => aos_proto::RENDER_STUB_CAP,
         RenderBackendId::Cpu => aos_proto::RENDER_CPU_CAP,
+        RenderBackendId::Blender => aos_proto::RENDER_BLENDER_CAP,
     };
 
     let svc = illustration_render_service();

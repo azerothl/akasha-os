@@ -10,6 +10,8 @@ pub enum RenderBackendId {
     Stub,
     /// CPU SceneGraph wireframe / flat beauty (no GPU, no Blender).
     Cpu,
+    /// Optional Blender beauty via isolated Renderer Pack (or deterministic mock).
+    Blender,
 }
 
 impl RenderBackendId {
@@ -17,6 +19,7 @@ impl RenderBackendId {
         match self {
             Self::Stub => "stub",
             Self::Cpu => "cpu",
+            Self::Blender => "blender",
         }
     }
 
@@ -24,6 +27,7 @@ impl RenderBackendId {
         match s.trim().to_ascii_lowercase().as_str() {
             "stub" | "solid" => Some(Self::Stub),
             "cpu" | "cpu_wireframe" | "wireframe" => Some(Self::Cpu),
+            "blender" | "beauty_blender" | "eevee" | "cycles" => Some(Self::Blender),
             _ => None,
         }
     }
@@ -93,6 +97,10 @@ pub enum RenderError {
     Encode(String),
     #[error("path outside illustrations tree: {0}")]
     PathDenied(String),
+    #[error("backend unavailable: {0}")]
+    BackendUnavailable(String),
+    #[error("isolation: {0}")]
+    Isolation(String),
 }
 
 /// Pluggable render backend (host-side; never Blender / bpy).

@@ -52,6 +52,7 @@ permissions:
     - fs.write:/documents/illustrations/**
     - render.stub
     - render.cpu
+    - render.blender
     - asset.read:/assets/illustration/**
     - tool.invoke:illustration-studio
 tools:
@@ -90,3 +91,11 @@ EOF
 rm -rf "$SHARE"
 cp -a "${STAGING}" "$SHARE"
 echo "== package ready: ${STAGING} / ${SHARE} (hash ${HASH}) =="
+
+# Keep local catalogue hash/caps in sync when present.
+if [[ -f "${ROOT}/share/modules/catalogue.yaml" ]]; then
+  echo "== refresh catalogue signature (UPDATE_CATALOGUE=1) =="
+  (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
+    committed_catalogue_signature_matches -- --nocapture) \
+    || echo "WARN: catalogue signature refresh failed — run UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features committed_catalogue_signature_matches"
+fi

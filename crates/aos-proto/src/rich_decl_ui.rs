@@ -628,7 +628,9 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
         crate::RENDER_SUBMIT_SERVICE => {
             // Backend-specific cap checked at runtime; require write + at least one render cap.
             let has_render = granted_caps.iter().any(|c| {
-                c == crate::RENDER_STUB_CAP || c == crate::RENDER_CPU_CAP
+                c == crate::RENDER_STUB_CAP
+                    || c == crate::RENDER_CPU_CAP
+                    || c == crate::RENDER_BLENDER_CAP
             });
             if !has_render {
                 return Err(RichDeclUiError::MissingCapability(
@@ -647,7 +649,9 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
         }
         crate::RENDER_STATUS_SERVICE | crate::RENDER_RESULT_SERVICE => {
             let has_render = granted_caps.iter().any(|c| {
-                c == crate::RENDER_STUB_CAP || c == crate::RENDER_CPU_CAP
+                c == crate::RENDER_STUB_CAP
+                    || c == crate::RENDER_CPU_CAP
+                    || c == crate::RENDER_BLENDER_CAP
             });
             if !has_render {
                 return Err(RichDeclUiError::MissingCapability(
@@ -1100,6 +1104,7 @@ mod tests {
             crate::ILLUSTRATION_FS_WRITE_CAP.into(),
             crate::RENDER_STUB_CAP.into(),
             crate::RENDER_CPU_CAP.into(),
+            crate::RENDER_BLENDER_CAP.into(),
             crate::ASSET_ILLUSTRATION_READ_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
