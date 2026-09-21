@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CharacterSpec",
+  "type": "object",
+  "required": [
+    "version",
+    "character",
+    "proportions",
+    "pose",
+    "camera"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "character": {
+      "type": "object",
+      "required": ["species", "age_group"],
+      "properties": {
+        "species": {
+          "type": "string",
+          "default": "human"
+        },
+        "age_group": {
+          "enum": [
+            "child",
+            "teen",
+            "adult",
+            "elderly"
+          ]
+        },
+        "sex": {
+          "type": "string"
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "build": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "proportions": {
+      "type": "object",
+      "required": ["height_heads"],
+      "properties": {
+        "system": {
+          "type": "string"
+        },
+        "height_heads": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 12
+        },
+        "shoulder_width_heads": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 4
+        }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "line_of_action": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": ["straight", "C", "S"]
+            },
+            "intensity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "balance": {
+          "type": "object",
+          "properties": {
+            "weight_bearing_leg": {
+              "enum": [
+                "left",
+                "right",
+                "both"
+              ]
+            }
+          }
+        },
+        "head": {
+          "$ref": "#/$defs/rotation"
+        },
+        "torso": {
+          "$ref": "#/$defs/rotation"
+        },
+        "pelvis": {
+          "$ref": "#/$defs/rotation"
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "enum": [
+            "orthographic",
+            "perspective"
+          ]
+        },
+        "view": {
+          "type": "string"
+        },
+        "yaw": {
+          "type": "number"
+        },
+        "pitch": {
+          "type": "number"
+        },
+        "roll": {
+          "type": "number"
+        },
+        "focal_length_mm": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 300
+        }
+      }
+    },
+    "drawing": {
+      "type": "object",
+      "properties": {
+        "medium": {
+          "type": "string"
+        },
+        "construction_lines": {
+          "type": "boolean"
+        },
+        "cross_contours": {
+          "type": "boolean"
+        },
+        "passes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "gesture",
+              "skeleton",
+              "mannequin",
+              "construction",
+              "anatomy",
+              "clean_line",
+              "rendering"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rotation": {
+      "type": "object",
+      "properties": {
+        "yaw": {
+          "type": "number",
+          "default": 0
+        },
+        "pitch": {
+          "type": "number",
+          "default": 0
+        },
+        "roll": {
+          "type": "number",
+          "default": 0
+        }
+      }
+    }
+  }
+}

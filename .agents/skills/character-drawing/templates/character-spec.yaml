@@ -1,0 +1,79 @@
+version: "1.0"
+
+character:
+  species: human
+  age_group: adult
+  sex: unspecified
+
+  body:
+    build: average
+
+proportions:
+  system: realistic
+  height_heads: 7.5
+  shoulder_width_heads: 2.25
+
+pose:
+  type: standing
+
+  line_of_action:
+    type: S
+    intensity: 0.3
+
+  balance:
+    weight_bearing_leg: right
+
+  head:
+    yaw: 0
+    pitch: 0
+    roll: 0
+
+  torso:
+    yaw: 0
+    pitch: 0
+    roll: 0
+
+  pelvis:
+    yaw: 0
+    pitch: 0
+    roll: 0
+
+  arms:
+    left:
+      shoulder: 0
+      elbow: 10
+    right:
+      shoulder: 0
+      elbow: 10
+
+  legs:
+    left:
+      hip: 0
+      knee: 5
+    right:
+      hip: 0
+      knee: 5
+
+camera:
+  projection: perspective
+  view: three_quarter
+
+  yaw: 20
+  pitch: 0
+  roll: 0
+
+  focal_length_mm: 50
+
+drawing:
+  medium: pencil
+  construction_lines: true
+  cross_contours: true
+
+  passes:
+    - gesture
+    - skeleton
+    - mannequin
+    - construction
+    - anatomy
+    - clean_line
+    - rendering

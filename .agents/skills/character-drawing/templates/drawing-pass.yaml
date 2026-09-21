@@ -1,0 +1,37 @@
+version: "1.0"
+
+character_id: character_001
+
+current_pass: gesture
+
+completed_passes: []
+
+locked:
+  canvas: true
+  camera: true
+  proportions: true
+  pose: true
+  joints: true
+
+preserve:
+  previous_image: true
+  previous_strokes: true
+
+geometry:
+  source: resolved-character.json
+
+drawing:
+  existing_strokes: []
+
+  new_strokes:
+    - gesture
+
+visibility:
+  gesture: 1.0
+  skeleton: 0.0
+  volumes: 0.0
+  construction: 0.0
+  anatomy: 0.0
+  clean_line: 0.0
+
+next_pass: skeleton

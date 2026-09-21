@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawingState",
+  "type": "object",
+  "required": [
+    "version",
+    "character_id",
+    "current_pass",
+    "completed_passes",
+    "locked"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "character_id": {
+      "type": "string"
+    },
+    "current_pass": {
+      "enum": [
+        "gesture",
+        "skeleton",
+        "mannequin",
+        "construction",
+        "anatomy",
+        "clean_line",
+        "rendering"
+      ]
+    },
+    "completed_passes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "locked": {
+      "type": "object",
+      "required": [
+        "canvas",
+        "camera",
+        "proportions",
+        "pose",
+        "joints"
+      ],
+      "properties": {
+        "canvas": {
+          "type": "boolean"
+        },
+        "camera": {
+          "type": "boolean"
+        },
+        "proportions": {
+          "type": "boolean"
+        },
+        "pose": {
+          "type": "boolean"
+        },
+        "joints": {
+          "type": "boolean"
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        }
+      }
+    },
+    "drawing": {
+      "type": "object",
+      "properties": {
+        "previous_image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existing_strokes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "new_strokes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "visibility": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "next_pass": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
