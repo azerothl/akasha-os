@@ -1,0 +1,58 @@
+{
+  "correction": "Reconnect left forelimb to shoulder girdle with continuous line tracing from scapula to paw. Re-establish anatomical continuity for left hindlimb by extending femur line from pelvis through knee to foot, ensuring joint circles align with limb segments.",
+  "decision": "reject",
+  "defects": [
+    {
+      "region": "cat left forelimb",
+      "visible_problem": "Left forelimb does not connect to shoulder joint — appears disconnected or floating mid-air without anatomical attachment."
+    },
+    {
+      "region": "cat left hindlimb",
+      "visible_problem": "Left hindlimb shows joint circle but lacks clear continuity from femur to hip — suggests improper articulation or missing structural link."
+    }
+  ],
+  "observations": [
+    {
+      "evidence": "One cat head is visible with ears and facial features drawn in skeleton style.",
+      "part": "head",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Cat torso shows rib cage and spine lines; positioned mid-leap over sofa backrest.",
+      "part": "torso",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Both forelimbs are extended forward, but left forelimb appears disconnected from body — no clear attachment point to shoulder girdle.",
+      "part": "forelimbs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Right hindlimb attached correctly to pelvis; left hindlimb shows joint circle but lacks clear connection to thigh bone — appears floating or improperly anchored.",
+      "part": "hindlimbs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Tail extends upward with segmented rings; attached cleanly at base of spine.",
+      "part": "tail",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Seat cushion clearly defined with seam line; cat’s hind paws contact it appropriately.",
+      "part": "seat cushion",
+      "subject": "sofa",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Backrest supports cat’s torso during leap; contour matches expected sofa structure.",
+      "part": "backrest",
+      "subject": "sofa",
+      "visible_count": 1
+    }
+  ]
+}

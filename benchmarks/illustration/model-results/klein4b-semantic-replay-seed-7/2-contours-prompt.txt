@@ -1,0 +1,13 @@
+Redraw this construction study as clean natural outlines. Erase all circular joint markers, interior connecting rods, cross-section ellipses and perspective guide lines. Replace them with the continuous silhouette of each requested subject and the visible edges of real objects. Preserve pose, framing, species and contact, not construction marks. Unshaded line art. Animals have natural bodies, not clothing or mechanical joints.
+
+Scene to construct: Original user request, for subject identity and details: An elderly gardener sits in an armchair smoking a pipe while gazing out at his garden
+Requested visible elements:
+An elderly male figure with a hunched posture, wearing loose gardening trousers and boots.
+A curved clay pipe held in the right hand, with visible smoke curling upwards from the bowl.
+The figure seated on an upholstered armchair with a high backrest and wide arm supports.
+The head turned slightly to the right, eyes directed outward towards a garden view in the background.
+Relative sizes: The height of the seated figure from seat to head top is approximately 1.2 times the height of the chair backrest.; The width of the armchair's base is roughly equal to the width of the figure's torso.
+Contacts at this instant: Buttocks contacting the seat cushion surface.; Elbows resting on the front edge of the armrests.; Boots contacting the ground plane.; Pipe bowl near lips with smoke rising away from face.
+The reference establishes the depicted instant, pose, framing, scale and contacts. Preserve those spatial relationships, but develop unfinished placeholders into the requested subjects. Instructions to omit faces, clothing, accessories, scenery or color applied ONLY to the earlier construction stages and must not suppress requested details in this stage. If the original request describes successive actions, depict ONLY the single instant established by the reference. Do not add another instance of a subject to show an earlier or later action. Do not combine successive poses into one body. This is one keyframe, not a storyboard or a complete animation.
+
+Render ONLY the current contours stage. The first reference after the initial pass is the drawing to develop. Single image, no montage, labels or tutorial panels.

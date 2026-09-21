@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "brief": {
+    "subject": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+    "look": "pencil",
+    "palette": "pencilMinimal",
+    "anchor": "",
+    "beats": [],
+    "engine": "flat",
+    "photo": "",
+    "video": ""
+  },
+  "parts": [],
+  "key_drawings": [],
+  "construction": {
+    "archetype": "subject",
+    "passes": [],
+    "must_read": [],
+    "relations": [],
+    "action_line": "",
+    "focal_point": "",
+    "value_groups": [],
+    "head_orientation": "",
+    "silhouette_test": false,
+    "model_sheet": [],
+    "material_pass": "",
+    "action_line_points": [],
+    "chest_oval": null,
+    "pelvis_oval": null
+  },
+  "construction_phase": "skeleton",
+  "skeleton": [
+    {
+      "id": "root",
+      "parent": null,
+      "x": 0.5,
+      "y": 0.8500000238418579,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "spine",
+      "parent": "root",
+      "x": 0.5,
+      "y": 0.75,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "head",
+      "parent": "spine",
+      "x": 0.5,
+      "y": 0.44999998807907104,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "neck",
+      "parent": "spine",
+      "x": 0.5,
+      "y": 0.550000011920929,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "shoulder_l",
+      "parent": "spine",
+      "x": 0.4000000059604645,
+      "y": 0.6000000238418579,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "elbow_l",
+      "parent": "shoulder_l",
+      "x": 0.3499999940395355,
+      "y": 0.699999988079071,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "hand_l",
+      "parent": "elbow_l",
+      "x": 0.3199999928474426,
+      "y": 0.800000011920929,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "knee_l",
+      "parent": "spine",
+      "x": 0.44999998807907104,
+      "y": 0.8999999761581421,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "foot_l",
+      "parent": "knee_l",
+      "x": 0.41999998688697815,
+      "y": 1.0,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "shoulder_r",
+      "parent": "spine",
+      "x": 0.6000000238418579,
+      "y": 0.6000000238418579,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "elbow_r",
+      "parent": "shoulder_r",
+      "x": 0.6499999761581421,
+      "y": 0.699999988079071,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "hand_r",
+      "parent": "elbow_r",
+      "x": 0.6800000071525574,
+      "y": 0.800000011920929,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "knee_r",
+      "parent": "spine",
+      "x": 0.550000011920929,
+      "y": 0.8999999761581421,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "foot_r",
+      "parent": "knee_r",
+      "x": 0.5799999833106995,
+      "y": 1.0,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "pipe_mouth",
+      "parent": "head",
+      "x": 0.6200000047683716,
+      "y": 0.41999998688697815,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "pipe_body",
+      "parent": "pipe_mouth",
+      "x": 0.75,
+      "y": 0.3499999940395355,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "chair_back_top",
+      "parent": null,
+      "x": 0.44999998807907104,
+      "y": 0.20000000298023224,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "chair_back_mid",
+      "parent": "chair_back_top",
+      "x": 0.44999998807907104,
+      "y": 0.3499999940395355,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "chair_back_bot",
+      "parent": "chair_back_mid",
+      "x": 0.44999998807907104,
+      "y": 0.5,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "chair_seat_left",
+      "parent": null,
+      "x": 0.30000001192092896,
+      "y": 0.75,
+      "radius": 0.00800000037997961
+    },
+    {
+      "id": "chair_seat_right",
+      "parent": null,
+      "x": 0.699999988079071,
+      "y": 0.75,
+      "radius": 0.00800000037997961
+    }
+  ],
+  "joint_bindings": {},
+  "contacts": {},
+  "volumes": [],
+  "contours": [],
+  "details": [],
+  "pose": {
+    "walk": 0.0,
+    "twitch": 0.0,
+    "wing": 0.0,
+    "flap": 0.0,
+    "tuck": 0.0,
+    "tilt": 0.0
+  },
+  "camera": {
+    "x": 0.5,
+    "y": 0.5,
+    "zoom": 1.0,
+    "rot": 0.0
+  },
+  "mode": "normal",
+  "show_construction": false,
+  "scribble_part": null
+}

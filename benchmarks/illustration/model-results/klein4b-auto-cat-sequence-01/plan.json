@@ -1,0 +1,12 @@
+{
+"construction": "A single quadruped cat in mid-air leaping towards a rectangular sofa block, with legs extended and body arched. The cat faces right, moving from left foreground to the sofa on the right background. A simple horizontal line indicates the sofa seat surface below the cat's trajectory. Leave the head as a blank oval without facial features. Maintain open space behind the sofa for depth. Do not add fur texture or color.",
+"subjects": [
+  "cat",
+  "sofa"
+],
+"spatial_relations": [
+  "cat is above and approaching the sofa",
+  "sofa is positioned to the right of the cat's starting point",
+  "cat's trajectory leads to the sofa surface"
+]
+}

@@ -1,0 +1,8 @@
+{
+  "needs_correction": true,
+  "visible_defects": [
+    "Les genoux et les chevilles du personnage sont dessinés de manière incorrecte, avec des articulations mal définies et une structure anatomique incohérente.",
+    "La chaise manque de stabilité : les pieds ne touchent pas correctement le sol et la structure semble flottante."
+  ],
+  "correction": "Corrigez les genoux et chevilles pour qu’ils soient anatomiquement corrects, avec des articulations claires. Assurez-vous que les pieds de la chaise reposent fermement sur le sol pour une stabilité réaliste."
+}

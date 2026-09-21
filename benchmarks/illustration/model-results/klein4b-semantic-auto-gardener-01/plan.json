@@ -1,0 +1,25 @@
+{
+  "construction": "A seated elderly gardener in a relaxed posture, viewed from a slightly elevated angle. The subject sits on the flat seat of an armchair, with knees bent and feet planted on the floor. One hand holds a pipe near the mouth; the other rests on the armrest. A small wooden stool stands to the left. The chair back supports the upper torso. The gardener faces right toward an implied garden view. The composition balances the seated mass against open space on the right.",
+  "frame_subject": "An elderly gardener sitting in an armchair, holding a pipe near his mouth, gazing toward the right side of the frame where the garden is visible.",
+  "scale_relationships": [
+    "The height of the chair seat from floor to top edge is approximately 0.4 times the standing height of the seated gardener.",
+    "The width of the armchair base spans roughly 1.2 times the shoulder width of the gardener."
+  ],
+  "contacts": [
+    "Buttocks resting on the flat horizontal seat surface",
+    "Lower back supported by the vertical backrest panel",
+    "Feet planted firmly on the ground floor",
+    "Left hand gripping the pipe bowl near lips"
+  ],
+  "subjects": [
+    "Elderly gardener",
+    "Armchair",
+    "Pipe",
+    "Wooden stool"
+  ],
+  "spatial_relations": [
+    "The stool is positioned to the left of the chair, slightly behind the front plane.",
+    "The gardener's gaze direction aligns with the open space on the right.",
+    "The pipe extends forward from the hand toward the face."
+  ]
+}

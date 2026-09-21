@@ -1,0 +1,43 @@
+{
+  "requested_elements": [
+    {
+      "source_excerpt": "un vieux jardinier",
+      "visual_evidence": "An elderly male figure with a hunched posture, wearing loose gardening trousers and boots."
+    },
+    {
+      "source_excerpt": "fumant la pipe",
+      "visual_evidence": "A curved clay pipe held in the right hand, with visible smoke curling upwards from the bowl."
+    },
+    {
+      "source_excerpt": "dans un fauteuil",
+      "visual_evidence": "The figure seated on an upholstered armchair with a high backrest and wide arm supports."
+    },
+    {
+      "source_excerpt": "regardant son jardin",
+      "visual_evidence": "The head turned slightly to the right, eyes directed outward towards a garden view in the background."
+    }
+  ],
+  "construction": "A single elderly male figure sits relaxed in an upholstered armchair. His right hand holds a curved clay pipe near his mouth, emitting smoke. The chair's backrest supports his upper spine while wide arms support his elbows. He wears loose trousers and boots. The composition places the subject on the left third, gazing rightward into open space representing the garden. The viewpoint is eye-level. The figure's center of mass rests on the seat cushion, with knees bent at roughly 90 degrees. The chair legs are planted firmly on the ground plane.",
+  "frame_subject": "An elderly gardener sits in an armchair smoking a pipe while gazing out at his garden",
+  "scale_relationships": [
+    "The height of the seated figure from seat to head top is approximately 1.2 times the height of the chair backrest.",
+    "The width of the armchair's base is roughly equal to the width of the figure's torso."
+  ],
+  "contacts": [
+    "Buttocks contacting the seat cushion surface.",
+    "Elbows resting on the front edge of the armrests.",
+    "Boots contacting the ground plane.",
+    "Pipe bowl near lips with smoke rising away from face."
+  ],
+  "subjects": [
+    "elderly male gardener",
+    "upholstered armchair",
+    "clay pipe",
+    "garden background"
+  ],
+  "spatial_relations": [
+    "The figure is positioned in the foreground left.",
+    "The garden view occupies the background right.",
+    "Smoke rises vertically above the pipe, moving away from the subject."
+  ]
+}

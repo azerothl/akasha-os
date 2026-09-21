@@ -1,0 +1,16 @@
+{
+  "regressed": true,
+  "regression_evidence": [
+    "Les jambes du personnage ont été modifiées pour montrer une peau rose pâle au lieu de pantalons gris clair.",
+    "Cette modification contredit la description originale d'un jardinier portant des vêtements."
+  ],
+  "needs_correction": true,
+  "visible_defects": [
+    {
+      "region": "jambes",
+      "observed_mark": "peau rose pâle visible à travers les pantalons",
+      "desired_appearance": "pantalons gris clair couvrant complètement les jambes"
+    }
+  ],
+  "correction": "Remplissez la zone des jambes avec le motif et la couleur des pantalons gris clair pour masquer la peau."
+}

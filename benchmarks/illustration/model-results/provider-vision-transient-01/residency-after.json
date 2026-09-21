@@ -1,0 +1,6 @@
+[
+  {
+    "model": "gemma3:12b",
+    "resident": false
+  }
+]

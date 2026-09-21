@@ -1,0 +1,48 @@
+{
+  "directive": "Crée une illustration pour cette demande utilisateur : un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin. Utilise le module Illustration de la session courante. Prépare toi-même la construction adaptée au sujet, lance le moteur image, suis les passes sans relancer un calcul en cours, puis examine le rendu réel et rapporte honnêtement les défauts. N'invente pas de validation artistique. Reste dans ce module, sans sous-agent ni autre fichier utilisateur.",
+  "kind": "task",
+  "display_name": null,
+  "persona_id": null,
+  "source_roster_id": null,
+  "caps": [],
+  "model_id": "provider:illustration-local-test:gemma3:12b",
+  "policy": null,
+  "goal": {
+    "statement": "Crée une illustration pour cette demande utilisateur : un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin. Utilise le module Illustration de la session courante. Prépare toi-même la construction adaptée au sujet, lance le moteur image, suis les passes sans relancer un calcul en cours, puis examine le rendu réel et rapporte honnêtement les défauts. N'invente pas de validation artistique. Reste dans ce module, sans sous-agent ni autre fichier utilisateur.",
+    "success_criteria": [
+      "Un véritable rendu image correspondant à la demande avec passes publiées",
+      "Inspection honnête du rendu, sans confondre succès technique et qualité artistique"
+    ],
+    "max_steps": 24,
+    "max_subagents": 0,
+    "timeout_secs": 600
+  },
+  "system_prompt": null,
+  "skills": [],
+  "tools": [
+    "illust.set_brief",
+    "illust.generate_image",
+    "illust.get",
+    "illust.refine_image",
+    "illust.resolve_image",
+    "illust.export",
+    "goal.complete"
+  ],
+  "mcp_servers": [],
+  "documents": [],
+  "parent_id": null,
+  "session_id": "sess-1789847767501",
+  "budget": {
+    "max_tokens": 24000,
+    "max_steps": 24
+  },
+  "optimize_prompt": false,
+  "gate_mode": "autonomous",
+  "origin": null,
+  "avatar": null,
+  "color": null,
+  "cognitive_mode": "normal",
+  "execution_backend": {
+    "kind": "native"
+  }
+}

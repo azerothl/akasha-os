@@ -1,0 +1,5 @@
+Use the reference ONLY as a pose and composition guide for a NEW clean contour drawing of the requested living subjects and objects. Replace the mannequin with a believable natural body and appropriate clothing. Replace all joint circles, cross-section ellipses, centerlines and box guides with continuous organic silhouettes and real object edges. The construction marks must disappear completely; preserve their underlying positions, NOT their drawn outlines. Establish correct overlapping forms and contact. Use economical unshaded outlines, with a simple face and background, saving small details for later.
+
+Scene to construct: un chat saute sur un canapé et se couche
+
+Render ONLY the current contours stage. The first reference after the initial pass is the drawing to develop. Single image, no montage, labels or tutorial panels.

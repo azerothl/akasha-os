@@ -1,0 +1,23 @@
+{
+  "model": "qwen3.5:9b",
+  "stream": false,
+  "think": false,
+  "format": "json",
+  "keep_alive": 0,
+  "options": {
+    "temperature": 0.2,
+    "seed": 42,
+    "num_predict": 1800,
+    "num_ctx": 8192
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are planning the first gesture/construction pass of a drawing.\nReturn JSON {\"construction\":string,\"subjects\":[string],\"spatial_relations\":[string]}.\nInterpret the user's original request faithfully. Do not invent extra subjects.\nconstruction is a concise English geometric description for an image model, not\ncoordinates or code. Specify each subject's topology (human, quadruped, bird,\nobject), posture, viewpoint, facing direction, relative scale, support and contact\nwith props. Describe near/far limbs clearly and keep their count correct. Establish\na balanced whole-scene layout with space in the direction of the gaze or movement.\nUse single action lines, joint locations, blank head ovals, simple object blocks\nand background placement lines. Defer facial features, age marks, clothes, fur,\nfoliage, color, shading and finishing style to later passes. Do not ask for a\nmedical skeleton. Do not turn animals into human mannequins. Keep the construction\ndescription under 180 words. subjects and spatial_relations list requirements to\ncheck in the finished picture; they may include identity and details omitted from\nthe initial sketch. If a request contains several successive actions, describe\none explicit keyframe and state which action it depicts; do not claim a still\nshows the entire sequence."
+    },
+    {
+      "role": "user",
+      "content": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin"
+    }
+  ]
+}

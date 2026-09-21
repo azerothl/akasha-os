@@ -1,0 +1,30 @@
+{
+  "session_id": "sess-1789847767501",
+  "illustration_open": true,
+  "doc": {
+    "session_id": "sess-1789847767501",
+    "brief": {
+      "subject": "",
+      "look": "ink",
+      "palette": "paperInk",
+      "anchor": "",
+      "beats": [],
+      "engine": "flat",
+      "photo": "",
+      "video": ""
+    },
+    "spec": null,
+    "image_run": null,
+    "timeline": {
+      "beats": []
+    },
+    "lock": null,
+    "last_png": null,
+    "pass_previews": [],
+    "last_sheet_png": null,
+    "last_model_sheet_png": null,
+    "last_mp4": null,
+    "revision": 0
+  },
+  "digest": "illust rev=0 look=ink palette=paperInk subject=\"\" parts=0 lock=- png=- sheet=- model_sheet=-"
+}

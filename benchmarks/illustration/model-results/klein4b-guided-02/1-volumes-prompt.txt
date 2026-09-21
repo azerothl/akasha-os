@@ -1,0 +1,5 @@
+Edit the supplied gesture diagram into an UNFINISHED anatomical mannequin study on white paper. Keep exactly the same pose, camera, framing and contacts. Wrap the line skeleton in oriented rib-cage and pelvis masses, tapered limb volumes, head wedge and simple hand/foot blocks. Use cross-contours to explain depth and overlap. Keep the underlying gesture visible. Furniture remains simple perspective boxes; background remains placement lines. No face, clothing, hair, foliage details, shading or decorative texture. Do not turn the mannequin into a finished person yet.
+
+Scene to construct: An elderly gardener smoking a pipe in an armchair, looking at his garden. Three-quarter side view, entire seated figure visible, feet supported on the ground, one bent arm holding the pipe close to his mouth. The garden is visible in the direction of his gaze. Traditional pencil and restrained watercolor illustration.
+
+Render ONLY the current volumes stage. Any requested finishing style belongs to the final pass, not the construction studies. The first reference after the initial pass is the drawing to develop. Single image, no montage, labels or tutorial panels.

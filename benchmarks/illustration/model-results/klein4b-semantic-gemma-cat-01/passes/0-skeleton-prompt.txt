@@ -1,0 +1,7 @@
+An artist's very early gesture sketch in light pencil on white paper. Capture each described subject's natural pose with a flowing line of action and a few economical strokes indicating its overall shape, balance and direction. The head is a simple undecorated mass. Each appendage is one continuous gesture from its natural attachment to its endpoint, with the correct bends and foreshortening. Establish relative scale, support and contact with the scene using sparse perspective placement edges. This is a loose preparatory drawing with large white areas, not a finished outline drawing. Only pose and composition are visible at this stage.
+
+Scene to construct: A single cat (mammal, quadruped) is airborne, mid-jump, viewed from the side, facing left. The cat's body is arched, with front and hind legs extended for the jump. The tail curves for balance. The sofa (object, upholstered furniture) is a rectangular block, viewed from the side, with a slightly raised backrest. The cat is descending onto the sofa cushions, its front paws making initial contact. The cat’s total height is approximately 25cm. The sofa's height is 45cm.
+Relative sizes: The cat's height is approximately 40% of the sofa's height (measured from the floor to the top of the backrest).; The cat's body length is approximately 1.5 times its height.
+Contacts at this instant: The cat's front paws are approaching the sofa cushions.
+
+Render ONLY the current skeleton stage. The first reference after the initial pass is the drawing to develop. Single image, no montage, labels or tutorial panels.

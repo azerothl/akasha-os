@@ -1,0 +1,13 @@
+{
+  "regressed": false,
+  "regression_evidence": [],
+  "needs_correction": true,
+  "visible_defects": [
+    {
+      "region": "jambes",
+      "observed_mark": "lignes de construction internes et symboles articulaires visibles sur les genoux et chevilles",
+      "desired_appearance": "peau ou tissu naturel sans lignes techniques ou guides"
+    }
+  ],
+  "correction": "effacer les lignes internes et les symboles articulaires sur les jambes pour révéler la peau ou le tissu sous-jacent."
+}

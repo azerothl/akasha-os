@@ -1,0 +1,13 @@
+{
+  "cfg_scale": 4.0,
+  "diffusion_model": "C:/Users/azero/.cache/akasha-illustration/klein-base4b/flux-2-klein-base-4b-Q8_0.gguf",
+  "height": 768,
+  "pose_reference": null,
+  "pose_reference_policy": "initial_only",
+  "sampling_method": "euler",
+  "seed": 42,
+  "steps": 20,
+  "text_encoder": "C:/Users/azero/.cache/akasha-illustration/klein4b\\Qwen3-4B-Q4_K_M.gguf",
+  "vae": "C:/Users/azero/.cache/akasha-illustration/klein4b\\split_files/vae/flux2-vae.safetensors",
+  "width": 768
+}

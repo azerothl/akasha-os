@@ -1,0 +1,35 @@
+{
+  "session_id": "sess-1789847479222",
+  "illustration_open": true,
+  "doc": {
+    "session_id": "sess-1789847479222",
+    "brief": {
+      "subject": "",
+      "look": "ink",
+      "palette": "paperInk",
+      "anchor": "center",
+      "beats": [
+        "Un vieux jardinier, assis dans un fauteuil en osier.",
+        "Il fume une pipe et regarde son jardin.",
+        "Le jardin est luxuriant et fleuri.",
+        "Lumière douce et chaleureuse."
+      ],
+      "engine": "flat",
+      "photo": "",
+      "video": ""
+    },
+    "spec": null,
+    "image_run": null,
+    "timeline": {
+      "beats": []
+    },
+    "lock": null,
+    "last_png": null,
+    "pass_previews": [],
+    "last_sheet_png": null,
+    "last_model_sheet_png": null,
+    "last_mp4": null,
+    "revision": 5
+  },
+  "digest": "illust rev=5 look=ink palette=paperInk subject=\"\" parts=0 lock=- png=- sheet=- model_sheet=-"
+}

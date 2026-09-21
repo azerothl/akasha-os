@@ -1,0 +1,26 @@
+{
+  "format": "json",
+  "keep_alive": 0,
+  "messages": [
+    {
+      "content": "Inspect the attached actual drawing, not just the requested description.\nReturn JSON {\"decision\":\"accept\"|\"reject\"|\"uncertain\", \"observations\":[{\"subject\":string,\"part\":string,\"visible_count\":number,\"evidence\":string}], \"defects\":[{\"region\":string,\"visible_problem\":string}], \"correction\":string}.\nThis is a gate before continuing a drawing, not final artistic approval.\nFirst trace the visible body silhouettes and attachments. Count heads, main bodies,\nlimbs and tails/wings where relevant. Distinguish near/far limbs and occlusion.\nDo not infer the expected count from species alone: report what the pixels show.\nEvidence must locate visible endpoints/attachments. Check species anatomy,\nsubject count, relative size, requested pose and actual support/contact surfaces.\nConstruction joint circles, axes, blank faces and simple masses are EXPECTED in\nskeleton/volumes; they are not defects at those stages. Surface polish, clothing,\nfur and shading are not required until details/final. A duplicated appendage,\ndisconnected limb or wrong contact is a defect even in an early sketch.\nReject concrete anatomical or scene errors; list localized evidence and one\ntargeted correction preserving the stage, valid pose, framing and subjects.\nIf visibility does not support a conclusion, return uncertain rather than invent\ndetails. Accept only if the actual image has no supported blocking error. An\naccept decision must have no defects and an empty correction. No confidence score.",
+      "role": "system"
+    },
+    {
+      "content": "Frame to depict: One cat leaping onto the seat cushion of a sofa\nCurrent drawing phase: skeleton",
+      "images": [
+        "input.png"
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "qwen3.5:9b",
+  "options": {
+    "num_ctx": 12288,
+    "num_predict": 2400,
+    "seed": 42,
+    "temperature": 0.0
+  },
+  "stream": false,
+  "think": false
+}

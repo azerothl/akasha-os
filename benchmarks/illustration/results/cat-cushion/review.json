@@ -1,0 +1,11 @@
+{
+  "score": 0.9,
+  "issues": [
+    {
+      "kind": "too_many_parts",
+      "severity": "warning",
+      "message": "More than 12 parts; prefer 3–8 for a readable silhouette."
+    }
+  ],
+  "checklist": "too_many_parts [warning] More than 12 parts; prefer 3–8 for a readable silhouette."
+}

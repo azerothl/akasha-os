@@ -1,0 +1,55 @@
+{
+  "correction": "",
+  "decision": "accept",
+  "defects": [],
+  "observations": [
+    {
+      "evidence": "Upper-center, defined by a triangular shape with a pointed tip and a curved base, attached to the torso.",
+      "part": "head",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Center, elongated cylindrical form extending from the head to the hindlimbs.",
+      "part": "torso",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Left and right limbs extending from the torso, terminating near the top of the sofa cushion. Left limb is more visible, extending from the torso to the sofa cushion. Right limb is partially occluded behind the left.",
+      "part": "forelimbs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Left and right limbs extending from the torso, terminating on the sofa cushion. Left hindlimb is more visible, extending from the torso to the sofa cushion. Right hindlimb is partially occluded behind the left.",
+      "part": "hindlimbs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Curved appendage extending from the rear of the torso, arching upwards and to the right.",
+      "part": "tail",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Large rectangular mass in the lower-center of the image, providing a surface for the cat to land on.",
+      "part": "seat cushion",
+      "subject": "sofa",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Vertical rectangular mass behind the seat cushion, forming the back of the sofa.",
+      "part": "back",
+      "subject": "sofa",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Horizontal rectangular masses extending from the sides of the seat cushion, forming the armrests.",
+      "part": "armrest",
+      "subject": "sofa",
+      "visible_count": 2
+    }
+  ]
+}

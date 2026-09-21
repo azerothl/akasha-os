@@ -1,0 +1,4 @@
+User's illustration request: An elderly gardener smoking a pipe in an armchair, looking at his garden. Three-quarter side view, entire seated figure visible, feet supported on the ground, one bent arm holding the pipe close to his mouth. The garden is visible in the direction of his gaze. Traditional pencil and restrained watercolor illustration.
+
+Refine the reference into a coherent contour drawing. Preserve pose, proportions, contacts, identities and composition. Draw continuous anatomical silhouettes, correct front/back occlusions and recognizable props. Suppress internal mass boundaries; do not outline every construction primitive. No decorative shading yet.
+The first reference, when present after the initial pass, is the drawing to develop. Return one image, not a montage or labeled tutorial page.

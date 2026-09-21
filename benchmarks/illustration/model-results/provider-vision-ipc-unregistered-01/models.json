@@ -1,0 +1,12 @@
+[
+  {
+    "id": "provider:illustration-local-test:gemma3:12b",
+    "name": "provider:illustration-local-test:gemma3:12b",
+    "n_layers": 0,
+    "privacy_class": "remote",
+    "state": "Remote",
+    "placement": null,
+    "profile": "balanced",
+    "has_vision": true
+  }
+]

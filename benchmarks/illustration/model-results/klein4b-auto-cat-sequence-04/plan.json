@@ -1,0 +1,13 @@
+{
+"construction": "A single cat (quadruped) is captured mid-air in a dynamic leap, body arched with all four paws extended forward towards a sofa block. The cat faces right, moving from left to right across the frame. Below, a rectangular sofa block sits on the ground plane, oriented perpendicular to the viewer's gaze. The cat's trajectory leads directly into the sofa's seating area. Leave the background as blank space to emphasize the motion path. Do not add fur texture or facial details yet.",
+"frame_subject": "A cat leaping onto a sofa",
+"subjects": [
+  "cat",
+  "sofa"
+],
+"spatial_relations": [
+  "cat is airborne above and approaching the sofa",
+  "cat's trajectory aligns with the sofa's seating area",
+  "sofa rests on the ground plane below the cat"
+]
+}

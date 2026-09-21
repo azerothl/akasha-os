@@ -1,0 +1,44 @@
+{
+  "session_id": "sess-1789847767501",
+  "brief": {
+    "subject": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+    "look": "pencil",
+    "palette": "pencilMinimal",
+    "anchor": "",
+    "beats": [
+      "jardinier âgé",
+      "pipe",
+      "fauteuil",
+      "jardin",
+      "regard",
+      "atmosphère paisible"
+    ],
+    "engine": "flat",
+    "photo": "none",
+    "video": "none"
+  },
+  "spec": null,
+  "image_run": {
+    "id": "e1004838f37fb08c-a5e32f1adf8b848a",
+    "source_revision": 2,
+    "phase": "skeleton",
+    "status": "failed",
+    "error": "échec sd: exit exit code: 0xffffffff: 0.79MB/s\u001b[K\n[INFO   ] model_loader.cpp:1233 - loading tensors completed, taking 4.88s (read: 4.14s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)\n[VERBOSE] model_manager.cpp:494  - model manager prepared params backend buffers (4101.40 MB, 149 tensors, 1 blocks, RAM) on CUDA_Host\n[VERBOSE] model_manager.cpp:621  - model manager staged compute params (4101.40 MB, 149 tensors, 5 blocks) to CUDA0, taking 68.63s\n[VERBOSE] ggml_runner.cpp:976  - flux compute buffer size: 597.88 MB(VRAM) on CUDA0 (peak across 1 segment)\n|============>                                     | 1/4 - 122.73s/it\u001b[K\n|=========================>                        | 2/4 - 10.56s/it\u001b[K\n|=====================================>            | 3/4 - 7.05s/it\u001b[K[VERBOSE] ggml_runner.cpp:852  - flux using 27 segments\n",
+    "source_png": null,
+    "candidate_png": null,
+    "candidate_selected": null,
+    "frame_subject": "Un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin, avec un jardin luxuriant en arrière-plan. La scène est baignée de lumière du soleil.",
+    "seed": 860876275,
+    "pose_reference_png": null
+  },
+  "timeline": {
+    "beats": []
+  },
+  "lock": null,
+  "last_png": null,
+  "pass_previews": [],
+  "last_sheet_png": null,
+  "last_model_sheet_png": null,
+  "last_mp4": null,
+  "revision": 2
+}

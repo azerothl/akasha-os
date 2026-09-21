@@ -1,0 +1,17 @@
+{
+  "model": "qwen3.5:9b",
+  "created_at": "2026-09-19T16:52:46.2772724Z",
+  "message": {
+    "role": "assistant",
+    "content": "{\n  \"construction_phase\": \"skeleton\",\n  \"skeleton\": [\n    { \"id\": \"root_pelvis\", \"parent\": null, \"x\": 0.5, \"y\": 0.6, \"radius\": 0.08 },\n    { \"id\": \"chest\", \"parent\": \"root_pelvis\", \"x\": 0.5, \"y\": 0.45, \"radius\": 0.08 },\n    { \"id\": \"neck\", \"parent\": \"chest\", \"x\": 0.5, \"y\": 0.32, \"radius\": 0.06 },\n    { \"id\": \"head\", \"parent\": \"neck\", \"x\": 0.5, \"y\": 0.18, \"radius\": 0.07 },\n    { \"id\": \"shoulder_l\", \"parent\": \"chest\", \"x\": 0.32, \"y\": 0.42, \"radius\": 0.06 },\n    { \"id\": \"elbow_l\", \"parent\": \"shoulder_l\", \"x\": 0.28, \"y\": 0.55, \"radius\": 0.05 },\n    { \"id\": \"wrist_l\", \"parent\": \"elbow_l\", \"x\": 0.26, \"y\": 0.68, \"radius\": 0.04 },\n    { \"id\": \"hip_l\", \"parent\": \"root_pelvis\", \"x\": 0.35, \"y\": 0.72, \"radius\": 0.06 },\n    { \"id\": \"knee_l\", \"parent\": \"hip_l\", \"x\": 0.38, \"y\": 0.92, \"radius\": 0.05 },\n    { \"id\": \"ankle_l\", \"parent\": \"knee_l\", \"x\": 0.42, \"y\": 1.05, \"radius\": 0.04 },\n    { \"id\": \"shoulder_r\", \"parent\": \"chest\", \"x\": 0.68, \"y\": 0.42, \"radius\": 0.06 },\n    { \"id\": \"elbow_r\", \"parent\": \"shoulder_r\", \"x\": 0.72, \"y\": 0.55, \"radius\": 0.05 },\n    { \"id\": \"wrist_r\", \"parent\": \"elbow_r\", \"x\": 0.74, \"y\": 0.68, \"radius\": 0.04 },\n    { \"id\": \"hip_r\", \"parent\": \"root_pelvis\", \"x\": 0.65, \"y\": 0.72, \"radius\": 0.06 },\n    { \"id\": \"knee_r\", \"parent\": \"hip_r\", \"x\": 0.62, \"y\": 0.92, \"radius\": 0.05 },\n    { \"id\": \"ankle_r\", \"parent\": \"knee_r\", \"x\": 0.58, \"y\": 1.05, \"radius\": 0.04 }\n  ]\n}"
+  },
+  "done": true,
+  "done_reason": "stop",
+  "total_duration": 8271529100,
+  "load_duration": 11043400,
+  "prompt_eval_count": 593,
+  "prompt_eval_cached_count": 0,
+  "prompt_eval_duration": 428763000,
+  "eval_count": 734,
+  "eval_duration": 7776934000
+}

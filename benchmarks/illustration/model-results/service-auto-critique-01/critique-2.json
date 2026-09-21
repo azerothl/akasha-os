@@ -1,0 +1,8 @@
+{
+  "needs_correction": true,
+  "visible_defects": [
+    "Les jambes du personnage sont déformées et mal articulées.",
+    "La main droite semble fusionnée avec le bras."
+  ],
+  "correction": "Corrigez la structure des jambes pour qu’elles soient correctement articulées au niveau des genoux et chevilles. Séparez clairement la main droite du bras en redessinant les doigts individuellement."
+}

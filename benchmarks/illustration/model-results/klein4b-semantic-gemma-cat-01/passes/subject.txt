@@ -1,0 +1,5 @@
+One cat is in the middle of jumping onto a sofa. The cat is airborne, its body arched, and its paws are extended. It is descending towards the cushions of the sofa.
+Requested visible elements:
+A cat is airborne, mid-jump, with its body arched and paws extended. The tail is curved for balance.
+Relative sizes: The cat's height is approximately 40% of the sofa's height (measured from the floor to the top of the backrest).; The cat's body length is approximately 1.5 times its height.
+Contacts at this instant: The cat's front paws are approaching the sofa cushions.

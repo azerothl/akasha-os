@@ -1,0 +1,68 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 16375 MiB):
+  Device 0: NVIDIA GeForce RTX 4080 SUPER, compute capability 8.9, VMM: yes, VRAM: 16375 MiB
+load_backend: loaded CUDA backend from C:\Users\azero\.cache\akasha-illustration\sdcpp-17860c0\bin\ggml-cuda.dll
+load_backend: loaded CPU backend from C:\Users\azero\.cache\akasha-illustration\sdcpp-17860c0\bin\ggml-cpu-cascadelake.dll
+[INFO   ] diffusion_engine.cpp:707  - loading diffusion model from 'C:/Users/azero/.cache/akasha-illustration/klein4b/flux-2-klein-4b-Q8_0.gguf'
+[INFO   ] model_loader.cpp:155  - load C:/Users/azero/.cache/akasha-illustration/klein4b/flux-2-klein-4b-Q8_0.gguf using gguf format
+[INFO   ] diffusion_engine.cpp:764  - loading llm from 'C:/Users/azero/.cache/akasha-illustration/klein4b/Qwen3-4B-Q4_K_M.gguf'
+[INFO   ] model_loader.cpp:155  - load C:/Users/azero/.cache/akasha-illustration/klein4b/Qwen3-4B-Q4_K_M.gguf using gguf format
+[INFO   ] diffusion_engine.cpp:778  - loading vae from 'C:/Users/azero/.cache/akasha-illustration/klein4b/split_files/vae/flux2-vae.safetensors'
+[INFO   ] model_loader.cpp:161  - load C:/Users/azero/.cache/akasha-illustration/klein4b/split_files/vae/flux2-vae.safetensors using safetensors format
+[INFO   ] diffusion_engine.cpp:915  - Version: Flux.2 klein 
+[INFO   ] diffusion_engine.cpp:1426 - Weight type stat:                      f32: 395  |    q8_0: 80   |    q4_K: 216  |    q6_K: 37   |     i32: 1    |    bf16: 69   
+[INFO   ] diffusion_engine.cpp:1427 - Conditioner weight type stat:          f32: 145  |    q4_K: 216  |    q6_K: 37   
+[INFO   ] diffusion_engine.cpp:1428 - Diffusion model weight type stat:     q8_0: 80   |    bf16: 69   
+[INFO   ] diffusion_engine.cpp:1429 - VAE weight type stat:                  f32: 250  |     i32: 1    
+[INFO   ] model_builders.cpp:564  - using VAE for encoding / decoding
+[INFO   ] auto_encoder_kl.hpp:529  - vae decoder: ch = 128
+[INFO   ] diffusion_engine.cpp:1122 - Using flash attention in the diffusion model
+[INFO   ] diffusion_engine.cpp:1254 - total params memory size = 6637.75MB (VRAM 0.00MB, RAM 6637.75MB): text_encoders 2375.91MB(RAM), diffusion_model 4101.40MB(RAM), vae 160.43MB(RAM), controlnet 0.00MB(N/A), extensions 0.00MB(N/A)
+[INFO   ] diffusion_engine.cpp:1376 - running in Flux FLOW mode
+[INFO   ] image.cpp:801  - generate_image 768x768
+[INFO   ] diffusion_engine.cpp:2798 - Using 'flux2' preset for reference images
+[INFO   ] denoiser.hpp:1122 - get_sigmas with Flux2 scheduler
+[INFO   ] request.cpp:418  - sampling using Euler method
+[INFO   ] image.cpp:271  - EDIT mode
+[INFO   ] ggml_graph_cut.cpp:1034 - vae build cached graph cut plan done (taking 1 ms)
+
+  |##################################################| 108/108 - 610.81MB/s[K
+[INFO   ] model_loader.cpp:1233 - loading tensors completed, taking 0.22s (read: 0.03s, memcpy: 0.00s, convert: 0.01s, copy_to_backend: 0.00s)
+[INFO   ] image.cpp:391  - encode_first_stage completed, taking 0.66s
+[INFO   ] ggml_graph_cut.cpp:1034 - qwen3 build cached graph cut plan done (taking 1 ms)
+
+  |################################                  | 188/298 - 4.05GB/s[K
+  |##################################################| 298/298 - 4.29GB/s[K
+[INFO   ] model_loader.cpp:1233 - loading tensors completed, taking 0.42s (read: 0.34s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)
+[INFO   ] image.cpp:516  - get_learned_condition completed, taking 0.72s
+[INFO   ] image.cpp:853  - generating image: 1/1 - seed 42
+[INFO   ] ggml_graph_cut.cpp:1034 - flux build cached graph cut plan done (taking 2 ms)
+
+  |##########                                        | 27/149 - 849.02MB/s[K
+  |################                                  | 47/149 - 1.50GB/s[K
+  |######################                            | 63/149 - 1.59GB/s[K
+  |#########################                         | 74/149 - 1.45GB/s[K
+  |############################                      | 82/149 - 1.33GB/s[K
+  |################################                  | 95/149 - 1.55GB/s[K
+  |####################################              | 106/149 - 1.52GB/s[K
+  |#######################################           | 115/149 - 1.53GB/s[K
+  |###########################################       | 127/149 - 1.56GB/s[K
+  |###############################################   | 139/149 - 1.56GB/s[K
+  |##################################################| 149/149 - 1.73GB/s[K
+[INFO   ] model_loader.cpp:1233 - loading tensors completed, taking 2.31s (read: 2.28s, memcpy: 0.00s, convert: 0.00s, copy_to_backend: 0.00s)
+
+  |============>                                     | 1/4 - 3.76s/it[K
+  |=========================>                        | 2/4 - 1.73it/s[K
+  |=====================================>            | 3/4 - 1.73it/s[K
+  |==================================================| 4/4 - 1.73it/s[K
+[INFO   ] image.cpp:886  - sampling completed, taking 5.53s
+[INFO   ] image.cpp:900  - generating 1 latent images completed, taking 5.53s
+[INFO   ] image.cpp:541  - decoding 1 latents
+[INFO   ] ggml_graph_cut.cpp:1034 - vae build cached graph cut plan done (taking 0 ms)
+
+  |##################################################| 140/140 - 923.35MB/s[K
+[INFO   ] model_loader.cpp:1233 - loading tensors completed, taking 0.20s (read: 0.09s, memcpy: 0.00s, convert: 0.01s, copy_to_backend: 0.00s)
+[INFO   ] image.cpp:607  - latent 1 decoded, taking 0.66s
+[INFO   ] image.cpp:611  - decode_first_stage completed, taking 0.66s
+[INFO   ] image.cpp:1037 - generate_image completed in 7.58s
+[INFO   ] main.cpp:504  - save result image 0 to 'E:/akasha-os/benchmarks/illustration/model-results/klein4b-auto-cat-01/targeted-repair.png' (success)
+[INFO   ] main.cpp:580  - 1/1 images saved

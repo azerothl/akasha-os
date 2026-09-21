@@ -1,0 +1,13 @@
+[
+  {
+    "path": "/downloads/unregistered-vision-probe.png",
+    "error": "statut NotFound: classification inconnue : chemin absent de l'index"
+  },
+  {
+    "path": "/downloads/illustration/beae3697192f5055-6cae678d7ebb4a96-final.png",
+    "class": {
+      "path": "/downloads/illustration/beae3697192f5055-6cae678d7ebb4a96-final.png",
+      "class": "private"
+    }
+  }
+]

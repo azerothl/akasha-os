@@ -1,0 +1,46 @@
+{
+  "agent_id": "agent-1",
+  "state": "Running",
+  "directive": "Crée une illustration pour cette demande utilisateur : un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin. Utilise le module Illustration de la session courante. Prépare toi-même la construction adaptée au sujet, lance le moteur image, suis les passes sans relancer un calcul en cours, puis examine le rendu réel et rapporte honnêtement les défauts. N'invente pas de validation artistique. Reste dans ce module, sans sous-agent ni autre fichier utilisateur.",
+  "pid": 49764,
+  "caps": [
+    "module.compile",
+    "module.install",
+    "module.uninstall",
+    "tool.invoke:illust"
+  ],
+  "last_output": "",
+  "step": 19,
+  "max_steps": 24,
+  "current_task": "Construction et génération (illust.generate_image)",
+  "parent_id": null,
+  "children": [],
+  "tokens_used": 1532,
+  "skills": [],
+  "tools": [
+    "illust.set_brief",
+    "illust.generate_image",
+    "illust.get",
+    "illust.refine_image",
+    "illust.resolve_image",
+    "illust.export",
+    "goal.complete"
+  ],
+  "mcp_servers": [],
+  "fail_reason": null,
+  "session_id": "sess-1789847479222",
+  "model_id": "provider:illustration-local-test:gemma3:12b",
+  "title": "Crée une illustration pour cette demande utilisateur : u…",
+  "kind": "task",
+  "display_name": "Crée une illustration pour cette demande utilisateur : u…",
+  "persona_id": null,
+  "source_roster_id": null,
+  "origin": null,
+  "avatar": null,
+  "color": null,
+  "deep_plan": null,
+  "cognitive_mode": "normal",
+  "execution_backend": {
+    "kind": "native"
+  }
+}

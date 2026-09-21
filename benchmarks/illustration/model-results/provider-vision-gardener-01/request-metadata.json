@@ -1,0 +1,26 @@
+{
+  "model_id": null,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Compare these two illustrations. Image 1 is the original; image 2 is a proposed revision. Describe only changes you can actually see, especially in footwear, pipe/smoke, chair linework and hands. Report uncertainty. Do not assume image 2 is better. Do not give an approval score."
+    }
+  ],
+  "tools": [],
+  "params": {
+    "max_tokens": 1200,
+    "temperature": 0.0,
+    "top_p": 0.9,
+    "seed": null
+  },
+  "priority": 1,
+  "data_refs": [
+    "E:/akasha-os/benchmarks/illustration/model-results/service-pose-refine-01/storage/data/downloads/illustration/2a7fe784701d5503-c88b1b8327e27dde-final.png",
+    "E:/akasha-os/benchmarks/illustration/model-results/service-pose-refine-01/final.png"
+  ],
+  "images": [
+    "E:/akasha-os/benchmarks/illustration/model-results/service-pose-refine-01/storage/data/downloads/illustration/2a7fe784701d5503-c88b1b8327e27dde-final.png",
+    "E:/akasha-os/benchmarks/illustration/model-results/service-pose-refine-01/final.png"
+  ],
+  "routing": "local_only"
+}

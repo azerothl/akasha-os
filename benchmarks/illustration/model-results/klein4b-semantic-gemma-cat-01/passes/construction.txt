@@ -1,0 +1,3 @@
+A single cat (mammal, quadruped) is airborne, mid-jump, viewed from the side, facing left. The cat's body is arched, with front and hind legs extended for the jump. The tail curves for balance. The sofa (object, upholstered furniture) is a rectangular block, viewed from the side, with a slightly raised backrest. The cat is descending onto the sofa cushions, its front paws making initial contact. The cat’s total height is approximately 25cm. The sofa's height is 45cm.
+Relative sizes: The cat's height is approximately 40% of the sofa's height (measured from the floor to the top of the backrest).; The cat's body length is approximately 1.5 times its height.
+Contacts at this instant: The cat's front paws are approaching the sofa cushions.

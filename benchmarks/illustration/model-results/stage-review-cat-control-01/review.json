@@ -1,0 +1,46 @@
+{
+  "correction": "Redraw cat in mid-leap: extend hind legs backward with toes pointed down, front legs reaching forward with paws open, torso arched slightly upward at shoulders and hips. Ensure tail curves dynamically behind body. Maintain skeleton style but adjust limb angles to reflect kinetic motion of leaping onto sofa.",
+  "decision": "reject",
+  "defects": [
+    {
+      "region": "cat’s hindlimbs and forelimbs",
+      "visible_problem": "Posture inconsistent with leaping motion — limbs suggest landing or push-off, not mid-air extension required for ‘leap onto sofa’"
+    },
+    {
+      "region": "cat’s torso orientation",
+      "visible_problem": "Body is horizontally aligned without arching or rotation expected during leap; lacks dynamic tension"
+    }
+  ],
+  "observations": [
+    {
+      "evidence": "The hind legs are drawn with knees bent in a crouched or landing posture, not extended for leaping. The feet are positioned as if pushing off or just after impact, inconsistent with mid-air leap.",
+      "part": "hindlimbs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Front paws are splayed forward and downward, suggesting preparation to land — but the body is airborne without contact. This contradicts the intended action of ‘leaping onto’ the sofa.",
+      "part": "forelimbs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "The spine shows grid lines indicating skeletal structure, which is acceptable for skeleton phase; however, the overall posture does not match dynamic leap motion — torso is too flat and aligned horizontally without arched back typical of feline jumping.",
+      "part": "torso",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Tail curves upward in an S-shape, which may be anatomically plausible, but its position relative to the body suggests static pose rather than active propulsion during leap.",
+      "part": "tail",
+      "subject": "cat",
+      "visible_count": 1
+    },
+    {
+      "evidence": "Cushions are clearly defined with seams and depth, appropriate for skeleton stage. No defects here.",
+      "part": "seat cushions",
+      "subject": "sofa",
+      "visible_count": 2
+    }
+  ]
+}

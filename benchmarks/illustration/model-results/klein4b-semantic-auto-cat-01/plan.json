@@ -1,0 +1,35 @@
+{
+  "requested_elements": [
+    {
+      "source_excerpt": "un chat saute",
+      "visual_evidence": "A feline quadruped in mid-air with hind legs extended downward and front paws reaching forward, indicating a jumping motion."
+    },
+    {
+      "source_excerpt": "sur un canapé",
+      "visual_evidence": "An upholstered sofa structure consisting of a rectangular seat cushion and a vertical backrest positioned behind the animal's trajectory."
+    },
+    {
+      "source_excerpt": "et se couche",
+      "visual_evidence": "The cat's body posture transitioning from an airborne arc to a flattened profile resting on the seat surface, with limbs tucked or splayed for settling."
+    }
+  ],
+  "construction": "A single feline quadruped is captured in the final phase of a jump, its center of mass descending toward a sofa. The cat's hind legs are planted or near-planting on the rectangular seat cushion while front paws reach forward to stabilize. The body forms a flattened arc against the vertical backrest of the sofa. The viewpoint is eye-level with the furniture. The cat occupies the central foreground, facing slightly right. The sofa extends horizontally across the mid-ground. No facial features or fur texture are rendered; only geometric blocks define the animal's volume and the sofa's mass. The background remains blank to isolate the interaction.",
+  "frame_subject": "A cat in mid-landing on a sofa, transitioning from a jump to a lying-down posture, with paws contacting the seat cushion and body aligning with the backrest.",
+  "scale_relationships": [
+    "The cat's total height is approximately 0.6 times the height of the sofa backrest.",
+    "The cat's length along its axis is roughly equal to the width of the visible seat section."
+  ],
+  "contacts": [
+    "Hind paw pads contacting the top surface of the seat cushion.",
+    "Lower abdomen and chest approaching the seat surface as weight transfers.",
+    "Tail tip hovering near the sofa armrest without contact."
+  ],
+  "subjects": [
+    "Feline quadruped",
+    "Sofa (seat and backrest)"
+  ],
+  "spatial_relations": [
+    "The cat is positioned centrally on the seat, slightly forward of the backrest.",
+    "The sofa backrest rises vertically behind the cat's upper body."
+  ]
+}

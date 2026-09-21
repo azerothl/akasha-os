@@ -1,0 +1,30 @@
+{
+  "session_id": "sess-1789847197485",
+  "illustration_open": true,
+  "doc": {
+    "session_id": "sess-1789847197485",
+    "brief": {
+      "subject": "Un vieux jardinier, assis dans un fauteuil en osier, fumant une pipe et regardant son jardin. Le jardin est luxuriant, avec des fleurs colorées et des légumes qui poussent. Le jardinier a un visage ridé et un regard paisible.",
+      "look": "pencil",
+      "palette": "pencilMinimal",
+      "anchor": "center",
+      "beats": [],
+      "engine": "flat",
+      "photo": "",
+      "video": ""
+    },
+    "spec": null,
+    "image_run": null,
+    "timeline": {
+      "beats": []
+    },
+    "lock": null,
+    "last_png": null,
+    "pass_previews": [],
+    "last_sheet_png": null,
+    "last_model_sheet_png": null,
+    "last_mp4": null,
+    "revision": 1
+  },
+  "digest": "illust rev=1 look=pencil palette=pencilMinimal subject=\"Un vieux jardinier, assis dans un fauteuil en osier, fumant une pipe et regardant son jardin. Le jardin est luxuriant, avec des fleurs colorées et des légumes qui poussent. Le jardinier a un visage ridé et un regard paisible.\" parts=0 lock=- png=- sheet=- model_sheet=-"
+}

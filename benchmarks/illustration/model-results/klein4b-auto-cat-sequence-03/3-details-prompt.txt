@@ -1,0 +1,7 @@
+Develop the natural subjects with their requested identifying details, species-appropriate features, accessories and environment. For humans, clothing folds follow tension and gravity; for animals, natural fur, feathers or scales follow the body instead. Never dress an animal unless explicitly requested. Remove remaining construction symbols and guide lines. Preserve the pose, composition and contacts while clarifying the requested identity.
+
+Scene to construct: Depicted instant and spatial layout (keep throughout this drawing): A single quadruped cat in mid-air leaping towards a rectangular sofa block, with legs extended and body arched. The cat faces right, moving from left foreground to the sofa on the right background. A simple horizontal line indicates the sofa seat surface below the cat's trajectory. Leave the head as a blank oval without facial features. Maintain open space behind the sofa for depth. Do not add fur texture or color.
+Original user request, for subject identity and details: un chat saute sur un canapé et se couche
+If the original request describes successive actions, depict ONLY the single instant established by the reference and construction above. Do not add another instance of a subject to show an earlier or later action. Do not combine successive poses into one body. This is one keyframe, not a storyboard or a complete animation.
+
+Render ONLY the current details stage. The first reference after the initial pass is the drawing to develop. Single image, no montage, labels or tutorial panels.

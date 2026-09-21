@@ -1,0 +1,20 @@
+{
+  "construction": "A cat in mid-air arcs downward toward a sofa, front paws extended to grasp the seat cushion while hind legs trail behind. The cat's body is angled slightly forward relative to the sofa's horizontal plane. The sofa is a rectangular block with a defined seat surface and backrest. The cat's center of mass is directly above the target seat area, indicating imminent contact. Viewpoint is eye-level from the front-left.",
+  "frame_subject": "A single cat leaping onto a sofa to settle on the seat cushion.",
+  "scale_relationships": [
+    "The cat's total height is approximately 0.6 times the sofa's seat depth.",
+    "The sofa's backrest height is roughly 1.5 times the cat's standing height."
+  ],
+  "contacts": [
+    "Cat's front paws approaching the sofa seat cushion surface",
+    "Cat's hind legs trailing in free space above the floor"
+  ],
+  "subjects": [
+    "cat",
+    "sofa"
+  ],
+  "spatial_relations": [
+    "The cat is positioned slightly forward of the sofa's centerline.",
+    "The sofa occupies the lower background plane while the cat dominates the mid-ground action."
+  ]
+}

@@ -1,0 +1,14 @@
+{
+"construction": "A quadruped cat in mid-air leaping onto a rectangular sofa block. The cat's front paws are extended downward toward the sofa seat surface, while hind legs trail behind with upward momentum. The cat's body is arched slightly forward, facing right, approaching the left side of the sofa. The sofa sits on four short legs on the ground plane. The cat is positioned slightly above and to the left of the sofa center, creating a near occlusion of the sofa's left armrest by the cat's torso. No facial features or fur texture are present; only simple geometric blocks define the forms.",
+"frame_subject": "A cat leaping onto a sofa",
+"subjects": [
+  "cat",
+  "sofa"
+],
+"spatial_relations": [
+  "cat is airborne approaching sofa seat",
+  "cat front paws near sofa surface",
+  "cat hind legs trailing above ground",
+  "sofa rests on ground plane"
+]
+}

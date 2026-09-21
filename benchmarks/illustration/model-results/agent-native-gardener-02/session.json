@@ -1,0 +1,19 @@
+{
+  "id": "sess-1789847479222",
+  "title": "Illustration · génération autonome de test",
+  "created_ms": 1789847479222,
+  "updated_ms": 1789847479222,
+  "archived": false,
+  "pinned": false,
+  "message_count": 0,
+  "model_id": "provider:illustration-local-test:gemma3:12b",
+  "mode": "direct",
+  "members": [],
+  "conductor_policy": {
+    "max_agent_turns_per_user": 4,
+    "allow_peer_debate": true
+  },
+  "canvas_open": false,
+  "canvas_aspect": "square",
+  "illustration_open": false
+}

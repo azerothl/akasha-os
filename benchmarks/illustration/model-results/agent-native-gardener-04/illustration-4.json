@@ -1,0 +1,55 @@
+{
+  "session_id": "sess-1789848439762",
+  "illustration_open": true,
+  "doc": {
+    "session_id": "sess-1789848439762",
+    "brief": {
+      "subject": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+      "look": "pencil",
+      "palette": "pencilMinimal",
+      "anchor": "",
+      "beats": [
+        "jardinier âgé",
+        "pipe",
+        "fauteuil",
+        "jardin",
+        "regard",
+        "atmosphère paisible"
+      ],
+      "engine": "flat",
+      "photo": "none",
+      "video": "none"
+    },
+    "spec": null,
+    "image_run": {
+      "id": "395e0c718ea5829a-d3672ac7f633dea6",
+      "source_revision": 2,
+      "phase": "skeleton",
+      "status": "running",
+      "error": null,
+      "source_png": null,
+      "candidate_png": null,
+      "candidate_selected": null,
+      "frame_subject": "Un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin. Le jardinier est assis dans un fauteuil en bois usé, sur une pelouse verdoyante. Le jardin est visible en arrière-plan, avec des fleurs colorées et des arbustes.",
+      "seed": 1003399842,
+      "pose_reference_png": null
+    },
+    "timeline": {
+      "beats": []
+    },
+    "lock": null,
+    "last_png": "/downloads/illustration/395e0c718ea5829a-d3672ac7f633dea6-skeleton.png",
+    "pass_previews": [
+      [
+        "skeleton",
+        2,
+        "/downloads/illustration/395e0c718ea5829a-d3672ac7f633dea6-skeleton.png"
+      ]
+    ],
+    "last_sheet_png": null,
+    "last_model_sheet_png": null,
+    "last_mp4": null,
+    "revision": 2
+  },
+  "digest": "illust rev=2 look=pencil palette=pencilMinimal subject=\"un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin\" parts=0 lock=- png=/downloads/illustration/395e0c718ea5829a-d3672ac7f633dea6-skeleton.png sheet=- model_sheet=-"
+}

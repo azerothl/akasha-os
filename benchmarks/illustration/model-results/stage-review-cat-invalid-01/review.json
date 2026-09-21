@@ -1,0 +1,34 @@
+{
+  "correction": "Reattach rear hind legs to show clear foot contact with sofa cushion; add subtle joint lines (shoulder/elbow) connecting front paws to chest. Preserve skeleton style — no shading or fur needed yet.",
+  "decision": "reject",
+  "defects": [
+    {
+      "region": "cat rear legs",
+      "visible_problem": "Disconnected or implausible grounding of hind limbs on sofa cushion during leap"
+    },
+    {
+      "region": "cat front paws",
+      "visible_problem": "Lack of visible joint connections to torso, breaking skeletal continuity"
+    }
+  ],
+  "observations": [
+    {
+      "evidence": "The rear legs are shown with joints and skeletal structure, but they appear disconnected from the body or improperly attached to the sofa cushion. The left hind leg (viewer’s perspective) is not clearly grounded on the seat; its foot does not make contact with the surface in a plausible way for a leaping motion.",
+      "part": "rear legs",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Front paws are extended forward but lack clear attachment points to the body — no visible shoulder or elbow joints connecting them. This breaks anatomical continuity expected even in skeleton stage.",
+      "part": "front paws",
+      "subject": "cat",
+      "visible_count": 2
+    },
+    {
+      "evidence": "Cushion is drawn as two separate blocks without clear seam or structural connection to frame — acceptable for sketch, but cat’s feet should show contact points on this surface.",
+      "part": "seat cushion",
+      "subject": "sofa",
+      "visible_count": 1
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "model": "qwen3.5:9b",
+  "created_at": "2026-09-19T16:50:47.0920049Z",
+  "message": {
+    "role": "assistant",
+    "content": "{\n  \"construction_phase\": \"skeleton\",\n  \"skeleton\": [\n    { \"id\": \"root\", \"parent\": null, \"x\": 0.5, \"y\": 0.8, \"radius\": 0.0 },\n    { \"id\": \"spine\", \"parent\": \"root\", \"x\": 0.5, \"y\": 0.6, \"radius\": 0.01 },\n    { \"id\": \"head_base\", \"parent\": \"spine\", \"x\": 0.5, \"y\": 0.35, \"radius\": 0.02 },\n    { \"id\": \"neck\", \"parent\": \"head_base\", \"x\": 0.5, \"y\": 0.45, \"radius\": 0.01 },\n    { \"id\": \"hip_left\", \"parent\": \"spine\", \"x\": 0.35, \"y\": 0.75, \"radius\": 0.01 },\n    { \"id\": \"hip_right\", \"parent\": \"spine\", \"x\": 0.65, \"y\": 0.75, \"radius\": 0.01 },\n    { \"id\": \"knee_left\", \"parent\": \"hip_left\", \"x\": 0.32, \"y\": 0.9, \"radius\": 0.01 },\n    { \"id\": \"ankle_left\", \"parent\": \"knee_left\", \"x\": 0.3, \"y\": 0.98, \"radius\": 0.01 },\n    { \"id\": \"knee_right\", \"parent\": \"hip_right\", \"x\": 0.68, \"y\": 0.9, \"radius\": 0.01 },\n    { \"id\": \"ankle_right\", \"parent\": \"knee_right\", \"x\": 0.7, \"y\": 0.98, \"radius\": 0.01 },\n    { \"id\": \"shoulder_left\", \"parent\": \"spine\", \"x\": 0.35, \"y\": 0.45, \"radius\": 0.01 },\n    { \"id\": \"shoulder_right\", \"parent\": \"spine\", \"x\": 0.65, \"y\": 0.45, \"radius\": 0.01 },\n    { \"id\": \"elbow_left\", \"parent\": \"shoulder_left\", \"x\": 0.3, \"y\": 0.35, \"radius\": 0.01 },\n    { \"id\": \"wrist_left\", \"parent\": \"elbow_left\", \"x\": 0.28, \"y\": 0.28, \"radius\": 0.01 },\n    { \"id\": \"elbow_right\", \"parent\": \"shoulder_right\", \"x\": 0.7, \"y\": 0.35, \"radius\": 0.01 },\n    { \"id\": \"wrist_right\", \"parent\": \"elbow_right\", \"x\": 0.72, \"y\": 0.28, \"radius\": 0.01 },\n    { \"id\": \"head_top\", \"parent\": \"neck\", \"x\": 0.5, \"y\": 0.2, \"radius\": 0.015 },\n    { \"id\": \"hand_left\", \"parent\": \"wrist_left\", \"x\": 0.28, \"y\": 0.25, \"radius\": 0.008 },\n    { \"id\": \"hand_right\", \"parent\": \"wrist_right\", \"x\": 0.72, \"y\": 0.25, \"radius\": 0.008 },\n    { \"id\": \"chair_back_top\", \"parent\": null, \"x\": 0.5, \"y\": 0.15, \"radius\": 0.03 },\n    { \"id\": \"chair_back_bottom\", \"parent\": \"chair_back_top\", \"x\": 0.5, \"y\": 0.45, \"radius\": 0.02 },\n    { \"id\": \"chair_seat_left\", \"parent\": \"chair_back_bottom\", \"x\": 0.3, \"y\": 0.6, \"radius\": 0.02 },\n    { \"id\": \"chair_seat_right\", \"parent\": \"chair_back_bottom\", \"x\": 0.7, \"y\": 0.6, \"radius\": 0.02 }\n  ]\n}"
+  },
+  "done": true,
+  "done_reason": "stop",
+  "total_duration": 11491202900,
+  "load_duration": 9958400,
+  "prompt_eval_count": 483,
+  "prompt_eval_cached_count": 0,
+  "prompt_eval_duration": 224260000,
+  "eval_count": 1035,
+  "eval_duration": 10964677000
+}

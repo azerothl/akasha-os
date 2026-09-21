@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "brief": {
+    "subject": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+    "look": "pencil",
+    "palette": "pencilMinimal",
+    "anchor": "",
+    "beats": [],
+    "engine": "flat",
+    "photo": "",
+    "video": ""
+  },
+  "parts": [],
+  "key_drawings": [],
+  "construction": {
+    "archetype": "subject",
+    "passes": [],
+    "must_read": [],
+    "relations": [],
+    "action_line": "",
+    "focal_point": "",
+    "value_groups": [],
+    "head_orientation": "",
+    "silhouette_test": false,
+    "model_sheet": [],
+    "material_pass": "",
+    "action_line_points": [],
+    "chest_oval": null,
+    "pelvis_oval": null
+  },
+  "construction_phase": "skeleton",
+  "skeleton": [
+    {
+      "id": "root_pelvis",
+      "parent": null,
+      "x": 0.5,
+      "y": 0.7200000286102295,
+      "radius": 0.07999999821186066
+    },
+    {
+      "id": "chest",
+      "parent": "root_pelvis",
+      "x": 0.5,
+      "y": 0.5600000023841858,
+      "radius": 0.07999999821186066
+    },
+    {
+      "id": "neck",
+      "parent": "chest",
+      "x": 0.5,
+      "y": 0.41999998688697815,
+      "radius": 0.05999999865889549
+    },
+    {
+      "id": "head",
+      "parent": "neck",
+      "x": 0.5,
+      "y": 0.30000001192092896,
+      "radius": 0.07000000029802322
+    },
+    {
+      "id": "shoulder_l",
+      "parent": "chest",
+      "x": 0.3199999928474426,
+      "y": 0.4000000059604645,
+      "radius": 0.05999999865889549
+    },
+    {
+      "id": "elbow_l",
+      "parent": "shoulder_l",
+      "x": 0.2800000011920929,
+      "y": 0.5199999809265137,
+      "radius": 0.05000000074505806
+    },
+    {
+      "id": "wrist_l",
+      "parent": "elbow_l",
+      "x": 0.25999999046325684,
+      "y": 0.6399999856948853,
+      "radius": 0.03999999910593033
+    },
+    {
+      "id": "hip_l",
+      "parent": "root_pelvis",
+      "x": 0.3499999940395355,
+      "y": 0.7799999713897705,
+      "radius": 0.05999999865889549
+    },
+    {
+      "id": "knee_l",
+      "parent": "hip_l",
+      "x": 0.3799999952316284,
+      "y": 0.9200000166893005,
+      "radius": 0.05000000074505806
+    },
+    {
+      "id": "ankle_l",
+      "parent": "knee_l",
+      "x": 0.4099999964237213,
+      "y": 1.0399999618530273,
+      "radius": 0.03999999910593033
+    },
+    {
+      "id": "shoulder_r",
+      "parent": "chest",
+      "x": 0.6800000071525574,
+      "y": 0.4000000059604645,
+      "radius": 0.05999999865889549
+    },
+    {
+      "id": "elbow_r",
+      "parent": "shoulder_r",
+      "x": 0.7200000286102295,
+      "y": 0.5199999809265137,
+      "radius": 0.05000000074505806
+    },
+    {
+      "id": "wrist_r",
+      "parent": "elbow_r",
+      "x": 0.7400000095367432,
+      "y": 0.6399999856948853,
+      "radius": 0.03999999910593033
+    },
+    {
+      "id": "hip_r",
+      "parent": "root_pelvis",
+      "x": 0.6499999761581421,
+      "y": 0.7799999713897705,
+      "radius": 0.05999999865889549
+    },
+    {
+      "id": "knee_r",
+      "parent": "hip_r",
+      "x": 0.6200000047683716,
+      "y": 0.9200000166893005,
+      "radius": 0.05000000074505806
+    },
+    {
+      "id": "ankle_r",
+      "parent": "knee_r",
+      "x": 0.5799999833106995,
+      "y": 1.0399999618530273,
+      "radius": 0.03999999910593033
+    }
+  ],
+  "joint_bindings": {},
+  "contacts": {},
+  "volumes": [],
+  "contours": [],
+  "details": [],
+  "pose": {
+    "walk": 0.0,
+    "twitch": 0.0,
+    "wing": 0.0,
+    "flap": 0.0,
+    "tuck": 0.0,
+    "tilt": 0.0
+  },
+  "camera": {
+    "x": 0.5,
+    "y": 0.5,
+    "zoom": 1.0,
+    "rot": 0.0
+  },
+  "mode": "normal",
+  "show_construction": false,
+  "scribble_part": null
+}

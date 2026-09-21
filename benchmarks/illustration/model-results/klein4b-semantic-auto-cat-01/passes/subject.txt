@@ -1,0 +1,7 @@
+A cat in mid-landing on a sofa, transitioning from a jump to a lying-down posture, with paws contacting the seat cushion and body aligning with the backrest.
+Requested visible elements:
+A feline quadruped in mid-air with hind legs extended downward and front paws reaching forward, indicating a jumping motion.
+An upholstered sofa structure consisting of a rectangular seat cushion and a vertical backrest positioned behind the animal's trajectory.
+The cat's body posture transitioning from an airborne arc to a flattened profile resting on the seat surface, with limbs tucked or splayed for settling.
+Relative sizes: The cat's total height is approximately 0.6 times the height of the sofa backrest.; The cat's length along its axis is roughly equal to the width of the visible seat section.
+Contacts at this instant: Hind paw pads contacting the top surface of the seat cushion.; Lower abdomen and chest approaching the seat surface as weight transfers.; Tail tip hovering near the sofa armrest without contact.

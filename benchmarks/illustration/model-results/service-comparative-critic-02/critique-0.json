@@ -1,0 +1,31 @@
+{
+  "regressed": true,
+  "regression_evidence": [
+    "Visible construction lines (circles at joints, straight lines on limbs) remain on the character's arms and legs.",
+    "These lines obscure the intended appearance of the clothing (white shirt, white trousers)."
+  ],
+  "needs_correction": true,
+  "visible_defects": [
+    {
+      "region": "Left arm",
+      "observed_mark": "Circular joint symbol and straight line overlaying the sleeve.",
+      "desired_appearance": "Clean white fabric of the short-sleeved shirt without any construction marks."
+    },
+    {
+      "region": "Right arm",
+      "observed_mark": "Straight line running along the forearm over the sleeve.",
+      "desired_appearance": "Clean white fabric of the short-sleeved shirt without any construction marks."
+    },
+    {
+      "region": "Left knee",
+      "observed_mark": "Circular joint symbol and straight line overlaying the trouser leg.",
+      "desired_appearance": "Clean white fabric of the trousers without any construction marks."
+    },
+    {
+      "region": "Right knee",
+      "observed_mark": "Circular joint symbol and straight line overlaying the trouser leg.",
+      "desired_appearance": "Clean white fabric of the trousers without any construction marks."
+    }
+  ],
+  "correction": "Erase all circular joint symbols and straight guide lines from the character's arms and legs, replacing them with the clean surface of the white shirt and white trousers."
+}

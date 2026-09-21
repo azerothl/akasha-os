@@ -1,0 +1,8 @@
+{
+  "needs_correction": true,
+  "visible_defects": [
+    "Les jambes du personnage sont dessinées de manière incorrecte : les genoux et les chevilles ne correspondent pas à une anatomie humaine réaliste.",
+    "La pipe semble flotter sans être correctement connectée aux lèvres du personnage."
+  ],
+  "correction": "Corrigez l'anatomie des jambes pour qu'elles soient proportionnées et structurées comme celles d'un humain assis. Assurez-vous que la pipe est solidement attachée à la bouche du personnage avec un léger mouvement de fumée qui en émane."
+}

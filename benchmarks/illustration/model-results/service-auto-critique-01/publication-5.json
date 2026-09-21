@@ -1,0 +1,61 @@
+{
+  "session_id": "sess-1789841074443",
+  "brief": {
+    "subject": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+    "look": "ink",
+    "palette": "paperInk",
+    "anchor": "",
+    "beats": [],
+    "engine": "flat",
+    "photo": "",
+    "video": ""
+  },
+  "spec": null,
+  "image_run": {
+    "id": "42663b78e269b977-8312f4ac95a6f4eb",
+    "source_revision": 2,
+    "phase": "final",
+    "status": "needs_review",
+    "error": null
+  },
+  "timeline": {
+    "beats": []
+  },
+  "lock": {
+    "holder": "human:benchmark",
+    "expires_ms": 1789841674445,
+    "reason": "service test"
+  },
+  "last_png": "/downloads/illustration/42663b78e269b977-8312f4ac95a6f4eb-final.png",
+  "pass_previews": [
+    [
+      "skeleton",
+      2,
+      "/downloads/illustration/42663b78e269b977-8312f4ac95a6f4eb-skeleton.png"
+    ],
+    [
+      "volumes",
+      2,
+      "/downloads/illustration/42663b78e269b977-8312f4ac95a6f4eb-volumes.png"
+    ],
+    [
+      "contours",
+      2,
+      "/downloads/illustration/42663b78e269b977-8312f4ac95a6f4eb-contours.png"
+    ],
+    [
+      "details",
+      2,
+      "/downloads/illustration/42663b78e269b977-8312f4ac95a6f4eb-details.png"
+    ],
+    [
+      "final",
+      2,
+      "/downloads/illustration/42663b78e269b977-8312f4ac95a6f4eb-final.png"
+    ]
+  ],
+  "last_sheet_png": null,
+  "last_model_sheet_png": null,
+  "last_mp4": null,
+  "revision": 2
+}

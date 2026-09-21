@@ -1,0 +1,37 @@
+{
+  "session_id": "sess-1789847767501",
+  "illustration_open": true,
+  "doc": {
+    "session_id": "sess-1789847767501",
+    "brief": {
+      "subject": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+      "look": "pencil",
+      "palette": "pencilMinimal",
+      "anchor": "",
+      "beats": [
+        "jardinier âgé",
+        "pipe",
+        "fauteuil",
+        "jardin",
+        "regard",
+        "atmosphère paisible"
+      ],
+      "engine": "flat",
+      "photo": "none",
+      "video": "none"
+    },
+    "spec": null,
+    "image_run": null,
+    "timeline": {
+      "beats": []
+    },
+    "lock": null,
+    "last_png": null,
+    "pass_previews": [],
+    "last_sheet_png": null,
+    "last_model_sheet_png": null,
+    "last_mp4": null,
+    "revision": 1
+  },
+  "digest": "illust rev=1 look=pencil palette=pencilMinimal subject=\"un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin\" parts=0 lock=- png=- sheet=- model_sheet=-"
+}

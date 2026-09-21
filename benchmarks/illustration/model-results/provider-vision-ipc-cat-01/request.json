@@ -1,0 +1,26 @@
+{
+  "model_id": "provider:illustration-local-test:gemma3:12b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Inspect image 1 and image 2 separately. For each image, report the number of cats actually visible, where each cat is, and whether any limbs or tails are ambiguous. Then list visible differences. Do not assume the second image is better. Do not invent missing details."
+    }
+  ],
+  "tools": [],
+  "params": {
+    "max_tokens": 1000,
+    "temperature": 0.0,
+    "top_p": 0.9,
+    "seed": null
+  },
+  "priority": 1,
+  "data_refs": [
+    "/downloads/illustration/de931118dbc3b1e5-ce76ec900138d49d-final.png",
+    "/downloads/illustration/beae3697192f5055-6cae678d7ebb4a96-final.png"
+  ],
+  "images": [
+    "/downloads/illustration/de931118dbc3b1e5-ce76ec900138d49d-final.png",
+    "/downloads/illustration/beae3697192f5055-6cae678d7ebb4a96-final.png"
+  ],
+  "routing": "local_only"
+}

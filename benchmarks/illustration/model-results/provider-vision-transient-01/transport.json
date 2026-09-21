@@ -1,0 +1,4 @@
+{
+  "model": "gemma3:12b",
+  "transient_ollama": true
+}

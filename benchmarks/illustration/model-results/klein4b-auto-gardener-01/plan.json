@@ -1,0 +1,17 @@
+{
+"construction": "A low-angle view of an elderly gardener seated in a simple armchair positioned on the left side of the frame, facing right towards an open garden space. The figure is depicted as a simplified human block with a rounded head oval and bent knees indicating a relaxed posture. A curved pipe rests near the mouth area without detailed features. The armchair supports the torso and legs, with visible contact points at the seat and backrest. The background consists of horizontal placement lines suggesting distant garden rows or hedges on the right, establishing depth away from the gaze direction. Space is allocated to the right for the viewed garden elements.",
+"subjects": [
+  "elderly gardener",
+  "armchair",
+  "pipe",
+  "garden background"
+],
+"spatial_relations": [
+  "gardener seated in armchair on left",
+  "gardener facing right towards garden",
+  "pipe held near mouth",
+  "armchair supporting seated figure",
+  "garden space extending to the right of gaze",
+  "background lines receding behind figure"
+]
+}
