@@ -588,6 +588,18 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::RENDER_STUB_SERVICE => {
             run_render_stub_beauty(bus, evt_tx, module, action_id, input, refresh_binds).await;
         }
+        aos_proto::RENDER_SUBMIT_SERVICE => {
+            run_render_submit(bus, evt_tx, module, action_id, input, refresh_binds).await;
+        }
+        aos_proto::RENDER_STATUS_SERVICE => {
+            run_render_status(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::RENDER_RESULT_SERVICE => {
+            run_render_result(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::ASSET_INSTANTIATE_SERVICE => {
+            run_asset_instantiate(evt_tx, module, action_id, input, refresh_binds);
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -599,6 +611,12 @@ pub(crate) async fn run_decl_service_action(
             });
         }
     }
+}
+
+fn illustration_render_service() -> &'static aos_scene::RenderService {
+    use std::sync::OnceLock;
+    static SVC: OnceLock<aos_scene::RenderService> = OnceLock::new();
+    SVC.get_or_init(aos_scene::RenderService::with_default_backends)
 }
 
 async fn run_render_stub_beauty(
@@ -616,24 +634,27 @@ async fn run_render_stub_beauty(
         .get("path")
         .and_then(|v| v.as_str())
         .unwrap_or("/documents/illustrations/beauty-stub.png");
-    if !path.starts_with(aos_proto::ILLUSTRATION_DOCUMENTS_PREFIX) {
-        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
-            module: module.to_string(),
-            action_id: action_id.to_string(),
-            ok: false,
-            result: Value::Null,
-            error: Some("stub beauty path must be under /documents/illustrations/".into()),
-            refresh_binds,
-        });
-        return;
-    }
     let r = input.get("r").and_then(|v| v.as_u64()).unwrap_or(48) as u8;
     let g = input.get("g").and_then(|v| v.as_u64()).unwrap_or(72) as u8;
     let b = input.get("b").and_then(|v| v.as_u64()).unwrap_or(96) as u8;
-    let png = aos_scene::stub_beauty_png(r, g, b);
+    let svc = illustration_render_service();
+    let rendered = match svc.stub_beauty(path, (r, g, b)) {
+        Ok(res) => res,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("render.stub.beauty: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
     let req = FsWriteBytesRequest {
-        path: path.to_string(),
-        content_b64: base64::engine::general_purpose::STANDARD.encode(&png),
+        path: rendered.path.clone(),
+        content_b64: base64::engine::general_purpose::STANDARD.encode(&rendered.png),
         actor: "human:ui".into(),
         caps: vec![
             aos_proto::ILLUSTRATION_FS_WRITE_CAP.into(),
@@ -651,10 +672,12 @@ async fn run_render_stub_beauty(
                 action_id: action_id.to_string(),
                 ok: true,
                 result: serde_json::json!({
-                    "path": path,
+                    "path": rendered.path,
                     "kind": "stub_beauty",
-                    "width": aos_scene::STUB_BEAUTY_SIZE,
-                    "height": aos_scene::STUB_BEAUTY_SIZE,
+                    "backend": "stub",
+                    "job_id": rendered.job_id,
+                    "width": rendered.width,
+                    "height": rendered.height,
                 }),
                 error: None,
                 refresh_binds,
@@ -671,6 +694,360 @@ async fn run_render_stub_beauty(
             });
         }
     }
+}
+
+async fn run_render_submit(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_proto::FsWriteBytesRequest;
+    use aos_scene::{
+        load_project_yaml, parse_backend, parse_pass, RenderBackendId, RenderSubmit, SceneGraph,
+    };
+    use base64::Engine as _;
+
+    let path = input
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("/documents/illustrations/beauty.png");
+    let backend = match parse_backend(input.get("backend").and_then(|v| v.as_str())) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e.to_string()),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let pass = match parse_pass(input.get("pass").and_then(|v| v.as_str())) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e.to_string()),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let width = input.get("width").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let height = input.get("height").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let r = input.get("r").and_then(|v| v.as_u64()).unwrap_or(48) as u8;
+    let g = input.get("g").and_then(|v| v.as_u64()).unwrap_or(72) as u8;
+    let b = input.get("b").and_then(|v| v.as_u64()).unwrap_or(96) as u8;
+
+    let scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            SceneGraph::demo_scene()
+        } else {
+            match load_project_yaml(yaml) {
+                Ok(p) => p.scene,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene_yaml: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        }
+    } else {
+        SceneGraph::demo_scene()
+    };
+
+    let render_cap = match backend {
+        RenderBackendId::Stub => aos_proto::RENDER_STUB_CAP,
+        RenderBackendId::Cpu => aos_proto::RENDER_CPU_CAP,
+    };
+
+    let svc = illustration_render_service();
+    let rendered = match svc.submit_and_result(RenderSubmit {
+        scene,
+        backend,
+        pass,
+        width,
+        height,
+        output_path: path.to_string(),
+        stub_rgb: (r, g, b),
+    }) {
+        Ok(res) => res,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("render.submit: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let req = FsWriteBytesRequest {
+        path: rendered.path.clone(),
+        content_b64: base64::engine::general_purpose::STANDARD.encode(&rendered.png),
+        actor: "human:ui".into(),
+        caps: vec![
+            aos_proto::ILLUSTRATION_FS_WRITE_CAP.into(),
+            render_cap.into(),
+        ],
+        trace_id: format!("decl-ui-{module}-render-submit"),
+    };
+    let result = bus
+        .call::<FsWriteBytesRequest, Value>("fs.write_bytes", &req, vec![])
+        .await;
+    match result {
+        Ok(_) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({
+                    "path": rendered.path,
+                    "kind": "render_submit",
+                    "backend": rendered.backend.as_str(),
+                    "pass": rendered.pass.as_str(),
+                    "job_id": rendered.job_id,
+                    "width": rendered.width,
+                    "height": rendered.height,
+                    "status": "succeeded",
+                }),
+                error: None,
+                refresh_binds,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("render.submit write: {e}")),
+                refresh_binds,
+            });
+        }
+    }
+}
+
+fn run_render_status(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    let Some(job_id) = input.get("job_id").and_then(|v| v.as_str()) else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("render.status: missing job_id".into()),
+            refresh_binds,
+        });
+        return;
+    };
+    match illustration_render_service().status(job_id) {
+        Ok(st) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({
+                    "job_id": st.job_id,
+                    "status": st.state.as_str(),
+                    "backend": st.backend.as_str(),
+                    "pass": st.pass.as_str(),
+                    "error": st.error,
+                }),
+                error: None,
+                refresh_binds,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e.to_string()),
+                refresh_binds,
+            });
+        }
+    }
+}
+
+fn run_render_result(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    let Some(job_id) = input.get("job_id").and_then(|v| v.as_str()) else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("render.result: missing job_id".into()),
+            refresh_binds,
+        });
+        return;
+    };
+    match illustration_render_service().result(job_id) {
+        Ok(res) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({
+                    "job_id": res.job_id,
+                    "path": res.path,
+                    "width": res.width,
+                    "height": res.height,
+                    "backend": res.backend.as_str(),
+                    "pass": res.pass.as_str(),
+                    "status": "succeeded",
+                }),
+                error: None,
+                refresh_binds,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e.to_string()),
+                refresh_binds,
+            });
+        }
+    }
+}
+
+fn run_asset_instantiate(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{
+        embedded_primitives_pack, instantiate_asset, load_project_yaml, save_project_yaml,
+        ProjectFile, SceneGraph,
+    };
+
+    let asset_id = input
+        .get("asset_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("humanoid.placeholder");
+    let parent_id = input.get("parent_id").and_then(|v| v.as_str());
+    let prefix = input
+        .get("prefix")
+        .and_then(|v| v.as_str())
+        .unwrap_or("inst_");
+
+    let mut scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            SceneGraph::demo_scene()
+        } else {
+            match load_project_yaml(yaml) {
+                Ok(p) => p.scene,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene_yaml: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        }
+    } else {
+        SceneGraph::demo_scene()
+    };
+
+    let pack = match embedded_primitives_pack() {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("asset pack: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let inst = match instantiate_asset(&mut scene, &pack, asset_id, parent_id, prefix) {
+        Ok(i) => i,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("asset.instantiate: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("save scene: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "asset_id": asset_id,
+            "root_id": inst.root_id,
+            "created_ids": inst.created_ids,
+            "scene_yaml": yaml,
+            "pack_path": "/assets/illustration/primitives/pack.yaml",
+        }),
+        error: None,
+        refresh_binds,
+    });
 }
 
 async fn run_media_image_generate(

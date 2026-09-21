@@ -159,8 +159,29 @@ pub const ILLUSTRATION_FS_WRITE_CAP: &str = "fs.write:/documents/illustrations/*
 /// Cap: host stub beauty-pass renderer (no Blender / no external engine).
 pub const RENDER_STUB_CAP: &str = "render.stub";
 
+/// Cap: host CPU SceneGraph wireframe / beauty backend (no Blender / no wgpu).
+pub const RENDER_CPU_CAP: &str = "render.cpu";
+
+/// Cap: read Illustration Studio asset packs under `/assets/illustration/**`.
+pub const ASSET_ILLUSTRATION_READ_CAP: &str = "asset.read:/assets/illustration/**";
+
+/// Illustration asset tree prefix (fail-closed with `ASSET_ILLUSTRATION_READ_CAP`).
+pub const ILLUSTRATION_ASSETS_PREFIX: &str = "/assets/illustration/";
+
 /// DeclUI service: stub solid/viewport beauty placeholder PNG.
 pub const RENDER_STUB_SERVICE: &str = "render.stub.beauty";
+
+/// DeclUI service: submit a render job via backend-agnostic RenderService.
+pub const RENDER_SUBMIT_SERVICE: &str = "render.submit";
+
+/// DeclUI service: poll render job status.
+pub const RENDER_STATUS_SERVICE: &str = "render.status";
+
+/// DeclUI service: fetch completed render job result.
+pub const RENDER_RESULT_SERVICE: &str = "render.result";
+
+/// DeclUI service: instantiate an asset pack entry into the SceneGraph.
+pub const ASSET_INSTANTIATE_SERVICE: &str = "asset.instantiate";
 
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =

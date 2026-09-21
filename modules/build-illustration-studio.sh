@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-illustration-studio.sh — package Illustration Studio foundation (.aospkg)
+# build-illustration-studio.sh — package Illustration Studio (.aospkg)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../" && pwd)"
@@ -44,13 +44,15 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.1.0
+version: 0.2.0
 hash: ${HASH}
 permissions:
   required_caps:
     - fs.read:/documents/illustrations/**
     - fs.write:/documents/illustrations/**
     - render.stub
+    - render.cpu
+    - asset.read:/assets/illustration/**
     - tool.invoke:illustration-studio
 tools:
   - name: illustration.project.load
