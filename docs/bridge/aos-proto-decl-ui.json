@@ -371,6 +371,13 @@
                 "null"
               ]
             },
+            "scene_key": {
+              "description": "SceneGraph JSON/YAML state key for `scene3d` / `scene_tree`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "selected_key": {
               "description": "Selected layer id state key (number or null).",
               "type": [
@@ -1139,6 +1146,13 @@
                 "null"
               ]
             },
+            "scene_key": {
+              "description": "SceneGraph JSON/YAML state key for `scene3d` / `scene_tree`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "selected_key": {
               "description": "Selected layer id state key (number or null).",
               "type": [
@@ -1484,6 +1498,13 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "scene_key": {
+          "description": "SceneGraph JSON/YAML state key for `scene3d` / `scene_tree`.",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -2038,6 +2059,13 @@
               },
               "type": [
                 "array",
+                "null"
+              ]
+            },
+            "scene_key": {
+              "description": "SceneGraph JSON/YAML state key for `scene3d` / `scene_tree`.",
+              "type": [
+                "string",
                 "null"
               ]
             },

@@ -286,7 +286,9 @@ pub(crate) fn on_ui_invoke_done(
 pub(crate) fn on_ui_service_done(
     app: &mut UiApp,
     module: String,
+    action_id: String,
     ok: bool,
+    result: Value,
     error: Option<String>,
     refresh_binds: Vec<String>,
 ) {
@@ -295,6 +297,15 @@ pub(crate) fn on_ui_service_done(
         panel.set_pending_invoke(false);
         if ok {
             panel.status.clear();
+            if module == "illustration-studio"
+                && (action_id == "stub_beauty" || action_id == aos_proto::RENDER_STUB_SERVICE)
+            {
+                if let Some(path) = result.get("path").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("beauty_path".into(), Value::String(path.to_string()));
+                }
+            }
         } else {
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
                 Some(raw) => {

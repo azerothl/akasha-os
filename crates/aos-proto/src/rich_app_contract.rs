@@ -82,6 +82,8 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "layer_canvas",
     "layer_list",
     "undo_redo",
+    "scene3d",
+    "scene_tree",
     "section",
     "text_input",
     "file_picker",
@@ -144,6 +146,21 @@ pub const CREATE_FS_READ_CAP: &str = "fs.read:/documents/create/**";
 
 /// Future write cap for Create package documents.
 pub const CREATE_FS_WRITE_CAP: &str = "fs.write:/documents/create/**";
+
+/// Illustration Studio document tree (SceneGraph YAML projects).
+pub const ILLUSTRATION_DOCUMENTS_PREFIX: &str = "/documents/illustrations/";
+
+/// Read cap for Illustration Studio documents.
+pub const ILLUSTRATION_FS_READ_CAP: &str = "fs.read:/documents/illustrations/**";
+
+/// Write cap for Illustration Studio documents.
+pub const ILLUSTRATION_FS_WRITE_CAP: &str = "fs.write:/documents/illustrations/**";
+
+/// Cap: host stub beauty-pass renderer (no Blender / no external engine).
+pub const RENDER_STUB_CAP: &str = "render.stub";
+
+/// DeclUI service: stub solid/viewport beauty placeholder PNG.
+pub const RENDER_STUB_SERVICE: &str = "render.stub.beauty";
 
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =

@@ -451,6 +451,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "aos-scene"
+version = "0.18.0"
+dependencies = [
+ "approx",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "aos-sd"
 version = "0.18.0"
 dependencies = [
@@ -526,6 +537,8 @@ dependencies = [
  "aos-placement",
  "aos-platform",
  "aos-proto",
+ "aos-scene",
+ "base64",
  "eframe",
  "egui_commonmark",
  "egui_plot",

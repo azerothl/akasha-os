@@ -1,0 +1,143 @@
+{
+  "type": "declarative_ui",
+  "contract": 2,
+  "title": "Illustration Studio",
+  "title_key": "app_title",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "app_title": "Illustration Studio",
+      "viewport_label": "Viewport",
+      "scene_label": "Scene",
+      "save_label": "Save project",
+      "load_label": "Load project",
+      "stub_render_label": "Stub beauty pass",
+      "about_body": "Foundation slice: editable SceneGraph, host scene3d orbit/select/TRS, YAML save/load. No AI, no Blender.",
+      "beauty_empty": "No beauty pass yet",
+      "preview_label": "Beauty (stub)"
+    },
+    "fr": {
+      "app_title": "Studio Illustration",
+      "viewport_label": "Fenêtre 3D",
+      "scene_label": "Scène",
+      "save_label": "Enregistrer le projet",
+      "load_label": "Charger le projet",
+      "stub_render_label": "Rendu stub (beauté)",
+      "about_body": "Tranche fondation : SceneGraph éditable, scene3d hôte (orbite/sélection/TRS), save/load YAML. Pas d'IA, pas de Blender.",
+      "beauty_empty": "Pas encore de rendu beauté",
+      "preview_label": "Beauté (stub)"
+    }
+  },
+  "state": {
+    "local": {
+      "scene": { "type": "string", "default": "" },
+      "selected_id": { "type": "string", "nullable": true, "default": "box" },
+      "beauty_path": { "type": "string", "default": "" }
+    }
+  },
+  "bindings": [
+    {
+      "id": "project",
+      "tool": "illustration.project.load",
+      "target": "/yaml",
+      "invalidate_on": []
+    },
+    {
+      "id": "beauty",
+      "tool": "illustration.document.load",
+      "target": "/beauty_path",
+      "invalidate_on": ["local.beauty_path"]
+    }
+  ],
+  "actions": [
+    {
+      "id": "save_project",
+      "tool": "illustration.project.save",
+      "input": { "yaml": "$local.scene" },
+      "refresh_binds": ["illustration.project.load"]
+    },
+    {
+      "id": "load_project",
+      "tool": "illustration.project.load",
+      "input": {},
+      "refresh_binds": ["illustration.project.load"]
+    },
+    {
+      "id": "stub_beauty",
+      "service": "render.stub.beauty",
+      "input": {
+        "path": "/documents/illustrations/beauty-stub.png",
+        "r": 48,
+        "g": 72,
+        "b": 96
+      },
+      "refresh_binds": []
+    }
+  ],
+  "subscriptions": [],
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "text",
+        "label_key": "about_body"
+      },
+      {
+        "kind": "row",
+        "children": [
+          {
+            "kind": "button",
+            "label_key": "save_label",
+            "action": "save_project"
+          },
+          {
+            "kind": "button",
+            "label_key": "load_label",
+            "action": "load_project"
+          },
+          {
+            "kind": "button",
+            "label_key": "stub_render_label",
+            "action": "stub_beauty"
+          }
+        ]
+      },
+      {
+        "kind": "split",
+        "split_ratio": 0.28,
+        "children": [
+          {
+            "kind": "scroll",
+            "children": [
+              {
+                "kind": "scene_tree",
+                "scene_key": "scene",
+                "selected_key": "selected_id",
+                "canvas_id": "illustration_viewport",
+                "label_key": "scene_label"
+              }
+            ]
+          },
+          {
+            "kind": "column",
+            "children": [
+              {
+                "kind": "scene3d",
+                "scene_key": "scene",
+                "selected_key": "selected_id",
+                "canvas_id": "illustration_viewport",
+                "label_key": "viewport_label"
+              },
+              {
+                "kind": "image_view",
+                "resource": "$local.beauty_path",
+                "label_key": "preview_label",
+                "empty_label_key": "beauty_empty"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

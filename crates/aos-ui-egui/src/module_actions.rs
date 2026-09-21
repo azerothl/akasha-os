@@ -585,6 +585,9 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             });
         }
+        aos_proto::RENDER_STUB_SERVICE => {
+            run_render_stub_beauty(bus, evt_tx, module, action_id, input, refresh_binds).await;
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -592,6 +595,78 @@ pub(crate) async fn run_decl_service_action(
                 ok: false,
                 result: serde_json::Value::Null,
                 error: Some(format!("unsupported declarative service action: {other}")),
+                refresh_binds,
+            });
+        }
+    }
+}
+
+async fn run_render_stub_beauty(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_proto::FsWriteBytesRequest;
+    use base64::Engine as _;
+
+    let path = input
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("/documents/illustrations/beauty-stub.png");
+    if !path.starts_with(aos_proto::ILLUSTRATION_DOCUMENTS_PREFIX) {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("stub beauty path must be under /documents/illustrations/".into()),
+            refresh_binds,
+        });
+        return;
+    }
+    let r = input.get("r").and_then(|v| v.as_u64()).unwrap_or(48) as u8;
+    let g = input.get("g").and_then(|v| v.as_u64()).unwrap_or(72) as u8;
+    let b = input.get("b").and_then(|v| v.as_u64()).unwrap_or(96) as u8;
+    let png = aos_scene::stub_beauty_png(r, g, b);
+    let req = FsWriteBytesRequest {
+        path: path.to_string(),
+        content_b64: base64::engine::general_purpose::STANDARD.encode(&png),
+        actor: "human:ui".into(),
+        caps: vec![
+            aos_proto::ILLUSTRATION_FS_WRITE_CAP.into(),
+            aos_proto::RENDER_STUB_CAP.into(),
+        ],
+        trace_id: format!("decl-ui-{module}-render-stub"),
+    };
+    let result = bus
+        .call::<FsWriteBytesRequest, Value>("fs.write_bytes", &req, vec![])
+        .await;
+    match result {
+        Ok(_) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({
+                    "path": path,
+                    "kind": "stub_beauty",
+                    "width": aos_scene::STUB_BEAUTY_SIZE,
+                    "height": aos_scene::STUB_BEAUTY_SIZE,
+                }),
+                error: None,
+                refresh_binds,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("render.stub.beauty: {e}")),
                 refresh_binds,
             });
         }

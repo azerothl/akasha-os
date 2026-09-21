@@ -84,6 +84,7 @@ mod research_controller;
 mod research_document;
 mod research_ui_state;
 mod rich_composition_ui;
+mod scene3d_ui;
 mod rich_decl;
 mod runtime;
 mod scenario_ui_state;
@@ -3460,15 +3461,17 @@ impl eframe::App for UiApp {
                 }
                 Evt::ModuleUiServiceDone {
                     module,
-                    action_id: _,
+                    action_id,
                     ok,
-                    result: _,
+                    result,
                     error,
                     refresh_binds,
                 } => module_event_controller::on_ui_service_done(
                     self,
                     module,
+                    action_id,
                     ok,
+                    result,
                     error,
                     refresh_binds,
                 ),

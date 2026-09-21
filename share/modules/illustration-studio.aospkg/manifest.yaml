@@ -1,0 +1,40 @@
+name: illustration-studio
+version: 0.1.0
+hash: 7283edb16da19b283684374562af70b8961c0a6cde44436cd9c82db1a0519995
+permissions:
+  required_caps:
+    - fs.read:/documents/illustrations/**
+    - fs.write:/documents/illustrations/**
+    - render.stub
+    - tool.invoke:illustration-studio
+tools:
+  - name: illustration.project.load
+    description: Load SceneGraph project YAML
+    input_schema:
+      type: object
+  - name: illustration.project.save
+    description: Persist SceneGraph project YAML
+    input_schema:
+      type: object
+      properties:
+        yaml:
+          type: string
+      required: [yaml]
+  - name: illustration.project.ensure
+    description: Ensure demo project YAML exists
+    input_schema:
+      type: object
+  - name: illustration.document.load
+    description: Load package UI state
+    input_schema:
+      type: object
+  - name: illustration.document.save
+    description: Persist package UI state
+    input_schema:
+      type: object
+ui:
+  contract: 2
+  document: ui/index.json
+  entry: ui/index.json
+  mode: declarative_ui
+min_os_api: 1
