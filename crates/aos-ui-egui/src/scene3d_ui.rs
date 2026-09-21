@@ -47,8 +47,8 @@ impl Default for Scene3dHostState {
         Self {
             yaw: 0.6,
             pitch: 0.45,
-            distance: 6.0,
-            target: Vec3::new(0.0, 0.5, 0.0),
+            distance: 8.0,
+            target: Vec3::new(0.4, 0.8, 0.0),
             drag: None,
             undo: UndoStack::default(),
         }
@@ -261,6 +261,7 @@ pub fn ui_scene3d(
 
     // Draw mesh boxes in world space
     let mut hit_candidates: Vec<(String, Pos2, f32)> = Vec::new();
+    let mut mesh_count = 0u32;
     for id in graph.node_ids_depth_first() {
         let Some(node) = graph.nodes.get(&id) else {
             continue;
@@ -268,6 +269,7 @@ pub fn ui_scene3d(
         if !node.visible || node.kind != NodeKind::MeshBox {
             continue;
         }
+        mesh_count += 1;
         let Ok(world) = graph.world_matrix(&id) else {
             continue;
         };
@@ -302,6 +304,21 @@ pub fn ui_scene3d(
                 },
             );
         }
+    }
+
+    if mesh_count == 0 {
+        let empty = w
+            .empty_label_key
+            .as_ref()
+            .and_then(|key| doc.labels.as_ref().and_then(|l| l.resolve(language, key)))
+            .unwrap_or_else(|| "No scene meshes".into());
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            empty,
+            egui::FontId::proportional(14.0),
+            Color32::from_rgb(160, 168, 176),
+        );
     }
 
     // Camera gizmo
@@ -502,10 +519,21 @@ pub fn ui_scene_tree(
     let title = widget_label(w, doc, language, "Scene");
     ui.label(egui::RichText::new(title).strong());
 
+    let node_ids = graph.node_ids_depth_first();
+    if node_ids.is_empty() {
+        let empty = w
+            .empty_label_key
+            .as_ref()
+            .and_then(|k| doc.labels.as_ref().and_then(|l| l.resolve(language, k)))
+            .unwrap_or_else(|| "No scene loaded yet.".into());
+        ui.label(egui::RichText::new(empty).weak());
+        return patch;
+    }
+
     egui::ScrollArea::vertical()
         .max_height(220.0)
         .show(ui, |ui| {
-            for id in graph.node_ids_depth_first() {
+            for id in node_ids {
                 let Some(node) = graph.nodes.get(&id) else {
                     continue;
                 };

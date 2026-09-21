@@ -59,10 +59,10 @@ fn rotate_90_about_z_maps_x_to_y() {
 #[test]
 fn parent_child_world_composition() {
     let mut g = SceneGraph::demo_scene();
-    // Move root up 1m; box local y=0.5 → world y=1.5
+    // Move root up 1m; box local y=0.675 → world y=1.675
     g.nodes.get_mut("root").unwrap().transform.translation = Vec3::new(0.0, 1.0, 0.0);
     let world = g.world_translation("box").unwrap();
-    assert_vec_close(world, Vec3::new(0.0, 1.5, 0.0), 1e-4);
+    assert_vec_close(world, Vec3::new(0.0, 1.675, 0.0), 1e-4);
 }
 
 #[test]
