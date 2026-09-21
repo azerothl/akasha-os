@@ -1261,7 +1261,7 @@ pub fn illust_tool_descs() -> Vec<ToolDesc> {
         ),
         (
             "illust.compose",
-            "Publie une passe réelle de dessin et son aperçu last_png. Utilise construction_phase dans l'ordre skeleton, volumes, contours, details, final. Chaque spec remplace la précédente : conserve les données des passes déjà construites. Pose et proportions dans skeleton, masses dans volumes, contours visibles dans contours, habillage dans details. Pour final, assemble explicitement parts avec les chevauchements corrects. Coordonnées normalisées 0..1 ; x/y est le coin haut-gauche pour ellipse/rect. Maintiens contacts, proportions, orientation et identité entre les passes. Une construction explicite est préservée par le moteur. Après le rendu final : render_sheet puis review/export. Le score de review est structurel, pas une mesure de qualité artistique.",
+            "Publie une passe réelle de dessin et son aperçu last_png. Utilise construction_phase dans l'ordre skeleton, volumes, contours, details, final — UNE passe par appel, dans cet ordre, sans sauter. Le panneau Illustration rejoue le dessin progressivement : chaque compose doit être visible avant la suivante. Chaque spec remplace la précédente : conserve les données des passes déjà construites (skeleton sous volumes, volumes sous contours, etc.). Pose et proportions dans skeleton, masses dans volumes, contours visibles dans contours, habillage dans details. Pour final, assemble explicitement parts avec les chevauchements corrects. Coordonnées normalisées 0..1 ; x/y est le coin haut-gauche pour ellipse/rect. Maintiens contacts, proportions, orientation et identité entre les passes. Une construction explicite est préservée par le moteur. Après le rendu final : render_sheet puis review/export. Le score de review est structurel, pas une mesure de qualité artistique.",
             serde_json::json!({
                 "type":"object",
                 "properties":{
@@ -1462,10 +1462,16 @@ pub fn explicit_illust_intent(text: &str) -> bool {
 
 /// Short strategy for illustration agents.
 pub fn illust_draw_strategy_hint() -> String {
-    "PROTOCOLE Illustration : pour une illustration raster, set_brief puis illust.generate_image avec une description de construction adaptée au sujet (pose, proportions, appuis, contacts, composition). L'outil publie les passes en arrière-plan; illust.get donne image_run et pass_previews. Ne pas relancer une génération running. needs_review ne prouve pas la qualité : inspecter visuellement le PNG et signaler les défauts. Ne pas utiliser le score vectoriel pour accepter ce rendu. Si le moteur est absent, rapporter l'erreur sans le remplacer par une recette. Pour une demande explicitement vectorielle, utiliser compose. Un seul auteur, INTERDIT agent.spawn. \
+    "PROTOCOLE Illustration : chemin par défaut vectoriel. set_brief (sujet = demande originale) puis illust.compose. \
+     Publie les passes UNE À UNE dans l'ordre skeleton → volumes → contours → details → final : le panneau montre chaque étape se dessiner ; ne pas sauter à final ni empiler plusieurs phases dans un seul compose. \
+     Chaque compose conserve skeleton/volumes/contours des passes précédentes. \
+     Un squelette taxonomique (pelvis, pipe_, seat_, garden_) est posé tout seul : ne pas le remplacer. \
+     Habiller avec des contours path d'au moins 8 points, liés aux joints (joint_bindings), pas avec des ellipses. \
+     Puis render_sheet → review. skeleton_undressed ou ellipse_only = redessiner les paths, pas generate_image. \
+     illust.generate_image est optionnel et seulement si le moteur image est configuré. S'il répond AOS_ILLUSTRATION_MODEL_DIR, revenir à compose ; ne pas goal.fail pour ça. \
+     Ne pas relancer une génération running. needs_review ne prouve pas la qualité. Un seul auteur, INTERDIT agent.spawn. \
      Format : UNE seule ligne JSON par tour {\"thought\":\"…\",\"action\":\"illust.…\",\"args\":{…}}. \
-     Pour la branche vectorielle seulement : set_brief → compose avec une scène complète de contours path (silhouette, \
-     masses, appendices, détails distinctifs et accessoires; au moins 8 points par contour) → \
+     Vectoriel : set_brief → compose skeleton → compose volumes → compose contours → compose details → compose final → \
      render_sheet → review structurelle → inspection visuelle → export. \
      Interdit d'empiler plusieurs JSON dans le même tour. \
      Alias acceptés : set_brief/compose/review/export (préfixe illust. ajouté). \
@@ -2252,6 +2258,13 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                     "brief",
                     "seed",
                     "show_construction",
+                    "skeleton",
+                    "contacts",
+                    "joint_bindings",
+                    "construction_phase",
+                    "volumes",
+                    "contours",
+                    "details",
                 ] {
                     if let Some(v) = obj.remove(k) {
                         spec.insert(k.into(), v);
@@ -2307,7 +2320,7 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                     let Some(p) = part.as_object_mut() else {
                         continue;
                     };
-                    let role = p
+                    let mut role = p
                         .get("role")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
@@ -2333,6 +2346,25 @@ fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serd
                         if !bound {
                             normalize_illust_part_geometry(geom, &role, i, n);
                         }
+                    } else if let Some(points) = p.get("points").cloned().filter(|v| {
+                        v.as_array().is_some_and(|a| a.len() >= 2)
+                    }) {
+                        if role.is_empty() {
+                            if let Some(ty) = p.get("type").and_then(|v| v.as_str()) {
+                                role = ty.to_string();
+                                p.insert("role".into(), serde_json::Value::String(role.clone()));
+                            }
+                        }
+                        p.insert(
+                            "geometry".into(),
+                            serde_json::json!({
+                                "kind": "path",
+                                "closed": true,
+                                "points": points
+                            }),
+                        );
+                        p.remove("points");
+                        p.remove("type");
                     } else {
                         // Models often send role+description only — invent a readable layout.
                         let (x, y, w, h) = layout_for_illust_role(&role, i, n);
@@ -3191,6 +3223,24 @@ mod tests {
         assert!((g["x"].as_f64().unwrap() - 0.3).abs() < 1e-6);
         assert!((g["w"].as_f64().unwrap() - 0.25).abs() < 1e-6);
         assert!(g.get("points").is_none());
+    }
+
+    #[test]
+    fn illust_compose_promotes_top_level_points_to_path() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "parts": [{
+                    "type": "silhouette",
+                    "points": [{"x":0.5,"y":0.2},{"x":0.35,"y":0.4},{"x":0.5,"y":0.8},{"x":0.65,"y":0.4},{"x":0.5,"y":0.2},{"x":0.4,"y":0.3},{"x":0.6,"y":0.3},{"x":0.5,"y":0.5}]
+                }]
+            }),
+        );
+        let part = &args["spec"]["parts"][0];
+        assert_eq!(part["role"], "silhouette");
+        assert_eq!(part["geometry"]["kind"], "path");
+        assert!(part["geometry"]["points"].as_array().unwrap().len() >= 8);
+        assert!(part.get("type").is_none());
     }
 
     #[test]

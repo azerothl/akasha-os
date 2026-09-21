@@ -92,12 +92,23 @@ pub fn export_png_progress(
 
 /// How long the panel should take to play the current subject, in seconds.
 pub fn draw_in_seconds(spec: &IllustrationSpec) -> f32 {
-    let n = spec
-        .parts
-        .iter()
-        .filter(|p| !part_is_background(p))
-        .count()
-        .max(1);
+    use aos_proto::IllustrationConstructionPhase as Phase;
+    let n = match spec.construction_phase {
+        Phase::Skeleton => spec
+            .skeleton
+            .len()
+            .max(spec.construction.action_line_points.len().saturating_sub(1))
+            .max(1),
+        Phase::Volumes => spec.volumes.len().max(1),
+        Phase::Contours => spec.contours.len().max(1),
+        Phase::Details => spec.details.len().max(1),
+        Phase::Final => spec
+            .parts
+            .iter()
+            .filter(|p| !part_is_background(p))
+            .count()
+            .max(1),
+    };
     (n as f32 * 0.5).clamp(1.8, 8.0)
 }
 
@@ -435,6 +446,36 @@ fn paint_spec(
 
     if !blueprint && spec.construction_phase != IllustrationConstructionPhase::Final {
         paint_construction_phase(img, spec, colors, progress);
+        return;
+    }
+
+    if !blueprint
+        && spec.construction_phase == IllustrationConstructionPhase::Final
+        && spec.show_construction
+        && !spec.skeleton.is_empty()
+    {
+        draw_skeleton_pose_alpha(
+            img,
+            spec,
+            parse_hex(&colors.guide),
+            parse_hex(&colors.blush),
+            0.1,
+            0.1,
+            None,
+        );
+    }
+
+    // A taxonomic pose with no dressed parts is still a drawing. Volumes and
+    // the joint chain have to show, or the preview is only the paper stock.
+    if spec.parts.is_empty() && (!spec.skeleton.is_empty() || !spec.volumes.is_empty()) {
+        if !spec.volumes.is_empty() {
+            let mut staged = spec.clone();
+            staged.parts = spec.volumes.iter().map(volume_as_part).collect();
+            paint_spec(img, &staged, colors, blueprint, progress);
+        }
+        if !spec.skeleton.is_empty() {
+            draw_skeleton_pose(img, spec, parse_hex(&colors.ink), parse_hex(&colors.ink));
+        }
         return;
     }
 
@@ -936,62 +977,247 @@ fn part_poly(
     }
 }
 
+fn draw_skeleton_pose(img: &mut RgbImage, spec: &IllustrationSpec, bone: Rgb<u8>, joint_color: Rgb<u8>) {
+    draw_skeleton_pose_alpha(img, spec, bone, joint_color, 0.95, 0.95, None);
+}
+
+/// Draw the joint chain. `progress` reveals bones then joints in skeleton order
+/// (None = fully drawn). Alphas let later passes keep the pose as a faint guide.
+fn draw_skeleton_pose_alpha(
+    img: &mut RgbImage,
+    spec: &IllustrationSpec,
+    bone: Rgb<u8>,
+    joint_color: Rgb<u8>,
+    bone_alpha: f32,
+    joint_alpha: f32,
+    progress: Option<f32>,
+) {
+    let w = img.width() as f32;
+    let h = img.height() as f32;
+    let n = spec.skeleton.len().max(1) as f32;
+    let reveal = progress.map(|p| {
+        let x = p.clamp(0.0, 0.9999) * n;
+        (x.floor() as usize, (x - x.floor()).clamp(0.0, 1.0))
+    });
+    for (i, joint) in spec.skeleton.iter().enumerate() {
+        let frac = match reveal {
+            Some((done, _)) if i > done => continue,
+            Some((done, stroke)) if i == done => stroke.max(0.04),
+            _ => 1.0,
+        };
+        if let Some(parent) = joint
+            .parent
+            .as_deref()
+            .and_then(|id| spec.skeleton.iter().find(|other| other.id == id))
+        {
+            let x0 = parent.x * w;
+            let y0 = parent.y * h;
+            let x1 = x0 + (joint.x * w - x0) * frac;
+            let y1 = y0 + (joint.y * h - y0) * frac;
+            draw_line(img, x0, y0, x1, y1, bone, bone_alpha, 2.4);
+        }
+    }
+    for (i, joint) in spec.skeleton.iter().enumerate() {
+        let show = match reveal {
+            Some((done, _)) if i > done => false,
+            Some((done, stroke)) if i == done => stroke > 0.55,
+            _ => true,
+        };
+        if !show {
+            continue;
+        }
+        fill_circle(
+            img,
+            (joint.x * w).round() as i32,
+            (joint.y * h).round() as i32,
+            (joint.radius.clamp(0.002, 0.008) * w).max(2.0).round() as i32,
+            joint_color,
+            joint_alpha,
+        );
+    }
+}
+
+fn paint_action_line_and_ovals(
+    img: &mut RgbImage,
+    spec: &IllustrationSpec,
+    colors: &IllustrationPaletteColors,
+    progress: Option<f32>,
+) {
+    let color = parse_hex(&colors.guide);
+    let w = img.width() as f32;
+    let h = img.height() as f32;
+    let p = progress.unwrap_or(1.0).clamp(0.0, 1.0);
+    let action_color = parse_hex(colors.accents.first().unwrap_or(&colors.ink));
+    let segments = spec.construction.action_line_points.windows(2).collect::<Vec<_>>();
+    if !segments.is_empty() {
+        let n = segments.len() as f32;
+        let action_span = if progress.is_some() { (p / 0.28).clamp(0.0, 1.0) } else { 1.0 };
+        let reveal = action_span * n;
+        let done = reveal.floor() as usize;
+        let stroke = (reveal - done as f32).clamp(0.0, 1.0);
+        for (i, pair) in segments.iter().enumerate() {
+            if i > done {
+                break;
+            }
+            let frac = if i == done { stroke.max(0.04) } else { 1.0 };
+            let a = pair[0];
+            let b = pair[1];
+            let x0 = a.x * w;
+            let y0 = a.y * h;
+            let x1 = x0 + (b.x * w - x0) * frac;
+            let y1 = y0 + (b.y * h - y0) * frac;
+            draw_line(img, x0, y0, x1, y1, action_color, 0.9, 2.5);
+        }
+    }
+    let ovals_ready = progress.map(|v| v >= 0.22).unwrap_or(true);
+    if ovals_ready {
+        if let Some(oval) = &spec.construction.chest_oval {
+            draw_construction_oval(img, oval, w, h, color);
+        }
+        if progress.map(|v| v >= 0.28).unwrap_or(true) {
+            if let Some(oval) = &spec.construction.pelvis_oval {
+                draw_construction_oval(img, oval, w, h, color);
+            }
+        }
+    }
+}
+
+/// Lightweight outlines so later passes keep earlier construction visible.
+fn paint_volume_underlay(
+    img: &mut RgbImage,
+    spec: &IllustrationSpec,
+    colors: &IllustrationPaletteColors,
+    alpha: f32,
+) {
+    let w = img.width() as f32;
+    let h = img.height() as f32;
+    let cam = &spec.camera;
+    let ink = parse_hex(&colors.guide);
+    for volume in &spec.volumes {
+        let part = volume_as_part(volume);
+        let poly = part_poly(&part, w, h, cam);
+        if poly.len() < 3 {
+            continue;
+        }
+        for pair in poly.windows(2) {
+            draw_line(
+                img,
+                pair[0].0 as f32,
+                pair[0].1 as f32,
+                pair[1].0 as f32,
+                pair[1].1 as f32,
+                ink,
+                alpha,
+                1.6,
+            );
+        }
+        if let (Some(first), Some(last)) = (poly.first(), poly.last()) {
+            draw_line(
+                img,
+                last.0 as f32,
+                last.1 as f32,
+                first.0 as f32,
+                first.1 as f32,
+                ink,
+                alpha,
+                1.6,
+            );
+        }
+    }
+}
+
+fn paint_contour_underlay(
+    img: &mut RgbImage,
+    spec: &IllustrationSpec,
+    colors: &IllustrationPaletteColors,
+    alpha: f32,
+) {
+    let w = img.width() as f32;
+    let h = img.height() as f32;
+    let cam = &spec.camera;
+    let ink = mix(parse_hex(&colors.ink), parse_hex(&colors.paper), 0.55);
+    for part in &spec.contours {
+        let poly = part_poly(part, w, h, cam);
+        if poly.len() < 3 {
+            continue;
+        }
+        for pair in poly.windows(2) {
+            draw_line(
+                img,
+                pair[0].0 as f32,
+                pair[0].1 as f32,
+                pair[1].0 as f32,
+                pair[1].1 as f32,
+                ink,
+                alpha,
+                1.8,
+            );
+        }
+        if let (Some(first), Some(last)) = (poly.first(), poly.last()) {
+            draw_line(
+                img,
+                last.0 as f32,
+                last.1 as f32,
+                first.0 as f32,
+                first.1 as f32,
+                ink,
+                alpha,
+                1.8,
+            );
+        }
+    }
+}
+
 fn paint_construction_phase(
     img: &mut RgbImage,
     spec: &IllustrationSpec,
     colors: &IllustrationPaletteColors,
     progress: Option<f32>,
 ) {
+    let guide = parse_hex(&colors.guide);
+    let blush = parse_hex(&colors.blush);
     match spec.construction_phase {
         IllustrationConstructionPhase::Skeleton => {
-            let color = parse_hex(&colors.guide);
-            let w = img.width() as f32;
-            let h = img.height() as f32;
-            for pair in spec.construction.action_line_points.windows(2) {
-                let a = pair[0];
-                let b = pair[1];
-                let action_color = parse_hex(colors.accents.first().unwrap_or(&colors.ink));
-                draw_line(img, a.x * w, a.y * h, b.x * w, b.y * h, action_color, 0.9, 2.5);
-            }
-            if let Some(oval) = &spec.construction.chest_oval {
-                draw_construction_oval(img, oval, w, h, color);
-            }
-            if let Some(oval) = &spec.construction.pelvis_oval {
-                draw_construction_oval(img, oval, w, h, color);
-            }
-            for joint in &spec.skeleton {
-                if let Some(parent) = joint.parent.as_deref().and_then(|id| {
-                    spec.skeleton.iter().find(|other| other.id == id)
-                }) {
-                    draw_line(
-                        img,
-                        parent.x * w,
-                        parent.y * h,
-                        joint.x * w,
-                        joint.y * h,
-                        color,
-                        0.82,
-                        2.0,
-                    );
-                }
-            }
-            for joint in &spec.skeleton {
-                fill_circle(
-                    img,
-                    (joint.x * w).round() as i32,
-                    (joint.y * h).round() as i32,
-                    // This pass shows joint markers, not anatomical masses.
-                    // Models sometimes use radius as a body-part size; keep
-                    // the pose readable even when that metadata is oversized.
-                    (joint.radius.clamp(0.002, 0.008) * w).max(2.0).round() as i32,
-                    parse_hex(&colors.blush),
-                    0.82,
-                );
+            paint_action_line_and_ovals(img, spec, colors, progress);
+            let skeleton_progress = match progress {
+                None => None,
+                Some(p) if p < 0.32 => Some(0.0),
+                Some(p) => Some(((p - 0.32) / 0.68).clamp(0.0, 1.0)),
+            };
+            if skeleton_progress != Some(0.0) {
+                draw_skeleton_pose_alpha(img, spec, guide, blush, 0.95, 0.95, skeleton_progress);
             }
         }
         IllustrationConstructionPhase::Volumes
         | IllustrationConstructionPhase::Contours
         | IllustrationConstructionPhase::Details => {
+            // Previous construction stays visible under the active pass.
+            if !spec.skeleton.is_empty() {
+                let (bone_a, joint_a) = match spec.construction_phase {
+                    IllustrationConstructionPhase::Volumes => (0.38, 0.38),
+                    IllustrationConstructionPhase::Contours => (0.22, 0.22),
+                    _ => (0.14, 0.14),
+                };
+                draw_skeleton_pose_alpha(img, spec, guide, blush, bone_a, joint_a, None);
+            }
+            if matches!(
+                spec.construction_phase,
+                IllustrationConstructionPhase::Contours | IllustrationConstructionPhase::Details
+            ) && !spec.volumes.is_empty()
+            {
+                let alpha = if spec.construction_phase == IllustrationConstructionPhase::Contours {
+                    0.34
+                } else {
+                    0.2
+                };
+                paint_volume_underlay(img, spec, colors, alpha);
+            }
+            if spec.construction_phase == IllustrationConstructionPhase::Details
+                && !spec.contours.is_empty()
+            {
+                paint_contour_underlay(img, spec, colors, 0.28);
+            }
+
             let mut staged = spec.clone();
             staged.construction_phase = IllustrationConstructionPhase::Final;
             staged.parts = match spec.construction_phase {
@@ -1012,14 +1238,15 @@ fn paint_construction_phase(
                 }
                 IllustrationConstructionPhase::Details => {
                     let mut parts = background_parts(spec);
-                    parts.extend(spec.contours.clone());
                     parts.extend(spec.details.clone());
                     parts
                 }
                 _ => Vec::new(),
             };
             paint_spec(img, &staged, colors, false, progress);
-            if spec.construction_phase == IllustrationConstructionPhase::Volumes {
+            if spec.construction_phase == IllustrationConstructionPhase::Volumes
+                && progress.map(|p| p >= 0.88).unwrap_or(true)
+            {
                 draw_volume_guides(img, spec, colors);
             }
         }
@@ -2159,7 +2386,7 @@ mod tests {
     use super::*;
     use aos_proto::{
         IllustrationBrief, IllustrationLook, IllustrationPaletteId, IllustrationPart,
-        IllustrationPartGeometry, IllustrationSpec,
+        IllustrationPartGeometry, IllustrationSkeletonJoint, IllustrationSpec,
     };
 
     #[test]
@@ -2306,6 +2533,33 @@ mod tests {
     }
 
     #[test]
+    fn empty_parts_still_draw_the_skeleton() {
+        let mut bare = IllustrationSpec::default();
+        bare.brief.look = IllustrationLook::Pencil;
+        bare.brief.palette = IllustrationPaletteId::PencilMinimal;
+        let mut posed = bare.clone();
+        posed.skeleton = vec![
+            IllustrationSkeletonJoint { id: "pelvis".into(), x: 0.46, y: 0.58, ..Default::default() },
+            IllustrationSkeletonJoint {
+                id: "head".into(),
+                parent: Some("pelvis".into()),
+                x: 0.46,
+                y: 0.26,
+                ..Default::default()
+            },
+        ];
+        let render = |spec: IllustrationSpec| {
+            let doc = IllustrationDoc { brief: spec.brief.clone(), spec: Some(spec), ..Default::default() };
+            let png = rasterize(&doc, 160, 160, None).unwrap();
+            image::load_from_memory(&png).unwrap().to_rgb8()
+        };
+        let blank = render(bare);
+        let drawn = render(posed);
+        let changed = blank.pixels().zip(drawn.pixels()).filter(|(a, b)| a != b).count();
+        assert!(changed > 40, "undressed skeleton must mark the paper, changed={changed}");
+    }
+
+    #[test]
     fn construction_phases_are_renderable() {
         let mut spec = IllustrationSpec::default();
         spec.brief.subject = "un chat saute sur un canapé et se couche".into();
@@ -2325,6 +2579,126 @@ mod tests {
             let png = export_png(&doc, 192, 192).unwrap();
             assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
         }
+    }
+
+    #[test]
+    fn skeleton_progress_reveals_more_over_time() {
+        let mut spec = IllustrationSpec::default();
+        spec.brief.look = IllustrationLook::Pencil;
+        spec.brief.palette = IllustrationPaletteId::PencilMinimal;
+        spec.construction_phase = IllustrationConstructionPhase::Skeleton;
+        spec.skeleton = vec![
+            IllustrationSkeletonJoint {
+                id: "pelvis".into(),
+                x: 0.5,
+                y: 0.62,
+                ..Default::default()
+            },
+            IllustrationSkeletonJoint {
+                id: "chest".into(),
+                parent: Some("pelvis".into()),
+                x: 0.5,
+                y: 0.42,
+                ..Default::default()
+            },
+            IllustrationSkeletonJoint {
+                id: "head".into(),
+                parent: Some("chest".into()),
+                x: 0.5,
+                y: 0.22,
+                ..Default::default()
+            },
+            IllustrationSkeletonJoint {
+                id: "l_hand".into(),
+                parent: Some("chest".into()),
+                x: 0.28,
+                y: 0.48,
+                ..Default::default()
+            },
+            IllustrationSkeletonJoint {
+                id: "r_hand".into(),
+                parent: Some("chest".into()),
+                x: 0.72,
+                y: 0.48,
+                ..Default::default()
+            },
+        ];
+        let doc = IllustrationDoc {
+            brief: spec.brief.clone(),
+            spec: Some(spec),
+            ..Default::default()
+        };
+        let count = |png: &[u8]| {
+            let img = image::load_from_memory(png).unwrap().to_rgb8();
+            let blank = {
+                let empty = IllustrationDoc {
+                    brief: doc.brief.clone(),
+                    ..Default::default()
+                };
+                image::load_from_memory(&export_png(&empty, 160, 160).unwrap())
+                    .unwrap()
+                    .to_rgb8()
+            };
+            blank.pixels().zip(img.pixels()).filter(|(a, b)| a != b).count()
+        };
+        let early = count(&export_png_progress(&doc, 160, 160, 0.15).unwrap());
+        let mid = count(&export_png_progress(&doc, 160, 160, 0.55).unwrap());
+        let late = count(&export_png_progress(&doc, 160, 160, 0.95).unwrap());
+        assert!(
+            early < mid && mid <= late,
+            "skeleton must draw in over progress: early={early} mid={mid} late={late}"
+        );
+    }
+
+    #[test]
+    fn volumes_pass_keeps_skeleton_underlay() {
+        let mut skeleton_only = IllustrationSpec::default();
+        skeleton_only.brief.look = IllustrationLook::Pencil;
+        skeleton_only.brief.palette = IllustrationPaletteId::PencilMinimal;
+        skeleton_only.construction_phase = IllustrationConstructionPhase::Skeleton;
+        skeleton_only.skeleton = vec![
+            IllustrationSkeletonJoint {
+                id: "pelvis".into(),
+                x: 0.5,
+                y: 0.6,
+                ..Default::default()
+            },
+            IllustrationSkeletonJoint {
+                id: "head".into(),
+                parent: Some("pelvis".into()),
+                x: 0.5,
+                y: 0.25,
+                ..Default::default()
+            },
+        ];
+        let mut volumes = skeleton_only.clone();
+        volumes.construction_phase = IllustrationConstructionPhase::Volumes;
+        volumes.volumes = vec![aos_proto::IllustrationVolume {
+            id: "rib".into(),
+            kind: "rib_cage".into(),
+            x: 0.35,
+            y: 0.32,
+            w: 0.3,
+            h: 0.28,
+            rotation: 0.0,
+        }];
+        let render = |spec: IllustrationSpec| {
+            let doc = IllustrationDoc {
+                brief: spec.brief.clone(),
+                spec: Some(spec),
+                ..Default::default()
+            };
+            image::load_from_memory(&export_png(&doc, 160, 160).unwrap())
+                .unwrap()
+                .to_rgb8()
+        };
+        let skel = render(skeleton_only);
+        let vol = render(volumes);
+        let changed = skel.pixels().zip(vol.pixels()).filter(|(a, b)| a != b).count();
+        assert!(
+            changed > 80,
+            "volumes pass must add mass on top of skeleton, changed={changed}"
+        );
     }
 
     #[test]

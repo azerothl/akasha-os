@@ -36,6 +36,17 @@ fn history_label(doc: &IllustrationDoc, path: &str, label: &str, revision: u64, 
     else { format!("{label} · {revision} · {status}") }
 }
 
+fn spec_is_drawable(spec: &aos_proto::IllustrationSpec) -> bool {
+    !spec.skeleton.is_empty()
+        || !spec.volumes.is_empty()
+        || !spec.contours.is_empty()
+        || !spec.details.is_empty()
+        || !spec.parts.is_empty()
+        || !spec.construction.action_line_points.is_empty()
+        || spec.construction.chest_oval.is_some()
+        || spec.construction.pelvis_oval.is_some()
+}
+
 #[derive(Clone, Copy)]
 struct DrawIn {
     t0: f64,
@@ -485,24 +496,35 @@ impl UiApp {
         let spec_changed = doc.spec != self.illust_ui.doc.spec;
         let path_changed = doc.last_png != self.illust_ui.doc.last_png
             || doc.last_sheet_png != self.illust_ui.doc.last_sheet_png;
-        let has_parts = doc
-            .spec
-            .as_ref()
-            .map(|s| !s.parts.is_empty())
-            .unwrap_or(false);
+        let pass_count_grew =
+            doc.pass_previews.len() > self.illust_ui.doc.pass_previews.len();
+        let image_pass_advanced = match (&self.illust_ui.doc.image_run, &doc.image_run) {
+            (Some(old), Some(new)) if old.id == new.id => {
+                old.phase != new.phase || path_changed || pass_count_grew
+            }
+            (None, Some(_)) => path_changed || pass_count_grew,
+            _ => false,
+        };
+        let drawable = doc.spec.as_ref().is_some_and(spec_is_drawable);
         self.illust_ui.doc = doc;
         if self.illust_ui.doc.image_run.is_some() {
+            // Image passes are full PNGs — no vector stroke replay.
             self.illust_ui.pending_draw = false;
             self.illust_ui.pending_motion = false;
             self.illust_ui.draw = None;
             self.illust_ui.motion = None;
             self.illust_ui.pending_preview = None;
+            if image_pass_advanced || path_changed {
+                // Show each published pass as soon as it lands.
+                self.illust_ui.texture = None;
+                self.illust_ui.texture_path.clear();
+            }
         }
         self.illust_ui.last_error.clear();
         if self.illust_ui.selected_pass_path.is_some() {
             return;
         }
-        if spec_changed && has_parts {
+        if self.illust_ui.doc.image_run.is_none() && spec_changed && drawable {
             self.illust_ui.pending_draw = true;
             self.illust_ui.pending_motion = false;
             self.illust_ui.draw = None;
