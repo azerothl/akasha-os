@@ -19,6 +19,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **Notes**: tags, live search, and delete so large collections stay findable (`notes.delete`)
 - **Chat**: fork-from-here and continue-after-interrupt; salon opening pass uses the full roster; live status while awaiting tokens
 - **Canvas**: semantic scenes and shared guides; agent read/review protocol
+- **Illustration surface**: skill-inspired stills (paper, wob outlines, ink/riso/screen/pencil finishes), exclusive agent lock, brief/palette/look, PNG sheet review, optional procedural animation (12→24 fps via ffmpeg)
 - **Secrets vault**: in-Settings key generator (hex / numeric / alnum / base64url) with LAN hex preset and invalid-key rejection on Save
 - **Create chrome**: painted actions, folded Advanced, result toolbar polish; FR-localized prompt starters
 - **External coding CLIs**: opt-in `harness.run` plus Agents Advanced **Runtime** (Codex / Claude / Grok) with Steer / Pause / Kill ([harness.md](harness.md))
@@ -72,7 +73,7 @@ Everything since 0.16.0 ships in this tag (there were no separate 0.16.1 /
 
 ### What's new in 0.16.0
 
-- **Canvas workspace**: grid and snapping, layers, move/delete/align/rotate/restyle operations, opacity and dash styles, plus PNG/SVG/JSON export with sidecars
+- **Illustration surface**: skill-inspired stills (paper, wob outlines, ink/riso/screen/pencil finishes) with exclusive agent lock, brief/palette/look, PNG sheet review, and optional procedural animation (12→24 fps via ffmpeg)
 - **Canvas agents**: bounded composition plans, live scene snapshots, duplicate/progress guards, and deterministic whole-scene geometry/topology validation that also works with text-only models
 - **Inference controls**: configurable prefix cache, prompt-lookup speculation and adaptive batching, with the selected mode exposed beside TTFT, token rate and cache metrics
 - **Model recovery**: failed loads no longer leave the subsystem stuck; selecting Load again retries from a clean state without restarting Preview

@@ -20,6 +20,9 @@ pub struct PromptCompileInput<'a> {
 
 /// Compile le prompt système multi-couches.
 pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
+    if is_focused_image_agent(input) {
+        return compile_image_agent_prompt(input);
+    }
     let mut parts: Vec<String> = Vec::new();
 
     let version = preview_version();
@@ -174,6 +177,57 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     parts.join("\n\n")
 }
 
+fn is_focused_image_agent(input: &PromptCompileInput<'_>) -> bool {
+    !input.spec.cognitive_mode.is_deep_thinking()
+        && input.skills.is_empty() && input.doc_index.is_empty() && input.instincts.is_empty()
+        && input.spec.tools.iter().any(|t| t == "illust.generate_image")
+        && input.spec.tools.iter().all(|t| matches!(t.as_str(),
+            "illust.get" | "illust.set_brief" | "illust.generate_image" |
+            "illust.refine_image" | "illust.resolve_image" | "illust.export" |
+            "goal.complete" | "goal.fail" | "plan.update"))
+}
+
+fn compact_schema(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("description");
+            for item in map.values_mut() { compact_schema(item); }
+        }
+        serde_json::Value::Array(items) => for item in items { compact_schema(item); },
+        _ => {}
+    }
+}
+
+/// Keep the actual action contract in context instead of spending the first 8k
+/// characters on unrelated OS/module tools. Does not change granted capabilities.
+fn compile_image_agent_prompt(input: &PromptCompileInput<'_>) -> String {
+    let mut result = format!("Tu es l'agent Illustration `{}` d'Akasha OS.\n{}\n\n\
+        Réponds uniquement par UN objet JSON : {{\"thought\":\"raisonnement bref\",\"action\":\"nom exact\",\"args\":{{}}}}. \
+        Exécute les outils, ne décris pas un résultat imaginaire. Le runtime impose la session : omets session_id.\n\
+        Procédure : illust.get, puis illust.set_brief avec brief.subject égal à la demande originale et engine=flat. \
+        Ensuite illust.generate_image avec construction ET frame_subject. construction décrit pose, espèce, proportions, appuis, contacts précis et occlusions, sans finition. \
+        frame_subject décrit l'image complète, son nombre de sujets et tous les détails demandés, au même instant que la construction. \
+        Pour une séquence, choisis une image-clé et n'annonce pas une animation complète. \
+        seed est optionnel ; pose_reference_png n'est utilisable que pour un guide existant et réellement inspecté.\n\
+        Suis les passes par illust.get : running signifie attendre, jamais relancer ; failed signifie erreur, jamais réussite. \
+        needs_review ne vaut pas approbation artistique. Examine seulement les PNG effectivement joints. \
+        Pour corriger un défaut visible : illust.refine_image avec correction ciblée, puis compare original et candidat. \
+        illust.resolve_image exige run_id courant et keep_candidate ; rejette une régression. \
+        Exporte le PNG retenu avec illust.export. goal.complete exige un vrai résultat ; rapporte les défauts et limites. \
+        Sinon goal.fail. Aucune délégation ni remplacement par des formes procédurales.\n\nCatalogue et schémas d'args :\n",
+        input.spec.agent_id, format_goal(&input.spec.goal));
+    for tool in input.tools.iter().filter(|t| t.name.starts_with("illust.") || matches!(t.name.as_str(), "goal.complete" | "goal.fail" | "plan.update")) {
+        let mut schema = tool.input_schema.clone();
+        compact_schema(&mut schema);
+        result.push_str(&format!("{} : {}\n", tool.name, schema));
+    }
+    if let Some(prompt) = &input.spec.system_prompt {
+        result.push_str("\nInstructions utilisateur supplémentaires :\n");
+        result.push_str(prompt);
+    }
+    result
+}
+
 pub(crate) fn uses_gemma4_native_tools(spec: &AgentSpec, tools: &[ToolDesc]) -> bool {
     if tools.is_empty() {
         return false;
@@ -315,6 +369,22 @@ pub fn optimize_prompt_request(
 mod tests {
     use super::*;
     use aos_proto::{AgentBudget, AgentGoal};
+
+    #[test]
+    fn focused_illustration_keeps_action_schemas_within_hard_context_limit() {
+        let spec: AgentSpec = serde_json::from_value(serde_json::json!({
+            "agent_id":"illustration-test", "goal":{"statement":"un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin"},
+            "tools":["illust.get","illust.set_brief","illust.generate_image","illust.refine_image","illust.resolve_image","illust.export","goal.complete"]
+        })).unwrap();
+        let tools = crate::tools::select_tools(&spec.tools, &[]);
+        let out = compile_system_prompt(&PromptCompileInput {spec:&spec, skills:&[],tools:&tools,doc_index:&[],instincts:&[]});
+        assert!(out.chars().count() < 8000, "{} chars", out.chars().count());
+        assert!(out.contains("\"required\":[\"construction\",\"frame_subject\"]"));
+        assert!(out.contains("\"keep_candidate\""));
+        assert!(out.contains("illust.export"));
+        assert!(!out.contains("module.scaffold"));
+        assert!(out.contains(&spec.goal.statement));
+    }
 
     #[test]
     fn compiles_layers() {

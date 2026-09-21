@@ -1194,7 +1194,328 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             required_caps: vec!["tool.invoke:canvas".into()],
         });
     }
+    v.extend(illust_tool_descs());
     v
+}
+
+/// Illustration surface tools (native platform intents).
+pub fn illust_tool_descs() -> Vec<ToolDesc> {
+    let sid = || {
+        serde_json::json!({"type":"string","description":"omis — le runtime force session_id"})
+    };
+    let tools = [
+        (
+            "illust.get",
+            "Lire brief/spec/digest Illustration (toujours en premier)",
+            serde_json::json!({"type":"object","properties":{"session_id":sid()}}),
+        ),
+        (
+            "illust.set_brief",
+            "Fixer subject/look/palette/anchor avant compose. look: ink|riso|screen|pencil|blueprint|doodle. engine: laisser flat. sand, paper ou found seulement si l'utilisateur demande du sable, un livre pop-up, ou une vidéo. Ne jamais mettre paper pour un chat ou un dessin.",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "brief":{
+                        "type":"object",
+                        "properties":{
+                            "subject":{"type":"string"},
+                            "look":{"type":"string","enum":["ink","riso","screen","pencil","blueprint","doodle"]},
+                            "palette":{"type":"string","enum":["paperInk","risoPop","screenSea","pencilMinimal","blueprintNight"]},
+                            "anchor":{"type":"string"},
+                            "beats":{"type":"array","items":{"type":"string"}},
+                            "engine":{"type":"string","enum":["flat","sand","paper","found"]},
+                            "photo":{"type":"string","description":"chemin local pour le look doodle"},
+                            "video":{"type":"string","description":"refusé: pas de traceur rotoscope"}
+                        },
+                        "required":["subject"]
+                    },
+                    "subject":{"type":"string","description":"alias flat — préférer brief.subject"},
+                    "look":{"type":"string"},
+                    "palette":{"type":"string"},
+                    "anchor":{"type":"string"}
+                },
+                "required":["brief"]
+            }),
+        ),
+        (
+            "illust.resolve_image",
+            "Après comparaison visuelle de image_run.source_png et image_run.candidate_png, choisir la retouche (keep_candidate=true) ou conserver l'original (false). Fournir l'id courant image_run.id comme run_id. Obligatoire avant export ou nouvelle retouche. Cette sélection ne constitue pas une validation artistique.",
+            serde_json::json!({"type":"object","properties":{
+                "session_id":sid(),"run_id":{"type":"string"},"keep_candidate":{"type":"boolean"}},"required":["run_id","keep_candidate"]}),
+        ),
+        (
+            "illust.refine_image",
+            "Retouche le dernier rendu image terminé. Après inspection visuelle, décris une correction précise dans correction (anatomie, contact, repères résiduels, détail manquant). Conserve le sujet et la composition. Exécution en arrière-plan; illust.get expose le nouveau résultat, l'historique et l'état. Ne pas appeler pendant running. needs_review ne vaut pas approbation artistique.",
+            serde_json::json!({"type":"object","properties":{
+                "session_id":sid(),"correction":{"type":"string"}},"required":["correction"]}),
+        ),
+        (
+            "illust.generate_image",
+            "Lance les passes de dessin par moteur d'édition local en arrière-plan. Après set_brief, fournis construction : description concise de la pose, de l'espèce, du cadrage, des appuis et des relations spatiales; pas de vêtements, visage, texture ou couleur à ce stade. Chaque passe reprend l'image précédente et devient visible dans Illustration. Consulte illust.get pour suivre image_run; ne relance pas tant que running. needs_review signifie terminé mais NON validé visuellement. Aucun fallback en formes procédurales si le moteur est absent.",
+            serde_json::json!({"type":"object","properties":{
+                "session_id":sid(),"seed":{"type":"integer","minimum":0,"maximum":u32::MAX,"description":"Optionnel : graine à reproduire. Omettre pour une nouvelle variante; image_run.seed conserve la valeur utilisée. Une nouvelle variante ne garantit pas une amélioration."},
+                "pose_reference_png":{"type":"string","description":"Optionnel : chemin existant d'un guide de pose PNG dans /downloads Akasha, maximum 2048x2048 et 16 Mio. Inspecter le guide et vérifier son adéquation au sujet avant utilisation. Guide la première passe seulement; ce n'est pas une garantie anatomique. Ne jamais inventer un chemin ni fournir un chemin du système hôte."},
+                "construction":{"type":"string","description":"Pose, espèce, masses et relations spatiales de l'image-clé. Préciser les rapports de taille plausibles entre sujets et mobilier, les appuis, les occlusions et la surface de contact exacte. Pour un mouvement vers un support, décrire la phase du geste, la direction du centre de masse et la proximité des points de contact avec la surface cible; éviter une pose suspendue sans interaction lisible. Reporter ces contraintes dans frame_subject."},
+                "frame_subject":{"type":"string","description":"Description complète de l'unique image-clé représentée : sujets et leur nombre, détails distinctifs, style et une seule action. Pour une demande séquentielle, omettre les actions précédentes/suivantes plutôt que demander de les ignorer. La construction doit représenter ce même instant. La demande originale reste intacte dans brief.subject; cette image ne vaut pas animation complète."}},"required":["construction","frame_subject"]}),
+        ),
+        (
+            "illust.compose",
+            "Publie une passe réelle de dessin et son aperçu last_png. Utilise construction_phase dans l'ordre skeleton, volumes, contours, details, final. Chaque spec remplace la précédente : conserve les données des passes déjà construites. Pose et proportions dans skeleton, masses dans volumes, contours visibles dans contours, habillage dans details. Pour final, assemble explicitement parts avec les chevauchements corrects. Coordonnées normalisées 0..1 ; x/y est le coin haut-gauche pour ellipse/rect. Maintiens contacts, proportions, orientation et identité entre les passes. Une construction explicite est préservée par le moteur. Après le rendu final : render_sheet puis review/export. Le score de review est structurel, pas une mesure de qualité artistique.",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "spec":{
+                        "type":"object",
+                        "properties":{
+                            "brief":{"type":"object"},
+                            "parts":{
+                                "type":"array",
+                                "items":{
+                                    "type":"object",
+                                    "properties":{
+                                        "id":{"type":"string"},
+                                        "role":{"type":"string"},
+                                        "fill":{"type":"boolean"},
+                                        "outline":{"type":"boolean"},
+                                        "fill_index":{"type":"integer"},
+                                        "seed":{"type":"integer"},
+                                        "geometry":{
+                                            "type":"object",
+                                            "properties":{
+                                                "kind":{"type":"string","enum":["ellipse","rect","path"]},
+                                                "x":{"type":"number"},
+                                                "y":{"type":"number"},
+                                                "w":{"type":"number"},
+                                                "h":{"type":"number"},
+                                                "points":{
+                                                    "type":"array",
+                                                    "minItems":8,
+                                                    "items":{
+                                                        "type":"object",
+                                                        "properties":{"x":{"type":"number"},"y":{"type":"number"}},
+                                                        "required":["x","y"]
+                                                    }
+                                                }
+                                            },
+                                            "required":["kind"]
+                                        }
+                                    },
+                                    "required":["id","role","geometry"]
+                                }
+                            },
+                            "key_drawings":{
+                                "type":"array",
+                                "description":"Dessins complets de remplacement, un par beat nommé; chaque dessin contient tous ses parts et conserve ses chevauchements.",
+                                "items":{
+                                    "type":"object",
+                                    "properties":{
+                                        "id":{"type":"string"},
+                                        "pose":{"type":"object"},
+                                        "parts":{"type":"array"}
+                                    },
+                                    "required":["id","parts"]
+                                }
+                            },
+                            "construction":{
+                                "type":"object",
+                                "description":"Plan multi-passes : ligne d'action, point focal, valeurs, orientation, silhouette et model sheet.",
+                                "properties":{
+                                    "archetype":{"type":"string"},
+                                    "passes":{"type":"array","items":{"type":"string"}},
+                                    "must_read":{"type":"array","items":{"type":"string"}},
+                                    "relations":{"type":"array","items":{"type":"string"}},
+                                    "action_line":{"type":"string"},
+                                    "focal_point":{"type":"string"},
+                                    "value_groups":{"type":"array","items":{"type":"string"}},
+                                    "head_orientation":{"type":"string"},
+                                    "silhouette_test":{"type":"boolean"},
+                                    "model_sheet":{"type":"array","items":{"type":"string"}},
+                                    "material_pass":{"type":"string"}
+                                }
+                            },
+                            "construction_phase":{"type":"string","enum":["skeleton","volumes","contours","details","final"]},
+                            "skeleton":{"type":"array","description":"Articulations et relations parent/enfant de la pose.","items":{"type":"object"}},
+                            "contacts":{"type":"object","description":"Contacts nommés : [racine, articulation intermédiaire, extrémité, cible]. Exemple prise_pipe:[epaule,coude,main,prise_pipe]. Ajouter la cible au skeleton. Le moteur conserve les longueurs, ajuste le coude et place la main sur la cible avant de résoudre joint_bindings. Racines et cibles fixes, chaînes indépendantes ; une cible hors de portée produit une erreur à corriger.","additionalProperties":{"type":"array","items":{"type":"string"},"minItems":4,"maxItems":4}},
+                            "joint_bindings":{"type":"object","description":"Associe un id de path ou volume à [articulation origine, articulation axe]. Coordonnées locales : (0,0)=origine, (1,0)=axe, y perpendiculaire en longueurs du segment. Applicable à parts, contours, details et volumes (x/y/w/h locaux, rotation relative en radians). Attacher masses, manches et détails aux mêmes articulations pour suivre la pose.","additionalProperties":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":2}},
+                            "volumes":{"type":"array","description":"Volumes simples avant contour.","items":{"type":"object"}},
+                            "contours":{"type":"array","description":"Contours principaux issus des volumes.","items":{"type":"object"}},
+                            "details":{"type":"array","description":"Détails identitaires appliqués après la silhouette.","items":{"type":"object"}}
+                        },
+                        "required":["parts"]
+                    }
+                },
+                "required":["spec"]
+            }),
+        ),
+        (
+            "illust.render_sheet",
+            "Rendre la planche style (sujet @0.6/1/1.8 + swatches) et la model sheet (face/profil/3-4/dos/expression/pose) → PNG sous /downloads/illustration",
+            serde_json::json!({"type":"object","properties":{"session_id":sid(),"width":{"type":"integer"}}}),
+        ),
+        (
+            "illust.review",
+            "Checklist déterministe (brief, parts, anchor, silhouette)",
+            serde_json::json!({"type":"object","properties":{"session_id":sid()}}),
+        ),
+        (
+            "illust.export",
+            "Exporter le still PNG (ou json) sous /downloads/illustration et libérer le lock agent",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "path":{"type":"string"},
+                    "width":{"type":"integer"},
+                    "height":{"type":"integer"},
+                    "format":{"type":"string"}
+                }
+            }),
+        ),
+        (
+            "illust.animate",
+            "Animer la scène (timeline optionnelle) → dessins à 24fps + mp4 24fps si ffmpeg",
+            serde_json::json!({
+                "type":"object",
+                "properties":{
+                    "session_id":sid(),
+                    "timeline":{"type":"object"},
+                    "width":{"type":"integer"},
+                    "path":{"type":"string"}
+                }
+            }),
+        ),
+    ];
+    tools
+        .into_iter()
+        .map(|(name, desc, schema)| ToolDesc {
+            name: name.into(),
+            description: desc.into(),
+            input_schema: schema,
+            backend: ToolBackend::Native,
+            required_caps: vec!["tool.invoke:illust".into()],
+        })
+        .collect()
+}
+
+pub const ILLUST_TOOL_IDS: &[&str] = &[
+    "illust.get",
+    "illust.set_brief",
+    "illust.compose",
+    "illust.generate_image",
+    "illust.refine_image",
+    "illust.resolve_image",
+    "illust.render_sheet",
+    "illust.review",
+    "illust.export",
+    "illust.animate",
+];
+
+pub fn merge_illust_tools(tool_ids: &mut Vec<String>, include: bool) {
+    if !include {
+        return;
+    }
+    for t in ILLUST_TOOL_IDS {
+        if !tool_ids.iter().any(|x| x == t) {
+            tool_ids.push((*t).to_string());
+        }
+    }
+}
+
+pub fn agent_has_illust_tools(tool_ids: &[String]) -> bool {
+    tool_ids.iter().any(|t| t.starts_with("illust."))
+}
+
+/// Illustration agents must not inherit spawn / user.ask from select_tools "always".
+pub fn strip_illust_blocked_runtime_tools(tools: &mut Vec<ToolDesc>, spec_tool_ids: &[String]) {
+    if !agent_has_illust_tools(spec_tool_ids) {
+        return;
+    }
+    for blocked in ["user.ask", "agent.spawn", "agent.await"] {
+        if spec_tool_ids.iter().any(|t| t == blocked) {
+            continue;
+        }
+        tools.retain(|t| t.name != blocked);
+    }
+}
+
+pub fn explicit_illust_intent(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "/illust",
+        "/illustration",
+        "illustre",
+        "illustration",
+        "style encre",
+        "style riso",
+        "hand-drawn",
+        "dessin animé",
+        "anime cette scène",
+        "anime la scène",
+        "paper ink",
+        "look ink",
+        "look riso",
+    ];
+    MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Short strategy for illustration agents.
+pub fn illust_draw_strategy_hint() -> String {
+    "PROTOCOLE Illustration : pour une illustration raster, set_brief puis illust.generate_image avec une description de construction adaptée au sujet (pose, proportions, appuis, contacts, composition). L'outil publie les passes en arrière-plan; illust.get donne image_run et pass_previews. Ne pas relancer une génération running. needs_review ne prouve pas la qualité : inspecter visuellement le PNG et signaler les défauts. Ne pas utiliser le score vectoriel pour accepter ce rendu. Si le moteur est absent, rapporter l'erreur sans le remplacer par une recette. Pour une demande explicitement vectorielle, utiliser compose. Un seul auteur, INTERDIT agent.spawn. \
+     Format : UNE seule ligne JSON par tour {\"thought\":\"…\",\"action\":\"illust.…\",\"args\":{…}}. \
+     Pour la branche vectorielle seulement : set_brief → compose avec une scène complète de contours path (silhouette, \
+     masses, appendices, détails distinctifs et accessoires; au moins 8 points par contour) → \
+     render_sheet → review structurelle → inspection visuelle → export. \
+     Interdit d'empiler plusieurs JSON dans le même tour. \
+     Alias acceptés : set_brief/compose/review/export (préfixe illust. ajouté). \
+     Règle skill : si ça ne se lit pas sur la planche 240px, redessiner les contours et la composition — ne pas décorer ni demander au puppet de réparer. \
+     Après inspection d'un rendu image, corrige ses défauts par illust.refine_image avec une consigne ciblée; compare ensuite image_run.source_png et image_run.candidate_png. Appelle illust.resolve_image avec run_id=image_run.id et keep_candidate=false si la retouche dégrade le rendu, true seulement si elle l'améliore sans perdre de détails demandés. last_png reste l'original jusqu'à ce choix. Ne jamais présenter une description texte comme une image produite."
+        .into()
+}
+
+/// Pipeline rank for illustration tools (higher = further along).
+pub fn illust_pipeline_rank(action: &str) -> u8 {
+    match canonicalize_tool_name(action).as_str() {
+        "illust.set_brief" | "illust.get" => 1,
+        "illust.compose" | "illust.generate_image" | "illust.refine_image" => 2,
+        "illust.render_sheet" => 3,
+        "illust.review" | "illust.resolve_image" => 4,
+        "illust.export" | "illust.animate" => 5,
+        "goal.complete" => 6,
+        "goal.fail" => 0,
+        _ => 0,
+    }
+}
+
+/// When the model dumps the whole pipeline, keep one action. Prefer advancing
+/// past a repeated leading `render_sheet` toward review/export.
+pub fn select_illust_turn_action(actions: &[crate::actions::AgentAction]) -> usize {
+    if actions.len() <= 1 {
+        return 0;
+    }
+    let first = canonicalize_tool_name(&actions[0].action);
+    // Stuck-loop pattern: sheet is listed first, then review/export in the same dump.
+    if first == "illust.render_sheet" {
+        if let Some(i) = actions.iter().position(|a| {
+            matches!(
+                canonicalize_tool_name(&a.action).as_str(),
+                "illust.review" | "illust.export"
+            )
+        }) {
+            return i;
+        }
+    }
+    // Never finish the goal before the earlier pipeline steps in the same dump.
+    if first == "goal.complete" || first == "goal.fail" {
+        if let Some(i) = actions.iter().position(|a| {
+            let n = canonicalize_tool_name(&a.action);
+            n.starts_with("illust.")
+        }) {
+            return i;
+        }
+    }
+    0
 }
 
 /// Canvas tool ids (session vector drawing) — never part of `default_agent_tools`.
@@ -1613,7 +1934,31 @@ pub fn canonicalize_tool_name(name: &str) -> String {
         "usb.write" => "device.usb.write".into(),
         "usb.close" => "device.usb.close".into(),
         "usb.io" | "device.usb.io" => "device.usb.io".into(),
+        // Illustration aliases models invent after reading digests / memory.
+        "illust.set" | "illust.brief" | "illust.setbrief" | "illustration.set_brief"
+        | "illustration.set" => "illust.set_brief".into(),
+        "illust.compose_scene" | "illust.draw" | "illust.run" | "illust.generate"
+        | "illustration.compose" | "illustration.run" => "illust.compose".into(),
+        "illust.sheet" | "illust.style_sheet" => "illust.render_sheet".into(),
+        "illust.check" | "illust.validate" => "illust.review".into(),
+        "illust.save" | "illustration.export" => "illust.export".into(),
         other => other.to_string(),
+    }
+}
+
+/// Bare names models invent once they drop the `illust.` prefix mid-loop.
+/// Only apply when the agent actually has illustration tools.
+pub fn canonicalize_illust_alias(name: &str) -> String {
+    let trimmed = name.trim();
+    match trimmed {
+        "set_brief" | "setbrief" | "brief" => "illust.set_brief".into(),
+        "compose" | "draw" | "run" | "generate" => "illust.compose".into(),
+        "render_sheet" | "style_sheet" | "sheet" => "illust.render_sheet".into(),
+        "review" | "review_illustration" | "check" | "validate" => "illust.review".into(),
+        "export" | "export_still" | "export_png" | "save" => "illust.export".into(),
+        "abort" | "cancel" | "give_up" => "goal.fail".into(),
+        "get" | "status" => "illust.get".into(),
+        other => canonicalize_tool_name(other),
     }
 }
 
@@ -1644,6 +1989,8 @@ pub fn reserved_tool_prefix(prefix: &str) -> bool {
             | "usb"
             | "shell"
             | "harness"
+            | "illust"
+            | "canvas"
     )
 }
 
@@ -1761,7 +2108,505 @@ pub fn normalize_tool_args(name: &str, args: &serde_json::Value) -> serde_json::
             }
         }
     }
+    if name.starts_with("illust.") {
+        normalize_illust_tool_args(name, obj);
+    }
     out
+}
+
+/// Coerce flat / alias LLM shapes into the Illust* request contracts.
+fn normalize_illust_tool_args(name: &str, obj: &mut serde_json::Map<String, serde_json::Value>) {
+    if name == "illust.set_brief" {
+        let mut brief = match obj.get("brief") {
+            Some(serde_json::Value::Object(m)) => m.clone(),
+            Some(serde_json::Value::String(s)) => {
+                let mut m = serde_json::Map::new();
+                m.insert("subject".into(), serde_json::Value::String(s.clone()));
+                m
+            }
+            _ => serde_json::Map::new(),
+        };
+        for (src, dst) in [
+            ("subject", "subject"),
+            ("look", "look"),
+            ("palette", "palette"),
+            ("anchor", "anchor"),
+            ("engine", "engine"),
+            ("photo", "photo"),
+            ("video", "video"),
+        ] {
+            if !brief.contains_key(dst) {
+                if let Some(v) = obj.get(src).cloned() {
+                    brief.insert(dst.into(), v);
+                }
+            }
+        }
+        // Beats may be strings or {type,desc} objects from the model.
+        if !brief.contains_key("beats") {
+            if let Some(v) = obj.get("beats").cloned() {
+                brief.insert("beats".into(), coerce_illust_beats(v));
+            }
+        } else if let Some(v) = brief.get("beats").cloned() {
+            brief.insert("beats".into(), coerce_illust_beats(v));
+        }
+        let partial = brief
+            .get("subject")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .is_empty();
+        // Coerce unknown palette names via look default (serde also falls back).
+        let look = brief
+            .get("look")
+            .and_then(|v| v.as_str())
+            .and_then(aos_proto::IllustrationLook::parse)
+            .unwrap_or_default();
+        if let Some(p) = brief.get("palette").and_then(|v| v.as_str()) {
+            let coerced = aos_proto::IllustrationPaletteId::parse_or(p, look);
+            brief.insert("palette".into(), serde_json::json!(coerced.as_str()));
+        } else if !partial {
+            brief.insert(
+                "palette".into(),
+                serde_json::json!(look.default_palette().as_str()),
+            );
+        }
+        if let Some(l) = brief.get("look").and_then(|v| v.as_str()) {
+            let coerced = aos_proto::IllustrationLook::parse(l).unwrap_or_default();
+            brief.insert("look".into(), serde_json::json!(coerced.as_str()));
+        }
+        // Prefer look/palette keywords in subject when the model leaves the UI defaults.
+        let subject_l = brief
+            .get("subject")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let look_hint = if subject_l.contains("pencil") || subject_l.contains("crayon") {
+            Some(aos_proto::IllustrationLook::Pencil)
+        } else if subject_l.contains("riso") {
+            Some(aos_proto::IllustrationLook::Riso)
+        } else if subject_l.contains("screen") || subject_l.contains("sérigraphie") {
+            Some(aos_proto::IllustrationLook::Screen)
+        } else if subject_l.contains("blueprint") || subject_l.contains("plan ") {
+            Some(aos_proto::IllustrationLook::Blueprint)
+        } else if subject_l.contains("ink") || subject_l.contains("encre") {
+            Some(aos_proto::IllustrationLook::Ink)
+        } else {
+            None
+        };
+        if let Some(look) = look_hint {
+            brief.insert("look".into(), serde_json::json!(look.as_str()));
+            let pal = brief
+                .get("palette")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let pal_l = pal.to_ascii_lowercase();
+            let pal_mismatched = pal.is_empty()
+                || (look == aos_proto::IllustrationLook::Pencil && !pal_l.contains("pencil"))
+                || (look == aos_proto::IllustrationLook::Riso && !pal_l.contains("riso"))
+                || (look == aos_proto::IllustrationLook::Screen && !pal_l.contains("screen"))
+                || (look == aos_proto::IllustrationLook::Blueprint && !pal_l.contains("blueprint"));
+            if pal_mismatched {
+                brief.insert(
+                    "palette".into(),
+                    serde_json::json!(look.default_palette().as_str()),
+                );
+            }
+        }
+        // Partial updates (beats/anchor only) must not invent empty subject/look defaults.
+        if partial {
+            brief.remove("subject");
+            if !obj.contains_key("look") {
+                brief.remove("look");
+            }
+            if !obj.contains_key("palette") {
+                brief.remove("palette");
+            }
+        }
+        obj.insert("brief".into(), serde_json::Value::Object(brief));
+        for k in ["subject", "look", "palette", "anchor", "beats"] {
+            obj.remove(k);
+        }
+    }
+    // Backward-compatible fallback for callers that omit a spec entirely. New
+    // illustration runs should provide authored path parts instead of relying
+    // on the procedural puppet recipes.
+    if name == "illust.compose" {
+        if !obj.contains_key("spec") && !obj.contains_key("parts") {
+            obj.insert(
+                "spec".into(),
+                serde_json::json!({ "parts": [] }),
+            );
+        }
+    }
+    if name == "illust.compose" {
+        // Flat parts at top-level → wrap as spec.
+        if !obj.contains_key("spec") {
+            if obj.contains_key("parts") {
+                let mut spec = serde_json::Map::new();
+                for k in [
+                    "parts",
+                    "key_drawings",
+                    "pose",
+                    "camera",
+                    "mode",
+                    "brief",
+                    "seed",
+                    "show_construction",
+                ] {
+                    if let Some(v) = obj.remove(k) {
+                        spec.insert(k.into(), v);
+                    }
+                }
+                obj.insert("spec".into(), serde_json::Value::Object(spec));
+            }
+        }
+        if let Some(serde_json::Value::Object(spec)) = obj.get_mut("spec") {
+            // Flat subject/look/palette on spec → nested brief.
+            let mut brief = match spec.get("brief") {
+                Some(serde_json::Value::Object(m)) => m.clone(),
+                Some(serde_json::Value::String(s)) => {
+                    let mut m = serde_json::Map::new();
+                    m.insert("subject".into(), serde_json::Value::String(s.clone()));
+                    m
+                }
+                _ => serde_json::Map::new(),
+            };
+            for key in ["subject", "look", "palette", "anchor", "beats"] {
+                if !brief.contains_key(key) {
+                    if let Some(v) = spec.remove(key) {
+                        brief.insert(key.into(), v);
+                    }
+                } else {
+                    spec.remove(key);
+                }
+            }
+            let look = brief
+                .get("look")
+                .and_then(|v| v.as_str())
+                .and_then(aos_proto::IllustrationLook::parse)
+                .unwrap_or_default();
+            if let Some(p) = brief.get("palette").and_then(|v| v.as_str()) {
+                let coerced = aos_proto::IllustrationPaletteId::parse_or(p, look);
+                brief.insert("palette".into(), serde_json::json!(coerced.as_str()));
+            }
+            if let Some(l) = brief.get("look").and_then(|v| v.as_str()) {
+                let coerced = aos_proto::IllustrationLook::parse(l).unwrap_or_default();
+                brief.insert("look".into(), serde_json::json!(coerced.as_str()));
+            }
+            if !brief.is_empty() {
+                spec.insert("brief".into(), serde_json::Value::Object(brief));
+            }
+
+            let bound_ids: std::collections::HashSet<String> = spec.get("joint_bindings")
+                .and_then(|v| v.as_object())
+                .map(|bindings| bindings.keys().cloned().collect())
+                .unwrap_or_default();
+            if let Some(serde_json::Value::Array(parts)) = spec.get_mut("parts") {
+                let n = parts.len().max(1);
+                for (i, part) in parts.iter_mut().enumerate() {
+                    let Some(p) = part.as_object_mut() else {
+                        continue;
+                    };
+                    let role = p
+                        .get("role")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if p.get("id").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
+                        let id = if role.is_empty() {
+                            format!("part{i}")
+                        } else {
+                            format!("{role}_{i}")
+                        };
+                        p.insert("id".into(), serde_json::Value::String(id));
+                    }
+                    let bound = p.get("id").and_then(|v| v.as_str())
+                        .map(|id| bound_ids.contains(id)).unwrap_or(false);
+                    if let Some(geom) = p.get_mut("geometry").and_then(|g| g.as_object_mut()) {
+                        if !geom.contains_key("kind") {
+                            if let Some(t) = geom.remove("type") {
+                                geom.insert("kind".into(), t);
+                            }
+                        }
+                        // Local joint coordinates may legitimately exceed 1 or
+                        // be negative. They are not pixel/percentage coordinates.
+                        if !bound {
+                            normalize_illust_part_geometry(geom, &role, i, n);
+                        }
+                    } else {
+                        // Models often send role+description only — invent a readable layout.
+                        let (x, y, w, h) = layout_for_illust_role(&role, i, n);
+                        p.insert(
+                            "geometry".into(),
+                            serde_json::json!({
+                                "kind": "ellipse",
+                                "x": x,
+                                "y": y,
+                                "w": w,
+                                "h": h,
+                                "rotation": 0.0
+                            }),
+                        );
+                    }
+                    if !p.contains_key("fill") {
+                        p.insert("fill".into(), serde_json::json!(true));
+                    }
+                    if !p.contains_key("outline") {
+                        p.insert("outline".into(), serde_json::json!(true));
+                    }
+                    if !p.contains_key("fill_index") {
+                        let id = p
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        p.insert(
+                            "fill_index".into(),
+                            serde_json::json!(default_illust_fill_index(&role, &id, i)),
+                        );
+                    }
+                    if !p.contains_key("seed") {
+                        p.insert("seed".into(), serde_json::json!(i as u32 + 1));
+                    }
+                    // Drop free-text fields the schema rejects.
+                    p.remove("description");
+                    p.remove("label");
+                    p.remove("name");
+                }
+            }
+        }
+    }
+}
+
+fn coerce_illust_beats(v: serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Array(items) => {
+            let out: Vec<serde_json::Value> = items
+                .into_iter()
+                .map(|item| match item {
+                    serde_json::Value::String(s) => serde_json::Value::String(s),
+                    serde_json::Value::Object(m) => {
+                        let ty = m
+                            .get("type")
+                            .or_else(|| m.get("role"))
+                            .or_else(|| m.get("id"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("beat");
+                        let desc = m
+                            .get("desc")
+                            .or_else(|| m.get("description"))
+                            .or_else(|| m.get("text"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        if desc.is_empty() {
+                            serde_json::Value::String(ty.to_string())
+                        } else {
+                            serde_json::Value::String(format!("{ty}: {desc}"))
+                        }
+                    }
+                    other => serde_json::Value::String(other.to_string()),
+                })
+                .collect();
+            serde_json::Value::Array(out)
+        }
+        serde_json::Value::String(s) => {
+            serde_json::Value::Array(vec![serde_json::Value::String(s)])
+        }
+        other => serde_json::Value::Array(vec![serde_json::Value::String(other.to_string())]),
+    }
+}
+
+/// Fix LLM geometry shapes before CBOR encode (path without points, missing bbox, …).
+fn normalize_illust_part_geometry(
+    geom: &mut serde_json::Map<String, serde_json::Value>,
+    role: &str,
+    index: usize,
+    total: usize,
+) {
+    let kind = geom
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("ellipse")
+        .to_string();
+    let points_ok = geom
+        .get("points")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len() >= 2)
+        .unwrap_or(false);
+
+    // Models often emit `path` with only a bbox (x/y/w/h) and no `points`.
+    if kind == "path" && !points_ok {
+        let (lx, ly, lw, lh) = layout_for_illust_role(role, index, total);
+        let x = num_f32(geom.get("x")).unwrap_or(lx);
+        let y = num_f32(geom.get("y")).unwrap_or(ly);
+        let w = num_f32(geom.get("w")).unwrap_or(lw);
+        let h = num_f32(geom.get("h")).unwrap_or(lh);
+        let rot = num_f32(geom.get("rotation")).unwrap_or(0.0);
+        geom.clear();
+        geom.insert("kind".into(), serde_json::json!("ellipse"));
+        geom.insert("x".into(), serde_json::json!(x));
+        geom.insert("y".into(), serde_json::json!(y));
+        geom.insert("w".into(), serde_json::json!(w));
+        geom.insert("h".into(), serde_json::json!(h));
+        geom.insert("rotation".into(), serde_json::json!(rot));
+        rescale_illust_bbox_fields(geom);
+        return;
+    }
+
+    if kind == "path" && points_ok {
+        rescale_illust_path_points(geom);
+        return;
+    }
+
+    if matches!(kind.as_str(), "ellipse" | "rect") {
+        let (lx, ly, lw, lh) = layout_for_illust_role(role, index, total);
+        if num_f32(geom.get("x")).is_none() {
+            geom.insert("x".into(), serde_json::json!(lx));
+        }
+        if num_f32(geom.get("y")).is_none() {
+            geom.insert("y".into(), serde_json::json!(ly));
+        }
+        if num_f32(geom.get("w")).is_none() {
+            geom.insert("w".into(), serde_json::json!(lw));
+        }
+        if num_f32(geom.get("h")).is_none() {
+            geom.insert("h".into(), serde_json::json!(lh));
+        }
+        if !geom.contains_key("rotation") {
+            geom.insert("rotation".into(), serde_json::json!(0.0));
+        }
+        rescale_illust_bbox_fields(geom);
+    }
+}
+
+/// LLMs often send 0..100 (%) or ~1024px instead of normalized 0..1.
+fn illust_coord_divisor(samples: &[f32]) -> f32 {
+    let max_abs = samples
+        .iter()
+        .copied()
+        .map(f32::abs)
+        .fold(0.0f32, f32::max);
+    if !max_abs.is_finite() || max_abs <= 1.5 {
+        1.0
+    } else if max_abs <= 100.5 {
+        100.0
+    } else if max_abs <= 2048.0 {
+        1024.0
+    } else {
+        max_abs
+    }
+}
+
+fn rescale_illust_bbox_fields(geom: &mut serde_json::Map<String, serde_json::Value>) {
+    let x = num_f32(geom.get("x")).unwrap_or(0.0);
+    let y = num_f32(geom.get("y")).unwrap_or(0.0);
+    let w = num_f32(geom.get("w")).unwrap_or(0.1);
+    let h = num_f32(geom.get("h")).unwrap_or(0.1);
+    let div = illust_coord_divisor(&[x, y, w, h, x + w, y + h]);
+    if (div - 1.0).abs() < f32::EPSILON {
+        return;
+    }
+    geom.insert("x".into(), serde_json::json!(x / div));
+    geom.insert("y".into(), serde_json::json!(y / div));
+    geom.insert("w".into(), serde_json::json!((w / div).max(0.01)));
+    geom.insert("h".into(), serde_json::json!((h / div).max(0.01)));
+}
+
+fn rescale_illust_path_points(geom: &mut serde_json::Map<String, serde_json::Value>) {
+    let Some(serde_json::Value::Array(pts)) = geom.get("points").cloned() else {
+        return;
+    };
+    let mut samples = Vec::new();
+    for p in &pts {
+        if let Some(o) = p.as_object() {
+            if let Some(x) = num_f32(o.get("x")) {
+                samples.push(x);
+            }
+            if let Some(y) = num_f32(o.get("y")) {
+                samples.push(y);
+            }
+        }
+    }
+    let div = illust_coord_divisor(&samples);
+    if (div - 1.0).abs() < f32::EPSILON {
+        return;
+    }
+    let scaled: Vec<serde_json::Value> = pts
+        .into_iter()
+        .map(|p| {
+            let Some(mut o) = p.as_object().cloned() else {
+                return p;
+            };
+            if let Some(x) = num_f32(o.get("x")) {
+                o.insert("x".into(), serde_json::json!(x / div));
+            }
+            if let Some(y) = num_f32(o.get("y")) {
+                o.insert("y".into(), serde_json::json!(y / div));
+            }
+            serde_json::Value::Object(o)
+        })
+        .collect();
+    geom.insert("points".into(), serde_json::Value::Array(scaled));
+}
+
+fn default_illust_fill_index(role: &str, id: &str, index: usize) -> u64 {
+    let s = format!("{role} {id}").to_ascii_lowercase();
+    if s.contains("sand") || s.contains("sable") || s.contains("beach") || s.contains("plage") {
+        3
+    } else if s.contains("sea") || s.contains("mer") || s.contains("ocean") || s.contains("eau") {
+        1
+    } else if s.contains("sky") || s.contains("ciel") {
+        0
+    } else if s.contains("sun") || s.contains("soleil") || s.contains("helmet") || s.contains("casque")
+    {
+        5
+    } else if s.contains("bike") || s.contains("velo") || s.contains("vélo") || s.contains("wheel")
+    {
+        7
+    } else if matches!(
+        role.to_ascii_lowercase().as_str(),
+        "background" | "bg"
+    ) {
+        0
+    } else {
+        (index as u64 % 4).max(1)
+    }
+}
+
+fn num_f32(v: Option<&serde_json::Value>) -> Option<f32> {
+    match v? {
+        serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
+        serde_json::Value::String(s) => s.parse::<f32>().ok(),
+        _ => None,
+    }
+}
+
+fn layout_for_illust_role(role: &str, index: usize, total: usize) -> (f32, f32, f32, f32) {
+    let r = role.to_ascii_lowercase();
+    match r.as_str() {
+        "background" | "bg" | "sky" | "plage" | "beach" | "ocean" | "mer" => {
+            (0.05, 0.55, 0.9, 0.4)
+        }
+        "ground" | "sable" | "sand" => (0.05, 0.7, 0.9, 0.25),
+        "sun" | "soleil" | "moon" => (0.72, 0.08, 0.16, 0.16),
+        "body" | "main" | "subject" | "masse" => (0.32, 0.28, 0.36, 0.42),
+        "bike" | "velo" | "vélo" | "cycle" => (0.22, 0.48, 0.56, 0.28),
+        "wheel" | "roue" => {
+            if index % 2 == 0 {
+                (0.24, 0.58, 0.16, 0.16)
+            } else {
+                (0.58, 0.58, 0.16, 0.16)
+            }
+        }
+        _ => {
+            let col = (index % 3) as f32;
+            let row = (index / 3) as f32;
+            let cols = 3.0_f32.min(total as f32).max(1.0);
+            let x = 0.12 + col * (0.7 / cols);
+            let y = 0.18 + row * 0.28;
+            (x, y, 0.22, 0.22)
+        }
+    }
 }
 
 /// Vérifie que child_caps ⊆ parent_caps.
@@ -1874,6 +2719,17 @@ mod tests {
         assert!(!tools.iter().any(|t| t.name == "user.ask"));
         assert!(!tools.iter().any(|t| t.name == "agent.spawn"));
         assert!(tools.iter().any(|t| t.name == "canvas.set_style"));
+    }
+
+    #[test]
+    fn strip_illust_blocked_runtime_tools_removes_spawn() {
+        let spec = vec!["illust.get".into(), "illust.set_brief".into()];
+        let mut tools = select_tools_mode(&spec, &[], true);
+        assert!(tools.iter().any(|t| t.name == "agent.spawn"));
+        strip_illust_blocked_runtime_tools(&mut tools, &spec);
+        assert!(!tools.iter().any(|t| t.name == "agent.spawn"));
+        assert!(!tools.iter().any(|t| t.name == "user.ask"));
+        assert!(tools.iter().any(|t| t.name == "illust.set_brief"));
     }
 
     #[test]
@@ -2254,5 +3110,257 @@ mod tests {
         assert!(!canvas_tool_denied_by_allowlist("canvas.path", &tools));
         assert!(canvas_tool_denied_by_allowlist("canvas.fill", &tools));
         assert!(!canvas_tool_denied_by_allowlist("notes.create", &tools));
+    }
+
+    #[test]
+    fn illust_set_brief_normalizes_flat_string_brief_and_unknown_palette() {
+        let args = normalize_tool_args(
+            "illust.set_brief",
+            &serde_json::json!({
+                "brief": "Un pingouin sur un vélo",
+                "look": "ink",
+                "palette": "warm_sunny_beach"
+            }),
+        );
+        assert_eq!(args["brief"]["subject"], "Un pingouin sur un vélo");
+        assert_eq!(args["brief"]["look"], "ink");
+        assert_eq!(args["brief"]["palette"], "paperInk");
+        assert!(args.get("look").is_none());
+        assert!(args.get("palette").is_none());
+    }
+
+    #[test]
+    fn illust_compose_wraps_flat_parts_and_geometry_type() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "parts": [{
+                    "id": "body",
+                    "role": "body",
+                    "geometry": {"type": "ellipse", "x": 0.2, "y": 0.2, "w": 0.4, "h": 0.5}
+                }]
+            }),
+        );
+        assert!(args.get("spec").is_some());
+        assert_eq!(args["spec"]["parts"][0]["geometry"]["kind"], "ellipse");
+    }
+
+    #[test]
+    fn illust_compose_synthesizes_id_and_geometry_from_description_parts() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "subject": "pingouin sur un vélo",
+                    "look": "pencil",
+                    "palette": "pencilMinimal",
+                    "parts": [
+                        {"role":"main","description":"pingouin"},
+                        {"role":"body","description":"vélo"},
+                        {"role":"background","description":"plage"}
+                    ]
+                }
+            }),
+        );
+        let parts = args["spec"]["parts"].as_array().unwrap();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[0]["id"], "main_0");
+        assert_eq!(parts[0]["geometry"]["kind"], "ellipse");
+        assert!(parts[0].get("description").is_none());
+        assert_eq!(args["spec"]["brief"]["subject"], "pingouin sur un vélo");
+        assert_eq!(args["spec"]["brief"]["palette"], "pencilMinimal");
+        assert!(args["spec"].get("subject").is_none());
+    }
+
+    #[test]
+    fn illust_compose_coerces_path_bbox_without_points_to_ellipse() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "parts": [{
+                        "id": "1",
+                        "role": "body",
+                        "geometry": {"kind":"path","x":0.3,"y":0.4,"w":0.25,"h":0.25}
+                    }]
+                }
+            }),
+        );
+        let g = &args["spec"]["parts"][0]["geometry"];
+        assert_eq!(g["kind"], "ellipse");
+        assert!((g["x"].as_f64().unwrap() - 0.3).abs() < 1e-6);
+        assert!((g["w"].as_f64().unwrap() - 0.25).abs() < 1e-6);
+        assert!(g.get("points").is_none());
+    }
+
+    #[test]
+    fn illust_compose_preserves_joint_local_coordinates() {
+        let geometry = serde_json::json!({"kind":"path", "closed":true,
+            "points":[{"x":0.0,"y":-0.1},{"x":12.0,"y":0.1},{"x":1.0,"y":0.2}]});
+        let normalized = normalize_tool_args("illust.compose", &serde_json::json!({
+            "spec": {"joint_bindings":{"sleeve":["elbow","wrist"]},
+            "parts":[{"id":"sleeve","role":"clothing","geometry":geometry.clone()}]}
+        }));
+        assert_eq!(normalized["spec"]["parts"][0]["geometry"], geometry);
+    }
+
+    #[test]
+    fn illust_compose_rescales_percent_coords_to_unit() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "parts": [
+                        {"id":"bg_sky","role":"background","geometry":{"kind":"rect","x":0,"y":0,"w":100,"h":60}},
+                        {"id":"penguin_body","role":"main","geometry":{"kind":"ellipse","x":45,"y":40,"w":10,"h":20}}
+                    ]
+                }
+            }),
+        );
+        let sky = &args["spec"]["parts"][0]["geometry"];
+        let penguin = &args["spec"]["parts"][1]["geometry"];
+        assert!((sky["w"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+        assert!((sky["h"].as_f64().unwrap() - 0.6).abs() < 1e-6);
+        assert!((penguin["x"].as_f64().unwrap() - 0.45).abs() < 1e-6);
+        assert!((penguin["w"].as_f64().unwrap() - 0.1).abs() < 1e-6);
+        assert_eq!(args["spec"]["parts"][0]["fill_index"], 0);
+        assert_eq!(args["spec"]["parts"][1]["fill_index"], 1);
+    }
+
+    #[test]
+    fn illust_compose_rescales_pixel_coords_to_unit() {
+        let args = normalize_tool_args(
+            "illust.compose",
+            &serde_json::json!({
+                "spec": {
+                    "parts": [{
+                        "id":"penguin","role":"main",
+                        "geometry":{"kind":"rect","x":350,"y":350,"w":320,"h":280}
+                    }]
+                }
+            }),
+        );
+        let g = &args["spec"]["parts"][0]["geometry"];
+        assert!((g["x"].as_f64().unwrap() - 350.0 / 1024.0).abs() < 1e-5);
+        assert!((g["w"].as_f64().unwrap() - 320.0 / 1024.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn illust_image_tool_is_available_without_becoming_vector_compose() {
+        let mut ids = Vec::new();
+        merge_illust_tools(&mut ids, true);
+        assert!(ids.iter().any(|id| id == "illust.generate_image"));
+        assert_eq!(canonicalize_tool_name("illust.generate_image"), "illust.generate_image");
+        let args = serde_json::json!({"construction":"quadruped curled on a cushion"});
+        assert_eq!(normalize_tool_args("illust.generate_image", &args), args);
+        assert!(ids.iter().any(|id| id == "illust.refine_image"));
+        assert!(ids.iter().any(|id| id == "illust.resolve_image"));
+        let args = serde_json::json!({"correction":"remove construction circles"});
+        assert_eq!(normalize_tool_args("illust.refine_image", &args), args);
+    }
+
+    #[test]
+    fn illust_set_aliases_canonicalize() {
+        assert_eq!(canonicalize_tool_name("illust.set"), "illust.set_brief");
+        assert_eq!(canonicalize_tool_name("illust.brief"), "illust.set_brief");
+        assert_eq!(canonicalize_tool_name("illustration.compose"), "illust.compose");
+        assert_eq!(canonicalize_tool_name("illust.run"), "illust.compose");
+        assert_eq!(canonicalize_tool_name("illust.generate"), "illust.compose");
+    }
+
+    #[test]
+    fn illust_bare_aliases_only_via_illust_helper() {
+        assert_eq!(canonicalize_illust_alias("set_brief"), "illust.set_brief");
+        assert_eq!(canonicalize_illust_alias("compose"), "illust.compose");
+        assert_eq!(canonicalize_illust_alias("review"), "illust.review");
+        assert_eq!(canonicalize_illust_alias("export"), "illust.export");
+        assert_eq!(canonicalize_illust_alias("abort"), "goal.fail");
+        // Global canonicalize must not steal bare names from other agents.
+        assert_eq!(canonicalize_tool_name("compose"), "compose");
+        assert_eq!(canonicalize_tool_name("export"), "export");
+    }
+
+    #[test]
+    fn select_illust_turn_skips_leading_sheet_when_review_present() {
+        let actions = vec![
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.render_sheet".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.review".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.export".into(),
+                args: serde_json::json!({}),
+            },
+        ];
+        assert_eq!(select_illust_turn_action(&actions), 1);
+    }
+
+    #[test]
+    fn select_illust_turn_keeps_leading_set_brief() {
+        let actions = vec![
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.set_brief".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "illust.compose".into(),
+                args: serde_json::json!({}),
+            },
+            crate::actions::AgentAction {
+                thought: String::new(),
+                action: "goal.complete".into(),
+                args: serde_json::json!({}),
+            },
+        ];
+        assert_eq!(select_illust_turn_action(&actions), 0);
+    }
+
+    #[test]
+    fn illust_run_empty_args_become_empty_compose_spec() {
+        let args = normalize_tool_args("illust.compose", &serde_json::json!({}));
+        assert!(args["spec"]["parts"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn illust_set_brief_partial_beats_omit_empty_subject() {
+        let args = normalize_tool_args(
+            "illust.set_brief",
+            &serde_json::json!({
+                "beats": [
+                    {"type":"body","desc":"Corps allongé","pos":"center","weight":0.9},
+                    {"type":"head","desc":"Tête posée","pos":"lower_left"}
+                ]
+            }),
+        );
+        assert!(args["brief"].get("subject").is_none());
+        let beats = args["brief"]["beats"].as_array().unwrap();
+        assert_eq!(beats.len(), 2);
+        assert!(beats[0].as_str().unwrap().contains("body"));
+        assert!(beats[1].as_str().unwrap().contains("head"));
+    }
+
+    #[test]
+    fn illust_set_brief_infers_pencil_from_subject() {
+        let args = normalize_tool_args(
+            "illust.set_brief",
+            &serde_json::json!({
+                "brief": {
+                    "subject": "chat qui s'étire sur un coussin style pencil",
+                    "look": "ink",
+                    "palette": "paperInk"
+                }
+            }),
+        );
+        assert_eq!(args["brief"]["look"], "pencil");
+        assert_eq!(args["brief"]["palette"], "pencilMinimal");
     }
 }

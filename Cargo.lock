@@ -367,6 +367,7 @@ dependencies = [
  "aos-sd",
  "base64",
  "futures",
+ "image",
  "reqwest",
  "serde",
  "serde_json",
@@ -403,6 +404,7 @@ dependencies = [
  "aos-llama",
  "aos-placement",
  "aos-proto",
+ "aos-sd",
  "base64",
  "chacha20poly1305",
  "cpal",
@@ -465,7 +467,11 @@ dependencies = [
 name = "aos-sd"
 version = "0.18.0"
 dependencies = [
+ "base64",
  "image",
+ "reqwest",
+ "serde",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 
@@ -3794,10 +3800,23 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
+ "image-webp",
  "moxcms",
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
+]
+
+[[package]]
+name = "image-webp"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
+dependencies = [
+ "byteorder-lite",
+ "quick-error",
 ]
 
 [[package]]

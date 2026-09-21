@@ -24,6 +24,7 @@ impl UiApp {
             routing: pending.routing.clone(),
             language: pending.language.clone(),
             canvas_open: pending.canvas_open,
+            illustration_open: pending.illustration_open,
             canvas_aspect: pending.canvas_aspect,
             deep_thinking: pending.deep_thinking,
         });
@@ -42,6 +43,7 @@ impl UiApp {
             routing: pending.routing,
             language: pending.language,
             canvas_open: pending.canvas_open,
+            illustration_open: pending.illustration_open,
             canvas_aspect: pending.canvas_aspect,
             deep_thinking: pending.deep_thinking,
             skip_session_append: false,

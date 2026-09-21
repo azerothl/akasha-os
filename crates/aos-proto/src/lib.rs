@@ -11,12 +11,14 @@ pub mod bridge;
 mod canvas_layers;
 mod canvas_style;
 pub mod chat_document;
-pub mod downloads_layout;
 pub mod create_contract;
 pub mod decl_ui;
 pub mod device_capture;
 pub mod device_usb;
+pub mod downloads_layout;
 pub mod host_folder;
+mod illustration;
+mod illustration_action;
 pub mod mem_extract;
 pub mod rich_app_contract;
 pub mod rich_composition;
@@ -96,6 +98,25 @@ pub use canvas_style::{
     parse_canvas_sidecar_json, parse_rgb, resolve_canvas_op_style_ex, sample_linear_gradient,
     set_canvas_op_body_dash, set_canvas_op_body_gradient, set_canvas_op_body_opacity,
     CanvasLinearGradient,
+};
+pub use illustration::{
+    enrich_illustration_puppet, illustration_digest, review_illustration, IllustAnimateRequest,
+    IllustAnimateResponse, IllustComposeRequest, IllustComposeResponse, IllustExportRequest,
+    IllustGenerateImageRequest, IllustRefineImageRequest, IllustResolveImageRequest, IllustrationImageRun, IllustrationImageStatus,
+    IllustGetRequest, IllustGetResponse, IllustLockAcquireRequest, IllustLockReleaseRequest,
+    IllustLockStatusRequest, IllustLockStatusResponse, IllustRenderSheetRequest, IllustReviewIssue,
+    IllustReviewRequest, IllustReviewResponse, IllustSetBriefRequest, IllustSetOpenRequest,
+    IllustrationArchetype, IllustrationBrief, IllustrationCamera, IllustrationConstructionOval,
+    IllustrationConstructionPhase, IllustrationConstructionPlan,
+    IllustrationDoc, IllustrationEngine, IllustrationFinish, IllustrationKeyDrawing,
+    IllustrationLock, IllustrationLook, IllustrationPaletteColors, IllustrationPaletteId,
+    IllustrationPart, IllustrationPartGeometry, IllustrationPose, IllustrationRenderMode,
+    IllustrationSkeletonJoint, IllustrationSpec, IllustrationTimeline, IllustrationTimelineBeat,
+    IllustrationVolume,
+};
+pub use illustration_action::{
+    action_timeline, apply_prompt_defaults, ease_io, lerp_pose, resolve_timeline, sign_off_word,
+    video_trace_error,
 };
 
 // ---------------------------------------------------------------------------
@@ -270,6 +291,7 @@ pub const PROVIDER_PRESETS: &[(&str, &str, Option<&str>)] = &[
     ("z.ai", "https://api.z.ai/api/paas/v4", Some("z_ai_api_key")),
     ("custom", "", None),
     ("ollama", "http://127.0.0.1:11434/v1", None),
+    ("ollama-transient", "http://127.0.0.1:11434/v1", None),
     ("vllm", "http://127.0.0.1:8000/v1", None),
     ("lmstudio", "http://127.0.0.1:1234/v1", None),
 ];
@@ -2361,11 +2383,21 @@ pub struct MemoryObject {
     pub embedding: Vec<f32>,
 }
 
-fn default_memory_schema_version() -> u16 { 2 }
-fn default_memory_confidence() -> f32 { 0.5 }
-fn default_memory_importance() -> f32 { 0.5 }
-fn default_memory_freshness() -> f32 { 1.0 }
-fn default_memory_visibility() -> String { "private".into() }
+fn default_memory_schema_version() -> u16 {
+    2
+}
+fn default_memory_confidence() -> f32 {
+    0.5
+}
+fn default_memory_importance() -> f32 {
+    0.5
+}
+fn default_memory_freshness() -> f32 {
+    1.0
+}
+fn default_memory_visibility() -> String {
+    "private".into()
+}
 
 /// V2 relation kind. Existing V1 relations remain available unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -2497,8 +2529,12 @@ pub struct MemGraphQueryRequest {
     pub relation: Option<MemoryRelationKind>,
 }
 
-fn default_graph_depth() -> usize { 2 }
-fn default_graph_nodes() -> usize { 64 }
+fn default_graph_depth() -> usize {
+    2
+}
+fn default_graph_nodes() -> usize {
+    64
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemTimelineRequest {
@@ -2514,7 +2550,9 @@ pub struct MemTimelineRequest {
     pub limit: usize,
 }
 
-fn default_timeline_limit() -> usize { 100 }
+fn default_timeline_limit() -> usize {
+    100
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemGraphResponse {
@@ -2531,7 +2569,9 @@ pub struct MemTimelineResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct MemExplainRequest { pub id: u64 }
+pub struct MemExplainRequest {
+    pub id: u64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemExplanation {
@@ -2626,7 +2666,9 @@ pub struct MemMindPalaceRequest {
     pub limit: usize,
 }
 
-fn default_mind_palace_limit() -> usize { 64 }
+fn default_mind_palace_limit() -> usize {
+    64
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemMindPalaceResponse {
@@ -3336,9 +3378,7 @@ fn strip_tts_preamble(text: &str) -> String {
 
 #[cfg(test)]
 mod chat_delegation_tests {
-    use super::{
-        chat_tts_request, chat_user_wants_advisory, chat_user_wants_module_authoring,
-    };
+    use super::{chat_tts_request, chat_user_wants_advisory, chat_user_wants_module_authoring};
 
     #[test]
     fn create_module_spawns() {
@@ -3390,7 +3430,9 @@ mod chat_delegation_tests {
                  pour la création d'un module de développement dans akasha-os ?";
         assert!(chat_user_wants_advisory(q));
         assert!(!chat_user_wants_module_authoring(q));
-        assert!(chat_user_wants_advisory("write a functional spec for a module"));
+        assert!(chat_user_wants_advisory(
+            "write a functional spec for a module"
+        ));
         assert!(!chat_user_wants_module_authoring(
             "write a functional spec for a module"
         ));
@@ -4380,6 +4422,9 @@ pub struct ChatSessionMeta {
     /// Proportions du canvas de session (défaut carré 1:1).
     #[serde(default)]
     pub canvas_aspect: CanvasAspect,
+    /// Surface Illustration (skill-inspired) ouverte — séparée du whiteboard.
+    #[serde(default)]
+    pub illustration_open: bool,
 }
 
 /// Point normalisé 0..1 sur le canvas de session.
@@ -4755,8 +4800,13 @@ pub fn compile_canvas_scene(
             return Err("scene: ids d'éléments uniques et non vides requis".into());
         }
         if !element.opacity.is_finite()
-            || element.width.is_some_and(|width| !width.is_finite() || width < 0.0)
-            || element.dash.iter().any(|value| !value.is_finite() || *value < 0.0)
+            || element
+                .width
+                .is_some_and(|width| !width.is_finite() || width < 0.0)
+            || element
+                .dash
+                .iter()
+                .any(|value| !value.is_finite() || *value < 0.0)
         {
             return Err(format!("scene: style invalide pour {}", element.id));
         }
@@ -4773,19 +4823,22 @@ pub fn compile_canvas_scene(
                 rotation,
             } if [*x, *y, *w, *h, *rotation].iter().all(|v| v.is_finite())
                 && *w > 0.0
-                && *h > 0.0 => CanvasOpBody::Rect {
-                x: *x,
-                y: *y,
-                w: *w,
-                h: *h,
-                color,
-                fill: element.fill,
-                width,
-                rotation: *rotation,
-                opacity,
-                dash,
-                gradient: None,
-            },
+                && *h > 0.0 =>
+            {
+                CanvasOpBody::Rect {
+                    x: *x,
+                    y: *y,
+                    w: *w,
+                    h: *h,
+                    color,
+                    fill: element.fill,
+                    width,
+                    rotation: *rotation,
+                    opacity,
+                    dash,
+                    gradient: None,
+                }
+            }
             CanvasSceneGeometry::Ellipse {
                 x,
                 y,
@@ -4794,54 +4847,61 @@ pub fn compile_canvas_scene(
                 rotation,
             } if [*x, *y, *w, *h, *rotation].iter().all(|v| v.is_finite())
                 && *w > 0.0
-                && *h > 0.0 => CanvasOpBody::Ellipse {
-                x: *x,
-                y: *y,
-                w: *w,
-                h: *h,
-                color,
-                fill: element.fill,
-                width,
-                rotation: *rotation,
-                opacity,
-                dash,
-                gradient: None,
-            },
+                && *h > 0.0 =>
+            {
+                CanvasOpBody::Ellipse {
+                    x: *x,
+                    y: *y,
+                    w: *w,
+                    h: *h,
+                    color,
+                    fill: element.fill,
+                    width,
+                    rotation: *rotation,
+                    opacity,
+                    dash,
+                    gradient: None,
+                }
+            }
             CanvasSceneGeometry::Line { p0, p1 }
-                if p0.x.is_finite()
-                    && p0.y.is_finite()
-                    && p1.x.is_finite()
-                    && p1.y.is_finite() => CanvasOpBody::Line {
-                p0: *p0,
-                p1: *p1,
-                color,
-                width,
-                opacity,
-                dash,
-            },
+                if p0.x.is_finite() && p0.y.is_finite() && p1.x.is_finite() && p1.y.is_finite() =>
+            {
+                CanvasOpBody::Line {
+                    p0: *p0,
+                    p1: *p1,
+                    color,
+                    width,
+                    opacity,
+                    dash,
+                }
+            }
             CanvasSceneGeometry::Spline { points }
                 if points.len() >= 2
                     && points.iter().all(|p| p.x.is_finite() && p.y.is_finite()) =>
+            {
                 CanvasOpBody::Spline {
-                points: points.clone(),
-                color,
-                width,
-                opacity,
-                dash,
-            },
+                    points: points.clone(),
+                    color,
+                    width,
+                    opacity,
+                    dash,
+                }
+            }
             CanvasSceneGeometry::Path { points, closed }
                 if points.len() >= 2
                     && points.iter().all(|p| p.x.is_finite() && p.y.is_finite()) =>
+            {
                 CanvasOpBody::Path {
-                points: points.clone(),
-                color,
-                width,
-                fill: element.fill,
-                closed: *closed,
-                opacity,
-                dash,
-                gradient: None,
-            },
+                    points: points.clone(),
+                    color,
+                    width,
+                    fill: element.fill,
+                    closed: *closed,
+                    opacity,
+                    dash,
+                    gradient: None,
+                }
+            }
             CanvasSceneGeometry::Text {
                 x,
                 y,
@@ -4852,15 +4912,18 @@ pub fn compile_canvas_scene(
                 && y.is_finite()
                 && size.is_finite()
                 && *size > 0.0
-                && !text.trim().is_empty() => CanvasOpBody::Text {
-                x: *x,
-                y: *y,
-                text: text.clone(),
-                size: *size,
-                color,
-                rotation: *rotation,
-                opacity,
-            },
+                && !text.trim().is_empty() =>
+            {
+                CanvasOpBody::Text {
+                    x: *x,
+                    y: *y,
+                    text: text.clone(),
+                    size: *size,
+                    color,
+                    rotation: *rotation,
+                    opacity,
+                }
+            }
             _ => return Err(format!("scene: géométrie invalide pour {}", element.id)),
         };
         out.push((element.layer.clone(), body));
@@ -4898,9 +4961,9 @@ pub fn canvas_scene_diagnostics(scene: &CanvasSceneSpec) -> Vec<String> {
     let mut warnings = Vec::new();
 
     let find_role = |needles: &[&str]| {
-        entries.iter().find(|(element, bbox)| {
-            bbox.is_some() && contains_scene_term(element, needles)
-        })
+        entries
+            .iter()
+            .find(|(element, bbox)| bbox.is_some() && contains_scene_term(element, needles))
     };
     if let (Some((body, Some(body_bbox))), Some((head, Some(head_bbox)))) = (
         find_role(&["body", "corps", "torso", "masse_principale", "masse"]),
@@ -4918,16 +4981,32 @@ pub fn canvas_scene_diagnostics(scene: &CanvasSceneSpec) -> Vec<String> {
         let Some(bbox) = bbox else {
             continue;
         };
-        if !contains_scene_term(element, &[
-            "ear", "oreille", "tail", "queue", "leg", "patte", "arm", "bras", "wing",
-            "aile", "appendage", "appendice",
-        ]) {
+        if !contains_scene_term(
+            element,
+            &[
+                "ear",
+                "oreille",
+                "tail",
+                "queue",
+                "leg",
+                "patte",
+                "arm",
+                "bras",
+                "wing",
+                "aile",
+                "appendage",
+                "appendice",
+            ],
+        ) {
             continue;
         }
         let attached = entries.iter().any(|(other, other_bbox)| {
             other.id != element.id
                 && other_bbox.is_some()
-                && !contains_scene_term(other, &["detail", "œil", "oeil", "eye", "moustache", "whisker"])
+                && !contains_scene_term(
+                    other,
+                    &["detail", "œil", "oeil", "eye", "moustache", "whisker"],
+                )
                 && canvas_scene_bboxes_connected(*bbox, other_bbox.unwrap(), 0.018)
         });
         if !attached {
@@ -4942,7 +5021,9 @@ pub fn canvas_scene_diagnostics(scene: &CanvasSceneSpec) -> Vec<String> {
 
 fn contains_scene_term(element: &CanvasSceneElement, terms: &[&str]) -> bool {
     let haystack = format!("{} {}", element.id, element.role).to_ascii_lowercase();
-    terms.iter().any(|term| haystack.contains(&term.to_ascii_lowercase()))
+    terms
+        .iter()
+        .any(|term| haystack.contains(&term.to_ascii_lowercase()))
 }
 
 fn canvas_scene_bboxes_connected(a: CanvasBBox, b: CanvasBBox, tolerance: f32) -> bool {
@@ -7047,12 +7128,10 @@ mod media_option_tests {
 mod chat_session_room_tests {
     use super::{
         canvas_scene_diagnostics, compile_canvas_scene, AgentCreateRequest, AgentGoal, AgentInfo,
-        AgentKind, AgentState,
-        CanvasAspect, CanvasGuides, CanvasOpBody, CanvasPoint, CanvasSceneElement,
-        CanvasSceneGeometry, CanvasSceneProfile, CanvasSceneRelation, CanvasSceneSpec,
-        CanvasSnapMode,
-        ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
-        ChatSessionMode, CognitiveMode,
+        AgentKind, AgentState, CanvasAspect, CanvasGuides, CanvasOpBody, CanvasPoint,
+        CanvasSceneElement, CanvasSceneGeometry, CanvasSceneProfile, CanvasSceneRelation,
+        CanvasSceneSpec, CanvasSnapMode, ChatRoomConductorPolicy, ChatRoomMember,
+        ChatSessionMessage, ChatSessionMeta, ChatSessionMode, CognitiveMode,
     };
 
     #[test]
@@ -7106,6 +7185,7 @@ mod chat_session_room_tests {
             },
             canvas_open: false,
             canvas_aspect: CanvasAspect::Square,
+            illustration_open: false,
         };
         let json = serde_json::to_string(&m).unwrap();
         let back: ChatSessionMeta = serde_json::from_str(&json).unwrap();
@@ -7458,7 +7538,12 @@ mod chat_session_room_tests {
         assert_eq!(compiled[0].0.as_deref(), Some("components"));
         assert_eq!(compiled[1].0.as_deref(), Some("edges"));
         match &compiled[0].1 {
-            CanvasOpBody::Rect { color, fill, opacity, .. } => {
+            CanvasOpBody::Rect {
+                color,
+                fill,
+                opacity,
+                ..
+            } => {
                 assert_eq!(color, "#3EE0C4");
                 assert!(*fill);
                 assert!((*opacity - 0.9).abs() < 0.001);
@@ -7483,27 +7568,39 @@ mod chat_session_room_tests {
         let scene = CanvasSceneSpec {
             profile: CanvasSceneProfile::Illustration,
             elements: vec![
-                element("body", "masse principale", CanvasSceneGeometry::Ellipse {
+                element(
+                    "body",
+                    "masse principale",
+                    CanvasSceneGeometry::Ellipse {
                         x: 0.5,
                         y: 0.6,
                         w: 0.4,
                         h: 0.3,
                         rotation: 0.0,
-                    }),
-                element("head", "partie supérieure", CanvasSceneGeometry::Ellipse {
+                    },
+                ),
+                element(
+                    "head",
+                    "partie supérieure",
+                    CanvasSceneGeometry::Ellipse {
                         x: 0.5,
                         y: 0.35,
                         w: 0.25,
                         h: 0.22,
                         rotation: 0.0,
-                    }),
-                element("ear_l", "oreille", CanvasSceneGeometry::Path {
+                    },
+                ),
+                element(
+                    "ear_l",
+                    "oreille",
+                    CanvasSceneGeometry::Path {
                         points: vec![
                             CanvasPoint { x: 0.42, y: 0.25 },
                             CanvasPoint { x: 0.48, y: 0.30 },
                         ],
                         closed: true,
-                    }),
+                    },
+                ),
             ],
             ..Default::default()
         };

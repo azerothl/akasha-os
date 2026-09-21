@@ -1,0 +1,10 @@
+# Isolated service stores are runtime data, not benchmark fixtures. Keep only
+# explicit publication snapshots, exported images and human-readable reviews.
+service-*/audit/
+service-*/memory/
+service-*/modules/
+service-*/secrets/
+service-*/sessions/
+service-*/skills/
+service-*/storage/
+service-*/community/

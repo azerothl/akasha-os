@@ -15,6 +15,7 @@ pub enum DownloadKind {
     Audio,
     Canvas,
     Fetched,
+    Illustration,
 }
 
 impl DownloadKind {
@@ -26,6 +27,7 @@ impl DownloadKind {
             Self::Audio => "audio",
             Self::Canvas => "canvas",
             Self::Fetched => "fetched",
+            Self::Illustration => "illustration",
         }
     }
 }

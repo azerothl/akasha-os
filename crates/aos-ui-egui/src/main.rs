@@ -116,6 +116,7 @@ mod ui_decl_module;
 mod ui_feedback;
 mod ui_files;
 mod ui_format;
+mod ui_illustration;
 mod ui_memory;
 mod ui_models;
 mod ui_primitives;
@@ -494,7 +495,8 @@ fn session_toggle_reserve_width(
     canvas_open: bool,
     tuck_secondary: bool,
 ) -> f32 {
-    let mut w = icons::SESSION_ICON_SZ * 4.0 + 18.0;
+    // Salon + Canvas + Illustration + Deep (+ optional canvas focus)
+    let mut w = icons::SESSION_ICON_SZ * 5.0 + 22.0;
     if canvas_open && !tuck_secondary {
         w += icons::SESSION_ICON_SZ + 6.0;
     }
@@ -568,6 +570,7 @@ struct UiApp {
     drafts_last_flush: std::time::Instant,
     guide: guide::GuideState,
     research_ui: research_ui_state::ResearchUiState,
+    illust_ui: ui_illustration::IllustrationUiState,
     screenshot: Option<ui_screenshot::UiScreenshotHarness>,
 }
 
@@ -887,6 +890,7 @@ impl UiApp {
             drafts_last_flush: std::time::Instant::now(),
             guide: guide::GuideState::default(),
             research_ui: research_ui_state::ResearchUiState::default(),
+            illust_ui: ui_illustration::IllustrationUiState::default(),
             screenshot,
         }
     }
@@ -3219,6 +3223,33 @@ impl eframe::App for UiApp {
                 Evt::CanvasExported { path, session_id } => {
                     canvas_event_controller::on_canvas_exported(self, path, session_id);
                 }
+                Evt::IllustDoc(doc) => {
+                    self.apply_illust_doc(doc);
+                }
+                Evt::IllustExported { path, message } => {
+                    if self.illust_ui.animate_busy {
+                        self.illust_ui.animate_busy = false;
+                        let notice = if path.is_empty() {
+                            message
+                        } else {
+                            format!("{message}\n{path}")
+                        };
+                        self.status = notice.clone();
+                        self.illust_ui.animate_notice = notice;
+                    } else {
+                        self.status = format!("{message}: {path}");
+                    }
+                    if let Some(sid) = self.chat_state.active_session.clone() {
+                        let _ = self.cmd_tx.send(Cmd::IllustGet { session_id: sid });
+                    }
+                }
+                Evt::IllustError(e) => {
+                    self.illust_ui.animate_busy = false;
+                    self.illust_ui.last_error = e;
+                }
+                Evt::IllustGetHint { session_id } => {
+                    let _ = self.cmd_tx.send(Cmd::IllustGet { session_id });
+                }
                 Evt::SessionExported { path, session_id } => {
                     if self.chat_state.active_session.as_deref() == Some(session_id.as_str()) {
                         let t = i18n::strings(&self.prefs.language);
@@ -3674,6 +3705,7 @@ impl eframe::App for UiApp {
         });
 
         self.ui_notifications_popup(ctx, &t);
+        self.ui_illust_animate_popups(ctx, &t);
 
         let show_sidebar = matches!(
             self.prefs.ui_presentation,

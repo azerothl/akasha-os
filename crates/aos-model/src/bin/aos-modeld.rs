@@ -4828,18 +4828,17 @@ async fn main() {
                 // --- Routage privacy (§3.7) ---
                 // 1. Classes des données référencées (via platformd fs.class).
                 let mut max_secret = false;
+                let mut unclassified_data = false;
                 for path in &req.data_refs {
-                    if let Ok(resp) = bus
+                    match bus
                         .call::<aos_proto::FsClassRequest, aos_proto::FsClassResponse>(
                             "fs.class",
                             &aos_proto::FsClassRequest { path: path.clone() },
                             vec![],
                         )
-                        .await
-                    {
-                        if resp.class == aos_proto::DataClass::Secret {
-                            max_secret = true;
-                        }
+                        .await {
+                        Ok(resp) => max_secret |= resp.class == aos_proto::DataClass::Secret,
+                        Err(_) => unclassified_data = true,
                     }
                 }
                 let mode = req
@@ -4849,6 +4848,13 @@ async fn main() {
                 let want_remote = model_id.starts_with("remote:") || sub.has_remote(&model_id);
 
                 if want_remote {
+                    if !req.images.is_empty() && (max_secret || unclassified_data) {
+                        let _ = stream.send(&TokenEvent::Error {
+                            message: "image secrète ou classification indisponible : envoi au provider refusé".into(),
+                        }).await;
+                        let _ = stream.finish(aos_ipc::msg::Status::PermissionDenied).await;
+                        return;
+                    }
                     // secret → jamais remote (§3.7) : bascule locale auditée.
                     if max_secret {
                         let _ = bus
@@ -4934,11 +4940,12 @@ async fn main() {
                         let mid = model_id.clone();
                         let req2 = req.clone();
                         tokio::spawn(async move {
-                            let r = sub2.infer_remote(&mid, &req2, tx).await;
+                            let r = sub2.infer_remote(&mid, &req2, tx.clone()).await;
                             if let Err(e) = r {
-                                // Le flux est fermé côté émetteur ; l'erreur est
-                                // loguée via audit par l'appelant si besoin.
+                                // Do not turn rejected images or a failed provider into
+                                // a successful empty reply for the agent.
                                 eprintln!("[modeld] remote infer: {e}");
+                                let _ = tx.send(TokenEvent::Error { message: e }).await;
                             }
                         });
                         while let Some(ev) = rx.recv().await {
