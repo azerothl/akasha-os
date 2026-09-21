@@ -287,13 +287,16 @@ fn attach_child(scene: &mut SceneGraph, parent: &str, node: SceneNode) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scene::SceneGraph;
+    use crate::scene::{SceneGraph, SceneNode};
 
     #[test]
     fn embedded_pack_loads_and_instantiates_humanoid() {
         let pack = embedded_primitives_pack().expect("pack");
         assert!(pack.get("humanoid.placeholder").is_some());
         assert!(pack.get("prop.box").is_some());
+        assert!(pack.get("prop.ground").is_some());
+        assert!(pack.get("prop.pedestal").is_some());
+        assert!(pack.get("scene.starter").is_some());
         let mut scene = SceneGraph::demo_scene();
         let r = instantiate_asset(
             &mut scene,
@@ -307,6 +310,28 @@ mod tests {
         assert!(scene.nodes.values().any(|n| {
             n.kind == NodeKind::MeshBox && (n.name.contains("Torso") || n.id.contains("torso"))
         }));
+        scene.validate().expect("valid");
+    }
+
+    #[test]
+    fn starter_prefab_instantiates_ground_and_box() {
+        let pack = embedded_primitives_pack().expect("pack");
+        // Empty root-only for a clean instantiate check.
+        let mut scene = SceneGraph {
+            nodes: {
+                let mut m = std::collections::HashMap::new();
+                let root = SceneNode::empty("root", "Scene");
+                m.insert(root.id.clone(), root);
+                m
+            },
+            roots: vec!["root".into()],
+            active_camera: None,
+        };
+        let r = instantiate_asset(&mut scene, &pack, "scene.starter", Some("root"), "s_")
+            .expect("starter");
+        assert!(scene.nodes.contains_key(&r.root_id));
+        assert!(scene.nodes.values().any(|n| n.name == "Ground"));
+        assert!(scene.nodes.values().any(|n| n.name == "Box"));
         scene.validate().expect("valid");
     }
 

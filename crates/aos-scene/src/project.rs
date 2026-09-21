@@ -76,7 +76,9 @@ mod tests {
         assert_eq!(loaded.format_version, PROJECT_FORMAT_VERSION);
         assert_eq!(loaded.scene.roots, project.scene.roots);
         let box_t = &loaded.scene.nodes["box"].transform.translation;
-        assert!((box_t.y - 0.5).abs() < 1e-5);
+        assert!((box_t.y - 0.675).abs() < 1e-5);
+        assert!(loaded.scene.nodes.contains_key("ground"));
+        assert!(loaded.scene.nodes.contains_key("humanoid"));
     }
 
     #[test]

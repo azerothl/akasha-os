@@ -153,28 +153,100 @@ impl Default for SceneGraph {
 }
 
 impl SceneGraph {
-    /// Minimal editable demo: ground empty, one box, one camera.
+    /// Preview starter: ground, pedestal, prop box, placeholder humanoid, camera.
+    /// Keeps `box` / `camera` ids used by ADR golden tests.
     pub fn demo_scene() -> Self {
         let mut nodes = HashMap::new();
 
         let mut root = SceneNode::empty("root", "Scene");
-        root.children = vec!["box".into(), "camera".into()];
+        root.children = vec![
+            "ground".into(),
+            "pedestal".into(),
+            "box".into(),
+            "humanoid".into(),
+            "camera".into(),
+        ];
 
+        let mut ground = SceneNode::empty("ground", "Ground");
+        ground.kind = NodeKind::MeshBox;
+        ground.parent = Some("root".into());
+        ground.transform.translation = Vec3::new(0.0, 0.04, 0.0);
+        ground.transform.scale = Vec3::new(6.0, 0.08, 6.0);
+
+        let mut pedestal = SceneNode::empty("pedestal", "Pedestal");
+        pedestal.kind = NodeKind::MeshBox;
+        pedestal.parent = Some("root".into());
+        pedestal.transform.translation = Vec3::new(0.0, 0.175, 0.0);
+        pedestal.transform.scale = Vec3::new(1.2, 0.35, 1.2);
+
+        // Box sits on the pedestal (centre height ≈ pedestal top + half box).
         let mut box_node = SceneNode::empty("box", "Box");
         box_node.kind = NodeKind::MeshBox;
         box_node.parent = Some("root".into());
-        box_node.transform.translation = Vec3::new(0.0, 0.5, 0.0);
+        box_node.transform.translation = Vec3::new(0.0, 0.675, 0.0);
+        box_node.transform.scale = Vec3::new(0.7, 0.7, 0.7);
+
+        let mut humanoid = SceneNode::empty("humanoid", "Humanoid");
+        humanoid.parent = Some("root".into());
+        humanoid.transform.translation = Vec3::new(1.4, 0.0, 0.3);
+        humanoid.children = vec![
+            "torso".into(),
+            "head".into(),
+            "leg_l".into(),
+            "leg_r".into(),
+            "arm_l".into(),
+            "arm_r".into(),
+        ];
+
+        let mut torso = SceneNode::empty("torso", "Torso");
+        torso.kind = NodeKind::MeshBox;
+        torso.parent = Some("humanoid".into());
+        torso.transform.translation = Vec3::new(0.0, 1.0, 0.0);
+        torso.transform.scale = Vec3::new(0.45, 0.55, 0.25);
+
+        let mut head = SceneNode::empty("head", "Head");
+        head.kind = NodeKind::MeshBox;
+        head.parent = Some("humanoid".into());
+        head.transform.translation = Vec3::new(0.0, 1.55, 0.0);
+        head.transform.scale = Vec3::new(0.22, 0.22, 0.22);
+
+        let mut leg_l = SceneNode::empty("leg_l", "LegL");
+        leg_l.kind = NodeKind::MeshBox;
+        leg_l.parent = Some("humanoid".into());
+        leg_l.transform.translation = Vec3::new(-0.12, 0.35, 0.0);
+        leg_l.transform.scale = Vec3::new(0.14, 0.7, 0.14);
+
+        let mut leg_r = SceneNode::empty("leg_r", "LegR");
+        leg_r.kind = NodeKind::MeshBox;
+        leg_r.parent = Some("humanoid".into());
+        leg_r.transform.translation = Vec3::new(0.12, 0.35, 0.0);
+        leg_r.transform.scale = Vec3::new(0.14, 0.7, 0.14);
+
+        let mut arm_l = SceneNode::empty("arm_l", "ArmL");
+        arm_l.kind = NodeKind::MeshBox;
+        arm_l.parent = Some("humanoid".into());
+        arm_l.transform.translation = Vec3::new(-0.38, 1.05, 0.0);
+        arm_l.transform.scale = Vec3::new(0.12, 0.5, 0.12);
+
+        let mut arm_r = SceneNode::empty("arm_r", "ArmR");
+        arm_r.kind = NodeKind::MeshBox;
+        arm_r.parent = Some("humanoid".into());
+        arm_r.transform.translation = Vec3::new(0.38, 1.05, 0.0);
+        arm_r.transform.scale = Vec3::new(0.12, 0.5, 0.12);
 
         let mut cam = SceneNode::empty("camera", "Camera");
         cam.kind = NodeKind::Camera;
         cam.parent = Some("root".into());
-        cam.transform.translation = Vec3::new(0.0, 1.5, 4.0);
-        // Look toward origin: rotate ~−20° about X is optional; identity looks −Z.
+        // Frame ground + humanoid; identity rotation looks −Z (ADR 0011).
+        cam.transform.translation = Vec3::new(0.0, 2.2, 6.5);
         cam.camera = Some(CameraParams::default());
 
-        nodes.insert(root.id.clone(), root);
-        nodes.insert(box_node.id.clone(), box_node);
-        nodes.insert(cam.id.clone(), cam);
+        for n in [
+            root, ground, pedestal, box_node, humanoid, torso, head, leg_l, leg_r, arm_l, arm_r,
+            cam,
+        ] {
+            nodes.insert(n.id.clone(), n);
+        }
 
         Self {
             nodes,

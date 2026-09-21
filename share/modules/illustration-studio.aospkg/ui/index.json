@@ -7,29 +7,39 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
+      "tip_body": "Orbit drag · click to select · drag to move. Offline Preview — stub/CPU beauty only.",
+      "assets_section": "Assets",
+      "project_section": "Project",
+      "render_section": "Beauty pass",
       "viewport_label": "Viewport",
       "scene_label": "Scene",
-      "save_label": "Save project",
-      "load_label": "Load project",
+      "scene_empty": "No scene loaded yet. Use Load project or add an asset.",
+      "save_label": "Save",
+      "load_label": "Load",
       "stub_render_label": "Stub beauty",
       "cpu_render_label": "CPU beauty",
+      "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
-      "about_body": "Product suite: SceneGraph + RenderService (stub/CPU) + primitives pack. Offline, no Blender.",
-      "beauty_empty": "No beauty pass yet",
-      "preview_label": "Beauty pass"
+      "beauty_empty": "No beauty pass yet — run Stub or CPU beauty.",
+      "preview_label": "Beauty preview"
     },
     "fr": {
       "app_title": "Studio Illustration",
+      "tip_body": "Orbite glisser · clic pour sélectionner · glisser pour déplacer. Aperçu hors-ligne — beauté stub/CPU seulement.",
+      "assets_section": "Assets",
+      "project_section": "Projet",
+      "render_section": "Rendu beauté",
       "viewport_label": "Fenêtre 3D",
       "scene_label": "Scène",
-      "save_label": "Enregistrer le projet",
-      "load_label": "Charger le projet",
+      "scene_empty": "Aucune scène chargée. Utilisez Charger ou ajoutez un asset.",
+      "save_label": "Enregistrer",
+      "load_label": "Charger",
       "stub_render_label": "Beauté stub",
       "cpu_render_label": "Beauté CPU",
+      "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
-      "about_body": "Suite produit : SceneGraph + RenderService (stub/CPU) + pack primitives. Hors-ligne, sans Blender.",
-      "beauty_empty": "Pas encore de rendu beauté",
-      "preview_label": "Rendu beauté"
+      "beauty_empty": "Pas encore de rendu beauté — lancez Stub ou CPU.",
+      "preview_label": "Aperçu beauté"
     }
   },
   "state": {
@@ -88,8 +98,19 @@
         "pass": "beauty",
         "path": "/documents/illustrations/beauty-cpu.png",
         "scene_yaml": "$local.scene",
-        "width": 256,
-        "height": 192
+        "width": 320,
+        "height": 240
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_box",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "prop.box",
+        "parent_id": "root",
+        "prefix": "box_",
+        "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
     },
@@ -111,35 +132,77 @@
     "children": [
       {
         "kind": "text",
-        "label_key": "about_body"
+        "label_key": "tip_body"
       },
       {
-        "kind": "row",
+        "kind": "text",
+        "label_key": "scene_empty",
+        "visible": {
+          "eq": ["$local.scene", ""]
+        }
+      },
+      {
+        "kind": "section",
+        "label_key": "assets_section",
         "children": [
           {
-            "kind": "button",
-            "label_key": "save_label",
-            "action": "save_project"
-          },
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "add_humanoid_label",
+                "action": "instantiate_humanoid",
+                "primary": true
+              },
+              {
+                "kind": "button",
+                "label_key": "add_box_label",
+                "action": "instantiate_box"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "render_section",
+        "children": [
           {
-            "kind": "button",
-            "label_key": "load_label",
-            "action": "load_project"
-          },
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "cpu_render_label",
+                "action": "cpu_beauty",
+                "primary": true
+              },
+              {
+                "kind": "button",
+                "label_key": "stub_render_label",
+                "action": "stub_beauty"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "project_section",
+        "children": [
           {
-            "kind": "button",
-            "label_key": "stub_render_label",
-            "action": "stub_beauty"
-          },
-          {
-            "kind": "button",
-            "label_key": "cpu_render_label",
-            "action": "cpu_beauty"
-          },
-          {
-            "kind": "button",
-            "label_key": "add_humanoid_label",
-            "action": "instantiate_humanoid"
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "save_label",
+                "action": "save_project"
+              },
+              {
+                "kind": "button",
+                "label_key": "load_label",
+                "action": "load_project"
+              }
+            ]
           }
         ]
       },
@@ -155,7 +218,8 @@
                 "scene_key": "scene",
                 "selected_key": "selected_id",
                 "canvas_id": "illustration_viewport",
-                "label_key": "scene_label"
+                "label_key": "scene_label",
+                "empty_label_key": "scene_empty"
               }
             ]
           },
@@ -167,7 +231,8 @@
                 "scene_key": "scene",
                 "selected_key": "selected_id",
                 "canvas_id": "illustration_viewport",
-                "label_key": "viewport_label"
+                "label_key": "viewport_label",
+                "empty_label_key": "scene_empty"
               },
               {
                 "kind": "image_view",

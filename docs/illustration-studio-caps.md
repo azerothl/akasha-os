@@ -41,7 +41,7 @@ Unknown DeclUI services remain rejected. Render writes also require the illustra
 | `/documents/illustrations/state.json` | Package UI prefs |
 | `/documents/illustrations/beauty-stub.png` | Stub beauty output |
 | `/documents/illustrations/beauty-cpu.png` | CPU beauty / wireframe output |
-| `/assets/illustration/primitives/pack.yaml` | Embedded primitives pack (prop.box, humanoid.placeholder) |
+| `/assets/illustration/primitives/pack.yaml` | Embedded primitives pack (`prop.box`, `prop.ground`, `prop.pedestal`, `humanoid.placeholder`, `scene.starter`) |
 
 ## Widgets
 

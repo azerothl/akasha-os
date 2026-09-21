@@ -311,6 +311,7 @@ pub(crate) fn on_ui_service_done(
             }
             if module == "illustration-studio"
                 && (action_id == "instantiate_humanoid"
+                    || action_id == "instantiate_box"
                     || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE)
             {
                 if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
