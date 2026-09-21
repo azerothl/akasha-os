@@ -238,7 +238,7 @@ impl SceneGraph {
         chain.reverse();
         let mut world = Mat4::IDENTITY;
         for cid in chain {
-            world = world.mul(self.local_matrix(&cid)?);
+            world = world * self.local_matrix(&cid)?;
         }
         Ok(world)
     }

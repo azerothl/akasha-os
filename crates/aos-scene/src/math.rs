@@ -207,7 +207,15 @@ impl Quat {
         v + (uv * (2.0 * self.w)) + (uuv * 2.0)
     }
 
-    pub fn mul(self, rhs: Self) -> Self {
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
+    }
+}
+
+impl std::ops::Mul for Quat {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
         Self {
             x: self.w * rhs.x + self.x * rhs.w + self.y * rhs.z - self.z * rhs.y,
             y: self.w * rhs.y - self.x * rhs.z + self.y * rhs.w + self.z * rhs.x,
@@ -216,10 +224,6 @@ impl Quat {
         }
         .normalized()
         .unwrap_or(Self::IDENTITY)
-    }
-
-    pub fn is_finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
     }
 }
 
@@ -242,27 +246,11 @@ impl Mat4 {
 
     pub fn from_cols(c0: [f32; 4], c1: [f32; 4], c2: [f32; 4], c3: [f32; 4]) -> Self {
         let mut m = [0.0; 16];
-        for i in 0..4 {
-            m[i] = c0[i];
-            m[4 + i] = c1[i];
-            m[8 + i] = c2[i];
-            m[12 + i] = c3[i];
-        }
+        m[..4].copy_from_slice(&c0);
+        m[4..8].copy_from_slice(&c1);
+        m[8..12].copy_from_slice(&c2);
+        m[12..16].copy_from_slice(&c3);
         Self { m }
-    }
-
-    pub fn mul(self, rhs: Self) -> Self {
-        let mut out = [0.0; 16];
-        for col in 0..4 {
-            for row in 0..4 {
-                let mut s = 0.0;
-                for k in 0..4 {
-                    s += self.m[k * 4 + row] * rhs.m[col * 4 + k];
-                }
-                out[col * 4 + row] = s;
-            }
-        }
-        Self { m: out }
     }
 
     pub fn transform_point(self, p: Vec3) -> Vec3 {
@@ -319,5 +307,23 @@ impl Mat4 {
         ];
         let c3 = [translation.x, translation.y, translation.z, 1.0];
         Self::from_cols(c0, c1, c2, c3)
+    }
+}
+
+impl std::ops::Mul for Mat4 {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
+        let mut out = [0.0; 16];
+        for col in 0..4 {
+            for row in 0..4 {
+                let mut s = 0.0;
+                for k in 0..4 {
+                    s += self.m[k * 4 + row] * rhs.m[col * 4 + k];
+                }
+                out[col * 4 + row] = s;
+            }
+        }
+        Self { m: out }
     }
 }

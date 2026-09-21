@@ -237,7 +237,7 @@ pub fn ui_scene3d(
     let aspect = rect.width() / rect.height().max(1.0);
     let view = look_at_rh(eye, host.target, Vec3::UNIT_Y);
     let proj = perspective_rh(50.0_f32.to_radians(), aspect, 0.1, 200.0);
-    let view_proj = proj.mul(view);
+    let view_proj = proj * view;
 
     // Grid
     for i in -4..=4 {
