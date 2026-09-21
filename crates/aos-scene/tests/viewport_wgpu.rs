@@ -48,7 +48,7 @@ fn wgpu_renders_starter_scene_png() {
     assert_eq!(rgba.len(), 320 * 180 * 4);
     // Atmosphere clear is ~24,28,34 — lit meshes should move some pixels away.
     let mut non_bg = 0u32;
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let dr = (px[0] as i16 - 24).unsigned_abs();
         let dg = (px[1] as i16 - 28).unsigned_abs();
         let db = (px[2] as i16 - 34).unsigned_abs();
