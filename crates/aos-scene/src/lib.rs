@@ -14,9 +14,11 @@
 //! (DeclUI `scene3d`). It is **not** a beauty / NPR RenderService backend.
 
 mod assets;
+mod compose;
 mod math;
 mod ops;
 mod png;
+mod pose;
 mod project;
 mod render;
 mod render_stub;
@@ -29,8 +31,16 @@ pub use assets::{
     ASSET_ILLUSTRATION_READ_CAP, ASSET_PACK_FORMAT_VERSION, EMBEDDED_PRIMITIVES_PACK_YAML,
     ILLUSTRATION_ASSETS_PREFIX,
 };
+pub use compose::{
+    compose_from_prompt, compose_from_prompt_with_pack, ComposeError, ComposeIntent, ComposeResult,
+    SCENE_COMPOSE_CAP, SCENE_COMPOSE_SERVICE,
+};
 pub use math::{Mat4, Quat, Vec3, EPSILON};
 pub use ops::{SceneOp, UndoStack};
+pub use pose::{
+    apply_pose, apply_pose_preset, joint_node_id, JointId, PoseError, PoseOp, PosePreset,
+    SCENE_POSE_CAP, SCENE_POSE_SERVICE,
+};
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use render::{
     isolation_matrix, parse_backend, parse_pass, AkashaSceneExport, BlenderRenderBackend,

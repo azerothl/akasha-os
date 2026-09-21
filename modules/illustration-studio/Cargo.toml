@@ -1,7 +1,7 @@
 [package]
 name = "module-illustration-studio"
-description = "Illustration Studio foundation — SceneGraph viewport (no AI / no Blender)"
-version = "0.1.0"
+description = "Illustration Studio — prompt→SceneGraph, pose/IK-lite, beauty (functional v1)"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 

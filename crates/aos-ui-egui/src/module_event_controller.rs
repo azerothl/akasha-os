@@ -313,7 +313,14 @@ pub(crate) fn on_ui_service_done(
             if module == "illustration-studio"
                 && (action_id == "instantiate_humanoid"
                     || action_id == "instantiate_box"
-                    || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE)
+                    || action_id == "instantiate_slim"
+                    || action_id == "compose_scene"
+                    || action_id == "pose_wave"
+                    || action_id == "pose_look"
+                    || action_id == "pose_rest"
+                    || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE
+                    || action_id == aos_proto::SCENE_COMPOSE_SERVICE
+                    || action_id == aos_proto::SCENE_POSE_SERVICE)
             {
                 if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
                     panel
@@ -324,6 +331,23 @@ pub(crate) fn on_ui_service_done(
                     panel
                         .local_state
                         .insert("selected_id".into(), Value::String(root.to_string()));
+                }
+                if let Some(cid) = result.get("character_id").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("character_id".into(), Value::String(cid.to_string()));
+                    panel
+                        .local_state
+                        .insert("selected_id".into(), Value::String(cid.to_string()));
+                } else if matches!(
+                    action_id.as_str(),
+                    "instantiate_humanoid" | "instantiate_slim"
+                ) {
+                    if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
+                        panel
+                            .local_state
+                            .insert("character_id".into(), Value::String(root.to_string()));
+                    }
                 }
             }
         } else {

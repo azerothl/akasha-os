@@ -1,6 +1,6 @@
-# Illustration Studio — host capabilities (product suite)
+# Illustration Studio — host capabilities (functional v1)
 
-**Status:** product suite (RenderService + assets + optional Blender isolation + wgpu edit viewport)  
+**Status:** functional v1 (prompt→scene + pose/IK-lite + richer assets + beauty backends + wgpu edit viewport)  
 **Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md)
 
 ## Caps (fail-closed)
@@ -13,9 +13,11 @@
 | `render.cpu` | CPU SceneGraph wireframe / beauty backend (`render.submit` backend=`cpu`) |
 | `render.blender` | Isolated Blender beauty (Renderer Pack) or deterministic mock (`backend=`blender`) |
 | `asset.read:/assets/illustration/**` | Read / instantiate Illustration asset packs |
+| `scene.compose` | Heuristic prompt → SceneGraph compose (`scene.compose` service) |
+| `scene.pose` | Pose / IK-lite on humanoid joints (`scene.pose` service) |
 | `tool.invoke:illustration-studio` | Invoke package tools |
 
-Unknown DeclUI services remain rejected. Render writes also require the illustrations write cap. Asset instantiate requires `asset.read:/assets/illustration/**` (not ambient FS). Blender path is fail-closed without `render.blender`.
+Unknown DeclUI services remain rejected. Render writes also require the illustrations write cap. Asset instantiate requires `asset.read:/assets/illustration/**` (not ambient FS). Compose requires `scene.compose` **and** `asset.read:/assets/illustration/**`. Pose requires `scene.pose`. Blender path is fail-closed without `render.blender`.
 
 ### Path rules
 
@@ -24,15 +26,40 @@ Unknown DeclUI services remain rejected. Render writes also require the illustra
 | `/documents/illustrations/**` | Render output paths must stay here (`..` denied) |
 | `/assets/illustration/**` | Asset pack logical tree; `asset.read` fail-closed (optional future: `fs.read` under same prefix) |
 
-## DeclUI services
+## DeclUI services (agent / tool surface)
 
-| Service | Role |
-|---------|------|
-| `render.submit` | Job-shaped submit via host `RenderService` (backends: `stub`, `cpu`, `blender`) |
-| `render.status` | Poll job state |
-| `render.result` | Fetch completed job metadata / path |
-| `render.stub.beauty` | Legacy thin wrapper → stub backend |
-| `asset.instantiate` | Instantiate pack entry into SceneGraph YAML |
+These host services are the **minimal agent/tool surface** for Illustration Studio. They mutate or replace SceneGraph YAML and return it; the guest persists via `illustration.project.save`. Caps are checked fail-closed before execution.
+
+| Service | Cap(s) | Role |
+|---------|--------|------|
+| `scene.compose` | `scene.compose` + `asset.read:/assets/illustration/**` | Prompt → SceneGraph (templates / keyword heuristics; places camera + assets) |
+| `scene.pose` | `scene.pose` | Apply pose preset / FK joint rotate / look-at (IK-lite); undoable ops in host |
+| `render.submit` | `render.*` + write | Job-shaped beauty via RenderService (`stub`, `cpu`, `blender`) |
+| `render.status` / `render.result` | `render.*` | Job poll / result metadata |
+| `render.stub.beauty` | `render.stub` + write | Legacy thin wrapper → stub backend |
+| `asset.instantiate` | `asset.read:/assets/illustration/**` | Instantiate pack entry into SceneGraph YAML |
+
+### `scene.compose` input
+
+```json
+{ "prompt": "A man enters an old library." }
+```
+
+Result includes `scene_yaml`, `template_id`, `placed_assets`, `character_id`, `camera_id`.
+
+### `scene.pose` input
+
+```json
+{
+  "scene_yaml": "<project yaml>",
+  "humanoid_root": "humanoid",
+  "preset": "wave_right"
+}
+```
+
+Alternates: `"look_at": { "x", "y", "z" }` or `"joint"` + `"axis"` + `"angle_rad"` for FK.
+
+Presets: `rest`, `wave_right`, `wave_left`, `reach_forward`, `look_left`, `look_right`.
 
 ## Paths
 
@@ -43,7 +70,7 @@ Unknown DeclUI services remain rejected. Render writes also require the illustra
 | `/documents/illustrations/beauty-stub.png` | Stub beauty output |
 | `/documents/illustrations/beauty-cpu.png` | CPU beauty / wireframe output |
 | `/documents/illustrations/beauty-blender.png` | Blender / mock beauty output |
-| `/assets/illustration/primitives/pack.yaml` | Embedded primitives pack (`prop.box`, `prop.ground`, `prop.pedestal`, `humanoid.placeholder`, `scene.starter`) |
+| `/assets/illustration/primitives/pack.yaml` | Embedded primitives pack (props + humanoid variants + starter) |
 
 ## Widgets
 
@@ -63,4 +90,4 @@ SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The vie
 
 ## Out of scope here
 
-NPR style packs beyond minimal beauty, AI prompt→scene, IK/FK, beauty-quality GPU path, marketplace.
+Full NPR style packs, marketplace, comic/storyboard, neural mesh gen, complete IK solver, multi-agent locks.

@@ -13,12 +13,22 @@ pub enum SceneOp {
         before: Transform,
         after: Transform,
     },
+    /// Multiple transforms as one undo step (pose presets / IK-lite).
+    Batch {
+        ops: Vec<SceneOp>,
+    },
 }
 
 impl SceneOp {
     pub fn apply(&self, graph: &mut SceneGraph) -> Result<(), SceneError> {
         match self {
             SceneOp::SetTransform { id, after, .. } => graph.set_transform(id, after.clone()),
+            SceneOp::Batch { ops } => {
+                for op in ops {
+                    op.apply(graph)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -28,6 +38,9 @@ impl SceneOp {
                 id: id.clone(),
                 before: after.clone(),
                 after: before.clone(),
+            },
+            SceneOp::Batch { ops } => SceneOp::Batch {
+                ops: ops.iter().rev().map(SceneOp::invert).collect(),
             },
         }
     }
@@ -42,12 +55,21 @@ pub struct UndoStack {
 impl UndoStack {
     pub fn push_apply(&mut self, graph: &mut SceneGraph, op: SceneOp) -> Result<(), SceneError> {
         op.apply(graph)?;
+        self.record(op);
+        Ok(())
+    }
+
+    /// Record an op that was already applied to the graph (pose builders).
+    pub fn push_applied(&mut self, op: SceneOp) {
+        self.record(op);
+    }
+
+    fn record(&mut self, op: SceneOp) {
         self.undo.push(op);
         if self.undo.len() > MAX_UNDO {
             self.undo.remove(0);
         }
         self.redo.clear();
-        Ok(())
     }
 
     pub fn undo(&mut self, graph: &mut SceneGraph) -> Result<bool, SceneError> {

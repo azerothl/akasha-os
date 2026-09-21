@@ -17,6 +17,63 @@ entries:
     id: prop.pedestal
     name: Pedestal
     size: [1.2, 0.35, 1.2]
+  - kind: mesh_box
+    id: prop.counter
+    name: Counter
+    size: [2.4, 0.9, 0.7]
+  - kind: mesh_box
+    id: prop.bookshelf
+    name: Bookshelf
+    size: [1.2, 2.2, 0.35]
+  - kind: mesh_box
+    id: prop.door
+    name: Door
+    size: [0.9, 2.1, 0.12]
+  - kind: prefab
+    id: prop.chair
+    name: Chair
+    nodes:
+      - id: chair
+        name: Chair
+        kind: empty
+        translation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+      - id: seat
+        name: Seat
+        parent: chair
+        kind: mesh_box
+        translation: [0.0, 0.45, 0.0]
+        scale: [0.45, 0.08, 0.45]
+      - id: back
+        name: Back
+        parent: chair
+        kind: mesh_box
+        translation: [0.0, 0.85, -0.18]
+        scale: [0.45, 0.7, 0.08]
+      - id: leg_fl
+        name: LegFL
+        parent: chair
+        kind: mesh_box
+        translation: [-0.16, 0.22, 0.16]
+        scale: [0.06, 0.44, 0.06]
+      - id: leg_fr
+        name: LegFR
+        parent: chair
+        kind: mesh_box
+        translation: [0.16, 0.22, 0.16]
+        scale: [0.06, 0.44, 0.06]
+      - id: leg_bl
+        name: LegBL
+        parent: chair
+        kind: mesh_box
+        translation: [-0.16, 0.22, -0.16]
+        scale: [0.06, 0.44, 0.06]
+      - id: leg_br
+        name: LegBR
+        parent: chair
+        kind: mesh_box
+        translation: [0.16, 0.22, -0.16]
+        scale: [0.06, 0.44, 0.06]
   - kind: prefab
     id: humanoid.placeholder
     name: Humanoid
@@ -63,6 +120,52 @@ entries:
         kind: mesh_box
         translation: [0.38, 1.05, 0.0]
         scale: [0.12, 0.5, 0.12]
+  # Second character variant — shorter / slimmer proportions (child or slight figure).
+  - kind: prefab
+    id: humanoid.slim
+    name: Humanoid slim
+    nodes:
+      - id: humanoid
+        name: Humanoid slim
+        kind: empty
+        translation: [0.0, 0.0, 0.0]
+        scale: [1.0, 1.0, 1.0]
+      - id: torso
+        name: Torso
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.0, 0.78, 0.0]
+        scale: [0.32, 0.42, 0.18]
+      - id: head
+        name: Head
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.0, 1.18, 0.0]
+        scale: [0.2, 0.2, 0.2]
+      - id: leg_l
+        name: LegL
+        parent: humanoid
+        kind: mesh_box
+        translation: [-0.09, 0.28, 0.0]
+        scale: [0.1, 0.55, 0.1]
+      - id: leg_r
+        name: LegR
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.09, 0.28, 0.0]
+        scale: [0.1, 0.55, 0.1]
+      - id: arm_l
+        name: ArmL
+        parent: humanoid
+        kind: mesh_box
+        translation: [-0.28, 0.82, 0.0]
+        scale: [0.09, 0.4, 0.09]
+      - id: arm_r
+        name: ArmR
+        parent: humanoid
+        kind: mesh_box
+        translation: [0.28, 0.82, 0.0]
+        scale: [0.09, 0.4, 0.09]
   - kind: prefab
     id: scene.starter
     name: Starter set

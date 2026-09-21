@@ -1,5 +1,5 @@
 name: illustration-studio
-version: 0.2.2
+version: 0.3.0
 hash: 934565c1f56731fbdeb505db834b62a64bf0aaf400989e3f73a0db98ae290b3b
 permissions:
   required_caps:
@@ -9,6 +9,8 @@ permissions:
     - render.cpu
     - render.blender
     - asset.read:/assets/illustration/**
+    - scene.compose
+    - scene.pose
     - tool.invoke:illustration-studio
 tools:
   - name: illustration.project.load
