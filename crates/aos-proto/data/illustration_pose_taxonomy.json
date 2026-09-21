@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "families": [
+    {
+      "id": "humanoid",
+      "label": "humanoïde",
+      "keywords": ["homme", "femme", "person", "humain", "human", "jardinier", "gardener", "monsieur", "woman", "man"],
+      "default_pose": "human_standing",
+      "groups": [
+        {
+          "id": "primate",
+          "label": "primate",
+          "keywords": ["humain", "human", "homme", "femme", "jardinier", "gardener", "lémur", "lemur"],
+          "default_pose": "human_standing",
+          "types": [
+            {
+              "id": "human",
+              "label": "humain",
+              "keywords": ["homme", "femme", "person", "humain", "human", "jardinier", "gardener", "monsieur", "woman"],
+              "pose": "human_standing",
+              "pose_if": [
+                { "any": ["assis", "assise", "sitting", "seated", "fauteuil", "banc", "bench", "armchair"], "pose": "human_sitting" }
+              ]
+            },
+            {
+              "id": "lemur",
+              "label": "lémurien",
+              "keywords": ["lémur", "lemur"],
+              "pose": "quadruped_default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mammal_quadruped",
+      "label": "mammifère quadrupède",
+      "keywords": ["chat", "cat", "kitten", "chien", "dog", "puppy", "ours", "bear", "éléphant", "elephant"],
+      "default_pose": "quadruped_default",
+      "groups": [
+        {
+          "id": "carnivore",
+          "label": "carnivore",
+          "keywords": ["chat", "cat", "kitten", "chien", "dog", "puppy", "ours", "bear"],
+          "default_pose": "quadruped_default",
+          "types": [
+            {
+              "id": "cat",
+              "label": "chat",
+              "keywords": ["chat", "cat", "kitten"],
+              "pose": "quadruped_cat"
+            },
+            {
+              "id": "dog",
+              "label": "chien",
+              "keywords": ["chien", "dog", "puppy"],
+              "pose": "quadruped_dog"
+            },
+            {
+              "id": "bear",
+              "label": "ours",
+              "keywords": ["ours", "bear"],
+              "pose": "quadruped_default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "object",
+      "label": "objet",
+      "keywords": ["objet", "object", "boîte", "box"],
+      "default_pose": "object_box",
+      "groups": [
+        {
+          "id": "furniture",
+          "label": "meuble",
+          "keywords": ["banc", "bench", "fauteuil", "armchair", "canap", "sofa", "coussin", "cushion"],
+          "default_pose": "furniture_seat",
+          "types": [
+            {
+              "id": "bench",
+              "label": "banc",
+              "keywords": ["banc", "bench"],
+              "pose": "furniture_seat"
+            },
+            {
+              "id": "armchair",
+              "label": "fauteuil",
+              "keywords": ["fauteuil", "armchair"],
+              "pose": "furniture_seat"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nature",
+      "label": "nature",
+      "keywords": ["jardin", "garden", "arbre", "tree", "fleur", "flower", "plante", "plant"],
+      "default_pose": "nature_mass",
+      "groups": [
+        {
+          "id": "flora",
+          "label": "flore",
+          "keywords": ["arbre", "tree", "fleur", "flower", "plante", "plant", "jardin", "garden"],
+          "default_pose": "nature_mass",
+          "types": [
+            {
+              "id": "tree",
+              "label": "arbre",
+              "keywords": ["arbre", "tree"],
+              "pose": "nature_mass"
+            },
+            {
+              "id": "flower",
+              "label": "fleur",
+              "keywords": ["fleur", "flower"],
+              "pose": "nature_mass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unknown",
+      "label": "inconnu",
+      "keywords": [],
+      "default_pose": null,
+      "groups": []
+    }
+  ],
+  "secondary_hints": [
+    { "id": "pipe", "family": "object", "keywords": ["pipe", "fum"] },
+    { "id": "garden", "family": "nature", "keywords": ["jardin", "garden", "fleur", "flower", "arbre", "tree"] },
+    { "id": "seat", "family": "object", "group": "furniture", "keywords": ["banc", "bench", "fauteuil", "armchair", "canap", "sofa"] }
+  ]
+}

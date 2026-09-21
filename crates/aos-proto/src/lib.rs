@@ -19,6 +19,8 @@ pub mod downloads_layout;
 pub mod host_folder;
 mod illustration;
 mod illustration_action;
+mod illustration_joint_rig;
+mod illustration_taxonomy;
 pub mod mem_extract;
 pub mod rich_app_contract;
 pub mod rich_composition;
@@ -100,21 +102,29 @@ pub use canvas_style::{
 pub use illustration::{
     enrich_illustration_puppet, illustration_digest, review_illustration, IllustAnimateRequest,
     IllustAnimateResponse, IllustComposeRequest, IllustComposeResponse, IllustExportRequest,
-    IllustGenerateImageRequest, IllustRefineImageRequest, IllustResolveImageRequest, IllustrationImageRun, IllustrationImageStatus,
-    IllustGetRequest, IllustGetResponse, IllustLockAcquireRequest, IllustLockReleaseRequest,
-    IllustLockStatusRequest, IllustLockStatusResponse, IllustRenderSheetRequest, IllustReviewIssue,
-    IllustReviewRequest, IllustReviewResponse, IllustSetBriefRequest, IllustSetOpenRequest,
-    IllustrationArchetype, IllustrationBrief, IllustrationCamera, IllustrationConstructionOval,
-    IllustrationConstructionPhase, IllustrationConstructionPlan,
-    IllustrationDoc, IllustrationEngine, IllustrationFinish, IllustrationKeyDrawing,
-    IllustrationLock, IllustrationLook, IllustrationPaletteColors, IllustrationPaletteId,
-    IllustrationPart, IllustrationPartGeometry, IllustrationPose, IllustrationRenderMode,
-    IllustrationSkeletonJoint, IllustrationSpec, IllustrationTimeline, IllustrationTimelineBeat,
-    IllustrationVolume,
+    IllustGenerateImageRequest, IllustGetRequest, IllustGetResponse, IllustLockAcquireRequest,
+    IllustLockReleaseRequest, IllustLockStatusRequest, IllustLockStatusResponse,
+    IllustRefineImageRequest, IllustRenderSheetRequest, IllustResolveImageRequest,
+    IllustReviewIssue, IllustReviewRequest, IllustReviewResponse, IllustSetBriefRequest,
+    IllustSetOpenRequest, IllustrationArchetype, IllustrationBrief, IllustrationCamera,
+    IllustrationConstructionOval, IllustrationConstructionPhase, IllustrationConstructionPlan,
+    IllustrationDoc, IllustrationEngine, IllustrationFinish, IllustrationImageRun,
+    IllustrationImageStatus, IllustrationKeyDrawing, IllustrationLock, IllustrationLook,
+    IllustrationPaletteColors, IllustrationPaletteId, IllustrationPart, IllustrationPartGeometry,
+    IllustrationPose, IllustrationRenderMode, IllustrationSkeletonJoint, IllustrationSpec,
+    IllustrationTimeline, IllustrationTimelineBeat, IllustrationVolume,
 };
 pub use illustration_action::{
     action_timeline, apply_prompt_defaults, ease_io, lerp_pose, resolve_timeline, sign_off_word,
     video_trace_error,
+};
+pub use illustration_joint_rig::{
+    human_bone_length, human_joint_locks, human_segment_rule, propagate_human_joint_edit,
+    reconcile_human_skeleton, HumanJointEdit, JointLock, JointSegmentRule,
+};
+pub use illustration_taxonomy::{
+    apply_taxonomy_skeleton, classify_illustration_subject, pose_instance_for, taxonomy_catalog,
+    taxonomy_locks_puppet, ClassificationResult, PoseInstance, TaxonomyCatalog,
 };
 
 // ---------------------------------------------------------------------------

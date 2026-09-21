@@ -487,6 +487,9 @@ pub enum IllustrationArchetype {
     Object,
     Furniture,
     Environment,
+    /// A label the model invented. It does not reject the compose.
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -555,6 +558,13 @@ pub struct IllustrationSkeletonJoint {
     pub y: f32,
     #[serde(default)]
     pub radius: f32,
+    /// Orientation in radians. Only `head` is read. A rotation must not move `x` or `y`.
+    #[serde(default)]
+    pub pitch: f32,
+    #[serde(default)]
+    pub yaw: f32,
+    #[serde(default)]
+    pub roll: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -685,8 +695,13 @@ impl IllustrationSpec {
         let mut resolved = self.clone();
         resolved.solve_contacts()?;
         for (id, anchors) in &self.joint_bindings {
-            let joint = |name: &str| resolved.skeleton.iter().find(|j| j.id == name)
-                .ok_or_else(|| format!("{id}: missing joint {name}"));
+            let joint = |name: &str| {
+                resolved
+                    .skeleton
+                    .iter()
+                    .find(|j| j.id == name)
+                    .ok_or_else(|| format!("{id}: missing joint {name}"))
+            };
             let a = joint(&anchors[0])?.clone();
             let b = joint(&anchors[1])?.clone();
             let dx = b.x - a.x;
@@ -695,9 +710,15 @@ impl IllustrationSpec {
                 return Err(format!("{id}: invalid or collapsed joint axis"));
             }
             let mut found = false;
-            for part in resolved.parts.iter_mut()
-                .chain(resolved.contours.iter_mut()).chain(resolved.details.iter_mut()) {
-                if part.id != *id { continue; }
+            for part in resolved
+                .parts
+                .iter_mut()
+                .chain(resolved.contours.iter_mut())
+                .chain(resolved.details.iter_mut())
+            {
+                if part.id != *id {
+                    continue;
+                }
                 found = true;
                 let IllustrationPartGeometry::Path { points, .. } = &mut part.geometry else {
                     return Err(format!("{id}: joint binding requires a path"));
@@ -713,9 +734,14 @@ impl IllustrationSpec {
             }
             for volume in resolved.volumes.iter_mut().filter(|v| v.id == *id) {
                 found = true;
-                if !volume.x.is_finite() || !volume.y.is_finite()
-                    || !volume.w.is_finite() || !volume.h.is_finite()
-                    || !volume.rotation.is_finite() || volume.w <= 0.0 || volume.h <= 0.0 {
+                if !volume.x.is_finite()
+                    || !volume.y.is_finite()
+                    || !volume.w.is_finite()
+                    || !volume.h.is_finite()
+                    || !volume.rotation.is_finite()
+                    || volume.w <= 0.0
+                    || volume.h <= 0.0
+                {
                     return Err(format!("{id}: invalid local volume"));
                 }
                 let u = volume.x + volume.w * 0.5;
@@ -727,7 +753,9 @@ impl IllustrationSpec {
                 volume.y = a.y + u * dy + v * dx - volume.h * 0.5;
                 volume.rotation += dy.atan2(dx);
             }
-            if !found { return Err(format!("{id}: binding has no contour or volume")); }
+            if !found {
+                return Err(format!("{id}: binding has no contour or volume"));
+            }
         }
         resolved.joint_bindings.clear();
         Ok(resolved)
@@ -737,11 +765,20 @@ impl IllustrationSpec {
         let mut joints = std::collections::HashMap::new();
         for joint in &self.skeleton {
             if joint.id.trim().is_empty() || joints.insert(joint.id.as_str(), joint).is_some() {
-                return Err(format!("skeleton: empty or duplicate joint id '{}'", joint.id));
+                return Err(format!(
+                    "skeleton: empty or duplicate joint id '{}'",
+                    joint.id
+                ));
             }
-            if !joint.x.is_finite() || !joint.y.is_finite()
-                || !joint.radius.is_finite() || joint.radius < 0.0 {
-                return Err(format!("skeleton: invalid coordinates/radius for {}", joint.id));
+            if !joint.x.is_finite()
+                || !joint.y.is_finite()
+                || !joint.radius.is_finite()
+                || joint.radius < 0.0
+            {
+                return Err(format!(
+                    "skeleton: invalid coordinates/radius for {}",
+                    joint.id
+                ));
             }
         }
         for joint in &self.skeleton {
@@ -751,9 +788,15 @@ impl IllustrationSpec {
                 if !visited.insert(current.id.as_str()) {
                     return Err(format!("skeleton: parent cycle involving {}", current.id));
                 }
-                let Some(parent) = current.parent.as_deref() else { break; };
-                current = joints.get(parent).copied()
-                    .ok_or_else(|| format!("skeleton: {} references missing parent {parent}", current.id))?;
+                let Some(parent) = current.parent.as_deref() else {
+                    break;
+                };
+                current = joints.get(parent).copied().ok_or_else(|| {
+                    format!(
+                        "skeleton: {} references missing parent {parent}",
+                        current.id
+                    )
+                })?;
             }
         }
         Ok(())
@@ -765,39 +808,61 @@ impl IllustrationSpec {
         let mut moved = std::collections::HashSet::new();
         for (name, ids) in &self.contacts {
             if ids.iter().collect::<std::collections::HashSet<_>>().len() != 4
-                || !moved.insert(ids[1].clone()) || !moved.insert(ids[2].clone()) {
+                || !moved.insert(ids[1].clone())
+                || !moved.insert(ids[2].clone())
+            {
                 return Err(format!("{name}: overlapping or repeated contact joints"));
             }
         }
         for (name, ids) in &self.contacts {
             if moved.contains(&ids[0]) || moved.contains(&ids[3]) {
-                return Err(format!("{name}: contact root and target must be fixed landmarks"));
+                return Err(format!(
+                    "{name}: contact root and target must be fixed landmarks"
+                ));
             }
-            let find = |id: &str| self.skeleton.iter().position(|j| j.id == id)
-                .ok_or_else(|| format!("{name}: missing contact joint {id}"));
-            let [ai, bi, ci, ti] = [find(&ids[0])?, find(&ids[1])?, find(&ids[2])?, find(&ids[3])?];
+            let find = |id: &str| {
+                self.skeleton
+                    .iter()
+                    .position(|j| j.id == id)
+                    .ok_or_else(|| format!("{name}: missing contact joint {id}"))
+            };
+            let [ai, bi, ci, ti] = [
+                find(&ids[0])?,
+                find(&ids[1])?,
+                find(&ids[2])?,
+                find(&ids[3])?,
+            ];
             let a = &self.skeleton[ai];
             let b = &self.skeleton[bi];
             let c = &self.skeleton[ci];
             let t = &self.skeleton[ti];
-            if [a,b,c,t].iter().any(|j| !j.x.is_finite() || !j.y.is_finite()) {
+            if [a, b, c, t]
+                .iter()
+                .any(|j| !j.x.is_finite() || !j.y.is_finite())
+            {
                 return Err(format!("{name}: non-finite contact coordinate"));
             }
-            let l1 = (b.x-a.x).hypot(b.y-a.y);
-            let l2 = (c.x-b.x).hypot(c.y-b.y);
-            let (dx,dy) = (t.x-a.x,t.y-a.y);
+            let l1 = (b.x - a.x).hypot(b.y - a.y);
+            let l2 = (c.x - b.x).hypot(c.y - b.y);
+            let (dx, dy) = (t.x - a.x, t.y - a.y);
             let d = dx.hypot(dy);
-            if l1 < 0.00001 || l2 < 0.00001 || d < 0.00001
-                || d > l1+l2+0.000001 || d < (l1-l2).abs()-0.000001 {
-                return Err(format!("{name}: contact target unreachable without changing limb lengths"));
+            if l1 < 0.00001
+                || l2 < 0.00001
+                || d < 0.00001
+                || d > l1 + l2 + 0.000001
+                || d < (l1 - l2).abs() - 0.000001
+            {
+                return Err(format!(
+                    "{name}: contact target unreachable without changing limb lengths"
+                ));
             }
-            let along = (l1*l1-l2*l2+d*d)/(2.0*d);
-            let height = (l1*l1-along*along).max(0.0).sqrt();
-            let cross = dx*(b.y-a.y)-dy*(b.x-a.x);
+            let along = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d);
+            let height = (l1 * l1 - along * along).max(0.0).sqrt();
+            let cross = dx * (b.y - a.y) - dy * (b.x - a.x);
             let side = if cross < 0.0 { -1.0 } else { 1.0 };
-            let bend_x = a.x + along*dx/d - side*height*dy/d;
-            let bend_y = a.y + along*dy/d + side*height*dx/d;
-            let (target_x,target_y) = (t.x,t.y);
+            let bend_x = a.x + along * dx / d - side * height * dy / d;
+            let bend_y = a.y + along * dy / d + side * height * dx / d;
+            let (target_x, target_y) = (t.x, t.y);
             self.skeleton[bi].x = bend_x;
             self.skeleton[bi].y = bend_y;
             self.skeleton[ci].x = target_x;
@@ -841,7 +906,11 @@ pub struct IllustrationLock {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum IllustrationImageStatus { Running, NeedsReview, Failed }
+pub enum IllustrationImageStatus {
+    Running,
+    NeedsReview,
+    Failed,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IllustrationImageRun {
@@ -1095,12 +1164,16 @@ pub fn review_illustration(doc: &IllustrationDoc) -> IllustReviewResponse {
         issues.push(IllustReviewIssue {
             kind: "unfinished_construction".into(),
             severity: "error".into(),
-            message: "Construction pass is still in progress. Continue composing before final export.".into(),
+            message:
+                "Construction pass is still in progress. Continue composing before final export."
+                    .into(),
         });
     }
     if let Err(message) = spec.resolve_joint_bindings() {
         issues.push(IllustReviewIssue {
-            kind: "invalid_joint_binding".into(), severity: "error".into(), message,
+            kind: "invalid_joint_binding".into(),
+            severity: "error".into(),
+            message,
         });
     }
     if spec.parts.is_empty() {
@@ -1183,7 +1256,8 @@ pub fn review_illustration(doc: &IllustrationDoc) -> IllustReviewResponse {
             issues.push(IllustReviewIssue {
                 kind: "missing_action_line".into(),
                 severity: "warning".into(),
-                message: "Add an action line before volumes so the pose does not become rigid.".into(),
+                message: "Add an action line before volumes so the pose does not become rigid."
+                    .into(),
             });
         }
         if spec.construction.focal_point.trim().is_empty() {
@@ -1211,7 +1285,8 @@ pub fn review_illustration(doc: &IllustrationDoc) -> IllustReviewResponse {
             issues.push(IllustReviewIssue {
                 kind: "missing_model_sheet".into(),
                 severity: "warning".into(),
-                message: "Keep stable face/profile/three-quarter/back references for redraws.".into(),
+                message: "Keep stable face/profile/three-quarter/back references for redraws."
+                    .into(),
             });
         }
     }
@@ -1277,6 +1352,35 @@ pub fn review_illustration(doc: &IllustrationDoc) -> IllustReviewResponse {
             message: "Silhouette is a stack of near-circles (skill rule 12 fails at 240px). Recompose with empty parts so the puppet replaces the snowman — overlapping body/head/ears, plus sofa or cushion."
                 .into(),
         });
+    }
+    // Taxonomic armature present: refuse ellipse-only (or unbound) dressing.
+    if taxonomic_skeleton_present(&spec.skeleton) {
+        let subject_parts: Vec<_> = spec
+            .parts
+            .iter()
+            .filter(|p| !is_background_part(p) && !is_furniture_part(p))
+            .collect();
+        let has_bound_path = spec.parts.iter().any(|p| {
+            !is_background_part(p)
+                && matches!(
+                    &p.geometry,
+                    IllustrationPartGeometry::Path { points, .. } if points.len() >= 8
+                )
+                && (spec.joint_bindings.contains_key(&p.id)
+                    || p.role == "body"
+                    || p.role == "head"
+                    || p.id.contains("body")
+                    || p.id.contains("head"))
+        });
+        let all_subject_ellipses =
+            !subject_parts.is_empty() && subject_parts.iter().copied().all(is_ellipse_part);
+        if subject_parts.is_empty() || all_subject_ellipses || !has_bound_path {
+            issues.push(IllustReviewIssue {
+                kind: "skeleton_undressed".into(),
+                severity: "error".into(),
+                message: "A taxonomic skeleton is present but the subject is still undressed (empty, ellipse-only, or without bound path contours). Add joint-bound path geometry; do not replace the skeleton with a new ellipse puppet.".into(),
+            });
+        }
     }
     // A still must contain at least one authored contour. Primitive-only
     // scenes can be valid diagrams, but they are not an acceptable subject
@@ -1395,21 +1499,43 @@ pub fn review_illustration(doc: &IllustrationDoc) -> IllustReviewResponse {
 /// a pipe, a garden — keeps the parts the agent composed. The generic blob is
 /// not a fallback for every sentence.
 pub fn enrich_illustration_puppet(spec: &mut IllustrationSpec) {
-    // Explicit construction passes are authored state, including unfinished
-    // drawings. Never replace them with a finished keyword recipe on preview.
-    if spec.construction_phase != IllustrationConstructionPhase::Final
-        || !spec.skeleton.is_empty()
+    // Early passes must still become a visible drawing: pose, then masses,
+    // then contours. A finished keyword recipe is only a last resort on an
+    // empty final with no construction at all.
+    if spec.construction_phase != IllustrationConstructionPhase::Final {
+        stage_construction_phase(spec);
+        return;
+    }
+    if !spec.skeleton.is_empty()
         || !spec.volumes.is_empty()
         || !spec.contours.is_empty()
         || !spec.details.is_empty()
     {
         return;
     }
+    // Taxonomy poser: fill an empty primary skeleton (+ secondaries/contacts)
+    // before recipes. Abstention leaves skeleton empty (OOD fallback).
+    let taxonomy = crate::apply_taxonomy_skeleton(spec);
+    let taxonomy_lock = crate::taxonomy_locks_puppet(&taxonomy) && !spec.skeleton.is_empty();
     let subject = spec.brief.subject.to_ascii_lowercase();
     if spec.construction == IllustrationConstructionPlan::default() {
         spec.construction = construction_plan_for_subject(&subject);
     }
     let has_drawing = spec.parts.iter().any(|p| !is_background_part(p));
+
+    // Confident taxonomy: agent dresses on the armature. Do not replace with
+    // species/person/keyword ellipse recipes that ignore the skeleton.
+    // Multi-character briefs still use the legacy split recipes.
+    if taxonomy_lock && !looks_multi_character(&subject) {
+        if has_drawing {
+            fix_center_anchored(&mut spec.parts);
+        } else if !spec.parts.iter().any(is_scene_backdrop) {
+            spec.parts = default_background_for_subject(&subject);
+        }
+        append_missing_props(spec, &subject);
+        ensure_scribble_and_construction(spec);
+        return;
+    }
 
     if is_species_recipe(&subject) {
         if !needs_puppet_enrichment(&spec.parts, &subject) {
@@ -1468,6 +1594,28 @@ fn is_species_recipe(subject: &str) -> bool {
         || subject.contains("pingouin")
         || subject.contains("penguin")
         || is_elephant(subject)
+}
+
+fn looks_multi_character(subject: &str) -> bool {
+    let markers = [
+        "chat",
+        "cat",
+        "chien",
+        "dog",
+        "elephant",
+        "éléphant",
+        "pingouin",
+        "penguin",
+        "ours",
+        "bear",
+        "homme",
+        "femme",
+        "jardinier",
+        "man",
+        "woman",
+    ];
+    let hits = markers.iter().filter(|m| subject.contains(*m)).count();
+    hits >= 2
 }
 
 /// Agents often send ellipse x,y as the centre. The raster reads top-left.
@@ -1592,42 +1740,278 @@ struct PoseJoint {
 }
 
 fn human_pose_joints(sitting: bool) -> Vec<PoseJoint> {
+    // Same eight-head canon as `human_standing` / `human_sitting` in the taxonomy poser.
     if sitting {
         vec![
-            PoseJoint { id: "pelvis", parent: None, x: 0.46, y: 0.61, radius: 0.045 },
-            PoseJoint { id: "chest", parent: Some("pelvis"), x: 0.46, y: 0.46, radius: 0.06 },
-            PoseJoint { id: "neck", parent: Some("chest"), x: 0.47, y: 0.35, radius: 0.028 },
-            PoseJoint { id: "head", parent: Some("neck"), x: 0.48, y: 0.23, radius: 0.075 },
-            PoseJoint { id: "shoulder_l", parent: Some("chest"), x: 0.36, y: 0.405, radius: 0.025 },
-            PoseJoint { id: "elbow_l", parent: Some("shoulder_l"), x: 0.54, y: 0.40, radius: 0.022 },
-            PoseJoint { id: "hand_l", parent: Some("elbow_l"), x: 0.68, y: 0.33, radius: 0.018 },
-            // The pipe hand follows a believable bent chain: shoulder -> low elbow -> mouth.
-            // Keeping the hand near the face prevents the forearm from passing behind the shoulder.
-            PoseJoint { id: "shoulder_r", parent: Some("chest"), x: 0.56, y: 0.415, radius: 0.025 },
-            PoseJoint { id: "elbow_r", parent: Some("shoulder_r"), x: 0.64, y: 0.52, radius: 0.022 },
-            PoseJoint { id: "hand_r", parent: Some("elbow_r"), x: 0.60, y: 0.325, radius: 0.018 },
-            PoseJoint { id: "hip_l", parent: Some("pelvis"), x: 0.48, y: 0.64, radius: 0.025 },
-            PoseJoint { id: "knee_l", parent: Some("hip_l"), x: 0.63, y: 0.68, radius: 0.022 },
-            PoseJoint { id: "ankle_l", parent: Some("knee_l"), x: 0.65, y: 0.84, radius: 0.018 },
-            PoseJoint { id: "hip_r", parent: Some("pelvis"), x: 0.40, y: 0.64, radius: 0.025 },
-            PoseJoint { id: "knee_r", parent: Some("hip_r"), x: 0.31, y: 0.70, radius: 0.022 },
-            PoseJoint { id: "ankle_r", parent: Some("knee_r"), x: 0.32, y: 0.82, radius: 0.018 },
+            PoseJoint {
+                id: "pelvis",
+                parent: None,
+                x: 0.46,
+                y: 0.58,
+                radius: 0.032,
+            },
+            PoseJoint {
+                id: "waist",
+                parent: Some("pelvis"),
+                x: 0.46,
+                y: 0.4675,
+                radius: 0.024,
+            },
+            PoseJoint {
+                id: "chest",
+                parent: Some("waist"),
+                x: 0.46,
+                y: 0.40,
+                radius: 0.038,
+            },
+            PoseJoint {
+                id: "neck",
+                parent: Some("chest"),
+                x: 0.46,
+                y: 0.328,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "head",
+                parent: Some("neck"),
+                x: 0.46,
+                y: 0.265,
+                radius: 0.045,
+            },
+            PoseJoint {
+                id: "shoulder_l",
+                parent: Some("chest"),
+                x: 0.37,
+                y: 0.3595,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "elbow_l",
+                parent: Some("shoulder_l"),
+                x: 0.316,
+                y: 0.485,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "hand_l",
+                parent: Some("elbow_l"),
+                x: 0.40,
+                y: 0.56,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "shoulder_r",
+                parent: Some("chest"),
+                x: 0.55,
+                y: 0.3595,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "elbow_r",
+                parent: Some("shoulder_r"),
+                x: 0.604,
+                y: 0.485,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "hand_r",
+                parent: Some("elbow_r"),
+                x: 0.52,
+                y: 0.56,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "hip_l",
+                parent: Some("pelvis"),
+                x: 0.415,
+                y: 0.58,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "knee_l",
+                parent: Some("hip_l"),
+                x: 0.561,
+                y: 0.639,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "ankle_l",
+                parent: Some("knee_l"),
+                x: 0.573,
+                y: 0.796,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "foot_l",
+                parent: Some("ankle_l"),
+                x: 0.621,
+                y: 0.818,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "hip_r",
+                parent: Some("pelvis"),
+                x: 0.505,
+                y: 0.58,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "knee_r",
+                parent: Some("hip_r"),
+                x: 0.657,
+                y: 0.622,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "ankle_r",
+                parent: Some("knee_r"),
+                x: 0.669,
+                y: 0.779,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "foot_r",
+                parent: Some("ankle_r"),
+                x: 0.717,
+                y: 0.801,
+                radius: 0.016,
+            },
         ]
     } else {
         vec![
-            PoseJoint { id: "pelvis", parent: None, x: 0.43, y: 0.62, radius: 0.045 },
-            PoseJoint { id: "chest", parent: Some("pelvis"), x: 0.43, y: 0.46, radius: 0.06 },
-            PoseJoint { id: "neck", parent: Some("chest"), x: 0.45, y: 0.34, radius: 0.028 },
-            PoseJoint { id: "head", parent: Some("neck"), x: 0.46, y: 0.22, radius: 0.075 },
-            PoseJoint { id: "shoulder_l", parent: Some("chest"), x: 0.36, y: 0.43, radius: 0.025 },
-            PoseJoint { id: "elbow_l", parent: Some("shoulder_l"), x: 0.55, y: 0.39, radius: 0.022 },
-            PoseJoint { id: "hand_l", parent: Some("elbow_l"), x: 0.69, y: 0.33, radius: 0.018 },
-            PoseJoint { id: "hip_l", parent: Some("pelvis"), x: 0.39, y: 0.65, radius: 0.025 },
-            PoseJoint { id: "knee_l", parent: Some("hip_l"), x: 0.36, y: 0.77, radius: 0.022 },
-            PoseJoint { id: "ankle_l", parent: Some("knee_l"), x: 0.34, y: 0.88, radius: 0.018 },
-            PoseJoint { id: "hip_r", parent: Some("pelvis"), x: 0.48, y: 0.65, radius: 0.025 },
-            PoseJoint { id: "knee_r", parent: Some("hip_r"), x: 0.52, y: 0.77, radius: 0.022 },
-            PoseJoint { id: "ankle_r", parent: Some("knee_r"), x: 0.55, y: 0.88, radius: 0.018 },
+            PoseJoint {
+                id: "pelvis",
+                parent: None,
+                x: 0.46,
+                y: 0.48,
+                radius: 0.032,
+            },
+            PoseJoint {
+                id: "waist",
+                parent: Some("pelvis"),
+                x: 0.46,
+                y: 0.3675,
+                radius: 0.024,
+            },
+            PoseJoint {
+                id: "chest",
+                parent: Some("waist"),
+                x: 0.46,
+                y: 0.30,
+                radius: 0.038,
+            },
+            PoseJoint {
+                id: "neck",
+                parent: Some("chest"),
+                x: 0.46,
+                y: 0.228,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "head",
+                parent: Some("neck"),
+                x: 0.46,
+                y: 0.165,
+                radius: 0.045,
+            },
+            PoseJoint {
+                id: "shoulder_l",
+                parent: Some("chest"),
+                x: 0.37,
+                y: 0.2595,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "elbow_l",
+                parent: Some("shoulder_l"),
+                x: 0.35,
+                y: 0.3945,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "hand_l",
+                parent: Some("elbow_l"),
+                x: 0.345,
+                y: 0.507,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "shoulder_r",
+                parent: Some("chest"),
+                x: 0.55,
+                y: 0.2595,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "elbow_r",
+                parent: Some("shoulder_r"),
+                x: 0.57,
+                y: 0.3945,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "hand_r",
+                parent: Some("elbow_r"),
+                x: 0.575,
+                y: 0.507,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "hip_l",
+                parent: Some("pelvis"),
+                x: 0.415,
+                y: 0.48,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "knee_l",
+                parent: Some("hip_l"),
+                x: 0.41,
+                y: 0.6375,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "ankle_l",
+                parent: Some("knee_l"),
+                x: 0.412,
+                y: 0.795,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "foot_l",
+                parent: Some("ankle_l"),
+                x: 0.44,
+                y: 0.84,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "hip_r",
+                parent: Some("pelvis"),
+                x: 0.505,
+                y: 0.48,
+                radius: 0.02,
+            },
+            PoseJoint {
+                id: "knee_r",
+                parent: Some("hip_r"),
+                x: 0.51,
+                y: 0.6375,
+                radius: 0.018,
+            },
+            PoseJoint {
+                id: "ankle_r",
+                parent: Some("knee_r"),
+                x: 0.508,
+                y: 0.795,
+                radius: 0.016,
+            },
+            PoseJoint {
+                id: "foot_r",
+                parent: Some("ankle_r"),
+                x: 0.53,
+                y: 0.84,
+                radius: 0.016,
+            },
         ]
     }
 }
@@ -1673,25 +2057,65 @@ fn capsule_part(
 fn human_silhouette_from_skeleton(sitting: bool) -> IllustrationPart {
     let points = if sitting {
         vec![
-            (0.405, 0.16), (0.48, 0.125), (0.555, 0.17), (0.565, 0.27),
-            (0.525, 0.345), (0.405, 0.385), (0.345, 0.455), (0.355, 0.585),
-            (0.425, 0.625), (0.50, 0.625), (0.61, 0.65), (0.69, 0.67),
-            (0.705, 0.73), (0.665, 0.765), (0.59, 0.755), (0.59, 0.85),
-            (0.655, 0.895), (0.625, 0.925), (0.56, 0.875), (0.545, 0.75),
-            (0.425, 0.72), (0.34, 0.68), (0.30, 0.62), (0.33, 0.53),
-            (0.34, 0.44), (0.38, 0.38),
+            (0.405, 0.16),
+            (0.48, 0.125),
+            (0.555, 0.17),
+            (0.565, 0.27),
+            (0.525, 0.345),
+            (0.405, 0.385),
+            (0.345, 0.455),
+            (0.355, 0.585),
+            (0.425, 0.625),
+            (0.50, 0.625),
+            (0.61, 0.65),
+            (0.69, 0.67),
+            (0.705, 0.73),
+            (0.665, 0.765),
+            (0.59, 0.755),
+            (0.59, 0.85),
+            (0.655, 0.895),
+            (0.625, 0.925),
+            (0.56, 0.875),
+            (0.545, 0.75),
+            (0.425, 0.72),
+            (0.34, 0.68),
+            (0.30, 0.62),
+            (0.33, 0.53),
+            (0.34, 0.44),
+            (0.38, 0.38),
         ]
     } else {
         vec![
-            (0.385, 0.16), (0.46, 0.125), (0.535, 0.17), (0.55, 0.28),
-            (0.515, 0.35), (0.56, 0.39), (0.70, 0.30), (0.73, 0.35),
-            (0.58, 0.49), (0.53, 0.62), (0.50, 0.70), (0.54, 0.88),
-            (0.50, 0.91), (0.45, 0.70), (0.40, 0.70), (0.35, 0.90),
-            (0.31, 0.88), (0.34, 0.66), (0.31, 0.58), (0.32, 0.45),
+            (0.385, 0.16),
+            (0.46, 0.125),
+            (0.535, 0.17),
+            (0.55, 0.28),
+            (0.515, 0.35),
+            (0.56, 0.39),
+            (0.70, 0.30),
+            (0.73, 0.35),
+            (0.58, 0.49),
+            (0.53, 0.62),
+            (0.50, 0.70),
+            (0.54, 0.88),
+            (0.50, 0.91),
+            (0.45, 0.70),
+            (0.40, 0.70),
+            (0.35, 0.90),
+            (0.31, 0.88),
+            (0.34, 0.66),
+            (0.31, 0.58),
+            (0.32, 0.45),
             (0.37, 0.38),
         ]
     };
-    path_part("human_silhouette", "body", 2, &smooth_closed(&points, 1), 100)
+    path_part(
+        "human_silhouette",
+        "body",
+        2,
+        &smooth_closed(&points, 1),
+        100,
+    )
 }
 
 fn human_scene_from_skeleton(sitting: bool) -> Vec<IllustrationPart> {
@@ -1731,7 +2155,17 @@ fn human_scene_from_skeleton(sitting: bool) -> Vec<IllustrationPart> {
         capsule_part("thigh_l", "leg", hip_l, knee_l, 0.055, 2, 105),
         capsule_part("shin_l", "leg", knee_l, ankle_l, 0.042, 2, 106),
         capsule_part("neck", "head", neck, head, 0.045, 1, 107),
-        organic_oval_part("head", "head", 1, head.0 - 0.075, head.1 - 0.075, 0.15, 0.16, 108, 0.08),
+        organic_oval_part(
+            "head",
+            "head",
+            1,
+            head.0 - 0.075,
+            head.1 - 0.075,
+            0.15,
+            0.16,
+            108,
+            0.08,
+        ),
         path_part(
             "hair",
             "head",
@@ -1751,34 +2185,112 @@ fn human_scene_from_skeleton(sitting: bool) -> Vec<IllustrationPart> {
             ),
             109,
         ),
-        ellipse_part("ear", "head", 1, head.0 - 0.080, head.1 + 0.015, 0.026, 0.050, 110),
+        ellipse_part(
+            "ear",
+            "head",
+            1,
+            head.0 - 0.080,
+            head.1 + 0.015,
+            0.026,
+            0.050,
+            110,
+        ),
         path_part(
             "nose",
             "head",
             0,
-            &[(head.0 + 0.043, head.1 + 0.035), (head.0 + 0.072, head.1 + 0.055), (head.0 + 0.043, head.1 + 0.063)],
+            &[
+                (head.0 + 0.043, head.1 + 0.035),
+                (head.0 + 0.072, head.1 + 0.055),
+                (head.0 + 0.043, head.1 + 0.063),
+            ],
             111,
         ),
-        organic_oval_part("hand_l", "hand", 1, hand_l.0 - 0.025, hand_l.1 - 0.020, 0.05, 0.04, 110, 0.08),
-        ellipse_part("eye", "head", 0, head.0 + 0.025, head.1 - 0.02, 0.024, 0.028, 112),
+        organic_oval_part(
+            "hand_l",
+            "hand",
+            1,
+            hand_l.0 - 0.025,
+            hand_l.1 - 0.020,
+            0.05,
+            0.04,
+            110,
+            0.08,
+        ),
+        ellipse_part(
+            "eye",
+            "head",
+            0,
+            head.0 + 0.025,
+            head.1 - 0.02,
+            0.024,
+            0.028,
+            112,
+        ),
     ];
     if sitting {
-        parts.push(capsule_part("upper_arm_r", "arm", shoulder_r, elbow_r, 0.040, 2, 112));
-        parts.push(capsule_part("forearm_r", "arm", elbow_r, hand_r, 0.034, 2, 113));
-        parts.push(organic_oval_part("hand_r", "hand", 1, hand_r.0 - 0.025, hand_r.1 - 0.020, 0.05, 0.04, 114, 0.08));
+        parts.push(capsule_part(
+            "upper_arm_r",
+            "arm",
+            shoulder_r,
+            elbow_r,
+            0.040,
+            2,
+            112,
+        ));
+        parts.push(capsule_part(
+            "forearm_r",
+            "arm",
+            elbow_r,
+            hand_r,
+            0.034,
+            2,
+            113,
+        ));
+        parts.push(organic_oval_part(
+            "hand_r",
+            "hand",
+            1,
+            hand_r.0 - 0.025,
+            hand_r.1 - 0.020,
+            0.05,
+            0.04,
+            114,
+            0.08,
+        ));
         let hip_r = pose_joint(&joints, "hip_r");
         let knee_r = pose_joint(&joints, "knee_r");
         let ankle_r = pose_joint(&joints, "ankle_r");
         parts.push(capsule_part("thigh_r", "leg", hip_r, knee_r, 0.050, 2, 115));
-        parts.push(capsule_part("shin_r", "leg", knee_r, ankle_r, 0.040, 2, 116));
-        parts.push(capsule_part("foot_l", "foot", ankle_l, (ankle_l.0 + 0.065, ankle_l.1 + 0.005), 0.032, 1, 117));
-        parts.push(capsule_part("foot_r", "foot", ankle_r, (ankle_r.0 - 0.065, ankle_r.1 + 0.005), 0.032, 1, 118));
+        parts.push(capsule_part(
+            "shin_r", "leg", knee_r, ankle_r, 0.040, 2, 116,
+        ));
+        parts.push(capsule_part(
+            "foot_l",
+            "foot",
+            ankle_l,
+            (ankle_l.0 + 0.065, ankle_l.1 + 0.005),
+            0.032,
+            1,
+            117,
+        ));
+        parts.push(capsule_part(
+            "foot_r",
+            "foot",
+            ankle_r,
+            (ankle_r.0 - 0.065, ankle_r.1 + 0.005),
+            0.032,
+            1,
+            118,
+        ));
     } else {
         let hip_r = pose_joint(&joints, "hip_r");
         let knee_r = pose_joint(&joints, "knee_r");
         let ankle_r = pose_joint(&joints, "ankle_r");
         parts.push(capsule_part("thigh_r", "leg", hip_r, knee_r, 0.055, 2, 119));
-        parts.push(capsule_part("shin_r", "leg", knee_r, ankle_r, 0.042, 2, 120));
+        parts.push(capsule_part(
+            "shin_r", "leg", knee_r, ankle_r, 0.042, 2, 120,
+        ));
     }
     parts
 }
@@ -1843,8 +2355,24 @@ fn seated_clothing() -> Vec<IllustrationPart> {
     vec![
         path_part("jacket", "clothing", 2, &jacket, 130),
         path_part("shirt_front", "clothing", 3, &shirt, 131),
-        capsule_part("sleeve_l", "clothing", (0.36, 0.405), (0.54, 0.40), 0.050, 2, 132),
-        capsule_part("sleeve_r", "clothing", (0.56, 0.415), (0.64, 0.52), 0.050, 2, 133),
+        capsule_part(
+            "sleeve_l",
+            "clothing",
+            (0.36, 0.405),
+            (0.54, 0.40),
+            0.050,
+            2,
+            132,
+        ),
+        capsule_part(
+            "sleeve_r",
+            "clothing",
+            (0.56, 0.415),
+            (0.64, 0.52),
+            0.050,
+            2,
+            133,
+        ),
         path_part("trouser_l", "clothing", 1, &trouser_l, 134),
         path_part("trouser_r", "clothing", 1, &trouser_r, 135),
     ]
@@ -2519,6 +3047,18 @@ fn ellipse_only_blob(parts: &[IllustrationPart]) -> bool {
     aspect < 1.28 && !has_break
 }
 
+fn taxonomic_skeleton_present(skeleton: &[IllustrationSkeletonJoint]) -> bool {
+    if skeleton.len() < 8 {
+        return false;
+    }
+    let has = |id: &str| skeleton.iter().any(|j| j.id == id);
+    // Primary humanoid / quadruped armatures from the taxonomy poser.
+    (has("pelvis") && has("chest") && (has("hand_l") || has("paw_fl")))
+        || skeleton.iter().any(|j| {
+            j.id.starts_with("pipe_") || j.id.starts_with("seat_") || j.id.starts_with("garden_")
+        })
+}
+
 fn is_ellipse_part(p: &IllustrationPart) -> bool {
     matches!(p.geometry, IllustrationPartGeometry::Ellipse { .. })
 }
@@ -2796,7 +3336,8 @@ fn construction_plan_for_subject(subject: &str) -> IllustrationConstructionPlan 
     }
     let action_line = if subject_wants_jump(subject) {
         "j_inverse".into()
-    } else if subject.contains("regard") || subject.contains("observe") || subject.contains("look") {
+    } else if subject.contains("regard") || subject.contains("observe") || subject.contains("look")
+    {
         "courbe_ouverte_vers_le_point_focal".into()
     } else if subject.contains("court") || subject.contains("run") || subject.contains("marche") {
         "diagonale".into()
@@ -2814,11 +3355,12 @@ fn construction_plan_for_subject(subject: &str) -> IllustrationConstructionPlan 
     } else {
         "objet_principal".into()
     };
-    let head_orientation = if subject.contains("regard") || subject.contains("observe") || subject.contains("look") {
-        "trois_quarts_vers_le_jardin_ou_la_cible".into()
-    } else {
-        "trois_quarts".into()
-    };
+    let head_orientation =
+        if subject.contains("regard") || subject.contains("observe") || subject.contains("look") {
+            "trois_quarts_vers_le_jardin_ou_la_cible".into()
+        } else {
+            "trois_quarts".into()
+        };
     let material_pass = if is_animal && (subject.contains("fourr") || subject.contains("poil")) {
         "volume_puis_touffes_dirigees_par_la_lumiere_et_la_gravite".into()
     } else if is_animal {
@@ -3737,11 +4279,17 @@ fn silhouette_test_passes(parts: &[IllustrationPart]) -> bool {
         .iter()
         .filter(|p| matches!(&p.geometry, IllustrationPartGeometry::Path { points, .. } if points.len() >= 8))
         .count();
-    let named = subject.iter().filter(|p| {
-        let id = p.id.to_ascii_lowercase();
-        id.contains("body") || id.contains("head") || id.contains("tail")
-            || id.contains("armchair") || id.contains("sofa")
-    }).count();
+    let named = subject
+        .iter()
+        .filter(|p| {
+            let id = p.id.to_ascii_lowercase();
+            id.contains("body")
+                || id.contains("head")
+                || id.contains("tail")
+                || id.contains("armchair")
+                || id.contains("sofa")
+        })
+        .count();
     // Some valid archetypes (elephant, furniture) use one dominant contour
     // plus several attached volumes; do not reject them for lacking two
     // separate paths.
@@ -3749,7 +4297,10 @@ fn silhouette_test_passes(parts: &[IllustrationPart]) -> bool {
 }
 
 fn skeleton_xy(joints: &[IllustrationSkeletonJoint], id: &str) -> Option<(f32, f32)> {
-    joints.iter().find(|joint| joint.id == id).map(|joint| (joint.x, joint.y))
+    joints
+        .iter()
+        .find(|joint| joint.id == id)
+        .map(|joint| (joint.x, joint.y))
 }
 
 fn cylinder_volume(
@@ -3824,10 +4375,94 @@ fn human_volumes_from_skeleton(joints: &[IllustrationSkeletonJoint]) -> Vec<Illu
     volumes
 }
 
+fn ellipse_path(x: f32, y: f32, w: f32, h: f32, rotation: f32) -> Vec<CanvasPoint> {
+    let cx = x + w * 0.5;
+    let cy = y + h * 0.5;
+    let (s, c) = rotation.sin_cos();
+    (0..12)
+        .map(|i| {
+            let t = i as f32 / 12.0 * std::f32::consts::TAU;
+            let lx = t.cos() * w * 0.5;
+            let ly = t.sin() * h * 0.5;
+            CanvasPoint {
+                x: cx + lx * c - ly * s,
+                y: cy + lx * s + ly * c,
+            }
+        })
+        .collect()
+}
+
+fn contours_from_volumes(volumes: &[IllustrationVolume]) -> Vec<IllustrationPart> {
+    volumes
+        .iter()
+        .enumerate()
+        .map(|(i, volume)| IllustrationPart {
+            id: format!("contour_{}", volume.id),
+            role: "contour".into(),
+            fill_index: 0,
+            fill: false,
+            outline: true,
+            seed: i as u32,
+            geometry: IllustrationPartGeometry::Path {
+                points: ellipse_path(volume.x, volume.y, volume.w, volume.h, volume.rotation),
+                closed: true,
+            },
+        })
+        .collect()
+}
+
+/// Fill only the layers that belong to the current construction phase.
+/// Later layers stay empty so the panel can show the drawing being built.
+fn stage_construction_phase(spec: &mut IllustrationSpec) {
+    let authored_skeleton = !spec.skeleton.is_empty();
+    if !authored_skeleton {
+        let _ = crate::apply_taxonomy_skeleton(spec);
+        ensure_construction_passes(spec);
+    }
+    let human = is_person_subject(&spec.brief.subject.to_ascii_lowercase());
+    match spec.construction_phase {
+        IllustrationConstructionPhase::Skeleton => {
+            if !authored_skeleton {
+                spec.volumes.clear();
+                spec.contours.clear();
+                spec.details.clear();
+                spec.parts.retain(is_background_part);
+            }
+        }
+        IllustrationConstructionPhase::Volumes => {
+            if spec.volumes.is_empty() && human {
+                spec.volumes = human_volumes_from_skeleton(&spec.skeleton);
+            }
+            if !authored_skeleton {
+                spec.contours.clear();
+                spec.details.clear();
+                spec.parts.retain(is_background_part);
+            }
+        }
+        IllustrationConstructionPhase::Contours | IllustrationConstructionPhase::Details => {
+            if spec.volumes.is_empty() && human {
+                spec.volumes = human_volumes_from_skeleton(&spec.skeleton);
+            }
+            if spec.contours.is_empty() {
+                spec.contours = contours_from_volumes(&spec.volumes);
+            }
+            if !authored_skeleton && spec.construction_phase == IllustrationConstructionPhase::Contours
+            {
+                spec.details.clear();
+            }
+            if !authored_skeleton {
+                spec.parts.retain(is_background_part);
+            }
+        }
+        IllustrationConstructionPhase::Final => {}
+    }
+}
+
 fn ensure_construction_passes(spec: &mut IllustrationSpec) {
     let subject = spec.brief.subject.to_ascii_lowercase();
     let human = is_person_subject(&subject);
-    if spec.skeleton.is_empty() {
+    let known_species = is_species_recipe(&subject);
+    if spec.skeleton.is_empty() && (human || known_species) {
         let anchor = subject_anchor(&spec.parts);
         let sitting = subject.contains("assis")
             || subject.contains("assise")
@@ -3838,13 +4473,55 @@ fn ensure_construction_passes(spec: &mut IllustrationSpec) {
             human_pose_joints(sitting)
         } else {
             vec![
-                PoseJoint { id: "pelvis", parent: None, x: anchor.0 + 0.08, y: anchor.1 + 0.04, radius: 0.04 },
-                PoseJoint { id: "chest", parent: Some("pelvis"), x: anchor.0, y: anchor.1, radius: 0.055 },
-                PoseJoint { id: "neck", parent: Some("chest"), x: anchor.0 - 0.05, y: anchor.1 - 0.08, radius: 0.025 },
-                PoseJoint { id: "head", parent: Some("neck"), x: anchor.0 - 0.08, y: anchor.1 - 0.16, radius: 0.065 },
-                PoseJoint { id: "paw_front", parent: Some("chest"), x: anchor.0 - 0.16, y: anchor.1 + 0.11, radius: 0.022 },
-                PoseJoint { id: "paw_back", parent: Some("pelvis"), x: anchor.0 + 0.20, y: anchor.1 + 0.12, radius: 0.022 },
-                PoseJoint { id: "tail_root", parent: Some("pelvis"), x: anchor.0 + 0.24, y: anchor.1, radius: 0.02 },
+                PoseJoint {
+                    id: "pelvis",
+                    parent: None,
+                    x: anchor.0 + 0.08,
+                    y: anchor.1 + 0.04,
+                    radius: 0.04,
+                },
+                PoseJoint {
+                    id: "chest",
+                    parent: Some("pelvis"),
+                    x: anchor.0,
+                    y: anchor.1,
+                    radius: 0.055,
+                },
+                PoseJoint {
+                    id: "neck",
+                    parent: Some("chest"),
+                    x: anchor.0 - 0.05,
+                    y: anchor.1 - 0.08,
+                    radius: 0.025,
+                },
+                PoseJoint {
+                    id: "head",
+                    parent: Some("neck"),
+                    x: anchor.0 - 0.08,
+                    y: anchor.1 - 0.16,
+                    radius: 0.065,
+                },
+                PoseJoint {
+                    id: "paw_front",
+                    parent: Some("chest"),
+                    x: anchor.0 - 0.16,
+                    y: anchor.1 + 0.11,
+                    radius: 0.022,
+                },
+                PoseJoint {
+                    id: "paw_back",
+                    parent: Some("pelvis"),
+                    x: anchor.0 + 0.20,
+                    y: anchor.1 + 0.12,
+                    radius: 0.022,
+                },
+                PoseJoint {
+                    id: "tail_root",
+                    parent: Some("pelvis"),
+                    x: anchor.0 + 0.24,
+                    y: anchor.1,
+                    radius: 0.02,
+                },
             ]
         };
         spec.skeleton = joints
@@ -3855,6 +4532,7 @@ fn ensure_construction_passes(spec: &mut IllustrationSpec) {
                 x: joint.x,
                 y: joint.y,
                 radius: joint.radius,
+                ..Default::default()
             })
             .collect();
     }
@@ -3863,10 +4541,13 @@ fn ensure_construction_passes(spec: &mut IllustrationSpec) {
         spec.construction.action_line_points = ids
             .iter()
             .filter_map(|id| {
-                spec.skeleton.iter().find(|joint| joint.id == *id).map(|joint| CanvasPoint {
-                    x: joint.x,
-                    y: joint.y,
-                })
+                spec.skeleton
+                    .iter()
+                    .find(|joint| joint.id == *id)
+                    .map(|joint| CanvasPoint {
+                        x: joint.x,
+                        y: joint.y,
+                    })
             })
             .collect();
     }
@@ -4005,23 +4686,64 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unknown_archetype_does_not_reject_the_spec() {
+        let spec: IllustrationSpec = serde_json::from_str(
+            r#"{"construction":{"archetype":"Vieil homme assis"}}"#,
+        )
+        .unwrap();
+        assert_eq!(spec.construction.archetype, IllustrationArchetype::Other);
+        let known: IllustrationSpec = serde_json::from_str(
+            r#"{"construction":{"archetype":"human"}}"#,
+        )
+        .unwrap();
+        assert_eq!(known.construction.archetype, IllustrationArchetype::Human);
+    }
+
+    #[test]
     fn authored_construction_survives_preview_enrichment() {
-        for phase in [IllustrationConstructionPhase::Skeleton,
-            IllustrationConstructionPhase::Volumes, IllustrationConstructionPhase::Contours,
-            IllustrationConstructionPhase::Details, IllustrationConstructionPhase::Final] {
-            let mut spec = IllustrationSpec::default();
-            spec.brief.subject = "un jardinier assis fumant une pipe".into();
-            spec.construction_phase = phase;
-            spec.skeleton.push(IllustrationSkeletonJoint {
-                id: "elbow".into(), x: 0.7, y: 0.6, ..Default::default()
-            });
-            spec.construction.relations.push("hand holds pipe".into());
-            let before = serde_json::to_value(&spec).unwrap();
-            enrich_illustration_puppet(&mut spec);
-            enrich_illustration_puppet(&mut spec);
-            assert_eq!(serde_json::to_value(&spec).unwrap(), before);
-            assert!(spec.parts.is_empty(), "preview must not invent a finished character");
-        }
+        let mut spec = IllustrationSpec::default();
+        spec.brief.subject = "un jardinier assis fumant une pipe".into();
+        spec.construction_phase = IllustrationConstructionPhase::Skeleton;
+        spec.skeleton.push(IllustrationSkeletonJoint {
+            id: "elbow".into(),
+            x: 0.7,
+            y: 0.6,
+            ..Default::default()
+        });
+        spec.construction.relations.push("hand holds pipe".into());
+        let before = serde_json::to_value(&spec).unwrap();
+        enrich_illustration_puppet(&mut spec);
+        assert_eq!(serde_json::to_value(&spec).unwrap(), before);
+        assert!(spec.parts.is_empty(), "preview must not invent a finished character");
+    }
+
+    #[test]
+    fn empty_passes_stage_pose_then_volumes_without_a_finished_puppet() {
+        let subject = "vieux jardinier assis dans un fauteuil, fumant la pipe";
+        let mut skeleton = IllustrationSpec::default();
+        skeleton.brief.subject = subject.into();
+        skeleton.construction_phase = IllustrationConstructionPhase::Skeleton;
+        enrich_illustration_puppet(&mut skeleton);
+        assert!(
+            skeleton.skeleton.iter().any(|j| j.id == "pelvis"),
+            "skeleton pass must pose the figure"
+        );
+        assert!(skeleton.volumes.is_empty());
+        assert!(
+            skeleton.parts.iter().all(is_background_part),
+            "skeleton pass must not dump a dressed character"
+        );
+
+        let mut volumes = skeleton.clone();
+        volumes.construction_phase = IllustrationConstructionPhase::Volumes;
+        volumes.volumes.clear();
+        enrich_illustration_puppet(&mut volumes);
+        assert!(volumes.skeleton.iter().any(|j| j.id == "pelvis"));
+        assert!(
+            volumes.volumes.iter().any(|v| v.kind == "rib_cage"),
+            "volumes pass must add masses on the posed skeleton"
+        );
+        assert!(volumes.parts.iter().all(is_background_part));
     }
 
     #[test]
@@ -4031,28 +4753,53 @@ mod tests {
         enrich_illustration_puppet(&mut spec);
         spec.construction_phase = IllustrationConstructionPhase::Volumes;
         let doc = IllustrationDoc {
-            brief: spec.brief.clone(), spec: Some(spec), ..Default::default()
+            brief: spec.brief.clone(),
+            spec: Some(spec),
+            ..Default::default()
         };
-        assert!(review_illustration(&doc).issues.iter().any(|issue|
-            issue.kind == "unfinished_construction" && issue.severity == "error"));
+        assert!(review_illustration(&doc)
+            .issues
+            .iter()
+            .any(|issue| issue.kind == "unfinished_construction" && issue.severity == "error"));
     }
 
     #[test]
     fn bound_contour_tracks_pose_in_all_drawing_passes() {
         let mut spec = IllustrationSpec::default();
         spec.skeleton = vec![
-            IllustrationSkeletonJoint { id: "elbow".into(), x: 0.4, y: 0.5, ..Default::default() },
-            IllustrationSkeletonJoint { id: "wrist".into(), x: 0.6, y: 0.5, ..Default::default() },
+            IllustrationSkeletonJoint {
+                id: "elbow".into(),
+                x: 0.4,
+                y: 0.5,
+                ..Default::default()
+            },
+            IllustrationSkeletonJoint {
+                id: "wrist".into(),
+                x: 0.6,
+                y: 0.5,
+                ..Default::default()
+            },
         ];
-        let sleeve = path_part("sleeve", "clothing", 1,
-            &[(0.0, -0.1), (1.0, -0.1), (1.0, 0.1), (0.0, 0.1)], 1);
+        let sleeve = path_part(
+            "sleeve",
+            "clothing",
+            1,
+            &[(0.0, -0.1), (1.0, -0.1), (1.0, 0.1), (0.0, 0.1)],
+            1,
+        );
         spec.parts = vec![sleeve.clone()];
         spec.contours = vec![sleeve.clone()];
         spec.details = vec![sleeve];
-        spec.joint_bindings.insert("sleeve".into(), ["elbow".into(), "wrist".into()]);
+        spec.joint_bindings
+            .insert("sleeve".into(), ["elbow".into(), "wrist".into()]);
         spec.volumes.push(IllustrationVolume {
-            id: "sleeve".into(), kind: "cylinder".into(),
-            x: 0.0, y: -0.1, w: 1.0, h: 0.2, rotation: 0.0,
+            id: "sleeve".into(),
+            kind: "cylinder".into(),
+            x: 0.0,
+            y: -0.1,
+            w: 1.0,
+            h: 0.2,
+            rotation: 0.0,
         });
         let horizontal = spec.resolve_joint_bindings().unwrap();
         spec.skeleton[1].x = 0.4;
@@ -4066,44 +4813,79 @@ mod tests {
         assert!((mass.y + mass.h * 0.5 - 0.4).abs() < 0.00001);
         assert!((mass.w - 0.2).abs() < 0.00001);
         assert!((mass.rotation + std::f32::consts::FRAC_PI_2).abs() < 0.00001);
-        let IllustrationPartGeometry::Path { points, .. } = &vertical.parts[0].geometry else { panic!() };
+        let IllustrationPartGeometry::Path { points, .. } = &vertical.parts[0].geometry else {
+            panic!()
+        };
         assert!((points[1].x - 0.38).abs() < 0.00001);
         assert!((points[1].y - 0.30).abs() < 0.00001);
         assert_eq!(vertical.resolve_joint_bindings().unwrap(), vertical);
         assert!(!spec.joint_bindings.is_empty(), "source stays editable");
         spec.skeleton.pop();
-        assert!(spec.resolve_joint_bindings().unwrap_err().contains("missing joint"));
+        assert!(spec
+            .resolve_joint_bindings()
+            .unwrap_err()
+            .contains("missing joint"));
     }
 
     #[test]
     fn contact_moves_hand_to_target_preserving_both_bone_lengths() {
         let mut spec = IllustrationSpec::default();
-        spec.skeleton = [("shoulder",0.4,0.4),("elbow",0.4,0.6),
-            ("hand",0.6,0.6),("grip",0.65,0.35)].into_iter()
-            .map(|(id,x,y)| IllustrationSkeletonJoint { id:id.into(), x,y,..Default::default() }).collect();
-        spec.contacts.insert("pipe".into(), ["shoulder".into(),"elbow".into(),"hand".into(),"grip".into()]);
+        spec.skeleton = [
+            ("shoulder", 0.4, 0.4),
+            ("elbow", 0.4, 0.6),
+            ("hand", 0.6, 0.6),
+            ("grip", 0.65, 0.35),
+        ]
+        .into_iter()
+        .map(|(id, x, y)| IllustrationSkeletonJoint {
+            id: id.into(),
+            x,
+            y,
+            ..Default::default()
+        })
+        .collect();
+        spec.contacts.insert(
+            "pipe".into(),
+            [
+                "shoulder".into(),
+                "elbow".into(),
+                "hand".into(),
+                "grip".into(),
+            ],
+        );
         let solved = spec.resolve_joint_bindings().unwrap();
         let j = &solved.skeleton;
-        assert_eq!((j[2].x,j[2].y),(j[3].x,j[3].y));
-        assert!(((j[1].x-j[0].x).hypot(j[1].y-j[0].y)-0.2).abs()<0.00001);
-        assert!(((j[2].x-j[1].x).hypot(j[2].y-j[1].y)-0.2).abs()<0.00001);
+        assert_eq!((j[2].x, j[2].y), (j[3].x, j[3].y));
+        assert!(((j[1].x - j[0].x).hypot(j[1].y - j[0].y) - 0.2).abs() < 0.00001);
+        assert!(((j[2].x - j[1].x).hypot(j[2].y - j[1].y) - 0.2).abs() < 0.00001);
         assert_eq!(solved.resolve_joint_bindings().unwrap(), solved);
         spec.skeleton[3].x = 0.95;
-        assert!(spec.resolve_joint_bindings().unwrap_err().contains("unreachable"));
+        assert!(spec
+            .resolve_joint_bindings()
+            .unwrap_err()
+            .contains("unreachable"));
     }
 
     #[test]
     fn invalid_skeleton_topology_is_rejected_before_rendering() {
         let mut spec = IllustrationSpec::default();
         spec.skeleton = vec![IllustrationSkeletonJoint {
-            id:"head".into(),parent:Some("missing".into()),..Default::default()
+            id: "head".into(),
+            parent: Some("missing".into()),
+            ..Default::default()
         }];
-        assert!(spec.resolve_joint_bindings().unwrap_err().contains("missing parent"));
+        assert!(spec
+            .resolve_joint_bindings()
+            .unwrap_err()
+            .contains("missing parent"));
         spec.skeleton[0].parent = Some("head".into());
         assert!(spec.resolve_joint_bindings().unwrap_err().contains("cycle"));
         spec.skeleton[0].parent = None;
         spec.skeleton.push(spec.skeleton[0].clone());
-        assert!(spec.resolve_joint_bindings().unwrap_err().contains("duplicate"));
+        assert!(spec
+            .resolve_joint_bindings()
+            .unwrap_err()
+            .contains("duplicate"));
     }
 
     #[test]
@@ -4140,13 +4922,17 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        assert!(spec.parts.len() >= 7);
-        assert!(spec.parts.iter().any(|p| p.id == "head"));
-        assert!(spec.parts.iter().any(|p| p.id == "body"));
-        assert!(spec.parts.iter().any(|p| p.id == "ear_l"));
-        assert!(spec.parts.iter().any(|p| p.id == "eye_l"));
-        assert!(spec.parts.iter().any(|p| p.id == "cushion"));
-        assert!(spec.scribble_part.is_some());
+        assert!(
+            !spec.skeleton.is_empty(),
+            "taxonomy must place a carnivore skeleton instead of expanding a snowman recipe"
+        );
+        assert!(spec.skeleton.iter().any(|j| j.id.starts_with("paw_")));
+        assert!(
+            spec.parts
+                .iter()
+                .any(|p| p.id.contains("cushion") || is_furniture_part(p)),
+            "cushion/furniture prop must survive or be appended"
+        );
     }
 
     #[test]
@@ -4186,14 +4972,17 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        assert_eq!(spec.key_drawings.len(), 3);
-        let land = spec.key_drawings.iter().find(|d| d.id == "land").unwrap();
-        assert!(land.parts.iter().any(|p| p.id == "body"));
-        assert!(land.parts.iter().any(|p| p.id == "sofa_base"));
-        assert!(land
-            .parts
-            .iter()
-            .any(|p| matches!(p.geometry, IllustrationPartGeometry::Path { .. })));
+        assert!(
+            taxonomic_skeleton_present(&spec.skeleton),
+            "taxonomy armature replaces recipe key-drawings for a known cat"
+        );
+        assert!(spec.skeleton.iter().any(|j| j.id.starts_with("paw_")));
+        assert!(
+            spec.parts
+                .iter()
+                .any(|p| p.id.starts_with("sofa_") || is_furniture_part(p)),
+            "sofa prop still appended for the brief"
+        );
     }
 
     #[test]
@@ -4231,19 +5020,16 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        assert!(spec.parts.iter().any(|p| p.id.starts_with("sofa_")));
-        assert!(spec.parts.iter().any(|p| p.id == "snout"));
-        assert!(spec.parts.iter().any(|p| p.id == "paw_fl"));
-        let body = spec.parts.iter().find(|p| p.id == "body").unwrap();
         assert!(
-            matches!(body.geometry, IllustrationPartGeometry::Path { .. }),
-            "sitting dog body must be an authored path, not an ellipse"
+            !spec.skeleton.is_empty(),
+            "taxonomy must place a dog quadruped skeleton"
         );
-        let ear = spec.parts.iter().find(|p| p.id == "ear_l").unwrap();
-        let (_, _, w, h) = part_bbox(ear);
+        assert!(spec.skeleton.iter().any(|j| j.id.starts_with("paw_")));
         assert!(
-            h > w,
-            "dog ears should hang (taller than wide), got {w}x{h}"
+            spec.parts
+                .iter()
+                .any(|p| p.id.starts_with("sofa_") || is_furniture_part(p)),
+            "sofa prop must be appended for the brief"
         );
     }
 
@@ -4257,13 +5043,18 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        for id in ["body", "head"] {
-            let part = spec.parts.iter().find(|p| p.id == id).expect(id);
-            assert!(
-                matches!(part.geometry, IllustrationPartGeometry::Path { .. }),
-                "{id} must be an authored contour"
-            );
-        }
+        assert!(
+            taxonomic_skeleton_present(&spec.skeleton),
+            "taxonomy armature replaces the old ellipse recipe for known animals"
+        );
+        assert!(
+            spec.parts.iter().any(is_furniture_part)
+                || spec
+                    .parts
+                    .iter()
+                    .any(|p| p.id.contains("cushion") || p.id.contains("coussin")),
+            "cushion prop should still be present for dressing"
+        );
     }
 
     #[test]
@@ -4329,14 +5120,22 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        assert!(spec.parts.iter().any(|p| p.id == "ear_l"));
-        assert!(spec.parts.iter().any(|p| p.id == "eye_l"));
-        let body = spec.parts.iter().find(|p| p.id == "body").unwrap();
-        let (_, _, w, h) = part_bbox(body);
         assert!(
-            w > h * 1.2,
-            "stretching cat body should be horizontal, got {w}x{h}"
+            taxonomic_skeleton_present(&spec.skeleton),
+            "taxonomy must keep a cat armature instead of expanding the snowman"
         );
+        assert!(
+            spec.parts.iter().any(|p| p.id == "body" || p.id == "head"),
+            "agent ellipses may remain until dressed"
+        );
+        assert!(
+            !spec.parts.iter().any(|p| p.id == "ear_l"),
+            "species recipe must not wipe in ears over a taxonomic skeleton"
+        );
+        assert!(spec
+            .parts
+            .iter()
+            .any(|p| p.id == "cushion" || p.id.contains("coussin")));
     }
 
     #[test]
@@ -4517,10 +5316,11 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        let body = spec.parts.iter().find(|p| p.id == "body").unwrap();
-        let (_, y, _, _) = part_bbox(body);
-        assert!(y < 0.2, "a jump recipe body sits high, got y={y}");
-        assert!(spec.parts.iter().any(|p| p.role == "leg"));
+        assert!(
+            taxonomic_skeleton_present(&spec.skeleton),
+            "jumping cat uses taxonomy armature; agent dresses the leap"
+        );
+        assert!(spec.skeleton.iter().any(|j| j.id == "paw_fl"));
     }
 
     #[test]
@@ -4541,11 +5341,17 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        assert!(spec.parts.iter().any(|p| p.id == "ear_l"), "ears required");
-        assert!(spec.parts.iter().any(|p| p.id == "eye_l"));
-        assert!(spec.parts.iter().any(|p| p.id.starts_with("sofa_")));
-        assert!(spec.parts.iter().any(|p| p.role == "leg"));
-        assert!(!spec.parts.iter().any(|p| p.id == "canapé"));
+        assert!(taxonomic_skeleton_present(&spec.skeleton));
+        assert!(
+            spec.parts
+                .iter()
+                .any(|p| p.id.starts_with("sofa_") || is_furniture_part(p)),
+            "sofa prop from brief"
+        );
+        assert!(
+            !spec.parts.iter().any(|p| p.id == "ear_l"),
+            "must not replace agent parts with a recipe puppet over taxonomy"
+        );
     }
 
     #[test]
@@ -4567,23 +5373,109 @@ mod tests {
             ..Default::default()
         };
         enrich_illustration_puppet(&mut spec);
-        assert!(
-            spec.parts.iter().any(|p| p.id == "pipe_stem"),
-            "pipe must be a stem, not a box"
-        );
-        assert!(spec.parts.iter().any(|p| p.id == "bench_seat"));
-        assert!(spec.parts.iter().any(|p| p.id.contains("canopy")));
-        assert!(spec.parts.iter().any(|p| p.id.starts_with("flower_")));
-        let head = spec.parts.iter().find(|p| p.id == "head").expect("head");
-        match &head.geometry {
-            IllustrationPartGeometry::Path { points, .. } => {
-                assert!(points.len() >= 8, "head must be a profile contour");
-            }
-            other => panic!("head became {other:?}"),
-        }
+        assert!(taxonomic_skeleton_present(&spec.skeleton));
+        assert!(spec.skeleton.iter().any(|j| j.id == "hand_r"));
+        assert!(spec.skeleton.iter().any(|j| j.id.starts_with("pipe_")));
+        assert!(spec
+            .skeleton
+            .iter()
+            .any(|j| j.id.starts_with("seat_") || j.id.starts_with("garden_")));
+        assert!(spec.contacts.contains_key("hold_pipe"));
         assert!(
             !spec.parts.iter().any(|p| p.id == "ear_l"),
             "a person must not become the generic animal"
+        );
+    }
+
+    #[test]
+    fn enrich_fills_taxonomy_skeleton_for_gardener() {
+        let mut spec = IllustrationSpec {
+            brief: IllustrationBrief {
+                subject: "un jardinier assis sur un fauteuil, fumant une pipe dans un jardin"
+                    .into(),
+                look: IllustrationLook::Pencil,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        enrich_illustration_puppet(&mut spec);
+        assert!(
+            !spec.skeleton.is_empty(),
+            "taxonomy must place a sitting human skeleton"
+        );
+        assert!(
+            spec.skeleton.iter().any(|j| j.id == "pelvis"),
+            "human skeleton needs a pelvis root"
+        );
+        assert!(
+            spec.skeleton.iter().any(|j| j.id == "hand_l"),
+            "sitting pose needs reachable hands"
+        );
+    }
+
+    #[test]
+    fn enrich_fills_taxonomy_skeleton_for_cat() {
+        let mut spec = IllustrationSpec {
+            brief: IllustrationBrief {
+                subject: "un chat allongé sur un coussin".into(),
+                look: IllustrationLook::Pencil,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        enrich_illustration_puppet(&mut spec);
+        assert!(
+            !spec.skeleton.is_empty(),
+            "taxonomy must place a carnivore quadruped skeleton"
+        );
+        assert!(spec.skeleton.iter().any(|j| j.id == "pelvis"));
+        assert!(spec.skeleton.iter().any(|j| j.id.starts_with("paw_")));
+    }
+
+    #[test]
+    fn enrich_ood_subject_leaves_skeleton_empty() {
+        let mut spec = IllustrationSpec {
+            brief: IllustrationBrief {
+                subject: "un ornithorynque quantique sur un trampoline en plasma".into(),
+                look: IllustrationLook::Pencil,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        enrich_illustration_puppet(&mut spec);
+        assert!(
+            spec.skeleton.is_empty(),
+            "OOD subject must abstain instead of inventing a ghost skeleton"
+        );
+    }
+
+    #[test]
+    fn review_flags_skeleton_undressed_ellipse_puppet() {
+        let mut spec = IllustrationSpec {
+            brief: IllustrationBrief {
+                subject: "un jardinier assis sur un fauteuil".into(),
+                ..Default::default()
+            },
+            parts: vec![
+                ellipse_part("body", "body", 1, 0.4, 0.4, 0.3, 0.4, 1),
+                ellipse_part("head", "head", 1, 0.45, 0.2, 0.15, 0.15, 2),
+            ],
+            ..Default::default()
+        };
+        enrich_illustration_puppet(&mut spec);
+        assert!(taxonomic_skeleton_present(&spec.skeleton));
+        let doc = IllustrationDoc {
+            brief: spec.brief.clone(),
+            last_sheet_png: Some("/downloads/illustration/sheet.png".into()),
+            last_model_sheet_png: Some("/downloads/illustration/model.png".into()),
+            spec: Some(spec),
+            ..Default::default()
+        };
+        let r = review_illustration(&doc);
+        assert!(
+            r.issues.iter().any(|i| i.kind == "skeleton_undressed"),
+            "ellipse dressing on a taxonomic skeleton must fail review: {:?}",
+            r.issues
         );
     }
 

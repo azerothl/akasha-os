@@ -355,6 +355,29 @@ impl ChatSessionStore {
         } else {
             spec.brief = doc.brief.clone();
         }
+        // Partial compose from the agent often omits skeleton/contacts. Keep the
+        // taxonomic armature already stored on the document.
+        if let Some(prev) = doc.spec.as_ref() {
+            if spec.skeleton.is_empty() && !prev.skeleton.is_empty() {
+                spec.skeleton = prev.skeleton.clone();
+            }
+            if spec.contacts.is_empty() && !prev.contacts.is_empty() {
+                spec.contacts = prev.contacts.clone();
+            }
+            if spec.joint_bindings.is_empty() && !prev.joint_bindings.is_empty() {
+                spec.joint_bindings = prev.joint_bindings.clone();
+            }
+            if spec.volumes.is_empty() && !prev.volumes.is_empty() {
+                spec.volumes = prev.volumes.clone();
+            }
+            if !spec.skeleton.is_empty() && !prev.skeleton.is_empty() {
+                match aos_proto::reconcile_human_skeleton(&prev.skeleton, &spec.skeleton) {
+                    Ok(Some(solved)) => spec.skeleton = solved,
+                    Ok(None) => {}
+                    Err(message) => return Err(SessionError::BadRequest(message)),
+                }
+            }
+        }
         aos_proto::apply_prompt_defaults(&mut spec.brief);
         doc.brief = spec.brief.clone();
         for (i, part) in spec.parts.iter_mut().enumerate() {

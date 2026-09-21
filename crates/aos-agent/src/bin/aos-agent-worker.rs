@@ -1524,7 +1524,7 @@ async fn main() {
                             }
                             let nudge = match illust.as_str() {
                                 "illust.set_brief" => Some(
-                                    "[runtime] Pour le moteur image, appelle illust.generate_image avec construction décrivant pose, appuis, contacts, espèce et composition, sans détails de finition. Les passes seront publiées progressivement. Consulte ensuite illust.get; needs_review exige une inspection visuelle. Si le moteur est absent, signale l'erreur. Réserve illust.compose aux demandes vectorielles explicites.",
+                                    "[runtime] Chemin vectoriel : illust.compose UNE passe à la fois (skeleton, puis volumes, puis contours, puis details, puis final). Le poseur remplit le squelette si tu ne fournis pas de joints ; ne renvoie pas une spec vide pour toutes les phases. À partir de contours, ajoute des paths (≥8 points) liés aux joints. Puis render_sheet et review. illust.generate_image seulement si le moteur image est déjà configuré ; s'il manque AOS_ILLUSTRATION_MODEL_DIR, rester sur compose et ne pas goal.fail.",
                                 ),
                                 "illust.compose" => Some(
                                     "[runtime] Aperçu de la passe publié. Si construction_phase n'est pas final, continue la construction avec illust.compose en conservant la pose et les passes précédentes. Vérifie les proportions, contacts et chevauchements avant les détails. Pour final, fournis parts avec les contours visibles et l'habillage complet, puis illust.render_sheet et illust.review. Un score structurel ne valide pas la qualité visuelle.",
@@ -1535,13 +1535,20 @@ async fn main() {
                                      {\"thought\":\"review\",\"action\":\"illust.review\",\"args\":{}}",
                                 ),
                                 "illust.review" => Some(
-                                    "[runtime] Si review a des errors (no_authored_contour/ellipse_only/not_stretched/center_coords), redessine la scène avec des paths complets et conserve les détails demandés. Sinon illust.export.",
+                                    "[runtime] Si review a des errors (skeleton_undressed/no_authored_contour/ellipse_only/not_stretched/center_coords), redessine avec des paths complets liés aux joints et conserve le squelette. Sinon illust.export. Ne bascule pas sur generate_image.",
                                 ),
                                 _ => None,
                             };
                             if let Some(msg) = nudge {
                                 st.push_user(msg);
                             }
+                        }
+                        if illust == "illust.generate_image"
+                            && outcome.contains("AOS_ILLUSTRATION_MODEL_DIR")
+                        {
+                            shared.state.lock().await.push_user(
+                                "[runtime] Moteur image absent. Ne goal.fail pas. Continue avec illust.compose : skeleton (le poseur pose les joints), puis volumes, contours path liés au squelette, details, final. Ensuite render_sheet et review.",
+                            );
                         }
                     }
                     if canonicalize_tool_name(&action.action).starts_with("device.camera") {
@@ -5305,7 +5312,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         } else if illust_draw {
             format!(
                 "step {}/{} goal={} plan={:?} — protocole illust.* uniquement \
-                 (set_brief→compose parts=[]→review→export). Interdit : prompt diffusion, agent.spawn, texte à la place de l'image.",
+                 (set_brief→compose skeleton→volumes→contours→details→final→review→export). Chaque compose doit porter la géométrie de sa phase. Interdit : prompt diffusion, agent.spawn, texte à la place de l'image, spec vide répétée.",
                 st.step, spec.goal.max_steps, spec.goal.statement, st.plan_stack
             )
         } else if deep {
@@ -5360,7 +5367,7 @@ async fn reflect(bus: &BusClient, shared: &Shared, spec: &AgentSpec) -> Option<S
         }
     } else if illust_draw {
         "Tu es un critique Illustration. En 2 phrases FR : \
-         l'agent doit appeler illust.* (compose avec spec.parts=[], puis export). \
+         l'agent doit publier illust.compose une phase à la fois (skeleton, volumes, contours, details, final) avec la géométrie de cette phase, pas une spec vide. \
          Interdit de suggérer un prompt diffusion, une description texte, ou agent.spawn. \
          Cite l'action JSON exacte suivante si le brief est déjà posé."
     } else if deep {

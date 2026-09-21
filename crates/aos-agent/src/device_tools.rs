@@ -71,7 +71,14 @@ pub fn illustration_run_is_pending(doc: &aos_proto::IllustrationDoc, id: &str) -
 pub fn illustration_completion_error(doc: &aos_proto::IllustrationDoc) -> Option<String> {
     use aos_proto::IllustrationImageStatus;
     let Some(run) = &doc.image_run else {
-        return Some("Illustration : aucune génération lancée. Appelle illust.generate_image avec construction et frame_subject ; un brief seul n'est pas un rendu.".into());
+        if doc.last_png.is_some() || doc.last_sheet_png.is_some() {
+            let review = aos_proto::review_illustration(doc);
+            if review.issues.iter().any(|issue| issue.kind == "skeleton_undressed") {
+                return Some("Illustration vectorielle : le squelette taxonomique n'est pas habillé. Compose des contours path (au moins 8 points) liés aux joints, pas des ellipses. N'appelle pas illust.generate_image.".into());
+            }
+            return None;
+        }
+        return Some("Illustration : aucun rendu. Compose une scène vectorielle (illust.compose puis render_sheet) ou, si le moteur image est configuré, illust.generate_image. Un brief seul n'est pas un rendu.".into());
     };
     match run.status {
         IllustrationImageStatus::Running => Some("Illustration : génération encore en cours. Suis les passes avec illust.get avant de terminer.".into()),
@@ -468,7 +475,7 @@ PNG webcam capturé."#;
     #[test]
     fn illustration_completion_requires_a_finished_selected_image() {
         let mut doc = aos_proto::IllustrationDoc::default();
-        assert!(illustration_completion_error(&doc).unwrap().contains("aucune génération"));
+        assert!(illustration_completion_error(&doc).unwrap().contains("aucun rendu"));
         doc.image_run = Some(serde_json::from_value(serde_json::json!({
             "id":"r", "source_revision":1, "phase":"final", "status":"running"
         })).unwrap());
@@ -485,6 +492,27 @@ PNG webcam capturé."#;
         assert!(illustration_completion_error(&doc).unwrap().contains("non résolue"));
         doc.image_run.as_mut().unwrap().candidate_selected = Some(false);
         assert!(illustration_completion_error(&doc).is_none());
+    }
+
+    #[test]
+    fn illustration_completion_accepts_vector_sheet_and_rejects_undressed_skeleton() {
+        let mut doc = aos_proto::IllustrationDoc::default();
+        doc.brief.subject = "un jardinier".into();
+        doc.last_png = Some("/downloads/illustration/preview.png".into());
+        doc.last_sheet_png = Some("/downloads/illustration/sheet.png".into());
+        assert!(illustration_completion_error(&doc).is_none());
+        doc.spec = Some(aos_proto::IllustrationSpec {
+            brief: doc.brief.clone(),
+            skeleton: (0..12)
+                .map(|i| aos_proto::IllustrationSkeletonJoint {
+                    id: if i == 0 { "pelvis".into() } else if i == 1 { "chest".into() } else if i == 2 { "hand_l".into() } else { format!("j{i}") },
+                    ..Default::default()
+                })
+                .collect(),
+            parts: vec![],
+            ..Default::default()
+        });
+        assert!(illustration_completion_error(&doc).unwrap().contains("pas habillé"));
     }
 
     #[test]
