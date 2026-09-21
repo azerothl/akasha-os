@@ -133,13 +133,12 @@ pub mod surface {
 mod tests {
     use super::surface::{
         EN_APP_TITLE, EN_IMAGE_PACK_LABEL, EN_PREVIEW_EMPTY, EN_PREVIEW_EMPTY_VIDEO,
-        EN_VIDEO_PACK_LABEL, FR_APP_TITLE, FR_GENERATE_LABEL,
-        FR_HEIGHT_LABEL, FR_HISTORY_EMPTY,
-        FR_IMAGE_PACK_LABEL, FR_JOB_LABEL, FR_MODE_IMAGE, FR_MODE_VIDEO, FR_NEGATIVE_LABEL,
-        FR_ADVANCED_DISCLOSURE, FR_PREVIEW_EMPTY, FR_PREVIEW_EMPTY_VIDEO, FR_PROMPT_LABEL,
-        FR_RESTORE_LABEL, FR_RESULT_TOOLBAR_SECTION, FR_SAVE_LABEL, FR_STEPS_LABEL,
-        FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_VIDEO_DURATION_LABEL, FR_VIDEO_FPS_LABEL,
-        FR_VIDEO_PACK_LABEL, FR_WIDTH_LABEL, LABEL_KEYS,
+        EN_VIDEO_PACK_LABEL, FR_ADVANCED_DISCLOSURE, FR_APP_TITLE, FR_GENERATE_LABEL,
+        FR_HEIGHT_LABEL, FR_HISTORY_EMPTY, FR_IMAGE_PACK_LABEL, FR_JOB_LABEL, FR_MODE_IMAGE,
+        FR_MODE_VIDEO, FR_NEGATIVE_LABEL, FR_PREVIEW_EMPTY, FR_PREVIEW_EMPTY_VIDEO,
+        FR_PROMPT_LABEL, FR_RESTORE_LABEL, FR_RESULT_TOOLBAR_SECTION, FR_SAVE_LABEL,
+        FR_STEPS_LABEL, FR_TAB_HISTORY, FR_TAB_PARAMS, FR_TAB_PREVIEW, FR_VIDEO_DURATION_LABEL,
+        FR_VIDEO_FPS_LABEL, FR_VIDEO_PACK_LABEL, FR_WIDTH_LABEL, LABEL_KEYS,
     };
     use super::*;
     use crate::decl_ui::DeclUiDocument;
@@ -776,9 +775,7 @@ mod tests {
         let mut upscale_cta_in_result_toolbar = false;
 
         walk(&doc.root, &mut |w| {
-            if w.kind == "section"
-                && w.open_state_key.as_deref() == Some("advanced_open")
-            {
+            if w.kind == "section" && w.open_state_key.as_deref() == Some("advanced_open") {
                 let children = w.children.as_deref().unwrap_or(&[]);
                 let name_is_own_widget = children.iter().any(|c| {
                     c.kind == "text_input" && c.state_key.as_deref() == Some("saved_preset_name")
@@ -811,21 +808,18 @@ mod tests {
                     .any(|c| c.kind == "button" && c.action.as_deref() == Some("upscale"));
             }
             if w.kind == "section" && w.label_key.as_deref() == Some("result_toolbar_section") {
-                upscale_cta_in_result_toolbar = w
-                    .children
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .any(|c| match c.kind.as_str() {
-                        "button" => c.action.as_deref() == Some("upscale"),
-                        "row" => c
-                            .children
-                            .as_deref()
-                            .unwrap_or(&[])
-                            .iter()
-                            .any(|b| b.kind == "button" && b.action.as_deref() == Some("upscale")),
-                        _ => false,
-                    });
+                upscale_cta_in_result_toolbar =
+                    w.children
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .any(|c| match c.kind.as_str() {
+                            "button" => c.action.as_deref() == Some("upscale"),
+                            "row" => c.children.as_deref().unwrap_or(&[]).iter().any(|b| {
+                                b.kind == "button" && b.action.as_deref() == Some("upscale")
+                            }),
+                            _ => false,
+                        });
             }
         });
 
