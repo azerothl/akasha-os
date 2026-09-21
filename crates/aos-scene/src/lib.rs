@@ -8,6 +8,9 @@
 //!
 //! Product suite: backend-agnostic [`RenderService`] (stub + CPU wireframe)
 //! and minimal [`assets`] pack format — no Blender binary / no GPL pack.
+//!
+//! Edit viewport: [`viewport`] is a wgpu lit MeshBox view of the same SceneGraph
+//! (DeclUI `scene3d`). It is **not** a beauty / NPR RenderService backend.
 
 mod assets;
 mod math;
@@ -17,6 +20,7 @@ mod project;
 mod render;
 mod render_stub;
 mod scene;
+pub mod viewport;
 
 pub use assets::{
     assert_asset_path, embedded_primitives_pack, instantiate_asset, load_asset_pack_yaml,
@@ -36,6 +40,10 @@ pub use render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 pub use scene::{
     CameraParams, NodeKind, SceneGraph, SceneNode, Transform, DEFAULT_SCENE_YAML_PATH,
     ILLUSTRATIONS_DOCUMENTS_PREFIX,
+};
+pub use viewport::{
+    collect_mesh_instances, eye_from_orbit, look_at_rh, perspective_rh, project_point_ndc,
+    MeshInstance, ViewportCamera, ViewportError, ViewportRenderer, BEAUTY_ROLE, VIEWPORT_ROLE,
 };
 
 /// Cap: read illustration project documents.

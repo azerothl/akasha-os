@@ -47,9 +47,18 @@ Unknown DeclUI services remain rejected. Render writes also require the illustra
 
 | Kind | Host behaviour |
 |------|----------------|
-| `scene3d` | Orbit / select / TRS — pointer-local (no per-move WASM) |
+| `scene3d` | **wgpu edit viewport** — lit MeshBox solid + wire overlay from SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR |
 | `scene_tree` | Node list selection synced via local state |
+
+### Viewport vs beauty (critical)
+
+| Path | Role |
+|------|------|
+| DeclUI `scene3d` (`aos-scene::viewport`) | Interactive **edit view** of the same SceneGraph |
+| `render.submit` / stub / cpu (/ future Blender) | Offline **beauty** jobs via RenderService — separate ABI |
+
+SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system.
 
 ## Out of scope here
 
-Blender / GPL Renderer Pack, prompt→scene, IK/FK, NPR styles, wgpu viewport.
+Blender / GPL Renderer Pack, prompt→scene, IK/FK, NPR styles, beauty-quality GPU path.
