@@ -1,18 +1,21 @@
-//! Host-local `scene3d` / `scene_tree` DeclUI widgets (Illustration Studio foundation).
+//! Host-local `scene3d` / `scene_tree` DeclUI widgets (Illustration Studio).
 //!
 //! Pointer orbit / select / TRS stay in the host process (same contract as
-//! `layer_canvas`): no WASM round-trip per mouse move. SceneGraph JSON in
-//! local state is the source of truth; camera orbit is host-only chrome.
+//! `layer_canvas`): no WASM round-trip per mouse move. SceneGraph in local
+//! state is the only source of truth; the wgpu mesh paint is an approximate
+//! **edit viewport** (not RenderService beauty / NPR).
 
 use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_scene::{
-    load_project_yaml, save_project_yaml, Mat4, NodeKind, ProjectFile, SceneGraph, SceneOp,
-    Transform, UndoStack, Vec3,
+    eye_from_orbit as orbit_eye, load_project_yaml, look_at_rh, perspective_rh,
+    save_project_yaml, Mat4, NodeKind, ProjectFile, SceneGraph, SceneOp, Transform, UndoStack,
+    Vec3, ViewportCamera, ViewportRenderer,
 };
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Ui, Vec2};
+use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DragMode {
@@ -110,52 +113,24 @@ fn selected_from_local(local: &HashMap<String, Value>, key: &str) -> Option<Stri
         .filter(|s| !s.is_empty())
 }
 
+fn scene_gpu() -> Option<&'static Mutex<ViewportRenderer>> {
+    static GPU: OnceLock<Option<Mutex<ViewportRenderer>>> = OnceLock::new();
+    GPU.get_or_init(|| ViewportRenderer::new().ok().map(Mutex::new))
+        .as_ref()
+}
+
 fn eye_from_orbit(host: &Scene3dHostState) -> Vec3 {
-    let cp = host.pitch.cos();
-    let offset = Vec3::new(
-        host.yaw.sin() * cp,
-        host.pitch.sin(),
-        host.yaw.cos() * cp,
-    ) * host.distance;
-    host.target + offset
+    orbit_eye(host.yaw, host.pitch, host.distance, host.target)
 }
 
 fn project_point(p: Vec3, view_proj: &Mat4, rect: Rect) -> Option<Pos2> {
     let clip = view_proj.transform_point(p);
-    // Crude NDC: assume transform_point already divided; treat as camera space projection.
-    // We build a simple perspective below that maps to NDC-ish [-1,1].
     if !clip.x.is_finite() || !clip.y.is_finite() {
         return None;
     }
     let x = (clip.x * 0.5 + 0.5) * rect.width() + rect.min.x;
     let y = (1.0 - (clip.y * 0.5 + 0.5)) * rect.height() + rect.min.y;
     Some(Pos2::new(x, y))
-}
-
-fn look_at_rh(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {
-    let f = (target - eye)
-        .normalized()
-        .unwrap_or(Vec3::new(0.0, 0.0, -1.0));
-    let s = f.cross(up).normalized().unwrap_or(Vec3::UNIT_X);
-    let u = s.cross(f);
-    // Column-major view matrix (world → camera), camera looks −Z.
-    Mat4::from_cols(
-        [s.x, u.x, -f.x, 0.0],
-        [s.y, u.y, -f.y, 0.0],
-        [s.z, u.z, -f.z, 0.0],
-        [-s.dot(eye), -u.dot(eye), f.dot(eye), 1.0],
-    )
-}
-
-fn perspective_rh(fovy: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
-    let f = 1.0 / (fovy * 0.5).tan();
-    let mut m = [0.0; 16];
-    m[0] = f / aspect;
-    m[5] = f;
-    m[10] = (far + near) / (near - far);
-    m[11] = -1.0;
-    m[14] = (2.0 * far * near) / (near - far);
-    Mat4 { m }
 }
 
 fn box_corners(center: Vec3, half: f32) -> [Vec3; 8] {
@@ -195,6 +170,82 @@ fn widget_label(w: &DeclUiWidget, doc: &DeclUiDocument, language: &str, fallback
         .unwrap_or_else(|| fallback.into())
 }
 
+fn paint_cpu_fallback(
+    painter: &egui::Painter,
+    rect: Rect,
+    graph: &SceneGraph,
+    selected: Option<&str>,
+    view_proj: &Mat4,
+    eye: Vec3,
+) -> (Vec<(String, Pos2, f32)>, u32) {
+    painter.rect_filled(rect, 4.0, Color32::from_rgb(24, 28, 34));
+    for i in -4..=4 {
+        let a = Vec3::new(i as f32, 0.0, -4.0);
+        let b = Vec3::new(i as f32, 0.0, 4.0);
+        let c = Vec3::new(-4.0, 0.0, i as f32);
+        let d = Vec3::new(4.0, 0.0, i as f32);
+        if let (Some(pa), Some(pb)) = (
+            project_point(a, view_proj, rect),
+            project_point(b, view_proj, rect),
+        ) {
+            painter.line_segment([pa, pb], Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)));
+        }
+        if let (Some(pc), Some(pd)) = (
+            project_point(c, view_proj, rect),
+            project_point(d, view_proj, rect),
+        ) {
+            painter.line_segment([pc, pd], Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)));
+        }
+    }
+
+    let mut hit_candidates: Vec<(String, Pos2, f32)> = Vec::new();
+    let mut mesh_count = 0u32;
+    for id in graph.node_ids_depth_first() {
+        let Some(node) = graph.nodes.get(&id) else {
+            continue;
+        };
+        if !node.visible || node.kind != NodeKind::MeshBox {
+            continue;
+        }
+        mesh_count += 1;
+        let Ok(world) = graph.world_matrix(&id) else {
+            continue;
+        };
+        let center = world.transform_point(Vec3::ZERO);
+        let half = world.transform_vector(Vec3::new(0.5, 0.5, 0.5)).length() * 0.5;
+        let half = half.max(0.25);
+        let corners = box_corners(center, half);
+        let selected_here = selected == Some(id.as_str());
+        let stroke = if selected_here {
+            Stroke::new(2.0_f32, Color32::from_rgb(120, 200, 255))
+        } else {
+            Stroke::new(1.5_f32, Color32::from_rgb(180, 160, 120))
+        };
+        for (i, j) in BOX_EDGES {
+            if let (Some(pa), Some(pb)) = (
+                project_point(corners[i], view_proj, rect),
+                project_point(corners[j], view_proj, rect),
+            ) {
+                painter.line_segment([pa, pb], stroke);
+            }
+        }
+        if let Some(screen) = project_point(center, view_proj, rect) {
+            let depth = (center - eye).length();
+            hit_candidates.push((id.clone(), screen, depth));
+            painter.circle_filled(
+                screen,
+                if selected_here { 5.0 } else { 3.0 },
+                if selected_here {
+                    Color32::from_rgb(120, 200, 255)
+                } else {
+                    Color32::from_rgb(220, 200, 140)
+                },
+            );
+        }
+    }
+    (hit_candidates, mesh_count)
+}
+
 /// Orbit (LMB empty / Alt+LMB), select (click mesh), translate (drag selected).
 pub fn ui_scene3d(
     ui: &mut Ui,
@@ -224,86 +275,106 @@ pub fn ui_scene3d(
     }
 
     let title = widget_label(w, doc, language, "Viewport");
-    ui.label(egui::RichText::new(title).strong());
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(title).strong());
+        ui.label(
+            egui::RichText::new(if language.starts_with("fr") {
+                "édition · pas beauté"
+            } else {
+                "edit view · not beauty"
+            })
+            .weak()
+            .small(),
+        );
+    });
 
     let desired = Vec2::new(ui.available_width().max(160.0), 280.0);
     let (rect, response) = ui.allocate_exact_size(desired, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
 
-    // Atmosphere
-    painter.rect_filled(rect, 4.0, Color32::from_rgb(24, 28, 34));
-    // Ground grid hint
     let eye = eye_from_orbit(host);
     let aspect = rect.width() / rect.height().max(1.0);
     let view = look_at_rh(eye, host.target, Vec3::UNIT_Y);
     let proj = perspective_rh(50.0_f32.to_radians(), aspect, 0.1, 200.0);
     let view_proj = proj * view;
 
-    // Grid
-    for i in -4..=4 {
-        let a = Vec3::new(i as f32, 0.0, -4.0);
-        let b = Vec3::new(i as f32, 0.0, 4.0);
-        let c = Vec3::new(-4.0, 0.0, i as f32);
-        let d = Vec3::new(4.0, 0.0, i as f32);
-        if let (Some(pa), Some(pb)) = (
-            project_point(a, &view_proj, rect),
-            project_point(b, &view_proj, rect),
-        ) {
-            painter.line_segment([pa, pb], Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)));
-        }
-        if let (Some(pc), Some(pd)) = (
-            project_point(c, &view_proj, rect),
-            project_point(d, &view_proj, rect),
-        ) {
-            painter.line_segment([pc, pd], Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)));
+    let mut hit_candidates: Vec<(String, Pos2, f32)> = Vec::new();
+    let mut mesh_count = 0u32;
+    let mut used_wgpu = false;
+
+    if let Some(gpu) = scene_gpu() {
+        if let Ok(gpu) = gpu.lock() {
+            let px_w = (rect.width() * ui.ctx().pixels_per_point())
+                .round()
+                .clamp(64.0, 2048.0) as u32;
+            let px_h = (rect.height() * ui.ctx().pixels_per_point())
+                .round()
+                .clamp(64.0, 2048.0) as u32;
+            let cam = ViewportCamera {
+                eye,
+                target: host.target,
+                up: Vec3::UNIT_Y,
+                fovy_rad: 50.0_f32.to_radians(),
+                near: 0.1,
+                far: 200.0,
+            };
+            if let Ok(rgba) = gpu.render_rgba(&graph, &cam, px_w, px_h, selected.as_deref()) {
+                let image =
+                    ColorImage::from_rgba_unmultiplied([px_w as usize, px_h as usize], &rgba);
+                let tex = ui.ctx().load_texture(
+                    "illustration_scene3d_wgpu",
+                    image,
+                    TextureOptions::LINEAR,
+                );
+                painter.image(
+                    tex.id(),
+                    rect,
+                    egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+                used_wgpu = true;
+                for id in graph.node_ids_depth_first() {
+                    let Some(node) = graph.nodes.get(&id) else {
+                        continue;
+                    };
+                    if !node.visible || node.kind != NodeKind::MeshBox {
+                        continue;
+                    }
+                    mesh_count += 1;
+                    let Ok(world) = graph.world_matrix(&id) else {
+                        continue;
+                    };
+                    let center = world.transform_point(Vec3::ZERO);
+                    if let Some(screen) = project_point(center, &view_proj, rect) {
+                        let depth = (center - eye).length();
+                        hit_candidates.push((id.clone(), screen, depth));
+                        let selected_here = selected.as_deref() == Some(id.as_str());
+                        painter.circle_filled(
+                            screen,
+                            if selected_here { 5.0 } else { 3.0 },
+                            if selected_here {
+                                Color32::from_rgb(120, 200, 255)
+                            } else {
+                                Color32::from_rgb(220, 200, 140)
+                            },
+                        );
+                    }
+                }
+            }
         }
     }
 
-    // Draw mesh boxes in world space
-    let mut hit_candidates: Vec<(String, Pos2, f32)> = Vec::new();
-    let mut mesh_count = 0u32;
-    for id in graph.node_ids_depth_first() {
-        let Some(node) = graph.nodes.get(&id) else {
-            continue;
-        };
-        if !node.visible || node.kind != NodeKind::MeshBox {
-            continue;
-        }
-        mesh_count += 1;
-        let Ok(world) = graph.world_matrix(&id) else {
-            continue;
-        };
-        let center = world.transform_point(Vec3::ZERO);
-        let half = world.transform_vector(Vec3::new(0.5, 0.5, 0.5)).length() * 0.5;
-        let half = half.max(0.25);
-        let corners = box_corners(center, half);
-        let selected_here = selected.as_deref() == Some(id.as_str());
-        let stroke = if selected_here {
-            Stroke::new(2.0_f32, Color32::from_rgb(120, 200, 255))
-        } else {
-            Stroke::new(1.5_f32, Color32::from_rgb(180, 160, 120))
-        };
-        for (i, j) in BOX_EDGES {
-            if let (Some(pa), Some(pb)) = (
-                project_point(corners[i], &view_proj, rect),
-                project_point(corners[j], &view_proj, rect),
-            ) {
-                painter.line_segment([pa, pb], stroke);
-            }
-        }
-        if let Some(screen) = project_point(center, &view_proj, rect) {
-            let depth = (center - eye).length();
-            hit_candidates.push((id.clone(), screen, depth));
-            painter.circle_filled(
-                screen,
-                if selected_here { 5.0 } else { 3.0 },
-                if selected_here {
-                    Color32::from_rgb(120, 200, 255)
-                } else {
-                    Color32::from_rgb(220, 200, 140)
-                },
-            );
-        }
+    if !used_wgpu {
+        let (hits, count) = paint_cpu_fallback(
+            &painter,
+            rect,
+            &graph,
+            selected.as_deref(),
+            &view_proj,
+            eye,
+        );
+        hit_candidates = hits;
+        mesh_count = count;
     }
 
     if mesh_count == 0 {

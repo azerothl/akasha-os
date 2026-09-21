@@ -44,7 +44,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.2.1
+version: 0.2.2
 hash: ${HASH}
 permissions:
   required_caps:

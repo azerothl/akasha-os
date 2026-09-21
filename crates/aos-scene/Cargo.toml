@@ -10,6 +10,10 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde_yaml.workspace = true
 thiserror = { workspace = true, default-features = true }
+# Edit viewport only — not a RenderService backend (see `viewport` module).
+wgpu = { version = "27", default-features = true }
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 approx = "0.5"

@@ -100,6 +100,11 @@ only freezes **which** cases exist.
 > **Implementation note (product suite):** `RenderService` (submit/status/result)
 > + stub/CPU backends and a minimal asset pack (`humanoid.placeholder`) land
 > without Blender. ADR numeric contract is unchanged.
+>
+> **Implementation note (wgpu edit viewport):** DeclUI `scene3d` paints via
+> `aos-scene::viewport` (wgpu lit MeshBox). That path is an approximate
+> **edit view** of the same SceneGraph — not a RenderService beauty backend
+> and not a second scene system.
 
 ## Consequences
 
