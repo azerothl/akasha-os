@@ -988,20 +988,22 @@ pub async fn resolve_resident_vision_model(
     resident_vision_model_id(preferred, &models)
 }
 
-/// Whether this infer target can consume image refs (loaded mmproj).
-/// `None` only matches a resident vision model — the default chat model is unknown.
+/// Whether this explicit infer target can consume image refs.
+/// A confirmed provider is allowed only when selected, never as an implicit fallback.
+fn infer_target_has_vision(model_id: Option<&str>, models: &[ModelInfo]) -> bool {
+    let Some(id) = model_id.filter(|s| !s.is_empty()) else { return false; };
+    models.iter().find(|m| m.id == id).is_some_and(|m| {
+        m.has_vision && (model_is_resident(m) || matches!(m.state, ModelState::Remote))
+    })
+}
+
+/// The default target is unknown: presence of another vision model is not proof.
 pub async fn session_model_has_vision(bus: &BusClient, model_id: Option<&str>) -> bool {
     let models: Vec<ModelInfo> = match bus.call("model.list", &(), vec![]).await {
         Ok(m) => m,
         Err(_) => return false,
     };
-    if let Some(id) = model_id.filter(|s| !s.is_empty()) {
-        return models
-            .iter()
-            .find(|m| m.id == id)
-            .is_some_and(|m| m.has_vision && model_is_resident(m));
-    }
-    models.iter().any(|m| m.has_vision && model_is_resident(m))
+    infer_target_has_vision(model_id, &models)
 }
 
 fn is_vision_image_path(path: &str) -> bool {
@@ -1636,6 +1638,20 @@ mod tests {
         );
         assert!(resident_vision_model_id(Some("text"), &models[..1]).is_none());
         assert!(resident_vision_model_id(None, &models[..2]).is_none());
+    }
+
+    #[test]
+    fn explicit_provider_vision_does_not_enable_unrelated_or_default_model() {
+        let models = vec![
+            model_info("provider:ollama:vision", ModelState::Remote, true),
+            model_info("provider:ollama:text", ModelState::Remote, false),
+            model_info("disk", ModelState::OnDisk, true),
+        ];
+        assert!(infer_target_has_vision(Some("provider:ollama:vision"), &models));
+        for id in [None, Some(""), Some("missing"), Some("provider:ollama:text"), Some("disk")] {
+            assert!(!infer_target_has_vision(id, &models));
+        }
+        assert!(resident_vision_model_id(None, &models).is_none());
     }
 
     #[test]
