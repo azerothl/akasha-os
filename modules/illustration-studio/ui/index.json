@@ -61,11 +61,12 @@
       "preview_label": "Beauty output",
       "mesh_section": "Mesh assist",
       "mesh_prompt_label": "Mesh prompt",
+      "mesh_image_label": "Conditioning image (local path)",
       "mesh_stub_label": "Stub mesh (procedural)",
       "mesh_neural_label": "Neural mesh (pack)",
       "mesh_pack_status_label": "Refresh pack status",
       "mesh_pack_status_empty": "Pack status unknown — tap Refresh pack status.",
-      "mesh_tip": "Stub builds MeshBox props from keywords. Neural uses the opt-in TRELLIS.2 GGUF Model Pack (fixture GLB mock when runner/weights absent). Cap mesh.neural · SceneGraph MeshAsset.",
+      "mesh_tip": "Stub builds MeshBox props from keywords. Neural spawns trellis.cpp / pack adapter (image→GLB) when runner + GGUF weights are installed; otherwise fixture mock. Cap mesh.neural · SceneGraph MeshAsset. No WebView.",
       "comic_section": "Comic page",
       "comic_layout_label": "Layout",
       "comic_apply_label": "Apply layout",
@@ -167,11 +168,12 @@
       "preview_label": "Sortie beauté",
       "mesh_section": "Assist mesh",
       "mesh_prompt_label": "Invite mesh",
+      "mesh_image_label": "Image de conditionnement (chemin local)",
       "mesh_stub_label": "Mesh stub (procédural)",
       "mesh_neural_label": "Mesh neural (pack)",
       "mesh_pack_status_label": "Rafraîchir statut pack",
       "mesh_pack_status_empty": "Statut pack inconnu — appuyez sur Rafraîchir statut pack.",
-      "mesh_tip": "Le stub assemble des MeshBox. Le neural utilise le Model Pack TRELLIS.2 GGUF (mock GLB fixture sans runner/poids). Cap mesh.neural · SceneGraph MeshAsset.",
+      "mesh_tip": "Le stub assemble des MeshBox. Le neural lance trellis.cpp / l’adaptateur du pack (image→GLB) si runner + poids GGUF sont installés ; sinon mock fixture. Cap mesh.neural · SceneGraph MeshAsset. Pas de WebView.",
       "comic_section": "Page BD",
       "comic_layout_label": "Mise en page",
       "comic_apply_label": "Appliquer la mise en page",
@@ -253,6 +255,10 @@
       "mesh_prompt": {
         "type": "string",
         "default": "wooden crate"
+      },
+      "mesh_image_path": {
+        "type": "string",
+        "default": ""
       },
       "mesh_pack_status": {
         "type": "string",
@@ -750,6 +756,7 @@
         "backend": "neural",
         "parent_id": "root",
         "prefix": "neural_",
+        "image_path": "$local.mesh_image_path",
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
@@ -1267,6 +1274,11 @@
                 "kind": "text_input",
                 "state_key": "mesh_prompt",
                 "label_key": "mesh_prompt_label"
+              },
+              {
+                "kind": "text_input",
+                "state_key": "mesh_image_path",
+                "label_key": "mesh_image_label"
               },
               {
                 "kind": "button",

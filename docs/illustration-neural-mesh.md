@@ -1,16 +1,17 @@
-# Illustration Studio — neural mesh assist (foundation + MeshAsset spike)
+# Illustration Studio — neural mesh assist (TRELLIS.2 GGUF runner)
 
-**Status:** Preview foundation (package `illustration-studio` **0.7.1**)  
+**Status:** Preview foundation + real spawn path (package `illustration-studio` **0.7.4**)  
 **Spec:** draft §110–114 (AI 3D gen is **not** an MVP dependency)  
 **Caps:** [`illustration-studio-caps.md`](illustration-studio-caps.md)
 
 ## Goal
 
-Ship a fail-closed **host surface** for future neural / AI mesh assist without:
+Ship a fail-closed **host surface** for neural / AI mesh assist without:
 
 - a Blender-only editor path
 - opaque model weights in-tree
 - a second scene SoT beside SceneGraph
+- Gradio / WebView UI
 
 ## Stub vs real
 
@@ -20,16 +21,19 @@ Ship a fail-closed **host surface** for future neural / AI mesh assist without:
 | `backend=stub` procedural MeshBox assembly | **Real** offline path (deterministic; EN/FR keywords) |
 | Proposal validation (part count / scale / bbox) | **Real** |
 | SceneGraph insert (MeshBox under parent) | **Real** |
-| DeclUI EN/FR Mesh assist section + pack status | **Real** |
-| `NodeKind::MeshAsset` + glTF/GLB load (CPU + wgpu) | **Real** (foundation) |
-| Neural Mesh Model Pack ABI (`share/illustration-neural-mesh-pack/`) | **Real** resolve + spawn shape; **mock** uses fixture GLB |
-| `backend=neural` TRELLIS.2 GGUF weights / trellis.cpp | **Not in git** — point `AOS_NEURAL_MESH_*` at offline install |
-| Pack missing | **`BackendUnavailable`** (fail-closed) |
+| DeclUI EN/FR Mesh assist + pack status + image path | **Real** |
+| `NodeKind::MeshAsset` + glTF/GLB load (CPU + wgpu) | **Real** |
+| Neural Mesh Model Pack ABI | **Real** resolve + spawn |
+| `trellis-cli` argv (`<in> <out> --models <dir> --res N`) | **Real** (matches pwilkin/trellis.cpp) |
+| Pack adapter `adapters/trellis_gguf.sh` | **Real** (wraps CLI; CI mock via `AOS_NEURAL_MESH_ADAPTER_MOCK=1`) |
+| Spawned GLB validation before MeshAsset insert | **Real** |
+| TRELLIS.2 GGUF weights / trellis.cpp binary | **Not in git** — point `AOS_NEURAL_MESH_*` at offline install |
+| Pack missing / weights missing in `require` | **`BackendUnavailable`** (fail-closed) |
 
 ## Flow
 
 ```text
-prompt (+ backend)
+prompt (+ optional local image_path, backend)
   → mesh.assist (cap mesh.neural)
   → propose (stub | neural pack)
   → validate
@@ -42,11 +46,13 @@ prompt (+ backend)
 | Env | Role |
 |-----|------|
 | `AOS_NEURAL_MESH_PACK` | Pack root (default `share/illustration-neural-mesh-pack`) |
-| `AOS_NEURAL_MESH_BIN` | `trellis-cli` / LocalAI binary |
+| `AOS_NEURAL_MESH_BIN` | `trellis-cli` or `adapters/trellis_gguf.sh` |
 | `AOS_NEURAL_MESH_WEIGHTS` | Multi-file GGUF directory (LocalAI-io / ilintar) |
 | `AOS_NEURAL_MESH_MODE` | `auto` \| `mock` \| `require` |
 | `AOS_NEURAL_MESH_FIXTURE` | Override fixture GLB |
 | `AOS_NEURAL_MESH_TIMEOUT_SECS` | Spawn timeout (default 600) |
+| `AOS_NEURAL_MESH_RES` | `--res` 512 / 1024 / 1536 (default 512) |
+| `AOS_NEURAL_MESH_ADAPTER_MOCK` | `1` → adapter copies fixture (CI) |
 
 See `share/illustration-neural-mesh-pack/README.md`.
 
@@ -66,3 +72,4 @@ See `share/illustration-neural-mesh-pack/README.md`.
 - Full PBR texture path in wgpu
 - Blender beauty importing GLB (export carries `mesh_uri`; adapter TBD)
 - Replacing §142 prefab MeshBox pack expansion (still primary for demos)
+- LocalAI long-lived HTTP server as the default Preview path (prefer argv CLI)

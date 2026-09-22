@@ -1990,12 +1990,19 @@ fn run_mesh_assist(
         .get("prefix")
         .and_then(|v| v.as_str())
         .unwrap_or("mesh_");
+    let image_path = input
+        .get("image_path")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
     let req = MeshAssistRequest {
         prompt: prompt.to_string(),
         parent_id: parent_id.to_string(),
         prefix: prefix.to_string(),
         backend,
+        image_path,
     };
 
     let applied = match mesh_assist(&mut scene, &req) {
@@ -2078,6 +2085,8 @@ fn run_mesh_pack_status(
             "pack_present": status.pack_root.is_some(),
             "ready_for_mock": status.ready_for_mock,
             "ready_for_spawn": status.ready_for_spawn,
+            "runner_kind": status.runner_kind.map(|k| k.as_str()),
+            "weights_present": status.weights_dir.is_some(),
             "pack_root": status.pack_root.as_ref().map(|p| p.to_string_lossy().into_owned()),
         }),
         error: None,

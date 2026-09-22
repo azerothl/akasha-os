@@ -109,7 +109,7 @@ pub use neural_mesh::{
     MESH_ASSIST_SERVICE, MESH_NEURAL_CAP, MIN_ABS_SCALE,
 };
 pub use neural_mesh_isolate::{
-    probe_pack_status, NeuralMeshRunMode, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
+    probe_pack_status, NeuralMeshRunMode, NeuralMeshRunnerKind, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
 };
 pub use ops::{SceneOp, UndoStack};
 pub use pose::{

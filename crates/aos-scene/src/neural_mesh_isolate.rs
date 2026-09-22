@@ -2,9 +2,12 @@
 //!
 //! Model:
 //! - Fixed argv only — never libre shell from modules
-//! - Work directory quarantines prompt/image in + GLB out
+//! - Work directory quarantines image in + GLB out
 //! - Optional Linux `bwrap --unshare-net` when available
 //! - Clear env of ambient secrets; keep a minimal PATH
+//!
+//! Real runner shape matches **trellis.cpp** `trellis-cli`:
+//! `trellis-cli <input.png> <output.glb> --models <GGUF_DIR> [--res 512|1024|…]`
 //!
 //! Weights (TRELLIS.2 GGUF multi-file sets) and the trellis.cpp / LocalAI
 //! runner are **never** vendored into the Akasha git tree. Point
@@ -21,6 +24,9 @@ use std::time::Duration;
 /// Default wall-clock timeout for a neural mesh child (minutes-scale jobs).
 pub const DEFAULT_NEURAL_MESH_TIMEOUT_SECS: u64 = 600;
 
+/// Default geometry resolution for trellis-cli (`--res`).
+pub const DEFAULT_NEURAL_MESH_RES: u32 = 512;
+
 /// How the host resolves the neural mesh runner / mock path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NeuralMeshRunMode {
@@ -28,7 +34,7 @@ pub enum NeuralMeshRunMode {
     Auto,
     /// Always use fixture GLB — never spawn trellis / LocalAI.
     Mock,
-    /// Require a real runner binary; error if missing.
+    /// Require a real runner binary + weights; error if missing.
     Require,
 }
 
@@ -55,33 +61,91 @@ impl NeuralMeshRunMode {
     }
 }
 
+/// Which argv family to emit for the resolved runner binary / adapter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NeuralMeshRunnerKind {
+    /// `trellis-cli <in> <out> --models <dir> …` (pwilkin/trellis.cpp).
+    TrellisCli,
+    /// Pack `adapters/trellis_gguf.sh` — same argv as trellis-cli (wraps CLI or LocalAI).
+    Adapter,
+    /// LocalAI binary — still argv-shaped via adapter preference; direct spawn uses trellis flags.
+    LocalAi,
+}
+
+impl NeuralMeshRunnerKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TrellisCli => "trellis-cli",
+            Self::Adapter => "adapter",
+            Self::LocalAi => "local-ai",
+        }
+    }
+
+    pub fn detect(bin: &Path) -> Self {
+        let name = bin
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if name.contains("trellis_gguf") || name.contains("adapter") {
+            Self::Adapter
+        } else if name.contains("local-ai") || name.contains("localai") {
+            Self::LocalAi
+        } else {
+            Self::TrellisCli
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NeuralMeshPackStatus {
     pub pack_root: Option<PathBuf>,
     pub runner_bin: Option<PathBuf>,
+    pub runner_kind: Option<NeuralMeshRunnerKind>,
+    pub weights_dir: Option<PathBuf>,
     pub fixture_glb: Option<PathBuf>,
     pub mode: NeuralMeshRunMode,
     pub ready_for_mock: bool,
+    /// Pack + runner + GGUF weights directory (at least one `.gguf` or ready marker).
     pub ready_for_spawn: bool,
 }
 
 impl NeuralMeshPackStatus {
     pub fn summary_en(&self) -> String {
-        match (&self.pack_root, self.ready_for_mock, self.ready_for_spawn) {
-            (None, _, _) => "Neural mesh pack: missing (backend=neural fail-closed)".into(),
-            (Some(_), true, true) => format!(
-                "Neural mesh pack: ready (mode={}, runner+fixture)",
+        match (
+            &self.pack_root,
+            self.ready_for_mock,
+            self.ready_for_spawn,
+            self.weights_dir.is_some(),
+            self.runner_bin.is_some(),
+        ) {
+            (None, _, _, _, _) => {
+                "Neural mesh pack: missing (backend=neural fail-closed)".into()
+            }
+            (Some(_), true, true, _, _) => format!(
+                "Neural mesh pack: ready (mode={}, runner={}, weights+fixture)",
+                self.mode.as_str(),
+                self.runner_kind
+                    .map(|k| k.as_str())
+                    .unwrap_or("unknown")
+            ),
+            (Some(_), true, false, false, true) => format!(
+                "Neural mesh pack: mock-ready (mode={}; runner present, GGUF weights missing)",
                 self.mode.as_str()
             ),
-            (Some(_), true, false) => format!(
-                "Neural mesh pack: mock-ready (mode={}, fixture GLB; no runner)",
+            (Some(_), true, false, true, false) => format!(
+                "Neural mesh pack: mock-ready (mode={}; weights present, runner missing)",
                 self.mode.as_str()
             ),
-            (Some(_), false, true) => format!(
+            (Some(_), true, false, _, _) => format!(
+                "Neural mesh pack: mock-ready (mode={}, fixture GLB; spawn not ready)",
+                self.mode.as_str()
+            ),
+            (Some(_), false, true, _, _) => format!(
                 "Neural mesh pack: runner ready (mode={}; no fixture)",
                 self.mode.as_str()
             ),
-            (Some(_), false, false) => format!(
+            (Some(_), false, false, _, _) => format!(
                 "Neural mesh pack: present but incomplete (mode={})",
                 self.mode.as_str()
             ),
@@ -89,21 +153,40 @@ impl NeuralMeshPackStatus {
     }
 
     pub fn summary_fr(&self) -> String {
-        match (&self.pack_root, self.ready_for_mock, self.ready_for_spawn) {
-            (None, _, _) => "Pack mesh neural : absent (backend=neural refusé)".into(),
-            (Some(_), true, true) => format!(
-                "Pack mesh neural : prêt (mode={}, runner+fixture)",
+        match (
+            &self.pack_root,
+            self.ready_for_mock,
+            self.ready_for_spawn,
+            self.weights_dir.is_some(),
+            self.runner_bin.is_some(),
+        ) {
+            (None, _, _, _, _) => {
+                "Pack mesh neural : absent (backend=neural refusé)".into()
+            }
+            (Some(_), true, true, _, _) => format!(
+                "Pack mesh neural : prêt (mode={}, runner={}, poids+fixture)",
+                self.mode.as_str(),
+                self.runner_kind
+                    .map(|k| k.as_str())
+                    .unwrap_or("inconnu")
+            ),
+            (Some(_), true, false, false, true) => format!(
+                "Pack mesh neural : mock prêt (mode={} ; runner présent, poids GGUF absents)",
                 self.mode.as_str()
             ),
-            (Some(_), true, false) => format!(
-                "Pack mesh neural : mock prêt (mode={}, GLB fixture ; pas de runner)",
+            (Some(_), true, false, true, false) => format!(
+                "Pack mesh neural : mock prêt (mode={} ; poids présents, runner absent)",
                 self.mode.as_str()
             ),
-            (Some(_), false, true) => format!(
+            (Some(_), true, false, _, _) => format!(
+                "Pack mesh neural : mock prêt (mode={}, GLB fixture ; spawn non prêt)",
+                self.mode.as_str()
+            ),
+            (Some(_), false, true, _, _) => format!(
                 "Pack mesh neural : runner prêt (mode={} ; pas de fixture)",
                 self.mode.as_str()
             ),
-            (Some(_), false, false) => format!(
+            (Some(_), false, false, _, _) => format!(
                 "Pack mesh neural : présent mais incomplet (mode={})",
                 self.mode.as_str()
             ),
@@ -131,7 +214,7 @@ pub fn resolve_pack_root() -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.is_dir())
 }
 
-/// Resolve runner: `AOS_NEURAL_MESH_BIN` → pack `bin/trellis-cli` → PATH.
+/// Resolve runner: env → pack adapter → pack `bin/trellis-cli` → PATH.
 pub fn resolve_runner_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
     if let Ok(p) = std::env::var("AOS_NEURAL_MESH_BIN") {
         let pb = PathBuf::from(p.trim());
@@ -141,6 +224,8 @@ pub fn resolve_runner_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
     }
     if let Some(root) = pack_root {
         for rel in [
+            "adapters/trellis_gguf.sh",
+            "adapters/trellis_gguf.cmd",
             "bin/trellis-cli",
             "bin/trellis-cli.exe",
             "trellis-cli",
@@ -174,16 +259,79 @@ pub fn resolve_fixture_glb(pack_root: Option<&Path>) -> Option<PathBuf> {
     crate_fix.is_file().then_some(crate_fix)
 }
 
+/// Resolve optional weights directory (never downloaded at generate-time).
+/// A directory counts only when it looks like a GGUF set (`.gguf` present) or
+/// carries an explicit `.aos-weights-ready` marker (CI / dry-run installs).
+pub fn resolve_weights_dir(pack_root: Option<&Path>) -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("AOS_NEURAL_MESH_WEIGHTS") {
+        let pb = PathBuf::from(p.trim());
+        if !p.trim().is_empty() && weights_dir_ready(&pb) {
+            return Some(pb);
+        }
+    }
+    if let Some(root) = pack_root {
+        let cand = root.join("weights");
+        if weights_dir_ready(&cand) {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// True when `dir` exists and contains at least one `.gguf` (any depth-1) or a ready marker.
+pub fn weights_dir_ready(dir: &Path) -> bool {
+    if !dir.is_dir() {
+        return false;
+    }
+    if dir.join(".aos-weights-ready").is_file() {
+        return true;
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in rd.flatten() {
+        let path = entry.path();
+        if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("gguf"))
+        {
+            return true;
+        }
+        // Quantized layouts often nest under q4/ q8/.
+        if path.is_dir() {
+            if let Ok(sub) = std::fs::read_dir(&path) {
+                for child in sub.flatten() {
+                    if child
+                        .path()
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("gguf"))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 pub fn probe_pack_status() -> NeuralMeshPackStatus {
     let mode = NeuralMeshRunMode::from_env();
     let pack_root = resolve_pack_root();
     let runner_bin = resolve_runner_bin(pack_root.as_deref());
+    let runner_kind = runner_bin.as_ref().map(|b| NeuralMeshRunnerKind::detect(b));
+    let weights_dir = resolve_weights_dir(pack_root.as_deref());
     let fixture_glb = resolve_fixture_glb(pack_root.as_deref());
     let ready_for_mock = pack_root.is_some() && fixture_glb.is_some();
-    let ready_for_spawn = pack_root.is_some() && runner_bin.is_some();
+    let ready_for_spawn =
+        pack_root.is_some() && runner_bin.is_some() && weights_dir.is_some();
     NeuralMeshPackStatus {
         pack_root,
         runner_bin,
+        runner_kind,
+        weights_dir,
         fixture_glb,
         mode,
         ready_for_mock,
@@ -213,31 +361,52 @@ pub fn bwrap_available() -> bool {
     which_on_path("bwrap").is_some()
 }
 
+/// Geometry resolution for `--res` (env `AOS_NEURAL_MESH_RES`, default 512).
+pub fn resolve_geometry_res() -> u32 {
+    std::env::var("AOS_NEURAL_MESH_RES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|r| matches!(r, 512 | 1024 | 1536))
+        .unwrap_or(DEFAULT_NEURAL_MESH_RES)
+}
+
 #[derive(Debug, Clone)]
 pub struct NeuralMeshSpawnPlan {
     pub runner_bin: PathBuf,
+    pub runner_kind: NeuralMeshRunnerKind,
     pub work_dir: PathBuf,
     pub input_image: PathBuf,
     pub output_glb: PathBuf,
-    pub weights_dir: Option<PathBuf>,
+    pub weights_dir: PathBuf,
+    pub geometry_res: u32,
     pub use_bwrap: bool,
     pub timeout: Duration,
 }
 
-/// Fixed argv for trellis-cli style: `trellis-cli --input <img> --output <glb> [--weights <dir>]`.
-/// Real LocalAI / trellis.cpp flags may differ — adapter scripts in the pack may wrap this.
+/// Fixed argv matching trellis.cpp / pack adapter:
+/// `<bin> <input.png> <output.glb> --models <dir> --res <N>`.
+/// Shell adapters are invoked as `bash <adapter.sh> …` so +x is not required.
+///
+/// LocalAI HTTP is intentionally not used here (caps prefer argv + net deny).
+/// Point `AOS_NEURAL_MESH_BIN` at `adapters/trellis_gguf.sh` to wrap LocalAI offline.
 pub fn build_trellis_argv(plan: &NeuralMeshSpawnPlan) -> Vec<String> {
-    let mut argv = vec![
-        plan.runner_bin.to_string_lossy().into_owned(),
-        "--input".into(),
-        plan.input_image.to_string_lossy().into_owned(),
-        "--output".into(),
-        plan.output_glb.to_string_lossy().into_owned(),
-    ];
-    if let Some(w) = &plan.weights_dir {
-        argv.push("--weights".into());
-        argv.push(w.to_string_lossy().into_owned());
+    let mut argv = Vec::new();
+    let is_shell = plan
+        .runner_bin
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("sh"))
+        || matches!(plan.runner_kind, NeuralMeshRunnerKind::Adapter);
+    if is_shell {
+        argv.push("bash".into());
     }
+    argv.push(plan.runner_bin.to_string_lossy().into_owned());
+    argv.push(plan.input_image.to_string_lossy().into_owned());
+    argv.push(plan.output_glb.to_string_lossy().into_owned());
+    argv.push("--models".into());
+    argv.push(plan.weights_dir.to_string_lossy().into_owned());
+    argv.push("--res".into());
+    argv.push(plan.geometry_res.to_string());
     argv
 }
 
@@ -253,6 +422,11 @@ pub struct NeuralMeshSpawnResult {
 /// Spawn runner (optionally under bubblewrap). Stdin closed; stdout/stderr capped.
 pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResult, String> {
     let argv = build_trellis_argv(plan);
+    let pack_root_guess = plan
+        .runner_bin
+        .parent()
+        .and_then(|p| p.parent())
+        .map(Path::to_path_buf);
     let (program, args, isolated): (PathBuf, Vec<String>, bool) =
         if plan.use_bwrap && bwrap_available() {
             let mut bw: Vec<String> = vec![
@@ -265,6 +439,9 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                 "--bind".into(),
                 plan.work_dir.to_string_lossy().into_owned(),
                 plan.work_dir.to_string_lossy().into_owned(),
+                "--ro-bind".into(),
+                plan.weights_dir.to_string_lossy().into_owned(),
+                plan.weights_dir.to_string_lossy().into_owned(),
                 "--ro-bind".into(),
                 "/usr".into(),
                 "/usr".into(),
@@ -281,16 +458,21 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                 "--chdir".into(),
                 plan.work_dir.to_string_lossy().into_owned(),
             ];
-            if let Some(w) = &plan.weights_dir {
+            if let Some(pack) = &pack_root_guess {
                 bw.push("--ro-bind".into());
-                bw.push(w.to_string_lossy().into_owned());
-                bw.push(w.to_string_lossy().into_owned());
+                bw.push(pack.to_string_lossy().into_owned());
+                bw.push(pack.to_string_lossy().into_owned());
+            }
+            if let Some(sh) = which_on_path("bash").or_else(|| which_on_path("sh")) {
+                bw.push("--ro-bind".into());
+                bw.push(sh.to_string_lossy().into_owned());
+                bw.push(sh.to_string_lossy().into_owned());
             }
             bw.extend(argv.iter().cloned());
             (PathBuf::from("bwrap"), bw[1..].to_vec(), true)
         } else {
             (
-                plan.runner_bin.clone(),
+                PathBuf::from(&argv[0]),
                 argv.iter().skip(1).cloned().collect(),
                 false,
             )
@@ -306,6 +488,21 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
         .env("HOME", plan.work_dir.as_os_str())
         .env("TMPDIR", plan.work_dir.as_os_str())
         .current_dir(&plan.work_dir);
+    if let Some(pack) = &pack_root_guess {
+        cmd.env("AOS_NEURAL_MESH_PACK", pack.as_os_str());
+    }
+    // Allowlisted host knobs only — never forward ambient secrets / HF tokens.
+    for key in [
+        "AOS_NEURAL_MESH_ADAPTER_MOCK",
+        "AOS_NEURAL_MESH_FIXTURE",
+        "AOS_NEURAL_MESH_TRELLIS_CLI",
+    ] {
+        if let Ok(v) = std::env::var(key) {
+            if !v.is_empty() {
+                cmd.env(key, v);
+            }
+        }
+    }
 
     let mut child = cmd.spawn().map_err(|e| format!("spawn: {e}"))?;
     let timeout = plan.timeout;
@@ -322,7 +519,14 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                         buf
                     })
                     .unwrap_or_default();
-                let tail: String = stderr.chars().rev().take(2000).collect::<String>().chars().rev().collect();
+                let tail: String = stderr
+                    .chars()
+                    .rev()
+                    .take(2000)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect();
                 return Ok(NeuralMeshSpawnResult {
                     exit_code: status.code().unwrap_or(-1),
                     stderr_tail: tail,
@@ -344,23 +548,6 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
             Err(e) => return Err(format!("wait: {e}")),
         }
     }
-}
-
-/// Resolve optional weights directory (never downloaded at generate-time).
-pub fn resolve_weights_dir(pack_root: Option<&Path>) -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("AOS_NEURAL_MESH_WEIGHTS") {
-        let pb = PathBuf::from(p.trim());
-        if !p.trim().is_empty() && pb.is_dir() {
-            return Some(pb);
-        }
-    }
-    if let Some(root) = pack_root {
-        let cand = root.join("weights");
-        if cand.is_dir() {
-            return Some(cand);
-        }
-    }
-    None
 }
 
 /// Shared with `neural_mesh` tests that mutate `AOS_NEURAL_MESH_*` env vars.
@@ -392,20 +579,76 @@ mod tests {
     }
 
     #[test]
-    fn argv_is_fixed_shape() {
+    fn argv_matches_trellis_cpp_cli() {
         let plan = NeuralMeshSpawnPlan {
             runner_bin: PathBuf::from("/opt/trellis-cli"),
+            runner_kind: NeuralMeshRunnerKind::TrellisCli,
             work_dir: PathBuf::from("/tmp/work"),
             input_image: PathBuf::from("/tmp/work/in.png"),
             output_glb: PathBuf::from("/tmp/work/out.glb"),
-            weights_dir: Some(PathBuf::from("/models/trellis2")),
+            weights_dir: PathBuf::from("/models/trellis2"),
+            geometry_res: 512,
             use_bwrap: false,
             timeout: Duration::from_secs(1),
         };
         let argv = build_trellis_argv(&plan);
-        assert_eq!(argv[0], "/opt/trellis-cli");
-        assert!(argv.contains(&"--input".into()));
-        assert!(argv.contains(&"--output".into()));
-        assert!(argv.contains(&"--weights".into()));
+        assert_eq!(
+            argv,
+            vec![
+                "/opt/trellis-cli".to_string(),
+                "/tmp/work/in.png".to_string(),
+                "/tmp/work/out.glb".to_string(),
+                "--models".to_string(),
+                "/models/trellis2".to_string(),
+                "--res".to_string(),
+                "512".to_string(),
+            ]
+        );
+
+        let adapter_plan = NeuralMeshSpawnPlan {
+            runner_bin: PathBuf::from("/pack/adapters/trellis_gguf.sh"),
+            runner_kind: NeuralMeshRunnerKind::Adapter,
+            work_dir: plan.work_dir.clone(),
+            input_image: plan.input_image.clone(),
+            output_glb: plan.output_glb.clone(),
+            weights_dir: plan.weights_dir.clone(),
+            geometry_res: plan.geometry_res,
+            use_bwrap: false,
+            timeout: plan.timeout,
+        };
+        let aargv = build_trellis_argv(&adapter_plan);
+        assert_eq!(aargv[0], "bash");
+        assert_eq!(aargv[1], "/pack/adapters/trellis_gguf.sh");
+        assert!(aargv.contains(&"--models".to_string()));
+    }
+
+    #[test]
+    fn runner_kind_detects_adapter_and_cli() {
+        assert_eq!(
+            NeuralMeshRunnerKind::detect(Path::new("adapters/trellis_gguf.sh")),
+            NeuralMeshRunnerKind::Adapter
+        );
+        assert_eq!(
+            NeuralMeshRunnerKind::detect(Path::new("/opt/trellis-cli")),
+            NeuralMeshRunnerKind::TrellisCli
+        );
+        assert_eq!(
+            NeuralMeshRunnerKind::detect(Path::new("bin/local-ai")),
+            NeuralMeshRunnerKind::LocalAi
+        );
+    }
+
+    #[test]
+    fn weights_ready_requires_gguf_or_marker() {
+        let tmp = std::env::temp_dir().join(format!(
+            "aos-weights-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        assert!(!weights_dir_ready(&tmp));
+        std::fs::write(tmp.join(".aos-weights-ready"), b"ci\n").unwrap();
+        assert!(weights_dir_ready(&tmp));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
