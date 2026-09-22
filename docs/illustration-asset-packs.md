@@ -1,7 +1,7 @@
 # Illustration Studio — asset packs & marketplace hooks
 
 **Status:** scaffolding (local catalogue offline; remote marketplace fail-closed)  
-**Package:** `illustration-studio` **0.3.1** (patch on functional v1 **0.3.0**; open NPR/coedit drafts claim **0.4.0**)  
+**Package:** `illustration-studio` **0.7.0** (MVP prefab pack §142 expansion)  
 **Related:** [caps](illustration-studio-caps.md), ADR 0011, ADR 0007 (module catalogue pattern — not a public store)
 
 ## What this is

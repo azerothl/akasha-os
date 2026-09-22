@@ -43,8 +43,17 @@
       "blender_render_label": "Blender beauty",
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
+      "add_female_label": "Add woman",
       "add_slim_label": "Add slim",
       "add_cat_label": "Add cat",
+      "add_dog_label": "Add dog",
+      "add_sofa_label": "Add sofa",
+      "add_desk_label": "Add desk",
+      "add_lamp_label": "Add lamp",
+      "add_plant_label": "Add plant",
+      "add_book_label": "Add book",
+      "add_window_label": "Add window",
+      "add_wall_label": "Add wall",
       "beauty_empty": "No beauty output yet. Pick a style on the left, then run CPU, Stub, or Blender beauty.",
       "preview_label": "Beauty output",
       "mesh_section": "Mesh assist",
@@ -122,8 +131,17 @@
       "blender_render_label": "Beauté Blender",
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
+      "add_female_label": "Ajouter femme",
       "add_slim_label": "Ajouter mince",
       "add_cat_label": "Ajouter chat",
+      "add_dog_label": "Ajouter chien",
+      "add_sofa_label": "Ajouter canapé",
+      "add_desk_label": "Ajouter bureau",
+      "add_lamp_label": "Ajouter lampe",
+      "add_plant_label": "Ajouter plante",
+      "add_book_label": "Ajouter livre",
+      "add_window_label": "Ajouter fenêtre",
+      "add_wall_label": "Ajouter mur",
       "beauty_empty": "Pas encore de sortie beauté. Choisissez un style à gauche, puis Stub, CPU ou Blender.",
       "preview_label": "Sortie beauté",
       "mesh_section": "Assist mesh",
@@ -490,6 +508,105 @@
       "refresh_binds": []
     },
     {
+      "id": "instantiate_female",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "humanoid.female",
+        "parent_id": "root",
+        "prefix": "f_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_dog",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "quadruped.dog",
+        "parent_id": "root",
+        "prefix": "dog_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_sofa",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "prop.sofa",
+        "parent_id": "root",
+        "prefix": "sofa_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_desk",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "prop.desk",
+        "parent_id": "root",
+        "prefix": "desk_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_lamp",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "prop.lamp",
+        "parent_id": "root",
+        "prefix": "lamp_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_plant",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "prop.plant",
+        "parent_id": "root",
+        "prefix": "plant_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_book",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "prop.book",
+        "parent_id": "root",
+        "prefix": "book_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_window",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "arch.window",
+        "parent_id": "root",
+        "prefix": "window_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "instantiate_wall",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "arch.wall",
+        "parent_id": "root",
+        "prefix": "wall_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
       "id": "lock_selected",
       "service": "scene.lock",
       "input": {
@@ -695,6 +812,11 @@
                       },
                       {
                         "kind": "button",
+                        "label_key": "add_female_label",
+                        "action": "instantiate_female"
+                      },
+                      {
+                        "kind": "button",
                         "label_key": "add_slim_label",
                         "action": "instantiate_slim"
                       },
@@ -702,6 +824,56 @@
                         "kind": "button",
                         "label_key": "add_cat_label",
                         "action": "instantiate_cat"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_dog_label",
+                        "action": "instantiate_dog"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "add_sofa_label",
+                        "action": "instantiate_sofa"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_desk_label",
+                        "action": "instantiate_desk"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_lamp_label",
+                        "action": "instantiate_lamp"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_plant_label",
+                        "action": "instantiate_plant"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_book_label",
+                        "action": "instantiate_book"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "add_wall_label",
+                        "action": "instantiate_wall"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_window_label",
+                        "action": "instantiate_window"
                       },
                       {
                         "kind": "button",

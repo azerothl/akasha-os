@@ -98,6 +98,26 @@ fn main() {
         "illustration-cat-sit-cpu-beauty.png",
     );
 
+    // 5) Bookstore demo (§143) → expanded prefab pack beauty
+    let bookstore = compose_from_prompt(
+        "An old bookstore. A man enters through the door while a cat lies on the counter watching him.",
+    )
+    .expect("bookstore compose");
+    println!(
+        "bookstore template={} placed={:?}",
+        bookstore.template_id, bookstore.placed_assets
+    );
+    let mut bookstore_scene = bookstore.scene;
+    if let Some(root) = bookstore.character_id.clone() {
+        let _ = apply_pose_preset(&mut bookstore_scene, &root, "wave_right", None);
+    }
+    write_yaml_and_beauty(
+        &out_dir,
+        &bookstore_scene,
+        "composed-bookstore.scene.yaml",
+        "illustration-bookstore-cpu-beauty.png",
+    );
+
     // Dump demo_scene seed for package / docs.
     let demo_yaml = save_project_yaml(&ProjectFile::new(SceneGraph::demo_scene())).expect("demo");
     std::fs::write(out_dir.join("demo-articulated.scene.yaml"), &demo_yaml).expect("write demo");

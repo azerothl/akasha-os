@@ -294,7 +294,9 @@ mod tests {
         let pack = embedded_primitives_pack().expect("pack");
         assert!(pack.get("humanoid.placeholder").is_some());
         assert!(pack.get("humanoid.slim").is_some());
+        assert!(pack.get("humanoid.female").is_some());
         assert!(pack.get("quadruped.cat").is_some());
+        assert!(pack.get("quadruped.dog").is_some());
         assert!(pack.get("prop.box").is_some());
         assert!(pack.get("prop.ground").is_some());
         assert!(pack.get("prop.pedestal").is_some());
@@ -302,6 +304,16 @@ mod tests {
         assert!(pack.get("prop.bookshelf").is_some());
         assert!(pack.get("prop.door").is_some());
         assert!(pack.get("prop.chair").is_some());
+        assert!(pack.get("prop.table").is_some());
+        assert!(pack.get("prop.sofa").is_some());
+        assert!(pack.get("prop.desk").is_some());
+        assert!(pack.get("arch.wall").is_some());
+        assert!(pack.get("arch.window").is_some());
+        assert!(pack.get("arch.stairs").is_some());
+        assert!(pack.get("prop.book").is_some());
+        assert!(pack.get("prop.lamp").is_some());
+        assert!(pack.get("prop.cup").is_some());
+        assert!(pack.get("prop.plant").is_some());
         assert!(pack.get("scene.starter").is_some());
         let mut scene = SceneGraph::demo_scene();
         let r = instantiate_asset(
