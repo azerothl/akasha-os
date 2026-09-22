@@ -1313,14 +1313,12 @@ mod tests {
 
         let stage = panes[1].children.as_ref().expect("stage panes");
         assert_eq!(stage.len(), 2);
-        let left_stage = stage[0].children.as_ref().expect("edit column");
-        let right_stage = stage[1].children.as_ref().expect("beauty column");
         assert!(
-            left_stage.iter().any(|w| w.kind == "scene3d"),
+            stage.iter().any(|w| w.kind == "scene3d"),
             "edit viewport on stage"
         );
         assert!(
-            right_stage.iter().any(|w| w.kind == "image_view"),
+            stage.iter().any(|w| w.kind == "image_view"),
             "beauty output on stage"
         );
         let tip = doc

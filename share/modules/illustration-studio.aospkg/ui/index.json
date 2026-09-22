@@ -1089,28 +1089,18 @@
         "split_ratio": 0.48,
         "children": [
           {
-            "kind": "column",
-            "children": [
-              {
-                "kind": "scene3d",
-                "scene_key": "scene",
-                "selected_key": "selected_id",
-                "canvas_id": "illustration_viewport",
-                "label_key": "viewport_label",
-                "empty_label_key": "scene_empty"
-              }
-            ]
+            "kind": "scene3d",
+            "scene_key": "scene",
+            "selected_key": "selected_id",
+            "canvas_id": "illustration_viewport",
+            "label_key": "viewport_label",
+            "empty_label_key": "scene_empty"
           },
           {
-            "kind": "column",
-            "children": [
-              {
-                "kind": "image_view",
-                "resource": "$local.beauty_path",
-                "label_key": "preview_label",
-                "empty_label_key": "beauty_empty"
-              }
-            ]
+            "kind": "image_view",
+            "resource": "$local.beauty_path",
+            "label_key": "preview_label",
+            "empty_label_key": "beauty_empty"
           }
         ]
       }

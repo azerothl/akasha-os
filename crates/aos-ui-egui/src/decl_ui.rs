@@ -1383,8 +1383,8 @@ impl DeclUiPanelState {
                 // Fill remaining stage height so Beauty output is a real pane,
                 // not a thin strip under a fixed viewport (Illustration Studio).
                 let avail_h = ui.available_height();
-                let panel_h = if avail_h > 120.0 {
-                    avail_h.max(220.0)
+                let panel_h = if avail_h.is_finite() && avail_h > 120.0 {
+                    avail_h.clamp(240.0, 900.0)
                 } else {
                     420.0
                 };
