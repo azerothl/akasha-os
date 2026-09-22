@@ -1,16 +1,18 @@
 //! Blender beauty RenderBackend (host orchestrator — no bpy).
 //!
-//! Real renders invoke the optional Illustration Renderer Pack across a
-//! process boundary. Default / CI path uses deterministic **mock** mode so
-//! Blender need not be downloaded.
+//! Real renders invoke the **opt-in** Illustration Renderer Pack across a
+//! process boundary. Auto fails closed when the pack is absent; with pack but
+//! no Blender binary it uses deterministic **mock** mode. Explicit
+//! `AOS_BLENDER_MODE=mock` never needs the pack (CI).
 
 use super::backend::{
     RenderBackend, RenderBackendId, RenderError, RenderOutput, RenderPassKind, RenderRequest,
 };
 use super::export::AkashaSceneExport;
 use super::isolate::{
-    bwrap_available, resolve_adapter_py, resolve_blender_bin, resolve_pack_root, spawn_isolated,
-    BlenderRunMode, BlenderSpawnPlan, DEFAULT_BLENDER_TIMEOUT_SECS,
+    bwrap_available, probe_pack_status, resolve_adapter_py, resolve_blender_bin, resolve_pack_root,
+    spawn_isolated, BlenderPackStatus, BlenderRunMode, BlenderSpawnPlan,
+    DEFAULT_BLENDER_TIMEOUT_SECS,
 };
 use crate::png::encode_rgba8_png;
 use std::fs;
@@ -22,6 +24,11 @@ pub const BLENDER_MAX_EDGE: u32 = 1024;
 
 /// Default logical output when DeclUI omits path.
 pub const DEFAULT_BLENDER_BEAUTY_PATH: &str = "/documents/illustrations/beauty-blender.png";
+
+/// DeclUI / host probe for Renderer Pack install status.
+pub fn blender_pack_status() -> BlenderPackStatus {
+    probe_pack_status()
+}
 
 pub struct BlenderRenderBackend {
     pub mode: BlenderRunMode,
@@ -61,27 +68,41 @@ impl RenderBackend for BlenderRenderBackend {
         )
         .map_err(RenderError::Scene)?;
         let digest = export.digest_hex().map_err(RenderError::Scene)?;
+        let status = probe_pack_status();
 
-        let use_mock = match self.mode {
-            BlenderRunMode::Mock => true,
-            BlenderRunMode::Require => false,
-            BlenderRunMode::Auto => {
-                let pack = resolve_pack_root();
-                let bin = resolve_blender_bin(pack.as_deref());
-                let adapter_ok = pack
-                    .as_ref()
-                    .and_then(|p| resolve_adapter_py(p))
-                    .is_some();
-                bin.is_none() || !adapter_ok
+        match self.mode {
+            BlenderRunMode::Mock => mock_beauty(w, h, req.pass, &digest, req.style.as_ref()),
+            BlenderRunMode::Require => {
+                if !status.ready_for_spawn {
+                    return Err(pack_unavailable_error(&status));
+                }
+                self.render_real(req, &export, w, h)
             }
-        };
-
-        if use_mock {
-            return mock_beauty(w, h, req.pass, &digest, req.style.as_ref());
+            BlenderRunMode::Auto => {
+                if status.ready_for_spawn {
+                    match self.render_real(req, &export, w, h) {
+                        Ok(out) => Ok(out),
+                        Err(_) if status.ready_for_mock => {
+                            mock_beauty(w, h, req.pass, &digest, req.style.as_ref())
+                        }
+                        Err(e) => Err(e),
+                    }
+                } else if status.ready_for_mock {
+                    mock_beauty(w, h, req.pass, &digest, req.style.as_ref())
+                } else {
+                    Err(pack_unavailable_error(&status))
+                }
+            }
         }
-
-        self.render_real(req, &export, w, h)
     }
+}
+
+fn pack_unavailable_error(status: &BlenderPackStatus) -> RenderError {
+    RenderError::BackendUnavailable(format!(
+        "illustration renderer pack not available (opt-in; mode={}; set AOS_ILLUSTRATION_RENDERER_PACK or AOS_BLENDER_MODE=mock) — {}",
+        status.mode.as_str(),
+        status.summary_en()
+    ))
 }
 
 impl BlenderRenderBackend {
@@ -321,6 +342,44 @@ mod tests {
             })
             .unwrap();
         assert_ne!(pencil.png, ink.png);
+    }
+
+    #[test]
+    fn auto_fail_closed_without_pack() {
+        let _lock = crate::render::isolate::BLENDER_PACK_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prev_pack = std::env::var("AOS_ILLUSTRATION_RENDERER_PACK").ok();
+        let prev_mode = std::env::var("AOS_BLENDER_MODE").ok();
+        std::env::set_var(
+            "AOS_ILLUSTRATION_RENDERER_PACK",
+            "/tmp/aos-missing-blender-renderer-pack",
+        );
+        std::env::set_var("AOS_BLENDER_MODE", "auto");
+        let backend = BlenderRenderBackend {
+            mode: BlenderRunMode::Auto,
+            prefer_bwrap: false,
+            timeout: Duration::from_secs(5),
+        };
+        let err = backend
+            .render(&RenderRequest {
+                scene: SceneGraph::demo_scene(),
+                pass: RenderPassKind::Beauty,
+                width: 32,
+                height: 32,
+                stub_rgb: (0, 0, 0),
+                style: None,
+            })
+            .expect_err("pack absent must fail closed");
+        assert!(matches!(err, RenderError::BackendUnavailable(_)));
+        match prev_pack {
+            Some(v) => std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", v),
+            None => std::env::remove_var("AOS_ILLUSTRATION_RENDERER_PACK"),
+        }
+        match prev_mode {
+            Some(v) => std::env::set_var("AOS_BLENDER_MODE", v),
+            None => std::env::remove_var("AOS_BLENDER_MODE"),
+        }
     }
 
     #[test]

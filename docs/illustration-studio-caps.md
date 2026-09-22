@@ -1,6 +1,6 @@
 # Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2) + lights v0 (0.7.3) + TRELLIS.2 GGUF real runner (0.7.4)**
+**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2) + lights v0 (0.7.3) + TRELLIS.2 GGUF real runner (0.7.4) + Blender Renderer Pack opt-in / pack status (0.7.5)**
 **Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), [Storyboard](illustration-studio-storyboard.md), [Asset packs](illustration-asset-packs.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md` / `illustration-studio-prefab-pack.md`
 
 > **Preview honesty:** wgpu `scene3d` is an **edit view**, not RenderService beauty. Beauty = stub/CPU in-tree; Blender = mock unless opt-in **GPL Renderer Pack** + binary. Compose = keyword heuristics (not LLM SceneIntent). Neural mesh = stub default; weights opt-in. Marketplace = offline packs only. This is **not** a claim of full MVP §140–§145. Tester-facing summary: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module).
@@ -13,7 +13,7 @@
 | `fs.write:/documents/illustrations/**` | Write project YAML / beauty PNG outputs |
 | `render.stub` | Stub solid beauty backend (`render.submit` backend=`stub`, legacy `render.stub.beauty`) |
 | `render.cpu` | CPU SceneGraph wireframe / beauty / NPR approx (`render.submit` backend=`cpu`) |
-| `render.blender` | Isolated Blender beauty (Renderer Pack) or deterministic mock (`backend=`blender`) |
+| `render.blender` | Isolated Blender beauty (Renderer Pack) or deterministic mock (`backend=`blender`); also gates `render.pack.status` |
 | `asset.read:/assets/illustration/**` | Read / instantiate Illustration asset + style packs |
 | `scene.compose` | Heuristic prompt → SceneGraph compose (`scene.compose` service) |
 | `scene.pose` | FK / look-at / two-bone IK / pose presets / undo (`scene.pose` service) |
@@ -53,6 +53,7 @@ WASM tools on `illustration-studio` forward to platform `host_call` (`scene_host
 | `asset.instantiate` | asset read | DeclUI legacy alias (same pack) |
 | `render.submit` | `render.*` + write | Job-shaped beauty via RenderService (`stub`, `cpu`, `blender`); optional `style` / `style_id` |
 | `render.status` / `render.result` | `render.*` | Job poll / result metadata |
+| `render.pack.status` | `render.blender` | Probe opt-in Illustration Renderer Pack (EN/FR summary; fail-closed beauty when pack absent) |
 | `render.stub.beauty` | `render.stub` + write | Legacy thin wrapper → stub backend |
 
 These host services are the **minimal agent/tool surface** for Illustration Studio. Caps are checked fail-closed before execution.
@@ -147,6 +148,7 @@ locks:
 | `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
 | `undo_redo` | When `scene_key` + `canvas_id` point at a `scene3d` viewport — global SceneGraph Undo/Redo chrome (same host stack). Layer-canvas mode unchanged when `layers_key` is set |
 | `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
+| Beauty · Blender | Tip + **Refresh Blender pack status** (`render.pack.status`) — opt-in GPL Renderer Pack; beauty fail-closed when pack absent |
 
 SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system. Blender is beauty-only (isolated Renderer Pack), never an editor. Styles are data and do not mutate the SceneGraph. Viewport and beauty consume the same posed TRS.
 

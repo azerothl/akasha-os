@@ -377,6 +377,21 @@ pub(crate) fn on_ui_service_done(
                     );
                 }
             }
+            if module == "illustration-studio"
+                && (action_id == "blender_pack_status"
+                    || action_id == aos_proto::RENDER_PACK_STATUS_SERVICE)
+            {
+                if let Some(summary) = result
+                    .get("blender_pack_status")
+                    .or_else(|| result.get("summary"))
+                    .and_then(|p| p.as_str())
+                {
+                    panel.local_state.insert(
+                        "blender_pack_status".into(),
+                        Value::String(summary.to_string()),
+                    );
+                }
+            }
         } else {
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
                 Some(raw) => {
@@ -498,6 +513,7 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
         || action_id == aos_proto::SCENE_LOCKS_SERVICE
         || action_id == aos_proto::MESH_ASSIST_SERVICE
         || action_id == aos_proto::MESH_PACK_STATUS_SERVICE
+        || action_id == aos_proto::RENDER_PACK_STATUS_SERVICE
         || action_id == aos_proto::STORYBOARD_CAPTURE_SERVICE
         || action_id == aos_proto::STORYBOARD_APPLY_SERVICE
         || action_id == aos_proto::STORYBOARD_DELETE_SERVICE

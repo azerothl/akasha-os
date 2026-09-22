@@ -16,10 +16,10 @@ mod stub;
 pub use backend::{
     RenderBackend, RenderBackendId, RenderError, RenderOutput, RenderPassKind, RenderRequest,
 };
-pub use blender::{BlenderRenderBackend, DEFAULT_BLENDER_BEAUTY_PATH};
+pub use blender::{blender_pack_status, BlenderRenderBackend, DEFAULT_BLENDER_BEAUTY_PATH};
 pub use cpu::CpuWireframeBackend;
 pub use export::{AkashaSceneExport, AKASHA_SCENE_EXPORT_VERSION};
-pub use isolate::{isolation_matrix, BlenderRunMode, IsolationRow};
+pub use isolate::{isolation_matrix, BlenderPackStatus, BlenderRunMode, IsolationRow};
 pub use service::{
     parse_backend, parse_pass, parse_style, JobState, RenderJobStatus, RenderResult, RenderService,
     RenderSubmit, DEFAULT_RENDER_BACKEND,

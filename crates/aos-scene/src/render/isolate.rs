@@ -21,11 +21,12 @@ pub const DEFAULT_BLENDER_TIMEOUT_SECS: u64 = 120;
 /// How the host resolves the Blender executable / mock path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlenderRunMode {
-    /// Prefer real Blender when found; otherwise mock (CI / offline default).
+    /// Prefer real Blender when pack + binary found; mock when pack present
+    /// without binary; **fail-closed** when the opt-in Renderer Pack is absent.
     Auto,
-    /// Always produce mock golden PNG — never spawn Blender.
+    /// Always produce mock golden PNG — never spawn Blender (CI path).
     Mock,
-    /// Require a real Blender binary; error if missing.
+    /// Require pack + real Blender binary; error if missing.
     Require,
 }
 
@@ -41,6 +42,103 @@ impl BlenderRunMode {
             "require" | "real" => Self::Require,
             _ => Self::Auto,
         }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Mock => "mock",
+            Self::Require => "require",
+        }
+    }
+}
+
+/// Opt-in Illustration Renderer Pack probe (DeclUI `render.pack.status`).
+#[derive(Debug, Clone)]
+pub struct BlenderPackStatus {
+    pub pack_root: Option<PathBuf>,
+    pub blender_bin: Option<PathBuf>,
+    pub adapter_py: Option<PathBuf>,
+    pub mode: BlenderRunMode,
+    /// Pack root + `adapters/akasha_beauty.py` present (mock path viable in Auto).
+    pub ready_for_mock: bool,
+    /// Pack + adapter + Blender binary present (real spawn viable).
+    pub ready_for_spawn: bool,
+}
+
+impl BlenderPackStatus {
+    pub fn summary_en(&self) -> String {
+        match (
+            &self.pack_root,
+            self.ready_for_mock,
+            self.ready_for_spawn,
+        ) {
+            (None, _, _) => {
+                "Blender pack: missing (opt-in Renderer Pack; beauty fail-closed — install pack or AOS_BLENDER_MODE=mock)".into()
+            }
+            (Some(_), true, true) => format!(
+                "Blender pack: ready (mode={}, binary+adapter)",
+                self.mode.as_str()
+            ),
+            (Some(_), true, false) => format!(
+                "Blender pack: mock-ready (mode={}, adapter; no Blender binary)",
+                self.mode.as_str()
+            ),
+            (Some(_), false, true) => format!(
+                "Blender pack: binary ready (mode={}; adapter missing)",
+                self.mode.as_str()
+            ),
+            (Some(_), false, false) => format!(
+                "Blender pack: present but incomplete (mode={})",
+                self.mode.as_str()
+            ),
+        }
+    }
+
+    pub fn summary_fr(&self) -> String {
+        match (
+            &self.pack_root,
+            self.ready_for_mock,
+            self.ready_for_spawn,
+        ) {
+            (None, _, _) => {
+                "Pack Blender : absent (Renderer Pack opt-in ; beauté refusée — installer le pack ou AOS_BLENDER_MODE=mock)".into()
+            }
+            (Some(_), true, true) => format!(
+                "Pack Blender : prêt (mode={}, binaire+adaptateur)",
+                self.mode.as_str()
+            ),
+            (Some(_), true, false) => format!(
+                "Pack Blender : mock prêt (mode={}, adaptateur ; pas de binaire Blender)",
+                self.mode.as_str()
+            ),
+            (Some(_), false, true) => format!(
+                "Pack Blender : binaire prêt (mode={} ; adaptateur manquant)",
+                self.mode.as_str()
+            ),
+            (Some(_), false, false) => format!(
+                "Pack Blender : présent mais incomplet (mode={})",
+                self.mode.as_str()
+            ),
+        }
+    }
+}
+
+/// Probe Renderer Pack install / enable status for DeclUI and Auto fail-closed.
+pub fn probe_pack_status() -> BlenderPackStatus {
+    let mode = BlenderRunMode::from_env();
+    let pack_root = resolve_pack_root();
+    let adapter_py = pack_root.as_ref().and_then(|p| resolve_adapter_py(p));
+    let blender_bin = resolve_blender_bin(pack_root.as_deref());
+    let ready_for_mock = pack_root.is_some() && adapter_py.is_some();
+    let ready_for_spawn = ready_for_mock && blender_bin.is_some();
+    BlenderPackStatus {
+        pack_root,
+        blender_bin,
+        adapter_py,
+        mode,
+        ready_for_mock,
+        ready_for_spawn,
     }
 }
 
@@ -98,11 +196,14 @@ pub fn resolve_blender_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
 }
 
 /// Resolve Renderer Pack root: `AOS_ILLUSTRATION_RENDERER_PACK` → relative defaults.
+/// When the env var is set to a non-empty path that is not a directory, returns
+/// `None` (fail-closed) — do not fall through to checkout defaults.
 pub fn resolve_pack_root() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("AOS_ILLUSTRATION_RENDERER_PACK") {
-        let pb = PathBuf::from(p.trim());
-        if !p.trim().is_empty() && pb.is_dir() {
-            return Some(pb);
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            let pb = PathBuf::from(trimmed);
+            return pb.is_dir().then_some(pb);
         }
     }
     // Dev checkout defaults (repo-relative from CWD or crate).
@@ -363,22 +464,59 @@ static ISOLATION_MATRIX: [IsolationRow; 6] = [
         fs_deny: "n/a (no child)",
         net_deny: "n/a",
         status: "GO",
-        notes: "Default Auto falls back to mock without Blender binary",
+        notes: "Explicit mock never needs Blender; Auto mocks only when opt-in pack+adapter present",
     },
     IsolationRow {
         platform: "Any",
-        mode: "mock",
+        mode: "pack absent (Auto/Require)",
         fs_deny: "n/a",
         net_deny: "n/a",
-        status: "GO",
-        notes: "Deterministic golden PNG from SceneGraph export digest",
+        status: "fail-closed",
+        notes: "BackendUnavailable until Renderer Pack install / AOS_ILLUSTRATION_RENDERER_PACK",
     },
 ];
+
+/// Serialize env mutations that touch pack resolution (parallel test safety).
+#[cfg(test)]
+pub(crate) static BLENDER_PACK_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    struct EnvRestore {
+        pack: Option<String>,
+        mode: Option<String>,
+        bin: Option<String>,
+    }
+
+    impl EnvRestore {
+        fn capture() -> Self {
+            Self {
+                pack: std::env::var("AOS_ILLUSTRATION_RENDERER_PACK").ok(),
+                mode: std::env::var("AOS_BLENDER_MODE").ok(),
+                bin: std::env::var("AOS_BLENDER_BIN").ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            match &self.pack {
+                Some(v) => std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", v),
+                None => std::env::remove_var("AOS_ILLUSTRATION_RENDERER_PACK"),
+            }
+            match &self.mode {
+                Some(v) => std::env::set_var("AOS_BLENDER_MODE", v),
+                None => std::env::remove_var("AOS_BLENDER_MODE"),
+            }
+            match &self.bin {
+                Some(v) => std::env::set_var("AOS_BLENDER_BIN", v),
+                None => std::env::remove_var("AOS_BLENDER_BIN"),
+            }
+        }
+    }
 
     #[test]
     fn argv_is_fixed_shape() {
@@ -402,6 +540,41 @@ mod tests {
     fn matrix_mentions_gaps() {
         let rows = isolation_matrix();
         assert!(rows.iter().any(|r| r.status.contains("gap")));
-        assert!(rows.iter().any(|r| r.mode.contains("mock")));
+        assert!(rows.iter().any(|r| r.status.contains("fail-closed")));
+    }
+
+    #[test]
+    fn pack_env_invalid_path_fail_closed() {
+        let _lock = BLENDER_PACK_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _restore = EnvRestore::capture();
+        std::env::set_var(
+            "AOS_ILLUSTRATION_RENDERER_PACK",
+            "/tmp/aos-missing-blender-renderer-pack",
+        );
+        let status = probe_pack_status();
+        assert!(status.pack_root.is_none());
+        assert!(!status.ready_for_mock);
+        assert!(!status.ready_for_spawn);
+        assert!(status.summary_en().contains("missing"));
+        assert!(status.summary_fr().contains("absent"));
+    }
+
+    #[test]
+    fn checkout_pack_is_mock_ready() {
+        let _lock = BLENDER_PACK_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _restore = EnvRestore::capture();
+        let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/illustration-renderer-pack");
+        assert!(pack.is_dir());
+        std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", &pack);
+        std::env::remove_var("AOS_BLENDER_BIN");
+        std::env::set_var("AOS_BLENDER_MODE", "auto");
+        let status = probe_pack_status();
+        assert!(status.ready_for_mock);
+        assert!(status.adapter_py.is_some());
     }
 }

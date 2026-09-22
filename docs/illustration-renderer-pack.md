@@ -12,7 +12,8 @@
 **Blender binaries and any `bpy` scripts stay in a separate GPL (or
 GPL-compatible) Renderer Pack.** They must not ship inside Apache guest
 modules (`modules/**`, `.aospkg`) or be linked into the AGPL host
-(`crates/**`).
+(`crates/**`). The pack is **opt-in**: Preview beauty is fail-closed without
+it (see [illustration-blender-backend.md](illustration-blender-backend.md)).
 
 ## Layers
 

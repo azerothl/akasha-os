@@ -118,11 +118,12 @@ pub use pose::{
 };
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use render::{
-    isolation_matrix, parse_backend, parse_pass, parse_style, AkashaSceneExport, BlenderRenderBackend,
-    BlenderRunMode, CpuWireframeBackend, IsolationRow, JobState, RenderBackend, RenderBackendId,
-    RenderError, RenderJobStatus, RenderOutput, RenderPassKind, RenderRequest, RenderResult,
-    RenderService, RenderSubmit, StubRenderBackend, AKASHA_SCENE_EXPORT_VERSION,
-    DEFAULT_BLENDER_BEAUTY_PATH, DEFAULT_RENDER_BACKEND,
+    blender_pack_status, isolation_matrix, parse_backend, parse_pass, parse_style,
+    AkashaSceneExport, BlenderPackStatus, BlenderRenderBackend, BlenderRunMode,
+    CpuWireframeBackend, IsolationRow, JobState, RenderBackend, RenderBackendId, RenderError,
+    RenderJobStatus, RenderOutput, RenderPassKind, RenderRequest, RenderResult, RenderService,
+    RenderSubmit, StubRenderBackend, AKASHA_SCENE_EXPORT_VERSION, DEFAULT_BLENDER_BEAUTY_PATH,
+    DEFAULT_RENDER_BACKEND,
 };
 pub use render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 pub use scene::{

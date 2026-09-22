@@ -1,8 +1,9 @@
 # Illustration Renderer Pack
 
-Optional GPL redistributable for Blender beauty renders. **Not** part of the
+**Opt-in** GPL redistributable for Blender beauty renders. **Not** part of the
 Akasha Preview zip by default. Host `RenderService` talks to this pack across
-a process + files boundary.
+a process + files boundary. Without this pack, DeclUI **Blender beauty** is
+**fail-closed** (unless `AOS_BLENDER_MODE=mock` for CI).
 
 ## Layout
 
@@ -18,23 +19,39 @@ illustration-renderer-pack/
 └── bin/                      (optional) place Blender binary here
 ```
 
-## Install (dev / manual)
+## Install / enable (dev / manual)
 
-1. Download an official Blender build from https://www.blender.org/download/
-2. Either put the binary on `PATH` as `blender`, set `AOS_BLENDER_BIN`, or
+1. Keep or copy this tree (adapters + notices). Preview does **not** ship the
+   Blender binary.
+2. Download an official Blender build from https://www.blender.org/download/
+3. Either put the binary on `PATH` as `blender`, set `AOS_BLENDER_BIN`, or
    place it at `bin/blender` under this pack.
-3. Point the host at the pack:
+4. Point the host at the pack (required when not using checkout defaults):
    ```bash
    export AOS_ILLUSTRATION_RENDERER_PACK=/path/to/share/illustration-renderer-pack
    export AOS_BLENDER_MODE=auto   # or require
    ```
-4. From Illustration Studio DeclUI, use **Blender beauty** (`render.submit`
-   backend=`blender`). Output: `/documents/illustrations/beauty-blender.png`.
+5. In Illustration Studio DeclUI Beauty:
+   - **Refresh Blender pack status** → should show mock-ready or ready
+   - **Blender beauty** (`render.submit` backend=`blender`)
+   - Output: `/documents/illustrations/beauty-blender.png`
 
-## Without Blender (CI / offline)
+## Modes
+
+| `AOS_BLENDER_MODE` | Behaviour |
+|--------------------|-----------|
+| `auto` (default) | Pack + binary → real spawn; pack only → mock; **pack missing → fail-closed** |
+| `mock` | Deterministic teal/digest PNG — **no** Blender (CI) |
+| `require` | Real spawn only; fail-closed if pack or binary missing |
+
+Invalid `AOS_ILLUSTRATION_RENDERER_PACK` (set but not a directory) does **not**
+fall through to checkout defaults — fail-closed.
+
+## Without Blender binary (pack present)
 
 ```bash
-export AOS_BLENDER_MODE=mock
+export AOS_ILLUSTRATION_RENDERER_PACK=$PWD/share/illustration-renderer-pack
+export AOS_BLENDER_MODE=auto   # or mock
 cargo test -p aos-scene
 # Adapter math (no bpy): identity camera must look +Y after Y-up→Z-up convert
 python3 adapters/test_akasha_beauty_math.py
