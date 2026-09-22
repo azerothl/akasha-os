@@ -92,11 +92,25 @@ fn undo_set_transform_round_trips() {
             },
         )
         .unwrap();
+    assert!(stack.can_undo());
+    assert!(!stack.can_redo());
     assert_vec_close(g.nodes["box"].transform.translation, after.translation, 1e-5);
     assert!(stack.undo(&mut g).unwrap());
+    assert!(stack.can_redo());
     assert_vec_close(g.nodes["box"].transform.translation, before.translation, 1e-5);
     assert!(stack.redo(&mut g).unwrap());
     assert_vec_close(g.nodes["box"].transform.translation, after.translation, 1e-5);
+}
+
+#[test]
+fn euler_xyz_round_trips_moderate_angles() {
+    let q = Quat::from_euler_xyz(0.3, -0.5, 0.8);
+    let (rx, ry, rz) = q.to_euler_xyz();
+    let q2 = Quat::from_euler_xyz(rx, ry, rz);
+    let v = Vec3::new(1.0, 2.0, 3.0);
+    let a = q.rotate_vec(v);
+    let b = q2.rotate_vec(v);
+    assert_vec_close(a, b, 1e-4);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 # Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1)**
+**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2)**
 **Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), [Storyboard](illustration-studio-storyboard.md), [Asset packs](illustration-asset-packs.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md` / `illustration-studio-prefab-pack.md`
 
 ## Caps (fail-closed)
@@ -140,8 +140,9 @@ locks:
 
 | Kind | Host behaviour |
 |------|----------------|
-| `scene3d` | **wgpu edit viewport** — lit MeshBox / MeshAsset solid + wire overlay from posed SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
+| `scene3d` | **wgpu edit viewport** — lit MeshBox / MeshAsset solid + wire overlay from posed SceneGraph; orbit / select / Move·Rotate·Scale gizmos + full numeric TRS + Undo/Redo (pointer-local, no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
 | `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
+| `undo_redo` | When `scene_key` + `canvas_id` point at a `scene3d` viewport — global SceneGraph Undo/Redo chrome (same host stack). Layer-canvas mode unchanged when `layers_key` is set |
 | `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
 
 SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system. Blender is beauty-only (isolated Renderer Pack), never an editor. Styles are data and do not mutate the SceneGraph. Viewport and beauty consume the same posed TRS.

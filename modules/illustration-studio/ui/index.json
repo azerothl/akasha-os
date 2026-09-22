@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Flow: Compose a scene → Edit in the 3D viewport (camera strip: look-at / orbit / FOV) → Run a Beauty pass.",
+      "tip_body": "Flow: Compose a scene → Edit (Move/Rotate/Scale gizmos + TRS strip + Undo/Redo) → Beauty. Project autosaves after edits.",
       "compose_section": "1 · Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -38,6 +38,9 @@
       "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
       "save_label": "Save",
       "load_label": "Load",
+      "undo_label": "Undo",
+      "redo_label": "Redo",
+      "autosave_hint": "Edits autosave to the project YAML after a short pause.",
       "stub_render_label": "Stub beauty",
       "cpu_render_label": "CPU beauty",
       "blender_render_label": "Blender beauty",
@@ -77,7 +80,7 @@
       "pack_summary_empty": "No pack list yet — tap List local packs.",
       "edit_section": "2 · Edit",
       "camera_section": "Camera",
-      "camera_orbit_hint": "Orbit drag · Alt+pan · click select · drag move. Numeric strip under the viewport writes the SceneGraph Camera.",
+      "camera_orbit_hint": "Orbit drag · Alt+pan · click select. Tools: Move / Rotate / Scale (axis gizmos). Full TRS numeric strip under the viewport. Undo/Redo or ⌘/Ctrl+Z.",
       "more_section": "More tools",
       "layout_single": "Single",
       "layout_two_h": "Two horizontal",
@@ -98,7 +101,7 @@
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Parcours : Composer une scène → Éditer dans la fenêtre 3D (bandeau caméra : viser / orbite / FOV) → Lancer un rendu Beauté.",
+      "tip_body": "Parcours : Composer une scène → Éditer (gizmos Déplacer/Rotation/Échelle + bandeau TRS + Annuler/Rétablir) → Beauté. Autosave du projet après les éditions.",
       "compose_section": "1 · Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -129,6 +132,9 @@
       "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
       "save_label": "Enregistrer",
       "load_label": "Charger",
+      "undo_label": "Annuler",
+      "redo_label": "Rétablir",
+      "autosave_hint": "Les éditions s’enregistrent automatiquement dans le YAML projet après une courte pause.",
       "stub_render_label": "Beauté stub",
       "cpu_render_label": "Beauté CPU",
       "blender_render_label": "Beauté Blender",
@@ -168,7 +174,7 @@
       "pack_summary_empty": "Pas encore de liste — appuyez sur Lister les packs locaux.",
       "edit_section": "2 · Éditer",
       "camera_section": "Caméra",
-      "camera_orbit_hint": "Orbite glisser · Alt+pan · clic sélection · glisser déplacer. Le bandeau numérique sous la fenêtre écrit le Camera du SceneGraph.",
+      "camera_orbit_hint": "Orbite glisser · Alt+pan · clic sélection. Outils : Déplacer / Rotation / Échelle (gizmos d’axes). Bandeau TRS complet sous la fenêtre. Annuler/Rétablir ou ⌘/Ctrl+Z.",
       "more_section": "Plus d’outils",
       "layout_single": "Unique",
       "layout_two_h": "Deux horizontales",
@@ -1290,6 +1296,16 @@
             "kind": "section",
             "label_key": "project_section",
             "children": [
+              {
+                "kind": "undo_redo",
+                "canvas_id": "illustration_viewport",
+                "scene_key": "scene",
+                "selected_key": "selected_id"
+              },
+              {
+                "kind": "text",
+                "label_key": "autosave_hint"
+              },
               {
                 "kind": "row",
                 "children": [

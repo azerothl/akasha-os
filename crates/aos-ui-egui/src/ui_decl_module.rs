@@ -39,6 +39,18 @@ impl UiApp {
             if module == "create" {
                 sync_create_generation_defaults(panel);
             }
+            if module == "illustration-studio" {
+                if let Some(inv) = &actions.invoke {
+                    if inv.tool == "illustration.project.save" {
+                        let fr = self.prefs.language.starts_with("fr");
+                        panel.status = if fr {
+                            "Projet enregistré (autosave)".into()
+                        } else {
+                            "Project saved (autosave)".into()
+                        };
+                    }
+                }
+            }
         }
         if actions.refresh {
             let _ = self.cmd_tx.send(Cmd::ModuleUiRefresh {
