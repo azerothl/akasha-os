@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → wgpu edit → NPR beauty. Locks · IK/FK · comic · storyboard · mesh stub.",
+      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Locks · IK/FK · comic · storyboard · local packs (marketplace fail-closed).",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -57,11 +57,16 @@
       "comic_render_label": "Render page",
       "comic_bind_label": "Bind scene → panel 1",
       "storyboard_section": "Storyboard",
-      "storyboard_summary_label": "Timeline"
+      "storyboard_summary_label": "Timeline",
+      "packs_section": "Local packs",
+      "packs_hint": "Offline catalogue only — not a public marketplace. Remote fetch stays fail-closed without network.fetch.",
+      "list_packs_label": "List local packs",
+      "describe_pack_label": "Describe primitives",
+      "pack_summary_empty": "No pack list yet — tap List local packs."
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR. Verrous · IK/FK · comic · storyboard · mesh stub.",
+      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Verrous · IK/FK · comic · storyboard · packs locaux (marketplace refusé).",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -111,7 +116,12 @@
       "comic_render_label": "Rendre la page",
       "comic_bind_label": "Lier scène → case 1",
       "storyboard_section": "Storyboard",
-      "storyboard_summary_label": "Timeline"
+      "storyboard_summary_label": "Timeline",
+      "packs_section": "Packs locaux",
+      "packs_hint": "Catalogue hors-ligne uniquement — pas de marketplace public. Le téléchargement distant reste refusé sans network.fetch.",
+      "list_packs_label": "Lister les packs locaux",
+      "describe_pack_label": "Décrire les primitives",
+      "pack_summary_empty": "Pas encore de liste — appuyez sur Lister les packs locaux."
     }
   },
   "state": {
@@ -169,6 +179,10 @@
       "storyboard_summary": {
         "type": "string",
         "default": "0 frames"
+      },
+      "pack_summary": {
+        "type": "string",
+        "default": ""
       }
     }
   },
@@ -533,6 +547,23 @@
         "direction": "later"
       },
       "refresh_binds": []
+    },
+    {
+      "id": "list_local_packs",
+      "service": "asset.pack.list",
+      "input": {
+        "lang": "en"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "describe_primitives_pack",
+      "service": "asset.pack.describe",
+      "input": {
+        "pack_id": "illustration-primitives-v0",
+        "lang": "en"
+      },
+      "refresh_binds": []
     }
   ],
   "subscriptions": [],
@@ -809,6 +840,53 @@
                 "kind": "button",
                 "label_key": "add_box_label",
                 "action": "instantiate_box"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "packs_section",
+        "children": [
+          {
+            "kind": "text",
+            "label_key": "packs_hint"
+          },
+          {
+            "kind": "text",
+            "label_key": "pack_summary_empty",
+            "visible": {
+              "eq": [
+                "$local.pack_summary",
+                ""
+              ]
+            }
+          },
+          {
+            "kind": "text_input",
+            "state_key": "pack_summary",
+            "label_key": "packs_section",
+            "visible": {
+              "ne": [
+                "$local.pack_summary",
+                ""
+              ]
+            }
+          },
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "list_packs_label",
+                "action": "list_local_packs",
+                "primary": true
+              },
+              {
+                "kind": "button",
+                "label_key": "describe_pack_label",
+                "action": "describe_primitives_pack"
               }
             ]
           }

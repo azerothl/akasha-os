@@ -776,6 +776,34 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+crate::ASSET_PACK_LIST_SERVICE
+        | crate::ASSET_PACK_DESCRIBE_SERVICE => {
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ASSET_ILLUSTRATION_READ_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ASSET_ILLUSTRATION_READ_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::ASSET_MARKETPLACE_FETCH_SERVICE => {
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ASSET_ILLUSTRATION_READ_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ASSET_ILLUSTRATION_READ_CAP.into(),
+                ));
+            }
+            if !granted_caps.iter().any(|c| c == crate::NETWORK_FETCH_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::NETWORK_FETCH_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }

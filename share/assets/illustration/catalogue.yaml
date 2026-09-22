@@ -1,0 +1,26 @@
+# Illustration Studio — local pack catalogue (offline index).
+# Logical path: /assets/illustration/catalogue.yaml
+# Cap: asset.read:/assets/illustration/**
+#
+# Not a public marketplace. Preview loads only this local / embedded index.
+# Network fetch hooks exist for a later opt-in path and stay fail-closed.
+format_version: 1
+catalogue_id: illustration-local-v0
+source: local_only
+network: deny
+packs:
+  - id: illustration-primitives-v0
+    kind: asset
+    version: "0.3.1"
+    name: Illustration primitives
+    name_fr: Primitives Illustration
+    path: /assets/illustration/primitives/pack.yaml
+    license: Apache-2.0
+    allows_scripts: false
+    allows_network: false
+    summary: Core MeshBox / prefab library (props, humanoids, starter set)
+    summary_fr: Bibliothèque MeshBox / prefab (props, humanoïdes, set de démarrage)
+    tags:
+      - primitives
+      - interior
+      - humanoid
