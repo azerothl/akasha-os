@@ -622,6 +622,12 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             );
         }
+        aos_proto::COMIC_LAYOUT_SERVICE => {
+            run_comic_layout(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::COMIC_RENDER_SERVICE => {
+            run_comic_render(bus, evt_tx, module, action_id, input, refresh_binds).await;
+        }
         aos_proto::MESH_ASSIST_SERVICE => {
             run_mesh_assist(evt_tx, module, action_id, input, refresh_binds);
         }
@@ -1819,6 +1825,341 @@ fn run_mesh_assist(
         error: None,
         refresh_binds,
     });
+}
+
+fn run_comic_layout(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{
+        apply_comic_layout, bind_panel_scene, load_comic_yaml, load_project_yaml, save_comic_yaml,
+        ComicLayoutId, SceneGraph,
+    };
+
+    let template = input
+        .get("template")
+        .or_else(|| input.get("layout"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("grid_2x2");
+
+    // Optional: bind current scene into an existing comic panel.
+    if let (Some(comic_yaml), Some(panel_id)) = (
+        input.get("comic_yaml").and_then(|v| v.as_str()),
+        input.get("panel_id").and_then(|v| v.as_str()),
+    ) {
+        let mut comic = match load_comic_yaml(comic_yaml) {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("comic.layout load: {e}")),
+                    refresh_binds,
+                });
+                return;
+            }
+        };
+        let scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+            match load_project_yaml(yaml) {
+                Ok(p) => p.scene,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene_yaml: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        } else {
+            SceneGraph::demo_scene()
+        };
+        let page_id = input
+            .get("page_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("page_1");
+        if let Err(e) = bind_panel_scene(&mut comic, page_id, panel_id, &scene) {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.layout bind: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+        let yaml = match save_comic_yaml(&comic) {
+            Ok(y) => y,
+            Err(e) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("comic.layout save: {e}")),
+                    refresh_binds,
+                });
+                return;
+            }
+        };
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: true,
+            result: serde_json::json!({
+                "comic_yaml": yaml,
+                "page_id": page_id,
+                "panel_id": panel_id,
+                "panel_count": comic.pages.iter().map(|p| p.panels.len()).sum::<usize>(),
+            }),
+            error: None,
+            refresh_binds,
+        });
+        return;
+    }
+
+    let Some(layout) = ComicLayoutId::parse(template) else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some(format!("comic.layout: unknown template `{template}`")),
+            refresh_binds,
+        });
+        return;
+    };
+
+    let scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            SceneGraph::demo_scene()
+        } else {
+            match load_project_yaml(yaml) {
+                Ok(p) => p.scene,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene_yaml: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        }
+    } else {
+        SceneGraph::demo_scene()
+    };
+
+    let width = input
+        .get("width")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(640) as u32;
+    let height = input
+        .get("height")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(960) as u32;
+
+    let comic = match apply_comic_layout(layout, &scene, width, height) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.layout: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let panel_count = comic.pages.first().map(|p| p.panels.len()).unwrap_or(0);
+    let yaml = match save_comic_yaml(&comic) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.layout save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "template": layout.as_str(),
+            "page_id": "page_1",
+            "panel_count": panel_count,
+            "comic_yaml": yaml,
+        }),
+        error: None,
+        refresh_binds,
+    });
+}
+
+async fn run_comic_render(
+    bus: &Arc<BusClient>,
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_proto::FsWriteBytesRequest;
+    use aos_scene::{load_comic_yaml, parse_backend, render_comic_page, DEFAULT_COMIC_PAGE_PATH};
+    use base64::Engine as _;
+
+    let Some(comic_yaml) = input.get("comic_yaml").and_then(|v| v.as_str()) else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("comic.render: missing comic_yaml".into()),
+            refresh_binds,
+        });
+        return;
+    };
+    if comic_yaml.trim().is_empty() {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("comic.render: empty comic_yaml — apply a layout first".into()),
+            refresh_binds,
+        });
+        return;
+    }
+
+    let comic = match load_comic_yaml(comic_yaml) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.render load: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let page_id = input
+        .get("page_id")
+        .and_then(|v| v.as_str())
+        .or(comic.active_page.as_deref())
+        .unwrap_or("page_1");
+    let path = input
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or(DEFAULT_COMIC_PAGE_PATH);
+    let backend_str = input.get("backend").and_then(|v| v.as_str());
+    let backend = match parse_backend(backend_str.or(Some("cpu"))) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.render: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let width = input.get("width").and_then(|v| v.as_u64()).map(|v| v as u32);
+    let height = input
+        .get("height")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+
+    let rendered = match render_comic_page(&comic, page_id, backend, width, height) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.render: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let render_cap = match rendered.backend {
+        aos_scene::RenderBackendId::Stub => aos_proto::RENDER_STUB_CAP,
+        aos_scene::RenderBackendId::Cpu => aos_proto::RENDER_CPU_CAP,
+        aos_scene::RenderBackendId::Blender => aos_proto::RENDER_CPU_CAP,
+    };
+
+    let req = FsWriteBytesRequest {
+        path: path.to_string(),
+        content_b64: base64::engine::general_purpose::STANDARD.encode(&rendered.png),
+        actor: "human:ui".into(),
+        caps: vec![
+            aos_proto::ILLUSTRATION_FS_WRITE_CAP.into(),
+            aos_proto::COMIC_RENDER_CAP.into(),
+            render_cap.into(),
+        ],
+        trace_id: format!("decl-ui-{module}-comic-render"),
+    };
+    match bus
+        .call::<FsWriteBytesRequest, Value>("fs.write_bytes", &req, req.caps.clone())
+        .await
+    {
+        Ok(_) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({
+                    "path": path,
+                    "width": rendered.width,
+                    "height": rendered.height,
+                    "page_id": rendered.page_id,
+                    "panel_count": rendered.panel_count,
+                    "backend": rendered.backend.as_str(),
+                }),
+                error: None,
+                refresh_binds,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.render write: {e}")),
+                refresh_binds,
+            });
+        }
+    }
 }
 
 async fn run_media_image_generate(

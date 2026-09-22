@@ -1,6 +1,6 @@
 name: illustration-studio
-version: 0.6.0
-hash: 517817a21cdcb75d57dffa052f6e5bf24baba4807eed3884c92b2b91dfcb48f5
+version: 0.6.1
+hash: 9836b2b08bcc63257a6b0c2e1f8f62cd8f87c883735fadc711a9f6f89b676987
 permissions:
   required_caps:
     - fs.read:/documents/illustrations/**
@@ -14,6 +14,8 @@ permissions:
     - scene.edit
     - scene.lock
     - mesh.neural
+    - comic.layout
+    - comic.render
     - tool.invoke:illustration-studio
 tools:
   - name: illustration.project.load

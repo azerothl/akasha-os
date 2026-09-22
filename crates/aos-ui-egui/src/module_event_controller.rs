@@ -301,8 +301,10 @@ pub(crate) fn on_ui_service_done(
                 && (action_id == "stub_beauty"
                     || action_id == "cpu_beauty"
                     || action_id == "blender_beauty"
+                    || action_id == "comic_render"
                     || action_id == aos_proto::RENDER_STUB_SERVICE
-                    || action_id == aos_proto::RENDER_SUBMIT_SERVICE)
+                    || action_id == aos_proto::RENDER_SUBMIT_SERVICE
+                    || action_id == aos_proto::COMIC_RENDER_SERVICE)
             {
                 if let Some(path) = result.get("path").and_then(|p| p.as_str()) {
                     panel
@@ -365,6 +367,22 @@ pub(crate) fn on_ui_service_done(
                             .local_state
                             .insert("character_id".into(), Value::String(root.to_string()));
                     }
+                }
+            }
+            if module == "illustration-studio"
+                && (action_id == "comic_layout"
+                    || action_id == "comic_bind_panel"
+                    || action_id == aos_proto::COMIC_LAYOUT_SERVICE)
+            {
+                if let Some(yaml) = result.get("comic_yaml").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("comic".into(), Value::String(yaml.to_string()));
+                }
+                if let Some(n) = result.get("panel_count").and_then(|p| p.as_u64()) {
+                    panel
+                        .local_state
+                        .insert("comic_panel_count".into(), Value::from(n));
                 }
             }
         } else {

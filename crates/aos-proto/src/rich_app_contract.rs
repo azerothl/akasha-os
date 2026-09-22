@@ -229,6 +229,17 @@ pub const SCENE_LOCKS_SERVICE: &str = "scene.locks";
 /// DeclUI service: neural / stub mesh assist → SceneGraph MeshBox insert.
 pub const MESH_ASSIST_SERVICE: &str = "mesh.assist";
 
+/// Cap: create / mutate comic page panel layouts.
+pub const COMIC_LAYOUT_CAP: &str = "comic.layout";
+
+/// Cap: composite comic page beauty PNG.
+pub const COMIC_RENDER_CAP: &str = "comic.render";
+/// DeclUI service: apply a comic page layout template (panels + SceneGraph snapshots).
+pub const COMIC_LAYOUT_SERVICE: &str = "comic.layout";
+
+/// DeclUI service: render / composite a comic page to PNG.
+pub const COMIC_RENDER_SERVICE: &str = "comic.render";
+
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =
     "Preview reference: 8-core x86_64, 16 GiB RAM, 1080p display, release build";

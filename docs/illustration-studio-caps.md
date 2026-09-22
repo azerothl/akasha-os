@@ -1,7 +1,7 @@
 # Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-**Status:** articulated IK/FK + pose library + neural mesh assist on co-edit/NPR
-**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md`
+**Status:** comic panels +  articulated IK/FK + pose library + neural mesh assist on co-edit/NPR
+**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md`
 
 ## Caps (fail-closed)
 
@@ -18,6 +18,8 @@
 | `scene.edit` | Select / TRS / transactional `scene.apply` / `scene.instantiate` |
 | `scene.lock` | Set / clear / list semantic locks |
 | `mesh.neural` | Neural / AI mesh assist (`mesh.assist`; stub procedural is Preview default) |
+| `comic.layout` | Create / mutate comic page panel layouts |
+| `comic.render` | Composite comic page beauty PNG |
 | `tool.invoke:illustration-studio` | Invoke package tools (incl. `scene.*`) |
 
 Unknown DeclUI services remain rejected. Render writes also require the illustrations write cap. Asset instantiate requires `asset.read:/assets/illustration/**` (not ambient FS). Compose requires `scene.compose` **and** `asset.read:/assets/illustration/**`. Pose requires `scene.pose`. Blender path is fail-closed without `render.blender`. Unknown NPR `style` / `style_id` values fail-closed. Agents mutate SceneGraph only through capability-gated `scene.*` host_calls (no free FS).
@@ -142,4 +144,4 @@ SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The vie
 
 ## Out of scope
 
-Marketplace style packs, watercolor / marker / charcoal, comic/storyboard, real neural weights / model pack download, Discord, multi-agent locks, transient pointer editing locks, realtime NPR in wgpu viewport, fingers/face/expressions.
+Marketplace style packs, watercolor / marker / charcoal, storyboard, real neural weights / model pack download, Discord, multi-agent locks, transient pointer editing locks, realtime NPR in wgpu viewport, fingers/face/expressions.
