@@ -1255,6 +1255,84 @@ mod tests {
             .expect("illustration-studio ui valid");
     }
 
+    /// Layout lock: Create-like split rail — Compose → Edit → Beauty, Camera
+    /// section wired to viewport strip copy, secondary tools collapsible, beauty on stage.
+    #[test]
+    fn illustration_studio_ui_keeps_compose_edit_beauty_flow() {
+        let raw = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../modules/illustration-studio/ui/index.json"),
+        )
+        .expect("illustration-studio ui");
+        let doc: DeclUiDocument = serde_json::from_str(&raw).expect("parse json");
+        assert_eq!(doc.root.kind, "split");
+        let panes = doc.root.children.as_ref().expect("split children");
+        assert_eq!(panes.len(), 2);
+        assert_eq!(panes[0].kind, "scroll");
+        assert_eq!(panes[1].kind, "split", "stage is edit|beauty split");
+
+        let rail = panes[0].children.as_ref().expect("rail");
+        let rail_labels: Vec<&str> = rail
+            .iter()
+            .filter_map(|w| w.label_key.as_deref())
+            .collect();
+        assert!(
+            rail_labels.contains(&"compose_section"),
+            "compose section in left rail"
+        );
+        assert!(
+            rail_labels.contains(&"edit_section"),
+            "edit section in left rail"
+        );
+        assert!(
+            rail_labels.contains(&"camera_section")
+                || rail.iter().any(|w| w.children.as_ref().is_some_and(|cs| {
+                    cs.iter()
+                        .any(|c| c.label_key.as_deref() == Some("camera_section"))
+                })),
+            "camera section nested under edit"
+        );
+        assert!(
+            rail_labels.contains(&"render_section"),
+            "beauty section in left rail"
+        );
+        for secondary in [
+            "pose_section",
+            "locks_section",
+            "mesh_section",
+            "comic_section",
+            "storyboard_section",
+            "packs_section",
+        ] {
+            let sec = rail
+                .iter()
+                .find(|w| w.label_key.as_deref() == Some(secondary))
+                .unwrap_or_else(|| panic!("missing {secondary}"));
+            assert_eq!(sec.collapsible, Some(true), "{secondary} collapsible");
+        }
+
+        let stage = panes[1].children.as_ref().expect("stage panes");
+        assert_eq!(stage.len(), 2);
+        assert!(
+            stage.iter().any(|w| w.kind == "scene3d"),
+            "edit viewport on stage"
+        );
+        assert!(
+            stage.iter().any(|w| w.kind == "image_view"),
+            "beauty output on stage"
+        );
+        let tip = doc
+            .labels
+            .as_ref()
+            .and_then(|l| l.en.get("tip_body"))
+            .map(String::as_str)
+            .unwrap_or("");
+        assert!(
+            tip.contains("Compose") && tip.contains("Beauty"),
+            "ADHD flow tip names Compose then Beauty"
+        );
+    }
+
     #[test]
     fn render_stub_service_requires_caps() {
         let action = RichAction {

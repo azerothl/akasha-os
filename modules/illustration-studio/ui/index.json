@@ -7,11 +7,11 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Camera strip (look-at / orbit / FOV) syncs with viewport. Locks · IK/FK · comic · storyboard · local packs (marketplace fail-closed).",
-      "compose_section": "Compose",
+      "tip_body": "Flow: Compose a scene → Edit in the 3D viewport (camera strip: look-at / orbit / FOV) → Run a Beauty pass.",
+      "compose_section": "1 · Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
-      "pose_section": "Pose",
+      "pose_section": "Pose (IK / FK)",
       "pose_wave_label": "Wave right",
       "pose_look_label": "Look at box",
       "pose_rest_label": "Rest pose",
@@ -25,16 +25,16 @@
       "lock_selected_label": "Lock selection",
       "lock_subtree_label": "Lock subtree",
       "unlock_selected_label": "Unlock",
-      "assets_section": "Assets",
+      "assets_section": "Add to scene",
       "project_section": "Project",
-      "render_section": "Beauty pass",
+      "render_section": "3 · Beauty pass",
       "style_section": "Illustration style",
       "style_label": "Style",
       "style_sketch": "Sketch",
       "style_pencil": "Pencil",
       "style_ink": "Ink",
-      "viewport_label": "Viewport",
-      "scene_label": "Scene",
+      "viewport_label": "Edit viewport",
+      "scene_label": "Scene graph",
       "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
       "save_label": "Save",
       "load_label": "Load",
@@ -45,8 +45,8 @@
       "add_humanoid_label": "Add humanoid",
       "add_slim_label": "Add slim",
       "add_cat_label": "Add cat",
-      "beauty_empty": "No beauty pass yet — pick a style, then run Stub, CPU, or Blender beauty.",
-      "preview_label": "Beauty preview",
+      "beauty_empty": "No beauty output yet. Pick a style on the left, then run CPU, Stub, or Blender beauty.",
+      "preview_label": "Beauty output",
       "mesh_section": "Mesh assist",
       "mesh_prompt_label": "Mesh prompt",
       "mesh_stub_label": "Stub mesh (procedural)",
@@ -62,15 +62,34 @@
       "packs_hint": "Offline catalogue only — not a public marketplace. Remote fetch stays fail-closed without network.fetch.",
       "list_packs_label": "List local packs",
       "describe_pack_label": "Describe primitives",
-      "pack_summary_empty": "No pack list yet — tap List local packs."
+      "pack_summary_empty": "No pack list yet — tap List local packs.",
+      "edit_section": "2 · Edit",
+      "camera_section": "Camera",
+      "camera_orbit_hint": "Orbit drag · Alt+pan · click select · drag move. Numeric strip under the viewport writes the SceneGraph Camera.",
+      "more_section": "More tools",
+      "layout_single": "Single",
+      "layout_two_h": "Two horizontal",
+      "layout_two_v": "Two vertical",
+      "layout_grid": "2×2 grid",
+      "layout_strip": "3-strip",
+      "frame_label_input": "Frame label",
+      "capture_frame_label": "Capture frame",
+      "frame_prev_label": "Previous",
+      "frame_next_label": "Next",
+      "move_earlier_label": "Move earlier",
+      "move_later_label": "Move later",
+      "delete_frame_label": "Delete frame",
+      "camera_controls_strip": "Look-at / Distance / Orbit yaw·pitch / FOV — under the 3D viewport; synced to the active Camera node.",
+      "camera_look_hint": "Look-at XYZ — edit in the viewport camera strip (SceneGraph SoT).",
+      "camera_fov_hint": "Field of view — edit in the viewport camera strip (SceneGraph SoT)."
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Bandeau caméra (viser / orbite / FOV) synchronisé avec la fenêtre. Verrous · IK/FK · comic · storyboard · packs locaux (marketplace refusé).",
-      "compose_section": "Composer",
+      "tip_body": "Parcours : Composer une scène → Éditer dans la fenêtre 3D (bandeau caméra : viser / orbite / FOV) → Lancer un rendu Beauté.",
+      "compose_section": "1 · Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
-      "pose_section": "Pose",
+      "pose_section": "Pose (IK / FK)",
       "pose_wave_label": "Saluer (droite)",
       "pose_look_label": "Regarder la boîte",
       "pose_rest_label": "Pose repos",
@@ -84,16 +103,16 @@
       "lock_selected_label": "Verrouiller la sélection",
       "lock_subtree_label": "Verrouiller le sous-arbre",
       "unlock_selected_label": "Déverrouiller",
-      "assets_section": "Assets",
+      "assets_section": "Ajouter à la scène",
       "project_section": "Projet",
-      "render_section": "Rendu beauté",
+      "render_section": "3 · Rendu beauté",
       "style_section": "Style d’illustration",
       "style_label": "Style",
       "style_sketch": "Esquisse",
       "style_pencil": "Crayon",
       "style_ink": "Encre",
-      "viewport_label": "Fenêtre 3D",
-      "scene_label": "Scène",
+      "viewport_label": "Fenêtre d’édition",
+      "scene_label": "Graphe de scène",
       "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
       "save_label": "Enregistrer",
       "load_label": "Charger",
@@ -104,8 +123,8 @@
       "add_humanoid_label": "Ajouter humanoïde",
       "add_slim_label": "Ajouter mince",
       "add_cat_label": "Ajouter chat",
-      "beauty_empty": "Pas encore de rendu beauté — choisissez un style, puis Stub, CPU ou Blender.",
-      "preview_label": "Aperçu beauté",
+      "beauty_empty": "Pas encore de sortie beauté. Choisissez un style à gauche, puis Stub, CPU ou Blender.",
+      "preview_label": "Sortie beauté",
       "mesh_section": "Assist mesh",
       "mesh_prompt_label": "Invite mesh",
       "mesh_stub_label": "Mesh stub (procédural)",
@@ -121,7 +140,26 @@
       "packs_hint": "Catalogue hors-ligne uniquement — pas de marketplace public. Le téléchargement distant reste refusé sans network.fetch.",
       "list_packs_label": "Lister les packs locaux",
       "describe_pack_label": "Décrire les primitives",
-      "pack_summary_empty": "Pas encore de liste — appuyez sur Lister les packs locaux."
+      "pack_summary_empty": "Pas encore de liste — appuyez sur Lister les packs locaux.",
+      "edit_section": "2 · Éditer",
+      "camera_section": "Caméra",
+      "camera_orbit_hint": "Orbite glisser · Alt+pan · clic sélection · glisser déplacer. Le bandeau numérique sous la fenêtre écrit le Camera du SceneGraph.",
+      "more_section": "Plus d’outils",
+      "layout_single": "Unique",
+      "layout_two_h": "Deux horizontales",
+      "layout_two_v": "Deux verticales",
+      "layout_grid": "Grille 2×2",
+      "layout_strip": "Bande 3",
+      "frame_label_input": "Libellé de plan",
+      "capture_frame_label": "Capturer le plan",
+      "frame_prev_label": "Précédent",
+      "frame_next_label": "Suivant",
+      "move_earlier_label": "Déplacer avant",
+      "move_later_label": "Déplacer après",
+      "delete_frame_label": "Supprimer le plan",
+      "camera_controls_strip": "Viser / Distance / Orbite lacet·tangage / FOV — sous la fenêtre 3D ; synchronisé avec le nœud Camera actif.",
+      "camera_look_hint": "Look-at XYZ — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT).",
+      "camera_fov_hint": "Champ de vision — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT)."
     }
   },
   "state": {
@@ -183,6 +221,38 @@
       "pack_summary": {
         "type": "string",
         "default": ""
+      },
+      "pose_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "locks_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "mesh_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "comic_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "storyboard_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "packs_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "project_open": {
+        "type": "boolean",
+        "default": true
+      },
+      "camera_open": {
+        "type": "boolean",
+        "default": false
       }
     }
   },
@@ -568,435 +638,469 @@
   ],
   "subscriptions": [],
   "root": {
-    "kind": "column",
+    "kind": "split",
+    "split_ratio": 0.3,
     "children": [
       {
-        "kind": "text",
-        "label_key": "tip_body"
-      },
-      {
-        "kind": "text",
-        "label_key": "scene_empty",
-        "visible": {
-          "eq": [
-            "$local.scene",
-            ""
-          ]
-        }
-      },
-      {
-        "kind": "section",
-        "label_key": "compose_section",
-        "children": [
-          {
-            "kind": "text_input",
-            "state_key": "prompt",
-            "label_key": "prompt_label"
-          },
-          {
-            "kind": "button",
-            "label_key": "compose_label",
-            "action": "compose_scene",
-            "primary": true
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "pose_section",
-        "children": [
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "pose_wave_label",
-                "action": "pose_wave",
-                "primary": true
-              },
-              {
-                "kind": "button",
-                "label_key": "pose_look_label",
-                "action": "pose_look"
-              },
-              {
-                "kind": "button",
-                "label_key": "pose_rest_label",
-                "action": "pose_rest"
-              }
-            ]
-          },
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "pose_sit_label",
-                "action": "pose_sit"
-              },
-              {
-                "kind": "button",
-                "label_key": "pose_point_label",
-                "action": "pose_point"
-              },
-              {
-                "kind": "button",
-                "label_key": "pose_ik_label",
-                "action": "pose_ik_reach"
-              },
-              {
-                "kind": "button",
-                "label_key": "pose_undo_label",
-                "action": "pose_undo"
-              }
-            ]
-          },
-          {
-            "kind": "text_input",
-            "state_key": "pose_joint",
-            "label_key": "pose_joint_label"
-          },
-          {
-            "kind": "button",
-            "label_key": "pose_fk_label",
-            "action": "pose_fk_joint"
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "locks_section",
-        "children": [
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "lock_selected_label",
-                "action": "lock_selected"
-              },
-              {
-                "kind": "button",
-                "label_key": "lock_subtree_label",
-                "action": "lock_subtree"
-              },
-              {
-                "kind": "button",
-                "label_key": "unlock_selected_label",
-                "action": "unlock_selected"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "mesh_section",
+        "kind": "scroll",
         "children": [
           {
             "kind": "text",
-            "label_key": "mesh_tip"
-          },
-          {
-            "kind": "text_input",
-            "state_key": "mesh_prompt",
-            "label_key": "mesh_prompt_label"
-          },
-          {
-            "kind": "button",
-            "label_key": "mesh_stub_label",
-            "action": "mesh_assist_stub",
-            "primary": true
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "comic_section",
-        "children": [
-          {
-            "kind": "radio",
-            "state_key": "comic_layout",
-            "label_key": "comic_layout_label",
-            "inline": true,
-            "items": [
-              "single",
-              "two_h",
-              "two_v",
-              "grid_2x2",
-              "strip_3"
-            ],
-            "item_label_keys": [
-              "layout_single",
-              "layout_two_h",
-              "layout_two_v",
-              "layout_grid",
-              "layout_strip"
-            ]
-          },
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "comic_apply_label",
-                "action": "comic_layout",
-                "primary": true
-              },
-              {
-                "kind": "button",
-                "label_key": "comic_bind_label",
-                "action": "comic_bind_panel"
-              },
-              {
-                "kind": "button",
-                "label_key": "comic_render_label",
-                "action": "comic_render"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "storyboard_section",
-        "children": [
-          {
-            "kind": "text_input",
-            "state_key": "storyboard_summary",
-            "label_key": "storyboard_summary_label"
-          },
-          {
-            "kind": "text_input",
-            "state_key": "frame_label",
-            "label_key": "frame_label_input"
-          },
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "capture_frame_label",
-                "action": "storyboard_capture",
-                "primary": true
-              },
-              {
-                "kind": "button",
-                "label_key": "frame_prev_label",
-                "action": "storyboard_prev"
-              },
-              {
-                "kind": "button",
-                "label_key": "frame_next_label",
-                "action": "storyboard_next"
-              }
-            ]
-          },
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "move_earlier_label",
-                "action": "storyboard_move_earlier"
-              },
-              {
-                "kind": "button",
-                "label_key": "move_later_label",
-                "action": "storyboard_move_later"
-              },
-              {
-                "kind": "button",
-                "label_key": "delete_frame_label",
-                "action": "storyboard_delete"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "assets_section",
-        "children": [
-          {
-            "kind": "row",
-            "children": [
-              {
-                "kind": "button",
-                "label_key": "add_humanoid_label",
-                "action": "instantiate_humanoid"
-              },
-              {
-                "kind": "button",
-                "label_key": "add_slim_label",
-                "action": "instantiate_slim"
-              },
-              {
-                "kind": "button",
-                "label_key": "add_cat_label",
-                "action": "instantiate_cat"
-              },
-              {
-                "kind": "button",
-                "label_key": "add_box_label",
-                "action": "instantiate_box"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "packs_section",
-        "children": [
-          {
-            "kind": "text",
-            "label_key": "packs_hint"
+            "label_key": "tip_body"
           },
           {
             "kind": "text",
-            "label_key": "pack_summary_empty",
+            "label_key": "scene_empty",
             "visible": {
               "eq": [
-                "$local.pack_summary",
+                "$local.scene",
                 ""
               ]
             }
           },
           {
-            "kind": "text_input",
-            "state_key": "pack_summary",
-            "label_key": "packs_section",
-            "visible": {
-              "ne": [
-                "$local.pack_summary",
-                ""
-              ]
-            }
-          },
-          {
-            "kind": "row",
+            "kind": "section",
+            "label_key": "compose_section",
             "children": [
               {
-                "kind": "button",
-                "label_key": "list_packs_label",
-                "action": "list_local_packs",
-                "primary": true
+                "kind": "text_input",
+                "state_key": "prompt",
+                "label_key": "prompt_label"
               },
               {
                 "kind": "button",
-                "label_key": "describe_pack_label",
-                "action": "describe_primitives_pack"
+                "label_key": "compose_label",
+                "action": "compose_scene",
+                "primary": true
               }
             ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "style_section",
-        "children": [
+          },
           {
-            "kind": "radio",
-            "state_key": "style_id",
-            "label_key": "style_label",
-            "inline": true,
-            "items": [
-              "sketch",
-              "pencil",
-              "ink"
+            "kind": "section",
+            "label_key": "edit_section",
+            "children": [
+              {
+                "kind": "section",
+                "label_key": "assets_section",
+                "children": [
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "add_humanoid_label",
+                        "action": "instantiate_humanoid"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_slim_label",
+                        "action": "instantiate_slim"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_cat_label",
+                        "action": "instantiate_cat"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "add_box_label",
+                        "action": "instantiate_box"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "section",
+                "label_key": "camera_section",
+                "children": [
+                  {
+                    "kind": "text",
+                    "label_key": "camera_orbit_hint"
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "camera_controls_strip"
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "camera_look_hint"
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "camera_fov_hint"
+                  }
+                ],
+                "collapsible": true,
+                "open_state_key": "camera_open"
+              }
+            ]
+          },
+          {
+            "kind": "section",
+            "label_key": "render_section",
+            "children": [
+              {
+                "kind": "radio",
+                "state_key": "style_id",
+                "label_key": "style_label",
+                "inline": true,
+                "items": [
+                  "sketch",
+                  "pencil",
+                  "ink"
+                ],
+                "item_label_keys": [
+                  "style_sketch",
+                  "style_pencil",
+                  "style_ink"
+                ]
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "cpu_render_label",
+                    "action": "cpu_beauty",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "stub_render_label",
+                    "action": "stub_beauty"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "blender_render_label",
+                    "action": "blender_beauty"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "section",
+            "label_key": "pose_section",
+            "children": [
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "pose_wave_label",
+                    "action": "pose_wave",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "pose_look_label",
+                    "action": "pose_look"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "pose_rest_label",
+                    "action": "pose_rest"
+                  }
+                ]
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "pose_sit_label",
+                    "action": "pose_sit"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "pose_point_label",
+                    "action": "pose_point"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "pose_ik_label",
+                    "action": "pose_ik_reach"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "pose_undo_label",
+                    "action": "pose_undo"
+                  }
+                ]
+              },
+              {
+                "kind": "text_input",
+                "state_key": "pose_joint",
+                "label_key": "pose_joint_label"
+              },
+              {
+                "kind": "button",
+                "label_key": "pose_fk_label",
+                "action": "pose_fk_joint"
+              }
             ],
-            "item_label_keys": [
-              "style_sketch",
-              "style_pencil",
-              "style_ink"
-            ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "render_section",
-        "children": [
+            "collapsible": true,
+            "open_state_key": "pose_open"
+          },
           {
-            "kind": "row",
+            "kind": "section",
+            "label_key": "locks_section",
             "children": [
               {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "lock_selected_label",
+                    "action": "lock_selected"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "lock_subtree_label",
+                    "action": "lock_subtree"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "unlock_selected_label",
+                    "action": "unlock_selected"
+                  }
+                ]
+              }
+            ],
+            "collapsible": true,
+            "open_state_key": "locks_open"
+          },
+          {
+            "kind": "section",
+            "label_key": "mesh_section",
+            "children": [
+              {
+                "kind": "text",
+                "label_key": "mesh_tip"
+              },
+              {
+                "kind": "text_input",
+                "state_key": "mesh_prompt",
+                "label_key": "mesh_prompt_label"
+              },
+              {
                 "kind": "button",
-                "label_key": "cpu_render_label",
-                "action": "cpu_beauty",
+                "label_key": "mesh_stub_label",
+                "action": "mesh_assist_stub",
                 "primary": true
-              },
-              {
-                "kind": "button",
-                "label_key": "stub_render_label",
-                "action": "stub_beauty"
-              },
-              {
-                "kind": "button",
-                "label_key": "blender_render_label",
-                "action": "blender_beauty"
               }
-            ]
-          }
-        ]
-      },
-      {
-        "kind": "section",
-        "label_key": "project_section",
-        "children": [
+            ],
+            "collapsible": true,
+            "open_state_key": "mesh_open"
+          },
           {
-            "kind": "row",
+            "kind": "section",
+            "label_key": "comic_section",
             "children": [
               {
-                "kind": "button",
-                "label_key": "save_label",
-                "action": "save_project"
+                "kind": "radio",
+                "state_key": "comic_layout",
+                "label_key": "comic_layout_label",
+                "inline": true,
+                "items": [
+                  "single",
+                  "two_h",
+                  "two_v",
+                  "grid_2x2",
+                  "strip_3"
+                ],
+                "item_label_keys": [
+                  "layout_single",
+                  "layout_two_h",
+                  "layout_two_v",
+                  "layout_grid",
+                  "layout_strip"
+                ]
               },
               {
-                "kind": "button",
-                "label_key": "load_label",
-                "action": "load_project"
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "comic_apply_label",
+                    "action": "comic_layout",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "comic_bind_label",
+                    "action": "comic_bind_panel"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "comic_render_label",
+                    "action": "comic_render"
+                  }
+                ]
               }
-            ]
+            ],
+            "collapsible": true,
+            "open_state_key": "comic_open"
+          },
+          {
+            "kind": "section",
+            "label_key": "storyboard_section",
+            "children": [
+              {
+                "kind": "text_input",
+                "state_key": "storyboard_summary",
+                "label_key": "storyboard_summary_label"
+              },
+              {
+                "kind": "text_input",
+                "state_key": "frame_label",
+                "label_key": "frame_label_input"
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "capture_frame_label",
+                    "action": "storyboard_capture",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "frame_prev_label",
+                    "action": "storyboard_prev"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "frame_next_label",
+                    "action": "storyboard_next"
+                  }
+                ]
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "move_earlier_label",
+                    "action": "storyboard_move_earlier"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "move_later_label",
+                    "action": "storyboard_move_later"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "delete_frame_label",
+                    "action": "storyboard_delete"
+                  }
+                ]
+              }
+            ],
+            "collapsible": true,
+            "open_state_key": "storyboard_open"
+          },
+          {
+            "kind": "section",
+            "label_key": "packs_section",
+            "children": [
+              {
+                "kind": "text",
+                "label_key": "packs_hint"
+              },
+              {
+                "kind": "text",
+                "label_key": "pack_summary_empty",
+                "visible": {
+                  "eq": [
+                    "$local.pack_summary",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "text_input",
+                "state_key": "pack_summary",
+                "label_key": "packs_section",
+                "visible": {
+                  "ne": [
+                    "$local.pack_summary",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "list_packs_label",
+                    "action": "list_local_packs",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "describe_pack_label",
+                    "action": "describe_primitives_pack"
+                  }
+                ]
+              }
+            ],
+            "collapsible": true,
+            "open_state_key": "packs_open"
+          },
+          {
+            "kind": "section",
+            "label_key": "project_section",
+            "children": [
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "save_label",
+                    "action": "save_project"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "load_label",
+                    "action": "load_project"
+                  }
+                ]
+              }
+            ],
+            "collapsible": true,
+            "open_state_key": "project_open"
+          },
+          {
+            "kind": "scene_tree",
+            "scene_key": "scene",
+            "selected_key": "selected_id",
+            "canvas_id": "illustration_viewport",
+            "label_key": "scene_label",
+            "empty_label_key": "scene_empty"
           }
         ]
       },
       {
         "kind": "split",
-        "split_ratio": 0.28,
+        "split_ratio": 0.48,
         "children": [
           {
-            "kind": "scroll",
-            "children": [
-              {
-                "kind": "scene_tree",
-                "scene_key": "scene",
-                "selected_key": "selected_id",
-                "canvas_id": "illustration_viewport",
-                "label_key": "scene_label",
-                "empty_label_key": "scene_empty"
-              }
-            ]
+            "kind": "scene3d",
+            "scene_key": "scene",
+            "selected_key": "selected_id",
+            "canvas_id": "illustration_viewport",
+            "label_key": "viewport_label",
+            "empty_label_key": "scene_empty"
           },
           {
-            "kind": "column",
-            "children": [
-              {
-                "kind": "scene3d",
-                "scene_key": "scene",
-                "selected_key": "selected_id",
-                "canvas_id": "illustration_viewport",
-                "label_key": "viewport_label",
-                "empty_label_key": "scene_empty"
-              },
-              {
-                "kind": "image_view",
-                "resource": "$local.beauty_path",
-                "label_key": "preview_label",
-                "empty_label_key": "beauty_empty"
-              }
-            ]
+            "kind": "image_view",
+            "resource": "$local.beauty_path",
+            "label_key": "preview_label",
+            "empty_label_key": "beauty_empty"
           }
         ]
       }

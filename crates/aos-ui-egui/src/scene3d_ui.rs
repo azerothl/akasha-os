@@ -421,7 +421,14 @@ pub fn ui_scene3d(
         );
     });
 
-    let desired = Vec2::new(ui.available_width().max(160.0), 280.0);
+    // Fill most of the assigned pane; leave a floor for TRS chrome below.
+    let avail_h = ui.available_height();
+    let viewport_h = if avail_h > 320.0 {
+        (avail_h - 96.0).clamp(240.0, 720.0)
+    } else {
+        280.0_f32.min(avail_h.max(200.0))
+    };
+    let desired = Vec2::new(ui.available_width().max(160.0), viewport_h);
     let (rect, response) = ui.allocate_exact_size(desired, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
 
