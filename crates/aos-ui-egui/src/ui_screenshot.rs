@@ -293,6 +293,74 @@ pub fn seed_screenshot_create_layout(app: &mut UiApp) {
     app.open_module_tab(MODULE_NAME.into());
 }
 
+const ILLUSTRATION_MODULE: &str = "illustration-studio";
+
+/// Seed Illustration Studio DeclUI for compose→edit→beauty layout QA.
+pub fn seed_screenshot_illustration_layout(app: &mut UiApp, language: &str) {
+    seed_screenshot_modules(app);
+    if !app
+        .settings_ui
+        .installed_modules
+        .iter()
+        .any(|m| m.name == ILLUSTRATION_MODULE)
+    {
+        app.settings_ui.installed_modules.push(ModuleInfo {
+            name: ILLUSTRATION_MODULE.into(),
+            version: "0.6.4".into(),
+            granted_caps: Vec::new(),
+            tools: Vec::new(),
+            quarantined: false,
+            ui_mode: Some("declarative_ui".into()),
+            ui_title: Some("Illustration Studio".into()),
+        });
+    }
+    let panel = app
+        .decl_panels
+        .entry(ILLUSTRATION_MODULE.into())
+        .or_insert_with(|| DeclUiPanelState::new(ILLUSTRATION_MODULE));
+    const RAW: &str = include_str!("../../../modules/illustration-studio/ui/index.json");
+    match DeclUiDocument::parse_json_with_contract(RAW.as_bytes(), UI_CONTRACT_V2) {
+        Ok(doc) => {
+            panel.set_document(doc);
+            const DEMO_SCENE: &str =
+                include_str!("../../../modules/illustration-studio/demo.scene.yaml");
+            panel
+                .local_state
+                .insert("scene".into(), json!(DEMO_SCENE));
+            panel
+                .local_state
+                .insert("selected_id".into(), json!("box"));
+            panel
+                .local_state
+                .insert("prompt".into(), json!("A man enters an old library."));
+            panel.local_state.insert("style_id".into(), json!("pencil"));
+            panel.local_state.insert("pose_open".into(), json!(false));
+            panel.local_state.insert("locks_open".into(), json!(false));
+            panel.local_state.insert("mesh_open".into(), json!(false));
+            panel.local_state.insert("comic_open".into(), json!(false));
+            panel
+                .local_state
+                .insert("storyboard_open".into(), json!(false));
+            panel.local_state.insert("packs_open".into(), json!(false));
+            panel.local_state.insert("camera_open".into(), json!(false));
+            panel.local_state.insert("project_open".into(), json!(true));
+            // Logical virtual-fs path; host resolves under AOS_HOME/var/storage/data.
+            panel.local_state.insert(
+                "beauty_path".into(),
+                json!("/documents/illustrations/beauty-cpu.png"),
+            );
+        }
+        Err(err) => {
+            eprintln!("seed_screenshot_illustration_layout: parse failed: {err}");
+        }
+    }
+    app.prefs.language = language.into();
+    app.prefs.ui_layout.activity_panel_open = false;
+    app.prefs.ui_layout.context_panel_open = false;
+    save_preferences(&app.prefs);
+    app.open_module_tab(ILLUSTRATION_MODULE.into());
+}
+
 pub fn screenshot_dir_from_env() -> Option<PathBuf> {
     std::env::var("AOS_UI_SCREENSHOT_DIR")
         .ok()
@@ -304,6 +372,13 @@ fn screenshot_focus_create_layout() -> bool {
     matches!(
         std::env::var("AOS_UI_SCREENSHOT_FOCUS").ok().as_deref(),
         Some("create-layout") | Some("create_layout")
+    )
+}
+
+fn screenshot_focus_illustration_layout() -> bool {
+    matches!(
+        std::env::var("AOS_UI_SCREENSHOT_FOCUS").ok().as_deref(),
+        Some("illustration-layout") | Some("illustration_layout")
     )
 }
 
@@ -544,6 +619,7 @@ pub struct UiScreenshotHarness {
     step: u8,
     waiting: bool,
     focus_create_layout: bool,
+    focus_illustration_layout: bool,
     focus_marketing: bool,
 }
 
@@ -555,6 +631,7 @@ impl UiScreenshotHarness {
             step: 0,
             waiting: false,
             focus_create_layout: screenshot_focus_create_layout(),
+            focus_illustration_layout: screenshot_focus_illustration_layout(),
             focus_marketing: screenshot_focus_marketing(),
         }
     }
@@ -612,6 +689,30 @@ impl UiScreenshotHarness {
                 }
                 _ => {
                     eprintln!("AOS_UI_SCREENSHOT_DIR: create-layout capture complete — exiting");
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+            return;
+        }
+
+        if self.focus_illustration_layout {
+            match self.step {
+                0 => {
+                    seed_screenshot_illustration_layout(app, "en");
+                    self.request(ctx, "illustration-layout-en");
+                    self.step = 1;
+                    self.settle_left = 8;
+                }
+                1 => {
+                    seed_screenshot_illustration_layout(app, "fr");
+                    self.request(ctx, "illustration-layout-fr");
+                    self.step = 2;
+                    self.settle_left = 8;
+                }
+                _ => {
+                    eprintln!(
+                        "AOS_UI_SCREENSHOT_DIR: illustration-layout capture complete — exiting"
+                    );
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }

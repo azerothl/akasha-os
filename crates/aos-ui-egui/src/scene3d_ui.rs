@@ -421,11 +421,10 @@ pub fn ui_scene3d(
         );
     });
 
-    // Prefer a tall edit viewport when the stage has height; leave a floor for
-    // the Beauty `image_view` sibling below (~40% of a typical stage).
+    // Fill most of the assigned pane; leave a floor for TRS chrome below.
     let avail_h = ui.available_height();
-    let viewport_h = if avail_h > 420.0 {
-        (avail_h * 0.58).clamp(280.0, 640.0)
+    let viewport_h = if avail_h > 320.0 {
+        (avail_h - 96.0).clamp(240.0, 720.0)
     } else {
         280.0_f32.min(avail_h.max(200.0))
     };

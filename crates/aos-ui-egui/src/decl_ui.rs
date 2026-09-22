@@ -1404,9 +1404,10 @@ impl DeclUiPanelState {
                                 let max_w = ui.available_width().max(1.0);
                                 let max_h = ui.available_height().max(1.0);
                                 let base = tex.size_vec2();
-                                let fit = (max_w / base.x.max(1.0))
-                                    .min(max_h / base.y.max(1.0))
-                                    .min(1.0);
+                                // Fill the assigned pane (Beauty stage); do not
+                                // cap at 1.0 or small NPR/CPU PNGs look like a stamp.
+                                let fit =
+                                    (max_w / base.x.max(1.0)).min(max_h / base.y.max(1.0));
                                 // Shared clamp for display and scroll so zoom state matches pixels.
                                 const ZOOM_MIN: f32 = 0.2;
                                 const ZOOM_MAX: f32 = 8.0;

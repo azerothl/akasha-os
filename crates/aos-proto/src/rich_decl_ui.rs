@@ -1269,7 +1269,7 @@ mod tests {
         let panes = doc.root.children.as_ref().expect("split children");
         assert_eq!(panes.len(), 2);
         assert_eq!(panes[0].kind, "scroll");
-        assert_eq!(panes[1].kind, "column");
+        assert_eq!(panes[1].kind, "split", "stage is edit|beauty split");
 
         let rail = panes[0].children.as_ref().expect("rail");
         let rail_labels: Vec<&str> = rail
@@ -1311,13 +1311,16 @@ mod tests {
             assert_eq!(sec.collapsible, Some(true), "{secondary} collapsible");
         }
 
-        let stage = panes[1].children.as_ref().expect("stage");
+        let stage = panes[1].children.as_ref().expect("stage panes");
+        assert_eq!(stage.len(), 2);
+        let left_stage = stage[0].children.as_ref().expect("edit column");
+        let right_stage = stage[1].children.as_ref().expect("beauty column");
         assert!(
-            stage.iter().any(|w| w.kind == "scene3d"),
+            left_stage.iter().any(|w| w.kind == "scene3d"),
             "edit viewport on stage"
         );
         assert!(
-            stage.iter().any(|w| w.kind == "image_view"),
+            right_stage.iter().any(|w| w.kind == "image_view"),
             "beauty output on stage"
         );
         let tip = doc

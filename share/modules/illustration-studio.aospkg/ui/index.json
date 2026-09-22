@@ -249,6 +249,10 @@
       "project_open": {
         "type": "boolean",
         "default": true
+      },
+      "camera_open": {
+        "type": "boolean",
+        "default": false
       }
     }
   },
@@ -635,7 +639,7 @@
   "subscriptions": [],
   "root": {
     "kind": "split",
-    "split_ratio": 0.34,
+    "split_ratio": 0.3,
     "children": [
       {
         "kind": "scroll",
@@ -725,6 +729,51 @@
                   {
                     "kind": "text",
                     "label_key": "camera_fov_hint"
+                  }
+                ],
+                "collapsible": true,
+                "open_state_key": "camera_open"
+              }
+            ]
+          },
+          {
+            "kind": "section",
+            "label_key": "render_section",
+            "children": [
+              {
+                "kind": "radio",
+                "state_key": "style_id",
+                "label_key": "style_label",
+                "inline": true,
+                "items": [
+                  "sketch",
+                  "pencil",
+                  "ink"
+                ],
+                "item_label_keys": [
+                  "style_sketch",
+                  "style_pencil",
+                  "style_ink"
+                ]
+              },
+              {
+                "kind": "row",
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "cpu_render_label",
+                    "action": "cpu_beauty",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "stub_render_label",
+                    "action": "stub_beauty"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "blender_render_label",
+                    "action": "blender_beauty"
                   }
                 ]
               }
@@ -1004,49 +1053,6 @@
           },
           {
             "kind": "section",
-            "label_key": "render_section",
-            "children": [
-              {
-                "kind": "radio",
-                "state_key": "style_id",
-                "label_key": "style_label",
-                "inline": true,
-                "items": [
-                  "sketch",
-                  "pencil",
-                  "ink"
-                ],
-                "item_label_keys": [
-                  "style_sketch",
-                  "style_pencil",
-                  "style_ink"
-                ]
-              },
-              {
-                "kind": "row",
-                "children": [
-                  {
-                    "kind": "button",
-                    "label_key": "cpu_render_label",
-                    "action": "cpu_beauty",
-                    "primary": true
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "stub_render_label",
-                    "action": "stub_beauty"
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "blender_render_label",
-                    "action": "blender_beauty"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "kind": "section",
             "label_key": "project_section",
             "children": [
               {
@@ -1079,21 +1085,32 @@
         ]
       },
       {
-        "kind": "column",
+        "kind": "split",
+        "split_ratio": 0.48,
         "children": [
           {
-            "kind": "scene3d",
-            "scene_key": "scene",
-            "selected_key": "selected_id",
-            "canvas_id": "illustration_viewport",
-            "label_key": "viewport_label",
-            "empty_label_key": "scene_empty"
+            "kind": "column",
+            "children": [
+              {
+                "kind": "scene3d",
+                "scene_key": "scene",
+                "selected_key": "selected_id",
+                "canvas_id": "illustration_viewport",
+                "label_key": "viewport_label",
+                "empty_label_key": "scene_empty"
+              }
+            ]
           },
           {
-            "kind": "image_view",
-            "resource": "$local.beauty_path",
-            "label_key": "preview_label",
-            "empty_label_key": "beauty_empty"
+            "kind": "column",
+            "children": [
+              {
+                "kind": "image_view",
+                "resource": "$local.beauty_path",
+                "label_key": "preview_label",
+                "empty_label_key": "beauty_empty"
+              }
+            ]
           }
         ]
       }
