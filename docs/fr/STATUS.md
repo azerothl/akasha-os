@@ -12,8 +12,11 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 chat, scènes/guides Canvas, générateur de clés coffre, chrome Create peaufiné,
 correctifs LAN/santé/Deep Thinking ; CLI de code externes opt-in (`harness.run` +
 Runtime Agents) et façade MCP optionnelle **`aos-mcpd`**
-([harness.md](harness.md), [mcp-server.md](mcp-server.md)). S’appuie sur
-l’espace Create 0.17.x et le chrome UI peint. Pas un OS bootable. Gate cohorte
+([harness.md](harness.md), [mcp-server.md](mcp-server.md)). Catalogue local :
+module expérimental **Studio Illustration** **0.7.3** (édition wgpu ≠ beauté ;
+beauté stub/CPU ; Blender mock sauf Renderer Pack GPL —
+[FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental)).
+S’appuie sur l’espace Create 0.17.x et le chrome UI peint. Pas un OS bootable. Gate cohorte
 encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de
 15 minutes). **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand
 planifié ; E9 hard-green après un run 2 GPU documenté.

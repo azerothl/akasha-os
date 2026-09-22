@@ -40,6 +40,7 @@ Catalogue : [FEATURES.md](FEATURES.md).
 | Caps | Liste / révocation dans l'UI |
 | Modèles | Packs selon le matériel (dont CPU) ; nouvelle tentative après erreur de chargement ; contrôles cache de préfixe/spéculation ; packs image/TTS optionnels ; métriques live TTFT / tok/s / VRAM |
 | Canvas | Dessin vectoriel avec calques, grille, édition, exports PNG/SVG/JSON et validation géométrique globale des agents |
+| Studio Illustration | Module DeclUI expérimental (catalogue local) : édition SceneGraph → beauté stub/CPU ; wgpu ≠ Blender ; voir [FEATURES §4c](FEATURES.md#4c-studio-illustration-module-expérimental) |
 | Providers | Cloud OpenAI-compat + loopback (Ollama / vLLM / LM Studio) ; clés dans le vault |
 | Réseau | Recherche opt-in + `web.browse` (sans JS) + fetch ; pages JS/SPA via MCP navigateur optionnel |
 | Settings | Langue, thème, densité, trust, routage, gpu/cpu/auto, défauts agent, moteur |
@@ -93,6 +94,7 @@ cargo run -p aos-session --release
 | [community.md](community.md) | Cohorte Preview (Discussions ; 3 Win + 1 Linux + 1 Mac) |
 | [write-a-skill.md](write-a-skill.md) | Guide skill en dix minutes (MIT, `var/skills/`) |
 | [write-a-module.md](write-a-module.md) | Premier module sans cargo (scaffold / caps) |
+| [../illustration-studio-caps.md](../illustration-studio-caps.md) | Caps Studio Illustration + honnêteté (édition ≠ beauté, pack Blender GPL) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Comment tester, discuter, et (si PR) licence |
 
 ## Licence

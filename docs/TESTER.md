@@ -350,6 +350,18 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 - Optional **draft** / **prefix** metrics may appear on that line when prompt-lookup fires (quotes / RAG / repeated prefixes).
 - Streamed tokens must still match a non-speculative reply (exact sampler). Multi-agent / batch N>1 still streams.
 
+### 31. Illustration Studio (experimental, optional)
+
+Not required for the cohort short path. Honesty catalogue: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module).
+
+- **Settings → Local module catalogue**: find **`illustration-studio`** (~0.7.3) → **Install** → accept cap review.
+- Open the DeclUI **Illustration Studio** tab. Confirm the tip: Compose → Edit → Beauty; host chrome on the 3D view says **edit view · not beauty** (FR: **édition · pas beauté**).
+- Compose a short EN or FR prompt (e.g. bookstore / library). Expect MeshBox proxies from **keyword heuristics** — not an LLM SceneIntent planner.
+- Orbit / select / Move·Rotate·Scale; confirm TRS strip + Undo/Redo. Run **CPU beauty** and/or **Stub beauty** → PNG under `/documents/illustrations/`.
+- **Blender beauty**: without a Renderer Pack + Blender binary, expect the **deterministic mock** (still a real `render.blender` path). Do not assume GPL Blender ships in the Preview zip.
+- **Mesh assist**: Stub mesh works procedurally; Neural mesh without Model Pack stays fail-closed / fixture mock.
+- **Local packs**: List local packs — offline only; remote marketplace fetch must refuse.
+
 ### 30. USB I/O (0.16.2 / issue #137)
 
 - On **Windows 10/11**, plug a USB-serial adapter and verify

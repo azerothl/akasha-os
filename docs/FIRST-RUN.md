@@ -58,6 +58,7 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 | Settings | Language, trust, routing, agent defaults, search engine, auto-remember, gpu/cpu/auto |
 | Feedback | GitHub issue on azerothl/akasha-os |
 | Scenarios | Cohort protocol (see [TESTER.md](TESTER.md)) |
+| Modules → Illustration Studio | Experimental DeclUI app from the local catalogue (`illustration-studio` ~0.7.3). wgpu edit view ≠ beauty; beauty = stub/CPU; Blender mock unless opt-in GPL Renderer Pack. Optional tester path: [TESTER.md §31](TESTER.md#31-illustration-studio-experimental-optional). Honesty: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module) |
 
 ### Agent detail
 
