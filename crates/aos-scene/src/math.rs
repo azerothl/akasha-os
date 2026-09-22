@@ -305,6 +305,40 @@ impl Quat {
     pub fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
     }
+
+    /// Intrinsic XYZ Euler (radians) → quaternion. Applied as `Rx * Ry * Rz`.
+    pub fn from_euler_xyz(rx: f32, ry: f32, rz: f32) -> Self {
+        let qx = Self::from_axis_angle(Vec3::UNIT_X, rx);
+        let qy = Self::from_axis_angle(Vec3::UNIT_Y, ry);
+        let qz = Self::from_axis_angle(Vec3::UNIT_Z, rz);
+        qx * qy * qz
+    }
+
+    /// Quaternion → intrinsic XYZ Euler (radians). Best-effort; gimbal lock clamps pitch.
+    pub fn to_euler_xyz(self) -> (f32, f32, f32) {
+        let q = self.normalized().unwrap_or(Self::IDENTITY);
+        // Rotation matrix columns.
+        let m00 = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+        let m01 = 2.0 * (q.x * q.y - q.z * q.w);
+        let m02 = 2.0 * (q.x * q.z + q.y * q.w);
+        let m11 = 1.0 - 2.0 * (q.x * q.x + q.z * q.z);
+        let m12 = 2.0 * (q.y * q.z - q.x * q.w);
+        let m21 = 2.0 * (q.y * q.z + q.x * q.w);
+        let m22 = 1.0 - 2.0 * (q.x * q.x + q.y * q.y);
+        // Intrinsic XYZ extraction from R = Rx Ry Rz.
+        let sy = m02.clamp(-1.0, 1.0);
+        let ry = sy.asin();
+        let (rx, rz) = if sy.abs() < 0.99999 {
+            let rx = (-m12).atan2(m22);
+            let rz = (-m01).atan2(m00);
+            (rx, rz)
+        } else {
+            // Gimbal: rz → 0, fold into rx.
+            let rx = m21.atan2(m11);
+            (rx, 0.0)
+        };
+        (rx, ry, rz)
+    }
 }
 
 impl std::ops::Mul for Quat {

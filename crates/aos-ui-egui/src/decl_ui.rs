@@ -1564,17 +1564,45 @@ impl DeclUiPanelState {
             }
             "undo_redo" => {
                 let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "layer_canvas".into());
-                let host = layer_canvases.entry(canvas_id).or_default();
-                if let Some(patch) = crate::rich_composition_ui::ui_undo_redo(
-                    ui,
-                    w,
-                    doc,
-                    language,
-                    local_state,
-                    host,
-                ) {
-                    for (k, v) in patch_to_local_map(&patch) {
-                        actions.local_patch.insert(k, v);
+                if w.scene_key.as_ref().is_some_and(|k| !k.is_empty()) {
+                    let host = scene3d_viewports.entry(canvas_id).or_default();
+                    if let Some(patch) = crate::scene3d_ui::ui_scene_undo_redo(
+                        ui,
+                        w,
+                        doc,
+                        language,
+                        local_state,
+                        host,
+                    ) {
+                        for (k, v) in scene_patch_to_local_map(&patch) {
+                            actions.local_patch.insert(k, v);
+                        }
+                        if patch.request_autosave && actions.invoke.is_none() {
+                            let yaml = patch.scene.clone();
+                            actions.invoke = Some(DeclUiInvokeAction {
+                                tool: "illustration.project.save".into(),
+                                args: serde_json::json!({ "yaml": yaml }),
+                                refresh_binds: vec![],
+                                clear_form_keys: vec![],
+                            });
+                            let fr = language.starts_with("fr");
+                            // Status surfaced via panel.status in ui_decl_module after invoke.
+                            let _ = fr;
+                        }
+                    }
+                } else {
+                    let host = layer_canvases.entry(canvas_id).or_default();
+                    if let Some(patch) = crate::rich_composition_ui::ui_undo_redo(
+                        ui,
+                        w,
+                        doc,
+                        language,
+                        local_state,
+                        host,
+                    ) {
+                        for (k, v) in patch_to_local_map(&patch) {
+                            actions.local_patch.insert(k, v);
+                        }
                     }
                 }
             }
@@ -1594,8 +1622,23 @@ impl DeclUiPanelState {
                     local_state,
                     host,
                 ) {
+                    let autosave = patch.request_autosave;
+                    let yaml = patch.scene.clone();
                     for (k, v) in scene_patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
+                    }
+                    if autosave {
+                        if actions.invoke.is_none() {
+                            actions.invoke = Some(DeclUiInvokeAction {
+                                tool: "illustration.project.save".into(),
+                                args: serde_json::json!({ "yaml": yaml }),
+                                refresh_binds: vec![],
+                                clear_form_keys: vec![],
+                            });
+                        } else {
+                            // Busy with another invoke — retry after debounce.
+                            host.mark_autosave_dirty();
+                        }
                     }
                 }
             }

@@ -9,25 +9,45 @@ use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_scene::{
     apply_orbit_to_active_camera, eye_from_orbit as orbit_eye, fovy_from_hfov,
     load_project_yaml, look_at_rh, orbit_from_active_camera, perspective_rh, save_project_yaml,
-    LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, SceneGraph, SceneOp, Transform,
-    UndoStack, Vec3, ViewportCamera, ViewportRenderer,
+    LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, Quat, SceneGraph, SceneOp,
+    Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
 };
 use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+const AUTOSAVE_DEBOUNCE: Duration = Duration::from_millis(1500);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditTool {
+    Translate,
+    Rotate,
+    Scale,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DragMode {
     Orbit,
     Pan,
     Translate,
+    Rotate,
+    Scale,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GizmoAxis {
+    X,
+    Y,
+    Z,
 }
 
 #[derive(Debug, Clone)]
 struct DragState {
     mode: DragMode,
+    axis: Option<GizmoAxis>,
     start: Pos2,
     yaw0: f32,
     pitch0: f32,
@@ -47,7 +67,12 @@ pub struct Scene3dHostState {
     /// Fingerprint of last scene yaml we pulled/pushed (camera sync).
     scene_fp: u64,
     drag: Option<DragState>,
-    undo: UndoStack,
+    pub undo: UndoStack,
+    pub tool: EditTool,
+    pub focused: bool,
+    /// Deferred project autosave after SceneGraph mutations.
+    autosave_dirty: bool,
+    autosave_due: Option<Instant>,
 }
 
 impl Default for Scene3dHostState {
@@ -61,7 +86,46 @@ impl Default for Scene3dHostState {
             scene_fp: 0,
             drag: None,
             undo: UndoStack::default(),
+            tool: EditTool::Translate,
+            focused: false,
+            autosave_dirty: false,
+            autosave_due: None,
         }
+    }
+}
+
+impl Scene3dHostState {
+    pub fn mark_autosave_dirty(&mut self) {
+        self.autosave_dirty = true;
+        self.autosave_due = Some(Instant::now() + AUTOSAVE_DEBOUNCE);
+    }
+
+    pub fn take_autosave_if_due(&mut self) -> bool {
+        if !self.autosave_dirty {
+            return false;
+        }
+        match self.autosave_due {
+            Some(due) if Instant::now() >= due => {
+                self.autosave_dirty = false;
+                self.autosave_due = None;
+                true
+            }
+            Some(due) => {
+                // Caller should request a repaint before `due`.
+                let _ = due;
+                false
+            }
+            None => {
+                self.autosave_dirty = false;
+                true
+            }
+        }
+    }
+
+    pub fn autosave_remaining(&self) -> Option<Duration> {
+        self.autosave_due
+            .map(|due| due.saturating_duration_since(Instant::now()))
+            .filter(|d| !d.is_zero())
     }
 }
 
@@ -73,6 +137,8 @@ pub struct Scene3dPatch {
     pub selected: Value,
     pub beauty_path_key: Option<String>,
     pub beauty_path: Option<Value>,
+    /// When true, host should persist project YAML (debounced autosave fired).
+    pub request_autosave: bool,
 }
 
 pub fn patch_to_local_map(patch: &Scene3dPatch) -> HashMap<String, Value> {
@@ -399,6 +465,7 @@ pub fn ui_scene3d(
             },
             beauty_path_key: None,
             beauty_path: None,
+            request_autosave: false,
         });
     }
 
@@ -431,9 +498,9 @@ pub fn ui_scene3d(
         .map(|s| s.clamp(160.0, 1200.0))
         .unwrap_or_else(|| {
             if avail_h.is_finite() && avail_h > 320.0 {
-                (avail_h - 96.0).clamp(240.0, 720.0)
+                (avail_h - 160.0).clamp(220.0, 720.0)
             } else if avail_h.is_finite() && avail_h > 1.0 {
-                (avail_h * 0.62).clamp(220.0, 720.0)
+                (avail_h * 0.55).clamp(200.0, 720.0)
             } else {
                 280.0
             }
@@ -545,13 +612,61 @@ pub fn ui_scene3d(
         );
     }
 
-    // Camera gizmo
+    // Camera marker
     if let Some(cam_id) = graph.active_camera.clone() {
         if let Ok(pos) = graph.world_translation(&cam_id) {
             if let Some(p) = project_point(pos, &view_proj, rect) {
                 painter.circle_stroke(p, 6.0, Stroke::new(1.5_f32, Color32::from_rgb(140, 200, 140)));
             }
         }
+    }
+
+    // TRS axis gizmos for selected non-camera node
+    let mut gizmo_hits: Vec<(GizmoAxis, Pos2, f32)> = Vec::new();
+    if let Some(id) = selected.as_ref() {
+        if graph.nodes.get(id).map(|n| n.kind != NodeKind::Camera).unwrap_or(false) {
+            if let Ok(origin) = graph.world_translation(id) {
+                let axis_len = (host.distance * 0.12).clamp(0.35, 1.8);
+                let axes = [
+                    (GizmoAxis::X, Vec3::UNIT_X, Color32::from_rgb(220, 80, 80)),
+                    (GizmoAxis::Y, Vec3::UNIT_Y, Color32::from_rgb(80, 200, 100)),
+                    (GizmoAxis::Z, Vec3::UNIT_Z, Color32::from_rgb(80, 140, 230)),
+                ];
+                if let Some(o) = project_point(origin, &view_proj, rect) {
+                    for (axis, dir, color) in axes {
+                        let tip = origin + dir * axis_len;
+                        if let Some(t) = project_point(tip, &view_proj, rect) {
+                            let stroke = Stroke::new(
+                                if host.tool == EditTool::Translate {
+                                    2.5_f32
+                                } else {
+                                    2.0_f32
+                                },
+                                color,
+                            );
+                            painter.line_segment([o, t], stroke);
+                            match host.tool {
+                                EditTool::Translate => {
+                                    painter.circle_filled(t, 4.5, color);
+                                }
+                                EditTool::Rotate => {
+                                    painter.circle_stroke(t, 6.0, Stroke::new(1.5_f32, color));
+                                }
+                                EditTool::Scale => {
+                                    let r = egui::Rect::from_center_size(t, egui::vec2(8.0, 8.0));
+                                    painter.rect_filled(r, 1.0, color);
+                                }
+                            }
+                            gizmo_hits.push((axis, t, (tip - eye).length()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if response.hovered() || response.dragged() || response.clicked() {
+        host.focused = true;
     }
 
     let pointer = response.interact_pointer_pos();
@@ -561,10 +676,23 @@ pub fn ui_scene3d(
 
     if response.drag_started() {
         if let Some(pos) = pointer {
+            let mut axis_pick: Option<GizmoAxis> = None;
+            let mut best = 14.0_f32;
+            for (axis, screen, _) in &gizmo_hits {
+                let dist = (*screen - pos).length();
+                if dist < best {
+                    best = dist;
+                    axis_pick = Some(*axis);
+                }
+            }
             let mode = if secondary || alt {
                 DragMode::Orbit
             } else if selected.is_some() {
-                DragMode::Translate
+                match host.tool {
+                    EditTool::Translate => DragMode::Translate,
+                    EditTool::Rotate => DragMode::Rotate,
+                    EditTool::Scale => DragMode::Scale,
+                }
             } else {
                 DragMode::Orbit
             };
@@ -574,6 +702,7 @@ pub fn ui_scene3d(
                 .and_then(|id| graph.nodes.get(id).map(|n| n.transform.clone()));
             host.drag = Some(DragState {
                 mode,
+                axis: axis_pick,
                 start: pos,
                 yaw0: host.yaw,
                 pitch0: host.pitch,
@@ -598,22 +727,10 @@ pub fn ui_scene3d(
                     let up = Vec3::UNIT_Y;
                     host.target = d.target0 + right * (-dx * 0.01) + up * (dy * 0.01);
                 }
-                DragMode::Translate => {
+                DragMode::Translate | DragMode::Rotate | DragMode::Scale => {
                     if let (Some(id), Some(t0)) = (d.node_id.clone(), d.node_t0.clone()) {
-                        let right = Vec3::new(host.yaw.cos(), 0.0, -host.yaw.sin());
-                        let forward = Vec3::new(host.yaw.sin(), 0.0, host.yaw.cos());
-                        let mut after = t0.clone();
-                        after.translation =
-                            t0.translation + right * (dx * 0.01) + forward * (-dy * 0.01);
-                        let before = t0;
-                        let _ = host.undo.push_apply(
-                            &mut graph,
-                            SceneOp::SetTransform {
-                                id: id.clone(),
-                                before,
-                                after,
-                            },
-                        );
+                        let after = apply_tool_drag(d.mode, d.axis, &t0, dx, dy, host.yaw);
+                        let _ = graph.set_transform(&id, after);
                         patch = Some(Scene3dPatch {
                             scene_key: scene_key.into(),
                             scene: scene_val(&graph, &selected),
@@ -621,6 +738,7 @@ pub fn ui_scene3d(
                             selected: json!(selected),
                             beauty_path_key: None,
                             beauty_path: None,
+                            request_autosave: false,
                         });
                     }
                 }
@@ -629,31 +747,49 @@ pub fn ui_scene3d(
     }
 
     if response.drag_stopped() {
-        let was_orbit = host
-            .drag
-            .as_ref()
-            .map(|d| matches!(d.mode, DragMode::Orbit | DragMode::Pan))
-            .unwrap_or(false);
-        host.drag = None;
-        if was_orbit && push_orbit_to_scene(host, &mut graph) {
-            let yaml = scene_val(&graph, &selected);
-            host.scene_fp = {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut h = DefaultHasher::new();
-                if let Value::String(s) = &yaml {
-                    s.hash(&mut h);
+        let drag = host.drag.take();
+        if let Some(d) = drag {
+            match d.mode {
+                DragMode::Orbit | DragMode::Pan => {
+                    if push_orbit_to_scene(host, &mut graph) {
+                        let yaml = scene_val(&graph, &selected);
+                        host.scene_fp = fingerprint_value(&yaml);
+                        host.mark_autosave_dirty();
+                        patch = Some(Scene3dPatch {
+                            scene_key: scene_key.into(),
+                            scene: yaml,
+                            selected_key: selected_key.into(),
+                            selected: json!(selected),
+                            beauty_path_key: None,
+                            beauty_path: None,
+                            request_autosave: false,
+                        });
+                    }
                 }
-                h.finish()
-            };
-            patch = Some(Scene3dPatch {
-                scene_key: scene_key.into(),
-                scene: yaml,
-                selected_key: selected_key.into(),
-                selected: json!(selected),
-                beauty_path_key: None,
-                beauty_path: None,
-            });
+                DragMode::Translate | DragMode::Rotate | DragMode::Scale => {
+                    if let (Some(id), Some(before)) = (d.node_id, d.node_t0) {
+                        if let Some(after) = graph.nodes.get(&id).map(|n| n.transform.clone()) {
+                            if after != before {
+                                host.undo.push_applied(SceneOp::SetTransform {
+                                    id: id.clone(),
+                                    before,
+                                    after,
+                                });
+                                host.mark_autosave_dirty();
+                                patch = Some(Scene3dPatch {
+                                    scene_key: scene_key.into(),
+                                    scene: scene_val(&graph, &selected),
+                                    selected_key: selected_key.into(),
+                                    selected: json!(selected),
+                                    beauty_path_key: None,
+                                    beauty_path: None,
+                                    request_autosave: false,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -680,6 +816,7 @@ pub fn ui_scene3d(
                 },
                 beauty_path_key: None,
                 beauty_path: None,
+                request_autosave: false,
             });
         }
     }
@@ -690,10 +827,8 @@ pub fn ui_scene3d(
         host.distance = (host.distance * (1.0 - scroll * 0.001)).clamp(1.0, 40.0);
         if push_orbit_to_scene(host, &mut graph) {
             let yaml = scene_val(&graph, &selected);
-            host.scene_fp = scene_fingerprint(
-                &HashMap::from([(scene_key.to_string(), yaml.clone())]),
-                scene_key,
-            );
+            host.scene_fp = fingerprint_value(&yaml);
+            host.mark_autosave_dirty();
             patch = Some(Scene3dPatch {
                 scene_key: scene_key.into(),
                 scene: yaml,
@@ -701,6 +836,90 @@ pub fn ui_scene3d(
                 selected: json!(selected),
                 beauty_path_key: None,
                 beauty_path: None,
+                request_autosave: false,
+            });
+        }
+    }
+
+    // Tool + undo/redo chrome (global edit chrome)
+    let fr = language.starts_with("fr");
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(if fr { "Outil" } else { "Tool" }).strong());
+        for (tool, en, fr_l) in [
+            (EditTool::Translate, "Move", "Déplacer"),
+            (EditTool::Rotate, "Rotate", "Rotation"),
+            (EditTool::Scale, "Scale", "Échelle"),
+        ] {
+            let label = if fr { fr_l } else { en };
+            if ui
+                .selectable_label(host.tool == tool, label)
+                .clicked()
+            {
+                host.tool = tool;
+            }
+        }
+        ui.separator();
+        let undo_l = if fr { "Annuler" } else { "Undo" };
+        let redo_l = if fr { "Rétablir" } else { "Redo" };
+        if ui
+            .add_enabled(host.undo.can_undo(), egui::Button::new(undo_l))
+            .clicked()
+            && host.undo.undo(&mut graph).unwrap_or(false)
+        {
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_val(&graph, &selected),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
+        }
+        if ui
+            .add_enabled(host.undo.can_redo(), egui::Button::new(redo_l))
+            .clicked()
+            && host.undo.redo(&mut graph).unwrap_or(false)
+        {
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_val(&graph, &selected),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
+        }
+    });
+
+    // Cmd/Ctrl+Z / Shift+Z / Y when viewport focused
+    if host.focused {
+        let do_undo =
+            ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z) && !i.modifiers.shift);
+        let do_redo = ui.input(|i| {
+            (i.modifiers.command && i.key_pressed(egui::Key::Y))
+                || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
+        });
+        let applied = if do_undo {
+            host.undo.undo(&mut graph).unwrap_or(false)
+        } else if do_redo {
+            host.undo.redo(&mut graph).unwrap_or(false)
+        } else {
+            false
+        };
+        if applied {
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_val(&graph, &selected),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
             });
         }
     }
@@ -738,11 +957,7 @@ pub fn ui_scene3d(
                         .range(1.0..=40.0),
                 )
                 .changed();
-            ui.label(if language.starts_with("fr") {
-                "Orbite"
-            } else {
-                "Orbit"
-            });
+            ui.label(if fr { "Orbite" } else { "Orbit" });
             changed |= ui
                 .add(egui::DragValue::new(&mut yaw_deg).speed(0.5).suffix("° y"))
                 .changed();
@@ -772,10 +987,8 @@ pub fn ui_scene3d(
             host.hfov_rad = fov_deg.to_radians();
             if push_orbit_to_scene(host, &mut graph) {
                 let yaml = scene_val(&graph, &selected);
-                host.scene_fp = scene_fingerprint(
-                    &HashMap::from([(scene_key.to_string(), yaml.clone())]),
-                    scene_key,
-                );
+                host.scene_fp = fingerprint_value(&yaml);
+                host.mark_autosave_dirty();
                 patch = Some(Scene3dPatch {
                     scene_key: scene_key.into(),
                     scene: yaml,
@@ -783,19 +996,36 @@ pub fn ui_scene3d(
                     selected: json!(selected),
                     beauty_path_key: None,
                     beauty_path: None,
+                    request_autosave: false,
                 });
             }
         }
     }
 
-    // TRS numeric strip for selected (non-camera nodes — camera uses strip above)
+    // Full TRS numeric strip for selected (non-camera nodes)
     if let Some(id) = selected.clone() {
         if let Some(node) = graph.nodes.get(&id).cloned() {
             if node.kind != NodeKind::Camera {
                 ui.horizontal(|ui| {
                     ui.label(format!("{} · TRS", node.name));
+                    ui.label(
+                        egui::RichText::new(if fr {
+                            "T mètres · R ° XYZ · S"
+                        } else {
+                            "T metres · R ° XYZ · S"
+                        })
+                        .weak()
+                        .small(),
+                    );
                 });
                 let mut t = node.transform.translation;
+                let (rx0, ry0, rz0) = node.transform.rotation.to_euler_xyz();
+                let mut r_deg = [
+                    rx0.to_degrees(),
+                    ry0.to_degrees(),
+                    rz0.to_degrees(),
+                ];
+                let mut s = node.transform.scale;
                 let mut changed = false;
                 ui.horizontal(|ui| {
                     ui.label("T");
@@ -809,10 +1039,55 @@ pub fn ui_scene3d(
                         .add(egui::DragValue::new(&mut t.z).speed(0.01).prefix("z "))
                         .changed();
                 });
+                ui.horizontal(|ui| {
+                    ui.label("R");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut r_deg[0]).speed(0.5).suffix("° x"))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut r_deg[1]).speed(0.5).suffix("° y"))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut r_deg[2]).speed(0.5).suffix("° z"))
+                        .changed();
+                });
+                ui.horizontal(|ui| {
+                    ui.label("S");
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut s.x)
+                                .speed(0.01)
+                                .prefix("x ")
+                                .range(0.01..=100.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut s.y)
+                                .speed(0.01)
+                                .prefix("y ")
+                                .range(0.01..=100.0),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::DragValue::new(&mut s.z)
+                                .speed(0.01)
+                                .prefix("z ")
+                                .range(0.01..=100.0),
+                        )
+                        .changed();
+                });
                 if changed {
                     let before = node.transform.clone();
                     let mut after = before.clone();
                     after.translation = t;
+                    after.rotation = Quat::from_euler_xyz(
+                        r_deg[0].to_radians(),
+                        r_deg[1].to_radians(),
+                        r_deg[2].to_radians(),
+                    );
+                    after.scale = s;
                     let _ = host.undo.push_apply(
                         &mut graph,
                         SceneOp::SetTransform {
@@ -821,6 +1096,7 @@ pub fn ui_scene3d(
                             after,
                         },
                     );
+                    host.mark_autosave_dirty();
                     patch = Some(Scene3dPatch {
                         scene_key: scene_key.into(),
                         scene: scene_val(&graph, &selected),
@@ -828,12 +1104,188 @@ pub fn ui_scene3d(
                         selected: Value::String(id),
                         beauty_path_key: None,
                         beauty_path: None,
+                        request_autosave: false,
                     });
                 }
             }
         }
     }
 
+    // Deferred autosave tick
+    if let Some(rem) = host.autosave_remaining() {
+        ui.ctx().request_repaint_after(rem);
+    }
+    if host.take_autosave_if_due() {
+        let yaml = scene_val(&graph, &selected);
+        let mut p = patch.unwrap_or_else(|| Scene3dPatch {
+            scene_key: scene_key.into(),
+            scene: yaml.clone(),
+            selected_key: selected_key.into(),
+            selected: json!(selected),
+            beauty_path_key: None,
+            beauty_path: None,
+            request_autosave: true,
+        });
+        p.scene = yaml;
+        p.request_autosave = true;
+        patch = Some(p);
+    }
+
+    patch
+}
+
+fn fingerprint_value(v: &Value) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    match v {
+        Value::String(s) => s.hash(&mut h),
+        other => other.to_string().hash(&mut h),
+    }
+    h.finish()
+}
+
+fn apply_tool_drag(
+    mode: DragMode,
+    axis: Option<GizmoAxis>,
+    t0: &Transform,
+    dx: f32,
+    dy: f32,
+    yaw: f32,
+) -> Transform {
+    let mut after = t0.clone();
+    let right = Vec3::new(yaw.cos(), 0.0, -yaw.sin());
+    let forward = Vec3::new(yaw.sin(), 0.0, yaw.cos());
+    match mode {
+        DragMode::Translate => {
+            let delta = match axis {
+                Some(GizmoAxis::X) => Vec3::UNIT_X * (dx * 0.01),
+                Some(GizmoAxis::Y) => Vec3::UNIT_Y * (-dy * 0.01),
+                Some(GizmoAxis::Z) => Vec3::UNIT_Z * (dx * 0.01),
+                None => right * (dx * 0.01) + forward * (-dy * 0.01),
+            };
+            after.translation = t0.translation + delta;
+        }
+        DragMode::Rotate => {
+            let ang = (dx * 0.01) + (dy * 0.01);
+            let q = match axis {
+                Some(GizmoAxis::X) => Quat::from_axis_angle(Vec3::UNIT_X, ang),
+                Some(GizmoAxis::Z) => Quat::from_axis_angle(Vec3::UNIT_Z, ang),
+                Some(GizmoAxis::Y) | None => Quat::from_axis_angle(Vec3::UNIT_Y, ang),
+            };
+            after.rotation = (q * t0.rotation)
+                .normalized()
+                .unwrap_or(t0.rotation);
+        }
+        DragMode::Scale => {
+            let factor = (1.0 + (dx - dy) * 0.005).clamp(0.05, 20.0);
+            match axis {
+                Some(GizmoAxis::X) => after.scale.x = (t0.scale.x * factor).clamp(0.01, 100.0),
+                Some(GizmoAxis::Y) => after.scale.y = (t0.scale.y * factor).clamp(0.01, 100.0),
+                Some(GizmoAxis::Z) => after.scale.z = (t0.scale.z * factor).clamp(0.01, 100.0),
+                None => {
+                    after.scale = Vec3::new(
+                        (t0.scale.x * factor).clamp(0.01, 100.0),
+                        (t0.scale.y * factor).clamp(0.01, 100.0),
+                        (t0.scale.z * factor).clamp(0.01, 100.0),
+                    );
+                }
+            }
+        }
+        DragMode::Orbit | DragMode::Pan => {}
+    }
+    after
+}
+
+/// DeclUI `undo_redo` chrome wired to a `scene3d` viewport undo stack.
+pub fn ui_scene_undo_redo(
+    ui: &mut Ui,
+    w: &DeclUiWidget,
+    doc: &DeclUiDocument,
+    language: &str,
+    local_state: &HashMap<String, Value>,
+    host: &mut Scene3dHostState,
+) -> Option<Scene3dPatch> {
+    let scene_key = w.scene_key.as_deref().unwrap_or("scene");
+    let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
+    let (mut graph, locks, _) = project_from_local(local_state, scene_key);
+    let selected = selected_from_local(local_state, selected_key);
+    let fr = language.starts_with("fr");
+    let undo_l = doc
+        .labels
+        .as_ref()
+        .and_then(|l| l.resolve(language, "undo_label"))
+        .unwrap_or_else(|| if fr { "Annuler".into() } else { "Undo".into() });
+    let redo_l = doc
+        .labels
+        .as_ref()
+        .and_then(|l| l.resolve(language, "redo_label"))
+        .unwrap_or_else(|| if fr { "Rétablir".into() } else { "Redo".into() });
+
+    let mut patch = None;
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(host.undo.can_undo(), egui::Button::new(undo_l))
+            .clicked()
+            && host.undo.undo(&mut graph).unwrap_or(false)
+        {
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
+        }
+        if ui
+            .add_enabled(host.undo.can_redo(), egui::Button::new(redo_l))
+            .clicked()
+            && host.undo.redo(&mut graph).unwrap_or(false)
+        {
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
+        }
+        if host.autosave_dirty {
+            ui.label(
+                egui::RichText::new(if fr {
+                    "Enregistrement…"
+                } else {
+                    "Saving…"
+                })
+                .weak()
+                .small(),
+            );
+        }
+    });
+    if let Some(rem) = host.autosave_remaining() {
+        ui.ctx().request_repaint_after(rem);
+    }
+    if host.take_autosave_if_due() {
+        let yaml = scene_to_value_with_locks(&graph, &locks, selected.clone());
+        let mut p = patch.unwrap_or_else(|| Scene3dPatch {
+            scene_key: scene_key.into(),
+            scene: yaml.clone(),
+            selected_key: selected_key.into(),
+            selected: json!(selected),
+            beauty_path_key: None,
+            beauty_path: None,
+            request_autosave: true,
+        });
+        p.scene = yaml;
+        p.request_autosave = true;
+        patch = Some(p);
+    }
     patch
 }
 
@@ -859,6 +1311,7 @@ pub fn ui_scene_tree(
             },
             beauty_path_key: None,
             beauty_path: None,
+            request_autosave: false,
         })
     } else {
         None
@@ -917,6 +1370,7 @@ pub fn ui_scene_tree(
                         selected: Value::String(id),
                         beauty_path_key: None,
                         beauty_path: None,
+                        request_autosave: false,
                     });
                 }
             }

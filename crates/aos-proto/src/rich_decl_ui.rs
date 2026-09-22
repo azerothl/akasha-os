@@ -552,14 +552,21 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
             }
         }
         "undo_redo" => {
+            let has_scene = w.scene_key.as_ref().is_some_and(|k| !k.is_empty());
+            let has_layers = w.layers_key.as_ref().is_some_and(|k| !k.is_empty());
             if w.canvas_id.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
                     "canvas_id",
                 )));
             }
-            if w.layers_key.as_ref().is_none_or(|k| k.is_empty()) {
+            if !has_scene && !has_layers {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
-                    "layers_key",
+                    "layers_key|scene_key",
+                )));
+            }
+            if has_scene && w.selected_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "selected_key",
                 )));
             }
         }
@@ -1293,8 +1300,25 @@ mod tests {
             "camera section nested under edit"
         );
         assert!(
-            rail_labels.contains(&"render_section"),
-            "beauty section in left rail"
+            rail.iter().any(|w| w.kind == "scene_tree"
+                || w.children.as_ref().is_some_and(|cs| {
+                    cs.iter().any(|c| c.kind == "scene_tree")
+                })),
+            "scene_tree in rail"
+        );
+        assert!(
+            rail.iter().any(|w| {
+                fn has_undo(w: &DeclUiWidget) -> bool {
+                    if w.kind == "undo_redo" && w.scene_key.as_deref() == Some("scene") {
+                        return true;
+                    }
+                    w.children
+                        .as_ref()
+                        .is_some_and(|cs| cs.iter().any(has_undo))
+                }
+                has_undo(w)
+            }),
+            "global scene undo_redo chrome in project section"
         );
         for secondary in [
             "pose_section",
