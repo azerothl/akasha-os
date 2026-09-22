@@ -1256,7 +1256,7 @@ mod tests {
     }
 
     /// Layout lock: Create-like split rail — Compose → Edit → Beauty, Camera
-    /// placeholders present, secondary tools collapsible, beauty on the stage.
+    /// section wired to viewport strip copy, secondary tools collapsible, beauty on stage.
     #[test]
     fn illustration_studio_ui_keeps_compose_edit_beauty_flow() {
         let raw = std::fs::read_to_string(
