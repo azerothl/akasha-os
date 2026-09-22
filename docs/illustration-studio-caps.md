@@ -1,7 +1,7 @@
-# Illustration Studio — host capabilities (agent co-edit + NPR)
+# Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-**Status:** agent co-edit + NPR styles + neural mesh assist foundation on functional v1  
-**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), store notes `illustration-studio-agent-coedit.md`
+**Status:** articulated IK/FK + pose library + neural mesh assist on co-edit/NPR
+**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md`
 
 ## Caps (fail-closed)
 
@@ -14,7 +14,7 @@
 | `render.blender` | Isolated Blender beauty (Renderer Pack) or deterministic mock (`backend=`blender`) |
 | `asset.read:/assets/illustration/**` | Read / instantiate Illustration asset + style packs |
 | `scene.compose` | Heuristic prompt → SceneGraph compose (`scene.compose` service) |
-| `scene.pose` | Pose / IK-lite on humanoid joints (`scene.pose` service) |
+| `scene.pose` | FK / look-at / two-bone IK / pose presets / undo (`scene.pose` service) |
 | `scene.edit` | Select / TRS / transactional `scene.apply` / `scene.instantiate` |
 | `scene.lock` | Set / clear / list semantic locks |
 | `mesh.neural` | Neural / AI mesh assist (`mesh.assist`; stub procedural is Preview default) |
@@ -39,7 +39,7 @@ WASM tools on `illustration-studio` forward to platform `host_call` (`scene_host
 | `scene.apply` | `scene.edit` (+ pose/compose/asset as needed per op) | **Transactional** batch — all-or-nothing rollback |
 | `scene.lock` / `scene.unlock` / `scene.locks` | `scene.lock` | Semantic locks (node or subtree) |
 | `scene.compose` | `scene.compose` + asset read | Prompt → scene (fails if locks present for agents) |
-| `scene.pose` | `scene.pose` | Pose / IK-lite |
+| `scene.pose` | `scene.pose` | Preset / FK / look-at / two-bone IK; host undo stack |
 | `scene.instantiate` | `scene.edit` + asset read | Instantiate pack entry |
 | `asset.instantiate` | asset read | DeclUI legacy alias (same pack) |
 | `render.submit` | `render.*` + write | Job-shaped beauty via RenderService (`stub`, `cpu`, `blender`); optional `style` / `style_id` |
@@ -72,6 +72,18 @@ Ids: `sketch`, `pencil`, `ink` (aliases: `esquisse`, `pencil_classic` / `crayon`
 
 Result includes `scene_yaml`, `template_id`, `placed_assets`, `character_id`, `camera_id`.
 
+### `scene.pose` input
+
+```json
+{ "scene_yaml": "<yaml>", "humanoid_root": "humanoid", "preset": "sitting" }
+```
+
+Alternates: `"look_at": {x,y,z}` · `"joint"` + `"axis"` + `"angle_rad"` · `"ik": { "chain", "target", "pole"? }` · `"undo": true`.
+
+**Presets:** `rest`, `standing`, `wave_right`, `wave_left`, `reach_forward`, `pointing`, `sitting`, `lying`, `look_left`, `look_right`, `quad_sit`.
+
+**IK chains:** `arm_l` / `arm_r` / `leg_l` / `leg_r` / `front_l` / `front_r` / `back_l` / `back_r`.
+
 ### `scene.apply` example
 
 ```json
@@ -100,6 +112,15 @@ locks:
     scope: subtree
 ```
 
+## Assets
+
+| Id | Notes |
+|----|-------|
+| `humanoid.placeholder` / `humanoid.slim` | Articulated Empty joints + MeshBox visuals (HumanoidRig v1) |
+| `quadruped.cat` | Simple quadruped (body, neck/head, 4 two-bone legs, tail) |
+| props / `scene.starter` | Unchanged from functional v1 |
+| `/assets/illustration/styles/traditional-drawing/` | NPR style pack (Sketch / Pencil / Ink) |
+
 | Path | Role |
 |------|------|
 | `/documents/illustrations/project.scene.yaml` | SceneGraph project (ADR 0011) |
@@ -108,18 +129,17 @@ locks:
 | `/documents/illustrations/beauty-cpu.png` | CPU beauty / wireframe / NPR output |
 | `/documents/illustrations/beauty-blender.png` | Blender / mock beauty output |
 | `/assets/illustration/primitives/pack.yaml` | Embedded primitives pack (props + humanoid variants + starter) |
-| `/assets/illustration/styles/traditional-drawing/` | NPR style pack (Sketch / Pencil / Ink) |
 
 ## DeclUI
 
 | Kind | Host behaviour |
 |------|----------------|
-| `scene3d` | **wgpu edit viewport** — lit MeshBox solid + wire overlay from SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
+| `scene3d` | **wgpu edit viewport** — lit MeshBox solid + wire overlay from posed SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
 | `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
 | `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
 
-SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system. Blender is beauty-only (isolated Renderer Pack), never an editor. Styles are data and do not mutate the SceneGraph.
+SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system. Blender is beauty-only (isolated Renderer Pack), never an editor. Styles are data and do not mutate the SceneGraph. Viewport and beauty consume the same posed TRS.
 
 ## Out of scope
 
-Marketplace style packs, watercolor / marker / charcoal, comic/storyboard, real neural weights / model pack download, complete IK solver, Discord, multi-agent locks, transient pointer editing locks, realtime NPR in wgpu viewport.
+Marketplace style packs, watercolor / marker / charcoal, comic/storyboard, real neural weights / model pack download, Discord, multi-agent locks, transient pointer editing locks, realtime NPR in wgpu viewport, fingers/face/expressions.

@@ -1,13 +1,13 @@
-//! Example: compose from prompt → pose → CPU beauty (+ optional wgpu viewport).
+//! Example: compose → pose presets / IK → CPU beauty (+ optional wgpu).
 //!
 //! ```bash
 //! AOS_ILLUSTRATION_DEMO_OUT=/path/to/media cargo run -p aos-scene --example compose_pose_demo
 //! ```
 
 use aos_scene::{
-    apply_pose_preset, compose_from_prompt, eye_from_orbit, save_project_yaml, CpuWireframeBackend,
-    ProjectFile, RenderBackend, RenderPassKind, RenderRequest, SceneGraph, Vec3, ViewportCamera,
-    ViewportRenderer,
+    apply_ik_chain, apply_pose_preset, compose_from_prompt, eye_from_orbit, save_project_yaml,
+    CpuWireframeBackend, ProjectFile, RenderBackend, RenderPassKind, RenderRequest, SceneGraph,
+    Vec3, ViewportCamera, ViewportRenderer,
 };
 use std::path::{Path, PathBuf};
 
@@ -53,6 +53,54 @@ fn main() {
         "composed-child.scene.yaml",
         "illustration-compose-slim-cpu-beauty.png",
     );
+
+    // 3) Articulated sit + two-bone IK reach → beauty
+    let mut ik_scene = SceneGraph::demo_scene();
+    apply_pose_preset(&mut ik_scene, "humanoid", "sitting", None).expect("sit");
+    apply_ik_chain(
+        &mut ik_scene,
+        "humanoid",
+        "arm_r",
+        Vec3::new(0.95, 1.25, 0.55),
+        Some(Vec3::new(0.5, 1.8, 1.0)),
+        None,
+    )
+    .expect("ik");
+    write_yaml_and_beauty(
+        &out_dir,
+        &ik_scene,
+        "posed-ik-sit.scene.yaml",
+        "illustration-ik-sit-cpu-beauty.png",
+    );
+    try_viewport(
+        &out_dir,
+        &ik_scene,
+        "humanoid",
+        "illustration-ik-sit-viewport.png",
+    );
+
+    // 4) Cat + man library → quad_sit
+    let with_cat = compose_from_prompt(
+        "A man enters an old library. A cat is sitting on the counter.",
+    )
+    .expect("cat compose");
+    let mut cat_scene = with_cat.scene;
+    let cat_root = cat_scene
+        .node_ids_depth_first()
+        .into_iter()
+        .find(|id| id.contains("quadruped") || id.starts_with("cat_"))
+        .expect("cat root");
+    apply_pose_preset(&mut cat_scene, &cat_root, "quad_sit", None).expect("quad sit");
+    write_yaml_and_beauty(
+        &out_dir,
+        &cat_scene,
+        "composed-cat.scene.yaml",
+        "illustration-cat-sit-cpu-beauty.png",
+    );
+
+    // Dump demo_scene seed for package / docs.
+    let demo_yaml = save_project_yaml(&ProjectFile::new(SceneGraph::demo_scene())).expect("demo");
+    std::fs::write(out_dir.join("demo-articulated.scene.yaml"), &demo_yaml).expect("write demo");
 }
 
 fn write_yaml_and_beauty(out_dir: &Path, scene: &SceneGraph, yaml_name: &str, png_name: &str) {

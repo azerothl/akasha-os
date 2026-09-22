@@ -1,7 +1,7 @@
 [package]
 name = "module-illustration-studio"
-description = "Illustration Studio — co-edit, NPR, neural mesh assist"
-version = "0.5.1"
+description = "Illustration Studio — IK/FK poses, co-edit, NPR, neural mesh"
+version = "0.6.0"
 edition = "2021"
 license = "Apache-2.0"
 

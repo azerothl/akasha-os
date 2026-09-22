@@ -1,4 +1,5 @@
 //! wgpu edit-viewport smoke (SceneGraph SoT; not RenderService beauty).
+//! Articulated humanoid meshes use `mesh_*` visual child ids.
 
 use aos_scene::{
     eye_from_orbit, collect_mesh_instances, SceneGraph, ViewportCamera, ViewportRenderer, Vec3,
@@ -17,7 +18,18 @@ fn starter_scene_mesh_parity() {
     let g = SceneGraph::demo_scene();
     let meshes = collect_mesh_instances(&g, Some("box"));
     let ids: Vec<_> = meshes.iter().map(|m| m.id.as_str()).collect();
-    for need in ["ground", "pedestal", "box", "torso", "head", "leg_l", "leg_r", "arm_l", "arm_r"] {
+    // Stage props + articulated humanoid MeshBox visuals (Empty joints are not meshes).
+    for need in [
+        "ground",
+        "pedestal",
+        "box",
+        "mesh_chest",
+        "mesh_head",
+        "mesh_upper_arm_l",
+        "mesh_upper_arm_r",
+        "mesh_upper_leg_l",
+        "mesh_upper_leg_r",
+    ] {
         assert!(ids.contains(&need), "missing {need} in {ids:?}");
     }
     assert!(meshes.iter().any(|m| m.selected && m.id == "box"));
@@ -58,3 +70,4 @@ fn wgpu_renders_starter_scene_png() {
     }
     assert!(non_bg > 500, "expected lit mesh pixels, got {non_bg}");
 }
+

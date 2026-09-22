@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move. Lock nodes. Mesh assist stub is procedural (no neural weights).",
+      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move. Lock nodes. Articulated IK/FK poses. Mesh assist stub is procedural (no neural weights).",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -15,14 +15,16 @@
       "pose_wave_label": "Wave right",
       "pose_look_label": "Look at box",
       "pose_rest_label": "Rest pose",
+      "pose_sit_label": "Sit",
+      "pose_point_label": "Point",
+      "pose_ik_label": "IK reach (right hand)",
+      "pose_undo_label": "Undo pose",
+      "pose_joint_label": "Joint (FK)",
+      "pose_fk_label": "Rotate joint +30°",
       "locks_section": "Semantic locks",
       "lock_selected_label": "Lock selection",
       "lock_subtree_label": "Lock subtree",
       "unlock_selected_label": "Unlock",
-      "mesh_section": "Mesh assist",
-      "mesh_prompt_label": "Mesh prompt",
-      "mesh_stub_label": "Stub mesh (procedural)",
-      "mesh_tip": "Stub builds MeshBox props from keywords (crate / column / lamp / table). Neural backend stays fail-closed until model infra ships.",
       "assets_section": "Assets",
       "project_section": "Project",
       "render_section": "Beauty pass",
@@ -42,12 +44,17 @@
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
       "add_slim_label": "Add slim",
+      "add_cat_label": "Add cat",
       "beauty_empty": "No beauty pass yet — pick a style, then run Stub, CPU, or Blender beauty.",
-      "preview_label": "Beauty preview"
+      "preview_label": "Beauty preview",
+      "mesh_section": "Mesh assist",
+      "mesh_prompt_label": "Mesh prompt",
+      "mesh_stub_label": "Stub mesh (procedural)",
+      "mesh_tip": "Stub builds MeshBox props from keywords (crate / column / lamp / table). Neural backend stays fail-closed until model infra ships."
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer. Verrouillez les nœuds. Assist mesh stub procédural (pas de poids neuronaux).",
+      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer. Verrouillez les nœuds. Poses IK/FK articulées. Assist mesh stub procédural (pas de poids neuronaux).",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -55,14 +62,16 @@
       "pose_wave_label": "Saluer (droite)",
       "pose_look_label": "Regarder la boîte",
       "pose_rest_label": "Pose repos",
+      "pose_sit_label": "Assis",
+      "pose_point_label": "Pointer",
+      "pose_ik_label": "IK atteindre (main droite)",
+      "pose_undo_label": "Annuler pose",
+      "pose_joint_label": "Articulation (FK)",
+      "pose_fk_label": "Tourner articulation +30°",
       "locks_section": "Verrous sémantiques",
       "lock_selected_label": "Verrouiller la sélection",
       "lock_subtree_label": "Verrouiller le sous-arbre",
       "unlock_selected_label": "Déverrouiller",
-      "mesh_section": "Assist mesh",
-      "mesh_prompt_label": "Invite mesh",
-      "mesh_stub_label": "Mesh stub (procédural)",
-      "mesh_tip": "Le stub assemble des MeshBox depuis des mots-clés (caisse / colonne / lampe / table). Le backend neural reste refusé tant que l’infra modèles n’existe pas.",
       "assets_section": "Assets",
       "project_section": "Projet",
       "render_section": "Rendu beauté",
@@ -82,25 +91,51 @@
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
       "add_slim_label": "Ajouter mince",
+      "add_cat_label": "Ajouter chat",
       "beauty_empty": "Pas encore de rendu beauté — choisissez un style, puis Stub, CPU ou Blender.",
-      "preview_label": "Aperçu beauté"
+      "preview_label": "Aperçu beauté",
+      "mesh_section": "Assist mesh",
+      "mesh_prompt_label": "Invite mesh",
+      "mesh_stub_label": "Mesh stub (procédural)",
+      "mesh_tip": "Le stub assemble des MeshBox depuis des mots-clés (caisse / colonne / lampe / table). Le backend neural reste refusé tant que l’infra modèles n’existe pas."
     }
   },
   "state": {
     "local": {
-      "scene": { "type": "string", "default": "" },
-      "selected_id": { "type": "string", "nullable": true, "default": "box" },
-      "character_id": { "type": "string", "nullable": true, "default": "humanoid" },
+      "scene": {
+        "type": "string",
+        "default": ""
+      },
+      "selected_id": {
+        "type": "string",
+        "nullable": true,
+        "default": "box"
+      },
+      "character_id": {
+        "type": "string",
+        "nullable": true,
+        "default": "humanoid"
+      },
+      "pose_joint": {
+        "type": "string",
+        "default": "upper_arm_r"
+      },
       "prompt": {
         "type": "string",
         "default": "A man enters an old library. He stands by the counter."
       },
-      "style_id": { "type": "string", "default": "pencil" },
+      "style_id": {
+        "type": "string",
+        "default": "pencil"
+      },
+      "beauty_path": {
+        "type": "string",
+        "default": ""
+      },
       "mesh_prompt": {
         "type": "string",
         "default": "wooden crate"
-      },
-      "beauty_path": { "type": "string", "default": "" }
+      }
     }
   },
   "bindings": [
@@ -114,21 +149,29 @@
       "id": "beauty",
       "tool": "illustration.document.load",
       "target": "/beauty_path",
-      "invalidate_on": ["local.beauty_path"]
+      "invalidate_on": [
+        "local.beauty_path"
+      ]
     }
   ],
   "actions": [
     {
       "id": "save_project",
       "tool": "illustration.project.save",
-      "input": { "yaml": "$local.scene" },
-      "refresh_binds": ["illustration.project.load"]
+      "input": {
+        "yaml": "$local.scene"
+      },
+      "refresh_binds": [
+        "illustration.project.load"
+      ]
     },
     {
       "id": "load_project",
       "tool": "illustration.project.load",
       "input": {},
-      "refresh_binds": ["illustration.project.load"]
+      "refresh_binds": [
+        "illustration.project.load"
+      ]
     },
     {
       "id": "compose_scene",
@@ -153,7 +196,11 @@
       "service": "scene.pose",
       "input": {
         "humanoid_root": "$local.character_id",
-        "look_at": { "x": 0.0, "y": 0.8, "z": 0.0 },
+        "look_at": {
+          "x": 0.0,
+          "y": 0.8,
+          "z": 0.0
+        },
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
@@ -169,13 +216,68 @@
       "refresh_binds": []
     },
     {
-      "id": "mesh_assist_stub",
-      "service": "mesh.assist",
+      "id": "pose_sit",
+      "service": "scene.pose",
       "input": {
-        "prompt": "$local.mesh_prompt",
-        "backend": "stub",
-        "parent_id": "root",
-        "prefix": "mesh_",
+        "preset": "sitting",
+        "humanoid_root": "$local.character_id",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "pose_point",
+      "service": "scene.pose",
+      "input": {
+        "preset": "pointing",
+        "humanoid_root": "$local.character_id",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "pose_ik_reach",
+      "service": "scene.pose",
+      "input": {
+        "humanoid_root": "$local.character_id",
+        "ik": {
+          "chain": "arm_r",
+          "target": {
+            "x": 0.9,
+            "y": 1.35,
+            "z": 0.45
+          },
+          "pole": {
+            "x": 0.4,
+            "y": 1.6,
+            "z": 1.0
+          }
+        },
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "pose_fk_joint",
+      "service": "scene.pose",
+      "input": {
+        "humanoid_root": "$local.character_id",
+        "joint": "$local.pose_joint",
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "angle_rad": 0.52,
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "pose_undo",
+      "service": "scene.pose",
+      "input": {
+        "undo": true,
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
@@ -257,6 +359,17 @@
       "refresh_binds": []
     },
     {
+      "id": "instantiate_cat",
+      "service": "asset.instantiate",
+      "input": {
+        "asset_id": "quadruped.cat",
+        "parent_id": "root",
+        "prefix": "cat_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
       "id": "lock_selected",
       "service": "scene.lock",
       "input": {
@@ -286,6 +399,18 @@
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
+    },
+    {
+      "id": "mesh_assist_stub",
+      "service": "mesh.assist",
+      "input": {
+        "prompt": "$local.mesh_prompt",
+        "backend": "stub",
+        "parent_id": "root",
+        "prefix": "mesh_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
     }
   ],
   "subscriptions": [],
@@ -300,7 +425,10 @@
         "kind": "text",
         "label_key": "scene_empty",
         "visible": {
-          "eq": ["$local.scene", ""]
+          "eq": [
+            "$local.scene",
+            ""
+          ]
         }
       },
       {
@@ -344,6 +472,41 @@
                 "action": "pose_rest"
               }
             ]
+          },
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "pose_sit_label",
+                "action": "pose_sit"
+              },
+              {
+                "kind": "button",
+                "label_key": "pose_point_label",
+                "action": "pose_point"
+              },
+              {
+                "kind": "button",
+                "label_key": "pose_ik_label",
+                "action": "pose_ik_reach"
+              },
+              {
+                "kind": "button",
+                "label_key": "pose_undo_label",
+                "action": "pose_undo"
+              }
+            ]
+          },
+          {
+            "kind": "text_input",
+            "state_key": "pose_joint",
+            "label_key": "pose_joint_label"
+          },
+          {
+            "kind": "button",
+            "label_key": "pose_fk_label",
+            "action": "pose_fk_joint"
           }
         ]
       },
@@ -413,6 +576,11 @@
               },
               {
                 "kind": "button",
+                "label_key": "add_cat_label",
+                "action": "instantiate_cat"
+              },
+              {
+                "kind": "button",
                 "label_key": "add_box_label",
                 "action": "instantiate_box"
               }
@@ -429,8 +597,16 @@
             "state_key": "style_id",
             "label_key": "style_label",
             "inline": true,
-            "items": ["sketch", "pencil", "ink"],
-            "item_label_keys": ["style_sketch", "style_pencil", "style_ink"]
+            "items": [
+              "sketch",
+              "pencil",
+              "ink"
+            ],
+            "item_label_keys": [
+              "style_sketch",
+              "style_pencil",
+              "style_ink"
+            ]
           }
         ]
       },

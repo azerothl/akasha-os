@@ -107,6 +107,13 @@ only freezes **which** cases exist.
 > `aos-scene::viewport` (wgpu lit MeshBox). That path is an approximate
 > **edit view** of the same SceneGraph — not a RenderService beauty backend
 > and not a second scene system.
+>
+> **Implementation note (IK / pose library):** Articulated humanoid +
+> `quadruped.cat` prefabs use Empty joints (scale 1) with MeshBox visuals.
+> `aos-scene::ik` provides analytic two-bone IK; `pose` adds FK, look-at, pose
+> presets, and undoable `SceneOp` batches. Conventions tests cover rest-pose
+> load/save and a documented two-bone IK fixture (tip error < 0.05 m).
+> glTF↔backend round-trips remain deferred.
 
 ## Consequences
 
