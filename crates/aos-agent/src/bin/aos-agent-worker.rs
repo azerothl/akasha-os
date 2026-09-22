@@ -3560,7 +3560,11 @@ async fn invoke_module(
     trace_id: &str,
     session_id: Option<&str>,
 ) -> String {
-    let module = tool.split('.').next().unwrap_or("").to_string();
+    let module = if tool.starts_with("scene.") {
+        "illustration-studio".to_string()
+    } else {
+        tool.split('.').next().unwrap_or("").to_string()
+    };
     let mut args = args.clone();
     if module == "canvas" {
         // Fail closed: canvas.* requires a bound session_id; reject calls when none is available.

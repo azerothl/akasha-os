@@ -163,8 +163,40 @@ fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, Str
         "illustration.project.ensure" => project_ensure(),
         "illustration.document.load" => document_load(),
         "illustration.document.save" => document_save(args),
+        // Agent co-edit surface (host_call → platform scene_host).
+        "scene.get"
+        | "scene.select"
+        | "scene.trs"
+        | "scene.apply"
+        | "scene.lock"
+        | "scene.unlock"
+        | "scene.locks"
+        | "scene.compose"
+        | "scene.pose"
+        | "scene.instantiate" => scene_tool(tool, args),
         _ => Err(format!("unknown tool: {tool}")),
     }
+}
+
+/// Ensure `scene_yaml` is present (from args or project file) then host_call.
+fn scene_tool(service: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let mut payload = args.clone();
+    if payload.get("scene_yaml").and_then(|v| v.as_str()).unwrap_or("").is_empty()
+        && service != "scene.compose"
+    {
+        let yaml = aos_module_sdk::fs_read(PROJECT_PATH).unwrap_or_default();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("scene_yaml".into(), json!(yaml));
+        }
+    }
+    let result = aos_module_sdk::call(service, &payload)?;
+    // Persist when the host returned an updated scene (audit-friendly SoT on disk).
+    if let Some(yaml) = result.get("scene_yaml").and_then(|v| v.as_str()) {
+        if !yaml.trim().is_empty() && service != "scene.get" && service != "scene.locks" {
+            let _ = aos_module_sdk::fs_write(PROJECT_PATH, yaml)?;
+        }
+    }
+    Ok(result)
 }
 
 fn project_ensure() -> Result<serde_json::Value, String> {

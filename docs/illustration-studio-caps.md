@@ -1,7 +1,7 @@
-# Illustration Studio — host capabilities (NPR styles + functional v1)
+# Illustration Studio — host capabilities (agent co-edit + NPR)
 
-**Status:** NPR styles (Sketch / Pencil / Ink) on functional v1  
-**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md)
+**Status:** agent co-edit + semantic locks + NPR styles (Sketch / Pencil / Ink) on functional v1  
+**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), store notes `illustration-studio-agent-coedit.md`
 
 ## Caps (fail-closed)
 
@@ -15,29 +15,37 @@
 | `asset.read:/assets/illustration/**` | Read / instantiate Illustration asset + style packs |
 | `scene.compose` | Heuristic prompt → SceneGraph compose (`scene.compose` service) |
 | `scene.pose` | Pose / IK-lite on humanoid joints (`scene.pose` service) |
-| `tool.invoke:illustration-studio` | Invoke package tools |
+| `scene.edit` | Select / TRS / transactional `scene.apply` / `scene.instantiate` |
+| `scene.lock` | Set / clear / list semantic locks |
+| `tool.invoke:illustration-studio` | Invoke package tools (incl. `scene.*`) |
 
-Unknown DeclUI services remain rejected. Render writes also require the illustrations write cap. Asset instantiate requires `asset.read:/assets/illustration/**` (not ambient FS). Compose requires `scene.compose` **and** `asset.read:/assets/illustration/**`. Pose requires `scene.pose`. Blender path is fail-closed without `render.blender`. Unknown NPR `style` / `style_id` values fail-closed.
+Unknown DeclUI services remain rejected. Render writes also require the illustrations write cap. Asset instantiate requires `asset.read:/assets/illustration/**` (not ambient FS). Compose requires `scene.compose` **and** `asset.read:/assets/illustration/**`. Pose requires `scene.pose`. Blender path is fail-closed without `render.blender`. Unknown NPR `style` / `style_id` values fail-closed. Agents mutate SceneGraph only through capability-gated `scene.*` host_calls (no free FS).
 
-### Path rules
+## Agent / host_call surface
 
 | Prefix | Rule |
 |--------|------|
 | `/documents/illustrations/**` | Render output paths must stay here (`..` denied) |
 | `/assets/illustration/**` | Asset + style pack logical tree; `asset.read` fail-closed |
 
-## DeclUI services (agent / tool surface)
+WASM tools on `illustration-studio` forward to platform `host_call` (`scene_host`). Agent `module.invoke` routes `scene.*` → module `illustration-studio`.
 
-These host services are the **minimal agent/tool surface** for Illustration Studio. They mutate or replace SceneGraph YAML and return it; the guest persists via `illustration.project.save`. Caps are checked fail-closed before execution.
-
-| Service | Cap(s) | Role |
-|---------|--------|------|
-| `scene.compose` | `scene.compose` + `asset.read:/assets/illustration/**` | Prompt → SceneGraph (templates / keyword heuristics; places camera + assets) |
-| `scene.pose` | `scene.pose` | Apply pose preset / FK joint rotate / look-at (IK-lite); undoable ops in host |
+| Tool / service | Cap(s) | Role |
+|----------------|--------|------|
+| `scene.get` | `scene.edit` or illustrations read | Snapshot: yaml + selection + locks |
+| `scene.select` | `scene.edit` | Set selection |
+| `scene.trs` | `scene.edit` | Set node TRS (ADR 0011) |
+| `scene.apply` | `scene.edit` (+ pose/compose/asset as needed per op) | **Transactional** batch — all-or-nothing rollback |
+| `scene.lock` / `scene.unlock` / `scene.locks` | `scene.lock` | Semantic locks (node or subtree) |
+| `scene.compose` | `scene.compose` + asset read | Prompt → scene (fails if locks present for agents) |
+| `scene.pose` | `scene.pose` | Pose / IK-lite |
+| `scene.instantiate` | `scene.edit` + asset read | Instantiate pack entry |
+| `asset.instantiate` | asset read | DeclUI legacy alias (same pack) |
 | `render.submit` | `render.*` + write | Job-shaped beauty via RenderService (`stub`, `cpu`, `blender`); optional `style` / `style_id` |
 | `render.status` / `render.result` | `render.*` | Job poll / result metadata |
 | `render.stub.beauty` | `render.stub` + write | Legacy thin wrapper → stub backend |
-| `asset.instantiate` | `asset.read:/assets/illustration/**` | Instantiate pack entry into SceneGraph YAML |
+
+These host services are the **minimal agent/tool surface** for Illustration Studio. Caps are checked fail-closed before execution.
 
 ### `render.submit` style
 
@@ -63,21 +71,33 @@ Ids: `sketch`, `pencil`, `ink` (aliases: `esquisse`, `pencil_classic` / `crayon`
 
 Result includes `scene_yaml`, `template_id`, `placed_assets`, `character_id`, `camera_id`.
 
-### `scene.pose` input
+### `scene.apply` example
 
 ```json
 {
   "scene_yaml": "<project yaml>",
-  "humanoid_root": "humanoid",
-  "preset": "wave_right"
+  "ops": [
+    { "op": "select", "id": "humanoid" },
+    { "op": "trs", "id": "box", "translation": { "x": 1.0, "y": 0.675, "z": 0.0 } },
+    { "op": "pose", "humanoid_root": "humanoid", "preset": "wave_right" }
+  ]
 }
 ```
 
-Alternates: `"look_at": { "x", "y", "z" }` or `"joint"` + `"axis"` + `"angle_rad"` for FK.
+On lock conflict or validation failure the pre-batch SceneGraph is restored.
 
-Presets: `rest`, `wave_right`, `wave_left`, `reach_forward`, `look_left`, `look_right`.
+## Semantic locks
 
-## Paths
+Persisted in project YAML (`locks:` map). Agents are fail-closed; humans (DeclUI) may still edit. DeclUI `scene_tree` shows `[locked]` / `[pose-lock]` markers.
+
+```yaml
+locks:
+  camera:
+    semantic: true
+  humanoid:
+    pose: true
+    scope: subtree
+```
 
 | Path | Role |
 |------|------|
@@ -89,23 +109,16 @@ Presets: `rest`, `wave_right`, `wave_left`, `reach_forward`, `look_left`, `look_
 | `/assets/illustration/primitives/pack.yaml` | Embedded primitives pack (props + humanoid variants + starter) |
 | `/assets/illustration/styles/traditional-drawing/` | NPR style pack (Sketch / Pencil / Ink) |
 
-## Widgets
+## DeclUI
 
 | Kind | Host behaviour |
 |------|----------------|
 | `scene3d` | **wgpu edit viewport** — lit MeshBox solid + wire overlay from SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
-| `scene_tree` | Node list selection synced via local state |
+| `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
 | `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
-
-### Viewport vs beauty (critical)
-
-| Path | Role |
-|------|------|
-| DeclUI `scene3d` (`aos-scene::viewport`) | Interactive **edit view** of the same SceneGraph |
-| `render.submit` / stub / cpu / blender | Offline **beauty** jobs via RenderService — optional NPR `style` |
 
 SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system. Blender is beauty-only (isolated Renderer Pack), never an editor. Styles are data and do not mutate the SceneGraph.
 
-## Out of scope here
+## Out of scope
 
-Marketplace style packs, watercolor / marker / charcoal, comic/storyboard, neural mesh gen, complete IK solver, multi-agent locks, realtime NPR in wgpu viewport.
+Marketplace style packs, watercolor / marker / charcoal, comic/storyboard, neural mesh gen, complete IK solver, Discord, multi-agent locks, transient pointer editing locks, realtime NPR in wgpu viewport.

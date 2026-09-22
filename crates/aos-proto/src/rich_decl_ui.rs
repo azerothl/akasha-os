@@ -695,6 +695,33 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::SCENE_GET_SERVICE => {
+            // Read snapshot — require illustrations read or edit.
+            if !granted_caps.iter().any(|c| {
+                c == crate::ILLUSTRATION_FS_READ_CAP || c == crate::SCENE_EDIT_CAP
+            }) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::SCENE_EDIT_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::SCENE_SELECT_SERVICE | crate::SCENE_TRS_SERVICE | crate::SCENE_APPLY_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::SCENE_EDIT_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::SCENE_EDIT_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::SCENE_LOCK_SERVICE | crate::SCENE_UNLOCK_SERVICE | crate::SCENE_LOCKS_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::SCENE_LOCK_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::SCENE_LOCK_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -1132,6 +1159,8 @@ mod tests {
             crate::ASSET_ILLUSTRATION_READ_CAP.into(),
             crate::SCENE_COMPOSE_CAP.into(),
             crate::SCENE_POSE_CAP.into(),
+            crate::SCENE_EDIT_CAP.into(),
+            crate::SCENE_LOCK_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
             .expect("illustration-studio ui valid");

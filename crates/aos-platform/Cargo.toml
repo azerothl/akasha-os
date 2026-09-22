@@ -12,6 +12,8 @@ aos-ipc = { path = "../aos-ipc" }
 aos-llama = { path = "../aos-llama", optional = true, default-features = false }
 aos-placement = { path = "../aos-placement" }
 aos-proto = { path = "../aos-proto" }
+# SceneGraph edit / locks / apply (no wgpu — viewport stays in aos-ui-egui).
+aos-scene = { path = "../aos-scene", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true

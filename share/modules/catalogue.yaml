@@ -46,10 +46,10 @@ entries:
       - media.generate
       - tool.invoke:create
   - name: illustration-studio
-    version: "0.4.0"
+    version: "0.5.0"
     kind: module
     path: share/modules/illustration-studio.aospkg
-    hash: sha256:53e83bc7b6c55bb123b60f4be36997ef35258ea15d90ba19b2147b1191a311d6
+    hash: sha256:8d3fed02033171400b59d3ab1b69077e955ca2769a5971b055f8db3a55d8381f
     attested_caps:
       - fs.read:/documents/illustrations/**
       - fs.write:/documents/illustrations/**
@@ -59,6 +59,8 @@ entries:
       - asset.read:/assets/illustration/**
       - scene.compose
       - scene.pose
+      - scene.edit
+      - scene.lock
       - tool.invoke:illustration-studio
   - name: mcp-example
     version: "1.0.0"

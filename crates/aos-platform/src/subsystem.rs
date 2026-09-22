@@ -1527,7 +1527,12 @@ impl HostServices for PlatformSubsystem {
             | "secrets.get" | "trust.set" | "agent.create" | "agent.grant" => {
                 Err(format!("service interdit depuis host_call WASM: {service}"))
             }
-            other => Err(format!("service inconnu: {other}")),
+            other => {
+                if let Some(v) = crate::scene_host::handle_scene_host_call(other, ctx, &args)? {
+                    return Ok(v);
+                }
+                Err(format!("service inconnu: {other}"))
+            }
         }
     }
 }
