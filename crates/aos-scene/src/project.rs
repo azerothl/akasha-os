@@ -1,5 +1,6 @@
 //! Illustration project YAML save/load.
 
+use crate::locks::LockTable;
 use crate::scene::{SceneError, SceneGraph};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -14,6 +15,12 @@ pub struct ProjectFile {
     #[serde(default = "adr_default")]
     pub conventions: String,
     pub scene: SceneGraph,
+    /// Semantic locks (spec §131) — optional; empty on older projects.
+    #[serde(default, skip_serializing_if = "LockTable::is_empty")]
+    pub locks: LockTable,
+    /// Last DeclUI / agent selection (optional UI aid; SceneGraph remains SoT).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_id: Option<String>,
 }
 
 fn adr_default() -> String {
@@ -36,6 +43,8 @@ impl ProjectFile {
             format_version: PROJECT_FORMAT_VERSION,
             conventions: adr_default(),
             scene,
+            locks: LockTable::default(),
+            selected_id: None,
         }
     }
 

@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move.",
+      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move. Lock nodes so agents cannot stomp.",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -15,6 +15,10 @@
       "pose_wave_label": "Wave right",
       "pose_look_label": "Look at box",
       "pose_rest_label": "Rest pose",
+      "locks_section": "Semantic locks",
+      "lock_selected_label": "Lock selection",
+      "lock_subtree_label": "Lock subtree",
+      "unlock_selected_label": "Unlock",
       "assets_section": "Assets",
       "project_section": "Project",
       "render_section": "Beauty pass",
@@ -39,7 +43,7 @@
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer.",
+      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer. Verrouillez les nœuds pour que l'agent ne les écrase pas.",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -47,6 +51,10 @@
       "pose_wave_label": "Saluer (droite)",
       "pose_look_label": "Regarder la boîte",
       "pose_rest_label": "Pose repos",
+      "locks_section": "Verrous sémantiques",
+      "lock_selected_label": "Verrouiller la sélection",
+      "lock_subtree_label": "Verrouiller le sous-arbre",
+      "unlock_selected_label": "Déverrouiller",
       "assets_section": "Assets",
       "project_section": "Projet",
       "render_section": "Rendu beauté",
@@ -223,6 +231,37 @@
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
+    },
+    {
+      "id": "lock_selected",
+      "service": "scene.lock",
+      "input": {
+        "id": "$local.selected_id",
+        "scope": "node",
+        "kind": "semantic",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "lock_subtree",
+      "service": "scene.lock",
+      "input": {
+        "id": "$local.selected_id",
+        "scope": "subtree",
+        "kind": "semantic",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "unlock_selected",
+      "service": "scene.unlock",
+      "input": {
+        "id": "$local.selected_id",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
     }
   ],
   "subscriptions": [],
@@ -279,6 +318,32 @@
                 "kind": "button",
                 "label_key": "pose_rest_label",
                 "action": "pose_rest"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "locks_section",
+        "children": [
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "lock_selected_label",
+                "action": "lock_selected"
+              },
+              {
+                "kind": "button",
+                "label_key": "lock_subtree_label",
+                "action": "lock_subtree"
+              },
+              {
+                "kind": "button",
+                "label_key": "unlock_selected_label",
+                "action": "unlock_selected"
               }
             ]
           }

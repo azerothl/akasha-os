@@ -606,6 +606,22 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::SCENE_POSE_SERVICE => {
             run_scene_pose(evt_tx, module, action_id, input, refresh_binds);
         }
+        aos_proto::SCENE_GET_SERVICE
+        | aos_proto::SCENE_SELECT_SERVICE
+        | aos_proto::SCENE_TRS_SERVICE
+        | aos_proto::SCENE_APPLY_SERVICE
+        | aos_proto::SCENE_LOCK_SERVICE
+        | aos_proto::SCENE_UNLOCK_SERVICE
+        | aos_proto::SCENE_LOCKS_SERVICE => {
+            run_scene_edit_service(
+                evt_tx,
+                module,
+                action_id,
+                service,
+                input,
+                refresh_binds,
+            );
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -1308,6 +1324,233 @@ fn run_scene_pose(
         error: None,
         refresh_binds,
     });
+}
+
+fn run_scene_edit_service(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    service: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{
+        apply_batch, apply_one, AgentEditOp, EditActorKind, EditSnapshot, LockKind, LockScope,
+    };
+
+    let yaml = input
+        .get("scene_yaml")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let mut snap = match EditSnapshot::from_yaml(yaml) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("{service}: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    // DeclUI is always human — locks do not block the user.
+    let actor = "human:ui";
+    let kind = EditActorKind::Human;
+
+    let outcome = match service {
+        aos_proto::SCENE_GET_SERVICE | aos_proto::SCENE_LOCKS_SERVICE => Ok(()),
+        aos_proto::SCENE_SELECT_SERVICE => {
+            let id = input
+                .get("id")
+                .or_else(|| input.get("selected_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            apply_one(
+                &mut snap,
+                &AgentEditOp::Select { id: id.into() },
+                actor,
+                kind,
+            )
+        }
+        aos_proto::SCENE_TRS_SERVICE => {
+            let id = input
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let translation = match input.get("translation").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("translation: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let rotation = match input.get("rotation").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("rotation: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let scale = match input.get("scale").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("scale: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            apply_one(
+                &mut snap,
+                &AgentEditOp::Trs {
+                    id,
+                    translation,
+                    rotation,
+                    scale,
+                },
+                actor,
+                kind,
+            )
+        }
+        aos_proto::SCENE_APPLY_SERVICE => {
+            let ops: Result<Vec<AgentEditOp>, _> = input
+                .get("ops")
+                .cloned()
+                .ok_or_else(|| "ops required".to_string())
+                .and_then(|v| serde_json::from_value(v).map_err(|e| e.to_string()));
+            match ops {
+                Ok(ops) => apply_batch(&mut snap, &ops, actor, kind),
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene.apply: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        }
+        aos_proto::SCENE_LOCK_SERVICE => {
+            let id = input
+                .get("id")
+                .or_else(|| input.get("node_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let scope = match input.get("scope").and_then(|v| v.as_str()).unwrap_or("node") {
+                "subtree" => LockScope::Subtree,
+                _ => LockScope::Node,
+            };
+            let kind_lock = if input.get("pose").and_then(|v| v.as_bool()).unwrap_or(false)
+                || input.get("kind").and_then(|v| v.as_str()) == Some("pose")
+            {
+                LockKind::Pose
+            } else {
+                LockKind::Semantic
+            };
+            apply_one(
+                &mut snap,
+                &AgentEditOp::Lock {
+                    id,
+                    scope,
+                    kind: kind_lock,
+                },
+                actor,
+                kind,
+            )
+        }
+        aos_proto::SCENE_UNLOCK_SERVICE => {
+            let id = input
+                .get("id")
+                .or_else(|| input.get("node_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            apply_one(&mut snap, &AgentEditOp::Unlock { id }, actor, kind)
+        }
+        other => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("unsupported scene edit service: {other}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    match outcome {
+        Ok(()) => match snap.result_json() {
+            Ok(result) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: true,
+                    result,
+                    error: None,
+                    refresh_binds,
+                });
+            }
+            Err(e) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("{service}: {e}")),
+                    refresh_binds,
+                });
+            }
+        },
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("{service}: {e}")),
+                refresh_binds,
+            });
+        }
+    }
 }
 
 async fn run_media_image_generate(

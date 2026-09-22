@@ -35,7 +35,13 @@ pub async fn invoke_module_tool(
     trace_id: &str,
     session_id: Option<&str>,
 ) -> String {
-    let module = tool.split('.').next().unwrap_or("").to_string();
+    let module = if tool.starts_with("scene.") {
+        // Illustration Studio agent tools share the `scene.*` namespace with
+        // DeclUI/host_call services; route to the illustration-studio guest.
+        "illustration-studio".to_string()
+    } else {
+        tool.split('.').next().unwrap_or("").to_string()
+    };
     let mut args = args.clone();
     if module == "canvas" {
         let sid = match session_id.filter(|s| !s.is_empty()) {

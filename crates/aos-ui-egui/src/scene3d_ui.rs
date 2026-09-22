@@ -8,8 +8,8 @@
 use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_scene::{
     eye_from_orbit as orbit_eye, load_project_yaml, look_at_rh, perspective_rh,
-    save_project_yaml, Mat4, NodeKind, ProjectFile, SceneGraph, SceneOp, Transform, UndoStack,
-    Vec3, ViewportCamera, ViewportRenderer,
+    save_project_yaml, LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, SceneGraph,
+    SceneOp, Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
 };
 use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2};
 use serde_json::{json, Value};
@@ -79,27 +79,69 @@ pub fn patch_to_local_map(patch: &Scene3dPatch) -> HashMap<String, Value> {
 }
 
 fn scene_from_local(local: &HashMap<String, Value>, scene_key: &str) -> (SceneGraph, bool) {
+    let (graph, _locks, seeded) = project_from_local(local, scene_key);
+    (graph, seeded)
+}
+
+fn project_from_local(
+    local: &HashMap<String, Value>,
+    scene_key: &str,
+) -> (SceneGraph, LockTable, bool) {
     match local.get(scene_key) {
         Some(Value::String(s)) if !s.trim().is_empty() => {
             if let Ok(p) = load_project_yaml(s) {
-                return (p.scene, false);
+                return (p.scene, p.locks, false);
             }
             if let Ok(g) = serde_json::from_str::<SceneGraph>(s) {
-                return (g, false);
+                return (g, LockTable::default(), false);
             }
         }
         Some(v) if !v.is_null() => {
             if let Ok(g) = serde_json::from_value::<SceneGraph>(v.clone()) {
-                return (g, false);
+                return (g, LockTable::default(), false);
             }
         }
         _ => {}
     }
-    (SceneGraph::demo_scene(), true)
+    (SceneGraph::demo_scene(), LockTable::default(), true)
+}
+
+fn lock_marker(locks: &LockTable, graph: &SceneGraph, id: &str) -> &'static str {
+    let covering = locks.list().into_iter().find(|lock| match lock.scope {
+        LockScope::Node => lock.node_id == id,
+        LockScope::Subtree => {
+            if lock.node_id == id {
+                return true;
+            }
+            let mut cur = graph.nodes.get(id).and_then(|n| n.parent.clone());
+            while let Some(pid) = cur {
+                if pid == lock.node_id {
+                    return true;
+                }
+                cur = graph.nodes.get(&pid).and_then(|n| n.parent.clone());
+            }
+            false
+        }
+    });
+    match covering.map(|l| l.kind) {
+        Some(LockKind::Pose) => " [pose-lock]",
+        Some(LockKind::Semantic) => " [locked]",
+        None => "",
+    }
 }
 
 fn scene_to_value(graph: &SceneGraph) -> Value {
-    let project = ProjectFile::new(graph.clone());
+    scene_to_value_with_locks(graph, &LockTable::default(), None)
+}
+
+fn scene_to_value_with_locks(
+    graph: &SceneGraph,
+    locks: &LockTable,
+    selected_id: Option<String>,
+) -> Value {
+    let mut project = ProjectFile::new(graph.clone());
+    project.locks = locks.clone();
+    project.selected_id = selected_id;
     match save_project_yaml(&project) {
         Ok(yaml) => Value::String(yaml),
         Err(_) => serde_json::to_value(graph).unwrap_or(Value::Null),
@@ -257,13 +299,16 @@ pub fn ui_scene3d(
 ) -> Option<Scene3dPatch> {
     let scene_key = w.scene_key.as_deref().unwrap_or("scene");
     let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
-    let (mut graph, seeded) = scene_from_local(local_state, scene_key);
+    let (mut graph, locks, seeded) = project_from_local(local_state, scene_key);
     let mut selected = selected_from_local(local_state, selected_key);
+    let scene_val = |g: &SceneGraph, sel: &Option<String>| {
+        scene_to_value_with_locks(g, &locks, sel.clone())
+    };
     let mut patch: Option<Scene3dPatch> = None;
     if seeded {
         patch = Some(Scene3dPatch {
             scene_key: scene_key.into(),
-            scene: scene_to_value(&graph),
+            scene: scene_val(&graph, &selected),
             selected_key: selected_key.into(),
             selected: match &selected {
                 Some(s) => Value::String(s.clone()),
@@ -463,7 +508,7 @@ pub fn ui_scene3d(
                         );
                         patch = Some(Scene3dPatch {
                             scene_key: scene_key.into(),
-                            scene: scene_to_value(&graph),
+                            scene: scene_val(&graph, &selected),
                             selected_key: selected_key.into(),
                             selected: json!(selected),
                             beauty_path_key: None,
@@ -495,7 +540,7 @@ pub fn ui_scene3d(
             selected = best.map(|(id, _)| id);
             patch = Some(Scene3dPatch {
                 scene_key: scene_key.into(),
-                scene: scene_to_value(&graph),
+                scene: scene_val(&graph, &selected),
                 selected_key: selected_key.into(),
                 selected: match &selected {
                     Some(s) => Value::String(s.clone()),
@@ -547,7 +592,7 @@ pub fn ui_scene3d(
                 );
                 patch = Some(Scene3dPatch {
                     scene_key: scene_key.into(),
-                    scene: scene_to_value(&graph),
+                    scene: scene_val(&graph, &selected),
                     selected_key: selected_key.into(),
                     selected: Value::String(id),
                     beauty_path_key: None,
@@ -569,12 +614,12 @@ pub fn ui_scene_tree(
 ) -> Option<Scene3dPatch> {
     let scene_key = w.scene_key.as_deref().unwrap_or("scene");
     let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
-    let (graph, seeded) = scene_from_local(local_state, scene_key);
+    let (graph, locks, seeded) = project_from_local(local_state, scene_key);
     let mut selected = selected_from_local(local_state, selected_key);
     let mut patch = if seeded {
         Some(Scene3dPatch {
             scene_key: scene_key.into(),
-            scene: scene_to_value(&graph),
+            scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
             selected_key: selected_key.into(),
             selected: match &selected {
                 Some(s) => Value::String(s.clone()),
@@ -618,7 +663,7 @@ pub fn ui_scene_tree(
                     d
                 };
                 let label = format!(
-                    "{}{} ({})",
+                    "{}{} ({}){}",
                     "  ".repeat(depth as usize),
                     node.name,
                     match node.kind {
@@ -626,14 +671,15 @@ pub fn ui_scene_tree(
                         NodeKind::MeshBox => "box",
                         NodeKind::Camera => "camera",
                         NodeKind::Light => "light",
-                    }
+                    },
+                    lock_marker(&locks, &graph, &id)
                 );
                 let is_sel = selected.as_deref() == Some(id.as_str());
                 if ui.selectable_label(is_sel, label).clicked() {
                     selected = Some(id.clone());
                     patch = Some(Scene3dPatch {
                         scene_key: scene_key.into(),
-                        scene: scene_to_value(&graph),
+                        scene: scene_to_value_with_locks(&graph, &locks, Some(id.clone())),
                         selected_key: selected_key.into(),
                         selected: Value::String(id),
                         beauty_path_key: None,

@@ -318,14 +318,29 @@ pub(crate) fn on_ui_service_done(
                     || action_id == "pose_wave"
                     || action_id == "pose_look"
                     || action_id == "pose_rest"
+                    || action_id == "lock_selected"
+                    || action_id == "lock_subtree"
+                    || action_id == "unlock_selected"
                     || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE
                     || action_id == aos_proto::SCENE_COMPOSE_SERVICE
-                    || action_id == aos_proto::SCENE_POSE_SERVICE)
+                    || action_id == aos_proto::SCENE_POSE_SERVICE
+                    || action_id == aos_proto::SCENE_GET_SERVICE
+                    || action_id == aos_proto::SCENE_SELECT_SERVICE
+                    || action_id == aos_proto::SCENE_TRS_SERVICE
+                    || action_id == aos_proto::SCENE_APPLY_SERVICE
+                    || action_id == aos_proto::SCENE_LOCK_SERVICE
+                    || action_id == aos_proto::SCENE_UNLOCK_SERVICE
+                    || action_id == aos_proto::SCENE_LOCKS_SERVICE)
             {
                 if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
                     panel
                         .local_state
                         .insert("scene".into(), Value::String(yaml.to_string()));
+                }
+                if let Some(sel) = result.get("selected_id").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("selected_id".into(), Value::String(sel.to_string()));
                 }
                 if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
                     panel

@@ -35,6 +35,7 @@ pub mod net_services;
 pub mod policy;
 pub mod product_rag;
 pub mod secrets;
+pub mod scene_host;
 pub mod skill;
 pub mod skill_pass;
 pub mod instincts;

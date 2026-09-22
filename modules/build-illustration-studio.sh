@@ -44,7 +44,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.4.0
+version: 0.5.0
 hash: ${HASH}
 permissions:
   required_caps:
@@ -56,6 +56,8 @@ permissions:
     - asset.read:/assets/illustration/**
     - scene.compose
     - scene.pose
+    - scene.edit
+    - scene.lock
     - tool.invoke:illustration-studio
 tools:
   - name: illustration.project.load
@@ -82,6 +84,113 @@ tools:
     description: Persist package UI state
     input_schema:
       type: object
+  - name: scene.get
+    description: Read SceneGraph snapshot (yaml + selection + locks)
+    input_schema:
+      type: object
+      properties:
+        scene_yaml:
+          type: string
+  - name: scene.select
+    description: Select a SceneGraph node
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        scene_yaml:
+          type: string
+      required: [id]
+  - name: scene.trs
+    description: Set node translation/rotation/scale (ADR 0011)
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        translation:
+          type: object
+        rotation:
+          type: object
+        scale:
+          type: object
+        scene_yaml:
+          type: string
+      required: [id]
+  - name: scene.apply
+    description: Transactional agent edit batch (apply or rollback)
+    input_schema:
+      type: object
+      properties:
+        ops:
+          type: array
+        scene_yaml:
+          type: string
+      required: [ops]
+  - name: scene.lock
+    description: Semantic lock a node or subtree (agent must not mutate)
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        scope:
+          type: string
+        kind:
+          type: string
+        scene_yaml:
+          type: string
+      required: [id]
+  - name: scene.unlock
+    description: Clear a semantic lock
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        scene_yaml:
+          type: string
+      required: [id]
+  - name: scene.locks
+    description: List semantic locks
+    input_schema:
+      type: object
+      properties:
+        scene_yaml:
+          type: string
+  - name: scene.compose
+    description: Compose SceneGraph from a short prompt
+    input_schema:
+      type: object
+      properties:
+        prompt:
+          type: string
+      required: [prompt]
+  - name: scene.pose
+    description: Apply pose/IK-lite to a humanoid
+    input_schema:
+      type: object
+      properties:
+        humanoid_root:
+          type: string
+        preset:
+          type: string
+        scene_yaml:
+          type: string
+  - name: scene.instantiate
+    description: Instantiate an illustration asset into the SceneGraph
+    input_schema:
+      type: object
+      properties:
+        asset_id:
+          type: string
+        parent_id:
+          type: string
+        prefix:
+          type: string
+        scene_yaml:
+          type: string
+      required: [asset_id]
 ui:
   contract: 2
   document: ui/index.json

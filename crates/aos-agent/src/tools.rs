@@ -1644,6 +1644,8 @@ pub fn reserved_tool_prefix(prefix: &str) -> bool {
             | "usb"
             | "shell"
             | "harness"
+            | "scene"
+            | "canvas"
     )
 }
 

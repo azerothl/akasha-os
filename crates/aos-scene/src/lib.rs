@@ -11,11 +11,15 @@
 //! minimal [`assets`] pack format. Blender / `bpy` stay in the separate
 //! Renderer Pack — never linked here.
 //!
-//! Edit viewport: [`viewport`] is a wgpu lit MeshBox view of the same SceneGraph
-//! (DeclUI `scene3d`). It is **not** a beauty / NPR RenderService backend.
+//! Edit viewport: [`viewport`] (feature `viewport`) is a wgpu lit MeshBox view
+//! of the same SceneGraph (DeclUI `scene3d`). It is **not** a beauty / NPR
+//! RenderService backend. Platform host_call paths depend on this crate with
+//! `default-features = false`.
 
 mod assets;
 mod compose;
+mod edit;
+mod locks;
 mod math;
 mod ops;
 mod png;
@@ -25,6 +29,7 @@ mod render;
 mod render_stub;
 mod scene;
 mod style;
+#[cfg(feature = "viewport")]
 pub mod viewport;
 
 pub use assets::{
@@ -36,6 +41,15 @@ pub use assets::{
 pub use compose::{
     compose_from_prompt, compose_from_prompt_with_pack, ComposeError, ComposeIntent, ComposeResult,
     SCENE_COMPOSE_CAP, SCENE_COMPOSE_SERVICE,
+};
+pub use edit::{
+    apply_batch, apply_one, merge_trs, require_batch_caps, require_edit_caps, AgentEditOp,
+    EditActorKind, EditError, EditSnapshot, SCENE_APPLY_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE,
+    SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
+};
+pub use locks::{
+    LockEntryWire, LockError, LockKind, LockScope, LockTable, MutateKind, SemanticLock,
+    SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE, SCENE_UNLOCK_SERVICE,
 };
 pub use math::{Mat4, Quat, Vec3, EPSILON};
 pub use ops::{SceneOp, UndoStack};
@@ -63,6 +77,7 @@ pub use style::{
     EMBEDDED_STYLE_PACK_MANIFEST_YAML, EMBEDDED_STYLE_PENCIL_YAML, EMBEDDED_STYLE_SKETCH_YAML,
     ILLUSTRATION_STYLES_PREFIX, STYLE_PACK_FORMAT_VERSION,
 };
+#[cfg(feature = "viewport")]
 pub use viewport::{
     collect_mesh_instances, eye_from_orbit, look_at_rh, perspective_rh, project_point_ndc,
     MeshInstance, ViewportCamera, ViewportError, ViewportRenderer, BEAUTY_ROLE, VIEWPORT_ROLE,

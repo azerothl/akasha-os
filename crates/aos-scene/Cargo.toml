@@ -5,15 +5,21 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["viewport"]
+# wgpu edit viewport (DeclUI scene3d). Platform / agent host_call paths use
+# `default-features = false` to avoid pulling GPU into platformd.
+viewport = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde_yaml.workspace = true
 thiserror = { workspace = true, default-features = true }
 # Edit viewport only — not a RenderService backend (see `viewport` module).
-wgpu = { version = "27", default-features = true }
-pollster = "0.4"
-bytemuck = { version = "1", features = ["derive"] }
+wgpu = { version = "27", default-features = true, optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 approx = "0.5"

@@ -177,6 +177,12 @@ pub const SCENE_COMPOSE_CAP: &str = "scene.compose";
 /// Cap: pose / IK-lite ops on SceneGraph humanoids.
 pub const SCENE_POSE_CAP: &str = "scene.pose";
 
+/// Cap: select / TRS / transactional scene.apply batches.
+pub const SCENE_EDIT_CAP: &str = "scene.edit";
+
+/// Cap: set / clear semantic locks on SceneGraph nodes.
+pub const SCENE_LOCK_CAP: &str = "scene.lock";
+
 /// DeclUI service: stub solid/viewport beauty placeholder PNG.
 pub const RENDER_STUB_SERVICE: &str = "render.stub.beauty";
 
@@ -197,6 +203,27 @@ pub const SCENE_COMPOSE_SERVICE: &str = "scene.compose";
 
 /// DeclUI service: apply pose / IK-lite to a humanoid in the SceneGraph.
 pub const SCENE_POSE_SERVICE: &str = "scene.pose";
+
+/// DeclUI / host_call: read SceneGraph project snapshot.
+pub const SCENE_GET_SERVICE: &str = "scene.get";
+
+/// DeclUI / host_call: set selection.
+pub const SCENE_SELECT_SERVICE: &str = "scene.select";
+
+/// DeclUI / host_call: set node TRS.
+pub const SCENE_TRS_SERVICE: &str = "scene.trs";
+
+/// DeclUI / host_call: transactional agent edit batch.
+pub const SCENE_APPLY_SERVICE: &str = "scene.apply";
+
+/// DeclUI / host_call: acquire semantic lock.
+pub const SCENE_LOCK_SERVICE: &str = "scene.lock";
+
+/// DeclUI / host_call: release semantic lock.
+pub const SCENE_UNLOCK_SERVICE: &str = "scene.unlock";
+
+/// DeclUI / host_call: list semantic locks.
+pub const SCENE_LOCKS_SERVICE: &str = "scene.locks";
 
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =
