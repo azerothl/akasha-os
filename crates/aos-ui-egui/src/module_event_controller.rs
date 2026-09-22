@@ -395,6 +395,32 @@ pub(crate) fn on_ui_service_done(
                         .insert("comic_panel_count".into(), Value::from(n));
                 }
             }
+            if module == "illustration-studio"
+                && (action_id == "list_local_packs"
+                    || action_id == aos_proto::ASSET_PACK_LIST_SERVICE
+                    || action_id == "describe_primitives_pack"
+                    || action_id == aos_proto::ASSET_PACK_DESCRIBE_SERVICE)
+            {
+                if let Some(summary) = result.get("summary").and_then(|p| p.as_str()) {
+                    panel
+                        .local_state
+                        .insert("pack_summary".into(), Value::String(summary.to_string()));
+                } else if let Some(name) = result.get("name").and_then(|p| p.as_str()) {
+                    let path = result
+                        .get("path")
+                        .and_then(|p| p.as_str())
+                        .unwrap_or("");
+                    let entries = result
+                        .get("entry_ids")
+                        .and_then(|p| p.as_array())
+                        .map(|a| a.len())
+                        .unwrap_or(0);
+                    panel.local_state.insert(
+                        "pack_summary".into(),
+                        Value::String(format!("{name} — {path} ({entries} entries)")),
+                    );
+                }
+            }
         } else {
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
                 Some(raw) => {

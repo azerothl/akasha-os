@@ -255,6 +255,18 @@ pub const STORYBOARD_DELETE_SERVICE: &str = "storyboard.delete";
 /// DeclUI service: reorder the active storyboard frame earlier / later.
 pub const STORYBOARD_MOVE_SERVICE: &str = "storyboard.move";
 
+/// DeclUI service: list local Illustration pack catalogue entries (offline).
+pub const ASSET_PACK_LIST_SERVICE: &str = "asset.pack.list";
+
+/// DeclUI service: describe one local Illustration pack.
+pub const ASSET_PACK_DESCRIBE_SERVICE: &str = "asset.pack.describe";
+
+/// DeclUI service: remote marketplace pack fetch hook (fail-closed in Preview).
+pub const ASSET_MARKETPLACE_FETCH_SERVICE: &str = "asset.marketplace.fetch";
+
+/// Cap: outbound network fetch (opt-in). Illustration Studio does **not** attest this.
+pub const NETWORK_FETCH_CAP: &str = "network.fetch";
+
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =
     "Preview reference: 8-core x86_64, 16 GiB RAM, 1080p display, release build";

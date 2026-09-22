@@ -7,7 +7,7 @@
 //! Backends convert; this crate never speaks Blender Z-up.
 //!
 //! Product suite: backend-agnostic [`RenderService`] (stub + CPU + optional
-//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), [`comic`] page/panel layouts, [`storyboard`] shot timeline, and
+//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), [`comic`] page/panel layouts, [`storyboard`] shot timeline, local [`pack_catalogue`] + marketplace hooks, and
 //! minimal [`assets`] pack format. Blender / `bpy` stay in the separate
 //! Renderer Pack — never linked here.
 //!
@@ -29,6 +29,7 @@ mod locks;
 mod math;
 mod neural_mesh;
 mod ops;
+mod pack_catalogue;
 mod png;
 mod pose;
 mod project;
@@ -62,6 +63,14 @@ pub use storyboard::{
     Storyboard, StoryboardError, DEFAULT_FRAME_DURATION_MS, STORYBOARD_APPLY_SERVICE,
     STORYBOARD_CAPTURE_SERVICE, STORYBOARD_DELETE_SERVICE, STORYBOARD_EDIT_CAP,
     STORYBOARD_FORMAT_VERSION, STORYBOARD_MOVE_SERVICE,
+};
+pub use pack_catalogue::{
+    describe_local_pack, embedded_pack_catalogue, format_pack_list_summary, list_local_packs,
+    load_pack_catalogue_yaml, marketplace_fetch_pack, resolve_asset_pack, CatalogueNetworkPolicy,
+    CatalogueSource, PackCatalogue, PackCatalogueEntry, PackCatalogueError, PackDescribeResult,
+    PackKind, ASSET_MARKETPLACE_FETCH_SERVICE, ASSET_PACK_DESCRIBE_SERVICE, ASSET_PACK_LIST_SERVICE,
+    EMBEDDED_PACK_CATALOGUE_YAML, NETWORK_FETCH_CAP, PACK_CATALOGUE_FORMAT_VERSION,
+    PACK_CATALOGUE_PATH,
 };
 pub use edit::{
     apply_batch, apply_one, merge_trs, require_batch_caps, require_edit_caps, AgentEditOp,

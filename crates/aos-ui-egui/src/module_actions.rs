@@ -622,6 +622,15 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             );
         }
+        aos_proto::ASSET_PACK_LIST_SERVICE => {
+            run_asset_pack_list(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::ASSET_PACK_DESCRIBE_SERVICE => {
+            run_asset_pack_describe(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::ASSET_MARKETPLACE_FETCH_SERVICE => {
+            run_asset_marketplace_fetch(evt_tx, module, action_id, input, refresh_binds);
+        }
         aos_proto::STORYBOARD_CAPTURE_SERVICE => {
             run_storyboard_capture(evt_tx, module, action_id, input, refresh_binds);
         }
@@ -2254,6 +2263,184 @@ fn run_storyboard_move(
         action_id: action_id.to_string(),
         ok: true,
         result: storyboard_result_payload(&project, yaml, extra),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_asset_marketplace_fetch(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{marketplace_fetch_pack, NETWORK_FETCH_CAP};
+
+    let pack_id = input.get("pack_id").and_then(|v| v.as_str()).unwrap_or("");
+    let granted: Vec<String> = input
+        .get("granted_caps")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| c.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let err = match marketplace_fetch_pack(pack_id, &granted) {
+        Ok(_) => "marketplace fetch unexpectedly succeeded".to_string(),
+        Err(e) => e.to_string(),
+    };
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: false,
+        result: serde_json::json!({
+            "pack_id": pack_id,
+            "marketplace_enabled": false,
+            "required_cap": NETWORK_FETCH_CAP,
+            "source": "local_only",
+        }),
+        error: Some(format!("asset.marketplace.fetch: {err}")),
+        refresh_binds,
+    });
+}
+
+fn run_asset_pack_describe(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{describe_local_pack, PackKind};
+
+    let pack_id = input
+        .get("pack_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("illustration-primitives-v0");
+    let lang = input.get("lang").and_then(|v| v.as_str()).unwrap_or("en");
+
+    match describe_local_pack(pack_id) {
+        Ok(d) => {
+            let kind = match d.entry.kind {
+                PackKind::Asset => "asset",
+                PackKind::Style => "style",
+                PackKind::Pose => "pose",
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({
+                    "pack_id": d.entry.id,
+                    "kind": kind,
+                    "version": d.entry.version,
+                    "name": d.entry.display_name(lang),
+                    "path": d.entry.path,
+                    "license": d.entry.license,
+                    "summary": d.entry.display_summary(lang),
+                    "entry_ids": d.entry_ids,
+                    "allows_scripts": d.entry.allows_scripts,
+                    "allows_network": d.entry.allows_network,
+                }),
+                error: None,
+                refresh_binds,
+            });
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("asset.pack.describe: {e}")),
+                refresh_binds,
+            });
+        }
+    }
+}
+
+fn run_asset_pack_list(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{
+        embedded_pack_catalogue, format_pack_list_summary, list_local_packs, PackKind,
+        PACK_CATALOGUE_PATH,
+    };
+
+    let lang = input.get("lang").and_then(|v| v.as_str()).unwrap_or("en");
+
+    let packs = match list_local_packs() {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("asset.pack.list: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let catalogue = match embedded_pack_catalogue() {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("asset.pack.list catalogue: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+    let summary = format_pack_list_summary(lang).unwrap_or_default();
+    let pack_rows: Vec<Value> = packs
+        .iter()
+        .map(|p| {
+            let kind = match p.kind {
+                PackKind::Asset => "asset",
+                PackKind::Style => "style",
+                PackKind::Pose => "pose",
+            };
+            serde_json::json!({
+                "id": p.id,
+                "kind": kind,
+                "version": p.version,
+                "name": p.display_name(lang),
+                "path": p.path,
+                "license": p.license,
+                "summary": p.display_summary(lang),
+                "tags": p.tags,
+                "allows_scripts": p.allows_scripts,
+                "allows_network": p.allows_network,
+            })
+        })
+        .collect();
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "catalogue_id": catalogue.catalogue_id,
+            "catalogue_path": PACK_CATALOGUE_PATH,
+            "source": "local_only",
+            "network": "deny",
+            "marketplace_enabled": false,
+            "summary": summary,
+            "packs": pack_rows,
+        }),
         error: None,
         refresh_binds,
     });
