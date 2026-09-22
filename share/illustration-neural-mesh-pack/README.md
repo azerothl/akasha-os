@@ -15,9 +15,11 @@ illustration-neural-mesh-pack/
 ├── LICENSES/                 (MIT Microsoft + DINOv3 Meta pointers)
 ├── fixtures/
 │   └── unit_cube.glb         (tiny CI / mock MeshAsset — NOT model output)
-├── adapters/                 (optional CLI wrappers; no weights in git)
+├── adapters/
+│   └── trellis_gguf.sh       (trellis.cpp argv; mock via AOS_NEURAL_MESH_ADAPTER_MOCK=1)
 ├── bin/                      (optional) place trellis-cli / LocalAI here
-└── weights/                  (optional, out-of-tree) multi-file GGUF set
+├── weights/                  (optional, out-of-tree) multi-file GGUF set
+└── workdir/                  (host-written GLB outputs; gitignored locally)
 ```
 
 ## Do **not** vendor GGUF weights into akasha-os
@@ -36,34 +38,53 @@ Full TRELLIS.2 shard sets are multi‑GB. Point the host at an offline copy:
 ```bash
 # Example (dev machine — never at generate-time over the network in Preview)
 export AOS_NEURAL_MESH_PACK=/path/to/share/illustration-neural-mesh-pack
-export AOS_NEURAL_MESH_BIN=/path/to/trellis-cli
+export AOS_NEURAL_MESH_BIN=$AOS_NEURAL_MESH_PACK/adapters/trellis_gguf.sh   # or /path/to/trellis-cli
 export AOS_NEURAL_MESH_WEIGHTS=/path/to/TRELLIS.2-4B-GGUF
 export AOS_NEURAL_MESH_MODE=auto   # mock | require | auto
 export AOS_NEURAL_MESH_TIMEOUT_SECS=600
+export AOS_NEURAL_MESH_RES=512     # 512 | 1024 | 1536
+```
+
+Real spawn argv (trellis.cpp):
+
+```text
+trellis-cli <input.png> <output.glb> --models <GGUF_DIR> --res 512
 ```
 
 ## Modes
 
 | `AOS_NEURAL_MESH_MODE` | Behaviour |
 |------------------------|-----------|
-| `mock` (CI default when pack present) | Insert `fixtures/unit_cube.glb` as SceneGraph `MeshAsset` — **no** runner, **no** weights |
-| `require` | Spawn fixed argv (`trellis-cli --input … --output … [--weights …]`); fail-closed if missing |
-| `auto` | Prefer spawn when runner exists; else fixture mock; pack missing → `BackendUnavailable` |
+| `mock` | Insert `fixtures/unit_cube.glb` as SceneGraph `MeshAsset` — **no** runner, **no** weights |
+| `require` | Spawn fixed argv; needs pack + runner + GGUF weights dir + local `image_path`; fail-closed otherwise |
+| `auto` | Prefer spawn when runner **and** weights ready (+ image); else fixture mock; pack missing → `BackendUnavailable` |
+
+`ready_for_spawn` requires a weights directory that contains at least one `.gguf` (or a `.aos-weights-ready` marker for CI dry-runs).
 
 ## Isolation (Blender-pack pattern)
 
 - Fixed argv only — never libre shell from DeclUI / WASM
 - Workdir quarantine for image in + GLB out
 - Optional Linux `bwrap --unshare-net`
-- Env cleared of ambient secrets
+- Env cleared of ambient secrets (allowlist: `AOS_NEURAL_MESH_ADAPTER_MOCK`, `FIXTURE`, `TRELLIS_CLI`, `PACK`)
 - Gaps: Windows AppContainer / macOS sandbox-exec (same class as Blender P0-B)
 
 ## Host contract
 
 1. Cap `mesh.neural` + service `mesh.assist` `backend=neural`
 2. Pack missing → `BackendUnavailable` (fail-closed)
-3. Validated GLB → `NodeKind::MeshAsset` + `mesh_uri` in SceneGraph (sole SoT)
-4. wgpu edit view loads triangles; beauty CPU treats MeshAsset as box proxy for now
+3. Spawned GLB is validated (`load_gltf_mesh` poly/vertex caps) before insert
+4. Validated GLB → `NodeKind::MeshAsset` + `mesh_uri` in SceneGraph (sole SoT)
+5. wgpu edit view loads triangles; beauty CPU treats MeshAsset as box proxy for now
+6. Conditioning image is a **local path** only (no URLs / no generate-time HF fetch)
+
+## CI dry-run
+
+```bash
+export AOS_NEURAL_MESH_ADAPTER_MOCK=1
+# adapter copies fixtures/unit_cube.glb → output (same argv as real trellis-cli)
+cargo test -p aos-scene --lib -- neural_gguf_adapter_spawn
+```
 
 ## License boundary
 
