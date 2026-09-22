@@ -17,8 +17,9 @@
 //! `default-features = false`.
 //!
 //! Neural mesh assist: [`neural_mesh`] (`mesh.assist`) inserts validated MeshBox
-//! props into the SceneGraph. Preview default is the procedural stub; the neural
-//! backend id is fail-closed until model infra exists (no weights in this crate).
+//! props (stub) or [`mesh_asset`] GLB nodes (neural pack mock / spawn) into the
+//! SceneGraph. Preview default is the procedural stub; neural is fail-closed
+//! without the opt-in Model Pack (no GGUF weights in this crate).
 
 mod assets;
 mod camera;
@@ -28,7 +29,9 @@ mod edit;
 mod ik;
 mod locks;
 mod math;
+mod mesh_asset;
 mod neural_mesh;
+mod neural_mesh_isolate;
 mod ops;
 mod pack_catalogue;
 mod png;
@@ -89,11 +92,18 @@ pub use locks::{
     SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE, SCENE_UNLOCK_SERVICE,
 };
 pub use math::{Mat4, Quat, Vec3, EPSILON};
+pub use mesh_asset::{
+    insert_mesh_asset, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
+    MAX_MESH_TRIANGLES, MAX_MESH_VERTICES,
+};
 pub use neural_mesh::{
-    apply_proposal, mesh_assist, propose_mesh_assist, validate_proposal, MeshAssistBackendId,
-    MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart, NeuralMeshError,
-    MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS, MESH_ASSIST_SERVICE, MESH_NEURAL_CAP,
-    MIN_ABS_SCALE,
+    apply_proposal, mesh_assist, neural_mesh_pack_status, propose_mesh_assist, validate_proposal,
+    MeshAssistBackendId, MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart,
+    NeuralMeshError, NeuralMeshPackStatus, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
+    MESH_ASSIST_SERVICE, MESH_NEURAL_CAP, MIN_ABS_SCALE,
+};
+pub use neural_mesh_isolate::{
+    probe_pack_status, NeuralMeshRunMode, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
 };
 pub use ops::{SceneOp, UndoStack};
 pub use pose::{

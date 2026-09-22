@@ -52,7 +52,7 @@ impl RenderBackend for CpuWireframeBackend {
             let Some(node) = req.scene.nodes.get(&id) else {
                 continue;
             };
-            if !node.visible || node.kind != NodeKind::MeshBox {
+            if !node.visible || !matches!(node.kind, NodeKind::MeshBox | NodeKind::MeshAsset) {
                 continue;
             }
             let Ok(world) = req.scene.world_matrix(&id) else {

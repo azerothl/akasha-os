@@ -17,6 +17,8 @@ pub enum NodeKind {
     #[default]
     Empty,
     MeshBox,
+    /// Imported / generated triangle mesh (glTF/GLB). See [`crate::mesh_asset`].
+    MeshAsset,
     Camera,
     Light,
 }
@@ -101,6 +103,10 @@ pub struct SceneNode {
     pub transform: Transform,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<CameraParams>,
+    /// Host-resolvable path or pack-relative URI for [`NodeKind::MeshAsset`].
+    /// Prefer project-local `/documents/illustrations/**` or pack fixtures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mesh_uri: Option<String>,
     #[serde(default)]
     pub visible: bool,
 }
@@ -115,6 +121,7 @@ impl SceneNode {
             children: Vec::new(),
             transform: Transform::default(),
             camera: None,
+            mesh_uri: None,
             visible: true,
         }
     }

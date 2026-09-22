@@ -1,7 +1,9 @@
 //! SceneGraph → mesh instances + camera math (ADR 0011). Shared by wgpu paint.
 
 use crate::math::{Mat4, Vec3};
+use crate::mesh_asset::{load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh};
 use crate::scene::{NodeKind, SceneGraph};
+use std::path::Path;
 
 pub use crate::camera::eye_from_orbit;
 
@@ -40,7 +42,7 @@ impl ViewportCamera {
     }
 }
 
-/// One drawable MeshBox in world space.
+/// One drawable mesh in world space (MeshBox unit cube or MeshAsset triangles).
 #[derive(Debug, Clone)]
 pub struct MeshInstance {
     pub id: String,
@@ -48,6 +50,8 @@ pub struct MeshInstance {
     /// Linear RGB + alpha (working space).
     pub color: [f32; 4],
     pub selected: bool,
+    /// When set, draw this triangle mesh instead of the unit cube.
+    pub triangle_mesh: Option<CpuTriangleMesh>,
 }
 
 /// Stable palette so ground / pedestal / props / limbs read as a “dev viewport”.
@@ -60,6 +64,7 @@ fn color_for_id(id: &str, selected: bool) -> [f32; 4] {
         id if id.starts_with("head") || id == "head" => [0.78, 0.72, 0.62, 1.0],
         id if id.contains("leg") => [0.42, 0.48, 0.58, 1.0],
         id if id.contains("arm") => [0.48, 0.54, 0.64, 1.0],
+        id if id.contains("mesh_asset") || id.starts_with("neural_") => [0.42, 0.72, 0.68, 1.0],
         _ => [0.58, 0.56, 0.52, 1.0],
     };
     if selected {
@@ -75,26 +80,74 @@ fn color_for_id(id: &str, selected: bool) -> [f32; 4] {
 }
 
 pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec<MeshInstance> {
+    let search = mesh_search_roots();
+    let search_refs: Vec<&Path> = search.iter().map(|p| p.as_path()).collect();
     let mut out = Vec::new();
     for id in scene.node_ids_depth_first() {
         let Some(node) = scene.nodes.get(&id) else {
             continue;
         };
-        if !node.visible || node.kind != NodeKind::MeshBox {
+        if !node.visible {
             continue;
         }
-        let Ok(world) = scene.world_matrix(&id) else {
-            continue;
-        };
         let selected_here = selected == Some(id.as_str());
-        out.push(MeshInstance {
-            id: id.clone(),
-            world,
-            color: color_for_id(&id, selected_here),
-            selected: selected_here,
-        });
+        match node.kind {
+            NodeKind::MeshBox => {
+                let Ok(world) = scene.world_matrix(&id) else {
+                    continue;
+                };
+                out.push(MeshInstance {
+                    id: id.clone(),
+                    world,
+                    color: color_for_id(&id, selected_here),
+                    selected: selected_here,
+                    triangle_mesh: None,
+                });
+            }
+            NodeKind::MeshAsset => {
+                let Ok(world) = scene.world_matrix(&id) else {
+                    continue;
+                };
+                let triangle_mesh = node
+                    .mesh_uri
+                    .as_deref()
+                    .and_then(|uri| resolve_mesh_uri(uri, &search_refs))
+                    .and_then(|path| load_gltf_mesh(&path).ok());
+                // If load fails, still show an AABB proxy as a unit cube so the
+                // node is visible in the edit view (SceneGraph remains SoT).
+                out.push(MeshInstance {
+                    id: id.clone(),
+                    world,
+                    color: color_for_id(&id, selected_here),
+                    selected: selected_here,
+                    triangle_mesh,
+                });
+            }
+            NodeKind::Empty | NodeKind::Camera | NodeKind::Light => {}
+        }
     }
     out
+}
+
+fn mesh_search_roots() -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(p) = std::env::var("AOS_NEURAL_MESH_PACK") {
+        let pb = std::path::PathBuf::from(p.trim());
+        if pb.is_dir() {
+            roots.push(pb);
+        }
+    }
+    for cand in [
+        std::path::PathBuf::from("share/illustration-neural-mesh-pack"),
+        std::path::PathBuf::from("share/assets/illustration"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../share/illustration-neural-mesh-pack"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"),
+    ] {
+        if cand.is_dir() {
+            roots.push(cand);
+        }
+    }
+    roots
 }
 
 pub fn look_at_rh(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {
