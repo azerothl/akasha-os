@@ -606,6 +606,6 @@ mod tests {
             local.get("selected_id").and_then(Value::as_str),
             Some("sofa_root")
         );
-        assert!(local.get("character_id").is_none());
+        assert!(!local.contains_key("character_id"));
     }
 }
