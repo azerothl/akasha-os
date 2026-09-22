@@ -1380,13 +1380,26 @@ impl DeclUiPanelState {
                     .or_else(|| w.state_key.clone())
                     .unwrap_or_else(|| "preview".into());
                 let view = image_views.entry(id.clone()).or_default();
-                let panel_size = egui::vec2(ui.available_width().max(280.0), 420.0);
+                // Fill remaining stage height so Beauty output is a real pane,
+                // not a thin strip under a fixed viewport (Illustration Studio).
+                let avail_h = ui.available_height();
+                let panel_h = if avail_h > 120.0 {
+                    avail_h.max(220.0)
+                } else {
+                    420.0
+                };
+                let panel_size = egui::vec2(ui.available_width().max(280.0), panel_h);
                 ui.allocate_ui_with_layout(
                     panel_size,
                     egui::Layout::top_down(egui::Align::Center),
                     |ui| {
                         ui.group(|ui| {
                             ui.set_min_size(panel_size - egui::vec2(8.0, 8.0));
+                            if let Some(label) =
+                                widget_text_from_key(w.label_key.as_deref(), doc, language)
+                            {
+                                ui.label(egui::RichText::new(label).strong());
+                            }
                             if let Some(tex) = try_load_png(ui.ctx(), &path) {
                                 let max_w = ui.available_width().max(1.0);
                                 let max_h = ui.available_height().max(1.0);
@@ -1424,11 +1437,18 @@ impl DeclUiPanelState {
                                 }
                             } else {
                                 ui.vertical_centered(|ui| {
-                                    ui.add_space(140.0);
-                                    ui.heading(
-                                        widget_text_from_key(w.label_key.as_deref(), doc, language)
+                                    ui.add_space(48.0);
+                                    // Title already rendered above when label_key is set.
+                                    if w.label_key.as_ref().is_none_or(|k| k.is_empty()) {
+                                        ui.heading(
+                                            widget_text_from_key(
+                                                w.label_key.as_deref(),
+                                                doc,
+                                                language,
+                                            )
                                             .unwrap_or_else(|| "Aperçu".into()),
-                                    );
+                                        );
+                                    }
                                     let empty = widget_text_from_key(
                                         w.empty_label_key.as_deref(),
                                         doc,
@@ -1436,7 +1456,7 @@ impl DeclUiPanelState {
                                     )
                                     .unwrap_or_else(|| t.decl_preview_empty.to_string());
                                     ui.weak(empty);
-                                    ui.add_space(140.0);
+                                    ui.add_space(48.0);
                                 });
                             }
                         });

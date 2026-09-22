@@ -44,7 +44,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.6.4
+version: 0.6.5
 hash: ${HASH}
 permissions:
   required_caps:
@@ -229,7 +229,11 @@ cp -a "${STAGING}" "$SHARE"
 echo "== package ready: ${STAGING} / ${SHARE} (hash ${HASH}) =="
 
 # Keep local catalogue hash/caps in sync when present.
-if [[ -f "${ROOT}/share/modules/catalogue.yaml" ]]; then
+CATALOGUE="${ROOT}/share/modules/catalogue.yaml"
+if [[ -f "$CATALOGUE" ]]; then
+  echo "== update catalogue.yaml illustration-studio hash =="
+  perl -i -0pe "s/(  - name: illustration-studio\n(?:    .*\n)*?    hash: )sha256:[a-f0-9]+/\${1}sha256:${HASH}/" "$CATALOGUE"
+  perl -i -0pe "s/(  - name: illustration-studio\n    version: )\"[^\"]+\"/\${1}\"0.6.5\"/" "$CATALOGUE"
   echo "== refresh catalogue signature (UPDATE_CATALOGUE=1) =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     committed_catalogue_signature_matches -- --nocapture) \

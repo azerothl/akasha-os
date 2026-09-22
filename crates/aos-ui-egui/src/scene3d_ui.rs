@@ -421,7 +421,15 @@ pub fn ui_scene3d(
         );
     });
 
-    let desired = Vec2::new(ui.available_width().max(160.0), 280.0);
+    // Prefer a tall edit viewport when the stage has height; leave a floor for
+    // the Beauty `image_view` sibling below (~40% of a typical stage).
+    let avail_h = ui.available_height();
+    let viewport_h = if avail_h > 420.0 {
+        (avail_h * 0.58).clamp(280.0, 640.0)
+    } else {
+        280.0_f32.min(avail_h.max(200.0))
+    };
+    let desired = Vec2::new(ui.available_width().max(160.0), viewport_h);
     let (rect, response) = ui.allocate_exact_size(desired, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
 
