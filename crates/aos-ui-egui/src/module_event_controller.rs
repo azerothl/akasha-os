@@ -313,74 +313,9 @@ pub(crate) fn on_ui_service_done(
                 }
             }
             if module == "illustration-studio"
-                && (action_id == "instantiate_humanoid"
-                    || action_id == "instantiate_box"
-                    || action_id == "instantiate_slim"
-                    || action_id == "compose_scene"
-                    || action_id == "pose_wave"
-                    || action_id == "pose_look"
-                    || action_id == "pose_rest"
-                    || action_id == "lock_selected"
-                    || action_id == "lock_subtree"
-                    || action_id == "unlock_selected"
-                    || action_id == "mesh_assist_stub"
-                    || action_id == "mesh_assist_neural"
-                    || action_id == "storyboard_capture"
-                    || action_id == "storyboard_prev"
-                    || action_id == "storyboard_next"
-                    || action_id == "storyboard_delete"
-                    || action_id == "storyboard_move_earlier"
-                    || action_id == "storyboard_move_later"
-                    || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE
-                    || action_id == aos_proto::SCENE_COMPOSE_SERVICE
-                    || action_id == aos_proto::SCENE_POSE_SERVICE
-                    || action_id == aos_proto::SCENE_GET_SERVICE
-                    || action_id == aos_proto::SCENE_SELECT_SERVICE
-                    || action_id == aos_proto::SCENE_TRS_SERVICE
-                    || action_id == aos_proto::SCENE_CAMERA_SERVICE
-                    || action_id == aos_proto::SCENE_APPLY_SERVICE
-                    || action_id == aos_proto::SCENE_LOCK_SERVICE
-                    || action_id == aos_proto::SCENE_UNLOCK_SERVICE
-                    || action_id == aos_proto::SCENE_LOCKS_SERVICE
-                    || action_id == aos_proto::MESH_ASSIST_SERVICE
-                    || action_id == aos_proto::MESH_PACK_STATUS_SERVICE
-                    || action_id == aos_proto::STORYBOARD_CAPTURE_SERVICE
-                    || action_id == aos_proto::STORYBOARD_APPLY_SERVICE
-                    || action_id == aos_proto::STORYBOARD_DELETE_SERVICE
-                    || action_id == aos_proto::STORYBOARD_MOVE_SERVICE)
+                && illustration_action_patches_scene(&action_id)
             {
-                if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
-                    panel
-                        .local_state
-                        .insert("scene".into(), Value::String(yaml.to_string()));
-                }
-                if let Some(sel) = result.get("selected_id").and_then(|p| p.as_str()) {
-                    panel
-                        .local_state
-                        .insert("selected_id".into(), Value::String(sel.to_string()));
-                }
-                if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
-                    panel
-                        .local_state
-                        .insert("selected_id".into(), Value::String(root.to_string()));
-                }
-                if let Some(cid) = result.get("character_id").and_then(|p| p.as_str()) {
-                    panel
-                        .local_state
-                        .insert("character_id".into(), Value::String(cid.to_string()));
-                    panel
-                        .local_state
-                        .insert("selected_id".into(), Value::String(cid.to_string()));
-                } else if matches!(
-                    action_id.as_str(),
-                    "instantiate_humanoid" | "instantiate_slim"
-                ) {
-                    if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
-                        panel
-                            .local_state
-                            .insert("character_id".into(), Value::String(root.to_string()));
-                    }
-                }
+                apply_illustration_scene_result(&mut panel.local_state, &action_id, &result);
             }
             if module == "illustration-studio"
                 && (action_id == "comic_layout"
@@ -520,5 +455,157 @@ pub(crate) fn on_ui_layers_generated(
                 serde_json::Value::Array(layers),
             );
         }
+    }
+}
+
+/// DeclUI actions whose success payloads may carry `scene_yaml` / selection for
+/// Illustration Studio. Prefer `instantiate_*` prefix so prefab Add buttons
+/// (#312) patch `$local.scene` without maintaining a brittle per-asset list.
+fn illustration_action_patches_scene(action_id: &str) -> bool {
+    if action_id.starts_with("instantiate_") {
+        return true;
+    }
+    matches!(
+        action_id,
+        "compose_scene"
+            | "pose_wave"
+            | "pose_look"
+            | "pose_rest"
+            | "lock_selected"
+            | "lock_subtree"
+            | "unlock_selected"
+            | "mesh_assist_stub"
+            | "mesh_assist_neural"
+            | "storyboard_capture"
+            | "storyboard_prev"
+            | "storyboard_next"
+            | "storyboard_delete"
+            | "storyboard_move_earlier"
+            | "storyboard_move_later"
+    ) || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE
+        || action_id == aos_proto::SCENE_COMPOSE_SERVICE
+        || action_id == aos_proto::SCENE_POSE_SERVICE
+        || action_id == aos_proto::SCENE_GET_SERVICE
+        || action_id == aos_proto::SCENE_SELECT_SERVICE
+        || action_id == aos_proto::SCENE_TRS_SERVICE
+        || action_id == aos_proto::SCENE_CAMERA_SERVICE
+        || action_id == aos_proto::SCENE_APPLY_SERVICE
+        || action_id == aos_proto::SCENE_LOCK_SERVICE
+        || action_id == aos_proto::SCENE_UNLOCK_SERVICE
+        || action_id == aos_proto::SCENE_LOCKS_SERVICE
+        || action_id == aos_proto::MESH_ASSIST_SERVICE
+        || action_id == aos_proto::MESH_PACK_STATUS_SERVICE
+        || action_id == aos_proto::STORYBOARD_CAPTURE_SERVICE
+        || action_id == aos_proto::STORYBOARD_APPLY_SERVICE
+        || action_id == aos_proto::STORYBOARD_DELETE_SERVICE
+        || action_id == aos_proto::STORYBOARD_MOVE_SERVICE
+}
+
+fn apply_illustration_scene_result(
+    local_state: &mut std::collections::HashMap<String, Value>,
+    action_id: &str,
+    result: &Value,
+) {
+    if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
+        local_state.insert("scene".into(), Value::String(yaml.to_string()));
+    }
+    if let Some(sel) = result.get("selected_id").and_then(|p| p.as_str()) {
+        local_state.insert("selected_id".into(), Value::String(sel.to_string()));
+    }
+    if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
+        local_state.insert("selected_id".into(), Value::String(root.to_string()));
+    }
+    if let Some(cid) = result.get("character_id").and_then(|p| p.as_str()) {
+        local_state.insert("character_id".into(), Value::String(cid.to_string()));
+        local_state.insert("selected_id".into(), Value::String(cid.to_string()));
+    } else if matches!(
+        action_id,
+        "instantiate_humanoid"
+            | "instantiate_slim"
+            | "instantiate_female"
+            | "instantiate_cat"
+            | "instantiate_dog"
+    ) {
+        if let Some(root) = result.get("root_id").and_then(|p| p.as_str()) {
+            local_state.insert("character_id".into(), Value::String(root.to_string()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn prefab_instantiate_action_ids_patch_scene() {
+        for id in [
+            "instantiate_humanoid",
+            "instantiate_female",
+            "instantiate_slim",
+            "instantiate_cat",
+            "instantiate_dog",
+            "instantiate_sofa",
+            "instantiate_desk",
+            "instantiate_lamp",
+            "instantiate_plant",
+            "instantiate_book",
+            "instantiate_window",
+            "instantiate_wall",
+            "instantiate_box",
+        ] {
+            assert!(
+                illustration_action_patches_scene(id),
+                "{id} must patch $local.scene after asset.instantiate"
+            );
+        }
+        assert!(!illustration_action_patches_scene("list_local_packs"));
+        assert!(!illustration_action_patches_scene("stub_beauty"));
+    }
+
+    #[test]
+    fn apply_instantiate_cat_writes_scene_and_selection() {
+        let mut local = HashMap::new();
+        local.insert("scene".into(), Value::String(String::new()));
+        let result = serde_json::json!({
+            "asset_id": "quadruped.cat",
+            "root_id": "cat_root",
+            "created_ids": ["cat_root", "cat_body"],
+            "scene_yaml": "schema_version: 1\nnodes: {}\n",
+        });
+        assert!(illustration_action_patches_scene("instantiate_cat"));
+        apply_illustration_scene_result(&mut local, "instantiate_cat", &result);
+        assert_eq!(
+            local.get("scene").and_then(Value::as_str),
+            Some("schema_version: 1\nnodes: {}\n")
+        );
+        assert_eq!(
+            local.get("selected_id").and_then(Value::as_str),
+            Some("cat_root")
+        );
+        assert_eq!(
+            local.get("character_id").and_then(Value::as_str),
+            Some("cat_root")
+        );
+    }
+
+    #[test]
+    fn apply_instantiate_sofa_writes_scene_without_character() {
+        let mut local = HashMap::new();
+        let result = serde_json::json!({
+            "asset_id": "prop.sofa",
+            "root_id": "sofa_root",
+            "scene_yaml": "schema_version: 1\nsofa: true\n",
+        });
+        apply_illustration_scene_result(&mut local, "instantiate_sofa", &result);
+        assert_eq!(
+            local.get("scene").and_then(Value::as_str),
+            Some("schema_version: 1\nsofa: true\n")
+        );
+        assert_eq!(
+            local.get("selected_id").and_then(Value::as_str),
+            Some("sofa_root")
+        );
+        assert!(!local.contains_key("character_id"));
     }
 }
