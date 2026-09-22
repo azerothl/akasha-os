@@ -1188,9 +1188,16 @@ fn run_scene_pose(
     refresh_binds: Vec<String>,
 ) {
     use aos_scene::{
-        apply_pose, apply_pose_preset, load_project_yaml, save_project_yaml, JointId, PoseOp,
-        ProjectFile, SceneGraph, UndoStack, Vec3,
+        apply_ik_chain, apply_pose, apply_pose_preset, load_project_yaml, save_project_yaml,
+        IkChain, JointId, PoseOp, ProjectFile, SceneGraph, UndoStack, Vec3,
     };
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    fn pose_undo_stacks() -> &'static Mutex<HashMap<String, UndoStack>> {
+        static STACKS: OnceLock<Mutex<HashMap<String, UndoStack>>> = OnceLock::new();
+        STACKS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
 
     let mut scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
         if yaml.trim().is_empty() {
@@ -1215,18 +1222,91 @@ fn run_scene_pose(
         SceneGraph::demo_scene()
     };
 
-    let humanoid_root = input
+    let character_root = input
         .get("humanoid_root")
         .and_then(|v| v.as_str())
+        .or_else(|| input.get("character_root").and_then(|v| v.as_str()))
         .or_else(|| input.get("root_id").and_then(|v| v.as_str()))
         .unwrap_or("humanoid");
 
-    let mut undo = UndoStack::default();
+    let want_undo = input
+        .get("undo")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if want_undo {
+        let undone = {
+            let mut map = pose_undo_stacks().lock().unwrap_or_else(|e| e.into_inner());
+            let stack = map.entry(module.to_string()).or_default();
+            stack.undo(&mut scene)
+        };
+        match undone {
+            Ok(true) => {}
+            Ok(false) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some("scene.pose: nothing to undo".into()),
+                    refresh_binds,
+                });
+                return;
+            }
+            Err(e) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("scene.pose undo: {e}")),
+                    refresh_binds,
+                });
+                return;
+            }
+        }
+        let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+            Ok(y) => y,
+            Err(e) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("scene.pose save: {e}")),
+                    refresh_binds,
+                });
+                return;
+            }
+        };
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: true,
+            result: serde_json::json!({
+                "humanoid_root": character_root,
+                "character_root": character_root,
+                "undone": true,
+                "scene_yaml": yaml,
+                "root_id": character_root,
+            }),
+            error: None,
+            refresh_binds,
+        });
+        return;
+    }
+
+    let mut stacks = pose_undo_stacks()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let undo_stack = stacks.entry(module.to_string()).or_default();
+
     let preset = input.get("preset").and_then(|v| v.as_str());
     let look_at = input.get("look_at");
+    let ik = input.get("ik").or_else(|| input.get("solve_ik"));
 
     let applied = if let Some(name) = preset {
-        apply_pose_preset(&mut scene, humanoid_root, name, Some(&mut undo))
+        apply_pose_preset(&mut scene, character_root, name, Some(undo_stack))
     } else if let Some(target) = look_at {
         let tx = target.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         let ty = target.get("y").and_then(|v| v.as_f64()).unwrap_or(1.5) as f32;
@@ -1234,10 +1314,55 @@ fn run_scene_pose(
         apply_pose(
             &mut scene,
             &PoseOp::LookAt {
-                humanoid_root: humanoid_root.into(),
+                character_root: character_root.into(),
                 target_world: Vec3::new(tx, ty, tz),
             },
-            Some(&mut undo),
+            Some(undo_stack),
+        )
+    } else if let Some(ik_val) = ik {
+        let chain_name = ik_val
+            .get("chain")
+            .and_then(|v| v.as_str())
+            .or_else(|| input.get("chain").and_then(|v| v.as_str()))
+            .unwrap_or("arm_r");
+        if IkChain::parse(chain_name).is_none() {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("scene.pose: unknown IK chain `{chain_name}`")),
+                refresh_binds,
+            });
+            return;
+        }
+        let target = ik_val.get("target").or(Some(ik_val));
+        let tx = target
+            .and_then(|t| t.get("x"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5) as f32;
+        let ty = target
+            .and_then(|t| t.get("y"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.2) as f32;
+        let tz = target
+            .and_then(|t| t.get("z"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.2) as f32;
+        let pole = ik_val.get("pole").map(|p| {
+            Vec3::new(
+                p.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                p.get("y").and_then(|v| v.as_f64()).unwrap_or(1.5) as f32,
+                p.get("z").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32,
+            )
+        });
+        apply_ik_chain(
+            &mut scene,
+            character_root,
+            chain_name,
+            Vec3::new(tx, ty, tz),
+            pole,
+            Some(undo_stack),
         )
     } else if let Some(joint) = input.get("joint").and_then(|v| v.as_str()) {
         let Some(joint_id) = JointId::parse(joint) else {
@@ -1271,16 +1396,21 @@ fn run_scene_pose(
         apply_pose(
             &mut scene,
             &PoseOp::RotateJoint {
-                humanoid_root: humanoid_root.into(),
+                character_root: character_root.into(),
                 joint: joint_id,
                 axis: Vec3::new(ax, ay, az),
                 angle_rad: angle,
             },
-            Some(&mut undo),
+            Some(undo_stack),
         )
     } else {
         // Default DeclUI affordance: wave right.
-        apply_pose_preset(&mut scene, humanoid_root, "wave_right", Some(&mut undo))
+        apply_pose_preset(
+            &mut scene,
+            character_root,
+            "wave_right",
+            Some(undo_stack),
+        )
     };
 
     let ops = match applied {
@@ -1297,6 +1427,7 @@ fn run_scene_pose(
             return;
         }
     };
+    drop(stacks);
 
     let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
         Ok(y) => y,
@@ -1318,11 +1449,12 @@ fn run_scene_pose(
         action_id: action_id.to_string(),
         ok: true,
         result: serde_json::json!({
-            "humanoid_root": humanoid_root,
+            "humanoid_root": character_root,
+            "character_root": character_root,
             "preset": preset,
             "ops_count": ops.len(),
             "scene_yaml": yaml,
-            "root_id": humanoid_root,
+            "root_id": character_root,
         }),
         error: None,
         refresh_binds,

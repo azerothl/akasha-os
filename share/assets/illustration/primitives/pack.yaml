@@ -1,6 +1,7 @@
 # Illustration Studio — core primitives asset pack (ADR 0011).
 # Logical path: /assets/illustration/primitives/pack.yaml
 # Cap: asset.read:/assets/illustration/**
+# Character prefabs use Empty joints (scale 1) + MeshBox visual children for IK/FK.
 format_version: 1
 pack_id: illustration-primitives-v0
 conventions: ADR-0011
@@ -78,49 +79,203 @@ entries:
     id: humanoid.placeholder
     name: Humanoid
     nodes:
-      # Root empty at origin; body parts as MeshBox children (metres, Y-up).
       - id: humanoid
         name: Humanoid
         kind: empty
-        translation: [0.0, 0.0, 0.0]
-        scale: [1.0, 1.0, 1.0]
-      - id: torso
-        name: Torso
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: pelvis
+        name: Pelvis
         parent: humanoid
+        kind: empty
+        translation: [0.0000, 0.9200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: spine
+        name: Spine
+        parent: pelvis
+        kind: empty
+        translation: [0.0000, 0.1200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_spine
+        name: SpineMesh
+        parent: spine
         kind: mesh_box
-        translation: [0.0, 1.0, 0.0]
-        scale: [0.45, 0.55, 0.25]
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.2800, 0.1800, 0.1600]
+      - id: chest
+        name: Chest
+        parent: spine
+        kind: empty
+        translation: [0.0000, 0.2200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_chest
+        name: ChestMesh
+        parent: chest
+        kind: mesh_box
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.4000, 0.2800, 0.2200]
+      - id: neck
+        name: Neck
+        parent: chest
+        kind: empty
+        translation: [0.0000, 0.2000, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
       - id: head
         name: Head
-        parent: humanoid
+        parent: neck
+        kind: empty
+        translation: [0.0000, 0.1400, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_head
+        name: HeadMesh
+        parent: head
         kind: mesh_box
-        translation: [0.0, 1.55, 0.0]
-        scale: [0.22, 0.22, 0.22]
-      - id: leg_l
-        name: LegL
-        parent: humanoid
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.2200, 0.2200, 0.2200]
+      - id: upper_arm_l
+        name: UpperArmL
+        parent: chest
+        kind: empty
+        translation: [-0.2800, 0.0800, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_arm_l
+        name: UpperArmLMesh
+        parent: upper_arm_l
         kind: mesh_box
-        translation: [-0.12, 0.35, 0.0]
-        scale: [0.14, 0.7, 0.14]
-      - id: leg_r
-        name: LegR
-        parent: humanoid
+        translation: [0.0000, -0.1400, 0.0000]
+        scale: [0.1000, 0.2800, 0.1000]
+      - id: lower_arm_l
+        name: LowerArmL
+        parent: upper_arm_l
+        kind: empty
+        translation: [0.0000, -0.2800, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_arm_l
+        name: LowerArmLMesh
+        parent: lower_arm_l
         kind: mesh_box
-        translation: [0.12, 0.35, 0.0]
-        scale: [0.14, 0.7, 0.14]
-      - id: arm_l
-        name: ArmL
-        parent: humanoid
+        translation: [0.0000, -0.1300, 0.0000]
+        scale: [0.0900, 0.2600, 0.0900]
+      - id: hand_l
+        name: HandL
+        parent: lower_arm_l
+        kind: empty
+        translation: [0.0000, -0.2200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_hand_l
+        name: HandLMesh
+        parent: hand_l
         kind: mesh_box
-        translation: [-0.38, 1.05, 0.0]
-        scale: [0.12, 0.5, 0.12]
-      - id: arm_r
-        name: ArmR
-        parent: humanoid
+        translation: [0.0000, -0.0500, 0.0000]
+        scale: [0.0800, 0.1000, 0.0600]
+      - id: upper_leg_l
+        name: UpperLegL
+        parent: pelvis
+        kind: empty
+        translation: [-0.1000, -0.0200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_leg_l
+        name: UpperLegLMesh
+        parent: upper_leg_l
         kind: mesh_box
-        translation: [0.38, 1.05, 0.0]
-        scale: [0.12, 0.5, 0.12]
-  # Second character variant — shorter / slimmer proportions (child or slight figure).
+        translation: [0.0000, -0.1800, 0.0000]
+        scale: [0.1200, 0.3600, 0.1200]
+      - id: lower_leg_l
+        name: LowerLegL
+        parent: upper_leg_l
+        kind: empty
+        translation: [0.0000, -0.3600, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_leg_l
+        name: LowerLegLMesh
+        parent: lower_leg_l
+        kind: mesh_box
+        translation: [0.0000, -0.1700, 0.0000]
+        scale: [0.1100, 0.3400, 0.1100]
+      - id: foot_l
+        name: FootL
+        parent: lower_leg_l
+        kind: empty
+        translation: [0.0000, -0.2800, 0.0600]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_foot_l
+        name: FootLMesh
+        parent: foot_l
+        kind: mesh_box
+        translation: [0.0000, -0.0200, 0.0400]
+        scale: [0.1000, 0.0800, 0.2000]
+      - id: upper_arm_r
+        name: UpperArmR
+        parent: chest
+        kind: empty
+        translation: [0.2800, 0.0800, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_arm_r
+        name: UpperArmRMesh
+        parent: upper_arm_r
+        kind: mesh_box
+        translation: [0.0000, -0.1400, 0.0000]
+        scale: [0.1000, 0.2800, 0.1000]
+      - id: lower_arm_r
+        name: LowerArmR
+        parent: upper_arm_r
+        kind: empty
+        translation: [0.0000, -0.2800, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_arm_r
+        name: LowerArmRMesh
+        parent: lower_arm_r
+        kind: mesh_box
+        translation: [0.0000, -0.1300, 0.0000]
+        scale: [0.0900, 0.2600, 0.0900]
+      - id: hand_r
+        name: HandR
+        parent: lower_arm_r
+        kind: empty
+        translation: [0.0000, -0.2200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_hand_r
+        name: HandRMesh
+        parent: hand_r
+        kind: mesh_box
+        translation: [0.0000, -0.0500, 0.0000]
+        scale: [0.0800, 0.1000, 0.0600]
+      - id: upper_leg_r
+        name: UpperLegR
+        parent: pelvis
+        kind: empty
+        translation: [0.1000, -0.0200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_leg_r
+        name: UpperLegRMesh
+        parent: upper_leg_r
+        kind: mesh_box
+        translation: [0.0000, -0.1800, 0.0000]
+        scale: [0.1200, 0.3600, 0.1200]
+      - id: lower_leg_r
+        name: LowerLegR
+        parent: upper_leg_r
+        kind: empty
+        translation: [0.0000, -0.3600, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_leg_r
+        name: LowerLegRMesh
+        parent: lower_leg_r
+        kind: mesh_box
+        translation: [0.0000, -0.1700, 0.0000]
+        scale: [0.1100, 0.3400, 0.1100]
+      - id: foot_r
+        name: FootR
+        parent: lower_leg_r
+        kind: empty
+        translation: [0.0000, -0.2800, 0.0600]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_foot_r
+        name: FootRMesh
+        parent: foot_r
+        kind: mesh_box
+        translation: [0.0000, -0.0200, 0.0400]
+        scale: [0.1000, 0.0800, 0.2000]
   - kind: prefab
     id: humanoid.slim
     name: Humanoid slim
@@ -128,49 +283,399 @@ entries:
       - id: humanoid
         name: Humanoid slim
         kind: empty
-        translation: [0.0, 0.0, 0.0]
-        scale: [1.0, 1.0, 1.0]
-      - id: torso
-        name: Torso
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: pelvis
+        name: Pelvis
         parent: humanoid
+        kind: empty
+        translation: [0.0000, 0.7200, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: spine
+        name: Spine
+        parent: pelvis
+        kind: empty
+        translation: [0.0000, 0.0936, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_spine
+        name: SpineMesh
+        parent: spine
         kind: mesh_box
-        translation: [0.0, 0.78, 0.0]
-        scale: [0.32, 0.42, 0.18]
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.2184, 0.1404, 0.1248]
+      - id: chest
+        name: Chest
+        parent: spine
+        kind: empty
+        translation: [0.0000, 0.1716, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_chest
+        name: ChestMesh
+        parent: chest
+        kind: mesh_box
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.3120, 0.2184, 0.1716]
+      - id: neck
+        name: Neck
+        parent: chest
+        kind: empty
+        translation: [0.0000, 0.1560, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
       - id: head
         name: Head
-        parent: humanoid
+        parent: neck
+        kind: empty
+        translation: [0.0000, 0.1092, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_head
+        name: HeadMesh
+        parent: head
         kind: mesh_box
-        translation: [0.0, 1.18, 0.0]
-        scale: [0.2, 0.2, 0.2]
-      - id: leg_l
-        name: LegL
-        parent: humanoid
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.1716, 0.1716, 0.1716]
+      - id: upper_arm_l
+        name: UpperArmL
+        parent: chest
+        kind: empty
+        translation: [-0.2184, 0.0624, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_arm_l
+        name: UpperArmLMesh
+        parent: upper_arm_l
         kind: mesh_box
-        translation: [-0.09, 0.28, 0.0]
-        scale: [0.1, 0.55, 0.1]
-      - id: leg_r
-        name: LegR
-        parent: humanoid
+        translation: [0.0000, -0.1092, 0.0000]
+        scale: [0.0780, 0.2184, 0.0780]
+      - id: lower_arm_l
+        name: LowerArmL
+        parent: upper_arm_l
+        kind: empty
+        translation: [0.0000, -0.2184, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_arm_l
+        name: LowerArmLMesh
+        parent: lower_arm_l
         kind: mesh_box
-        translation: [0.09, 0.28, 0.0]
-        scale: [0.1, 0.55, 0.1]
-      - id: arm_l
-        name: ArmL
-        parent: humanoid
+        translation: [0.0000, -0.1014, 0.0000]
+        scale: [0.0702, 0.2028, 0.0702]
+      - id: hand_l
+        name: HandL
+        parent: lower_arm_l
+        kind: empty
+        translation: [0.0000, -0.1716, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_hand_l
+        name: HandLMesh
+        parent: hand_l
         kind: mesh_box
-        translation: [-0.28, 0.82, 0.0]
-        scale: [0.09, 0.4, 0.09]
-      - id: arm_r
-        name: ArmR
-        parent: humanoid
+        translation: [0.0000, -0.0390, 0.0000]
+        scale: [0.0624, 0.0780, 0.0468]
+      - id: upper_leg_l
+        name: UpperLegL
+        parent: pelvis
+        kind: empty
+        translation: [-0.0780, -0.0156, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_leg_l
+        name: UpperLegLMesh
+        parent: upper_leg_l
         kind: mesh_box
-        translation: [0.28, 0.82, 0.0]
-        scale: [0.09, 0.4, 0.09]
+        translation: [0.0000, -0.1404, 0.0000]
+        scale: [0.0936, 0.2808, 0.0936]
+      - id: lower_leg_l
+        name: LowerLegL
+        parent: upper_leg_l
+        kind: empty
+        translation: [0.0000, -0.2808, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_leg_l
+        name: LowerLegLMesh
+        parent: lower_leg_l
+        kind: mesh_box
+        translation: [0.0000, -0.1326, 0.0000]
+        scale: [0.0858, 0.2652, 0.0858]
+      - id: foot_l
+        name: FootL
+        parent: lower_leg_l
+        kind: empty
+        translation: [0.0000, -0.2184, 0.0468]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_foot_l
+        name: FootLMesh
+        parent: foot_l
+        kind: mesh_box
+        translation: [0.0000, -0.0156, 0.0312]
+        scale: [0.0780, 0.0624, 0.1560]
+      - id: upper_arm_r
+        name: UpperArmR
+        parent: chest
+        kind: empty
+        translation: [0.2184, 0.0624, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_arm_r
+        name: UpperArmRMesh
+        parent: upper_arm_r
+        kind: mesh_box
+        translation: [0.0000, -0.1092, 0.0000]
+        scale: [0.0780, 0.2184, 0.0780]
+      - id: lower_arm_r
+        name: LowerArmR
+        parent: upper_arm_r
+        kind: empty
+        translation: [0.0000, -0.2184, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_arm_r
+        name: LowerArmRMesh
+        parent: lower_arm_r
+        kind: mesh_box
+        translation: [0.0000, -0.1014, 0.0000]
+        scale: [0.0702, 0.2028, 0.0702]
+      - id: hand_r
+        name: HandR
+        parent: lower_arm_r
+        kind: empty
+        translation: [0.0000, -0.1716, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_hand_r
+        name: HandRMesh
+        parent: hand_r
+        kind: mesh_box
+        translation: [0.0000, -0.0390, 0.0000]
+        scale: [0.0624, 0.0780, 0.0468]
+      - id: upper_leg_r
+        name: UpperLegR
+        parent: pelvis
+        kind: empty
+        translation: [0.0780, -0.0156, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_leg_r
+        name: UpperLegRMesh
+        parent: upper_leg_r
+        kind: mesh_box
+        translation: [0.0000, -0.1404, 0.0000]
+        scale: [0.0936, 0.2808, 0.0936]
+      - id: lower_leg_r
+        name: LowerLegR
+        parent: upper_leg_r
+        kind: empty
+        translation: [0.0000, -0.2808, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_leg_r
+        name: LowerLegRMesh
+        parent: lower_leg_r
+        kind: mesh_box
+        translation: [0.0000, -0.1326, 0.0000]
+        scale: [0.0858, 0.2652, 0.0858]
+      - id: foot_r
+        name: FootR
+        parent: lower_leg_r
+        kind: empty
+        translation: [0.0000, -0.2184, 0.0468]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_foot_r
+        name: FootRMesh
+        parent: foot_r
+        kind: mesh_box
+        translation: [0.0000, -0.0156, 0.0312]
+        scale: [0.0780, 0.0624, 0.1560]
+  - kind: prefab
+    id: quadruped.cat
+    name: Cat
+    nodes:
+      - id: quadruped
+        name: Cat
+        kind: empty
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: body
+        name: Body
+        parent: quadruped
+        kind: empty
+        translation: [0.0000, 0.2800, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_body
+        name: BodyMesh
+        parent: body
+        kind: mesh_box
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.2200, 0.1800, 0.4500]
+      - id: neck
+        name: Neck
+        parent: body
+        kind: empty
+        translation: [0.0000, 0.0600, 0.2200]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: head
+        name: Head
+        parent: neck
+        kind: empty
+        translation: [0.0000, 0.0600, 0.1000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_head
+        name: HeadMesh
+        parent: head
+        kind: mesh_box
+        translation: [0.0000, 0.0000, 0.0000]
+        scale: [0.1400, 0.1200, 0.1600]
+      - id: tail
+        name: Tail
+        parent: body
+        kind: empty
+        translation: [0.0000, 0.0400, -0.2800]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_tail
+        name: TailMesh
+        parent: tail
+        kind: mesh_box
+        translation: [0.0000, 0.0000, -0.0500]
+        scale: [0.0500, 0.0500, 0.2800]
+      - id: upper_fl
+        name: UpperFL
+        parent: body
+        kind: empty
+        translation: [-0.1000, -0.0200, 0.1400]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_fl
+        name: UpperFLMesh
+        parent: upper_fl
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0700, 0.1400, 0.0700]
+      - id: lower_fl
+        name: LowerFL
+        parent: upper_fl
+        kind: empty
+        translation: [0.0000, -0.1400, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_fl
+        name: LowerFLMesh
+        parent: lower_fl
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0600, 0.1400, 0.0600]
+      - id: paw_fl
+        name: PawFL
+        parent: lower_fl
+        kind: empty
+        translation: [0.0000, -0.1000, 0.0200]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_paw_fl
+        name: PawFLMesh
+        parent: paw_fl
+        kind: mesh_box
+        translation: [0.0000, -0.0100, 0.0200]
+        scale: [0.0700, 0.0400, 0.0900]
+      - id: upper_fr
+        name: UpperFR
+        parent: body
+        kind: empty
+        translation: [0.1000, -0.0200, 0.1400]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_fr
+        name: UpperFRMesh
+        parent: upper_fr
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0700, 0.1400, 0.0700]
+      - id: lower_fr
+        name: LowerFR
+        parent: upper_fr
+        kind: empty
+        translation: [0.0000, -0.1400, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_fr
+        name: LowerFRMesh
+        parent: lower_fr
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0600, 0.1400, 0.0600]
+      - id: paw_fr
+        name: PawFR
+        parent: lower_fr
+        kind: empty
+        translation: [0.0000, -0.1000, 0.0200]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_paw_fr
+        name: PawFRMesh
+        parent: paw_fr
+        kind: mesh_box
+        translation: [0.0000, -0.0100, 0.0200]
+        scale: [0.0700, 0.0400, 0.0900]
+      - id: upper_bl
+        name: UpperBL
+        parent: body
+        kind: empty
+        translation: [-0.1000, -0.0200, -0.1400]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_bl
+        name: UpperBLMesh
+        parent: upper_bl
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0700, 0.1400, 0.0700]
+      - id: lower_bl
+        name: LowerBL
+        parent: upper_bl
+        kind: empty
+        translation: [0.0000, -0.1400, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_bl
+        name: LowerBLMesh
+        parent: lower_bl
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0600, 0.1400, 0.0600]
+      - id: paw_bl
+        name: PawBL
+        parent: lower_bl
+        kind: empty
+        translation: [0.0000, -0.1000, 0.0200]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_paw_bl
+        name: PawBLMesh
+        parent: paw_bl
+        kind: mesh_box
+        translation: [0.0000, -0.0100, 0.0200]
+        scale: [0.0700, 0.0400, 0.0900]
+      - id: upper_br
+        name: UpperBR
+        parent: body
+        kind: empty
+        translation: [0.1000, -0.0200, -0.1400]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_upper_br
+        name: UpperBRMesh
+        parent: upper_br
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0700, 0.1400, 0.0700]
+      - id: lower_br
+        name: LowerBR
+        parent: upper_br
+        kind: empty
+        translation: [0.0000, -0.1400, 0.0000]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_lower_br
+        name: LowerBRMesh
+        parent: lower_br
+        kind: mesh_box
+        translation: [0.0000, -0.0700, 0.0000]
+        scale: [0.0600, 0.1400, 0.0600]
+      - id: paw_br
+        name: PawBR
+        parent: lower_br
+        kind: empty
+        translation: [0.0000, -0.1000, 0.0200]
+        scale: [1.0000, 1.0000, 1.0000]
+      - id: mesh_paw_br
+        name: PawBRMesh
+        parent: paw_br
+        kind: mesh_box
+        translation: [0.0000, -0.0100, 0.0200]
+        scale: [0.0700, 0.0400, 0.0900]
   - kind: prefab
     id: scene.starter
     name: Starter set
     nodes:
-      # Compact blockout: ground + pedestal + box (humanoid added separately in demo).
       - id: set
         name: Starter set
         kind: empty

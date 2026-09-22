@@ -100,6 +100,84 @@ fn undo_set_transform_round_trips() {
 }
 
 #[test]
+fn articulated_humanoid_rest_pose_stable_round_trip() {
+    use aos_scene::{joint_node_id, load_project_yaml, save_project_yaml, JointId, ProjectFile};
+    let g = SceneGraph::demo_scene();
+    let head = joint_node_id(&g, "humanoid", JointId::Head).expect("head");
+    let hand = joint_node_id(&g, "humanoid", JointId::HandR).expect("hand");
+    let yaml = save_project_yaml(&ProjectFile::new(g.clone())).unwrap();
+    let loaded = load_project_yaml(&yaml).unwrap().scene;
+    assert_eq!(
+        g.nodes[&head].transform.rotation.to_array(),
+        loaded.nodes[&head].transform.rotation.to_array()
+    );
+    assert_vec_close(
+        g.world_translation(&hand).unwrap(),
+        loaded.world_translation(&hand).unwrap(),
+        1e-4,
+    );
+}
+
+#[test]
+fn two_bone_ik_fixture_within_tolerance() {
+    use aos_scene::{solve_two_bone, SceneNode, Transform};
+    let mut nodes = std::collections::HashMap::new();
+    let mut root = SceneNode::empty("root", "Root");
+    root.children = vec!["upper".into()];
+    let mut upper = SceneNode::empty("upper", "Upper");
+    upper.parent = Some("root".into());
+    upper.children = vec!["lower".into()];
+    upper.transform.translation = Vec3::new(0.0, 1.0, 0.0);
+    let mut lower = SceneNode::empty("lower", "Lower");
+    lower.parent = Some("upper".into());
+    lower.children = vec!["tip".into()];
+    lower.transform.translation = Vec3::new(0.0, -0.4, 0.0);
+    let mut tip = SceneNode::empty("tip", "Tip");
+    tip.parent = Some("lower".into());
+    tip.transform.translation = Vec3::new(0.0, -0.35, 0.0);
+    for n in [root, upper, lower, tip] {
+        nodes.insert(n.id.clone(), n);
+    }
+    let mut scene = SceneGraph {
+        nodes,
+        roots: vec!["root".into()],
+        active_camera: None,
+    };
+    let target = Vec3::new(0.5, 0.6, 0.0);
+    let solved = solve_two_bone(
+        &scene,
+        "upper",
+        "lower",
+        "tip",
+        target,
+        Some(Vec3::new(0.0, 1.0, 1.0)),
+    )
+    .unwrap();
+    for (id, rot) in [
+        ("upper", solved.upper_local),
+        ("lower", solved.lower_local),
+    ] {
+        let t = scene.nodes[id].transform.clone();
+        scene
+            .set_transform(
+                id,
+                Transform {
+                    translation: t.translation,
+                    rotation: rot,
+                    scale: t.scale,
+                },
+            )
+            .unwrap();
+    }
+    let tip_pos = scene.world_translation("tip").unwrap();
+    let err = (tip_pos - target).length();
+    assert!(
+        err < 0.05,
+        "IK tip error {err} exceeds ADR fixture tolerance 0.05"
+    );
+}
+
+#[test]
 fn project_yaml_path_prefix() {
     assert!(aos_scene::DEFAULT_SCENE_YAML_PATH.starts_with(aos_scene::ILLUSTRATIONS_DOCUMENTS_PREFIX));
     let _ = ProjectFile::new(SceneGraph::demo_scene());

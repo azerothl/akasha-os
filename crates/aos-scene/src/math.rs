@@ -58,6 +58,10 @@ impl Vec3 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
 
+    pub fn length_squared(self) -> f32 {
+        self.x * self.x + self.y * self.y + self.z * self.z
+    }
+
     pub fn normalized(self) -> Option<Self> {
         let len = self.length();
         if len < EPSILON {
@@ -199,6 +203,97 @@ impl Quat {
         .unwrap_or(Self::IDENTITY)
     }
 
+    /// Shortest rotation taking unit vector `from` onto unit vector `to`.
+    pub fn from_rotation_arc(from: Vec3, to: Vec3) -> Self {
+        let from = from.normalized().unwrap_or(Vec3::UNIT_Y);
+        let to = to.normalized().unwrap_or(Vec3::UNIT_Y);
+        let dot = from.dot(to).clamp(-1.0, 1.0);
+        if dot > 1.0 - EPSILON {
+            return Self::IDENTITY;
+        }
+        if dot < -1.0 + EPSILON {
+            // 180°: pick an orthogonal axis.
+            let axis = if from.x.abs() < 0.9 {
+                from.cross(Vec3::UNIT_X)
+            } else {
+                from.cross(Vec3::UNIT_Y)
+            }
+            .normalized()
+            .unwrap_or(Vec3::UNIT_Z);
+            return Self::from_axis_angle(axis, std::f32::consts::PI);
+        }
+        let axis = from.cross(to);
+        let w = 1.0 + dot;
+        Self::from_xyzw(axis.x, axis.y, axis.z, w)
+            .normalized()
+            .unwrap_or(Self::IDENTITY)
+    }
+
+    pub fn conjugate(self) -> Self {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+            w: self.w,
+        }
+    }
+
+    /// Extract rotation from an affine matrix (orthonormalize columns).
+    pub fn from_mat4_rotation(m: Mat4) -> Self {
+        let c0 = Vec3::new(m.m[0], m.m[1], m.m[2])
+            .normalized()
+            .unwrap_or(Vec3::UNIT_X);
+        let c1 = Vec3::new(m.m[4], m.m[5], m.m[6])
+            .normalized()
+            .unwrap_or(Vec3::UNIT_Y);
+        let c2 = Vec3::new(m.m[8], m.m[9], m.m[10])
+            .normalized()
+            .unwrap_or(Vec3::UNIT_Z);
+        // Shepperd's method from rotation matrix columns.
+        let trace = c0.x + c1.y + c2.z;
+        if trace > 0.0 {
+            let s = (trace + 1.0).sqrt() * 2.0;
+            Self::from_xyzw(
+                (c1.z - c2.y) / s,
+                (c2.x - c0.z) / s,
+                (c0.y - c1.x) / s,
+                0.25 * s,
+            )
+            .normalized()
+            .unwrap_or(Self::IDENTITY)
+        } else if c0.x > c1.y && c0.x > c2.z {
+            let s = (1.0 + c0.x - c1.y - c2.z).sqrt() * 2.0;
+            Self::from_xyzw(
+                0.25 * s,
+                (c0.y + c1.x) / s,
+                (c2.x + c0.z) / s,
+                (c1.z - c2.y) / s,
+            )
+            .normalized()
+            .unwrap_or(Self::IDENTITY)
+        } else if c1.y > c2.z {
+            let s = (1.0 + c1.y - c0.x - c2.z).sqrt() * 2.0;
+            Self::from_xyzw(
+                (c0.y + c1.x) / s,
+                0.25 * s,
+                (c1.z + c2.y) / s,
+                (c2.x - c0.z) / s,
+            )
+            .normalized()
+            .unwrap_or(Self::IDENTITY)
+        } else {
+            let s = (1.0 + c2.z - c0.x - c1.y).sqrt() * 2.0;
+            Self::from_xyzw(
+                (c2.x + c0.z) / s,
+                (c1.z + c2.y) / s,
+                0.25 * s,
+                (c0.y - c1.x) / s,
+            )
+            .normalized()
+            .unwrap_or(Self::IDENTITY)
+        }
+    }
+
     pub fn rotate_vec(self, v: Vec3) -> Vec3 {
         // q * (0,v) * q^{-1}
         let qv = Vec3::new(self.x, self.y, self.z);
@@ -271,6 +366,46 @@ impl Mat4 {
             self.m[1] * v.x + self.m[5] * v.y + self.m[9] * v.z,
             self.m[2] * v.x + self.m[6] * v.y + self.m[10] * v.z,
         )
+    }
+
+    /// Affine inverse for TRS matrices (last row ≈ `[0,0,0,1]`).
+    pub fn try_inverse_affine(self) -> Option<Self> {
+        // Invert 3×3 (columns = basis * scale).
+        let a = self.m[0];
+        let b = self.m[4];
+        let c = self.m[8];
+        let d = self.m[1];
+        let e = self.m[5];
+        let f = self.m[9];
+        let g = self.m[2];
+        let h = self.m[6];
+        let i = self.m[10];
+        let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+        if !det.is_finite() || det.abs() < EPSILON {
+            return None;
+        }
+        let inv_det = 1.0 / det;
+        let r00 = (e * i - f * h) * inv_det;
+        let r01 = (c * h - b * i) * inv_det;
+        let r02 = (b * f - c * e) * inv_det;
+        let r10 = (f * g - d * i) * inv_det;
+        let r11 = (a * i - c * g) * inv_det;
+        let r12 = (c * d - a * f) * inv_det;
+        let r20 = (d * h - e * g) * inv_det;
+        let r21 = (b * g - a * h) * inv_det;
+        let r22 = (a * e - b * d) * inv_det;
+        let tx = self.m[12];
+        let ty = self.m[13];
+        let tz = self.m[14];
+        let itx = -(r00 * tx + r01 * ty + r02 * tz);
+        let ity = -(r10 * tx + r11 * ty + r12 * tz);
+        let itz = -(r20 * tx + r21 * ty + r22 * tz);
+        Some(Self::from_cols(
+            [r00, r10, r20, 0.0],
+            [r01, r11, r21, 0.0],
+            [r02, r12, r22, 0.0],
+            [itx, ity, itz, 1.0],
+        ))
     }
 
     /// TRS: scale, then rotate, then translate (`T * R * S`).

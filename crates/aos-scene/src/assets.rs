@@ -294,6 +294,7 @@ mod tests {
         let pack = embedded_primitives_pack().expect("pack");
         assert!(pack.get("humanoid.placeholder").is_some());
         assert!(pack.get("humanoid.slim").is_some());
+        assert!(pack.get("quadruped.cat").is_some());
         assert!(pack.get("prop.box").is_some());
         assert!(pack.get("prop.ground").is_some());
         assert!(pack.get("prop.pedestal").is_some());
@@ -313,7 +314,7 @@ mod tests {
         .expect("instantiate");
         assert!(scene.nodes.contains_key(&r.root_id));
         assert!(scene.nodes.values().any(|n| {
-            n.kind == NodeKind::MeshBox && (n.name.contains("Torso") || n.id.contains("torso"))
+            n.kind == NodeKind::MeshBox && (n.name.contains("Chest") || n.id.contains("chest") || n.name.contains("Torso") || n.id.contains("torso"))
         }));
         scene.validate().expect("valid");
     }

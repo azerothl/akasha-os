@@ -23,6 +23,7 @@
 mod assets;
 mod compose;
 mod edit;
+mod ik;
 mod locks;
 mod math;
 mod neural_mesh;
@@ -52,6 +53,7 @@ pub use edit::{
     EditActorKind, EditError, EditSnapshot, SCENE_APPLY_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE,
     SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
 };
+pub use ik::{solve_two_bone, IkError, TwoBoneIkResult};
 pub use locks::{
     LockEntryWire, LockError, LockKind, LockScope, LockTable, MutateKind, SemanticLock,
     SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE, SCENE_UNLOCK_SERVICE,
@@ -65,8 +67,8 @@ pub use neural_mesh::{
 };
 pub use ops::{SceneOp, UndoStack};
 pub use pose::{
-    apply_pose, apply_pose_preset, joint_node_id, JointId, PoseError, PoseOp, PosePreset,
-    SCENE_POSE_CAP, SCENE_POSE_SERVICE,
+    apply_ik_chain, apply_pose, apply_pose_preset, joint_node_id, IkChain, JointId, PoseError,
+    PoseOp, PosePreset, SCENE_POSE_CAP, SCENE_POSE_SERVICE,
 };
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use render::{

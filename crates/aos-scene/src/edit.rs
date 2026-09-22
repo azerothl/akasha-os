@@ -251,7 +251,7 @@ pub fn apply_one(
                 apply_pose(
                     &mut snap.project.scene,
                     &PoseOp::LookAt {
-                        humanoid_root: humanoid_root.clone(),
+                        character_root: humanoid_root.clone(),
                         target_world: *target,
                     },
                     Some(&mut undo),
@@ -262,7 +262,7 @@ pub fn apply_one(
                 apply_pose(
                     &mut snap.project.scene,
                     &PoseOp::RotateJoint {
-                        humanoid_root: humanoid_root.clone(),
+                        character_root: humanoid_root.clone(),
                         joint,
                         axis: *ax,
                         angle_rad: *ang,

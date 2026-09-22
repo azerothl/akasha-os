@@ -189,50 +189,116 @@ impl SceneGraph {
         let mut humanoid = SceneNode::empty("humanoid", "Humanoid");
         humanoid.parent = Some("root".into());
         humanoid.transform.translation = Vec3::new(1.4, 0.0, 0.3);
-        humanoid.children = vec![
-            "torso".into(),
-            "head".into(),
-            "leg_l".into(),
-            "leg_r".into(),
-            "arm_l".into(),
-            "arm_r".into(),
-        ];
+        nodes.insert(humanoid.id.clone(), humanoid);
+        nodes.insert(root.id.clone(), root);
+        nodes.insert(ground.id.clone(), ground);
+        nodes.insert(pedestal.id.clone(), pedestal);
+        nodes.insert(box_node.id.clone(), box_node);
 
-        let mut torso = SceneNode::empty("torso", "Torso");
-        torso.kind = NodeKind::MeshBox;
-        torso.parent = Some("humanoid".into());
-        torso.transform.translation = Vec3::new(0.0, 1.0, 0.0);
-        torso.transform.scale = Vec3::new(0.45, 0.55, 0.25);
+        // Articulated HumanoidRig: Empty joints (scale 1) + MeshBox visuals.
+        demo_insert_joint_mesh(
+            &mut nodes,
+            "pelvis",
+            "Pelvis",
+            "humanoid",
+            Vec3::new(0.0, 0.92, 0.0),
+            None,
+        );
+        demo_insert_joint_mesh(
+            &mut nodes,
+            "spine",
+            "Spine",
+            "pelvis",
+            Vec3::new(0.0, 0.12, 0.0),
+            Some((Vec3::ZERO, Vec3::new(0.28, 0.18, 0.16))),
+        );
+        demo_insert_joint_mesh(
+            &mut nodes,
+            "chest",
+            "Chest",
+            "spine",
+            Vec3::new(0.0, 0.22, 0.0),
+            Some((Vec3::ZERO, Vec3::new(0.4, 0.28, 0.22))),
+        );
+        demo_insert_joint_mesh(
+            &mut nodes,
+            "neck",
+            "Neck",
+            "chest",
+            Vec3::new(0.0, 0.2, 0.0),
+            None,
+        );
+        demo_insert_joint_mesh(
+            &mut nodes,
+            "head",
+            "Head",
+            "neck",
+            Vec3::new(0.0, 0.14, 0.0),
+            Some((Vec3::ZERO, Vec3::new(0.22, 0.22, 0.22))),
+        );
+        for (side, sx) in [("l", -1.0_f32), ("r", 1.0_f32)] {
+            let upper = format!("upper_arm_{side}");
+            let lower = format!("lower_arm_{side}");
+            let hand = format!("hand_{side}");
+            demo_insert_joint_mesh(
+                &mut nodes,
+                &upper,
+                &format!("UpperArm{}", side.to_uppercase()),
+                "chest",
+                Vec3::new(0.28 * sx, 0.08, 0.0),
+                Some((Vec3::new(0.0, -0.14, 0.0), Vec3::new(0.1, 0.28, 0.1))),
+            );
+            demo_insert_joint_mesh(
+                &mut nodes,
+                &lower,
+                &format!("LowerArm{}", side.to_uppercase()),
+                &upper,
+                Vec3::new(0.0, -0.28, 0.0),
+                Some((Vec3::new(0.0, -0.13, 0.0), Vec3::new(0.09, 0.26, 0.09))),
+            );
+            demo_insert_joint_mesh(
+                &mut nodes,
+                &hand,
+                &format!("Hand{}", side.to_uppercase()),
+                &lower,
+                Vec3::new(0.0, -0.22, 0.0),
+                Some((Vec3::new(0.0, -0.05, 0.0), Vec3::new(0.08, 0.1, 0.06))),
+            );
+            // Legacy alias for viewport smoke / flat-rig callers.
+            let alias = format!("arm_{side}");
+            demo_insert_alias(&mut nodes, &alias, &format!("Arm{}", side.to_uppercase()), &upper);
 
-        let mut head = SceneNode::empty("head", "Head");
-        head.kind = NodeKind::MeshBox;
-        head.parent = Some("humanoid".into());
-        head.transform.translation = Vec3::new(0.0, 1.55, 0.0);
-        head.transform.scale = Vec3::new(0.22, 0.22, 0.22);
-
-        let mut leg_l = SceneNode::empty("leg_l", "LegL");
-        leg_l.kind = NodeKind::MeshBox;
-        leg_l.parent = Some("humanoid".into());
-        leg_l.transform.translation = Vec3::new(-0.12, 0.35, 0.0);
-        leg_l.transform.scale = Vec3::new(0.14, 0.7, 0.14);
-
-        let mut leg_r = SceneNode::empty("leg_r", "LegR");
-        leg_r.kind = NodeKind::MeshBox;
-        leg_r.parent = Some("humanoid".into());
-        leg_r.transform.translation = Vec3::new(0.12, 0.35, 0.0);
-        leg_r.transform.scale = Vec3::new(0.14, 0.7, 0.14);
-
-        let mut arm_l = SceneNode::empty("arm_l", "ArmL");
-        arm_l.kind = NodeKind::MeshBox;
-        arm_l.parent = Some("humanoid".into());
-        arm_l.transform.translation = Vec3::new(-0.38, 1.05, 0.0);
-        arm_l.transform.scale = Vec3::new(0.12, 0.5, 0.12);
-
-        let mut arm_r = SceneNode::empty("arm_r", "ArmR");
-        arm_r.kind = NodeKind::MeshBox;
-        arm_r.parent = Some("humanoid".into());
-        arm_r.transform.translation = Vec3::new(0.38, 1.05, 0.0);
-        arm_r.transform.scale = Vec3::new(0.12, 0.5, 0.12);
+            let uleg = format!("upper_leg_{side}");
+            let lleg = format!("lower_leg_{side}");
+            let foot = format!("foot_{side}");
+            demo_insert_joint_mesh(
+                &mut nodes,
+                &uleg,
+                &format!("UpperLeg{}", side.to_uppercase()),
+                "pelvis",
+                Vec3::new(0.1 * sx, -0.02, 0.0),
+                Some((Vec3::new(0.0, -0.18, 0.0), Vec3::new(0.12, 0.36, 0.12))),
+            );
+            demo_insert_joint_mesh(
+                &mut nodes,
+                &lleg,
+                &format!("LowerLeg{}", side.to_uppercase()),
+                &uleg,
+                Vec3::new(0.0, -0.36, 0.0),
+                Some((Vec3::new(0.0, -0.17, 0.0), Vec3::new(0.11, 0.34, 0.11))),
+            );
+            demo_insert_joint_mesh(
+                &mut nodes,
+                &foot,
+                &format!("Foot{}", side.to_uppercase()),
+                &lleg,
+                Vec3::new(0.0, -0.28, 0.06),
+                Some((Vec3::new(0.0, -0.02, 0.04), Vec3::new(0.1, 0.08, 0.2))),
+            );
+            let lalias = format!("leg_{side}");
+            demo_insert_alias(&mut nodes, &lalias, &format!("Leg{}", side.to_uppercase()), &uleg);
+        }
+        demo_insert_alias(&mut nodes, "torso", "Torso", "chest");
 
         let mut cam = SceneNode::empty("camera", "Camera");
         cam.kind = NodeKind::Camera;
@@ -240,13 +306,12 @@ impl SceneGraph {
         // Frame ground + humanoid; identity rotation looks −Z (ADR 0011).
         cam.transform.translation = Vec3::new(0.0, 2.2, 6.5);
         cam.camera = Some(CameraParams::default());
-
-        for n in [
-            root, ground, pedestal, box_node, humanoid, torso, head, leg_l, leg_r, arm_l, arm_r,
-            cam,
-        ] {
-            nodes.insert(n.id.clone(), n);
+        if let Some(r) = nodes.get_mut("root") {
+            if !r.children.contains(&cam.id) {
+                r.children.push(cam.id.clone());
+            }
         }
+        nodes.insert(cam.id.clone(), cam);
 
         Self {
             nodes,
@@ -352,4 +417,46 @@ impl SceneGraph {
         }
         out
     }
+}
+
+fn demo_attach(nodes: &mut HashMap<String, SceneNode>, parent: &str, child: &str) {
+    if let Some(p) = nodes.get_mut(parent) {
+        if !p.children.contains(&child.to_string()) {
+            p.children.push(child.to_string());
+        }
+    }
+}
+
+fn demo_insert_joint_mesh(
+    nodes: &mut HashMap<String, SceneNode>,
+    id: &str,
+    name: &str,
+    parent: &str,
+    translation: Vec3,
+    mesh: Option<(Vec3, Vec3)>,
+) {
+    let mut joint = SceneNode::empty(id, name);
+    joint.parent = Some(parent.into());
+    joint.transform.translation = translation;
+    joint.transform.scale = Vec3::ONE;
+    demo_attach(nodes, parent, id);
+    nodes.insert(joint.id.clone(), joint);
+    if let Some((mesh_t, mesh_s)) = mesh {
+        let mid = format!("mesh_{id}");
+        let mut m = SceneNode::empty(&mid, format!("{name}Mesh"));
+        m.kind = NodeKind::MeshBox;
+        m.parent = Some(id.into());
+        m.transform.translation = mesh_t;
+        m.transform.scale = mesh_s;
+        demo_attach(nodes, id, &mid);
+        nodes.insert(m.id.clone(), m);
+    }
+}
+
+fn demo_insert_alias(nodes: &mut HashMap<String, SceneNode>, id: &str, name: &str, parent: &str) {
+    let mut alias = SceneNode::empty(id, name);
+    alias.parent = Some(parent.into());
+    alias.visible = false;
+    demo_attach(nodes, parent, id);
+    nodes.insert(alias.id.clone(), alias);
 }

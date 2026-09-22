@@ -55,6 +55,7 @@ pub struct ComposeIntent {
     pub wants_child: bool,
     pub wants_adult: bool,
     pub wants_second_character: bool,
+    pub wants_cat: bool,
 }
 
 impl ComposeIntent {
@@ -99,6 +100,16 @@ impl ComposeIntent {
         ]);
         let wants_second_character = has(&["two", "deux", "both", "pair", "together", "ensemble"])
             || (wants_child && wants_adult);
+        let wants_cat = has(&[
+            "cat",
+            "chat",
+            "kitten",
+            "chaton",
+            "quadruped",
+            "animal",
+            "félin",
+            "felin",
+        ]);
         Self {
             wants_library,
             wants_door,
@@ -106,8 +117,9 @@ impl ComposeIntent {
             wants_counter,
             wants_bookshelf,
             wants_child,
-            wants_adult: wants_adult || (!wants_child && !prompt.trim().is_empty()),
+            wants_adult: wants_adult || (!wants_child && !wants_cat && !prompt.trim().is_empty()),
             wants_second_character,
+            wants_cat,
         }
     }
 }
@@ -258,6 +270,25 @@ pub fn compose_from_prompt_with_pack(
                 Vec3::new(-0.6, 0.0, 1.2),
                 &mut placed,
             )?;
+        }
+    }
+
+    if intent.wants_cat {
+        let cat_pos = if template_id.starts_with("interior") {
+            Vec3::new(-0.2, 0.9, 0.4)
+        } else {
+            Vec3::new(-0.8, 0.0, 0.6)
+        };
+        let cat_root = place(
+            &mut scene,
+            pack,
+            "quadruped.cat",
+            "cat_",
+            cat_pos,
+            &mut placed,
+        )?;
+        if character_id.is_none() {
+            character_id = Some(cat_root);
         }
     }
 
