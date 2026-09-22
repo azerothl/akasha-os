@@ -1,6 +1,7 @@
 //! Render backend trait + request types.
 
 use crate::scene::SceneGraph;
+use crate::style::ResolvedStyle;
 use thiserror::Error;
 
 /// Stable backend identifiers (DeclUI / caps map to these).
@@ -66,6 +67,8 @@ pub struct RenderRequest {
     pub height: u32,
     /// Optional stub solid color (ignored by CPU backend).
     pub stub_rgb: (u8, u8, u8),
+    /// Optional NPR style (Sketch / Pencil / Ink). `None` = legacy wireframe look.
+    pub style: Option<ResolvedStyle>,
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +104,8 @@ pub enum RenderError {
     BackendUnavailable(String),
     #[error("isolation: {0}")]
     Isolation(String),
+    #[error("unknown style `{0}`")]
+    UnknownStyle(String),
 }
 
 /// Pluggable render backend (host-side; never Blender / bpy).

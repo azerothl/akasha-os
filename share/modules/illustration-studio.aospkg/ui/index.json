@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → beauty via RenderService. Orbit drag · click select · drag move.",
+      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move.",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -18,6 +18,11 @@
       "assets_section": "Assets",
       "project_section": "Project",
       "render_section": "Beauty pass",
+      "style_section": "Illustration style",
+      "style_label": "Style",
+      "style_sketch": "Sketch",
+      "style_pencil": "Pencil",
+      "style_ink": "Ink",
       "viewport_label": "Viewport",
       "scene_label": "Scene",
       "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
@@ -29,12 +34,12 @@
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
       "add_slim_label": "Add slim",
-      "beauty_empty": "No beauty pass yet — run Stub, CPU, or Blender beauty.",
+      "beauty_empty": "No beauty pass yet — pick a style, then run Stub, CPU, or Blender beauty.",
       "preview_label": "Beauty preview"
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté via RenderService. Orbite glisser · clic sélection · glisser déplacer.",
+      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer.",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -45,6 +50,11 @@
       "assets_section": "Assets",
       "project_section": "Projet",
       "render_section": "Rendu beauté",
+      "style_section": "Style d’illustration",
+      "style_label": "Style",
+      "style_sketch": "Esquisse",
+      "style_pencil": "Crayon",
+      "style_ink": "Encre",
       "viewport_label": "Fenêtre 3D",
       "scene_label": "Scène",
       "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
@@ -56,7 +66,7 @@
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
       "add_slim_label": "Ajouter mince",
-      "beauty_empty": "Pas encore de rendu beauté — lancez Stub, CPU ou Blender.",
+      "beauty_empty": "Pas encore de rendu beauté — choisissez un style, puis Stub, CPU ou Blender.",
       "preview_label": "Aperçu beauté"
     }
   },
@@ -69,6 +79,7 @@
         "type": "string",
         "default": "A man enters an old library. He stands by the counter."
       },
+      "style_id": { "type": "string", "default": "pencil" },
       "beauty_path": { "type": "string", "default": "" }
     }
   },
@@ -145,6 +156,7 @@
         "pass": "beauty",
         "path": "/documents/illustrations/beauty-stub.png",
         "scene_yaml": "$local.scene",
+        "style": "$local.style_id",
         "r": 48,
         "g": 72,
         "b": 96
@@ -159,6 +171,7 @@
         "pass": "beauty",
         "path": "/documents/illustrations/beauty-cpu.png",
         "scene_yaml": "$local.scene",
+        "style": "$local.style_id",
         "width": 320,
         "height": 240
       },
@@ -172,6 +185,7 @@
         "pass": "beauty",
         "path": "/documents/illustrations/beauty-blender.png",
         "scene_yaml": "$local.scene",
+        "style": "$local.style_id",
         "width": 256,
         "height": 192
       },
@@ -293,6 +307,20 @@
                 "action": "instantiate_box"
               }
             ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "style_section",
+        "children": [
+          {
+            "kind": "radio",
+            "state_key": "style_id",
+            "label_key": "style_label",
+            "inline": true,
+            "items": ["sketch", "pencil", "ink"],
+            "item_label_keys": ["style_sketch", "style_pencil", "style_ink"]
           }
         ]
       },

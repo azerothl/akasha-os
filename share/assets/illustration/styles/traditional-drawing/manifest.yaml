@@ -1,0 +1,13 @@
+# Illustration Studio — Traditional Drawing NPR style pack (spec §40).
+# Logical path: /assets/illustration/styles/traditional-drawing/manifest.yaml
+# Cap: asset.read:/assets/illustration/**
+# Styles are data (not Blender); GPL adapters may consume the same ids.
+id: traditional-drawing
+name: Traditional Drawing
+version: 1.0.0
+format_version: 1
+conventions: ADR-0011
+styles:
+  - sketch
+  - pencil
+  - ink

@@ -21,7 +21,7 @@ pub use cpu::CpuWireframeBackend;
 pub use export::{AkashaSceneExport, AKASHA_SCENE_EXPORT_VERSION};
 pub use isolate::{isolation_matrix, BlenderRunMode, IsolationRow};
 pub use service::{
-    parse_backend, parse_pass, JobState, RenderJobStatus, RenderResult, RenderService,
+    parse_backend, parse_pass, parse_style, JobState, RenderJobStatus, RenderResult, RenderService,
     RenderSubmit, DEFAULT_RENDER_BACKEND,
 };
 pub use stub::StubRenderBackend;
