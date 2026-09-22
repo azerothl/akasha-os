@@ -271,10 +271,21 @@ pub fn signals_to_profile_fields(signals: &BandwidthSignals) -> (f64, f64, f64, 
 mod tests {
     use super::*;
 
+    /// Unit-test floor only. `cargo test --workspace` on shared CI runners runs many
+    /// crates in parallel; measured read throughput can drop well below 1 GB/s even
+    /// though first-run `host_probe` on real hardware reports tens of GB/s.
+    const RAM_PROBE_TEST_MIN_BYTES_PER_SEC: f64 = 100_000_000.0; // 100 MB/s
+
     #[test]
     fn ram_probe_returns_positive_measured() {
-        let sig = probe_ram_read_bw(2);
-        assert!(sig.bytes_per_sec > 1e9);
+        let sig = probe_ram_read_bw(1);
+        assert!(sig.bytes_per_sec.is_finite());
+        assert!(
+            sig.bytes_per_sec > RAM_PROBE_TEST_MIN_BYTES_PER_SEC,
+            "expected measurable RAM read throughput, got {} B/s ({:.3} GB/s)",
+            sig.bytes_per_sec,
+            sig.bytes_per_sec / 1e9,
+        );
         assert_eq!(sig.source, BandwidthSource::Measured);
         assert!(sig.detail.contains("host_probe"));
     }
