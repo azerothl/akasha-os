@@ -336,22 +336,33 @@ mod tests {
 
     #[test]
     fn capture_apply_round_trip_preserves_pose() {
+        use crate::pose::{joint_node_id, JointId};
+
         let mut scene = SceneGraph::demo_scene();
         let mut undo = UndoStack::default();
         apply_pose_preset(&mut scene, "humanoid", "wave_right", Some(&mut undo)).unwrap();
-        let waved_arm = scene.nodes["arm_r"].transform.clone();
+        let arm_id = joint_node_id(&scene, "humanoid", JointId::UpperArmR).expect("upper arm");
+        let waved_arm = scene.nodes[&arm_id].transform.clone();
+        assert_ne!(
+            waved_arm.rotation,
+            crate::math::Quat::IDENTITY,
+            "wave_right should rotate upper_arm_r"
+        );
 
         let mut board = Storyboard::default();
         let frame = capture_frame(&mut board, &scene, Some("Wave"), None).unwrap();
         assert_eq!(frame.label, "Wave");
         assert_eq!(board.frames.len(), 1);
 
-        // Mutate scene away from the captured pose.
-        apply_pose_preset(&mut scene, "humanoid", "rest", Some(&mut undo)).unwrap();
-        assert_ne!(scene.nodes["arm_r"].transform, waved_arm);
+        // Mutate the scene away from the captured pose (direct transform, not rest —
+        // articulated reset sets can be sparse vs legacy flat joints).
+        let mut away = waved_arm.clone();
+        away.rotation = crate::math::Quat::IDENTITY;
+        scene.set_transform(&arm_id, away).unwrap();
+        assert_ne!(scene.nodes[&arm_id].transform, waved_arm);
 
         apply_frame(&mut board, &mut scene, ApplyTarget::Active).unwrap();
-        assert_eq!(scene.nodes["arm_r"].transform, waved_arm);
+        assert_eq!(scene.nodes[&arm_id].transform, waved_arm);
         assert_eq!(board.summary(), "Frame 1/1 — Wave");
     }
 
