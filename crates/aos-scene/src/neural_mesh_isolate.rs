@@ -363,14 +363,30 @@ pub fn resolve_weights_dir(pack_root: Option<&Path>) -> Option<PathBuf> {
     None
 }
 
+/// Shared with `neural_mesh` tests that mutate `AOS_NEURAL_MESH_*` env vars.
+#[cfg(test)]
+pub(crate) static NEURAL_MESH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn pack_root_resolves_from_crate() {
+        let _guard = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prev_pack = std::env::var("AOS_NEURAL_MESH_PACK").ok();
+        std::env::remove_var("AOS_NEURAL_MESH_PACK");
         let root = resolve_pack_root();
-        assert!(root.is_some(), "share/illustration-neural-mesh-pack should exist");
+        match prev_pack {
+            Some(v) => std::env::set_var("AOS_NEURAL_MESH_PACK", v),
+            None => std::env::remove_var("AOS_NEURAL_MESH_PACK"),
+        }
+        assert!(
+            root.is_some(),
+            "share/illustration-neural-mesh-pack should exist"
+        );
         let fixture = resolve_fixture_glb(root.as_deref());
         assert!(fixture.is_some());
     }
