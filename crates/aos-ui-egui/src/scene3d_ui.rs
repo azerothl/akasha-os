@@ -1326,7 +1326,7 @@ pub fn ui_scene_tree(
             .empty_label_key
             .as_ref()
             .and_then(|k| doc.labels.as_ref().and_then(|l| l.resolve(language, k)))
-            .unwrap_or_else(|| "No scene loaded yet.".into());
+            .unwrap_or_else(|| "No illustration yet.".into());
         ui.label(egui::RichText::new(empty).weak());
         return patch;
     }
