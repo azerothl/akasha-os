@@ -81,7 +81,8 @@
       "delete_frame_label": "Delete frame",
       "camera_controls_strip": "Look-at / Distance / Orbit yaw·pitch / FOV — under the 3D viewport; synced to the active Camera node.",
       "camera_look_hint": "Look-at XYZ — edit in the viewport camera strip (SceneGraph SoT).",
-      "camera_fov_hint": "Field of view — edit in the viewport camera strip (SceneGraph SoT)."
+      "camera_fov_hint": "Field of view — edit in the viewport camera strip (SceneGraph SoT).",
+      "studio_controls": "Controls"
     },
     "fr": {
       "app_title": "Studio Illustration",
@@ -159,7 +160,8 @@
       "delete_frame_label": "Supprimer le plan",
       "camera_controls_strip": "Viser / Distance / Orbite lacet·tangage / FOV — sous la fenêtre 3D ; synchronisé avec le nœud Camera actif.",
       "camera_look_hint": "Look-at XYZ — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT).",
-      "camera_fov_hint": "Champ de vision — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT)."
+      "camera_fov_hint": "Champ de vision — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT).",
+      "studio_controls": "Commandes"
     }
   },
   "state": {
@@ -639,7 +641,7 @@
   "subscriptions": [],
   "root": {
     "kind": "split",
-    "split_ratio": 0.3,
+    "split_ratio": 0.36,
     "children": [
       {
         "kind": "scroll",
@@ -1082,7 +1084,8 @@
             "label_key": "scene_label",
             "empty_label_key": "scene_empty"
           }
-        ]
+        ],
+        "label_key": "studio_controls"
       },
       {
         "kind": "split",
@@ -1094,7 +1097,8 @@
             "selected_key": "selected_id",
             "canvas_id": "illustration_viewport",
             "label_key": "viewport_label",
-            "empty_label_key": "scene_empty"
+            "empty_label_key": "scene_empty",
+            "size": 380
           },
           {
             "kind": "image_view",
