@@ -359,7 +359,7 @@ impl ViewportRenderer {
                 continue;
             };
             let mut verts: Vec<Vertex> = Vec::with_capacity(mesh.vertex_count());
-            for chunk in mesh.interleaved.chunks_exact(6) {
+            for chunk in mesh.interleaved.as_chunks::<6>().0 {
                 verts.push(Vertex {
                     position: [chunk[0], chunk[1], chunk[2]],
                     normal: [chunk[3], chunk[4], chunk[5]],

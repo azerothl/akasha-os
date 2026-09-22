@@ -316,10 +316,10 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                 let stderr = child
                     .stderr
                     .take()
-                    .and_then(|mut s| {
+                    .map(|mut s| {
                         let mut buf = String::new();
                         let _ = std::io::Read::read_to_string(&mut s, &mut buf);
-                        Some(buf)
+                        buf
                     })
                     .unwrap_or_default();
                 let tail: String = stderr.chars().rev().take(2000).collect::<String>().chars().rev().collect();
