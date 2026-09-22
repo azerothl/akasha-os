@@ -36,6 +36,8 @@ illustration-renderer-pack/
 ```bash
 export AOS_BLENDER_MODE=mock
 cargo test -p aos-scene
+# Adapter math (no bpy): identity camera must look +Y after Y-up→Z-up convert
+python3 adapters/test_akasha_beauty_math.py
 ```
 
 Mock mode never downloads or spawns Blender. It writes a deterministic teal

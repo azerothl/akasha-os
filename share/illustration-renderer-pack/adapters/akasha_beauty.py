@@ -14,6 +14,219 @@ import json
 import math
 import os
 import sys
+from typing import Any, Dict, List, Optional, Tuple
+
+# Akasha Y-up RH → Blender Z-up: (x, y, z) → (x, -z, y) ≡ rotate +90° about X.
+_HALF = math.sqrt(0.5)
+# Quaternion xyzw for +90° about X (left-multiply onto Akasha world rotation).
+Q_BASIS_XYZW = (_HALF, 0.0, 0.0, _HALF)
+
+
+def qmul_xyzw(
+    a: Tuple[float, float, float, float], b: Tuple[float, float, float, float]
+) -> Tuple[float, float, float, float]:
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return (
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
+
+
+def qrot_xyzw(
+    q: Tuple[float, float, float, float], v: Tuple[float, float, float]
+) -> Tuple[float, float, float]:
+    """Rotate vector `v` by unit quaternion `q` (xyzw)."""
+    x, y, z, w = q
+    vx, vy, vz = v
+    tx = 2.0 * (y * vz - z * vy)
+    ty = 2.0 * (z * vx - x * vz)
+    tz = 2.0 * (x * vy - y * vx)
+    return (
+        vx + w * tx + (y * tz - z * ty),
+        vy + w * ty + (z * tx - x * tz),
+        vz + w * tz + (x * ty - y * tx),
+    )
+
+
+def y_up_vec_to_blender(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    x, y, z = v
+    return (x, -z, y)
+
+
+def y_up_quat_to_blender(
+    r_xyzw: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    """Bake Y-up→Z-up into orientation: q_b = q_basis * q_akasha.
+
+    Component-shuffle / conjugation alone leaves identity cameras looking along
+    Blender −Z after position remap, which misses the remapped scene (Akasha −Z
+    becomes Blender +Y). Left-multiply by q_basis aims local −Z correctly.
+    """
+    return qmul_xyzw(Q_BASIS_XYZW, r_xyzw)
+
+
+def y_up_to_blender(t, r_xyzw, s):
+    """Convert Akasha Y-up RH translation/quat/scale into Blender Z-up.
+
+    Position: (x, y, z)_akasha → (x, -z, y)_blender.
+    Rotation: q_blender = q_basis(+90° X) * q_akasha (xyzw).
+    Scale: permute to match the axis remap (x, z, y).
+    """
+    tx, ty, tz = t
+    sx, sy, sz = s
+    qx, qy, qz, qw = r_xyzw
+    pos = y_up_vec_to_blender((float(tx), float(ty), float(tz)))
+    scale = (float(sx), float(sz), float(sy))
+    quat = y_up_quat_to_blender((float(qx), float(qy), float(qz), float(qw)))
+    return pos, quat, scale
+
+
+def _as_vec3(v: Any, default: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    if not isinstance(v, (list, tuple)) or len(v) < 3:
+        return default
+    return (float(v[0]), float(v[1]), float(v[2]))
+
+
+def _as_quat(v: Any) -> Tuple[float, float, float, float]:
+    if not isinstance(v, (list, tuple)) or len(v) < 4:
+        return (0.0, 0.0, 0.0, 1.0)
+    return (float(v[0]), float(v[1]), float(v[2]), float(v[3]))
+
+
+def _compose_local(
+    parent: Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float, float], Tuple[float, float, float]]],
+    local_t: Tuple[float, float, float],
+    local_q: Tuple[float, float, float, float],
+    local_s: Tuple[float, float, float],
+) -> Tuple[Tuple[float, float, float], Tuple[float, float, float, float], Tuple[float, float, float]]:
+    """Compose Akasha parent world * local TRS (uniform-scale-friendly)."""
+    if parent is None:
+        return local_t, local_q, local_s
+    pt, pq, ps = parent
+    # world_t = parent_t + rotate(parent_q, parent_s * local_t)
+    scaled = (ps[0] * local_t[0], ps[1] * local_t[1], ps[2] * local_t[2])
+    rotated = qrot_xyzw(pq, scaled)
+    wt = (pt[0] + rotated[0], pt[1] + rotated[1], pt[2] + rotated[2])
+    wq = qmul_xyzw(pq, local_q)
+    ws = (ps[0] * local_s[0], ps[1] * local_s[1], ps[2] * local_s[2])
+    return wt, wq, ws
+
+
+def compute_akasha_world_trs(
+    nodes: Dict[str, Any],
+) -> Dict[str, Tuple[Tuple[float, float, float], Tuple[float, float, float, float], Tuple[float, float, float]]]:
+    """World TRS in Akasha Y-up for every exported node (parent chain)."""
+    cache: Dict[
+        str, Tuple[Tuple[float, float, float], Tuple[float, float, float, float], Tuple[float, float, float]]
+    ] = {}
+
+    def world_of(node_id: str, stack: List[str]):
+        if node_id in cache:
+            return cache[node_id]
+        if node_id in stack:
+            # Cycle — treat as local only.
+            node = nodes.get(node_id) or {}
+            t = _as_vec3(node.get("translation"), (0.0, 0.0, 0.0))
+            q = _as_quat(node.get("rotation_xyzw"))
+            s = _as_vec3(node.get("scale"), (1.0, 1.0, 1.0))
+            cache[node_id] = (t, q, s)
+            return cache[node_id]
+        node = nodes.get(node_id) or {}
+        t = _as_vec3(node.get("translation"), (0.0, 0.0, 0.0))
+        q = _as_quat(node.get("rotation_xyzw"))
+        s = _as_vec3(node.get("scale"), (1.0, 1.0, 1.0))
+        parent_id = node.get("parent")
+        parent_world = None
+        if parent_id and parent_id in nodes:
+            parent_world = world_of(str(parent_id), stack + [node_id])
+        cache[node_id] = _compose_local(parent_world, t, q, s)
+        return cache[node_id]
+
+    for nid in nodes:
+        world_of(nid, [])
+    return cache
+
+
+def mesh_centroid_akasha(nodes: Dict[str, Any], world: Dict[str, Any]) -> Tuple[float, float, float]:
+    pts: List[Tuple[float, float, float]] = []
+    for nid, node in nodes.items():
+        if not node.get("visible", True):
+            continue
+        if node.get("kind") != "mesh_box":
+            continue
+        if nid in world:
+            pts.append(world[nid][0])
+    if not pts:
+        return (0.0, 0.5, 0.0)
+    sx = sum(p[0] for p in pts) / len(pts)
+    sy = sum(p[1] for p in pts) / len(pts)
+    sz = sum(p[2] for p in pts) / len(pts)
+    return (sx, sy, sz)
+
+
+def look_at_quat_blender(
+    eye: Tuple[float, float, float],
+    target: Tuple[float, float, float],
+    up: Tuple[float, float, float] = (0.0, 0.0, 1.0),
+) -> Tuple[float, float, float, float]:
+    """Blender camera quaternion (xyzw) so local −Z aims at target (Z-up world)."""
+    # Forward (look) = normalize(target - eye); camera looks down local −Z.
+    fx = target[0] - eye[0]
+    fy = target[1] - eye[1]
+    fz = target[2] - eye[2]
+    fl = math.sqrt(fx * fx + fy * fy + fz * fz) or 1.0
+    fx, fy, fz = fx / fl, fy / fl, fz / fl
+    # Right = forward × up
+    rx = fy * up[2] - fz * up[1]
+    ry = fz * up[0] - fx * up[2]
+    rz = fx * up[1] - fy * up[0]
+    rl = math.sqrt(rx * rx + ry * ry + rz * rz)
+    if rl < 1e-6:
+        up = (0.0, 1.0, 0.0)
+        rx = fy * up[2] - fz * up[1]
+        ry = fz * up[0] - fx * up[2]
+        rz = fx * up[1] - fy * up[0]
+        rl = math.sqrt(rx * rx + ry * ry + rz * rz) or 1.0
+    rx, ry, rz = rx / rl, ry / rl, rz / rl
+    # True up = right × forward
+    ux = ry * fz - rz * fy
+    uy = rz * fx - rx * fz
+    uz = rx * fy - ry * fx
+    # Rotation matrix columns = right, up, -forward (camera local axes in world)
+    # Local −Z = forward ⇒ third column = −forward
+    r00, r01, r02 = rx, ux, -fx
+    r10, r11, r12 = ry, uy, -fy
+    r20, r21, r22 = rz, uz, -fz
+    # Matrix → quaternion (xyzw), Shepperd
+    trace = r00 + r11 + r22
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        qw = 0.25 * s
+        qx = (r21 - r12) / s
+        qy = (r02 - r20) / s
+        qz = (r10 - r01) / s
+    elif r00 > r11 and r00 > r22:
+        s = math.sqrt(1.0 + r00 - r11 - r22) * 2.0
+        qw = (r21 - r12) / s
+        qx = 0.25 * s
+        qy = (r01 + r10) / s
+        qz = (r02 + r20) / s
+    elif r11 > r22:
+        s = math.sqrt(1.0 + r11 - r00 - r22) * 2.0
+        qw = (r02 - r20) / s
+        qx = (r01 + r10) / s
+        qy = 0.25 * s
+        qz = (r12 + r21) / s
+    else:
+        s = math.sqrt(1.0 + r22 - r00 - r11) * 2.0
+        qw = (r10 - r01) / s
+        qx = (r02 + r20) / s
+        qy = (r12 + r21) / s
+        qz = 0.25 * s
+    return (qx, qy, qz, qw)
 
 
 def _argv_work_dir() -> str:
@@ -22,26 +235,6 @@ def _argv_work_dir() -> str:
         if i + 1 < len(sys.argv):
             return sys.argv[i + 1]
     return os.getcwd()
-
-
-def y_up_to_blender(t, r_xyzw, s):
-    """Convert Akasha Y-up RH translation/quat/scale into Blender Z-up.
-
-    Simple axis remap: (x, y, z)_akasha -> (x, -z, y)_blender for position.
-    Quaternion: apply matching basis change (approx for MVP boxes).
-    """
-    tx, ty, tz = t
-    sx, sy, sz = s
-    qx, qy, qz, qw = r_xyzw
-    pos = (tx, -tz, ty)
-    scale = (sx, sz, sy)
-    # Remap quaternion components for Y-up -> Z-up (rotate -90° about X).
-    # q' = q_basis * q * q_basis^-1 with q_basis = rot_x(-90°)
-    hx, hy, hz, hw = (math.sqrt(0.5), 0.0, 0.0, math.sqrt(0.5))  # +90 X for inverse path
-    # For MVP: identity-ish remap of vector part
-    quat = (qx, -qz, qy, qw)
-    _ = (hx, hy, hz, hw)
-    return pos, quat, scale
 
 
 def main() -> int:
@@ -64,15 +257,25 @@ def main() -> int:
     nodes = data.get("nodes") or {}
     blender_objs = {}
 
+    # World-space placement avoids broken hierarchy after basis change: convert
+    # composed Akasha world TRS once, do not re-parent (parent links are baked).
+    world_akasha = compute_akasha_world_trs(nodes)
+    target_akasha = mesh_centroid_akasha(nodes, world_akasha)
+    target_blender = y_up_vec_to_blender(target_akasha)
+
     for node_id, node in nodes.items():
         if not node.get("visible", True):
             continue
         kind = node.get("kind")
-        pos, quat, scale = y_up_to_blender(
-            node.get("translation") or [0, 0, 0],
-            node.get("rotation_xyzw") or [0, 0, 0, 1],
-            node.get("scale") or [1, 1, 1],
+        wt, wq, ws = world_akasha.get(
+            node_id,
+            (
+                _as_vec3(node.get("translation"), (0.0, 0.0, 0.0)),
+                _as_quat(node.get("rotation_xyzw")),
+                _as_vec3(node.get("scale"), (1.0, 1.0, 1.0)),
+            ),
         )
+        pos, quat, scale = y_up_to_blender(wt, wq, ws)
         if kind == "mesh_box":
             bpy.ops.mesh.primitive_cube_add(size=1.0, location=pos)
             obj = bpy.context.active_object
@@ -80,12 +283,30 @@ def main() -> int:
             obj.scale = scale
             obj.rotation_mode = "QUATERNION"
             obj.rotation_quaternion = (quat[3], quat[0], quat[1], quat[2])  # wxyz
+            # Readable default matte so beauty is not paper-only when Freestyle is off.
+            mat = bpy.data.materials.new(name=f"mat_{node_id}")
+            mat.use_nodes = True
+            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf is not None:
+                bsdf.inputs["Base Color"].default_value = (0.22, 0.24, 0.28, 1.0)
+                bsdf.inputs["Roughness"].default_value = 0.65
+            if obj.data.materials:
+                obj.data.materials[0] = mat
+            else:
+                obj.data.materials.append(mat)
             blender_objs[node_id] = obj
         elif kind == "camera":
             cam_data = bpy.data.cameras.new(name=node.get("name") or node_id)
             cam_obj = bpy.data.objects.new(cam_data.name, cam_data)
             bpy.context.scene.collection.objects.link(cam_obj)
             cam_obj.location = pos
+            # Prefer look-at mesh centroid (parity with host CPU beauty), falling
+            # back to converted world quaternion when target coincides with eye.
+            dx = target_blender[0] - pos[0]
+            dy = target_blender[1] - pos[1]
+            dz = target_blender[2] - pos[2]
+            if (dx * dx + dy * dy + dz * dz) > 1e-8:
+                quat = look_at_quat_blender(pos, target_blender)
             cam_obj.rotation_mode = "QUATERNION"
             cam_obj.rotation_quaternion = (quat[3], quat[0], quat[1], quat[2])
             cam = node.get("camera") or {}
@@ -105,15 +326,10 @@ def main() -> int:
             empty = bpy.data.objects.new(node.get("name") or node_id, None)
             bpy.context.scene.collection.objects.link(empty)
             empty.location = pos
+            empty.rotation_mode = "QUATERNION"
+            empty.rotation_quaternion = (quat[3], quat[0], quat[1], quat[2])
+            empty.scale = scale
             blender_objs[node_id] = empty
-
-    # Parent links (best-effort after all objects exist)
-    for node_id, node in nodes.items():
-        parent_id = node.get("parent")
-        if parent_id and node_id in blender_objs and parent_id in blender_objs:
-            child = blender_objs[node_id]
-            parent = blender_objs[parent_id]
-            child.parent = parent
 
     scene = bpy.context.scene
     active = data.get("active_camera")
@@ -129,6 +345,12 @@ def main() -> int:
     if scene.camera is None:
         bpy.ops.object.camera_add(location=(0.0, -6.5, 2.2))
         scene.camera = bpy.context.active_object
+        scene.camera.rotation_mode = "QUATERNION"
+        la = look_at_quat_blender(
+            (scene.camera.location.x, scene.camera.location.y, scene.camera.location.z),
+            target_blender,
+        )
+        scene.camera.rotation_quaternion = (la[3], la[0], la[1], la[2])
 
     # Default area light if none
     if not any(o.type == "LIGHT" for o in bpy.data.objects):
@@ -141,6 +363,13 @@ def main() -> int:
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
     scene.cycles.samples = 16
+    # Distro Blender builds often omit OpenImageDenoiser; leave denoise off
+    # so beauty stays fail-closed on geometry, not on optional denoise deps.
+    if hasattr(scene.cycles, "use_denoising"):
+        scene.cycles.use_denoising = False
+    view_layer = bpy.context.view_layer
+    if hasattr(view_layer, "cycles") and hasattr(view_layer.cycles, "use_denoising"):
+        view_layer.cycles.use_denoising = False
     scene.render.resolution_x = width
     scene.render.resolution_y = height
     scene.render.filepath = out_path
@@ -153,7 +382,15 @@ def main() -> int:
     if family in ("sketch", "pencil", "ink"):
         scene.render.use_freestyle = True
         try:
-            linestyle = bpy.context.view_layer.freestyle_settings.linesets[0].linestyle
+            fs = bpy.context.view_layer.freestyle_settings
+            if fs.linesets:
+                lineset = fs.linesets[0]
+            else:
+                lineset = fs.linesets.new("AosLineSet")
+            # Factory-empty scenes ship a lineset with linestyle=None; create one.
+            if lineset.linestyle is None:
+                lineset.linestyle = bpy.data.linestyles.new("AosLineStyle")
+            linestyle = lineset.linestyle
             linewidth = float(style.get("line_width") or 1.2)
             linestyle.thickness = max(0.5, min(linewidth * 1.5, 6.0))
             jitter = float(style.get("jitter") or 0.0)
@@ -161,9 +398,21 @@ def main() -> int:
                 linestyle.thickness *= 0.85
             elif family == "ink":
                 linestyle.thickness *= 1.35
+            stroke = style.get("stroke_rgb") or [20, 18, 16]
+            if hasattr(linestyle, "color"):
+                linestyle.color = (
+                    float(stroke[0]) / 255.0,
+                    float(stroke[1]) / 255.0,
+                    float(stroke[2]) / 255.0,
+                )
             # Soften world for paper-like look when tint present.
+            # `read_factory_settings(use_empty=True)` leaves `scene.world is None`
+            # — without creating a World, empty-frustum beauty is pure black (or
+            # reads as a blank square in DeclUI) instead of paper tint.
             tint = style.get("paper_tint") or [248, 246, 240]
-            if hasattr(scene, "world") and scene.world is not None:
+            if getattr(scene, "world", None) is None:
+                scene.world = bpy.data.worlds.new("AosPaperWorld")
+            if scene.world is not None:
                 scene.world.use_nodes = True
                 bg = scene.world.node_tree.nodes.get("Background")
                 if bg is not None:
@@ -173,6 +422,8 @@ def main() -> int:
                         float(tint[2]) / 255.0,
                         1.0,
                     )
+                    # Keep paper visible but not so bright it washes out Freestyle.
+                    bg.inputs[1].default_value = 0.85
             _ = jitter  # reserved for future noise modifiers in pack scripts
         except Exception:
             # Freestyle / lineset may be unavailable in minimal builds — still render.

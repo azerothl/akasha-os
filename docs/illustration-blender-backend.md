@@ -24,6 +24,18 @@ DeclUI ──render.submit(backend=blender)──► RenderService
 SceneGraph remains the **only** source of truth. Blender is a beauty backend,
 not an editor. The interactive `scene3d` viewport is unchanged.
 
+### Y-up → Z-up (adapter contract)
+
+Host export stays Akasha **Y-up RH** (`conventions: y_up_rh`). The pack adapter must:
+
+1. Remap positions `(x, y, z) → (x, -z, y)` (≡ +90° about X).
+2. Bake orientation with **`q_blender = q_basis(+90° X) * q_akasha`** — not a
+   component shuffle. Identity cameras look **−Z** in Akasha; after remap that
+   forward is Blender **+Y**. Leaving identity looking −Z aimed past the scene
+   and produced NPR paper-only (white) beauty frames.
+3. Prefer composed **world** TRS (bake parenting) before convert; aim the active
+   camera at the mesh centroid for parity with host CPU `look_at_rh`.
+
 ## Isolation model
 
 | Control | Behaviour |
