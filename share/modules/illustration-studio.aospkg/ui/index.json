@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move. Lock nodes so agents cannot stomp.",
+      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move. Lock nodes. Mesh assist stub is procedural (no neural weights).",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -19,6 +19,10 @@
       "lock_selected_label": "Lock selection",
       "lock_subtree_label": "Lock subtree",
       "unlock_selected_label": "Unlock",
+      "mesh_section": "Mesh assist",
+      "mesh_prompt_label": "Mesh prompt",
+      "mesh_stub_label": "Stub mesh (procedural)",
+      "mesh_tip": "Stub builds MeshBox props from keywords (crate / column / lamp / table). Neural backend stays fail-closed until model infra ships.",
       "assets_section": "Assets",
       "project_section": "Project",
       "render_section": "Beauty pass",
@@ -43,7 +47,7 @@
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer. Verrouillez les nœuds pour que l'agent ne les écrase pas.",
+      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer. Verrouillez les nœuds. Assist mesh stub procédural (pas de poids neuronaux).",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -55,6 +59,10 @@
       "lock_selected_label": "Verrouiller la sélection",
       "lock_subtree_label": "Verrouiller le sous-arbre",
       "unlock_selected_label": "Déverrouiller",
+      "mesh_section": "Assist mesh",
+      "mesh_prompt_label": "Invite mesh",
+      "mesh_stub_label": "Mesh stub (procédural)",
+      "mesh_tip": "Le stub assemble des MeshBox depuis des mots-clés (caisse / colonne / lampe / table). Le backend neural reste refusé tant que l’infra modèles n’existe pas.",
       "assets_section": "Assets",
       "project_section": "Projet",
       "render_section": "Rendu beauté",
@@ -88,6 +96,10 @@
         "default": "A man enters an old library. He stands by the counter."
       },
       "style_id": { "type": "string", "default": "pencil" },
+      "mesh_prompt": {
+        "type": "string",
+        "default": "wooden crate"
+      },
       "beauty_path": { "type": "string", "default": "" }
     }
   },
@@ -152,6 +164,18 @@
       "input": {
         "preset": "rest",
         "humanoid_root": "$local.character_id",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "mesh_assist_stub",
+      "service": "mesh.assist",
+      "input": {
+        "prompt": "$local.mesh_prompt",
+        "backend": "stub",
+        "parent_id": "root",
+        "prefix": "mesh_",
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
@@ -346,6 +370,27 @@
                 "action": "unlock_selected"
               }
             ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "mesh_section",
+        "children": [
+          {
+            "kind": "text",
+            "label_key": "mesh_tip"
+          },
+          {
+            "kind": "text_input",
+            "state_key": "mesh_prompt",
+            "label_key": "mesh_prompt_label"
+          },
+          {
+            "kind": "button",
+            "label_key": "mesh_stub_label",
+            "action": "mesh_assist_stub",
+            "primary": true
           }
         ]
       },

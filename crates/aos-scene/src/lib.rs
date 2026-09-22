@@ -15,12 +15,17 @@
 //! of the same SceneGraph (DeclUI `scene3d`). It is **not** a beauty / NPR
 //! RenderService backend. Platform host_call paths depend on this crate with
 //! `default-features = false`.
+//!
+//! Neural mesh assist: [`neural_mesh`] (`mesh.assist`) inserts validated MeshBox
+//! props into the SceneGraph. Preview default is the procedural stub; the neural
+//! backend id is fail-closed until model infra exists (no weights in this crate).
 
 mod assets;
 mod compose;
 mod edit;
 mod locks;
 mod math;
+mod neural_mesh;
 mod ops;
 mod png;
 mod pose;
@@ -52,6 +57,12 @@ pub use locks::{
     SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE, SCENE_UNLOCK_SERVICE,
 };
 pub use math::{Mat4, Quat, Vec3, EPSILON};
+pub use neural_mesh::{
+    apply_proposal, mesh_assist, propose_mesh_assist, validate_proposal, MeshAssistBackendId,
+    MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart, NeuralMeshError,
+    MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS, MESH_ASSIST_SERVICE, MESH_NEURAL_CAP,
+    MIN_ABS_SCALE,
+};
 pub use ops::{SceneOp, UndoStack};
 pub use pose::{
     apply_pose, apply_pose_preset, joint_node_id, JointId, PoseError, PoseOp, PosePreset,

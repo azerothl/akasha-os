@@ -182,6 +182,8 @@ pub const SCENE_EDIT_CAP: &str = "scene.edit";
 
 /// Cap: set / clear semantic locks on SceneGraph nodes.
 pub const SCENE_LOCK_CAP: &str = "scene.lock";
+/// Cap: neural / AI mesh assist (fail-closed; stub procedural is Preview default).
+pub const MESH_NEURAL_CAP: &str = "mesh.neural";
 
 /// DeclUI service: stub solid/viewport beauty placeholder PNG.
 pub const RENDER_STUB_SERVICE: &str = "render.stub.beauty";
@@ -224,6 +226,8 @@ pub const SCENE_UNLOCK_SERVICE: &str = "scene.unlock";
 
 /// DeclUI / host_call: list semantic locks.
 pub const SCENE_LOCKS_SERVICE: &str = "scene.locks";
+/// DeclUI service: neural / stub mesh assist → SceneGraph MeshBox insert.
+pub const MESH_ASSIST_SERVICE: &str = "mesh.assist";
 
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =
