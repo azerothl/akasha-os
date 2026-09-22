@@ -622,6 +622,18 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             );
         }
+        aos_proto::STORYBOARD_CAPTURE_SERVICE => {
+            run_storyboard_capture(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::STORYBOARD_APPLY_SERVICE => {
+            run_storyboard_apply(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::STORYBOARD_DELETE_SERVICE => {
+            run_storyboard_delete(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::STORYBOARD_MOVE_SERVICE => {
+            run_storyboard_move(evt_tx, module, action_id, input, refresh_binds);
+        }
         aos_proto::COMIC_LAYOUT_SERVICE => {
             run_comic_layout(evt_tx, module, action_id, input, refresh_binds);
         }
@@ -2160,6 +2172,409 @@ async fn run_comic_render(
             });
         }
     }
+}
+
+fn run_storyboard_move(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{move_active_frame, save_project_yaml};
+
+    let mut project = match load_illustration_project(&input) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let Some(board) = project.storyboard.as_mut() else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("storyboard.move: empty storyboard".into()),
+            refresh_binds,
+        });
+        return;
+    };
+
+    let direction = input
+        .get("direction")
+        .and_then(|v| v.as_str())
+        .unwrap_or("later");
+    let new_index = match move_active_frame(board, direction) {
+        Ok(i) => i,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.move: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let yaml = match save_project_yaml(&project) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.move save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let mut extra = serde_json::Map::new();
+    extra.insert("op".into(), Value::String("move".into()));
+    extra.insert("direction".into(), Value::String(direction.into()));
+    extra.insert("new_index".into(), Value::from(new_index as u64));
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: storyboard_result_payload(&project, yaml, extra),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_storyboard_delete(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{apply_frame, delete_frame, save_project_yaml, ApplyTarget};
+
+    let mut project = match load_illustration_project(&input) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let Some(board) = project.storyboard.as_mut() else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("storyboard.delete: empty storyboard".into()),
+            refresh_binds,
+        });
+        return;
+    };
+
+    let id = input.get("frame_id").and_then(|v| v.as_str());
+    let removed = match delete_frame(board, id) {
+        Ok(f) => f,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.delete: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    if !board.frames.is_empty() {
+        if let Err(e) = apply_frame(board, &mut project.scene, ApplyTarget::Active) {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.delete apply: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    }
+    if board.frames.is_empty() {
+        project.storyboard = None;
+    }
+
+    let yaml = match save_project_yaml(&project) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.delete save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let mut extra = serde_json::Map::new();
+    extra.insert("op".into(), Value::String("delete".into()));
+    extra.insert("deleted_id".into(), Value::String(removed.id));
+    extra.insert("deleted_label".into(), Value::String(removed.label));
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: storyboard_result_payload(&project, yaml, extra),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_storyboard_apply(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{apply_frame, save_project_yaml, ApplyTarget};
+
+    let mut project = match load_illustration_project(&input) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let Some(board) = project.storyboard.as_mut() else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("storyboard.apply: empty storyboard".into()),
+            refresh_binds,
+        });
+        return;
+    };
+
+    let target = if let Some(id) = input.get("frame_id").and_then(|v| v.as_str()) {
+        ApplyTarget::Id(id.to_string())
+    } else if let Some(idx) = input.get("index").and_then(|v| v.as_u64()) {
+        ApplyTarget::Index(idx as usize)
+    } else if let Some(step) = input.get("step").and_then(|v| v.as_i64()) {
+        ApplyTarget::Step(step as isize)
+    } else if let Some(dir) = input.get("direction").and_then(|v| v.as_str()) {
+        match dir.trim().to_ascii_lowercase().as_str() {
+            "prev" | "previous" | "earlier" | "back" => ApplyTarget::Step(-1),
+            "next" | "later" | "forward" => ApplyTarget::Step(1),
+            _ => ApplyTarget::Active,
+        }
+    } else {
+        ApplyTarget::Active
+    };
+
+    let frame_id = match apply_frame(board, &mut project.scene, target) {
+        Ok(f) => f.id.clone(),
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.apply: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let yaml = match save_project_yaml(&project) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.apply save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let mut extra = serde_json::Map::new();
+    extra.insert("op".into(), Value::String("apply".into()));
+    extra.insert("applied_id".into(), Value::String(frame_id));
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: storyboard_result_payload(&project, yaml, extra),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_storyboard_capture(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{capture_frame, save_project_yaml, Storyboard};
+
+    let mut project = match load_illustration_project(&input) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let label = input
+        .get("label")
+        .and_then(|v| v.as_str())
+        .or_else(|| input.get("frame_label").and_then(|v| v.as_str()));
+    let duration_ms = input
+        .get("duration_ms")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+
+    let board = project.storyboard.get_or_insert_with(Storyboard::default);
+    let frame = match capture_frame(board, &project.scene, label, duration_ms) {
+        Ok(f) => f,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.capture: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let yaml = match save_project_yaml(&project) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("storyboard.capture save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let mut extra = serde_json::Map::new();
+    extra.insert("op".into(), Value::String("capture".into()));
+    extra.insert("label".into(), Value::String(frame.label.clone()));
+    extra.insert("captured_id".into(), Value::String(frame.id.clone()));
+    extra.insert("duration_ms".into(), Value::from(frame.duration_ms));
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: storyboard_result_payload(&project, yaml, extra),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn load_illustration_project(input: &Value) -> Result<aos_scene::ProjectFile, String> {
+    use aos_scene::{load_project_yaml, ProjectFile, SceneGraph};
+    if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            Ok(ProjectFile::new(SceneGraph::demo_scene()))
+        } else {
+            load_project_yaml(yaml).map_err(|e| format!("scene_yaml: {e}"))
+        }
+    } else {
+        Ok(ProjectFile::new(SceneGraph::demo_scene()))
+    }
+}
+
+fn storyboard_result_payload(
+    project: &aos_scene::ProjectFile,
+    yaml: String,
+    extra: serde_json::Map<String, Value>,
+) -> Value {
+    let mut map = extra;
+    let (summary, active_id, frame_count, active_index) =
+        if let Some(board) = project.storyboard.as_ref() {
+            let summary = board.summary();
+            let active_id = board
+                .active_frame()
+                .map(|f| f.id.clone())
+                .unwrap_or_default();
+            (
+                summary,
+                active_id,
+                board.frames.len(),
+                board.active_index,
+            )
+        } else {
+            ("0 frames".into(), String::new(), 0usize, 0usize)
+        };
+    map.insert("scene_yaml".into(), Value::String(yaml));
+    map.insert("storyboard_summary".into(), Value::String(summary));
+    map.insert("frame_id".into(), Value::String(active_id));
+    map.insert("frame_count".into(), Value::from(frame_count as u64));
+    map.insert("active_index".into(), Value::from(active_index as u64));
+    Value::Object(map)
 }
 
 async fn run_media_image_generate(

@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → wgpu edit → NPR beauty. Locks · IK/FK poses · comic panels · mesh assist stub (procedural).",
+      "tip_body": "Prompt → SceneGraph → wgpu edit → NPR beauty. Locks · IK/FK · comic · storyboard · mesh stub.",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -55,11 +55,13 @@
       "comic_layout_label": "Layout",
       "comic_apply_label": "Apply layout",
       "comic_render_label": "Render page",
-      "comic_bind_label": "Bind scene → panel 1"
+      "comic_bind_label": "Bind scene → panel 1",
+      "storyboard_section": "Storyboard",
+      "storyboard_summary_label": "Timeline"
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR. Verrous · poses IK/FK · planches comic · assist mesh stub (procédural).",
+      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR. Verrous · IK/FK · comic · storyboard · mesh stub.",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -107,7 +109,9 @@
       "comic_layout_label": "Mise en page",
       "comic_apply_label": "Appliquer la mise en page",
       "comic_render_label": "Rendre la page",
-      "comic_bind_label": "Lier scène → case 1"
+      "comic_bind_label": "Lier scène → case 1",
+      "storyboard_section": "Storyboard",
+      "storyboard_summary_label": "Timeline"
     }
   },
   "state": {
@@ -157,6 +161,14 @@
       "comic_panel_count": {
         "type": "number",
         "default": 0
+      },
+      "frame_label": {
+        "type": "string",
+        "default": ""
+      },
+      "storyboard_summary": {
+        "type": "string",
+        "default": "0 frames"
       }
     }
   },
@@ -468,6 +480,59 @@
         "height": 960
       },
       "refresh_binds": []
+    },
+    {
+      "id": "storyboard_capture",
+      "service": "storyboard.capture",
+      "input": {
+        "scene_yaml": "$local.scene",
+        "label": "$local.frame_label"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "storyboard_prev",
+      "service": "storyboard.apply",
+      "input": {
+        "scene_yaml": "$local.scene",
+        "direction": "prev"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "storyboard_next",
+      "service": "storyboard.apply",
+      "input": {
+        "scene_yaml": "$local.scene",
+        "direction": "next"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "storyboard_delete",
+      "service": "storyboard.delete",
+      "input": {
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "storyboard_move_earlier",
+      "service": "storyboard.move",
+      "input": {
+        "scene_yaml": "$local.scene",
+        "direction": "earlier"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "storyboard_move_later",
+      "service": "storyboard.move",
+      "input": {
+        "scene_yaml": "$local.scene",
+        "direction": "later"
+      },
+      "refresh_binds": []
     }
   ],
   "subscriptions": [],
@@ -656,6 +721,63 @@
                 "kind": "button",
                 "label_key": "comic_render_label",
                 "action": "comic_render"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "storyboard_section",
+        "children": [
+          {
+            "kind": "text_input",
+            "state_key": "storyboard_summary",
+            "label_key": "storyboard_summary_label"
+          },
+          {
+            "kind": "text_input",
+            "state_key": "frame_label",
+            "label_key": "frame_label_input"
+          },
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "capture_frame_label",
+                "action": "storyboard_capture",
+                "primary": true
+              },
+              {
+                "kind": "button",
+                "label_key": "frame_prev_label",
+                "action": "storyboard_prev"
+              },
+              {
+                "kind": "button",
+                "label_key": "frame_next_label",
+                "action": "storyboard_next"
+              }
+            ]
+          },
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "move_earlier_label",
+                "action": "storyboard_move_earlier"
+              },
+              {
+                "kind": "button",
+                "label_key": "move_later_label",
+                "action": "storyboard_move_later"
+              },
+              {
+                "kind": "button",
+                "label_key": "delete_frame_label",
+                "action": "storyboard_delete"
               }
             ]
           }
