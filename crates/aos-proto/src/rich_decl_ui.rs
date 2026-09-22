@@ -725,7 +725,7 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-        crate::MESH_ASSIST_SERVICE => {
+        crate::MESH_ASSIST_SERVICE | crate::MESH_PACK_STATUS_SERVICE => {
             if !granted_caps.iter().any(|c| c == crate::MESH_NEURAL_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
                     crate::MESH_NEURAL_CAP.into(),

@@ -59,7 +59,10 @@
       "mesh_section": "Mesh assist",
       "mesh_prompt_label": "Mesh prompt",
       "mesh_stub_label": "Stub mesh (procedural)",
-      "mesh_tip": "Stub builds MeshBox props from keywords (crate / column / lamp / table). Neural backend stays fail-closed until model infra ships.",
+      "mesh_neural_label": "Neural mesh (pack)",
+      "mesh_pack_status_label": "Refresh pack status",
+      "mesh_pack_status_empty": "Pack status unknown — tap Refresh pack status.",
+      "mesh_tip": "Stub builds MeshBox props from keywords. Neural uses the opt-in TRELLIS.2 GGUF Model Pack (fixture GLB mock when runner/weights absent). Cap mesh.neural · SceneGraph MeshAsset.",
       "comic_section": "Comic page",
       "comic_layout_label": "Layout",
       "comic_apply_label": "Apply layout",
@@ -147,7 +150,10 @@
       "mesh_section": "Assist mesh",
       "mesh_prompt_label": "Invite mesh",
       "mesh_stub_label": "Mesh stub (procédural)",
-      "mesh_tip": "Le stub assemble des MeshBox depuis des mots-clés (caisse / colonne / lampe / table). Le backend neural reste refusé tant que l’infra modèles n’existe pas.",
+      "mesh_neural_label": "Mesh neural (pack)",
+      "mesh_pack_status_label": "Rafraîchir statut pack",
+      "mesh_pack_status_empty": "Statut pack inconnu — appuyez sur Rafraîchir statut pack.",
+      "mesh_tip": "Le stub assemble des MeshBox. Le neural utilise le Model Pack TRELLIS.2 GGUF (mock GLB fixture sans runner/poids). Cap mesh.neural · SceneGraph MeshAsset.",
       "comic_section": "Page BD",
       "comic_layout_label": "Mise en page",
       "comic_apply_label": "Appliquer la mise en page",
@@ -217,6 +223,10 @@
       "mesh_prompt": {
         "type": "string",
         "default": "wooden crate"
+      },
+      "mesh_pack_status": {
+        "type": "string",
+        "default": ""
       },
       "comic": {
         "type": "string",
@@ -650,6 +660,26 @@
       "refresh_binds": []
     },
     {
+      "id": "mesh_assist_neural",
+      "service": "mesh.assist",
+      "input": {
+        "prompt": "$local.mesh_prompt",
+        "backend": "neural",
+        "parent_id": "root",
+        "prefix": "neural_",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "mesh_pack_status",
+      "service": "mesh.pack.status",
+      "input": {
+        "lang": "en"
+      },
+      "refresh_binds": []
+    },
+    {
       "id": "comic_layout",
       "service": "comic.layout",
       "input": {
@@ -1054,15 +1084,46 @@
                 "label_key": "mesh_tip"
               },
               {
+                "kind": "text",
+                "label_key": "mesh_pack_status_empty",
+                "visible": {
+                  "eq": [
+                    "$local.mesh_pack_status",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "text_input",
+                "state_key": "mesh_pack_status",
+                "label_key": "mesh_pack_status_label",
+                "visible": {
+                  "ne": [
+                    "$local.mesh_pack_status",
+                    ""
+                  ]
+                }
+              },
+              {
                 "kind": "text_input",
                 "state_key": "mesh_prompt",
                 "label_key": "mesh_prompt_label"
               },
               {
                 "kind": "button",
+                "label_key": "mesh_pack_status_label",
+                "action": "mesh_pack_status"
+              },
+              {
+                "kind": "button",
                 "label_key": "mesh_stub_label",
                 "action": "mesh_assist_stub",
                 "primary": true
+              },
+              {
+                "kind": "button",
+                "label_key": "mesh_neural_label",
+                "action": "mesh_assist_neural"
               }
             ],
             "collapsible": true,

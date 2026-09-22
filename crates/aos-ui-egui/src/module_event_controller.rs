@@ -324,6 +324,7 @@ pub(crate) fn on_ui_service_done(
                     || action_id == "lock_subtree"
                     || action_id == "unlock_selected"
                     || action_id == "mesh_assist_stub"
+                    || action_id == "mesh_assist_neural"
                     || action_id == "storyboard_capture"
                     || action_id == "storyboard_prev"
                     || action_id == "storyboard_next"
@@ -342,6 +343,7 @@ pub(crate) fn on_ui_service_done(
                     || action_id == aos_proto::SCENE_UNLOCK_SERVICE
                     || action_id == aos_proto::SCENE_LOCKS_SERVICE
                     || action_id == aos_proto::MESH_ASSIST_SERVICE
+                    || action_id == aos_proto::MESH_PACK_STATUS_SERVICE
                     || action_id == aos_proto::STORYBOARD_CAPTURE_SERVICE
                     || action_id == aos_proto::STORYBOARD_APPLY_SERVICE
                     || action_id == aos_proto::STORYBOARD_DELETE_SERVICE
@@ -419,6 +421,24 @@ pub(crate) fn on_ui_service_done(
                     panel.local_state.insert(
                         "pack_summary".into(),
                         Value::String(format!("{name} — {path} ({entries} entries)")),
+                    );
+                }
+            }
+            if module == "illustration-studio"
+                && (action_id == "mesh_pack_status"
+                    || action_id == aos_proto::MESH_PACK_STATUS_SERVICE
+                    || action_id == "mesh_assist_stub"
+                    || action_id == "mesh_assist_neural"
+                    || action_id == aos_proto::MESH_ASSIST_SERVICE)
+            {
+                if let Some(summary) = result
+                    .get("mesh_pack_status")
+                    .or_else(|| result.get("summary"))
+                    .and_then(|p| p.as_str())
+                {
+                    panel.local_state.insert(
+                        "mesh_pack_status".into(),
+                        Value::String(summary.to_string()),
                     );
                 }
             }
