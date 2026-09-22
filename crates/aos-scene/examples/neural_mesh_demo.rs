@@ -78,6 +78,7 @@ fn write_yaml_and_beauty(out_dir: &Path, scene: &SceneGraph, yaml_name: &str, pn
             width: 480,
             height: 320,
             stub_rgb: (48, 72, 96),
+            style: None,
         })
         .expect("cpu beauty");
     let beauty_path = out_dir.join(png_name);
