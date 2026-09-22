@@ -318,6 +318,18 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 - Des métriques **draft** / **préfixe** optionnelles peuvent apparaître quand le prompt-lookup se déclenche.
 - Les tokens streamés restent exacts (même sampler). Batch / multi-agents N>1 stream encore.
 
+### 31. Studio Illustration (expérimental, optionnel)
+
+Hors chemin court de cohorte. Catalogue honnête : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental).
+
+- **Paramètres → Catalogue local de modules** : trouver **`illustration-studio`** (~0.7.3) → **Installer** → accepter la revue de caps.
+- Ouvrir l’onglet DeclUI **Studio Illustration**. Confirmer le tip Compose → Éditer → Beauté ; le chrome hôte sur la vue 3D affiche **édition · pas beauté** (EN : **edit view · not beauty**).
+- Composer une courte invite EN ou FR (ex. librairie / bibliothèque). Attendre des proxys MeshBox via **heuristiques mots-clés** — pas un planner SceneIntent LLM.
+- Orbite / sélection / Déplacer·Rotation·Échelle ; confirmer bandeau TRS + Annuler/Rétablir. Lancer **Beauté CPU** et/ou **Beauté stub** → PNG sous `/documents/illustrations/`.
+- **Beauté Blender** : sans Renderer Pack + binaire Blender, attendre le **mock déterministe** (chemin `render.blender` réel). Ne pas supposer que Blender GPL est dans le zip Preview.
+- **Assist mesh** : le stub procédural fonctionne ; le neural sans Model Pack reste fail-closed / mock fixture.
+- **Packs locaux** : lister les packs — hors-ligne seulement ; le fetch marketplace distant doit refuser.
+
 ### 30. USB I/O (0.16.2 / issue #137)
 
 - Sous **Windows 10/11**, brancher un adaptateur USB-série et vérifier que

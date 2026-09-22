@@ -13,6 +13,9 @@ fork/continue, Canvas scenes/guides, secrets vault key generator, Create
 chrome polish, LAN/health/Deep Thinking fixes; opt-in **external coding CLIs**
 (`harness.run` + Agents Advanced Runtime) and optional **`aos-mcpd`** MCP
 server façade ([harness.md](harness.md), [mcp-server.md](mcp-server.md)).
+Local catalogue also ships experimental **Illustration Studio** module **0.7.3**
+(edit wgpu ≠ beauty; stub/CPU beauty; Blender mock unless GPL Renderer Pack —
+[FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module)).
 Builds on 0.17.x Create workspace + painted UI chrome. Not a bootable OS.
 Cohort gate still open (**3 Windows + 1 Linux + 1 macOS Apple Silicon**,
 15-minute path). **Next:** PC cohort close; Horizon C / PV.4+ when scheduled;
