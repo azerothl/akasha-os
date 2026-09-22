@@ -864,36 +864,34 @@ pub fn ui_scene3d(
         if ui
             .add_enabled(host.undo.can_undo(), egui::Button::new(undo_l))
             .clicked()
+            && host.undo.undo(&mut graph).unwrap_or(false)
         {
-            if host.undo.undo(&mut graph).unwrap_or(false) {
-                host.mark_autosave_dirty();
-                patch = Some(Scene3dPatch {
-                    scene_key: scene_key.into(),
-                    scene: scene_val(&graph, &selected),
-                    selected_key: selected_key.into(),
-                    selected: json!(selected),
-                    beauty_path_key: None,
-                    beauty_path: None,
-                    request_autosave: false,
-                });
-            }
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_val(&graph, &selected),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
         }
         if ui
             .add_enabled(host.undo.can_redo(), egui::Button::new(redo_l))
             .clicked()
+            && host.undo.redo(&mut graph).unwrap_or(false)
         {
-            if host.undo.redo(&mut graph).unwrap_or(false) {
-                host.mark_autosave_dirty();
-                patch = Some(Scene3dPatch {
-                    scene_key: scene_key.into(),
-                    scene: scene_val(&graph, &selected),
-                    selected_key: selected_key.into(),
-                    selected: json!(selected),
-                    beauty_path_key: None,
-                    beauty_path: None,
-                    request_autosave: false,
-                });
-            }
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_val(&graph, &selected),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
         }
     });
 
@@ -905,32 +903,24 @@ pub fn ui_scene3d(
             (i.modifiers.command && i.key_pressed(egui::Key::Y))
                 || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
         });
-        if do_undo {
-            if host.undo.undo(&mut graph).unwrap_or(false) {
-                host.mark_autosave_dirty();
-                patch = Some(Scene3dPatch {
-                    scene_key: scene_key.into(),
-                    scene: scene_val(&graph, &selected),
-                    selected_key: selected_key.into(),
-                    selected: json!(selected),
-                    beauty_path_key: None,
-                    beauty_path: None,
-                    request_autosave: false,
-                });
-            }
+        let applied = if do_undo {
+            host.undo.undo(&mut graph).unwrap_or(false)
         } else if do_redo {
-            if host.undo.redo(&mut graph).unwrap_or(false) {
-                host.mark_autosave_dirty();
-                patch = Some(Scene3dPatch {
-                    scene_key: scene_key.into(),
-                    scene: scene_val(&graph, &selected),
-                    selected_key: selected_key.into(),
-                    selected: json!(selected),
-                    beauty_path_key: None,
-                    beauty_path: None,
-                    request_autosave: false,
-                });
-            }
+            host.undo.redo(&mut graph).unwrap_or(false)
+        } else {
+            false
+        };
+        if applied {
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_val(&graph, &selected),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
         }
     }
 
@@ -1237,36 +1227,34 @@ pub fn ui_scene_undo_redo(
         if ui
             .add_enabled(host.undo.can_undo(), egui::Button::new(undo_l))
             .clicked()
+            && host.undo.undo(&mut graph).unwrap_or(false)
         {
-            if host.undo.undo(&mut graph).unwrap_or(false) {
-                host.mark_autosave_dirty();
-                patch = Some(Scene3dPatch {
-                    scene_key: scene_key.into(),
-                    scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
-                    selected_key: selected_key.into(),
-                    selected: json!(selected),
-                    beauty_path_key: None,
-                    beauty_path: None,
-                    request_autosave: false,
-                });
-            }
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
         }
         if ui
             .add_enabled(host.undo.can_redo(), egui::Button::new(redo_l))
             .clicked()
+            && host.undo.redo(&mut graph).unwrap_or(false)
         {
-            if host.undo.redo(&mut graph).unwrap_or(false) {
-                host.mark_autosave_dirty();
-                patch = Some(Scene3dPatch {
-                    scene_key: scene_key.into(),
-                    scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
-                    selected_key: selected_key.into(),
-                    selected: json!(selected),
-                    beauty_path_key: None,
-                    beauty_path: None,
-                    request_autosave: false,
-                });
-            }
+            host.mark_autosave_dirty();
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+                request_autosave: false,
+            });
         }
         if host.autosave_dirty {
             ui.label(
