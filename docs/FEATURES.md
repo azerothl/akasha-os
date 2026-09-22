@@ -328,6 +328,29 @@ Slash commands:
 
 ---
 
+## 4c. Illustration Studio (experimental module)
+
+Local catalogue package **`illustration-studio` 0.7.3** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md).
+
+**What ships (honest):**
+
+| Surface | Reality |
+|---------|---------|
+| SceneGraph SoT (ADR 0011) + project YAML + undo/redo + autosave | Real |
+| wgpu **edit viewport** (`scene3d`) | Approximate realtime MeshBox/MeshAsset — **not** RenderService beauty / NPR / Blender |
+| Beauty via RenderService | **Stub** + **CPU** in-tree; optional NPR Sketch/Pencil/Ink (CPU approx) |
+| Blender beauty | Cap + isolation path real; **deterministic mock by default**; real beauty needs opt-in **GPL Renderer Pack** + Blender binary (**not** in the Preview zip / guest module) |
+| Compose | **Keyword heuristics** EN/FR → templates — **not** LLM SceneIntent / planners |
+| Pose IK/FK, camera, lights v0, comic/storyboard extensions | Real (bounded) |
+| Neural mesh assist | Cap + stub procedural real; `backend=neural` needs opt-in Model Pack (fixture/mock without weights) |
+| Marketplace | **Offline local packs only**; remote fetch fail-closed |
+
+**Do not read this as MVP §140–§145 complete.** Missing vs that written MVP include LLM SceneIntent planners, Blender-in-zip beauty QA, and a public marketplace. Blender stays a beauty backend behind a process boundary — never the project editor.
+
+Optional tester path: [TESTER.md](TESTER.md#31-illustration-studio-experimental-optional).
+
+---
+
 ## 5. Agents
 
 Observe / Think / Act loop with capability checks, confirmation, and audit.
@@ -484,7 +507,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - Bootable / bare-metal image
 - STT / always-on voice
 - Native Messages/Gemini/Bedrock APIs (OpenAI-compat Providers only)
-- Paid / public module store (opt-in signed Git catalogue is not a ClawHub clone)
+- Paid / public module store (opt-in signed Git catalogue is not a ClawHub clone; Illustration Studio pack list is offline-only)
 - Messaging channels (Slack/Discord/etc.) in the OS core
 - Simultaneous multi-user accounts
 - Multi-GPU **hard-green** without a documented 2-GPU run (code path + 1-GPU skip ship in 0.10)
@@ -495,5 +518,6 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - `webview` widget kind (pie/scatter ship in 0.10.1)
 - Second draft GGUF / vLLM-in-TCB / DFlash2 (E20 uses prompt-lookup only)
 - seL4 guest in the public Preview zip (internal `sel4-pv-*` only)
+- Illustration Studio as full MVP §140–§145 (LLM SceneIntent, Blender binary in zip, neural mesh weights, public marketplace) — the experimental module in §4c is narrower
 
 Cohort protocol: [TESTER.md](TESTER.md).

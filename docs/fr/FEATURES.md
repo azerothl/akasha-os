@@ -329,6 +329,29 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 ---
 
+## 4c. Studio Illustration (module expérimental)
+
+Paquet catalogue local **`illustration-studio` 0.7.3** (versionné **indépendamment** de l’hôte Preview **0.18.0**). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md).
+
+**Ce qui est livré (honnête) :**
+
+| Surface | Réalité |
+|---------|---------|
+| SceneGraph SoT (ADR 0011) + YAML projet + undo/redo + autosave | Réel |
+| **Fenêtre d’édition** wgpu (`scene3d`) | MeshBox/MeshAsset approximatif temps réel — **pas** beauté RenderService / NPR / Blender |
+| Beauté via RenderService | **Stub** + **CPU** in-tree ; NPR Sketch/Pencil/Ink optionnel (approx CPU) |
+| Beauté Blender | Cap + chemin d’isolation réels ; **mock déterministe par défaut** ; beauté réelle = **Renderer Pack GPL** opt-in + binaire Blender (**pas** dans le zip Preview / module guest) |
+| Compose | **Heuristiques mots-clés** EN/FR → templates — **pas** SceneIntent LLM / planners |
+| Pose IK/FK, caméra, lumières v0, extensions comic/storyboard | Réel (borné) |
+| Assist mesh neural | Cap + stub procédural réels ; `backend=neural` exige Model Pack opt-in (fixture/mock sans poids) |
+| Marketplace | **Packs locaux hors-ligne seulement** ; fetch distant fail-closed |
+
+**Ne pas lire ceci comme le MVP §140–§145 complet.** Manquent notamment les planners SceneIntent LLM, la QA beauté Blender dans le zip, et un marketplace public. Blender reste un backend beauté derrière une frontière process — jamais l’éditeur de projet.
+
+Chemin testeur optionnel : [TESTER.md](TESTER.md#31-studio-illustration-expérimental-optionnel).
+
+---
+
 ## 5. Agents
 
 Boucle Observe / Think / Act avec caps, confirmation et audit.
@@ -485,7 +508,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Image bootable / fer nu
 - STT / voix permanente
 - APIs natives Messages/Gemini/Bedrock (Providers OpenAI-compat seulement)
-- Store public / payant de modules (le catalogue Git signé opt-in n’est pas un clone de ClawHub)
+- Store public / payant de modules (le catalogue Git signé opt-in n’est pas un clone de ClawHub ; la liste de packs Studio Illustration est hors-ligne seulement)
 - Canaux de messagerie (Slack/Discord/etc.) dans le noyau OS
 - Comptes multi-utilisateur simultanés
 - Multi-GPU **hard-green** sans run 2 GPU documenté (chemin + skip 1 GPU en 0.10)
@@ -496,5 +519,6 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - kind `webview` (pie/scatter livrés en 0.10.1)
 - Second GGUF draft / vLLM dans le TCB / DFlash2 (E20 = prompt-lookup seulement)
 - Guest seL4 dans le zip Preview public (`sel4-pv-*` interne seulement)
+- Studio Illustration comme MVP §140–§145 complet (SceneIntent LLM, binaire Blender dans le zip, poids mesh neural, marketplace public) — le module expérimental §4c est plus étroit
 
 Protocole cohorte : [TESTER.md](TESTER.md).
