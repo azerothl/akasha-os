@@ -171,6 +171,12 @@ pub const ASSET_ILLUSTRATION_READ_CAP: &str = "asset.read:/assets/illustration/*
 /// Illustration asset tree prefix (fail-closed with `ASSET_ILLUSTRATION_READ_CAP`).
 pub const ILLUSTRATION_ASSETS_PREFIX: &str = "/assets/illustration/";
 
+/// Cap: heuristic prompt → SceneGraph compose.
+pub const SCENE_COMPOSE_CAP: &str = "scene.compose";
+
+/// Cap: pose / IK-lite ops on SceneGraph humanoids.
+pub const SCENE_POSE_CAP: &str = "scene.pose";
+
 /// DeclUI service: stub solid/viewport beauty placeholder PNG.
 pub const RENDER_STUB_SERVICE: &str = "render.stub.beauty";
 
@@ -185,6 +191,12 @@ pub const RENDER_RESULT_SERVICE: &str = "render.result";
 
 /// DeclUI service: instantiate an asset pack entry into the SceneGraph.
 pub const ASSET_INSTANTIATE_SERVICE: &str = "asset.instantiate";
+
+/// DeclUI service: compose SceneGraph from a short prompt (heuristics / templates).
+pub const SCENE_COMPOSE_SERVICE: &str = "scene.compose";
+
+/// DeclUI service: apply pose / IK-lite to a humanoid in the SceneGraph.
+pub const SCENE_POSE_SERVICE: &str = "scene.pose";
 
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =

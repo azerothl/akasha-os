@@ -44,7 +44,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.2.2
+version: 0.3.0
 hash: ${HASH}
 permissions:
   required_caps:
@@ -54,6 +54,8 @@ permissions:
     - render.cpu
     - render.blender
     - asset.read:/assets/illustration/**
+    - scene.compose
+    - scene.pose
     - tool.invoke:illustration-studio
 tools:
   - name: illustration.project.load

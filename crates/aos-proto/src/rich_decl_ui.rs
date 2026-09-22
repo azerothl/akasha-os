@@ -671,6 +671,30 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::SCENE_COMPOSE_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::SCENE_COMPOSE_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::SCENE_COMPOSE_CAP.into(),
+                ));
+            }
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ASSET_ILLUSTRATION_READ_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ASSET_ILLUSTRATION_READ_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::SCENE_POSE_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::SCENE_POSE_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::SCENE_POSE_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -1106,6 +1130,8 @@ mod tests {
             crate::RENDER_CPU_CAP.into(),
             crate::RENDER_BLENDER_CAP.into(),
             crate::ASSET_ILLUSTRATION_READ_CAP.into(),
+            crate::SCENE_COMPOSE_CAP.into(),
+            crate::SCENE_POSE_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
             .expect("illustration-studio ui valid");
@@ -1177,6 +1203,43 @@ mod tests {
                 &[crate::ASSET_ILLUSTRATION_READ_CAP.into()],
             )
             .expect("asset with read cap");
+
+        let compose = RichAction {
+            id: "compose".into(),
+            tool: None,
+            service: Some(crate::SCENE_COMPOSE_SERVICE.into()),
+            input: Some(serde_json::json!({"prompt": "a person on a stage"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        assert!(matches!(
+            compose.validate(&HashSet::new(), &[]).unwrap_err(),
+            RichDeclUiError::MissingCapability(_)
+        ));
+        compose
+            .validate(
+                &HashSet::new(),
+                &[
+                    crate::SCENE_COMPOSE_CAP.into(),
+                    crate::ASSET_ILLUSTRATION_READ_CAP.into(),
+                ],
+            )
+            .expect("compose with caps");
+
+        let pose = RichAction {
+            id: "pose".into(),
+            tool: None,
+            service: Some(crate::SCENE_POSE_SERVICE.into()),
+            input: Some(serde_json::json!({"preset": "wave_right"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        assert!(matches!(
+            pose.validate(&HashSet::new(), &[]).unwrap_err(),
+            RichDeclUiError::MissingCapability(_)
+        ));
+        pose.validate(&HashSet::new(), &[crate::SCENE_POSE_CAP.into()])
+            .expect("pose with cap");
     }
 
     #[test]

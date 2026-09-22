@@ -293,9 +293,14 @@ mod tests {
     fn embedded_pack_loads_and_instantiates_humanoid() {
         let pack = embedded_primitives_pack().expect("pack");
         assert!(pack.get("humanoid.placeholder").is_some());
+        assert!(pack.get("humanoid.slim").is_some());
         assert!(pack.get("prop.box").is_some());
         assert!(pack.get("prop.ground").is_some());
         assert!(pack.get("prop.pedestal").is_some());
+        assert!(pack.get("prop.counter").is_some());
+        assert!(pack.get("prop.bookshelf").is_some());
+        assert!(pack.get("prop.door").is_some());
+        assert!(pack.get("prop.chair").is_some());
         assert!(pack.get("scene.starter").is_some());
         let mut scene = SceneGraph::demo_scene();
         let r = instantiate_asset(

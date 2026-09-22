@@ -46,7 +46,7 @@ entries:
       - media.generate
       - tool.invoke:create
   - name: illustration-studio
-    version: "0.2.2"
+    version: "0.3.0"
     kind: module
     path: share/modules/illustration-studio.aospkg
     hash: sha256:934565c1f56731fbdeb505db834b62a64bf0aaf400989e3f73a0db98ae290b3b
@@ -57,6 +57,8 @@ entries:
       - render.cpu
       - render.blender
       - asset.read:/assets/illustration/**
+      - scene.compose
+      - scene.pose
       - tool.invoke:illustration-studio
   - name: mcp-example
     version: "1.0.0"

@@ -600,6 +600,12 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::ASSET_INSTANTIATE_SERVICE => {
             run_asset_instantiate(evt_tx, module, action_id, input, refresh_binds);
         }
+        aos_proto::SCENE_COMPOSE_SERVICE => {
+            run_scene_compose(evt_tx, module, action_id, input, refresh_binds);
+        }
+        aos_proto::SCENE_POSE_SERVICE => {
+            run_scene_pose(evt_tx, module, action_id, input, refresh_binds);
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -1045,6 +1051,233 @@ fn run_asset_instantiate(
             "created_ids": inst.created_ids,
             "scene_yaml": yaml,
             "pack_path": "/assets/illustration/primitives/pack.yaml",
+        }),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_scene_compose(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{compose_from_prompt, save_project_yaml, ProjectFile};
+
+    let prompt = input
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if prompt.is_empty() {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("scene.compose: missing prompt".into()),
+            refresh_binds,
+        });
+        return;
+    }
+
+    let composed = match compose_from_prompt(prompt) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("scene.compose: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let selected = composed
+        .character_id
+        .clone()
+        .unwrap_or_else(|| composed.camera_id.clone());
+    let yaml = match save_project_yaml(&ProjectFile::new(composed.scene)) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("scene.compose save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "prompt": prompt,
+            "template_id": composed.template_id,
+            "placed_assets": composed.placed_assets,
+            "character_id": composed.character_id,
+            "camera_id": composed.camera_id,
+            "root_id": selected,
+            "scene_yaml": yaml,
+        }),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_scene_pose(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{
+        apply_pose, apply_pose_preset, load_project_yaml, save_project_yaml, JointId, PoseOp,
+        ProjectFile, SceneGraph, UndoStack, Vec3,
+    };
+
+    let mut scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            SceneGraph::demo_scene()
+        } else {
+            match load_project_yaml(yaml) {
+                Ok(p) => p.scene,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene_yaml: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        }
+    } else {
+        SceneGraph::demo_scene()
+    };
+
+    let humanoid_root = input
+        .get("humanoid_root")
+        .and_then(|v| v.as_str())
+        .or_else(|| input.get("root_id").and_then(|v| v.as_str()))
+        .unwrap_or("humanoid");
+
+    let mut undo = UndoStack::default();
+    let preset = input.get("preset").and_then(|v| v.as_str());
+    let look_at = input.get("look_at");
+
+    let applied = if let Some(name) = preset {
+        apply_pose_preset(&mut scene, humanoid_root, name, Some(&mut undo))
+    } else if let Some(target) = look_at {
+        let tx = target.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let ty = target.get("y").and_then(|v| v.as_f64()).unwrap_or(1.5) as f32;
+        let tz = target.get("z").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        apply_pose(
+            &mut scene,
+            &PoseOp::LookAt {
+                humanoid_root: humanoid_root.into(),
+                target_world: Vec3::new(tx, ty, tz),
+            },
+            Some(&mut undo),
+        )
+    } else if let Some(joint) = input.get("joint").and_then(|v| v.as_str()) {
+        let Some(joint_id) = JointId::parse(joint) else {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("scene.pose: unknown joint `{joint}`")),
+                refresh_binds,
+            });
+            return;
+        };
+        let axis = input.get("axis").and_then(|v| v.as_array());
+        let ax = axis
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+        let ay = axis
+            .and_then(|a| a.get(1))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+        let az = axis
+            .and_then(|a| a.get(2))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0) as f32;
+        let angle = input
+            .get("angle_rad")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5) as f32;
+        apply_pose(
+            &mut scene,
+            &PoseOp::RotateJoint {
+                humanoid_root: humanoid_root.into(),
+                joint: joint_id,
+                axis: Vec3::new(ax, ay, az),
+                angle_rad: angle,
+            },
+            Some(&mut undo),
+        )
+    } else {
+        // Default DeclUI affordance: wave right.
+        apply_pose_preset(&mut scene, humanoid_root, "wave_right", Some(&mut undo))
+    };
+
+    let ops = match applied {
+        Ok(o) => o,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("scene.pose: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("scene.pose save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "humanoid_root": humanoid_root,
+            "preset": preset,
+            "ops_count": ops.len(),
+            "scene_yaml": yaml,
+            "root_id": humanoid_root,
         }),
         error: None,
         refresh_binds,
