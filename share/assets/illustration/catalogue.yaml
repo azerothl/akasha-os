@@ -11,16 +11,18 @@ network: deny
 packs:
   - id: illustration-primitives-v0
     kind: asset
-    version: "0.3.1"
+    version: "0.7.0"
     name: Illustration primitives
     name_fr: Primitives Illustration
     path: /assets/illustration/primitives/pack.yaml
     license: Apache-2.0
     allows_scripts: false
     allows_network: false
-    summary: Core MeshBox / prefab library (props, humanoids, starter set)
-    summary_fr: Bibliothèque MeshBox / prefab (props, humanoïdes, set de démarrage)
+    summary: MVP MeshBox / prefab pack (§142) — characters, furniture, architecture, props for bookstore demo
+    summary_fr: Pack MeshBox / prefab MVP (§142) — personnages, meubles, architecture, props pour démo librairie
     tags:
       - primitives
       - interior
       - humanoid
+      - bookstore
+      - mvp

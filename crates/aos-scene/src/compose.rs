@@ -52,10 +52,22 @@ pub struct ComposeIntent {
     pub wants_chair: bool,
     pub wants_counter: bool,
     pub wants_bookshelf: bool,
+    pub wants_sofa: bool,
+    pub wants_desk: bool,
+    pub wants_table: bool,
+    pub wants_wall: bool,
+    pub wants_window: bool,
+    pub wants_stairs: bool,
+    pub wants_lamp: bool,
+    pub wants_book: bool,
+    pub wants_cup: bool,
+    pub wants_plant: bool,
     pub wants_child: bool,
     pub wants_adult: bool,
+    pub wants_female: bool,
     pub wants_second_character: bool,
     pub wants_cat: bool,
+    pub wants_dog: bool,
 }
 
 impl ComposeIntent {
@@ -75,16 +87,32 @@ impl ComposeIntent {
         ]);
         let wants_door = has(&["door", "porte", "entrance", "entrée", "entree"]);
         let wants_chair = has(&["chair", "chaise", "seat", "siège", "siege"]);
-        let wants_counter = has(&[
-            "counter",
-            "comptoir",
-            "desk",
-            "bureau",
-            "table",
-        ]) || wants_library;
+        let wants_sofa = has(&["sofa", "couch", "canapé", "canape", "divan"]);
+        let wants_desk = has(&["desk", "bureau", "writing desk"]);
+        let wants_table = has(&["table"]) && !wants_desk;
+        let wants_counter = has(&["counter", "comptoir"]) || wants_library;
         let wants_bookshelf = wants_library
             || has(&["shelf", "shelves", "bookshelf", "rayonnage", "étagère", "etagere"]);
+        let wants_wall = wants_library || has(&["wall", "mur", "walls", "murs"]);
+        let wants_window =
+            wants_library || has(&["window", "fenêtre", "fenetre", "vitrine"]);
+        let wants_stairs = has(&["stair", "stairs", "escalier", "steps", "marches"]);
+        let wants_lamp =
+            wants_library || has(&["lamp", "lampe", "lantern", "lanterne", "lumière", "lumiere"]);
+        let wants_book = wants_library || has(&["book", "livre", "tome", "novel", "roman"]);
+        let wants_cup = has(&["cup", "mug", "tasse", "coffee", "café", "cafe", "tea", "thé"]);
+        let wants_plant =
+            wants_library || has(&["plant", "plante", "flower", "fleur", "fern", "fougère", "fougere"]);
         let wants_child = has(&["child", "kid", "enfant", "fille", "garçon", "garcon"]);
+        let wants_female = has(&[
+            "woman",
+            "female",
+            "femme",
+            "lady",
+            "dame",
+            "girl",
+            "fille",
+        ]);
         let wants_adult = has(&[
             "man",
             "woman",
@@ -97,6 +125,8 @@ impl ComposeIntent {
             "humanoide",
             "character",
             "personnage",
+            "adult",
+            "adulte",
         ]);
         let wants_second_character = has(&["two", "deux", "both", "pair", "together", "ensemble"])
             || (wants_child && wants_adult);
@@ -105,21 +135,35 @@ impl ComposeIntent {
             "chat",
             "kitten",
             "chaton",
-            "quadruped",
-            "animal",
             "félin",
             "felin",
-        ]);
+            "quadruped",
+            "animal",
+        ]) && !has(&["dog", "chien", "puppy", "chiot", "hound"]);
+        let wants_dog = has(&["dog", "chien", "puppy", "chiot", "hound"]);
+        let animal_only = (wants_cat || wants_dog) && !wants_adult && !wants_child;
         Self {
             wants_library,
             wants_door,
             wants_chair,
             wants_counter,
             wants_bookshelf,
+            wants_sofa,
+            wants_desk,
+            wants_table,
+            wants_wall,
+            wants_window,
+            wants_stairs,
+            wants_lamp,
+            wants_book,
+            wants_cup,
+            wants_plant,
             wants_child,
-            wants_adult: wants_adult || (!wants_child && !wants_cat && !prompt.trim().is_empty()),
+            wants_adult: wants_adult || (!wants_child && !animal_only && !prompt.trim().is_empty()),
+            wants_female,
             wants_second_character,
             wants_cat,
+            wants_dog,
         }
     }
 }
@@ -145,7 +189,16 @@ pub fn compose_from_prompt_with_pack(
     let intent = ComposeIntent::from_prompt(prompt);
     let template_id = if intent.wants_library {
         "interior_library"
-    } else if intent.wants_counter || intent.wants_bookshelf || intent.wants_door || intent.wants_chair
+    } else if intent.wants_counter
+        || intent.wants_bookshelf
+        || intent.wants_door
+        || intent.wants_chair
+        || intent.wants_sofa
+        || intent.wants_desk
+        || intent.wants_table
+        || intent.wants_wall
+        || intent.wants_window
+        || intent.wants_stairs
     {
         "interior_room"
     } else {
@@ -166,6 +219,39 @@ pub fn compose_from_prompt_with_pack(
     )?;
 
     if template_id == "interior_library" || template_id == "interior_room" {
+        if intent.wants_wall {
+            place(
+                &mut scene,
+                pack,
+                "arch.wall",
+                "wall_",
+                Vec3::new(0.0, 0.0, -2.4),
+                &mut placed,
+            )?;
+            let side_wall = place(
+                &mut scene,
+                pack,
+                "arch.wall",
+                "wallb_",
+                Vec3::new(-3.2, 0.0, 0.0),
+                &mut placed,
+            )?;
+            if let Some(node) = scene.nodes.get_mut(&side_wall) {
+                // Rotate side wall ~90° around Y (xyzw).
+                node.transform.rotation =
+                    Quat::from_axis_angle(Vec3::UNIT_Y, std::f32::consts::FRAC_PI_2);
+            }
+        }
+        if intent.wants_window {
+            place(
+                &mut scene,
+                pack,
+                "arch.window",
+                "window_",
+                Vec3::new(1.4, 0.0, -2.25),
+                &mut placed,
+            )?;
+        }
         if intent.wants_bookshelf || intent.wants_library {
             place(
                 &mut scene,
@@ -214,6 +300,94 @@ pub fn compose_from_prompt_with_pack(
                 &mut placed,
             )?;
         }
+        if intent.wants_sofa || intent.wants_library {
+            place(
+                &mut scene,
+                pack,
+                "prop.sofa",
+                "sofa_",
+                Vec3::new(2.0, 0.0, 1.2),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_desk {
+            place(
+                &mut scene,
+                pack,
+                "prop.desk",
+                "desk_",
+                Vec3::new(-1.4, 0.0, 0.6),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_table {
+            place(
+                &mut scene,
+                pack,
+                "prop.table",
+                "table_",
+                Vec3::new(0.4, 0.0, 1.6),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_stairs {
+            place(
+                &mut scene,
+                pack,
+                "arch.stairs",
+                "stairs_",
+                Vec3::new(2.6, 0.0, -0.8),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_lamp {
+            place(
+                &mut scene,
+                pack,
+                "prop.lamp",
+                "lamp_",
+                Vec3::new(0.7, 0.9, -0.2),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_book {
+            place(
+                &mut scene,
+                pack,
+                "prop.book",
+                "book_",
+                Vec3::new(-0.4, 0.92, -0.15),
+                &mut placed,
+            )?;
+            place(
+                &mut scene,
+                pack,
+                "prop.book",
+                "bookb_",
+                Vec3::new(-0.55, 0.96, -0.1),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_cup {
+            place(
+                &mut scene,
+                pack,
+                "prop.cup",
+                "cup_",
+                Vec3::new(0.35, 0.95, -0.25),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_plant {
+            place(
+                &mut scene,
+                pack,
+                "prop.plant",
+                "plant_",
+                Vec3::new(-2.4, 0.0, 1.4),
+                &mut placed,
+            )?;
+        }
     } else {
         // Stage blockout: pedestal + box so beauty/viewport stay interesting.
         place(
@@ -232,12 +406,34 @@ pub fn compose_from_prompt_with_pack(
             Vec3::new(0.0, 0.675, 0.0),
             &mut placed,
         )?;
+        if intent.wants_lamp {
+            place(
+                &mut scene,
+                pack,
+                "prop.lamp",
+                "lamp_",
+                Vec3::new(-1.0, 0.0, 0.4),
+                &mut placed,
+            )?;
+        }
+        if intent.wants_plant {
+            place(
+                &mut scene,
+                pack,
+                "prop.plant",
+                "plant_",
+                Vec3::new(1.2, 0.0, -0.6),
+                &mut placed,
+            )?;
+        }
     }
 
     let mut character_id = None;
     if intent.wants_adult || intent.wants_child {
         let primary_asset = if intent.wants_child && !intent.wants_adult {
             "humanoid.slim"
+        } else if intent.wants_female {
+            "humanoid.female"
         } else {
             "humanoid.placeholder"
         };
@@ -257,8 +453,12 @@ pub fn compose_from_prompt_with_pack(
         character_id = Some(root);
 
         if intent.wants_second_character {
-            let secondary = if primary_asset == "humanoid.placeholder" {
+            let secondary = if primary_asset == "humanoid.placeholder"
+                || primary_asset == "humanoid.female"
+            {
                 "humanoid.slim"
+            } else if intent.wants_female {
+                "humanoid.female"
             } else {
                 "humanoid.placeholder"
             };
@@ -289,6 +489,25 @@ pub fn compose_from_prompt_with_pack(
         )?;
         if character_id.is_none() {
             character_id = Some(cat_root);
+        }
+    }
+
+    if intent.wants_dog {
+        let dog_pos = if template_id.starts_with("interior") {
+            Vec3::new(-1.0, 0.0, 1.0)
+        } else {
+            Vec3::new(-1.2, 0.0, 0.8)
+        };
+        let dog_root = place(
+            &mut scene,
+            pack,
+            "quadruped.dog",
+            "dog_",
+            dog_pos,
+            &mut placed,
+        )?;
+        if character_id.is_none() {
+            character_id = Some(dog_root);
         }
     }
 
@@ -375,7 +594,14 @@ mod tests {
         assert_eq!(r.template_id, "interior_library");
         assert!(r.placed_assets.iter().any(|a| a == "prop.bookshelf"));
         assert!(r.placed_assets.iter().any(|a| a == "prop.counter"));
+        assert!(r.placed_assets.iter().any(|a| a == "arch.wall"));
+        assert!(r.placed_assets.iter().any(|a| a == "arch.window"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.sofa"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.lamp"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.book"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.plant"));
         assert!(r.placed_assets.iter().any(|a| a == "humanoid.placeholder"));
+        assert!(r.placed_assets.iter().any(|a| a == "quadruped.cat"));
         assert!(r.scene.nodes.contains_key("camera"));
         assert_eq!(r.scene.active_camera.as_deref(), Some("camera"));
         r.scene.validate().expect("valid");
@@ -386,6 +612,22 @@ mod tests {
         let r = compose_from_prompt("a child stands near a chair").expect("compose");
         assert!(r.placed_assets.iter().any(|a| a == "humanoid.slim"));
         assert!(r.placed_assets.iter().any(|a| a == "prop.chair"));
+    }
+
+    #[test]
+    fn woman_prompt_uses_female_variant() {
+        let r = compose_from_prompt("a woman sits on a sofa near a desk").expect("compose");
+        assert!(r.placed_assets.iter().any(|a| a == "humanoid.female"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.sofa"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.desk"));
+    }
+
+    #[test]
+    fn dog_prompt_places_quadruped_without_forced_humanoid() {
+        let r = compose_from_prompt("a dog near a plant").expect("compose");
+        assert!(r.placed_assets.iter().any(|a| a == "quadruped.dog"));
+        assert!(r.placed_assets.iter().any(|a| a == "prop.plant"));
+        assert!(!r.placed_assets.iter().any(|a| a.starts_with("humanoid.")));
     }
 
     #[test]
@@ -402,5 +644,32 @@ mod tests {
         assert_eq!(r.template_id, "default_stage");
         assert!(r.character_id.is_some());
         assert!(r.placed_assets.iter().any(|a| a == "prop.pedestal"));
+    }
+
+    #[test]
+    fn bookstore_demo_prompt_is_coherent() {
+        let r = compose_from_prompt(
+            "An old bookstore. A man enters through the door while a cat lies on the counter watching him.",
+        )
+        .expect("compose");
+        assert_eq!(r.template_id, "interior_library");
+        for id in [
+            "prop.door",
+            "prop.counter",
+            "prop.bookshelf",
+            "arch.wall",
+            "arch.window",
+            "prop.lamp",
+            "prop.book",
+            "humanoid.placeholder",
+            "quadruped.cat",
+        ] {
+            assert!(
+                r.placed_assets.iter().any(|a| a == id),
+                "missing asset {id} in {:?}",
+                r.placed_assets
+            );
+        }
+        r.scene.validate().expect("valid");
     }
 }

@@ -324,7 +324,7 @@ impl InpaintMask {
         }
     }
 
-    pub fn save_logical_png(&self, logical_path: &str) -> Result<(), String> {
+    pub fn save_logical_png(&self, logical_path: &str) -> Result<PathBuf, String> {
         let host = logical_host_path(logical_path);
         if let Some(parent) = host.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -338,7 +338,8 @@ impl InpaintMask {
         let mut buf = Vec::new();
         img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
             .map_err(|e| e.to_string())?;
-        std::fs::write(&host, buf).map_err(|e| e.to_string())
+        std::fs::write(&host, &buf).map_err(|e| e.to_string())?;
+        Ok(host)
     }
 }
 
@@ -370,15 +371,37 @@ mod tests {
 
     #[test]
     fn inpaint_mask_paint_and_save() {
+        // Isolate from parallel tests that mutate process-global AOS_HOME / cwd.
+        let root = std::env::temp_dir().join(format!(
+            "aos-inpaint-mask-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&root).expect("temp aos home");
+        let previous = std::env::var_os("AOS_HOME");
+        std::env::set_var("AOS_HOME", &root);
+
         let mut mask = InpaintMask::new(8, 8);
         assert!(!mask.has_paint());
         mask.paint_brush(0.5, 0.5, 0.25);
         assert!(mask.has_paint());
         let logical = format!("/downloads/test-mask-{}.png", std::process::id());
-        mask.save_logical_png(&logical).expect("save mask");
-        let host = logical_host_path(&logical);
-        assert!(host.is_file());
-        let _ = std::fs::remove_file(host);
+        let host = mask.save_logical_png(&logical).expect("save mask");
+        assert!(
+            host.is_file(),
+            "mask not written at {}",
+            host.display()
+        );
+        let _ = std::fs::remove_file(&host);
+
+        match previous {
+            Some(value) => std::env::set_var("AOS_HOME", value),
+            None => std::env::remove_var("AOS_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
