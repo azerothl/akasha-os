@@ -1,6 +1,6 @@
 name: illustration-studio
-version: 0.7.3
-hash: 19563187aa1aec87c3e3d86c3e353a89eb1fbe8d417a512c09ee88e37b70def1
+version: 0.7.4
+hash: 23b064c101102edde38311706bf0b337733de2127355c71139b0ca2323b75a37
 permissions:
   required_caps:
     - fs.read:/documents/illustrations/**
