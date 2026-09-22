@@ -8,6 +8,17 @@ Cap: `asset.read:/assets/illustration/**` (fail-closed; `..` denied)
 | Path | Contents |
 |------|----------|
 | `primitives/pack.yaml` | Core MeshBox / prefab library (ADR 0011 metres, Y-up) |
+| `styles/traditional-drawing/` | NPR style pack — Sketch / Pencil / Ink (YAML data) |
+
+### Style pack (NPR)
+
+| Id | Family | Notes |
+|----|--------|-------|
+| `sketch` | Sketch / Esquisse | Loose jittered line art |
+| `pencil` | Pencil / Crayon | Graphite + cross-hatch (default DeclUI) |
+| `ink` | Ink / Encre | Bold lines + sparse hatch |
+
+Host embeds these styles in `aos-scene` for offline / CI. See `docs/illustration-npr-styles.md`.
 
 ### Primitives entries (v1 functional)
 

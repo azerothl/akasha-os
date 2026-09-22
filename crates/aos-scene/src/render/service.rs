@@ -7,6 +7,7 @@ use super::blender::BlenderRenderBackend;
 use super::cpu::CpuWireframeBackend;
 use super::stub::StubRenderBackend;
 use crate::scene::{SceneGraph, ILLUSTRATIONS_DOCUMENTS_PREFIX};
+use crate::style::{parse_optional_style, ResolvedStyle};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -44,6 +45,8 @@ pub struct RenderSubmit {
     pub height: u32,
     pub output_path: String,
     pub stub_rgb: (u8, u8, u8),
+    /// Optional NPR style id resolved before submit (or `None` for legacy look).
+    pub style: Option<ResolvedStyle>,
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +155,7 @@ impl RenderService {
             width: submit.width,
             height: submit.height,
             stub_rgb: submit.stub_rgb,
+            style: submit.style,
         };
 
         match backend.render(&req) {
@@ -232,6 +236,7 @@ impl RenderService {
             height: 64,
             output_path: path.into(),
             stub_rgb: rgb,
+            style: None,
         })
     }
 }
@@ -254,6 +259,14 @@ pub fn parse_pass(s: Option<&str>) -> Result<RenderPassKind, RenderError> {
     }
 }
 
+/// Parse optional NPR style from DeclUI (`style` / `style_id`). Fail-closed on unknown.
+pub fn parse_style(s: Option<&str>) -> Result<Option<ResolvedStyle>, RenderError> {
+    parse_optional_style(s).map_err(|e| match e {
+        crate::style::StyleError::UnknownStyle(id) => RenderError::UnknownStyle(id),
+        other => RenderError::Scene(other.to_string()),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,6 +284,7 @@ mod tests {
                 height: 64,
                 output_path: "/documents/illustrations/beauty-stub.png".into(),
                 stub_rgb: (10, 20, 30),
+                style: None,
             })
             .expect("submit");
         let st = svc.status(&job).expect("status");
@@ -292,6 +306,7 @@ mod tests {
                 height: 64,
                 output_path: "/tmp/evil.png".into(),
                 stub_rgb: (0, 0, 0),
+                style: None,
             })
             .unwrap_err();
         assert!(matches!(err, RenderError::PathDenied(_)));
@@ -309,10 +324,30 @@ mod tests {
                 height: 72,
                 output_path: "/documents/illustrations/beauty-cpu.png".into(),
                 stub_rgb: (0, 0, 0),
+                style: None,
             })
             .expect("cpu");
         assert_eq!(res.backend, RenderBackendId::Cpu);
         assert_eq!(res.width, 96);
+    }
+
+    #[test]
+    fn cpu_npr_pencil_job() {
+        let svc = RenderService::default();
+        let style = crate::style::resolve_style("pencil").unwrap();
+        let res = svc
+            .submit_and_result(RenderSubmit {
+                scene: SceneGraph::demo_scene(),
+                backend: RenderBackendId::Cpu,
+                pass: RenderPassKind::Beauty,
+                width: 128,
+                height: 96,
+                output_path: "/documents/illustrations/beauty-pencil.png".into(),
+                stub_rgb: (0, 0, 0),
+                style: Some(style),
+            })
+            .expect("cpu pencil");
+        assert!(res.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
     }
 
     #[test]
@@ -329,9 +364,16 @@ mod tests {
                 height: 60,
                 output_path: "/documents/illustrations/beauty-blender.png".into(),
                 stub_rgb: (0, 0, 0),
+                style: None,
             })
             .expect("blender auto/mock");
         assert_eq!(res.backend, RenderBackendId::Blender);
         assert!(res.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
+    }
+
+    #[test]
+    fn unknown_style_rejected() {
+        let err = parse_style(Some("watercolor_wet")).unwrap_err();
+        assert!(matches!(err, RenderError::UnknownStyle(_)));
     }
 }

@@ -52,8 +52,14 @@ impl RenderBackend for BlenderRenderBackend {
     fn render(&self, req: &RenderRequest) -> Result<RenderOutput, RenderError> {
         let w = req.width.clamp(16, BLENDER_MAX_EDGE);
         let h = req.height.clamp(16, BLENDER_MAX_EDGE);
-        let export = AkashaSceneExport::from_scene(&req.scene, w, h, req.pass.as_str())
-            .map_err(RenderError::Scene)?;
+        let export = AkashaSceneExport::from_scene_with_style(
+            &req.scene,
+            w,
+            h,
+            req.pass.as_str(),
+            req.style.as_ref(),
+        )
+        .map_err(RenderError::Scene)?;
         let digest = export.digest_hex().map_err(RenderError::Scene)?;
 
         let use_mock = match self.mode {
@@ -71,7 +77,7 @@ impl RenderBackend for BlenderRenderBackend {
         };
 
         if use_mock {
-            return mock_beauty(w, h, req.pass, &digest);
+            return mock_beauty(w, h, req.pass, &digest, req.style.as_ref());
         }
 
         self.render_real(req, &export, w, h)
@@ -166,28 +172,45 @@ fn make_work_dir() -> Result<PathBuf, RenderError> {
     Ok(dir)
 }
 
-/// Deterministic mock beauty: solid teal field + digest-tinted strip.
-/// Distinct from stub (grey-blue) and CPU wireframe so DeclUI can tell modes apart.
+/// Deterministic mock beauty: paper/style field + digest-tinted strip.
+/// Distinct from stub and CPU so DeclUI can tell modes apart. Style-aware
+/// so Sketch / Pencil / Ink mock previews differ without Blender installed.
 fn mock_beauty(
     w: u32,
     h: u32,
     pass: RenderPassKind,
     digest_hex: &str,
+    style: Option<&crate::style::ResolvedStyle>,
 ) -> Result<RenderOutput, RenderError> {
     let tint = u8::from_str_radix(&digest_hex[0..2], 16).unwrap_or(0x40);
-    let bg = match pass {
-        RenderPassKind::Beauty => [24u8, 96, 88, 255],
-        RenderPassKind::Wireframe => [16u8, 48, 44, 255],
+    let bg = if let Some(st) = style {
+        let t = st.paper_tint;
+        match pass {
+            RenderPassKind::Beauty => [t[0], t[1], t[2], 255],
+            RenderPassKind::Wireframe => [
+                t[0].saturating_sub(20),
+                t[1].saturating_sub(20),
+                t[2].saturating_sub(20),
+                255,
+            ],
+        }
+    } else {
+        match pass {
+            RenderPassKind::Beauty => [24u8, 96, 88, 255],
+            RenderPassKind::Wireframe => [16u8, 48, 44, 255],
+        }
     };
+    let stroke = style.map(|s| s.stroke_rgb()).unwrap_or([tint, tint.wrapping_add(40), 200]);
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let on_strip = y < 4 || (y >= h.saturating_sub(4));
-            if on_strip {
-                rgba[i] = tint;
-                rgba[i + 1] = tint.wrapping_add(40);
-                rgba[i + 2] = 200;
+            let on_frame = style.is_some() && (x < 3 || x >= w.saturating_sub(3));
+            if on_strip || on_frame {
+                rgba[i] = stroke[0];
+                rgba[i + 1] = stroke[1];
+                rgba[i + 2] = stroke[2];
                 rgba[i + 3] = 255;
             } else {
                 rgba[i..i + 4].copy_from_slice(&bg);
@@ -198,8 +221,18 @@ fn mock_beauty(
     if w >= 2 && h >= 1 {
         rgba[0] = b'B';
         rgba[1] = b'M';
-        rgba[2] = 1;
+        rgba[2] = 0;
         rgba[3] = 255;
+        rgba[4] = style
+            .map(|s| match s.family {
+                crate::style::StyleFamily::Sketch => b'S',
+                crate::style::StyleFamily::Pencil => b'P',
+                crate::style::StyleFamily::Ink => b'I',
+            })
+            .unwrap_or(b'B');
+        rgba[5] = 0;
+        rgba[6] = 0;
+        rgba[7] = 255;
     }
     let png = encode_rgba8_png(w, h, &rgba).map_err(RenderError::Encode)?;
     Ok(RenderOutput {
@@ -215,6 +248,7 @@ fn mock_beauty(
 mod tests {
     use super::*;
     use crate::scene::SceneGraph;
+    use crate::style::resolve_style;
 
     #[test]
     fn mock_mode_produces_png() {
@@ -230,6 +264,7 @@ mod tests {
                 width: 64,
                 height: 48,
                 stub_rgb: (0, 0, 0),
+                style: None,
             })
             .expect("mock");
         assert_eq!(out.backend_id, RenderBackendId::Blender);
@@ -251,10 +286,41 @@ mod tests {
             width: 32,
             height: 32,
             stub_rgb: (0, 0, 0),
+            style: None,
         };
         let a = backend.render(&req).unwrap();
         let b = backend.render(&req).unwrap();
         assert_eq!(a.png, b.png);
+    }
+
+    #[test]
+    fn mock_style_marker_differs() {
+        let backend = BlenderRenderBackend {
+            mode: BlenderRunMode::Mock,
+            prefer_bwrap: false,
+            timeout: Duration::from_secs(5),
+        };
+        let pencil = backend
+            .render(&RenderRequest {
+                scene: SceneGraph::demo_scene(),
+                pass: RenderPassKind::Beauty,
+                width: 32,
+                height: 32,
+                stub_rgb: (0, 0, 0),
+                style: Some(resolve_style("pencil").unwrap()),
+            })
+            .unwrap();
+        let ink = backend
+            .render(&RenderRequest {
+                scene: SceneGraph::demo_scene(),
+                pass: RenderPassKind::Beauty,
+                width: 32,
+                height: 32,
+                stub_rgb: (0, 0, 0),
+                style: Some(resolve_style("ink").unwrap()),
+            })
+            .unwrap();
+        assert_ne!(pencil.png, ink.png);
     }
 
     #[test]
@@ -275,6 +341,7 @@ mod tests {
                 width: 128,
                 height: 96,
                 stub_rgb: (0, 0, 0),
+                style: Some(resolve_style("ink").unwrap()),
             })
             .expect("real blender");
         assert!(out.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));

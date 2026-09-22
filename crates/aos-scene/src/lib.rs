@@ -7,8 +7,9 @@
 //! Backends convert; this crate never speaks Blender Z-up.
 //!
 //! Product suite: backend-agnostic [`RenderService`] (stub + CPU + optional
-//! Blender-isolated beauty) and minimal [`assets`] pack format. Blender / `bpy`
-//! stay in the separate Renderer Pack — never linked here.
+//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), and
+//! minimal [`assets`] pack format. Blender / `bpy` stay in the separate
+//! Renderer Pack — never linked here.
 //!
 //! Edit viewport: [`viewport`] is a wgpu lit MeshBox view of the same SceneGraph
 //! (DeclUI `scene3d`). It is **not** a beauty / NPR RenderService backend.
@@ -23,6 +24,7 @@ mod project;
 mod render;
 mod render_stub;
 mod scene;
+mod style;
 pub mod viewport;
 
 pub use assets::{
@@ -43,7 +45,7 @@ pub use pose::{
 };
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use render::{
-    isolation_matrix, parse_backend, parse_pass, AkashaSceneExport, BlenderRenderBackend,
+    isolation_matrix, parse_backend, parse_pass, parse_style, AkashaSceneExport, BlenderRenderBackend,
     BlenderRunMode, CpuWireframeBackend, IsolationRow, JobState, RenderBackend, RenderBackendId,
     RenderError, RenderJobStatus, RenderOutput, RenderPassKind, RenderRequest, RenderResult,
     RenderService, RenderSubmit, StubRenderBackend, AKASHA_SCENE_EXPORT_VERSION,
@@ -53,6 +55,13 @@ pub use render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 pub use scene::{
     CameraParams, NodeKind, SceneGraph, SceneNode, Transform, DEFAULT_SCENE_YAML_PATH,
     ILLUSTRATIONS_DOCUMENTS_PREFIX,
+};
+pub use style::{
+    embedded_styles, load_style_pack_manifest_yaml, load_style_yaml, parse_optional_style,
+    resolve_style, ResolvedStyle, StyleColor, StyleDef, StyleError, StyleFamily, StyleLine,
+    StylePackManifest, StylePaper, StyleShading, DEFAULT_STYLE_ID, EMBEDDED_STYLE_INK_YAML,
+    EMBEDDED_STYLE_PACK_MANIFEST_YAML, EMBEDDED_STYLE_PENCIL_YAML, EMBEDDED_STYLE_SKETCH_YAML,
+    ILLUSTRATION_STYLES_PREFIX, STYLE_PACK_FORMAT_VERSION,
 };
 pub use viewport::{
     collect_mesh_instances, eye_from_orbit, look_at_rh, perspective_rh, project_point_ndc,

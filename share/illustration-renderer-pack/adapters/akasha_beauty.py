@@ -145,6 +145,39 @@ def main() -> int:
     scene.render.resolution_y = height
     scene.render.filepath = out_path
     scene.render.image_settings.file_format = "PNG"
+
+    # Optional NPR style from Akasha export (Sketch / Pencil / Ink).
+    # Freestyle line art is the pack-side approximation; host stays bpy-free.
+    style = data.get("style") or {}
+    family = str(style.get("family") or "").lower()
+    if family in ("sketch", "pencil", "ink"):
+        scene.render.use_freestyle = True
+        try:
+            linestyle = bpy.context.view_layer.freestyle_settings.linesets[0].linestyle
+            linewidth = float(style.get("line_width") or 1.2)
+            linestyle.thickness = max(0.5, min(linewidth * 1.5, 6.0))
+            jitter = float(style.get("jitter") or 0.0)
+            if family == "sketch":
+                linestyle.thickness *= 0.85
+            elif family == "ink":
+                linestyle.thickness *= 1.35
+            # Soften world for paper-like look when tint present.
+            tint = style.get("paper_tint") or [248, 246, 240]
+            if hasattr(scene, "world") and scene.world is not None:
+                scene.world.use_nodes = True
+                bg = scene.world.node_tree.nodes.get("Background")
+                if bg is not None:
+                    bg.inputs[0].default_value = (
+                        float(tint[0]) / 255.0,
+                        float(tint[1]) / 255.0,
+                        float(tint[2]) / 255.0,
+                        1.0,
+                    )
+            _ = jitter  # reserved for future noise modifiers in pack scripts
+        except Exception:
+            # Freestyle / lineset may be unavailable in minimal builds — still render.
+            pass
+
     bpy.ops.render.render(write_still=True)
     return 0
 

@@ -712,7 +712,8 @@ async fn run_render_submit(
 ) {
     use aos_proto::FsWriteBytesRequest;
     use aos_scene::{
-        load_project_yaml, parse_backend, parse_pass, RenderBackendId, RenderSubmit, SceneGraph,
+        load_project_yaml, parse_backend, parse_pass, parse_style, RenderBackendId, RenderSubmit,
+        SceneGraph,
     };
     use base64::Engine as _;
 
@@ -753,6 +754,25 @@ async fn run_render_submit(
     let r = input.get("r").and_then(|v| v.as_u64()).unwrap_or(48) as u8;
     let g = input.get("g").and_then(|v| v.as_u64()).unwrap_or(72) as u8;
     let b = input.get("b").and_then(|v| v.as_u64()).unwrap_or(96) as u8;
+    let style = match parse_style(
+        input
+            .get("style")
+            .or_else(|| input.get("style_id"))
+            .and_then(|v| v.as_str()),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(e.to_string()),
+                refresh_binds,
+            });
+            return;
+        }
+    };
 
     let scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
         if yaml.trim().is_empty() {
@@ -792,6 +812,7 @@ async fn run_render_submit(
         height,
         output_path: path.to_string(),
         stub_rgb: (r, g, b),
+        style,
     }) {
         Ok(res) => res,
         Err(e) => {
@@ -835,6 +856,11 @@ async fn run_render_submit(
                     "width": rendered.width,
                     "height": rendered.height,
                     "status": "succeeded",
+                    "style": input
+                        .get("style")
+                        .or_else(|| input.get("style_id"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(""),
                 }),
                 error: None,
                 refresh_binds,

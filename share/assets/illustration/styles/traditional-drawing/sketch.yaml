@@ -1,0 +1,20 @@
+# NPR style: Sketch / esquisse (spec Phase 5).
+id: sketch
+family: sketch
+renderer: npr
+line:
+  type: sketch
+  width: 0.9
+  jitter: 0.35
+  opacity: 0.72
+shading:
+  type: none
+  contrast: 0.25
+color:
+  saturation: 0
+paper:
+  texture: newsprint
+  tint: [245, 242, 232]
+aliases:
+  - sketch_loose
+  - esquisse

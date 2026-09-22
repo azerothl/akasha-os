@@ -5,6 +5,7 @@
 //! never import `bpy` and never speak Blender axes in core types.
 
 use crate::scene::{NodeKind, SceneGraph, SceneNode};
+use crate::style::ResolvedStyle;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -21,10 +22,42 @@ pub struct AkashaSceneExport {
     pub width: u32,
     pub height: u32,
     pub pass: String,
+    /// Optional NPR style payload for Renderer Pack adapters (Sketch / Pencil / Ink).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<ExportStyle>,
     pub active_camera: Option<String>,
     /// Nodes keyed by id in sorted order for byte-stable JSON.
     pub nodes: BTreeMap<String, ExportNode>,
     pub roots: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ExportStyle {
+    pub id: String,
+    pub family: String,
+    pub line_width: f32,
+    pub jitter: f32,
+    pub opacity: f32,
+    pub shading: String,
+    pub contrast: f32,
+    pub paper_tint: [u8; 3],
+    pub paper_texture: String,
+}
+
+impl ExportStyle {
+    pub fn from_resolved(s: &ResolvedStyle) -> Self {
+        Self {
+            id: s.id.clone(),
+            family: s.family.as_str().into(),
+            line_width: s.line_width,
+            jitter: s.jitter,
+            opacity: s.opacity,
+            shading: s.shading.clone(),
+            contrast: s.contrast,
+            paper_tint: s.paper_tint,
+            paper_texture: s.paper_texture.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -58,6 +91,16 @@ impl AkashaSceneExport {
         height: u32,
         pass: &str,
     ) -> Result<Self, String> {
+        Self::from_scene_with_style(scene, width, height, pass, None)
+    }
+
+    pub fn from_scene_with_style(
+        scene: &SceneGraph,
+        width: u32,
+        height: u32,
+        pass: &str,
+        style: Option<&ResolvedStyle>,
+    ) -> Result<Self, String> {
         scene.validate().map_err(|e| e.to_string())?;
         let mut nodes = BTreeMap::new();
         let mut ids: Vec<_> = scene.nodes.keys().cloned().collect();
@@ -77,6 +120,7 @@ impl AkashaSceneExport {
             width,
             height,
             pass: pass.to_string(),
+            style: style.map(ExportStyle::from_resolved),
             active_camera: scene.active_camera.clone(),
             nodes,
             roots,

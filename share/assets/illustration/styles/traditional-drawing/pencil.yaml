@@ -1,0 +1,22 @@
+# NPR style: Pencil / crayon (spec §34 pencil_classic).
+id: pencil
+family: pencil
+renderer: npr
+line:
+  type: pencil
+  width: 1.2
+  jitter: 0.15
+  opacity: 0.85
+shading:
+  type: cross_hatching
+  contrast: 0.7
+color:
+  saturation: 0
+paper:
+  texture: rough
+  tint: [250, 248, 240]
+graphite:
+  hardness: HB
+aliases:
+  - pencil_classic
+  - crayon
