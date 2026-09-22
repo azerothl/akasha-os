@@ -6,6 +6,9 @@
 //! SceneGraph remains the only SoT; this module never touches the host FS.
 
 use crate::assets::{embedded_primitives_pack, instantiate_asset, AssetError};
+use crate::camera::{
+    camera_transform_look_at, eye_from_orbit, orbit_from_active_camera, set_focal_from_hfov,
+};
 use crate::compose::{compose_from_prompt, ComposeError};
 use crate::locks::{
     LockError, LockKind, LockScope, LockTable, MutateKind, SemanticLock, SCENE_LOCK_CAP,
@@ -14,7 +17,7 @@ use crate::math::{Quat, Vec3};
 use crate::ops::{SceneOp, UndoStack};
 use crate::pose::{apply_pose, apply_pose_preset, JointId, PoseError, PoseOp};
 use crate::project::{load_project_yaml, save_project_yaml, ProjectFile, ProjectError};
-use crate::scene::{SceneError, SceneGraph, Transform};
+use crate::scene::{NodeKind, SceneError, SceneGraph, Transform};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -29,6 +32,9 @@ pub const SCENE_SELECT_SERVICE: &str = "scene.select";
 
 /// DeclUI / host_call: set node TRS.
 pub const SCENE_TRS_SERVICE: &str = "scene.trs";
+
+/// DeclUI / host_call: set active camera orbit / look-at / FOV.
+pub const SCENE_CAMERA_SERVICE: &str = "scene.camera";
 
 /// DeclUI / host_call: transactional batch apply / rollback.
 pub const SCENE_APPLY_SERVICE: &str = "scene.apply";
@@ -47,6 +53,24 @@ pub enum AgentEditOp {
         rotation: Option<Quat>,
         #[serde(default)]
         scale: Option<Vec3>,
+    },
+    /// Active (or named) camera: eye / look-at / horizontal FOV degrees.
+    Camera {
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        eye: Option<Vec3>,
+        #[serde(default)]
+        look_at: Option<Vec3>,
+        /// Horizontal FOV in **degrees** (UI / agent boundary).
+        #[serde(default)]
+        fov_deg: Option<f32>,
+        #[serde(default)]
+        yaw: Option<f32>,
+        #[serde(default)]
+        pitch: Option<f32>,
+        #[serde(default)]
+        distance: Option<f32>,
     },
     Pose {
         humanoid_root: String,
@@ -145,6 +169,8 @@ pub enum EditError {
     UnknownNode(String),
     #[error("pose op requires preset, look_at, or joint+axis+angle_rad")]
     IncompletePose,
+    #[error("camera op requires eye+look_at, orbit (yaw/pitch/distance+look_at), or fov_deg")]
+    IncompleteCamera,
     #[error("empty apply batch")]
     EmptyBatch,
     #[error("actor `{0}` denied — missing capability")]
@@ -222,6 +248,73 @@ pub fn apply_one(
             let mut undo = UndoStack::default();
             undo.push_apply(&mut snap.project.scene, op)?;
             snap.selected_id = Some(id.clone());
+            Ok(())
+        }
+        AgentEditOp::Camera {
+            id,
+            eye,
+            look_at,
+            fov_deg,
+            yaw,
+            pitch,
+            distance,
+        } => {
+            let cam_id = id
+                .clone()
+                .or_else(|| snap.project.scene.active_camera.clone())
+                .ok_or_else(|| EditError::UnknownNode("camera".into()))?;
+            if actor_kind == EditActorKind::Agent {
+                snap.project.locks.assert_agent_may_mutate(
+                    &snap.project.scene,
+                    &cam_id,
+                    MutateKind::Transform,
+                )?;
+            }
+            let node = snap
+                .project
+                .scene
+                .nodes
+                .get(&cam_id)
+                .ok_or_else(|| EditError::UnknownNode(cam_id.clone()))?
+                .clone();
+            if node.kind != NodeKind::Camera {
+                return Err(EditError::UnknownNode(cam_id));
+            }
+            let before = node.transform.clone();
+            let before_params = node.camera.clone().unwrap_or_default();
+            let mut after_params = before_params.clone();
+            if let Some(d) = fov_deg {
+                set_focal_from_hfov(&mut after_params, d.to_radians());
+            }
+
+            let after = match (eye, look_at, yaw, pitch, distance) {
+                (Some(e), Some(t), _, _, _) => camera_transform_look_at(*e, *t),
+                (_, Some(t), Some(y), Some(p), Some(d)) => {
+                    let e = eye_from_orbit(*y, *p, *d, *t);
+                    camera_transform_look_at(e, *t)
+                }
+                (_, None, Some(y), Some(p), Some(d)) => {
+                    let target = orbit_from_active_camera(&snap.project.scene, *d)
+                        .map(|(_, _, _, t, _, _)| t)
+                        .unwrap_or(Vec3::new(0.4, 0.8, 0.0));
+                    let e = eye_from_orbit(*y, *p, *d, target);
+                    camera_transform_look_at(e, target)
+                }
+                (None, None, None, None, None) if fov_deg.is_some() => before.clone(),
+                _ => return Err(EditError::IncompleteCamera),
+            };
+
+            let op = SceneOp::SetCamera {
+                id: cam_id.clone(),
+                before,
+                after,
+                before_params,
+                after_params,
+            };
+            let mut undo = UndoStack::default();
+            undo.push_apply(&mut snap.project.scene, op)?;
+            snap.project.scene.active_camera = Some(cam_id.clone());
+            snap.selected_id = Some(cam_id);
             Ok(())
         }
         AgentEditOp::Pose {
@@ -363,9 +456,10 @@ pub fn apply_batch(
 /// Capability gate helper for host / DeclUI (fail-closed).
 pub fn require_edit_caps(op: &AgentEditOp, granted: &[String]) -> Result<(), EditError> {
     let need = match op {
-        AgentEditOp::Select { .. } | AgentEditOp::Trs { .. } | AgentEditOp::Instantiate { .. } => {
-            SCENE_EDIT_CAP
-        }
+        AgentEditOp::Select { .. }
+        | AgentEditOp::Trs { .. }
+        | AgentEditOp::Camera { .. }
+        | AgentEditOp::Instantiate { .. } => SCENE_EDIT_CAP,
         AgentEditOp::Pose { .. } => crate::pose::SCENE_POSE_CAP,
         AgentEditOp::Compose { .. } => crate::compose::SCENE_COMPOSE_CAP,
         AgentEditOp::Lock { .. } | AgentEditOp::Unlock { .. } => SCENE_LOCK_CAP,
@@ -515,5 +609,48 @@ mod tests {
         )
         .unwrap();
         assert!((snap.project.scene.nodes["box"].transform.translation.x - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn camera_op_sets_look_at_and_fov() {
+        let mut snap = demo_snap();
+        apply_one(
+            &mut snap,
+            &AgentEditOp::Camera {
+                id: None,
+                eye: Some(Vec3::new(0.0, 3.0, 8.0)),
+                look_at: Some(Vec3::new(0.0, 1.0, 0.0)),
+                fov_deg: Some(35.0),
+                yaw: None,
+                pitch: None,
+                distance: None,
+            },
+            "human:test",
+            EditActorKind::Human,
+        )
+        .unwrap();
+        let cam = &snap.project.scene.nodes["camera"];
+        assert!((cam.transform.translation.z - 8.0).abs() < 1e-3);
+        let params = cam.camera.as_ref().unwrap();
+        let hfov = crate::camera::hfov_rad(params).to_degrees();
+        assert!((hfov - 35.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn camera_op_denied_without_cap() {
+        let err = require_edit_caps(
+            &AgentEditOp::Camera {
+                id: None,
+                eye: None,
+                look_at: None,
+                fov_deg: Some(40.0),
+                yaw: None,
+                pitch: None,
+                distance: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+        assert!(matches!(err, EditError::CapDenied(_)));
     }
 }

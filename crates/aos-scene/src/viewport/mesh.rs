@@ -3,6 +3,8 @@
 use crate::math::{Mat4, Vec3};
 use crate::scene::{NodeKind, SceneGraph};
 
+pub use crate::camera::eye_from_orbit;
+
 /// Half-extent of the unit box before node scale (metres).
 pub const UNIT_CUBE_HALF: f32 = 0.5;
 
@@ -93,12 +95,6 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
         });
     }
     out
-}
-
-pub fn eye_from_orbit(yaw: f32, pitch: f32, distance: f32, target: Vec3) -> Vec3 {
-    let cp = pitch.cos();
-    let offset = Vec3::new(yaw.sin() * cp, pitch.sin(), yaw.cos() * cp) * distance;
-    target + offset
 }
 
 pub fn look_at_rh(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {

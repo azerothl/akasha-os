@@ -7,9 +7,10 @@
 
 use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_scene::{
-    eye_from_orbit as orbit_eye, load_project_yaml, look_at_rh, perspective_rh,
-    save_project_yaml, LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, SceneGraph,
-    SceneOp, Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
+    apply_orbit_to_active_camera, eye_from_orbit as orbit_eye, fovy_from_hfov,
+    load_project_yaml, look_at_rh, orbit_from_active_camera, perspective_rh, save_project_yaml,
+    LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, SceneGraph, SceneOp, Transform,
+    UndoStack, Vec3, ViewportCamera, ViewportRenderer,
 };
 use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2};
 use serde_json::{json, Value};
@@ -41,6 +42,10 @@ pub struct Scene3dHostState {
     pub pitch: f32,
     pub distance: f32,
     pub target: Vec3,
+    /// Horizontal FOV (radians) — mirrors SceneGraph `CameraParams`.
+    pub hfov_rad: f32,
+    /// Fingerprint of last scene yaml we pulled/pushed (camera sync).
+    scene_fp: u64,
     drag: Option<DragState>,
     undo: UndoStack,
 }
@@ -52,6 +57,8 @@ impl Default for Scene3dHostState {
             pitch: 0.45,
             distance: 8.0,
             target: Vec3::new(0.4, 0.8, 0.0),
+            hfov_rad: aos_scene::hfov_rad(&aos_scene::CameraParams::default()),
+            scene_fp: 0,
             drag: None,
             undo: UndoStack::default(),
         }
@@ -163,6 +170,80 @@ fn scene_gpu() -> Option<&'static Mutex<ViewportRenderer>> {
 
 fn eye_from_orbit(host: &Scene3dHostState) -> Vec3 {
     orbit_eye(host.yaw, host.pitch, host.distance, host.target)
+}
+
+fn scene_fingerprint(local: &HashMap<String, Value>, scene_key: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    match local.get(scene_key) {
+        Some(Value::String(s)) => s.hash(&mut h),
+        Some(v) => v.to_string().hash(&mut h),
+        None => 0u8.hash(&mut h),
+    }
+    h.finish()
+}
+
+fn pull_orbit_from_scene(host: &mut Scene3dHostState, graph: &SceneGraph) {
+    if let Some((yaw, pitch, dist, target, hfov, _)) =
+        orbit_from_active_camera(graph, host.distance.max(1.0))
+    {
+        host.yaw = yaw;
+        host.pitch = pitch;
+        host.distance = dist.clamp(1.0, 40.0);
+        host.target = target;
+        host.hfov_rad = hfov;
+    }
+}
+
+fn push_orbit_to_scene(host: &mut Scene3dHostState, graph: &mut SceneGraph) -> bool {
+    let Some(cam_id) = graph.active_camera.clone() else {
+        return false;
+    };
+    let Some(node) = graph.nodes.get(&cam_id).cloned() else {
+        return false;
+    };
+    if node.kind != NodeKind::Camera {
+        return false;
+    }
+    let before = node.transform.clone();
+    let before_params = node.camera.clone().unwrap_or_default();
+    if apply_orbit_to_active_camera(
+        graph,
+        host.yaw,
+        host.pitch,
+        host.distance,
+        host.target,
+        host.hfov_rad,
+    )
+    .is_err()
+    {
+        return false;
+    }
+    let Some(after_node) = graph.nodes.get(&cam_id).cloned() else {
+        return false;
+    };
+    let after = after_node.transform.clone();
+    let after_params = after_node.camera.clone().unwrap_or_default();
+    if before == after && before_params == after_params {
+        return false;
+    }
+    host.undo.push_applied(SceneOp::SetCamera {
+        id: cam_id,
+        before,
+        after,
+        before_params,
+        after_params,
+    });
+    true
+}
+
+fn camera_strip_labels(language: &str) -> (&'static str, &'static str, &'static str, &'static str) {
+    if language.starts_with("fr") {
+        ("Caméra", "Viser", "Distance", "FOV")
+    } else {
+        ("Camera", "Look-at", "Distance", "FOV")
+    }
 }
 
 fn project_point(p: Vec3, view_proj: &Mat4, rect: Rect) -> Option<Pos2> {
@@ -319,6 +400,13 @@ pub fn ui_scene3d(
         });
     }
 
+    // Pull orbit from SceneGraph when the project yaml changes (load / compose).
+    let fp = scene_fingerprint(local_state, scene_key);
+    if fp != host.scene_fp || seeded {
+        pull_orbit_from_scene(host, &graph);
+        host.scene_fp = fp;
+    }
+
     let title = widget_label(w, doc, language, "Viewport");
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(title).strong());
@@ -339,8 +427,9 @@ pub fn ui_scene3d(
 
     let eye = eye_from_orbit(host);
     let aspect = rect.width() / rect.height().max(1.0);
+    let fovy = fovy_from_hfov(host.hfov_rad, aspect);
     let view = look_at_rh(eye, host.target, Vec3::UNIT_Y);
-    let proj = perspective_rh(50.0_f32.to_radians(), aspect, 0.1, 200.0);
+    let proj = perspective_rh(fovy, aspect, 0.1, 200.0);
     let view_proj = proj * view;
 
     let mut hit_candidates: Vec<(String, Pos2, f32)> = Vec::new();
@@ -359,7 +448,7 @@ pub fn ui_scene3d(
                 eye,
                 target: host.target,
                 up: Vec3::UNIT_Y,
-                fovy_rad: 50.0_f32.to_radians(),
+                fovy_rad: fovy,
                 near: 0.1,
                 far: 200.0,
             };
@@ -521,8 +610,32 @@ pub fn ui_scene3d(
     }
 
     if response.drag_stopped() {
+        let was_orbit = host
+            .drag
+            .as_ref()
+            .map(|d| matches!(d.mode, DragMode::Orbit | DragMode::Pan))
+            .unwrap_or(false);
         host.drag = None;
-        // commit already applied via undo ops during drag for translate
+        if was_orbit && push_orbit_to_scene(host, &mut graph) {
+            let yaml = scene_val(&graph, &selected);
+            host.scene_fp = {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut h = DefaultHasher::new();
+                if let Value::String(s) = &yaml {
+                    s.hash(&mut h);
+                }
+                h.finish()
+            };
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: yaml,
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+            });
+        }
     }
 
     if response.clicked() && !response.dragged() {
@@ -552,52 +665,152 @@ pub fn ui_scene3d(
         }
     }
 
-    // Scroll zoom — host local
+    // Scroll zoom — host local; persist camera on change
     let scroll = ui.input(|i| i.smooth_scroll_delta.y);
     if response.hovered() && scroll.abs() > 0.0 {
         host.distance = (host.distance * (1.0 - scroll * 0.001)).clamp(1.0, 40.0);
+        if push_orbit_to_scene(host, &mut graph) {
+            let yaml = scene_val(&graph, &selected);
+            host.scene_fp = scene_fingerprint(
+                &HashMap::from([(scene_key.to_string(), yaml.clone())]),
+                scene_key,
+            );
+            patch = Some(Scene3dPatch {
+                scene_key: scene_key.into(),
+                scene: yaml,
+                selected_key: selected_key.into(),
+                selected: json!(selected),
+                beauty_path_key: None,
+                beauty_path: None,
+            });
+        }
     }
 
-    // TRS numeric strip for selected
-    if let Some(id) = selected.clone() {
-        if let Some(node) = graph.nodes.get(&id).cloned() {
-            ui.horizontal(|ui| {
-                ui.label(format!("{} · TRS", node.name));
+    // Camera strip (orbit + look-at + FOV) — always for active camera.
+    if graph.active_camera.is_some() {
+        let (cam_l, look_l, dist_l, fov_l) = camera_strip_labels(language);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(cam_l).strong());
+        });
+        let mut changed = false;
+        let mut look = host.target;
+        ui.horizontal(|ui| {
+            ui.label(look_l);
+            changed |= ui
+                .add(egui::DragValue::new(&mut look.x).speed(0.01).prefix("x "))
+                .changed();
+            changed |= ui
+                .add(egui::DragValue::new(&mut look.y).speed(0.01).prefix("y "))
+                .changed();
+            changed |= ui
+                .add(egui::DragValue::new(&mut look.z).speed(0.01).prefix("z "))
+                .changed();
+        });
+        let mut dist = host.distance;
+        let mut yaw_deg = host.yaw.to_degrees();
+        let mut pitch_deg = host.pitch.to_degrees();
+        let mut fov_deg = host.hfov_rad.to_degrees();
+        ui.horizontal(|ui| {
+            ui.label(dist_l);
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut dist)
+                        .speed(0.05)
+                        .range(1.0..=40.0),
+                )
+                .changed();
+            ui.label(if language.starts_with("fr") {
+                "Orbite"
+            } else {
+                "Orbit"
             });
-            let mut t = node.transform.translation;
-            let mut changed = false;
-            ui.horizontal(|ui| {
-                ui.label("T");
-                changed |= ui
-                    .add(egui::DragValue::new(&mut t.x).speed(0.01).prefix("x "))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut t.y).speed(0.01).prefix("y "))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut t.z).speed(0.01).prefix("z "))
-                    .changed();
-            });
-            if changed {
-                let before = node.transform.clone();
-                let mut after = before.clone();
-                after.translation = t;
-                let _ = host.undo.push_apply(
-                    &mut graph,
-                    SceneOp::SetTransform {
-                        id: id.clone(),
-                        before,
-                        after,
-                    },
+            changed |= ui
+                .add(egui::DragValue::new(&mut yaw_deg).speed(0.5).suffix("° y"))
+                .changed();
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut pitch_deg)
+                        .speed(0.5)
+                        .suffix("° p")
+                        .range(-85.0..=85.0),
+                )
+                .changed();
+            ui.label(fov_l);
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut fov_deg)
+                        .speed(0.5)
+                        .suffix("°")
+                        .range(15.0..=120.0),
+                )
+                .changed();
+        });
+        if changed {
+            host.target = look;
+            host.distance = dist.clamp(1.0, 40.0);
+            host.yaw = yaw_deg.to_radians();
+            host.pitch = pitch_deg.to_radians().clamp(-FRAC_PI_2 + 0.05, FRAC_PI_2 - 0.05);
+            host.hfov_rad = fov_deg.to_radians();
+            if push_orbit_to_scene(host, &mut graph) {
+                let yaml = scene_val(&graph, &selected);
+                host.scene_fp = scene_fingerprint(
+                    &HashMap::from([(scene_key.to_string(), yaml.clone())]),
+                    scene_key,
                 );
                 patch = Some(Scene3dPatch {
                     scene_key: scene_key.into(),
-                    scene: scene_val(&graph, &selected),
+                    scene: yaml,
                     selected_key: selected_key.into(),
-                    selected: Value::String(id),
+                    selected: json!(selected),
                     beauty_path_key: None,
                     beauty_path: None,
                 });
+            }
+        }
+    }
+
+    // TRS numeric strip for selected (non-camera nodes — camera uses strip above)
+    if let Some(id) = selected.clone() {
+        if let Some(node) = graph.nodes.get(&id).cloned() {
+            if node.kind != NodeKind::Camera {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{} · TRS", node.name));
+                });
+                let mut t = node.transform.translation;
+                let mut changed = false;
+                ui.horizontal(|ui| {
+                    ui.label("T");
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut t.x).speed(0.01).prefix("x "))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut t.y).speed(0.01).prefix("y "))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut t.z).speed(0.01).prefix("z "))
+                        .changed();
+                });
+                if changed {
+                    let before = node.transform.clone();
+                    let mut after = before.clone();
+                    after.translation = t;
+                    let _ = host.undo.push_apply(
+                        &mut graph,
+                        SceneOp::SetTransform {
+                            id: id.clone(),
+                            before,
+                            after,
+                        },
+                    );
+                    patch = Some(Scene3dPatch {
+                        scene_key: scene_key.into(),
+                        scene: scene_val(&graph, &selected),
+                        selected_key: selected_key.into(),
+                        selected: Value::String(id),
+                        beauty_path_key: None,
+                        beauty_path: None,
+                    });
+                }
             }
         }
     }

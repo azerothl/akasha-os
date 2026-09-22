@@ -1,6 +1,6 @@
 //! Undo-friendly SceneGraph ops (cheap foundation stack).
 
-use crate::scene::{SceneError, SceneGraph, Transform};
+use crate::scene::{CameraParams, SceneError, SceneGraph, Transform};
 use serde::{Deserialize, Serialize};
 
 const MAX_UNDO: usize = 64;
@@ -13,6 +13,14 @@ pub enum SceneOp {
         before: Transform,
         after: Transform,
     },
+    /// Camera transform + optics as one undo step.
+    SetCamera {
+        id: String,
+        before: Transform,
+        after: Transform,
+        before_params: CameraParams,
+        after_params: CameraParams,
+    },
     /// Multiple transforms as one undo step (pose presets / IK-lite).
     Batch {
         ops: Vec<SceneOp>,
@@ -23,6 +31,15 @@ impl SceneOp {
     pub fn apply(&self, graph: &mut SceneGraph) -> Result<(), SceneError> {
         match self {
             SceneOp::SetTransform { id, after, .. } => graph.set_transform(id, after.clone()),
+            SceneOp::SetCamera {
+                id,
+                after,
+                after_params,
+                ..
+            } => {
+                graph.set_transform(id, after.clone())?;
+                graph.set_camera_params(id, after_params.clone())
+            }
             SceneOp::Batch { ops } => {
                 for op in ops {
                     op.apply(graph)?;
@@ -38,6 +55,19 @@ impl SceneOp {
                 id: id.clone(),
                 before: after.clone(),
                 after: before.clone(),
+            },
+            SceneOp::SetCamera {
+                id,
+                before,
+                after,
+                before_params,
+                after_params,
+            } => SceneOp::SetCamera {
+                id: id.clone(),
+                before: after.clone(),
+                after: before.clone(),
+                before_params: after_params.clone(),
+                after_params: before_params.clone(),
             },
             SceneOp::Batch { ops } => SceneOp::Batch {
                 ops: ops.iter().rev().map(SceneOp::invert).collect(),

@@ -609,6 +609,7 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::SCENE_GET_SERVICE
         | aos_proto::SCENE_SELECT_SERVICE
         | aos_proto::SCENE_TRS_SERVICE
+        | aos_proto::SCENE_CAMERA_SERVICE
         | aos_proto::SCENE_APPLY_SERVICE
         | aos_proto::SCENE_LOCK_SERVICE
         | aos_proto::SCENE_UNLOCK_SERVICE
@@ -1602,6 +1603,73 @@ fn run_scene_edit_service(
                     translation,
                     rotation,
                     scale,
+                },
+                actor,
+                kind,
+            )
+        }
+        aos_proto::SCENE_CAMERA_SERVICE => {
+            let id = input
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let eye = match input.get("eye").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("eye: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let look_at = match input.get("look_at").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("look_at: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let fov_deg = input
+                .get("fov_deg")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let yaw = input.get("yaw").and_then(|v| v.as_f64()).map(|v| v as f32);
+            let pitch = input
+                .get("pitch")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let distance = input
+                .get("distance")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            apply_one(
+                &mut snap,
+                &AgentEditOp::Camera {
+                    id,
+                    eye,
+                    look_at,
+                    fov_deg,
+                    yaw,
+                    pitch,
+                    distance,
                 },
                 actor,
                 kind,

@@ -402,6 +402,30 @@ impl SceneGraph {
         Ok(())
     }
 
+    /// Set camera optics on a [`NodeKind::Camera`] node (fail-closed on other kinds).
+    pub fn set_camera_params(&mut self, id: &str, params: CameraParams) -> Result<(), SceneError> {
+        if !params.focal_mm.is_finite()
+            || !params.sensor_width_mm.is_finite()
+            || !params.near.is_finite()
+            || !params.far.is_finite()
+            || params.focal_mm <= 0.0
+            || params.sensor_width_mm <= 0.0
+            || params.near <= 0.0
+            || params.far <= params.near
+        {
+            return Err(SceneError::NonFiniteTransform);
+        }
+        let node = self
+            .nodes
+            .get_mut(id)
+            .ok_or_else(|| SceneError::UnknownNode(id.into()))?;
+        if node.kind != NodeKind::Camera {
+            return Err(SceneError::UnknownNode(id.into()));
+        }
+        node.camera = Some(params);
+        Ok(())
+    }
+
     pub fn node_ids_depth_first(&self) -> Vec<String> {
         let mut out = Vec::new();
         fn walk(g: &SceneGraph, id: &str, out: &mut Vec<String>) {

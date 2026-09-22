@@ -9,9 +9,9 @@ use crate::module_rt::HostCallCtx;
 use aos_scene::{
     apply_batch, apply_one, require_batch_caps, require_edit_caps, AgentEditOp, EditActorKind,
     EditSnapshot, LockKind, LockScope, SemanticLock, ASSET_ILLUSTRATION_READ_CAP,
-    DEFAULT_SCENE_YAML_PATH, SCENE_APPLY_SERVICE, SCENE_COMPOSE_CAP, SCENE_COMPOSE_SERVICE,
-    SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE,
-    SCENE_POSE_CAP, SCENE_POSE_SERVICE, SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
+    DEFAULT_SCENE_YAML_PATH, SCENE_APPLY_SERVICE, SCENE_CAMERA_SERVICE, SCENE_COMPOSE_CAP,
+    SCENE_COMPOSE_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP,
+    SCENE_LOCK_SERVICE, SCENE_POSE_CAP, SCENE_POSE_SERVICE, SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
     SCENE_UNLOCK_SERVICE,
 };
 use serde_json::{json, Value};
@@ -133,6 +133,51 @@ pub fn handle_scene_host_call(
                 translation,
                 rotation,
                 scale,
+            };
+            require_edit_caps(&op, &ctx.granted_caps).map_err(|e| e.to_string())?;
+            apply_one(&mut snap, &op, &ctx.actor, actor_kind(ctx)).map_err(|e| e.to_string())?;
+            Ok(Some(snap.result_json().map_err(|e| e.to_string())?))
+        }
+        SCENE_CAMERA_SERVICE => {
+            require_any_cap(ctx, &[SCENE_EDIT_CAP])?;
+            let id = args
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let eye = args
+                .get("eye")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| format!("eye: {e}"))?;
+            let look_at = args
+                .get("look_at")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| format!("look_at: {e}"))?;
+            let fov_deg = args
+                .get("fov_deg")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let yaw = args.get("yaw").and_then(|v| v.as_f64()).map(|v| v as f32);
+            let pitch = args
+                .get("pitch")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let distance = args
+                .get("distance")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let mut snap = load_snap(args)?;
+            let op = AgentEditOp::Camera {
+                id,
+                eye,
+                look_at,
+                fov_deg,
+                yaw,
+                pitch,
+                distance,
             };
             require_edit_caps(&op, &ctx.granted_caps).map_err(|e| e.to_string())?;
             apply_one(&mut snap, &op, &ctx.actor, actor_kind(ctx)).map_err(|e| e.to_string())?;

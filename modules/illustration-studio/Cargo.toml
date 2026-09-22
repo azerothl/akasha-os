@@ -1,7 +1,7 @@
 [package]
 name = "module-illustration-studio"
 description = "Illustration Studio — packs/marketplace hooks, storyboard, comic, IK/FK"
-version = "0.6.3"
+version = "0.6.4"
 edition = "2021"
 license = "Apache-2.0"
 
