@@ -317,17 +317,26 @@ impl ViewportRenderer {
             .write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&uniforms));
 
         let instances = collect_mesh_instances(scene, selected);
-        let mut raw: Vec<InstanceRaw> = instances
-            .iter()
-            .take(MAX_INSTANCES as usize)
-            .map(|inst| InstanceRaw {
+        let mut cube_raw: Vec<InstanceRaw> = Vec::new();
+        let mut asset_draws: Vec<(&crate::viewport::mesh::MeshInstance, InstanceRaw)> = Vec::new();
+        for inst in &instances {
+            if instances.len() as u32 > MAX_INSTANCES && cube_raw.len() + asset_draws.len() >= MAX_INSTANCES as usize
+            {
+                break;
+            }
+            let raw = InstanceRaw {
                 world: mat4_cols(&inst.world),
                 color: inst.color,
-            })
-            .collect();
-        if raw.is_empty() {
+            };
+            if inst.triangle_mesh.is_some() {
+                asset_draws.push((inst, raw));
+            } else {
+                cube_raw.push(raw);
+            }
+        }
+        if cube_raw.is_empty() && asset_draws.is_empty() {
             // Empty scene: still clear to atmosphere.
-            raw.push(InstanceRaw {
+            cube_raw.push(InstanceRaw {
                 world: [
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
@@ -337,9 +346,61 @@ impl ViewportRenderer {
                 color: [0.0, 0.0, 0.0, 0.0],
             });
         }
-        let instance_count = raw.len() as u32;
-        self.queue
-            .write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&raw));
+        let cube_count = cube_raw.len() as u32;
+        if !cube_raw.is_empty() {
+            self.queue
+                .write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&cube_raw));
+        }
+
+        // Upload MeshAsset triangle meshes (per-frame; spike-sized).
+        let mut asset_gpu: Vec<(wgpu::Buffer, wgpu::Buffer, u32, InstanceRaw)> = Vec::new();
+        for (inst, raw) in &asset_draws {
+            let Some(mesh) = &inst.triangle_mesh else {
+                continue;
+            };
+            let mut verts: Vec<Vertex> = Vec::with_capacity(mesh.vertex_count());
+            for chunk in mesh.interleaved.as_chunks::<6>().0 {
+                verts.push(Vertex {
+                    position: [chunk[0], chunk[1], chunk[2]],
+                    normal: [chunk[3], chunk[4], chunk[5]],
+                });
+            }
+            let indices: Vec<u16> = mesh
+                .indices
+                .iter()
+                .map(|&i| i.min(u16::MAX as u32) as u16)
+                .collect();
+            if verts.is_empty() || indices.len() < 3 {
+                continue;
+            }
+            let vbuf = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("mesh-asset-verts"),
+                    contents: bytemuck::cast_slice(&verts),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+            let ibuf = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("mesh-asset-indices"),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+            asset_gpu.push((vbuf, ibuf, indices.len() as u32, *raw));
+        }
+        // Pack asset instances into a small instance buffer slice after cubes.
+        let asset_instance_offset = (cube_count as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
+        if !asset_gpu.is_empty() {
+            let asset_raw: Vec<InstanceRaw> = asset_gpu.iter().map(|(_, _, _, r)| *r).collect();
+            if (cube_count as usize + asset_raw.len()) <= MAX_INSTANCES as usize {
+                self.queue.write_buffer(
+                    &self.instance_buf,
+                    asset_instance_offset,
+                    bytemuck::cast_slice(&asset_raw),
+                );
+            }
+        }
 
         let color = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("viewport-color"),
@@ -414,20 +475,36 @@ impl ViewportRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            if !instances.is_empty() {
+            let box_count = instances
+                .iter()
+                .filter(|i| i.triangle_mesh.is_none())
+                .count() as u32;
+            if box_count > 0 {
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_vertex_buffer(1, self.instance_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
-                pass.draw_indexed(0..self.index_count, 0, 0..instance_count);
+                pass.draw_indexed(0..self.index_count, 0, 0..box_count);
 
                 pass.set_pipeline(&self.wire_pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_vertex_buffer(1, self.instance_buf.slice(..));
                 pass.set_index_buffer(self.edge_index_buf.slice(..), wgpu::IndexFormat::Uint16);
-                pass.draw_indexed(0..self.edge_index_count, 0, 0..instance_count);
+                pass.draw_indexed(0..self.edge_index_count, 0, 0..box_count);
+            }
+
+            for (i, (vbuf, ibuf, index_count, _)) in asset_gpu.iter().enumerate() {
+                let inst_start =
+                    asset_instance_offset + (i as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
+                let inst_end = inst_start + std::mem::size_of::<InstanceRaw>() as u64;
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_vertex_buffer(0, vbuf.slice(..));
+                pass.set_vertex_buffer(1, self.instance_buf.slice(inst_start..inst_end));
+                pass.set_index_buffer(ibuf.slice(..), wgpu::IndexFormat::Uint16);
+                pass.draw_indexed(0..*index_count, 0, 0..1);
             }
         }
 

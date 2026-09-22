@@ -1,0 +1,6 @@
+# Source offer
+
+If this pack distribution includes GPL components (unlikely for the GGUF path;
+Blender remains a separate Renderer Pack), corresponding source will be offered
+per the applicable license. TRELLIS.2 GGUF weights and trellis.cpp are obtained
+from their upstream projects — see README.

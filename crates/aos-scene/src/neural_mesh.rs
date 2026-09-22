@@ -2,19 +2,25 @@
 //!
 //! Spec §110–114: AI 3D mesh generation is **not** an MVP dependency. This
 //! module ships the fail-closed host surface so Preview can grow a real
-//! backend later without a Blender-only path or opaque weights in-tree.
+//! TRELLIS.2 GGUF Model Pack without a Blender-only path or opaque weights
+//! in-tree.
 //!
 //! | Backend | Status | Behaviour |
 //! |---------|--------|-----------|
 //! | `stub` (default) | **Real Preview path** | Deterministic procedural MeshBox assembly from EN/FR prompt keywords. No model weights. |
-//! | `neural` | **Stub interface only** | Fail-closed (`BackendUnavailable`) until model infra exists. |
+//! | `neural` | **Pack ABI stub** | Pack missing → `BackendUnavailable`. Pack present + fixture/mock → insert `MeshAsset` from GLB. Real trellis.cpp spawn shape documented; weights never in git. |
 //!
-//! All proposals are validated (part count, scale, bbox) before insertion into
-//! the SceneGraph (sole SoT). wgpu edit view and RenderService beauty consume
-//! the same graph — this module never speaks Blender.
+//! All proposals are validated before insertion into the SceneGraph (sole SoT).
+//! wgpu edit view and RenderService beauty consume the same graph.
 
 use crate::math::{Quat, Vec3};
+use crate::mesh_asset::insert_mesh_asset;
+use crate::neural_mesh_isolate::{
+    probe_pack_status, resolve_fixture_glb, resolve_runner_bin, resolve_weights_dir, spawn_isolated,
+    NeuralMeshRunMode, NeuralMeshSpawnPlan, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
+};
 use crate::scene::{NodeKind, SceneError, SceneGraph, SceneNode, Transform};
+use std::time::Duration;
 use thiserror::Error;
 
 /// Cap: run neural / AI mesh assist (fail-closed).
@@ -34,7 +40,7 @@ pub const MIN_ABS_SCALE: f32 = 0.01;
 pub enum MeshAssistBackendId {
     /// Deterministic procedural MeshBox assembly (Preview default; no weights).
     Stub,
-    /// Future neural weights path — unavailable until model infra ships.
+    /// Opt-in Neural Mesh Model Pack (TRELLIS.2 GGUF path) — fail-closed without pack.
     Neural,
 }
 
@@ -65,7 +71,7 @@ pub enum NeuralMeshError {
     EmptyPrompt,
     #[error("unknown mesh assist backend `{0}`")]
     UnknownBackend(String),
-    #[error("neural mesh backend unavailable (no model infra; use backend=stub)")]
+    #[error("neural mesh backend unavailable (no model pack / runner; use backend=stub or install illustration-neural-mesh-pack)")]
     BackendUnavailable,
     #[error("validation failed: {0}")]
     Validation(String),
@@ -94,9 +100,11 @@ pub struct MeshAssistProposal {
     pub backend: MeshAssistBackendId,
     /// True when the proposal came from the stub / procedural path.
     pub is_stub: bool,
-    /// Human-readable template / kind id (`crate`, `column`, `lamp`, …).
+    /// Human-readable template / kind id (`crate`, `column`, `lamp`, … / `mesh_asset`).
     pub kind_id: String,
     pub parts: Vec<MeshPart>,
+    /// When set, apply inserts a single [`NodeKind::MeshAsset`] instead of MeshBox parts.
+    pub mesh_uri: Option<String>,
     pub notes: Vec<String>,
 }
 
@@ -129,10 +137,22 @@ pub struct MeshAssistResult {
     pub is_stub: bool,
     pub kind_id: String,
     pub notes: Vec<String>,
+    pub mesh_uri: Option<String>,
 }
 
 /// Fail-closed validation of a proposal (poly/part count, scale, bbox).
 pub fn validate_proposal(proposal: &MeshAssistProposal) -> Result<(), NeuralMeshError> {
+    if let Some(uri) = &proposal.mesh_uri {
+        if uri.trim().is_empty() {
+            return Err(NeuralMeshError::Validation("empty mesh_uri".into()));
+        }
+        if !proposal.parts.is_empty() {
+            return Err(NeuralMeshError::Validation(
+                "mesh_uri proposals must not also carry MeshBox parts".into(),
+            ));
+        }
+        return Ok(());
+    }
     if proposal.parts.is_empty() {
         return Err(NeuralMeshError::Validation("empty parts".into()));
     }
@@ -185,7 +205,11 @@ pub fn propose_mesh_assist(req: &MeshAssistRequest) -> Result<MeshAssistProposal
             validate_proposal(&proposal)?;
             Ok(proposal)
         }
-        MeshAssistBackendId::Neural => Err(NeuralMeshError::BackendUnavailable),
+        MeshAssistBackendId::Neural => {
+            let proposal = neural_propose(prompt)?;
+            validate_proposal(&proposal)?;
+            Ok(proposal)
+        }
     }
 }
 
@@ -198,7 +222,7 @@ pub fn mesh_assist(
     apply_proposal(scene, &proposal, &req.parent_id, &req.prefix)
 }
 
-/// Insert a validated proposal as MeshBox children under `parent_id`.
+/// Insert a validated proposal under `parent_id` (MeshBox parts or MeshAsset).
 pub fn apply_proposal(
     scene: &mut SceneGraph,
     proposal: &MeshAssistProposal,
@@ -212,6 +236,32 @@ pub fn apply_proposal(
     } else {
         prefix
     };
+
+    if let Some(uri) = &proposal.mesh_uri {
+        let root_id = unique_id(scene, &format!("{prefix}{}", proposal.kind_id));
+        insert_mesh_asset(
+            scene,
+            &parent,
+            &root_id,
+            format!("Assist {}", proposal.kind_id),
+            uri,
+            Transform {
+                translation: Vec3::new(0.0, 0.5, 0.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+        )
+        .map_err(|e| NeuralMeshError::Scene(e.to_string()))?;
+        return Ok(MeshAssistResult {
+            root_id: root_id.clone(),
+            created_ids: vec![root_id],
+            backend: proposal.backend,
+            is_stub: proposal.is_stub,
+            kind_id: proposal.kind_id.clone(),
+            notes: proposal.notes.clone(),
+            mesh_uri: Some(uri.clone()),
+        });
+    }
 
     let root_id = unique_id(scene, &format!("{prefix}{}", proposal.kind_id));
     let mut created = Vec::new();
@@ -243,6 +293,142 @@ pub fn apply_proposal(
         is_stub: proposal.is_stub,
         kind_id: proposal.kind_id.clone(),
         notes: proposal.notes.clone(),
+        mesh_uri: None,
+    })
+}
+
+fn neural_propose(prompt: &str) -> Result<MeshAssistProposal, NeuralMeshError> {
+    let status = probe_pack_status();
+    let Some(pack_root) = status.pack_root.clone() else {
+        return Err(NeuralMeshError::BackendUnavailable);
+    };
+
+    match status.mode {
+        NeuralMeshRunMode::Mock => neural_from_fixture(&pack_root, prompt, true),
+        NeuralMeshRunMode::Require => neural_from_spawn(&pack_root, prompt),
+        NeuralMeshRunMode::Auto => {
+            if status.ready_for_spawn {
+                match neural_from_spawn(&pack_root, prompt) {
+                    Ok(p) => Ok(p),
+                    Err(_) if status.ready_for_mock => neural_from_fixture(&pack_root, prompt, true),
+                    Err(_) => Err(NeuralMeshError::BackendUnavailable),
+                }
+            } else if status.ready_for_mock {
+                neural_from_fixture(&pack_root, prompt, true)
+            } else {
+                Err(NeuralMeshError::BackendUnavailable)
+            }
+        }
+    }
+}
+
+fn neural_from_fixture(
+    pack_root: &std::path::Path,
+    prompt: &str,
+    is_mock: bool,
+) -> Result<MeshAssistProposal, NeuralMeshError> {
+    let Some(fixture) = resolve_fixture_glb(Some(pack_root)) else {
+        return Err(NeuralMeshError::BackendUnavailable);
+    };
+    let uri = fixture.to_string_lossy().into_owned();
+    let mut notes = vec![
+        if is_mock {
+            "backend=neural (mock/fixture GLB; no GGUF weights loaded)".into()
+        } else {
+            "backend=neural (fixture GLB)".into()
+        },
+        format!("pack={}", pack_root.display()),
+        format!("mesh_uri={uri}"),
+        format!("prompt_chars={}", prompt.chars().count()),
+        "weights: point AOS_NEURAL_MESH_WEIGHTS at LocalAI-io / ilintar TRELLIS.2 GGUF (never in git)".into(),
+    ];
+    notes.push(probe_pack_status().summary_en());
+    Ok(MeshAssistProposal {
+        backend: MeshAssistBackendId::Neural,
+        is_stub: false,
+        kind_id: "mesh_asset".into(),
+        parts: vec![],
+        mesh_uri: Some(uri),
+        notes,
+    })
+}
+
+fn neural_from_spawn(
+    pack_root: &std::path::Path,
+    prompt: &str,
+) -> Result<MeshAssistProposal, NeuralMeshError> {
+    let Some(runner) = resolve_runner_bin(Some(pack_root)) else {
+        return Err(NeuralMeshError::BackendUnavailable);
+    };
+    // Spike: without a real conditioning image, Prefer fixture path if spawn is not viable.
+    // Real product will stage user/Create image into work_dir.
+    let work = std::env::temp_dir().join(format!(
+        "aos-neural-mesh-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&work).map_err(|_| NeuralMeshError::BackendUnavailable)?;
+    let input = work.join("input.png");
+    // Minimal 1×1 PNG so argv is honest when a runner exists; runners that need
+    // real images will fail closed and we fall back only in Auto via caller.
+    if !input.exists() {
+        let _ = std::fs::write(
+            &input,
+            [
+                0x89u8, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49,
+                0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00,
+                0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54,
+                0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05,
+                0xFE, 0xD4, 0xEF, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60,
+                0x82,
+            ],
+        );
+    }
+    let output = work.join("output.glb");
+    let weights = resolve_weights_dir(Some(pack_root));
+    let timeout_secs = std::env::var("AOS_NEURAL_MESH_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_NEURAL_MESH_TIMEOUT_SECS);
+    let plan = NeuralMeshSpawnPlan {
+        runner_bin: runner,
+        work_dir: work.clone(),
+        input_image: input,
+        output_glb: output.clone(),
+        weights_dir: weights,
+        use_bwrap: cfg!(target_os = "linux"),
+        timeout: Duration::from_secs(timeout_secs),
+    };
+    let spawn = spawn_isolated(&plan).map_err(|_| NeuralMeshError::BackendUnavailable)?;
+    if spawn.exit_code != 0 || !output.is_file() {
+        let _ = std::fs::remove_dir_all(&work);
+        return Err(NeuralMeshError::BackendUnavailable);
+    }
+    let dest = pack_root
+        .join("workdir")
+        .join(format!("assist_{}.glb", std::process::id()));
+    if let Some(parent) = dest.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::copy(&output, &dest).map_err(|_| NeuralMeshError::BackendUnavailable)?;
+    let _ = std::fs::remove_dir_all(&work);
+    let uri = dest.to_string_lossy().into_owned();
+    Ok(MeshAssistProposal {
+        backend: MeshAssistBackendId::Neural,
+        is_stub: false,
+        kind_id: "mesh_asset".into(),
+        parts: vec![],
+        mesh_uri: Some(uri.clone()),
+        notes: vec![
+            "backend=neural (isolated spawn → GLB → MeshAsset)".into(),
+            format!("prompt_chars={}", prompt.chars().count()),
+            format!("mesh_uri={uri}"),
+            format!("argv_len={}", spawn.argv.len()),
+            format!("bwrap={}", spawn.isolated_with_bwrap),
+        ],
     })
 }
 
@@ -434,6 +620,7 @@ fn stub_propose(prompt: &str) -> MeshAssistProposal {
         is_stub: true,
         kind_id: kind.id().into(),
         parts,
+        mesh_uri: None,
         notes: vec![
             "backend=stub (procedural MeshBox; no neural weights)".into(),
             format!("prompt_kind={}", kind.id()),
@@ -441,10 +628,18 @@ fn stub_propose(prompt: &str) -> MeshAssistProposal {
     }
 }
 
+/// Re-export pack probe for DeclUI / host status chrome.
+pub use crate::neural_mesh_isolate::probe_pack_status as neural_mesh_pack_status;
+pub use crate::neural_mesh_isolate::NeuralMeshPackStatus;
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::scene::SceneGraph;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn stub_crate_from_en_fr_prompts() {
@@ -462,7 +657,11 @@ mod tests {
     }
 
     #[test]
-    fn neural_backend_fail_closed() {
+    fn neural_backend_fail_closed_without_pack() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // Force missing pack via env override to a non-existent path.
+        std::env::set_var("AOS_NEURAL_MESH_PACK", "/tmp/aos-missing-neural-pack-spike");
+        std::env::set_var("AOS_NEURAL_MESH_MODE", "mock");
         let req = MeshAssistRequest {
             prompt: "a marble statue".into(),
             backend: MeshAssistBackendId::Neural,
@@ -470,6 +669,34 @@ mod tests {
         };
         let err = propose_mesh_assist(&req).unwrap_err();
         assert_eq!(err, NeuralMeshError::BackendUnavailable);
+        std::env::remove_var("AOS_NEURAL_MESH_PACK");
+        std::env::remove_var("AOS_NEURAL_MESH_MODE");
+    }
+
+    #[test]
+    fn neural_mock_inserts_mesh_asset_when_pack_present() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/illustration-neural-mesh-pack");
+        assert!(pack.is_dir());
+        std::env::set_var("AOS_NEURAL_MESH_PACK", &pack);
+        std::env::set_var("AOS_NEURAL_MESH_MODE", "mock");
+        let mut scene = SceneGraph::demo_scene();
+        let req = MeshAssistRequest {
+            prompt: "fixture cube prop".into(),
+            parent_id: "root".into(),
+            prefix: "neural_".into(),
+            backend: MeshAssistBackendId::Neural,
+        };
+        let res = mesh_assist(&mut scene, &req).expect("neural mock assist");
+        assert!(!res.is_stub);
+        assert_eq!(res.kind_id, "mesh_asset");
+        assert!(res.mesh_uri.is_some());
+        let node = scene.nodes.get(&res.root_id).expect("node");
+        assert_eq!(node.kind, NodeKind::MeshAsset);
+        assert!(node.mesh_uri.is_some());
+        std::env::remove_var("AOS_NEURAL_MESH_PACK");
+        std::env::remove_var("AOS_NEURAL_MESH_MODE");
     }
 
     #[test]
@@ -512,6 +739,7 @@ mod tests {
                 translation: [0.0, 0.0, 0.0],
                 scale: [100.0, 1.0, 1.0],
             }],
+            mesh_uri: None,
             notes: vec![],
         };
         assert!(matches!(

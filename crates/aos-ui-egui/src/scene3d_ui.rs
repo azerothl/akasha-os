@@ -327,7 +327,7 @@ fn paint_cpu_fallback(
         let Some(node) = graph.nodes.get(&id) else {
             continue;
         };
-        if !node.visible || node.kind != NodeKind::MeshBox {
+        if !node.visible || !matches!(node.kind, NodeKind::MeshBox | NodeKind::MeshAsset) {
             continue;
         }
         mesh_count += 1;
@@ -341,6 +341,8 @@ fn paint_cpu_fallback(
         let selected_here = selected == Some(id.as_str());
         let stroke = if selected_here {
             Stroke::new(2.0_f32, Color32::from_rgb(120, 200, 255))
+        } else if node.kind == NodeKind::MeshAsset {
+            Stroke::new(1.5_f32, Color32::from_rgb(90, 180, 170))
         } else {
             Stroke::new(1.5_f32, Color32::from_rgb(180, 160, 120))
         };
@@ -486,7 +488,9 @@ pub fn ui_scene3d(
                     let Some(node) = graph.nodes.get(&id) else {
                         continue;
                     };
-                    if !node.visible || node.kind != NodeKind::MeshBox {
+                    if !node.visible
+                        || !matches!(node.kind, NodeKind::MeshBox | NodeKind::MeshAsset)
+                    {
                         continue;
                     }
                     mesh_count += 1;
@@ -897,6 +901,7 @@ pub fn ui_scene_tree(
                     match node.kind {
                         NodeKind::Empty => "empty",
                         NodeKind::MeshBox => "box",
+                        NodeKind::MeshAsset => "mesh",
                         NodeKind::Camera => "camera",
                         NodeKind::Light => "light",
                     },

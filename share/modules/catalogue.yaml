@@ -46,7 +46,7 @@ entries:
       - media.generate
       - tool.invoke:create
   - name: illustration-studio
-    version: "0.7.0"
+    version: "0.7.1"
     kind: module
     path: share/modules/illustration-studio.aospkg
     hash: sha256:945f778154988a3f7b79b8c9a548b413215cde1968924736a94546f4f258bc8e

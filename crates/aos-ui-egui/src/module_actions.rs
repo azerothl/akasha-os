@@ -653,6 +653,9 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::MESH_ASSIST_SERVICE => {
             run_mesh_assist(evt_tx, module, action_id, input, refresh_binds);
         }
+        aos_proto::MESH_PACK_STATUS_SERVICE => {
+            run_mesh_pack_status(evt_tx, module, action_id, input, refresh_binds);
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -1909,7 +1912,45 @@ fn run_mesh_assist(
             "created_ids": applied.created_ids,
             "notes": applied.notes,
             "root_id": applied.root_id,
+            "mesh_uri": applied.mesh_uri,
+            "pack_status": aos_scene::neural_mesh_pack_status().summary_en(),
             "scene_yaml": yaml,
+        }),
+        error: None,
+        refresh_binds,
+    });
+}
+
+fn run_mesh_pack_status(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    let status = aos_scene::neural_mesh_pack_status();
+    let lang = input
+        .get("lang")
+        .and_then(|v| v.as_str())
+        .unwrap_or("en")
+        .to_ascii_lowercase();
+    let summary = if lang.starts_with("fr") {
+        status.summary_fr()
+    } else {
+        status.summary_en()
+    };
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "summary": summary.clone(),
+            "mesh_pack_status": summary,
+            "mode": status.mode.as_str(),
+            "pack_present": status.pack_root.is_some(),
+            "ready_for_mock": status.ready_for_mock,
+            "ready_for_spawn": status.ready_for_spawn,
+            "pack_root": status.pack_root.as_ref().map(|p| p.to_string_lossy().into_owned()),
         }),
         error: None,
         refresh_binds,

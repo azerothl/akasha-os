@@ -229,8 +229,10 @@ pub const SCENE_UNLOCK_SERVICE: &str = "scene.unlock";
 
 /// DeclUI / host_call: list semantic locks.
 pub const SCENE_LOCKS_SERVICE: &str = "scene.locks";
-/// DeclUI service: neural / stub mesh assist → SceneGraph MeshBox insert.
+/// DeclUI service: neural / stub mesh assist → SceneGraph MeshBox / MeshAsset insert.
 pub const MESH_ASSIST_SERVICE: &str = "mesh.assist";
+/// DeclUI service: probe Neural Mesh Model Pack status (EN/FR summary).
+pub const MESH_PACK_STATUS_SERVICE: &str = "mesh.pack.status";
 
 /// Cap: create / mutate comic page panel layouts.
 pub const COMIC_LAYOUT_CAP: &str = "comic.layout";

@@ -1,0 +1,23 @@
+# NOTICE — Illustration Neural Mesh Pack
+
+This directory is an **opt-in** Model Pack for Akasha OS Illustration Studio.
+It does **not** ship multi‑GB GGUF weights in the akasha-os git tree.
+
+## Upstream licenses (when you install weights / runners)
+
+| Component | Typical license | Notes |
+|-----------|-----------------|-------|
+| Microsoft TRELLIS / TRELLIS.2 model weights | MIT | LocalAI-io / ilintar GGUF conversions of Microsoft weights |
+| DINOv3 GGUF companion | Meta DINOv3 License (not MIT) | Required by TRELLIS.2 image encoder path — inventory before redistribution |
+| trellis.cpp / LocalAI trellis2cpp | See upstream repos | Prebuilt runners preferred for Preview |
+
+## Akasha host
+
+Akasha host crates (`crates/**`) and guest modules (`modules/**`) remain free of
+neural mesh weights and do not link PyTorch / ggml at compile time for this path.
+Generation is process-isolated (see README).
+
+## Fixture
+
+`fixtures/unit_cube.glb` is a tiny synthetic mesh for CI / mock mode only.
+It is **not** TRELLIS output and carries no model weights.

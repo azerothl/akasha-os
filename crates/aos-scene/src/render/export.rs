@@ -73,6 +73,8 @@ pub struct ExportNode {
     pub scale: [f32; 3],
     pub visible: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<ExportCamera>,
 }
 
@@ -143,6 +145,7 @@ fn export_node(n: &SceneNode) -> ExportNode {
     let kind = match n.kind {
         NodeKind::Empty => "empty",
         NodeKind::MeshBox => "mesh_box",
+        NodeKind::MeshAsset => "mesh_asset",
         NodeKind::Camera => "camera",
         NodeKind::Light => "light",
     };
@@ -165,6 +168,7 @@ fn export_node(n: &SceneNode) -> ExportNode {
         ],
         scale: [n.transform.scale.x, n.transform.scale.y, n.transform.scale.z],
         visible: n.visible,
+        mesh_uri: n.mesh_uri.clone(),
         camera: n.camera.as_ref().map(|c| ExportCamera {
             focal_mm: c.focal_mm,
             sensor_width_mm: c.sensor_width_mm,

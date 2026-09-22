@@ -1,6 +1,6 @@
 # Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0)**
+**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1)**
 **Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), [Storyboard](illustration-studio-storyboard.md), [Asset packs](illustration-asset-packs.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md` / `illustration-studio-prefab-pack.md`
 
 ## Caps (fail-closed)
@@ -17,7 +17,7 @@
 | `scene.pose` | FK / look-at / two-bone IK / pose presets / undo (`scene.pose` service) |
 | `scene.edit` | Select / TRS / transactional `scene.apply` / `scene.instantiate` |
 | `scene.lock` | Set / clear / list semantic locks |
-| `mesh.neural` | Neural / AI mesh assist (`mesh.assist`; stub procedural is Preview default) |
+| `mesh.neural` | Neural / AI mesh assist (`mesh.assist`, `mesh.pack.status`; stub procedural is Preview default; neural fail-closed without Model Pack) |
 | `comic.layout` | Create / mutate comic page panel layouts |
 | `comic.render` | Composite comic page beauty PNG |
 | `storyboard.edit` | Capture / apply / delete / reorder storyboard frames |
@@ -140,7 +140,7 @@ locks:
 
 | Kind | Host behaviour |
 |------|----------------|
-| `scene3d` | **wgpu edit viewport** — lit MeshBox solid + wire overlay from posed SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
+| `scene3d` | **wgpu edit viewport** — lit MeshBox / MeshAsset solid + wire overlay from posed SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
 | `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
 | `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
 
