@@ -17,7 +17,7 @@
 | `scene.pose` | FK / look-at / two-bone IK / pose presets / undo (`scene.pose` service) |
 | `scene.edit` | Select / TRS / transactional `scene.apply` / `scene.instantiate` |
 | `scene.lock` | Set / clear / list semantic locks |
-| `mesh.neural` | Neural / AI mesh assist (`mesh.assist`; stub procedural is Preview default) |
+| `mesh.neural` | Neural / AI mesh assist (`mesh.assist`, `mesh.pack.status`; stub procedural is Preview default; neural fail-closed without Model Pack) |
 | `comic.layout` | Create / mutate comic page panel layouts |
 | `comic.render` | Composite comic page beauty PNG |
 | `storyboard.edit` | Capture / apply / delete / reorder storyboard frames |
@@ -140,7 +140,7 @@ locks:
 
 | Kind | Host behaviour |
 |------|----------------|
-| `scene3d` | **wgpu edit viewport** — lit MeshBox solid + wire overlay from posed SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
+| `scene3d` | **wgpu edit viewport** — lit MeshBox / MeshAsset solid + wire overlay from posed SceneGraph; orbit / select / TRS pointer-local (no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
 | `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
 | `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
 
