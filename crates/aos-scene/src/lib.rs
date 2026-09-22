@@ -7,7 +7,7 @@
 //! Backends convert; this crate never speaks Blender Z-up.
 //!
 //! Product suite: backend-agnostic [`RenderService`] (stub + CPU + optional
-//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), and
+//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), [`comic`] page/panel layouts, and
 //! minimal [`assets`] pack format. Blender / `bpy` stay in the separate
 //! Renderer Pack — never linked here.
 //!
@@ -21,6 +21,7 @@
 //! backend id is fail-closed until model infra exists (no weights in this crate).
 
 mod assets;
+mod comic;
 mod compose;
 mod edit;
 mod ik;
@@ -47,6 +48,13 @@ pub use assets::{
 pub use compose::{
     compose_from_prompt, compose_from_prompt_with_pack, ComposeError, ComposeIntent, ComposeResult,
     SCENE_COMPOSE_CAP, SCENE_COMPOSE_SERVICE,
+};
+pub use comic::{
+    apply_comic_layout, bind_panel_scene, layout_rects, load_comic_yaml, render_comic_page,
+    save_comic_yaml, ComicError, ComicLayoutId, ComicPage, ComicPanel, ComicProject,
+    ComicRenderResult, PanelRect, COMIC_FORMAT_VERSION, COMIC_LAYOUT_CAP, COMIC_LAYOUT_SERVICE,
+    COMIC_MAX_PAGE_EDGE, COMIC_MAX_PANEL_EDGE, COMIC_RENDER_CAP, COMIC_RENDER_SERVICE,
+    DEFAULT_COMIC_PAGE_PATH,
 };
 pub use edit::{
     apply_batch, apply_one, merge_trs, require_batch_caps, require_edit_caps, AgentEditOp,

@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → edit in wgpu viewport → NPR beauty via RenderService. Orbit drag · click select · drag move. Lock nodes. Articulated IK/FK poses. Mesh assist stub is procedural (no neural weights).",
+      "tip_body": "Prompt → SceneGraph → wgpu edit → NPR beauty. Locks · IK/FK poses · comic panels · mesh assist stub (procedural).",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -50,11 +50,16 @@
       "mesh_section": "Mesh assist",
       "mesh_prompt_label": "Mesh prompt",
       "mesh_stub_label": "Stub mesh (procedural)",
-      "mesh_tip": "Stub builds MeshBox props from keywords (crate / column / lamp / table). Neural backend stays fail-closed until model infra ships."
+      "mesh_tip": "Stub builds MeshBox props from keywords (crate / column / lamp / table). Neural backend stays fail-closed until model infra ships.",
+      "comic_section": "Comic page",
+      "comic_layout_label": "Layout",
+      "comic_apply_label": "Apply layout",
+      "comic_render_label": "Render page",
+      "comic_bind_label": "Bind scene → panel 1"
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR via RenderService. Orbite glisser · clic sélection · glisser déplacer. Verrouillez les nœuds. Poses IK/FK articulées. Assist mesh stub procédural (pas de poids neuronaux).",
+      "tip_body": "Prompt → SceneGraph → édition wgpu → beauté NPR. Verrous · poses IK/FK · planches comic · assist mesh stub (procédural).",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -97,7 +102,12 @@
       "mesh_section": "Assist mesh",
       "mesh_prompt_label": "Invite mesh",
       "mesh_stub_label": "Mesh stub (procédural)",
-      "mesh_tip": "Le stub assemble des MeshBox depuis des mots-clés (caisse / colonne / lampe / table). Le backend neural reste refusé tant que l’infra modèles n’existe pas."
+      "mesh_tip": "Le stub assemble des MeshBox depuis des mots-clés (caisse / colonne / lampe / table). Le backend neural reste refusé tant que l’infra modèles n’existe pas.",
+      "comic_section": "Page BD",
+      "comic_layout_label": "Mise en page",
+      "comic_apply_label": "Appliquer la mise en page",
+      "comic_render_label": "Rendre la page",
+      "comic_bind_label": "Lier scène → case 1"
     }
   },
   "state": {
@@ -135,6 +145,18 @@
       "mesh_prompt": {
         "type": "string",
         "default": "wooden crate"
+      },
+      "comic": {
+        "type": "string",
+        "default": ""
+      },
+      "comic_layout": {
+        "type": "string",
+        "default": "grid_2x2"
+      },
+      "comic_panel_count": {
+        "type": "number",
+        "default": 0
       }
     }
   },
@@ -411,6 +433,41 @@
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
+    },
+    {
+      "id": "comic_layout",
+      "service": "comic.layout",
+      "input": {
+        "template": "$local.comic_layout",
+        "scene_yaml": "$local.scene",
+        "width": 640,
+        "height": 960
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "comic_bind_panel",
+      "service": "comic.layout",
+      "input": {
+        "comic_yaml": "$local.comic",
+        "page_id": "page_1",
+        "panel_id": "panel_1",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "comic_render",
+      "service": "comic.render",
+      "input": {
+        "comic_yaml": "$local.comic",
+        "page_id": "page_1",
+        "backend": "cpu",
+        "path": "/documents/illustrations/comic-page.png",
+        "width": 640,
+        "height": 960
+      },
+      "refresh_binds": []
     }
   ],
   "subscriptions": [],
@@ -554,6 +611,53 @@
             "label_key": "mesh_stub_label",
             "action": "mesh_assist_stub",
             "primary": true
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "label_key": "comic_section",
+        "children": [
+          {
+            "kind": "radio",
+            "state_key": "comic_layout",
+            "label_key": "comic_layout_label",
+            "inline": true,
+            "items": [
+              "single",
+              "two_h",
+              "two_v",
+              "grid_2x2",
+              "strip_3"
+            ],
+            "item_label_keys": [
+              "layout_single",
+              "layout_two_h",
+              "layout_two_v",
+              "layout_grid",
+              "layout_strip"
+            ]
+          },
+          {
+            "kind": "row",
+            "children": [
+              {
+                "kind": "button",
+                "label_key": "comic_apply_label",
+                "action": "comic_layout",
+                "primary": true
+              },
+              {
+                "kind": "button",
+                "label_key": "comic_bind_label",
+                "action": "comic_bind_panel"
+              },
+              {
+                "kind": "button",
+                "label_key": "comic_render_label",
+                "action": "comic_render"
+              }
+            ]
           }
         ]
       },

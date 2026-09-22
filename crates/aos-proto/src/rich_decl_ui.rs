@@ -730,6 +730,41 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::COMIC_LAYOUT_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::COMIC_LAYOUT_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::COMIC_LAYOUT_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
+        crate::COMIC_RENDER_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::COMIC_RENDER_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::COMIC_RENDER_CAP.into(),
+                ));
+            }
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ILLUSTRATION_FS_WRITE_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ILLUSTRATION_FS_WRITE_CAP.into(),
+                ));
+            }
+            // Beauty backends used for panel fills.
+            let has_render = granted_caps.iter().any(|c| {
+                c == crate::RENDER_STUB_CAP
+                    || c == crate::RENDER_CPU_CAP
+                    || c == crate::RENDER_BLENDER_CAP
+            });
+            if !has_render {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::RENDER_CPU_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -1170,6 +1205,8 @@ mod tests {
             crate::SCENE_EDIT_CAP.into(),
             crate::SCENE_LOCK_CAP.into(),
             crate::MESH_NEURAL_CAP.into(),
+            crate::COMIC_LAYOUT_CAP.into(),
+            crate::COMIC_RENDER_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
             .expect("illustration-studio ui valid");
