@@ -622,6 +622,9 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             );
         }
+        aos_proto::MESH_ASSIST_SERVICE => {
+            run_mesh_assist(evt_tx, module, action_id, input, refresh_binds);
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -1551,6 +1554,139 @@ fn run_scene_edit_service(
             });
         }
     }
+}
+
+fn run_mesh_assist(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use aos_scene::{
+        load_project_yaml, mesh_assist, save_project_yaml, MeshAssistBackendId, MeshAssistRequest,
+        ProjectFile, SceneGraph,
+    };
+
+    let prompt = input
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if prompt.is_empty() {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some("mesh.assist: missing prompt".into()),
+            refresh_binds,
+        });
+        return;
+    }
+
+    let backend_raw = input
+        .get("backend")
+        .and_then(|v| v.as_str())
+        .unwrap_or("stub");
+    let Some(backend) = MeshAssistBackendId::parse(backend_raw) else {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(),
+            action_id: action_id.to_string(),
+            ok: false,
+            result: Value::Null,
+            error: Some(format!("mesh.assist: unknown backend `{backend_raw}`")),
+            refresh_binds,
+        });
+        return;
+    };
+
+    let mut scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            SceneGraph::demo_scene()
+        } else {
+            match load_project_yaml(yaml) {
+                Ok(p) => p.scene,
+                Err(e) => {
+                    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                        module: module.to_string(),
+                        action_id: action_id.to_string(),
+                        ok: false,
+                        result: Value::Null,
+                        error: Some(format!("scene_yaml: {e}")),
+                        refresh_binds,
+                    });
+                    return;
+                }
+            }
+        }
+    } else {
+        SceneGraph::demo_scene()
+    };
+
+    let parent_id = input
+        .get("parent_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("root");
+    let prefix = input
+        .get("prefix")
+        .and_then(|v| v.as_str())
+        .unwrap_or("mesh_");
+
+    let req = MeshAssistRequest {
+        prompt: prompt.to_string(),
+        parent_id: parent_id.to_string(),
+        prefix: prefix.to_string(),
+        backend,
+    };
+
+    let applied = match mesh_assist(&mut scene, &req) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("mesh.assist: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+        Ok(y) => y,
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("mesh.assist save: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+    };
+
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.to_string(),
+        action_id: action_id.to_string(),
+        ok: true,
+        result: serde_json::json!({
+            "prompt": prompt,
+            "backend": applied.backend.as_str(),
+            "is_stub": applied.is_stub,
+            "kind_id": applied.kind_id,
+            "created_ids": applied.created_ids,
+            "notes": applied.notes,
+            "root_id": applied.root_id,
+            "scene_yaml": yaml,
+        }),
+        error: None,
+        refresh_binds,
+    });
 }
 
 async fn run_media_image_generate(

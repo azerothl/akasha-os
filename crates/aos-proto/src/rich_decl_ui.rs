@@ -722,6 +722,14 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::MESH_ASSIST_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::MESH_NEURAL_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::MESH_NEURAL_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -1161,6 +1169,7 @@ mod tests {
             crate::SCENE_POSE_CAP.into(),
             crate::SCENE_EDIT_CAP.into(),
             crate::SCENE_LOCK_CAP.into(),
+            crate::MESH_NEURAL_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
             .expect("illustration-studio ui valid");
@@ -1269,6 +1278,21 @@ mod tests {
         ));
         pose.validate(&HashSet::new(), &[crate::SCENE_POSE_CAP.into()])
             .expect("pose with cap");
+
+        let mesh = RichAction {
+            id: "mesh".into(),
+            tool: None,
+            service: Some(crate::MESH_ASSIST_SERVICE.into()),
+            input: Some(serde_json::json!({"prompt": "wooden crate", "backend": "stub"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        assert!(matches!(
+            mesh.validate(&HashSet::new(), &[]).unwrap_err(),
+            RichDeclUiError::MissingCapability(_)
+        ));
+        mesh.validate(&HashSet::new(), &[crate::MESH_NEURAL_CAP.into()])
+            .expect("mesh.assist with cap");
     }
 
     #[test]
