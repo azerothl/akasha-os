@@ -44,6 +44,9 @@
       "stub_render_label": "Stub beauty",
       "cpu_render_label": "CPU beauty",
       "blender_render_label": "Blender beauty",
+      "blender_tip": "Blender beauty is opt-in: install the Illustration Renderer Pack (GPL adapter + Blender binary). Without the pack, Blender beauty fails closed. Cap render.blender · see share/illustration-renderer-pack/README.md.",
+      "blender_pack_status_label": "Refresh Blender pack status",
+      "blender_pack_status_empty": "Blender pack status unknown — tap Refresh Blender pack status.",
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
       "add_female_label": "Add woman",
@@ -151,6 +154,9 @@
       "stub_render_label": "Beauté stub",
       "cpu_render_label": "Beauté CPU",
       "blender_render_label": "Beauté Blender",
+      "blender_tip": "La beauté Blender est opt-in : installer le Illustration Renderer Pack (adaptateur GPL + binaire Blender). Sans pack, la beauté Blender est refusée. Cap render.blender · voir share/illustration-renderer-pack/README.md.",
+      "blender_pack_status_label": "Rafraîchir statut pack Blender",
+      "blender_pack_status_empty": "Statut pack Blender inconnu — appuyez sur Rafraîchir statut pack Blender.",
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
       "add_female_label": "Ajouter femme",
@@ -261,6 +267,10 @@
         "default": ""
       },
       "mesh_pack_status": {
+        "type": "string",
+        "default": ""
+      },
+      "blender_pack_status": {
         "type": "string",
         "default": ""
       },
@@ -530,6 +540,14 @@
         "style": "$local.style_id",
         "width": 256,
         "height": 192
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "blender_pack_status",
+      "service": "render.pack.status",
+      "input": {
+        "lang": "en"
       },
       "refresh_binds": []
     },
@@ -1146,6 +1164,36 @@
                     "action": "blender_beauty"
                   }
                 ]
+              },
+              {
+                "kind": "text",
+                "label_key": "blender_tip"
+              },
+              {
+                "kind": "text",
+                "label_key": "blender_pack_status_empty",
+                "visible": {
+                  "eq": [
+                    "$local.blender_pack_status",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "text_input",
+                "state_key": "blender_pack_status",
+                "label_key": "blender_pack_status_label",
+                "visible": {
+                  "ne": [
+                    "$local.blender_pack_status",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "button",
+                "label_key": "blender_pack_status_label",
+                "action": "blender_pack_status"
               }
             ]
           },

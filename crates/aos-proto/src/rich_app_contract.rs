@@ -237,6 +237,9 @@ pub const MESH_ASSIST_SERVICE: &str = "mesh.assist";
 /// DeclUI service: probe Neural Mesh Model Pack status (EN/FR summary).
 pub const MESH_PACK_STATUS_SERVICE: &str = "mesh.pack.status";
 
+/// DeclUI service: probe Illustration Renderer Pack (Blender) status (EN/FR summary).
+pub const RENDER_PACK_STATUS_SERVICE: &str = "render.pack.status";
+
 /// Cap: create / mutate comic page panel layouts.
 pub const COMIC_LAYOUT_CAP: &str = "comic.layout";
 
