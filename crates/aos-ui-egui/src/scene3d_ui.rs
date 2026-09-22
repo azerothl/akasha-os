@@ -107,38 +107,26 @@ fn project_from_local(
 }
 
 fn lock_marker(locks: &LockTable, graph: &SceneGraph, id: &str) -> &'static str {
-    let covers = locks.list().into_iter().any(|lock| match lock.scope {
+    let covering = locks.list().into_iter().find(|lock| match lock.scope {
         LockScope::Node => lock.node_id == id,
         LockScope::Subtree => {
-            lock.node_id == id
-                || {
-                    let mut cur = graph.nodes.get(id).and_then(|n| n.parent.clone());
-                    while let Some(pid) = cur {
-                        if pid == lock.node_id {
-                            return true;
-                        }
-                        cur = graph.nodes.get(&pid).and_then(|n| n.parent.clone());
-                    }
-                    false
+            if lock.node_id == id {
+                return true;
+            }
+            let mut cur = graph.nodes.get(id).and_then(|n| n.parent.clone());
+            while let Some(pid) = cur {
+                if pid == lock.node_id {
+                    return true;
                 }
+                cur = graph.nodes.get(&pid).and_then(|n| n.parent.clone());
+            }
+            false
         }
     });
-    if !covers {
-        return "";
-    }
-    match locks.get(id).map(|l| l.kind).or_else(|| {
-        locks.list().into_iter().find_map(|l| {
-            if l.node_id == id {
-                Some(l.kind)
-            } else if l.scope == LockScope::Subtree {
-                Some(l.kind)
-            } else {
-                None
-            }
-        })
-    }) {
+    match covering.map(|l| l.kind) {
         Some(LockKind::Pose) => " [pose-lock]",
-        Some(LockKind::Semantic) | None => " [locked]",
+        Some(LockKind::Semantic) => " [locked]",
+        None => "",
     }
 }
 
