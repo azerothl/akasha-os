@@ -8,6 +8,7 @@ use super::backend::{
     RenderBackend, RenderBackendId, RenderError, RenderOutput, RenderPassKind, RenderRequest,
 };
 use crate::camera::{fovy_from_hfov, hfov_rad};
+use crate::light::{collect_lights, linear_to_srgb_u8, shade_diffuse, ResolvedLight};
 use crate::math::{Mat4, Vec3};
 use crate::png::encode_rgba8_png;
 use crate::scene::{NodeKind, SceneGraph};
@@ -71,6 +72,7 @@ impl RenderBackend for CpuWireframeBackend {
             view_proj: &view_proj,
             seed: 0xA05C_E11Eu64,
         };
+        let lights = collect_lights(&req.scene);
         for (id, _) in boxes {
             let Ok(world) = req.scene.world_matrix(&id) else {
                 continue;
@@ -79,7 +81,7 @@ impl RenderBackend for CpuWireframeBackend {
             let half_v = world.transform_vector(Vec3::new(0.5, 0.5, 0.5));
             let half = (half_v.length() * 0.5).max(0.15);
             let corners = box_corners(center, half);
-            draw_box(&mut raster, &corners, req.pass, style);
+            draw_box(&mut raster, &corners, req.pass, style, &lights);
         }
 
         let png = encode_rgba8_png(w, h, &rgba).map_err(RenderError::Encode)?;
@@ -128,6 +130,7 @@ fn draw_box(
     corners: &[Vec3; 8],
     pass: RenderPassKind,
     style: Option<&ResolvedStyle>,
+    lights: &[ResolvedLight],
 ) {
     let Some(st) = style else {
         let line = match pass {
@@ -135,13 +138,15 @@ fn draw_box(
             RenderPassKind::Wireframe => [160u8, 200, 220, 255],
         };
         if matches!(pass, RenderPassKind::Beauty) {
-            raster.fill_quad(
+            let fill = lit_face_rgba(
+                lights,
                 corners[0],
                 corners[1],
                 corners[2],
-                corners[3],
+                [70.0 / 255.0, 78.0 / 255.0, 90.0 / 255.0],
                 [70, 78, 90, 255],
             );
+            raster.fill_quad(corners[0], corners[1], corners[2], corners[3], fill);
         }
         for (i, j) in BOX_EDGES {
             raster.stroke_line(corners[i], corners[j], line);
@@ -154,7 +159,7 @@ fn draw_box(
         let a = (st.opacity * 255.0).round().clamp(0.0, 255.0) as u8;
         [rgb[0], rgb[1], rgb[2], a]
     };
-    let fill = {
+    let fill_base = {
         let rgb = st.fill_rgb();
         [rgb[0], rgb[1], rgb[2], 255]
     };
@@ -164,6 +169,19 @@ fn draw_box(
         StyleFamily::Pencil | StyleFamily::Ink => matches!(pass, RenderPassKind::Beauty),
     };
     if do_fill {
+        let albedo = [
+            fill_base[0] as f32 / 255.0,
+            fill_base[1] as f32 / 255.0,
+            fill_base[2] as f32 / 255.0,
+        ];
+        let fill = lit_face_rgba(
+            lights,
+            corners[0],
+            corners[1],
+            corners[2],
+            albedo,
+            fill_base,
+        );
         raster.fill_quad(corners[0], corners[1], corners[2], corners[3], fill);
         if st.shading != "none" {
             hatch_face(raster, corners[0], corners[1], corners[2], corners[3], st);
@@ -186,6 +204,27 @@ fn draw_box(
             let b = jitter_point(corners[j], st.jitter, raster.next_f32());
             raster.stroke_line_thick(a, b, stroke, thickness);
         }
+    }
+}
+
+fn lit_face_rgba(
+    lights: &[ResolvedLight],
+    a: Vec3,
+    b: Vec3,
+    c: Vec3,
+    albedo_linear: [f32; 3],
+    fallback: [u8; 4],
+) -> [u8; 4] {
+    let center = (a + b + c) * (1.0 / 3.0);
+    let normal = (b - a).cross(c - a);
+    match shade_diffuse(lights, center, normal, albedo_linear) {
+        Some(lin) => [
+            linear_to_srgb_u8(lin[0]),
+            linear_to_srgb_u8(lin[1]),
+            linear_to_srgb_u8(lin[2]),
+            255,
+        ],
+        None => fallback,
     }
 }
 

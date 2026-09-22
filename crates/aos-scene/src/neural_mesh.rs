@@ -635,11 +635,36 @@ pub use crate::neural_mesh_isolate::NeuralMeshPackStatus;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::neural_mesh_isolate::NEURAL_MESH_ENV_LOCK;
     use crate::scene::SceneGraph;
     use std::path::PathBuf;
-    use std::sync::Mutex;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    struct EnvRestore {
+        pack: Option<String>,
+        mode: Option<String>,
+    }
+
+    impl EnvRestore {
+        fn capture() -> Self {
+            Self {
+                pack: std::env::var("AOS_NEURAL_MESH_PACK").ok(),
+                mode: std::env::var("AOS_NEURAL_MESH_MODE").ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            match &self.pack {
+                Some(v) => std::env::set_var("AOS_NEURAL_MESH_PACK", v),
+                None => std::env::remove_var("AOS_NEURAL_MESH_PACK"),
+            }
+            match &self.mode {
+                Some(v) => std::env::set_var("AOS_NEURAL_MESH_MODE", v),
+                None => std::env::remove_var("AOS_NEURAL_MESH_MODE"),
+            }
+        }
+    }
 
     #[test]
     fn stub_crate_from_en_fr_prompts() {
@@ -658,7 +683,10 @@ mod tests {
 
     #[test]
     fn neural_backend_fail_closed_without_pack() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _lock = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _restore = EnvRestore::capture();
         // Force missing pack via env override to a non-existent path.
         std::env::set_var("AOS_NEURAL_MESH_PACK", "/tmp/aos-missing-neural-pack-spike");
         std::env::set_var("AOS_NEURAL_MESH_MODE", "mock");
@@ -669,13 +697,14 @@ mod tests {
         };
         let err = propose_mesh_assist(&req).unwrap_err();
         assert_eq!(err, NeuralMeshError::BackendUnavailable);
-        std::env::remove_var("AOS_NEURAL_MESH_PACK");
-        std::env::remove_var("AOS_NEURAL_MESH_MODE");
     }
 
     #[test]
     fn neural_mock_inserts_mesh_asset_when_pack_present() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _lock = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _restore = EnvRestore::capture();
         let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../share/illustration-neural-mesh-pack");
         assert!(pack.is_dir());
@@ -695,8 +724,6 @@ mod tests {
         let node = scene.nodes.get(&res.root_id).expect("node");
         assert_eq!(node.kind, NodeKind::MeshAsset);
         assert!(node.mesh_uri.is_some());
-        std::env::remove_var("AOS_NEURAL_MESH_PACK");
-        std::env::remove_var("AOS_NEURAL_MESH_MODE");
     }
 
     #[test]

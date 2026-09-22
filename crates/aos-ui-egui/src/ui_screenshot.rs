@@ -343,6 +343,12 @@ pub fn seed_screenshot_illustration_layout(app: &mut UiApp, language: &str) {
                 .insert("storyboard_open".into(), json!(false));
             panel.local_state.insert("packs_open".into(), json!(false));
             panel.local_state.insert("camera_open".into(), json!(false));
+            panel.local_state.insert("lights_open".into(), json!(false));
+            panel.local_state.insert("light_type".into(), json!("point"));
+            panel.local_state.insert("light_intensity".into(), json!(1.5));
+            panel.local_state.insert("color_r".into(), json!(255));
+            panel.local_state.insert("color_g".into(), json!(242));
+            panel.local_state.insert("color_b".into(), json!(224));
             panel.local_state.insert("project_open".into(), json!(true));
             // Logical virtual-fs path; host resolves under AOS_HOME/var/storage/data.
             panel.local_state.insert(

@@ -76,6 +76,8 @@ pub struct ExportNode {
     pub mesh_uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<ExportCamera>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub light: Option<ExportLight>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -84,6 +86,16 @@ pub struct ExportCamera {
     pub sensor_width_mm: f32,
     pub near: f32,
     pub far: f32,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ExportLight {
+    #[serde(rename = "type")]
+    pub light_type: String,
+    pub intensity: f32,
+    pub color: [f32; 3],
+    pub range: f32,
+    pub spot_angle_rad: f32,
 }
 
 impl AkashaSceneExport {
@@ -174,6 +186,13 @@ fn export_node(n: &SceneNode) -> ExportNode {
             sensor_width_mm: c.sensor_width_mm,
             near: c.near,
             far: c.far,
+        }),
+        light: n.light.as_ref().map(|l| ExportLight {
+            light_type: crate::light::light_type_as_str(l.light_type).into(),
+            intensity: l.intensity,
+            color: l.color,
+            range: l.range,
+            spot_angle_rad: l.spot_angle_rad,
         }),
     }
 }

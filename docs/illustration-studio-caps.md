@@ -1,6 +1,6 @@
 # Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2)**
+**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2) + lights v0 (0.7.3)**
 **Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), [Storyboard](illustration-studio-storyboard.md), [Asset packs](illustration-asset-packs.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md` / `illustration-studio-prefab-pack.md`
 
 ## Caps (fail-closed)
@@ -15,7 +15,7 @@
 | `asset.read:/assets/illustration/**` | Read / instantiate Illustration asset + style packs |
 | `scene.compose` | Heuristic prompt → SceneGraph compose (`scene.compose` service) |
 | `scene.pose` | FK / look-at / two-bone IK / pose presets / undo (`scene.pose` service) |
-| `scene.edit` | Select / TRS / transactional `scene.apply` / `scene.instantiate` |
+| `scene.edit` | Select / TRS / camera / light / transactional `scene.apply` / `scene.instantiate` |
 | `scene.lock` | Set / clear / list semantic locks |
 | `mesh.neural` | Neural / AI mesh assist (`mesh.assist`, `mesh.pack.status`; stub procedural is Preview default; neural fail-closed without Model Pack) |
 | `comic.layout` | Create / mutate comic page panel layouts |
@@ -42,6 +42,7 @@ WASM tools on `illustration-studio` forward to platform `host_call` (`scene_host
 | `scene.select` | `scene.edit` | Set selection |
 | `scene.trs` | `scene.edit` | Set node TRS (ADR 0011) |
 | `scene.camera` | `scene.edit` | Set active camera eye / look-at / orbit / FOV |
+| `scene.light` | `scene.edit` | Add / edit Light nodes (type / intensity / color) |
 | `scene.apply` | `scene.edit` (+ pose/compose/asset as needed per op) | **Transactional** batch — all-or-nothing rollback |
 | `scene.lock` / `scene.unlock` / `scene.locks` | `scene.lock` | Semantic locks (node or subtree) |
 | `scene.compose` | `scene.compose` + asset read | Prompt → scene (fails if locks present for agents) |

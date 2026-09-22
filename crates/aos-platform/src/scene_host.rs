@@ -10,9 +10,9 @@ use aos_scene::{
     apply_batch, apply_one, require_batch_caps, require_edit_caps, AgentEditOp, EditActorKind,
     EditSnapshot, LockKind, LockScope, SemanticLock, ASSET_ILLUSTRATION_READ_CAP,
     DEFAULT_SCENE_YAML_PATH, SCENE_APPLY_SERVICE, SCENE_CAMERA_SERVICE, SCENE_COMPOSE_CAP,
-    SCENE_COMPOSE_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP,
-    SCENE_LOCK_SERVICE, SCENE_POSE_CAP, SCENE_POSE_SERVICE, SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
-    SCENE_UNLOCK_SERVICE,
+    SCENE_COMPOSE_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LIGHT_SERVICE,
+    SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE, SCENE_POSE_CAP, SCENE_POSE_SERVICE,
+    SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE, SCENE_UNLOCK_SERVICE,
 };
 use serde_json::{json, Value};
 
@@ -178,6 +178,71 @@ pub fn handle_scene_host_call(
                 yaw,
                 pitch,
                 distance,
+            };
+            require_edit_caps(&op, &ctx.granted_caps).map_err(|e| e.to_string())?;
+            apply_one(&mut snap, &op, &ctx.actor, actor_kind(ctx)).map_err(|e| e.to_string())?;
+            Ok(Some(snap.result_json().map_err(|e| e.to_string())?))
+        }
+        SCENE_LIGHT_SERVICE => {
+            require_any_cap(ctx, &[SCENE_EDIT_CAP])?;
+            let id = args
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let add = args.get("add").and_then(|v| v.as_bool()).unwrap_or(false);
+            let parent_id = args
+                .get("parent_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let name = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let translation = args
+                .get("translation")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| format!("translation: {e}"))?;
+            let light_type = args
+                .get("light_type")
+                .or_else(|| args.get("type"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let intensity = args
+                .get("intensity")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let color = args
+                .get("color")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| format!("color: {e}"))?;
+            let color_srgb = args
+                .get("color_srgb")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| format!("color_srgb: {e}"))?;
+            let range = args.get("range").and_then(|v| v.as_f64()).map(|v| v as f32);
+            let spot_angle_deg = args
+                .get("spot_angle_deg")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let mut snap = load_snap(args)?;
+            let op = AgentEditOp::Light {
+                id,
+                add,
+                parent_id,
+                name,
+                translation,
+                light_type,
+                intensity,
+                color,
+                color_srgb,
+                range,
+                spot_angle_deg,
             };
             require_edit_caps(&op, &ctx.granted_caps).map_err(|e| e.to_string())?;
             apply_one(&mut snap, &op, &ctx.actor, actor_kind(ctx)).map_err(|e| e.to_string())?;

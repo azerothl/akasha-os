@@ -1,6 +1,6 @@
 //! Undo-friendly SceneGraph ops (cheap foundation stack).
 
-use crate::scene::{CameraParams, SceneError, SceneGraph, Transform};
+use crate::scene::{CameraParams, LightParams, NodeKind, SceneError, SceneGraph, Transform};
 use serde::{Deserialize, Serialize};
 
 const MAX_UNDO: usize = 64;
@@ -21,6 +21,26 @@ pub enum SceneOp {
         before_params: CameraParams,
         after_params: CameraParams,
     },
+    /// Light transform + params as one undo step (existing node).
+    SetLight {
+        id: String,
+        before: Transform,
+        after: Transform,
+        before_params: LightParams,
+        after_params: LightParams,
+    },
+    /// Insert a new Light node (undo removes it).
+    InsertLight {
+        id: String,
+        name: String,
+        parent: String,
+        transform: Transform,
+        params: LightParams,
+    },
+    /// Remove a Light node (redo of InsertLight undo). Not constructed from DeclUI.
+    RemoveLight {
+        id: String,
+    },
     /// Multiple transforms as one undo step (pose presets / IK-lite).
     Batch {
         ops: Vec<SceneOp>,
@@ -40,6 +60,32 @@ impl SceneOp {
                 graph.set_transform(id, after.clone())?;
                 graph.set_camera_params(id, after_params.clone())
             }
+            SceneOp::SetLight {
+                id,
+                after,
+                after_params,
+                ..
+            } => {
+                graph.set_transform(id, after.clone())?;
+                graph.set_light_params(id, after_params.clone())
+            }
+            SceneOp::InsertLight {
+                id,
+                name,
+                parent,
+                transform,
+                params,
+            } => {
+                graph.insert_light(
+                    id,
+                    name,
+                    Some(parent.as_str()),
+                    transform.clone(),
+                    params.clone(),
+                )?;
+                Ok(())
+            }
+            SceneOp::RemoveLight { id } => remove_light_node(graph, id),
             SceneOp::Batch { ops } => {
                 for op in ops {
                     op.apply(graph)?;
@@ -69,11 +115,53 @@ impl SceneOp {
                 before_params: after_params.clone(),
                 after_params: before_params.clone(),
             },
+            SceneOp::SetLight {
+                id,
+                before,
+                after,
+                before_params,
+                after_params,
+            } => SceneOp::SetLight {
+                id: id.clone(),
+                before: after.clone(),
+                after: before.clone(),
+                before_params: after_params.clone(),
+                after_params: before_params.clone(),
+            },
+            SceneOp::InsertLight { id, .. } => SceneOp::RemoveLight { id: id.clone() },
+            // Redo after undo-of-insert: cannot rebuild without a snapshot.
+            // UndoStack only pushes RemoveLight via InsertLight invert; redo of
+            // that RemoveLight is the original InsertLight kept on the redo stack
+            // (see UndoStack::undo — it stores the original op, not the invert).
+            SceneOp::RemoveLight { id } => SceneOp::RemoveLight { id: id.clone() },
             SceneOp::Batch { ops } => SceneOp::Batch {
                 ops: ops.iter().rev().map(SceneOp::invert).collect(),
             },
         }
     }
+}
+
+fn remove_light_node(graph: &mut SceneGraph, id: &str) -> Result<(), SceneError> {
+    let node = graph
+        .nodes
+        .get(id)
+        .ok_or_else(|| SceneError::UnknownNode(id.into()))?
+        .clone();
+    if node.kind != NodeKind::Light {
+        return Err(SceneError::UnknownNode(id.into()));
+    }
+    if !node.children.is_empty() {
+        return Err(SceneError::UnknownNode(format!(
+            "light `{id}` has children"
+        )));
+    }
+    if let Some(parent) = &node.parent {
+        if let Some(p) = graph.nodes.get_mut(parent) {
+            p.children.retain(|c| c != id);
+        }
+    }
+    graph.nodes.remove(id);
+    Ok(())
 }
 
 #[derive(Debug, Default)]
