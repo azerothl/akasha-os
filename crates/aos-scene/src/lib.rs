@@ -27,6 +27,7 @@ mod comic;
 mod compose;
 mod edit;
 mod ik;
+mod light;
 mod locks;
 mod math;
 mod mesh_asset;
@@ -84,7 +85,12 @@ pub use pack_catalogue::{
 pub use edit::{
     apply_batch, apply_one, merge_trs, require_batch_caps, require_edit_caps, AgentEditOp,
     EditActorKind, EditError, EditSnapshot, SCENE_APPLY_SERVICE, SCENE_CAMERA_SERVICE,
-    SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
+    SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LIGHT_SERVICE, SCENE_SELECT_SERVICE,
+    SCENE_TRS_SERVICE,
+};
+pub use light::{
+    average_light_tint, collect_lights, color_from_srgb_u8, light_type_as_str, linear_to_srgb_u8,
+    merge_light_params, parse_light_type, shade_diffuse, srgb_u8_to_linear, ResolvedLight,
 };
 pub use ik::{solve_two_bone, IkError, TwoBoneIkResult};
 pub use locks::{
@@ -120,8 +126,8 @@ pub use render::{
 };
 pub use render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 pub use scene::{
-    CameraParams, NodeKind, SceneGraph, SceneNode, Transform, DEFAULT_SCENE_YAML_PATH,
-    ILLUSTRATIONS_DOCUMENTS_PREFIX,
+    CameraParams, LightParams, LightType, NodeKind, SceneGraph, SceneNode, Transform,
+    DEFAULT_SCENE_YAML_PATH, ILLUSTRATIONS_DOCUMENTS_PREFIX,
 };
 pub use style::{
     embedded_styles, load_style_pack_manifest_yaml, load_style_yaml, parse_optional_style,

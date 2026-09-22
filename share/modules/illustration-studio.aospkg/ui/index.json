@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Flow: Compose a scene → Edit (Move/Rotate/Scale gizmos + TRS strip + Undo/Redo) → Beauty. Project autosaves after edits.",
+      "tip_body": "Flow: Compose a scene → Edit (Move/Rotate/Scale gizmos + TRS strip + Undo/Redo + lights) → Beauty. Project autosaves after edits.",
       "compose_section": "1 · Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -97,11 +97,23 @@
       "camera_controls_strip": "Look-at / Distance / Orbit yaw·pitch / FOV — under the 3D viewport; synced to the active Camera node.",
       "camera_look_hint": "Look-at XYZ — edit in the viewport camera strip (SceneGraph SoT).",
       "camera_fov_hint": "Field of view — edit in the viewport camera strip (SceneGraph SoT).",
-      "studio_controls": "Controls"
+      "studio_controls": "Controls",
+      "lights_section": "Lights",
+      "lights_hint": "SceneGraph Light nodes (point / directional / spot). Beauty CPU and Blender use intensity, color, and type.",
+      "add_light_label": "Add point light",
+      "apply_light_label": "Apply to selection",
+      "light_type_label": "Type",
+      "light_type_point": "Point",
+      "light_type_directional": "Directional",
+      "light_type_spot": "Spot",
+      "light_intensity_label": "Intensity",
+      "light_color_r_label": "Color R (sRGB)",
+      "light_color_g_label": "Color G (sRGB)",
+      "light_color_b_label": "Color B (sRGB)"
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Parcours : Composer une scène → Éditer (gizmos Déplacer/Rotation/Échelle + bandeau TRS + Annuler/Rétablir) → Beauté. Autosave du projet après les éditions.",
+      "tip_body": "Parcours : Composer une scène → Éditer (gizmos Déplacer/Rotation/Échelle + bandeau TRS + Annuler/Rétablir + lumières) → Beauté. Autosave du projet après les éditions.",
       "compose_section": "1 · Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -191,7 +203,19 @@
       "camera_controls_strip": "Viser / Distance / Orbite lacet·tangage / FOV — sous la fenêtre 3D ; synchronisé avec le nœud Camera actif.",
       "camera_look_hint": "Look-at XYZ — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT).",
       "camera_fov_hint": "Champ de vision — éditer dans le bandeau caméra de la fenêtre (Camera SceneGraph = SoT).",
-      "studio_controls": "Commandes"
+      "studio_controls": "Commandes",
+      "lights_section": "Lumières",
+      "lights_hint": "Nœuds Light du SceneGraph (point / directionnel / spot). Beauté CPU et Blender respectent intensité, couleur et type.",
+      "add_light_label": "Ajouter lumière ponctuelle",
+      "apply_light_label": "Appliquer à la sélection",
+      "light_type_label": "Type",
+      "light_type_point": "Ponctuelle",
+      "light_type_directional": "Directionnelle",
+      "light_type_spot": "Spot",
+      "light_intensity_label": "Intensité",
+      "light_color_r_label": "Couleur R (sRVB)",
+      "light_color_g_label": "Couleur V (sRVB)",
+      "light_color_b_label": "Couleur B (sRVB)"
     }
   },
   "state": {
@@ -289,6 +313,30 @@
       "camera_open": {
         "type": "boolean",
         "default": false
+      },
+      "lights_open": {
+        "type": "boolean",
+        "default": false
+      },
+      "light_type": {
+        "type": "string",
+        "default": "point"
+      },
+      "light_intensity": {
+        "type": "number",
+        "default": 1.5
+      },
+      "color_r": {
+        "type": "number",
+        "default": 255
+      },
+      "color_g": {
+        "type": "number",
+        "default": 242
+      },
+      "color_b": {
+        "type": "number",
+        "default": 224
       }
     }
   },
@@ -476,6 +524,35 @@
         "style": "$local.style_id",
         "width": 256,
         "height": 192
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "add_light",
+      "service": "scene.light",
+      "input": {
+        "add": true,
+        "light_type": "$local.light_type",
+        "intensity": "$local.light_intensity",
+        "color_r": "$local.color_r",
+        "color_g": "$local.color_g",
+        "color_b": "$local.color_b",
+        "scene_yaml": "$local.scene"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "apply_light",
+      "service": "scene.light",
+      "input": {
+        "id": "$local.selected_id",
+        "add": false,
+        "light_type": "$local.light_type",
+        "intensity": "$local.light_intensity",
+        "color_r": "$local.color_r",
+        "color_g": "$local.color_g",
+        "color_b": "$local.color_b",
+        "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
     },
@@ -943,6 +1020,82 @@
                 ],
                 "collapsible": true,
                 "open_state_key": "camera_open"
+              },
+              {
+                "kind": "section",
+                "label_key": "lights_section",
+                "children": [
+                  {
+                    "kind": "text",
+                    "label_key": "lights_hint"
+                  },
+                  {
+                    "kind": "radio",
+                    "state_key": "light_type",
+                    "label_key": "light_type_label",
+                    "inline": true,
+                    "items": [
+                      "point",
+                      "directional",
+                      "spot"
+                    ],
+                    "item_label_keys": [
+                      "light_type_point",
+                      "light_type_directional",
+                      "light_type_spot"
+                    ]
+                  },
+                  {
+                    "kind": "number",
+                    "state_key": "light_intensity",
+                    "min": 0,
+                    "max": 20,
+                    "label_key": "light_intensity_label"
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "number",
+                        "state_key": "color_r",
+                        "min": 0,
+                        "max": 255,
+                        "label_key": "light_color_r_label"
+                      },
+                      {
+                        "kind": "number",
+                        "state_key": "color_g",
+                        "min": 0,
+                        "max": 255,
+                        "label_key": "light_color_g_label"
+                      },
+                      {
+                        "kind": "number",
+                        "state_key": "color_b",
+                        "min": 0,
+                        "max": 255,
+                        "label_key": "light_color_b_label"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "add_light_label",
+                        "action": "add_light"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "apply_light_label",
+                        "action": "apply_light"
+                      }
+                    ]
+                  }
+                ],
+                "collapsible": true,
+                "open_state_key": "lights_open"
               }
             ]
           },

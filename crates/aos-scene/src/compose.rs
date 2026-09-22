@@ -5,7 +5,7 @@
 
 use crate::assets::{embedded_primitives_pack, instantiate_asset, AssetError, AssetPack};
 use crate::math::{Quat, Vec3};
-use crate::scene::{CameraParams, NodeKind, SceneError, SceneGraph, SceneNode, Transform};
+use crate::scene::{CameraParams, LightParams, NodeKind, SceneError, SceneGraph, SceneNode, Transform};
 use thiserror::Error;
 
 /// DeclUI / host service id: compose a SceneGraph from a short prompt.
@@ -519,6 +519,7 @@ pub fn compose_from_prompt_with_pack(
             Vec3::new(0.0, 2.2, 6.5)
         },
     )?;
+    let _ = add_key_light(&mut scene)?;
 
     scene.validate()?;
     Ok(ComposeResult {
@@ -578,6 +579,27 @@ fn add_camera(scene: &mut SceneGraph, translation: Vec3) -> Result<String, Compo
         }
     }
     scene.active_camera = Some(id.clone());
+    Ok(id)
+}
+
+fn add_key_light(scene: &mut SceneGraph) -> Result<String, ComposeError> {
+    let id = "key_light".to_string();
+    if scene.nodes.contains_key(&id) {
+        return Ok(id);
+    }
+    scene
+        .insert_light(
+            &id,
+            "Key Light",
+            Some("root"),
+            Transform {
+                translation: Vec3::new(2.8, 4.5, 3.2),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+            LightParams::default(),
+        )
+        .map_err(ComposeError::from)?;
     Ok(id)
 }
 

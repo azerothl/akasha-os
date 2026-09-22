@@ -90,6 +90,55 @@ impl Default for CameraParams {
     }
 }
 
+/// Light kind on a [`NodeKind::Light`] node (SceneGraph SoT).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LightType {
+    #[default]
+    Point,
+    /// Direction = local **−Z** (same convention as cameras).
+    Directional,
+    Spot,
+}
+
+/// Optics / energy for a Light node. Color is **linear RGB** (ADR 0011);
+/// DeclUI converts sRGB at the boundary.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LightParams {
+    #[serde(rename = "type", default)]
+    pub light_type: LightType,
+    /// Linear intensity multiplier (unitless; backends map to energy).
+    pub intensity: f32,
+    /// Linear RGB in \[0, ∞) (typically \[0, 1\] for UI defaults).
+    pub color: [f32; 3],
+    /// Influence radius in metres (point / spot). Ignored for directional.
+    #[serde(default = "default_light_range")]
+    pub range: f32,
+    /// Outer cone half-angle in **radians** (spot only).
+    #[serde(default = "default_spot_angle")]
+    pub spot_angle_rad: f32,
+}
+
+fn default_light_range() -> f32 {
+    8.0
+}
+
+fn default_spot_angle() -> f32 {
+    std::f32::consts::FRAC_PI_4
+}
+
+impl Default for LightParams {
+    fn default() -> Self {
+        Self {
+            light_type: LightType::Point,
+            intensity: 1.5,
+            color: [1.0, 0.95, 0.88],
+            range: default_light_range(),
+            spot_angle_rad: default_spot_angle(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SceneNode {
     pub id: String,
@@ -103,6 +152,8 @@ pub struct SceneNode {
     pub transform: Transform,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<CameraParams>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub light: Option<LightParams>,
     /// Host-resolvable path or pack-relative URI for [`NodeKind::MeshAsset`].
     /// Prefer project-local `/documents/illustrations/**` or pack fixtures.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -121,6 +172,7 @@ impl SceneNode {
             children: Vec::new(),
             transform: Transform::default(),
             camera: None,
+            light: None,
             mesh_uri: None,
             visible: true,
         }
@@ -320,6 +372,19 @@ impl SceneGraph {
         }
         nodes.insert(cam.id.clone(), cam);
 
+        // Soft key light so beauty / stub paths have a SceneGraph light by default.
+        let mut key = SceneNode::empty("key_light", "Key Light");
+        key.kind = NodeKind::Light;
+        key.parent = Some("root".into());
+        key.transform.translation = Vec3::new(2.8, 4.5, 3.2);
+        key.light = Some(LightParams::default());
+        if let Some(r) = nodes.get_mut("root") {
+            if !r.children.contains(&key.id) {
+                r.children.push(key.id.clone());
+            }
+        }
+        nodes.insert(key.id.clone(), key);
+
         Self {
             nodes,
             roots: vec!["root".into()],
@@ -431,6 +496,69 @@ impl SceneGraph {
         }
         node.camera = Some(params);
         Ok(())
+    }
+
+    /// Set light params on a [`NodeKind::Light`] node (fail-closed on other kinds).
+    pub fn set_light_params(&mut self, id: &str, params: LightParams) -> Result<(), SceneError> {
+        if !params.intensity.is_finite()
+            || params.intensity < 0.0
+            || !params.range.is_finite()
+            || params.range <= 0.0
+            || !params.spot_angle_rad.is_finite()
+            || params.spot_angle_rad <= 0.0
+            || params.spot_angle_rad >= std::f32::consts::PI
+            || !params.color[0].is_finite()
+            || !params.color[1].is_finite()
+            || !params.color[2].is_finite()
+            || params.color[0] < 0.0
+            || params.color[1] < 0.0
+            || params.color[2] < 0.0
+        {
+            return Err(SceneError::NonFiniteTransform);
+        }
+        let node = self
+            .nodes
+            .get_mut(id)
+            .ok_or_else(|| SceneError::UnknownNode(id.into()))?;
+        if node.kind != NodeKind::Light {
+            return Err(SceneError::UnknownNode(id.into()));
+        }
+        node.light = Some(params);
+        Ok(())
+    }
+
+    /// Insert a new Light node under `parent` (default `root`). Fail-closed on duplicate id.
+    pub fn insert_light(
+        &mut self,
+        id: impl Into<String>,
+        name: impl Into<String>,
+        parent: Option<&str>,
+        transform: Transform,
+        params: LightParams,
+    ) -> Result<String, SceneError> {
+        let id = id.into();
+        if self.nodes.contains_key(&id) {
+            return Err(SceneError::DuplicateNode(id));
+        }
+        let parent_id = parent.unwrap_or("root").to_string();
+        if !self.nodes.contains_key(&parent_id) {
+            return Err(SceneError::UnknownNode(parent_id));
+        }
+        let t = transform.normalized_rotation()?;
+        // Validate params via a temp set after insert.
+        let mut node = SceneNode::empty(&id, name);
+        node.kind = NodeKind::Light;
+        node.parent = Some(parent_id.clone());
+        node.transform = t;
+        node.light = Some(LightParams::default());
+        self.nodes.insert(id.clone(), node);
+        if let Some(p) = self.nodes.get_mut(&parent_id) {
+            if !p.children.contains(&id) {
+                p.children.push(id.clone());
+            }
+        }
+        self.set_light_params(&id, params)?;
+        Ok(id)
     }
 
     pub fn node_ids_depth_first(&self) -> Vec<String> {

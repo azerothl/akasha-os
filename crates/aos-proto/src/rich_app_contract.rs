@@ -218,6 +218,9 @@ pub const SCENE_TRS_SERVICE: &str = "scene.trs";
 /// DeclUI / host_call: set active camera orbit / look-at / FOV.
 pub const SCENE_CAMERA_SERVICE: &str = "scene.camera";
 
+/// DeclUI / host_call: add / edit SceneGraph Light nodes.
+pub const SCENE_LIGHT_SERVICE: &str = "scene.light";
+
 /// DeclUI / host_call: transactional agent edit batch.
 pub const SCENE_APPLY_SERVICE: &str = "scene.apply";
 

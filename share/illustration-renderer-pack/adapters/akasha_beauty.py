@@ -316,11 +316,34 @@ def main() -> int:
             cam_data.clip_end = float(cam.get("far") or 100.0)
             blender_objs[node_id] = cam_obj
         elif kind == "light":
-            light_data = bpy.data.lights.new(name=node.get("name") or node_id, type="AREA")
-            light_data.energy = 200.0
+            light_meta = node.get("light") or {}
+            ltype = str(light_meta.get("type") or "point").lower()
+            blender_type = {
+                "point": "POINT",
+                "directional": "SUN",
+                "spot": "SPOT",
+                "area": "AREA",
+            }.get(ltype, "POINT")
+            light_data = bpy.data.lights.new(name=node.get("name") or node_id, type=blender_type)
+            # Intensity is unitless linear in Akasha; map to Blender energy heuristically.
+            intensity = float(light_meta.get("intensity") or 1.5)
+            if blender_type == "SUN":
+                light_data.energy = max(0.05, intensity * 2.0)
+            else:
+                light_data.energy = max(1.0, intensity * 120.0)
+            color = light_meta.get("color") or [1.0, 0.95, 0.88]
+            try:
+                light_data.color = (float(color[0]), float(color[1]), float(color[2]))
+            except (TypeError, ValueError, IndexError):
+                light_data.color = (1.0, 0.95, 0.88)
+            if blender_type == "SPOT":
+                spot_angle = float(light_meta.get("spot_angle_rad") or 0.785398)
+                light_data.spot_size = max(0.05, min(3.14, spot_angle * 2.0))
             light_obj = bpy.data.objects.new(light_data.name, light_data)
             bpy.context.scene.collection.objects.link(light_obj)
             light_obj.location = pos
+            light_obj.rotation_mode = "QUATERNION"
+            light_obj.rotation_quaternion = (quat[3], quat[0], quat[1], quat[2])
             blender_objs[node_id] = light_obj
         else:
             empty = bpy.data.objects.new(node.get("name") or node_id, None)

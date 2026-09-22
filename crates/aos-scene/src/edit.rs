@@ -10,14 +10,15 @@ use crate::camera::{
     camera_transform_look_at, eye_from_orbit, orbit_from_active_camera, set_focal_from_hfov,
 };
 use crate::compose::{compose_from_prompt, ComposeError};
+use crate::light::{color_from_srgb_u8, merge_light_params, parse_light_type};
 use crate::locks::{
     LockError, LockKind, LockScope, LockTable, MutateKind, SemanticLock, SCENE_LOCK_CAP,
 };
 use crate::math::{Quat, Vec3};
 use crate::ops::{SceneOp, UndoStack};
 use crate::pose::{apply_pose, apply_pose_preset, JointId, PoseError, PoseOp};
-use crate::project::{load_project_yaml, save_project_yaml, ProjectFile, ProjectError};
-use crate::scene::{NodeKind, SceneError, SceneGraph, Transform};
+use crate::project::{load_project_yaml, save_project_yaml, ProjectError, ProjectFile};
+use crate::scene::{LightParams, NodeKind, SceneError, SceneGraph, Transform};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -35,6 +36,9 @@ pub const SCENE_TRS_SERVICE: &str = "scene.trs";
 
 /// DeclUI / host_call: set active camera orbit / look-at / FOV.
 pub const SCENE_CAMERA_SERVICE: &str = "scene.camera";
+
+/// DeclUI / host_call: add / edit SceneGraph Light nodes.
+pub const SCENE_LIGHT_SERVICE: &str = "scene.light";
 
 /// DeclUI / host_call: transactional batch apply / rollback.
 pub const SCENE_APPLY_SERVICE: &str = "scene.apply";
@@ -71,6 +75,36 @@ pub enum AgentEditOp {
         pitch: Option<f32>,
         #[serde(default)]
         distance: Option<f32>,
+    },
+    /// Add a Light node and/or edit intensity / color / type / translation.
+    Light {
+        #[serde(default)]
+        id: Option<String>,
+        /// When true, insert a new Light (id optional; auto `light_N`).
+        #[serde(default)]
+        add: bool,
+        #[serde(default)]
+        parent_id: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        translation: Option<Vec3>,
+        /// `point` | `directional` | `spot` (EN; FR aliases accepted in parse).
+        #[serde(default)]
+        light_type: Option<String>,
+        #[serde(default)]
+        intensity: Option<f32>,
+        /// Linear RGB when set; prefer `color_srgb` from DeclUI.
+        #[serde(default)]
+        color: Option<[f32; 3]>,
+        /// sRGB 0–255 channels from DeclUI (converted to linear at boundary).
+        #[serde(default)]
+        color_srgb: Option<[u8; 3]>,
+        #[serde(default)]
+        range: Option<f32>,
+        /// Spot outer half-angle in **degrees** (UI boundary).
+        #[serde(default)]
+        spot_angle_deg: Option<f32>,
     },
     Pose {
         humanoid_root: String,
@@ -171,6 +205,10 @@ pub enum EditError {
     IncompletePose,
     #[error("camera op requires eye+look_at, orbit (yaw/pitch/distance+look_at), or fov_deg")]
     IncompleteCamera,
+    #[error("light op requires add and/or id with intensity/color/type/translation")]
+    IncompleteLight,
+    #[error("unknown light type `{0}`")]
+    UnknownLightType(String),
     #[error("empty apply batch")]
     EmptyBatch,
     #[error("actor `{0}` denied — missing capability")]
@@ -317,6 +355,128 @@ pub fn apply_one(
             snap.selected_id = Some(cam_id);
             Ok(())
         }
+        AgentEditOp::Light {
+            id,
+            add,
+            parent_id,
+            name,
+            translation,
+            light_type,
+            intensity,
+            color,
+            color_srgb,
+            range,
+            spot_angle_deg,
+        } => {
+            let parsed_type = match light_type {
+                Some(s) => Some(parse_light_type(s).ok_or_else(|| {
+                    EditError::UnknownLightType(s.clone())
+                })?),
+                None => None,
+            };
+            let linear_color = color.or_else(|| color_srgb.map(color_from_srgb_u8));
+            let spot_rad = spot_angle_deg.map(|d| d.to_radians());
+            let has_patch = translation.is_some()
+                || parsed_type.is_some()
+                || intensity.is_some()
+                || linear_color.is_some()
+                || range.is_some()
+                || spot_rad.is_some();
+
+            if *add {
+                let parent = parent_id.as_deref().unwrap_or("root");
+                if actor_kind == EditActorKind::Agent {
+                    snap.project.locks.assert_agent_may_mutate(
+                        &snap.project.scene,
+                        parent,
+                        MutateKind::Structure,
+                    )?;
+                }
+                let new_id = id.clone().unwrap_or_else(|| next_light_id(&snap.project.scene));
+                let mut params = LightParams::default();
+                if let Some(t) = parsed_type {
+                    params.light_type = t;
+                }
+                if let Some(i) = intensity {
+                    params.intensity = *i;
+                }
+                if let Some(c) = linear_color {
+                    params.color = c;
+                }
+                if let Some(r) = range {
+                    params.range = *r;
+                }
+                if let Some(a) = spot_rad {
+                    params.spot_angle_rad = a;
+                }
+                let transform = Transform {
+                    translation: translation.unwrap_or(Vec3::new(2.0, 3.5, 2.0)),
+                    rotation: Quat::IDENTITY,
+                    scale: Vec3::ONE,
+                };
+                let op = SceneOp::InsertLight {
+                    id: new_id.clone(),
+                    name: name.clone().unwrap_or_else(|| "Light".into()),
+                    parent: parent.into(),
+                    transform,
+                    params,
+                };
+                let mut undo = UndoStack::default();
+                undo.push_apply(&mut snap.project.scene, op)?;
+                snap.selected_id = Some(new_id);
+                return Ok(());
+            }
+
+            let light_id = id
+                .clone()
+                .or_else(|| snap.selected_id.clone())
+                .ok_or(EditError::IncompleteLight)?;
+            if !has_patch {
+                return Err(EditError::IncompleteLight);
+            }
+            if actor_kind == EditActorKind::Agent {
+                snap.project.locks.assert_agent_may_mutate(
+                    &snap.project.scene,
+                    &light_id,
+                    MutateKind::Transform,
+                )?;
+            }
+            let node = snap
+                .project
+                .scene
+                .nodes
+                .get(&light_id)
+                .ok_or_else(|| EditError::UnknownNode(light_id.clone()))?
+                .clone();
+            if node.kind != NodeKind::Light {
+                return Err(EditError::UnknownNode(light_id));
+            }
+            let before = node.transform.clone();
+            let before_params = node.light.clone().unwrap_or_default();
+            let after_params = merge_light_params(
+                &before_params,
+                parsed_type,
+                *intensity,
+                linear_color,
+                *range,
+                spot_rad,
+            );
+            let mut after = before.clone();
+            if let Some(t) = translation {
+                after.translation = *t;
+            }
+            let op = SceneOp::SetLight {
+                id: light_id.clone(),
+                before,
+                after,
+                before_params,
+                after_params,
+            };
+            let mut undo = UndoStack::default();
+            undo.push_apply(&mut snap.project.scene, op)?;
+            snap.selected_id = Some(light_id);
+            Ok(())
+        }
         AgentEditOp::Pose {
             humanoid_root,
             preset,
@@ -459,6 +619,7 @@ pub fn require_edit_caps(op: &AgentEditOp, granted: &[String]) -> Result<(), Edi
         AgentEditOp::Select { .. }
         | AgentEditOp::Trs { .. }
         | AgentEditOp::Camera { .. }
+        | AgentEditOp::Light { .. }
         | AgentEditOp::Instantiate { .. } => SCENE_EDIT_CAP,
         AgentEditOp::Pose { .. } => crate::pose::SCENE_POSE_CAP,
         AgentEditOp::Compose { .. } => crate::compose::SCENE_COMPOSE_CAP,
@@ -498,22 +659,32 @@ pub fn require_batch_caps(ops: &[AgentEditOp], granted: &[String]) -> Result<(),
 
 /// Build a `Transform` patch helper for DeclUI TRS input.
 pub fn merge_trs(
-    base: &Transform,
+    before: &Transform,
     translation: Option<Vec3>,
     rotation: Option<Quat>,
     scale: Option<Vec3>,
 ) -> Transform {
-    let mut t = base.clone();
-    if let Some(v) = translation {
-        t.translation = v;
+    let mut after = before.clone();
+    if let Some(t) = translation {
+        after.translation = t;
     }
-    if let Some(v) = rotation {
-        t.rotation = v;
+    if let Some(r) = rotation {
+        after.rotation = r;
     }
-    if let Some(v) = scale {
-        t.scale = v;
+    if let Some(s) = scale {
+        after.scale = s;
     }
-    t
+    after
+}
+
+fn next_light_id(scene: &SceneGraph) -> String {
+    for i in 1..10_000 {
+        let id = format!("light_{i}");
+        if !scene.nodes.contains_key(&id) {
+            return id;
+        }
+    }
+    format!("light_{}", scene.nodes.len())
 }
 
 #[cfg(test)]
@@ -647,6 +818,82 @@ mod tests {
                 yaw: None,
                 pitch: None,
                 distance: None,
+            },
+            &[],
+        )
+        .unwrap_err();
+        assert!(matches!(err, EditError::CapDenied(_)));
+    }
+
+    #[test]
+    fn light_add_and_edit_intensity() {
+        let mut snap = demo_snap();
+        apply_one(
+            &mut snap,
+            &AgentEditOp::Light {
+                id: Some("fill".into()),
+                add: true,
+                parent_id: None,
+                name: Some("Fill".into()),
+                translation: Some(Vec3::new(-2.0, 3.0, 1.0)),
+                light_type: Some("directional".into()),
+                intensity: Some(0.8),
+                color: None,
+                color_srgb: Some([180, 200, 255]),
+                range: None,
+                spot_angle_deg: None,
+            },
+            "human:ui",
+            EditActorKind::Human,
+        )
+        .unwrap();
+        assert_eq!(snap.project.scene.nodes["fill"].kind, NodeKind::Light);
+        apply_one(
+            &mut snap,
+            &AgentEditOp::Light {
+                id: Some("key_light".into()),
+                add: false,
+                parent_id: None,
+                name: None,
+                translation: None,
+                light_type: None,
+                intensity: Some(3.0),
+                color: None,
+                color_srgb: None,
+                range: None,
+                spot_angle_deg: None,
+            },
+            "human:ui",
+            EditActorKind::Human,
+        )
+        .unwrap();
+        assert!(
+            (snap.project.scene.nodes["key_light"]
+                .light
+                .as_ref()
+                .unwrap()
+                .intensity
+                - 3.0)
+                .abs()
+                < 1e-5
+        );
+    }
+
+    #[test]
+    fn light_op_denied_without_cap() {
+        let err = require_edit_caps(
+            &AgentEditOp::Light {
+                id: None,
+                add: true,
+                parent_id: None,
+                name: None,
+                translation: None,
+                light_type: None,
+                intensity: None,
+                color: None,
+                color_srgb: None,
+                range: None,
+                spot_angle_deg: None,
             },
             &[],
         )

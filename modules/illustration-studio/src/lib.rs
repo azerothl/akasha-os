@@ -25,6 +25,7 @@ fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, Str
         | "scene.select"
         | "scene.trs"
         | "scene.camera"
+        | "scene.light"
         | "scene.apply"
         | "scene.lock"
         | "scene.unlock"

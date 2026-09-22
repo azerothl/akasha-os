@@ -3,6 +3,7 @@
 use super::backend::{
     RenderBackend, RenderBackendId, RenderError, RenderOutput, RenderPassKind, RenderRequest,
 };
+use crate::light::{average_light_tint, collect_lights};
 use crate::render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 
 pub struct StubRenderBackend;
@@ -13,9 +14,14 @@ impl RenderBackend for StubRenderBackend {
     }
 
     fn render(&self, req: &RenderRequest) -> Result<RenderOutput, RenderError> {
-        let (r, g, b) = req.stub_rgb;
-        // Stub always emits fixed size; width/height on the request are advisory.
-        let _ = (req.width, req.height, req.pass, &req.scene);
+        let (mut r, mut g, mut b) = req.stub_rgb;
+        // Cheap light respect: blend stub color toward average SceneGraph light tint.
+        if let Some(tint) = average_light_tint(&collect_lights(&req.scene)) {
+            r = ((r as u16 * 2 + tint[0] as u16) / 3) as u8;
+            g = ((g as u16 * 2 + tint[1] as u16) / 3) as u8;
+            b = ((b as u16 * 2 + tint[2] as u16) / 3) as u8;
+        }
+        let _ = (req.width, req.height, req.pass);
         // When an NPR style is selected, tint the stub so DeclUI preview
         // still reflects the choice without requiring CPU/Blender.
         let png = if let Some(style) = &req.style {

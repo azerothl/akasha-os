@@ -142,6 +142,31 @@ tools:
           type: number
         scene_yaml:
           type: string
+  - name: scene.light
+    description: Add or edit SceneGraph Light nodes (type/intensity/color)
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        add:
+          type: boolean
+        parent_id:
+          type: string
+        light_type:
+          type: string
+        intensity:
+          type: number
+        color_srgb:
+          type: array
+        color_r:
+          type: number
+        color_g:
+          type: number
+        color_b:
+          type: number
+        scene_yaml:
+          type: string
   - name: scene.apply
     description: Transactional agent edit batch (apply or rollback)
     input_schema:

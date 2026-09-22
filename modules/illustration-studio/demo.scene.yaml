@@ -2,148 +2,21 @@ format_version: 1
 conventions: ADR-0011
 scene:
   nodes:
-    mesh_spine:
-      id: mesh_spine
-      name: SpineMesh
-      kind: mesh_box
-      parent: spine
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.28
-          y: 0.18
-          z: 0.16
-      visible: true
-    mesh_chest:
-      id: mesh_chest
-      name: ChestMesh
-      kind: mesh_box
-      parent: chest
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.4
-          y: 0.28
-          z: 0.22
-      visible: true
-    mesh_lower_leg_l:
-      id: mesh_lower_leg_l
-      name: LowerLegLMesh
-      kind: mesh_box
-      parent: lower_leg_l
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: -0.17
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.11
-          y: 0.34
-          z: 0.11
-      visible: true
-    upper_arm_r:
-      id: upper_arm_r
-      name: UpperArmR
+    root:
+      id: root
+      name: Scene
       kind: empty
-      parent: chest
       children:
-      - mesh_upper_arm_r
-      - lower_arm_r
-      - arm_r
-      transform:
-        translation:
-          x: 0.28
-          y: 0.08
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: true
-    lower_arm_r:
-      id: lower_arm_r
-      name: LowerArmR
-      kind: empty
-      parent: upper_arm_r
-      children:
-      - mesh_lower_arm_r
-      - hand_r
-      transform:
-        translation:
-          x: 0.0
-          y: -0.28
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: true
-    torso:
-      id: torso
-      name: Torso
-      kind: empty
-      parent: chest
-      children: []
+      - ground
+      - pedestal
+      - box
+      - humanoid
+      - camera
+      - key_light
       transform:
         translation:
           x: 0.0
           y: 0.0
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: false
-    hand_r:
-      id: hand_r
-      name: HandR
-      kind: empty
-      parent: lower_arm_r
-      children:
-      - mesh_hand_r
-      transform:
-        translation:
-          x: 0.0
-          y: -0.22
           z: 0.0
         rotation:
           x: 0.0
@@ -177,18 +50,86 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    lower_leg_l:
-      id: lower_leg_l
-      name: LowerLegL
-      kind: empty
-      parent: upper_leg_l
-      children:
-      - mesh_lower_leg_l
-      - foot_l
+    box:
+      id: box
+      name: Box
+      kind: mesh_box
+      parent: root
+      children: []
       transform:
         translation:
           x: 0.0
-          y: -0.36
+          y: 0.675
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.7
+          y: 0.7
+          z: 0.7
+      visible: true
+    chest:
+      id: chest
+      name: Chest
+      kind: empty
+      parent: spine
+      children:
+      - mesh_chest
+      - neck
+      - upper_arm_l
+      - upper_arm_r
+      - torso
+      transform:
+        translation:
+          x: 0.0
+          y: 0.22
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: true
+    arm_l:
+      id: arm_l
+      name: ArmL
+      kind: empty
+      parent: upper_arm_l
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: false
+    lower_arm_r:
+      id: lower_arm_r
+      name: LowerArmR
+      kind: empty
+      parent: upper_arm_r
+      children:
+      - mesh_lower_arm_r
+      - hand_r
+      transform:
+        translation:
+          x: 0.0
+          y: -0.28
           z: 0.0
         rotation:
           x: 0.0
@@ -221,18 +162,18 @@ scene:
           y: 0.22
           z: 0.22
       visible: true
-    hand_l:
-      id: hand_l
-      name: HandL
+    humanoid:
+      id: humanoid
+      name: Humanoid
       kind: empty
-      parent: lower_arm_l
+      parent: root
       children:
-      - mesh_hand_l
+      - pelvis
       transform:
         translation:
-          x: 0.0
-          y: -0.22
-          z: 0.0
+          x: 1.4
+          y: 0.0
+          z: 0.3
         rotation:
           x: 0.0
           y: 0.0
@@ -243,82 +184,17 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    mesh_upper_leg_l:
-      id: mesh_upper_leg_l
-      name: UpperLegLMesh
-      kind: mesh_box
-      parent: upper_leg_l
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: -0.18
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.12
-          y: 0.36
-          z: 0.12
-      visible: true
-    mesh_lower_leg_r:
-      id: mesh_lower_leg_r
-      name: LowerLegRMesh
-      kind: mesh_box
-      parent: lower_leg_r
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: -0.17
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.11
-          y: 0.34
-          z: 0.11
-      visible: true
-    arm_r:
-      id: arm_r
-      name: ArmR
-      kind: empty
-      parent: upper_arm_r
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: false
-    upper_arm_l:
-      id: upper_arm_l
-      name: UpperArmL
+    neck:
+      id: neck
+      name: Neck
       kind: empty
       parent: chest
       children:
-      - mesh_upper_arm_l
-      - lower_arm_l
-      - arm_l
+      - head
       transform:
         translation:
-          x: -0.28
-          y: 0.08
+          x: 0.0
+          y: 0.2
           z: 0.0
         rotation:
           x: 0.0
@@ -351,16 +227,16 @@ scene:
           y: 0.1
           z: 0.06
       visible: true
-    mesh_lower_arm_l:
-      id: mesh_lower_arm_l
-      name: LowerArmLMesh
+    mesh_upper_arm_l:
+      id: mesh_upper_arm_l
+      name: UpperArmLMesh
       kind: mesh_box
-      parent: lower_arm_l
+      parent: upper_arm_l
       children: []
       transform:
         translation:
           x: 0.0
-          y: -0.13
+          y: -0.14
           z: 0.0
         rotation:
           x: 0.0
@@ -368,24 +244,22 @@ scene:
           z: 0.0
           w: 1.0
         scale:
-          x: 0.09
-          y: 0.26
-          z: 0.09
+          x: 0.1
+          y: 0.28
+          z: 0.1
       visible: true
-    root:
-      id: root
-      name: Scene
+    lower_leg_l:
+      id: lower_leg_l
+      name: LowerLegL
       kind: empty
+      parent: upper_leg_l
       children:
-      - ground
-      - pedestal
-      - box
-      - humanoid
-      - camera
+      - mesh_lower_leg_l
+      - foot_l
       transform:
         translation:
           x: 0.0
-          y: 0.0
+          y: -0.36
           z: 0.0
         rotation:
           x: 0.0
@@ -396,27 +270,6 @@ scene:
           x: 1.0
           y: 1.0
           z: 1.0
-      visible: true
-    pedestal:
-      id: pedestal
-      name: Pedestal
-      kind: mesh_box
-      parent: root
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.175
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.2
-          y: 0.35
-          z: 1.2
       visible: true
     mesh_hand_r:
       id: mesh_hand_r
@@ -438,116 +291,6 @@ scene:
           x: 0.08
           y: 0.1
           z: 0.06
-      visible: true
-    arm_l:
-      id: arm_l
-      name: ArmL
-      kind: empty
-      parent: upper_arm_l
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: false
-    upper_leg_r:
-      id: upper_leg_r
-      name: UpperLegR
-      kind: empty
-      parent: pelvis
-      children:
-      - mesh_upper_leg_r
-      - lower_leg_r
-      - leg_r
-      transform:
-        translation:
-          x: 0.1
-          y: -0.02
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: true
-    foot_l:
-      id: foot_l
-      name: FootL
-      kind: empty
-      parent: lower_leg_l
-      children:
-      - mesh_foot_l
-      transform:
-        translation:
-          x: 0.0
-          y: -0.28
-          z: 0.06
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: true
-    ground:
-      id: ground
-      name: Ground
-      kind: mesh_box
-      parent: root
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.04
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 6.0
-          y: 0.08
-          z: 6.0
-      visible: true
-    neck:
-      id: neck
-      name: Neck
-      kind: empty
-      parent: chest
-      children:
-      - head
-      transform:
-        translation:
-          x: 0.0
-          y: 0.2
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
       visible: true
     lower_leg_r:
       id: lower_leg_r
@@ -572,18 +315,17 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    spine:
-      id: spine
-      name: Spine
+    hand_r:
+      id: hand_r
+      name: HandR
       kind: empty
-      parent: pelvis
+      parent: lower_arm_r
       children:
-      - mesh_spine
-      - chest
+      - mesh_hand_r
       transform:
         translation:
           x: 0.0
-          y: 0.12
+          y: -0.22
           z: 0.0
         rotation:
           x: 0.0
@@ -595,18 +337,20 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    humanoid:
-      id: humanoid
-      name: Humanoid
+    upper_arm_l:
+      id: upper_arm_l
+      name: UpperArmL
       kind: empty
-      parent: root
+      parent: chest
       children:
-      - pelvis
+      - mesh_upper_arm_l
+      - lower_arm_l
+      - arm_l
       transform:
         translation:
-          x: 1.4
-          y: 0.0
-          z: 0.3
+          x: -0.28
+          y: 0.08
+          z: 0.0
         rotation:
           x: 0.0
           y: 0.0
@@ -617,16 +361,16 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    mesh_upper_leg_r:
-      id: mesh_upper_leg_r
-      name: UpperLegRMesh
-      kind: mesh_box
-      parent: upper_leg_r
+    arm_r:
+      id: arm_r
+      name: ArmR
+      kind: empty
+      parent: upper_arm_r
       children: []
       transform:
         translation:
           x: 0.0
-          y: -0.18
+          y: 0.0
           z: 0.0
         rotation:
           x: 0.0
@@ -634,9 +378,30 @@ scene:
           z: 0.0
           w: 1.0
         scale:
-          x: 0.12
-          y: 0.36
-          z: 0.12
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: false
+    mesh_chest:
+      id: mesh_chest
+      name: ChestMesh
+      kind: mesh_box
+      parent: chest
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.4
+          y: 0.28
+          z: 0.22
       visible: true
     lower_arm_l:
       id: lower_arm_l
@@ -661,32 +426,11 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    mesh_foot_r:
-      id: mesh_foot_r
-      name: FootRMesh
+    mesh_lower_arm_l:
+      id: mesh_lower_arm_l
+      name: LowerArmLMesh
       kind: mesh_box
-      parent: foot_r
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: -0.02
-          z: 0.04
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.1
-          y: 0.08
-          z: 0.2
-      visible: true
-    mesh_lower_arm_r:
-      id: mesh_lower_arm_r
-      name: LowerArmRMesh
-      kind: mesh_box
-      parent: lower_arm_r
+      parent: lower_arm_l
       children: []
       transform:
         translation:
@@ -703,16 +447,16 @@ scene:
           y: 0.26
           z: 0.09
       visible: true
-    mesh_upper_arm_r:
-      id: mesh_upper_arm_r
-      name: UpperArmRMesh
+    mesh_lower_leg_l:
+      id: mesh_lower_leg_l
+      name: LowerLegLMesh
       kind: mesh_box
-      parent: upper_arm_r
+      parent: lower_leg_l
       children: []
       transform:
         translation:
           x: 0.0
-          y: -0.14
+          y: -0.17
           z: 0.0
         rotation:
           x: 0.0
@@ -720,134 +464,65 @@ scene:
           z: 0.0
           w: 1.0
         scale:
-          x: 0.1
-          y: 0.28
-          z: 0.1
+          x: 0.11
+          y: 0.34
+          z: 0.11
       visible: true
-    foot_r:
-      id: foot_r
-      name: FootR
-      kind: empty
-      parent: lower_leg_r
-      children:
-      - mesh_foot_r
-      transform:
-        translation:
-          x: 0.0
-          y: -0.28
-          z: 0.06
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: true
-    leg_r:
-      id: leg_r
-      name: LegR
-      kind: empty
-      parent: upper_leg_r
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: false
-    mesh_foot_l:
-      id: mesh_foot_l
-      name: FootLMesh
+    mesh_spine:
+      id: mesh_spine
+      name: SpineMesh
       kind: mesh_box
-      parent: foot_l
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: -0.02
-          z: 0.04
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.1
-          y: 0.08
-          z: 0.2
-      visible: true
-    pelvis:
-      id: pelvis
-      name: Pelvis
-      kind: empty
-      parent: humanoid
-      children:
-      - spine
-      - upper_leg_l
-      - upper_leg_r
-      transform:
-        translation:
-          x: 0.0
-          y: 0.92
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 1.0
-          y: 1.0
-          z: 1.0
-      visible: true
-    mesh_upper_arm_l:
-      id: mesh_upper_arm_l
-      name: UpperArmLMesh
-      kind: mesh_box
-      parent: upper_arm_l
-      children: []
-      transform:
-        translation:
-          x: 0.0
-          y: -0.14
-          z: 0.0
-        rotation:
-          x: 0.0
-          y: 0.0
-          z: 0.0
-          w: 1.0
-        scale:
-          x: 0.1
-          y: 0.28
-          z: 0.1
-      visible: true
-    chest:
-      id: chest
-      name: Chest
-      kind: empty
       parent: spine
-      children:
-      - mesh_chest
-      - neck
-      - upper_arm_l
-      - upper_arm_r
-      - torso
+      children: []
       transform:
         translation:
           x: 0.0
-          y: 0.22
+          y: 0.0
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.28
+          y: 0.18
+          z: 0.16
+      visible: true
+    ground:
+      id: ground
+      name: Ground
+      kind: mesh_box
+      parent: root
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: 0.04
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 6.0
+          y: 0.08
+          z: 6.0
+      visible: true
+    upper_arm_r:
+      id: upper_arm_r
+      name: UpperArmR
+      kind: empty
+      parent: chest
+      children:
+      - mesh_upper_arm_r
+      - lower_arm_r
+      - arm_r
+      transform:
+        translation:
+          x: 0.28
+          y: 0.08
           z: 0.0
         rotation:
           x: 0.0
@@ -883,16 +558,41 @@ scene:
           y: 1.0
           z: 1.0
       visible: true
-    leg_l:
-      id: leg_l
-      name: LegL
+    foot_l:
+      id: foot_l
+      name: FootL
       kind: empty
-      parent: upper_leg_l
-      children: []
+      parent: lower_leg_l
+      children:
+      - mesh_foot_l
       transform:
         translation:
           x: 0.0
+          y: -0.28
+          z: 0.06
+        rotation:
+          x: 0.0
           y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: true
+    upper_leg_r:
+      id: upper_leg_r
+      name: UpperLegR
+      kind: empty
+      parent: pelvis
+      children:
+      - mesh_upper_leg_r
+      - lower_leg_r
+      - leg_r
+      transform:
+        translation:
+          x: 0.1
+          y: -0.02
           z: 0.0
         rotation:
           x: 0.0
@@ -903,7 +603,71 @@ scene:
           x: 1.0
           y: 1.0
           z: 1.0
-      visible: false
+      visible: true
+    mesh_lower_leg_r:
+      id: mesh_lower_leg_r
+      name: LowerLegRMesh
+      kind: mesh_box
+      parent: lower_leg_r
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.17
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.11
+          y: 0.34
+          z: 0.11
+      visible: true
+    hand_l:
+      id: hand_l
+      name: HandL
+      kind: empty
+      parent: lower_arm_l
+      children:
+      - mesh_hand_l
+      transform:
+        translation:
+          x: 0.0
+          y: -0.22
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: true
+    mesh_foot_r:
+      id: mesh_foot_r
+      name: FootRMesh
+      kind: mesh_box
+      parent: foot_r
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.02
+          z: 0.04
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.1
+          y: 0.08
+          z: 0.2
+      visible: true
     camera:
       id: camera
       name: Camera
@@ -930,16 +694,16 @@ scene:
         near: 0.1
         far: 100.0
       visible: true
-    box:
-      id: box
-      name: Box
+    pedestal:
+      id: pedestal
+      name: Pedestal
       kind: mesh_box
       parent: root
       children: []
       transform:
         translation:
           x: 0.0
-          y: 0.675
+          y: 0.175
           z: 0.0
         rotation:
           x: 0.0
@@ -947,9 +711,276 @@ scene:
           z: 0.0
           w: 1.0
         scale:
-          x: 0.7
-          y: 0.7
-          z: 0.7
+          x: 1.2
+          y: 0.35
+          z: 1.2
+      visible: true
+    pelvis:
+      id: pelvis
+      name: Pelvis
+      kind: empty
+      parent: humanoid
+      children:
+      - spine
+      - upper_leg_l
+      - upper_leg_r
+      transform:
+        translation:
+          x: 0.0
+          y: 0.92
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: true
+    leg_l:
+      id: leg_l
+      name: LegL
+      kind: empty
+      parent: upper_leg_l
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: false
+    leg_r:
+      id: leg_r
+      name: LegR
+      kind: empty
+      parent: upper_leg_r
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: false
+    foot_r:
+      id: foot_r
+      name: FootR
+      kind: empty
+      parent: lower_leg_r
+      children:
+      - mesh_foot_r
+      transform:
+        translation:
+          x: 0.0
+          y: -0.28
+          z: 0.06
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: true
+    key_light:
+      id: key_light
+      name: Key Light
+      kind: light
+      parent: root
+      children: []
+      transform:
+        translation:
+          x: 2.8
+          y: 4.5
+          z: 3.2
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      light:
+        type: point
+        intensity: 1.5
+        color:
+        - 1.0
+        - 0.95
+        - 0.88
+        range: 8.0
+        spot_angle_rad: 0.7853982
+      visible: true
+    mesh_upper_leg_r:
+      id: mesh_upper_leg_r
+      name: UpperLegRMesh
+      kind: mesh_box
+      parent: upper_leg_r
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.18
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.12
+          y: 0.36
+          z: 0.12
+      visible: true
+    torso:
+      id: torso
+      name: Torso
+      kind: empty
+      parent: chest
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: false
+    mesh_upper_leg_l:
+      id: mesh_upper_leg_l
+      name: UpperLegLMesh
+      kind: mesh_box
+      parent: upper_leg_l
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.18
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.12
+          y: 0.36
+          z: 0.12
+      visible: true
+    mesh_upper_arm_r:
+      id: mesh_upper_arm_r
+      name: UpperArmRMesh
+      kind: mesh_box
+      parent: upper_arm_r
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.14
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.1
+          y: 0.28
+          z: 0.1
+      visible: true
+    spine:
+      id: spine
+      name: Spine
+      kind: empty
+      parent: pelvis
+      children:
+      - mesh_spine
+      - chest
+      transform:
+        translation:
+          x: 0.0
+          y: 0.12
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 1.0
+          y: 1.0
+          z: 1.0
+      visible: true
+    mesh_lower_arm_r:
+      id: mesh_lower_arm_r
+      name: LowerArmRMesh
+      kind: mesh_box
+      parent: lower_arm_r
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.13
+          z: 0.0
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.09
+          y: 0.26
+          z: 0.09
+      visible: true
+    mesh_foot_l:
+      id: mesh_foot_l
+      name: FootLMesh
+      kind: mesh_box
+      parent: foot_l
+      children: []
+      transform:
+        translation:
+          x: 0.0
+          y: -0.02
+          z: 0.04
+        rotation:
+          x: 0.0
+          y: 0.0
+          z: 0.0
+          w: 1.0
+        scale:
+          x: 0.1
+          y: 0.08
+          z: 0.2
       visible: true
   roots:
   - root

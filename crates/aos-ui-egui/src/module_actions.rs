@@ -610,6 +610,7 @@ pub(crate) async fn run_decl_service_action(
         | aos_proto::SCENE_SELECT_SERVICE
         | aos_proto::SCENE_TRS_SERVICE
         | aos_proto::SCENE_CAMERA_SERVICE
+        | aos_proto::SCENE_LIGHT_SERVICE
         | aos_proto::SCENE_APPLY_SERVICE
         | aos_proto::SCENE_LOCK_SERVICE
         | aos_proto::SCENE_UNLOCK_SERVICE
@@ -1673,6 +1674,133 @@ fn run_scene_edit_service(
                     yaw,
                     pitch,
                     distance,
+                },
+                actor,
+                kind,
+            )
+        }
+        aos_proto::SCENE_LIGHT_SERVICE => {
+            let id = input
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let add = input.get("add").and_then(|v| v.as_bool()).unwrap_or(false);
+            let parent_id = input
+                .get("parent_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let name = input
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let translation = match input.get("translation").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("translation: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let light_type = input
+                .get("light_type")
+                .or_else(|| input.get("type"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let intensity = input
+                .get("intensity")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            let color = match input.get("color").cloned() {
+                Some(v) => match serde_json::from_value(v) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                            module: module.to_string(),
+                            action_id: action_id.to_string(),
+                            ok: false,
+                            result: Value::Null,
+                            error: Some(format!("color: {e}")),
+                            refresh_binds,
+                        });
+                        return;
+                    }
+                },
+                None => None,
+            };
+            let color_srgb = match input.get("color_srgb").cloned() {
+                Some(v) => match serde_json::from_value::<[u8; 3]>(v.clone()) {
+                    Ok(t) => Some(t),
+                    Err(_) => {
+                        if let Some(arr) = v.as_array() {
+                            if arr.len() == 3 {
+                                Some([
+                                    arr[0].as_u64().unwrap_or(255) as u8,
+                                    arr[1].as_u64().unwrap_or(255) as u8,
+                                    arr[2].as_u64().unwrap_or(255) as u8,
+                                ])
+                            } else {
+                                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                                    module: module.to_string(),
+                                    action_id: action_id.to_string(),
+                                    ok: false,
+                                    result: Value::Null,
+                                    error: Some("color_srgb: expected 3 channels".into()),
+                                    refresh_binds,
+                                });
+                                return;
+                            }
+                        } else {
+                            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                                module: module.to_string(),
+                                action_id: action_id.to_string(),
+                                ok: false,
+                                result: Value::Null,
+                                error: Some("color_srgb: invalid".into()),
+                                refresh_binds,
+                            });
+                            return;
+                        }
+                    }
+                },
+                None => {
+                    // Build from separate DeclUI number fields when present.
+                    let r = input.get("color_r").and_then(|v| v.as_f64()).map(|v| v as u8);
+                    let g = input.get("color_g").and_then(|v| v.as_f64()).map(|v| v as u8);
+                    let b = input.get("color_b").and_then(|v| v.as_f64()).map(|v| v as u8);
+                    match (r, g, b) {
+                        (Some(r), Some(g), Some(b)) => Some([r, g, b]),
+                        _ => None,
+                    }
+                }
+            };
+            let range = input.get("range").and_then(|v| v.as_f64()).map(|v| v as f32);
+            let spot_angle_deg = input
+                .get("spot_angle_deg")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
+            apply_one(
+                &mut snap,
+                &AgentEditOp::Light {
+                    id,
+                    add,
+                    parent_id,
+                    name,
+                    translation,
+                    light_type,
+                    intensity,
+                    color,
+                    color_srgb,
+                    range,
+                    spot_angle_deg,
                 },
                 actor,
                 kind,

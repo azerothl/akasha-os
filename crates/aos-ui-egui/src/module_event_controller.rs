@@ -476,6 +476,8 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
             | "unlock_selected"
             | "mesh_assist_stub"
             | "mesh_assist_neural"
+            | "add_light"
+            | "apply_light"
             | "storyboard_capture"
             | "storyboard_prev"
             | "storyboard_next"
@@ -489,6 +491,7 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
         || action_id == aos_proto::SCENE_SELECT_SERVICE
         || action_id == aos_proto::SCENE_TRS_SERVICE
         || action_id == aos_proto::SCENE_CAMERA_SERVICE
+        || action_id == aos_proto::SCENE_LIGHT_SERVICE
         || action_id == aos_proto::SCENE_APPLY_SERVICE
         || action_id == aos_proto::SCENE_LOCK_SERVICE
         || action_id == aos_proto::SCENE_UNLOCK_SERVICE
