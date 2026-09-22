@@ -1,6 +1,6 @@
 # Illustration Studio — neural mesh assist (foundation + MeshAsset spike)
 
-**Status:** Preview foundation (package `illustration-studio` **0.7.0**)  
+**Status:** Preview foundation (package `illustration-studio` **0.7.1**)  
 **Spec:** draft §110–114 (AI 3D gen is **not** an MVP dependency)  
 **Caps:** [`illustration-studio-caps.md`](illustration-studio-caps.md)
 
