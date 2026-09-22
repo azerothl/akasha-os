@@ -240,6 +240,21 @@ pub const COMIC_LAYOUT_SERVICE: &str = "comic.layout";
 /// DeclUI service: render / composite a comic page to PNG.
 pub const COMIC_RENDER_SERVICE: &str = "comic.render";
 
+/// Cap: mutate Illustration Studio storyboard timeline (shots / frames).
+pub const STORYBOARD_EDIT_CAP: &str = "storyboard.edit";
+
+/// DeclUI service: capture current SceneGraph as a storyboard frame.
+pub const STORYBOARD_CAPTURE_SERVICE: &str = "storyboard.capture";
+
+/// DeclUI service: apply / step a storyboard frame onto the SceneGraph.
+pub const STORYBOARD_APPLY_SERVICE: &str = "storyboard.apply";
+
+/// DeclUI service: delete a storyboard frame.
+pub const STORYBOARD_DELETE_SERVICE: &str = "storyboard.delete";
+
+/// DeclUI service: reorder the active storyboard frame earlier / later.
+pub const STORYBOARD_MOVE_SERVICE: &str = "storyboard.move";
+
 /// Reference machine assumptions for budget gates (documented, not enforced in lot 0).
 pub const REFERENCE_MACHINE_NOTE: &str =
     "Preview reference: 8-core x86_64, 16 GiB RAM, 1080p display, release build";

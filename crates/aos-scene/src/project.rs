@@ -1,6 +1,7 @@
 //! Illustration project YAML save/load.
 
 use crate::locks::LockTable;
+use crate::storyboard::{Storyboard, StoryboardError};
 use crate::scene::{SceneError, SceneGraph};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -21,6 +22,9 @@ pub struct ProjectFile {
     /// Last DeclUI / agent selection (optional UI aid; SceneGraph remains SoT).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_id: Option<String>,
+    /// Optional ordered shot timeline (spec §161). Absent on pre-storyboard projects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storyboard: Option<Storyboard>,
 }
 
 fn adr_default() -> String {
@@ -31,6 +35,8 @@ fn adr_default() -> String {
 pub enum ProjectError {
     #[error(transparent)]
     Scene(#[from] SceneError),
+    #[error(transparent)]
+    Storyboard(#[from] StoryboardError),
     #[error("unsupported format_version {0}")]
     UnsupportedVersion(u32),
     #[error("yaml: {0}")]
@@ -45,6 +51,18 @@ impl ProjectFile {
             scene,
             locks: LockTable::default(),
             selected_id: None,
+            storyboard: None,
+        }
+    }
+
+    pub fn with_storyboard(scene: SceneGraph, storyboard: Storyboard) -> Self {
+        Self {
+            format_version: PROJECT_FORMAT_VERSION,
+            conventions: adr_default(),
+            scene,
+            locks: LockTable::default(),
+            selected_id: None,
+            storyboard: Some(storyboard),
         }
     }
 
@@ -53,6 +71,9 @@ impl ProjectFile {
             return Err(ProjectError::UnsupportedVersion(self.format_version));
         }
         self.scene.validate()?;
+        if let Some(board) = &self.storyboard {
+            board.validate()?;
+        }
         Ok(())
     }
 }

@@ -324,6 +324,12 @@ pub(crate) fn on_ui_service_done(
                     || action_id == "lock_subtree"
                     || action_id == "unlock_selected"
                     || action_id == "mesh_assist_stub"
+                    || action_id == "storyboard_capture"
+                    || action_id == "storyboard_prev"
+                    || action_id == "storyboard_next"
+                    || action_id == "storyboard_delete"
+                    || action_id == "storyboard_move_earlier"
+                    || action_id == "storyboard_move_later"
                     || action_id == aos_proto::ASSET_INSTANTIATE_SERVICE
                     || action_id == aos_proto::SCENE_COMPOSE_SERVICE
                     || action_id == aos_proto::SCENE_POSE_SERVICE
@@ -334,7 +340,11 @@ pub(crate) fn on_ui_service_done(
                     || action_id == aos_proto::SCENE_LOCK_SERVICE
                     || action_id == aos_proto::SCENE_UNLOCK_SERVICE
                     || action_id == aos_proto::SCENE_LOCKS_SERVICE
-                    || action_id == aos_proto::MESH_ASSIST_SERVICE)
+                    || action_id == aos_proto::MESH_ASSIST_SERVICE
+                    || action_id == aos_proto::STORYBOARD_CAPTURE_SERVICE
+                    || action_id == aos_proto::STORYBOARD_APPLY_SERVICE
+                    || action_id == aos_proto::STORYBOARD_DELETE_SERVICE
+                    || action_id == aos_proto::STORYBOARD_MOVE_SERVICE)
             {
                 if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
                     panel

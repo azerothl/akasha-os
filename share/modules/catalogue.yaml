@@ -46,10 +46,10 @@ entries:
       - media.generate
       - tool.invoke:create
   - name: illustration-studio
-    version: "0.6.1"
+    version: "0.6.2"
     kind: module
     path: share/modules/illustration-studio.aospkg
-    hash: sha256:9836b2b08bcc63257a6b0c2e1f8f62cd8f87c883735fadc711a9f6f89b676987
+    hash: sha256:59c33062f6da3fd0d85f95972d4829ea8f308066d6960d8ea22034f8594b84e8
     attested_caps:
       - fs.read:/documents/illustrations/**
       - fs.write:/documents/illustrations/**
@@ -64,6 +64,7 @@ entries:
       - mesh.neural
       - comic.layout
       - comic.render
+      - storyboard.edit
       - tool.invoke:illustration-studio
   - name: mcp-example
     version: "1.0.0"

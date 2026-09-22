@@ -7,7 +7,7 @@
 //! Backends convert; this crate never speaks Blender Z-up.
 //!
 //! Product suite: backend-agnostic [`RenderService`] (stub + CPU + optional
-//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), [`comic`] page/panel layouts, and
+//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), [`comic`] page/panel layouts, [`storyboard`] shot timeline, and
 //! minimal [`assets`] pack format. Blender / `bpy` stay in the separate
 //! Renderer Pack — never linked here.
 //!
@@ -35,6 +35,7 @@ mod project;
 mod render;
 mod render_stub;
 mod scene;
+mod storyboard;
 mod style;
 #[cfg(feature = "viewport")]
 pub mod viewport;
@@ -55,6 +56,12 @@ pub use comic::{
     ComicRenderResult, PanelRect, COMIC_FORMAT_VERSION, COMIC_LAYOUT_CAP, COMIC_LAYOUT_SERVICE,
     COMIC_MAX_PAGE_EDGE, COMIC_MAX_PANEL_EDGE, COMIC_RENDER_CAP, COMIC_RENDER_SERVICE,
     DEFAULT_COMIC_PAGE_PATH,
+};
+pub use storyboard::{
+    apply_frame, capture_frame, delete_frame, move_active_frame, ApplyTarget, StoryFrame,
+    Storyboard, StoryboardError, DEFAULT_FRAME_DURATION_MS, STORYBOARD_APPLY_SERVICE,
+    STORYBOARD_CAPTURE_SERVICE, STORYBOARD_DELETE_SERVICE, STORYBOARD_EDIT_CAP,
+    STORYBOARD_FORMAT_VERSION, STORYBOARD_MOVE_SERVICE,
 };
 pub use edit::{
     apply_batch, apply_one, merge_trs, require_batch_caps, require_edit_caps, AgentEditOp,

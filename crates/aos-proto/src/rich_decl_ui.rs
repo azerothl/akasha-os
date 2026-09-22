@@ -765,6 +765,17 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::STORYBOARD_CAPTURE_SERVICE
+        | crate::STORYBOARD_APPLY_SERVICE
+        | crate::STORYBOARD_DELETE_SERVICE
+        | crate::STORYBOARD_MOVE_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::STORYBOARD_EDIT_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::STORYBOARD_EDIT_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         other => Err(RichDeclUiError::UnknownService(other.into())),
     }
 }
@@ -1207,6 +1218,7 @@ mod tests {
             crate::MESH_NEURAL_CAP.into(),
             crate::COMIC_LAYOUT_CAP.into(),
             crate::COMIC_RENDER_CAP.into(),
+            crate::STORYBOARD_EDIT_CAP.into(),
         ];
         validate_rich_document(&doc, UI_CONTRACT_V2, &tools, &caps)
             .expect("illustration-studio ui valid");
