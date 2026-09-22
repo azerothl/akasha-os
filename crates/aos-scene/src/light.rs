@@ -217,9 +217,13 @@ mod tests {
     #[test]
     fn shade_responds_to_intensity() {
         let mut scene = SceneGraph::demo_scene();
-        let mut p = LightParams::default();
-        p.intensity = 0.2;
-        scene.set_light_params("key_light", p.clone()).unwrap();
+        let dim_params = LightParams {
+            intensity: 0.2,
+            ..LightParams::default()
+        };
+        scene
+            .set_light_params("key_light", dim_params)
+            .unwrap();
         let dim = shade_diffuse(
             &collect_lights(&scene),
             Vec3::ZERO,
@@ -227,8 +231,13 @@ mod tests {
             [0.5, 0.5, 0.5],
         )
         .unwrap();
-        p.intensity = 4.0;
-        scene.set_light_params("key_light", p).unwrap();
+        let bright_params = LightParams {
+            intensity: 4.0,
+            ..LightParams::default()
+        };
+        scene
+            .set_light_params("key_light", bright_params)
+            .unwrap();
         let bright = shade_diffuse(
             &collect_lights(&scene),
             Vec3::ZERO,
