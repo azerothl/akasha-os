@@ -336,6 +336,7 @@ pub(crate) fn on_ui_service_done(
                     || action_id == aos_proto::SCENE_GET_SERVICE
                     || action_id == aos_proto::SCENE_SELECT_SERVICE
                     || action_id == aos_proto::SCENE_TRS_SERVICE
+                    || action_id == aos_proto::SCENE_CAMERA_SERVICE
                     || action_id == aos_proto::SCENE_APPLY_SERVICE
                     || action_id == aos_proto::SCENE_LOCK_SERVICE
                     || action_id == aos_proto::SCENE_UNLOCK_SERVICE

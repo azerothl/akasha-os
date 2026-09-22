@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Locks · IK/FK · comic · storyboard · local packs (marketplace fail-closed).",
+      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Camera strip (look-at / orbit / FOV) syncs with viewport. Locks · IK/FK · comic · storyboard · local packs (marketplace fail-closed).",
       "compose_section": "Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -66,7 +66,7 @@
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Verrous · IK/FK · comic · storyboard · packs locaux (marketplace refusé).",
+      "tip_body": "Prompt → SceneGraph → wgpu → NPR. Bandeau caméra (viser / orbite / FOV) synchronisé avec la fenêtre. Verrous · IK/FK · comic · storyboard · packs locaux (marketplace refusé).",
       "compose_section": "Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",

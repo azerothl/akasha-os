@@ -7,6 +7,7 @@
 use super::backend::{
     RenderBackend, RenderBackendId, RenderError, RenderOutput, RenderPassKind, RenderRequest,
 };
+use crate::camera::{fovy_from_hfov, hfov_rad};
 use crate::math::{Mat4, Vec3};
 use crate::png::encode_rgba8_png;
 use crate::scene::{NodeKind, SceneGraph};
@@ -32,7 +33,8 @@ impl RenderBackend for CpuWireframeBackend {
         let (eye, target) = camera_eye_target(&req.scene);
         let aspect = w as f32 / (h as f32).max(1.0);
         let view = look_at_rh(eye, target, Vec3::UNIT_Y);
-        let proj = perspective_rh(50.0_f32.to_radians(), aspect, 0.1, 200.0);
+        let (fovy, near, far) = camera_projection(&req.scene, aspect);
+        let proj = perspective_rh(fovy, aspect, near, far);
         let view_proj = proj * view;
 
         let style = req.style.as_ref();
@@ -249,6 +251,19 @@ fn camera_eye_target(scene: &SceneGraph) -> (Vec3, Vec3) {
         }
     }
     (Vec3::new(0.0, 1.5, 4.0), Vec3::new(0.0, 0.5, 0.0))
+}
+
+fn camera_projection(scene: &SceneGraph, aspect: f32) -> (f32, f32, f32) {
+    if let Some(cam_id) = scene.active_camera.as_deref() {
+        if let Some(node) = scene.nodes.get(cam_id) {
+            if let Some(params) = node.camera.as_ref() {
+                let hfov = hfov_rad(params);
+                let fovy = fovy_from_hfov(hfov, aspect);
+                return (fovy, params.near.max(0.01), params.far.max(params.near + 1.0));
+            }
+        }
+    }
+    (50.0_f32.to_radians(), 0.1, 200.0)
 }
 
 fn look_at_rh(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {

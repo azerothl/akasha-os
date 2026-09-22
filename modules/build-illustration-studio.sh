@@ -44,7 +44,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.6.3
+version: 0.6.4
 hash: ${HASH}
 permissions:
   required_caps:
@@ -121,6 +121,27 @@ tools:
         scene_yaml:
           type: string
       required: [id]
+  - name: scene.camera
+    description: Set active camera eye/look-at/orbit/FOV (ADR 0011)
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        eye:
+          type: object
+        look_at:
+          type: object
+        fov_deg:
+          type: number
+        yaw:
+          type: number
+        pitch:
+          type: number
+        distance:
+          type: number
+        scene_yaml:
+          type: string
   - name: scene.apply
     description: Transactional agent edit batch (apply or rollback)
     input_schema:

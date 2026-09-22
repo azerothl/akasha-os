@@ -1,6 +1,6 @@
 name: illustration-studio
-version: 0.6.3
-hash: a3ca43be0ba0c21ff92581140a869d2638e08bf8cd1fb751c132f7b68418eb01
+version: 0.6.4
+hash: 03ffddc04e30dc29a0354a1c5069a7ec6b0842cb19104f5ad4e9f5b821ed860a
 permissions:
   required_caps:
     - fs.read:/documents/illustrations/**
@@ -76,6 +76,27 @@ tools:
         scene_yaml:
           type: string
       required: [id]
+  - name: scene.camera
+    description: Set active camera eye/look-at/orbit/FOV (ADR 0011)
+    input_schema:
+      type: object
+      properties:
+        id:
+          type: string
+        eye:
+          type: object
+        look_at:
+          type: object
+        fov_deg:
+          type: number
+        yaw:
+          type: number
+        pitch:
+          type: number
+        distance:
+          type: number
+        scene_yaml:
+          type: string
   - name: scene.apply
     description: Transactional agent edit batch (apply or rollback)
     input_schema:

@@ -41,6 +41,7 @@ WASM tools on `illustration-studio` forward to platform `host_call` (`scene_host
 | `scene.get` | `scene.edit` or illustrations read | Snapshot: yaml + selection + locks |
 | `scene.select` | `scene.edit` | Set selection |
 | `scene.trs` | `scene.edit` | Set node TRS (ADR 0011) |
+| `scene.camera` | `scene.edit` | Set active camera eye / look-at / orbit / FOV |
 | `scene.apply` | `scene.edit` (+ pose/compose/asset as needed per op) | **Transactional** batch — all-or-nothing rollback |
 | `scene.lock` / `scene.unlock` / `scene.locks` | `scene.lock` | Semantic locks (node or subtree) |
 | `scene.compose` | `scene.compose` + asset read | Prompt → scene (fails if locks present for agents) |

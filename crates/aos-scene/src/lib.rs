@@ -21,6 +21,7 @@
 //! backend id is fail-closed until model infra exists (no weights in this crate).
 
 mod assets;
+mod camera;
 mod comic;
 mod compose;
 mod edit;
@@ -46,6 +47,11 @@ pub use assets::{
     AssetEntry, AssetError, AssetPack, InstantiateResult, PrefabNode, PrefabNodeKind,
     ASSET_ILLUSTRATION_READ_CAP, ASSET_PACK_FORMAT_VERSION, EMBEDDED_PRIMITIVES_PACK_YAML,
     ILLUSTRATION_ASSETS_PREFIX,
+};
+pub use camera::{
+    active_camera_eye_target, apply_orbit_to_active_camera, camera_transform_look_at,
+    eye_from_orbit, fovy_from_hfov, hfov_from_fovy, hfov_rad, orbit_from_active_camera,
+    orbit_from_eye_target, rotation_look_at, set_focal_from_hfov,
 };
 pub use compose::{
     compose_from_prompt, compose_from_prompt_with_pack, ComposeError, ComposeIntent, ComposeResult,
@@ -74,8 +80,8 @@ pub use pack_catalogue::{
 };
 pub use edit::{
     apply_batch, apply_one, merge_trs, require_batch_caps, require_edit_caps, AgentEditOp,
-    EditActorKind, EditError, EditSnapshot, SCENE_APPLY_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE,
-    SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
+    EditActorKind, EditError, EditSnapshot, SCENE_APPLY_SERVICE, SCENE_CAMERA_SERVICE,
+    SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE,
 };
 pub use ik::{solve_two_bone, IkError, TwoBoneIkResult};
 pub use locks::{
@@ -116,8 +122,8 @@ pub use style::{
 };
 #[cfg(feature = "viewport")]
 pub use viewport::{
-    collect_mesh_instances, eye_from_orbit, look_at_rh, perspective_rh, project_point_ndc,
-    MeshInstance, ViewportCamera, ViewportError, ViewportRenderer, BEAUTY_ROLE, VIEWPORT_ROLE,
+    collect_mesh_instances, look_at_rh, perspective_rh, project_point_ndc, MeshInstance,
+    ViewportCamera, ViewportError, ViewportRenderer, BEAUTY_ROLE, VIEWPORT_ROLE,
 };
 
 /// Cap: read illustration project documents.

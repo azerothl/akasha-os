@@ -215,6 +215,9 @@ pub const SCENE_SELECT_SERVICE: &str = "scene.select";
 /// DeclUI / host_call: set node TRS.
 pub const SCENE_TRS_SERVICE: &str = "scene.trs";
 
+/// DeclUI / host_call: set active camera orbit / look-at / FOV.
+pub const SCENE_CAMERA_SERVICE: &str = "scene.camera";
+
 /// DeclUI / host_call: transactional agent edit batch.
 pub const SCENE_APPLY_SERVICE: &str = "scene.apply";
 

@@ -706,7 +706,10 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-        crate::SCENE_SELECT_SERVICE | crate::SCENE_TRS_SERVICE | crate::SCENE_APPLY_SERVICE => {
+        crate::SCENE_SELECT_SERVICE
+        | crate::SCENE_TRS_SERVICE
+        | crate::SCENE_CAMERA_SERVICE
+        | crate::SCENE_APPLY_SERVICE => {
             if !granted_caps.iter().any(|c| c == crate::SCENE_EDIT_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
                     crate::SCENE_EDIT_CAP.into(),
