@@ -95,6 +95,7 @@ cargo run -p aos-session --release
 | [write-a-skill.md](write-a-skill.md) | Guide skill en dix minutes (MIT, `var/skills/`) |
 | [write-a-module.md](write-a-module.md) | Premier module sans cargo (scaffold / caps) |
 | [../illustration-studio-caps.md](../illustration-studio-caps.md) | Caps Studio Illustration + honnêteté (édition ≠ beauté, pack Blender GPL) |
+| [../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) | Spec produit Studio Illustration (**Draft v0.1**) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Comment tester, discuter, et (si PR) licence |
 
 ## Licence

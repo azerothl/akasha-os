@@ -40,6 +40,12 @@ sha256_file() {
 mkdir -p "${STAGING}/ui"
 cp -f "$WASM_SRC" "${STAGING}/module.wasm"
 cp -f "${MOD}/ui/index.json" "${STAGING}/ui/index.json"
+# Product / design docs ship with the package (not hashed; catalogue hash is wasm-only).
+if [[ -d "${MOD}/docs" ]]; then
+  rm -rf "${STAGING}/docs"
+  mkdir -p "${STAGING}/docs"
+  cp -a "${MOD}/docs/." "${STAGING}/docs/"
+fi
 HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
