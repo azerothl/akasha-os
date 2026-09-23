@@ -7,12 +7,15 @@
 
 use aos_proto::decl_ui::{DeclUiDocument, DeclUiWidget};
 use aos_scene::{
-    apply_orbit_to_active_camera, eye_from_orbit as orbit_eye, fovy_from_hfov,
-    load_project_yaml, look_at_rh, orbit_from_active_camera, perspective_rh, save_project_yaml,
-    LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, Quat, SceneGraph, SceneOp,
-    Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
+    align_nodes, apply_orbit_to_active_camera, duplicate_nodes, embedded_primitives_pack,
+    eye_from_orbit as orbit_eye, fovy_from_hfov, group_nodes, instantiate_asset, load_project_yaml,
+    look_at_rh, orbit_from_active_camera, perspective_rh, save_project_yaml, snap_nodes, AlignMode,
+    EditAxis, LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, Quat, SceneGraph,
+    SceneOp, Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
 };
-use eframe::egui::{self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2};
+use eframe::egui::{
+    self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2,
+};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
@@ -54,6 +57,13 @@ struct DragState {
     target0: Vec3,
     node_t0: Option<Transform>,
     node_id: Option<String>,
+    group_t0: Vec<(String, Transform)>,
+}
+
+#[derive(Clone)]
+pub enum AssetDrag {
+    Prefab(String),
+    Mesh { uri: String, name: String },
 }
 
 #[derive(Debug)]
@@ -70,6 +80,10 @@ pub struct Scene3dHostState {
     pub undo: UndoStack,
     pub tool: EditTool,
     pub focused: bool,
+    pub selection: Vec<String>,
+    pub snap_grid_m: f32,
+    pub align_mode: AlignMode,
+    pub last_edit_error: Option<String>,
     /// Deferred project autosave after SceneGraph mutations.
     autosave_dirty: bool,
     autosave_due: Option<Instant>,
@@ -88,6 +102,10 @@ impl Default for Scene3dHostState {
             undo: UndoStack::default(),
             tool: EditTool::Translate,
             focused: false,
+            selection: Vec::new(),
+            snap_grid_m: 0.25,
+            align_mode: AlignMode::Center,
+            last_edit_error: None,
             autosave_dirty: false,
             autosave_due: None,
         }
@@ -377,13 +395,19 @@ fn paint_cpu_fallback(
             project_point(a, view_proj, rect),
             project_point(b, view_proj, rect),
         ) {
-            painter.line_segment([pa, pb], Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)));
+            painter.line_segment(
+                [pa, pb],
+                Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)),
+            );
         }
         if let (Some(pc), Some(pd)) = (
             project_point(c, view_proj, rect),
             project_point(d, view_proj, rect),
         ) {
-            painter.line_segment([pc, pd], Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)));
+            painter.line_segment(
+                [pc, pd],
+                Stroke::new(1.0_f32, Color32::from_rgb(48, 56, 64)),
+            );
         }
     }
 
@@ -450,9 +474,14 @@ pub fn ui_scene3d(
     let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
     let (mut graph, locks, seeded) = project_from_local(local_state, scene_key);
     let mut selected = selected_from_local(local_state, selected_key);
-    let scene_val = |g: &SceneGraph, sel: &Option<String>| {
-        scene_to_value_with_locks(g, &locks, sel.clone())
-    };
+    host.selection.retain(|id| graph.nodes.contains_key(id));
+    if host.selection.is_empty() {
+        if let Some(id) = selected.as_ref().filter(|id| graph.nodes.contains_key(*id)) {
+            host.selection.push(id.clone());
+        }
+    }
+    let scene_val =
+        |g: &SceneGraph, sel: &Option<String>| scene_to_value_with_locks(g, &locks, sel.clone());
     let mut patch: Option<Scene3dPatch> = None;
     if seeded {
         patch = Some(Scene3dPatch {
@@ -493,18 +522,15 @@ pub fn ui_scene3d(
     // Prefer DeclUI `size` (px); otherwise fill the stage pane, leaving headroom
     // for TRS / camera chrome below the viewport.
     let avail_h = ui.available_height();
-    let viewport_h = w
-        .size
-        .map(|s| s.clamp(160.0, 1200.0))
-        .unwrap_or_else(|| {
-            if avail_h.is_finite() && avail_h > 320.0 {
-                (avail_h - 160.0).clamp(220.0, 720.0)
-            } else if avail_h.is_finite() && avail_h > 1.0 {
-                (avail_h * 0.55).clamp(200.0, 720.0)
-            } else {
-                280.0
-            }
-        });
+    let viewport_h = w.size.map(|s| s.clamp(160.0, 1200.0)).unwrap_or_else(|| {
+        if avail_h.is_finite() && avail_h > 320.0 {
+            (avail_h - 160.0).clamp(220.0, 720.0)
+        } else if avail_h.is_finite() && avail_h > 1.0 {
+            (avail_h * 0.55).clamp(200.0, 720.0)
+        } else {
+            280.0
+        }
+    });
     let desired = Vec2::new(ui.available_width().max(160.0), viewport_h);
     let (rect, response) = ui.allocate_exact_size(desired, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
@@ -585,14 +611,8 @@ pub fn ui_scene3d(
     }
 
     if !used_wgpu {
-        let (hits, count) = paint_cpu_fallback(
-            &painter,
-            rect,
-            &graph,
-            selected.as_deref(),
-            &view_proj,
-            eye,
-        );
+        let (hits, count) =
+            paint_cpu_fallback(&painter, rect, &graph, selected.as_deref(), &view_proj, eye);
         hit_candidates = hits;
         mesh_count = count;
     }
@@ -616,7 +636,11 @@ pub fn ui_scene3d(
     if let Some(cam_id) = graph.active_camera.clone() {
         if let Ok(pos) = graph.world_translation(&cam_id) {
             if let Some(p) = project_point(pos, &view_proj, rect) {
-                painter.circle_stroke(p, 6.0, Stroke::new(1.5_f32, Color32::from_rgb(140, 200, 140)));
+                painter.circle_stroke(
+                    p,
+                    6.0,
+                    Stroke::new(1.5_f32, Color32::from_rgb(140, 200, 140)),
+                );
             }
         }
     }
@@ -624,7 +648,12 @@ pub fn ui_scene3d(
     // TRS axis gizmos for selected non-camera node
     let mut gizmo_hits: Vec<(GizmoAxis, Pos2, f32)> = Vec::new();
     if let Some(id) = selected.as_ref() {
-        if graph.nodes.get(id).map(|n| n.kind != NodeKind::Camera).unwrap_or(false) {
+        if graph
+            .nodes
+            .get(id)
+            .map(|n| n.kind != NodeKind::Camera)
+            .unwrap_or(false)
+        {
             if let Ok(origin) = graph.world_translation(id) {
                 let axis_len = (host.distance * 0.12).clamp(0.35, 1.8);
                 let axes = [
@@ -700,6 +729,16 @@ pub fn ui_scene3d(
             let node_t0 = node_id
                 .as_ref()
                 .and_then(|id| graph.nodes.get(id).map(|n| n.transform.clone()));
+            let group_t0 = host
+                .selection
+                .iter()
+                .filter_map(|id| {
+                    graph
+                        .nodes
+                        .get(id)
+                        .map(|n| (id.clone(), n.transform.clone()))
+                })
+                .collect();
             host.drag = Some(DragState {
                 mode,
                 axis: axis_pick,
@@ -709,6 +748,7 @@ pub fn ui_scene3d(
                 target0: host.target,
                 node_t0,
                 node_id,
+                group_t0,
             });
         }
     }
@@ -730,7 +770,15 @@ pub fn ui_scene3d(
                 DragMode::Translate | DragMode::Rotate | DragMode::Scale => {
                     if let (Some(id), Some(t0)) = (d.node_id.clone(), d.node_t0.clone()) {
                         let after = apply_tool_drag(d.mode, d.axis, &t0, dx, dy, host.yaw);
-                        let _ = graph.set_transform(&id, after);
+                        let _ = graph.set_transform(&id, after.clone());
+                        for (other_id, original) in &d.group_t0 {
+                            if other_id == &id {
+                                continue;
+                            }
+                            let transformed =
+                                apply_tool_drag(d.mode, d.axis, original, dx, dy, host.yaw);
+                            let _ = graph.set_transform(other_id, transformed);
+                        }
                         patch = Some(Scene3dPatch {
                             scene_key: scene_key.into(),
                             scene: scene_val(&graph, &selected),
@@ -770,10 +818,31 @@ pub fn ui_scene3d(
                     if let (Some(id), Some(before)) = (d.node_id, d.node_t0) {
                         if let Some(after) = graph.nodes.get(&id).map(|n| n.transform.clone()) {
                             if after != before {
-                                host.undo.push_applied(SceneOp::SetTransform {
+                                let mut ops = vec![SceneOp::SetTransform {
                                     id: id.clone(),
                                     before,
                                     after,
+                                }];
+                                for (other_id, original) in d.group_t0 {
+                                    if other_id == id {
+                                        continue;
+                                    }
+                                    if let Some(updated) =
+                                        graph.nodes.get(&other_id).map(|n| n.transform.clone())
+                                    {
+                                        if updated != original {
+                                            ops.push(SceneOp::SetTransform {
+                                                id: other_id,
+                                                before: original,
+                                                after: updated,
+                                            });
+                                        }
+                                    }
+                                }
+                                host.undo.push_applied(if ops.len() == 1 {
+                                    ops.remove(0)
+                                } else {
+                                    SceneOp::Batch { ops }
                                 });
                                 host.mark_autosave_dirty();
                                 patch = Some(Scene3dPatch {
@@ -806,6 +875,18 @@ pub fn ui_scene3d(
                 }
             }
             selected = best.map(|(id, _)| id);
+            if ui.input(|i| i.modifiers.shift) {
+                if let Some(id) = &selected {
+                    if host.selection.contains(id) {
+                        host.selection.retain(|old| old != id);
+                    } else if host.selection.len() < 32 {
+                        host.selection.push(id.clone());
+                    }
+                }
+            } else {
+                host.selection = selected.clone().into_iter().collect();
+            }
+            selected = host.selection.last().cloned();
             patch = Some(Scene3dPatch {
                 scene_key: scene_key.into(),
                 scene: scene_val(&graph, &selected),
@@ -818,6 +899,60 @@ pub fn ui_scene3d(
                 beauty_path: None,
                 request_autosave: false,
             });
+        }
+    }
+
+    if let Some(payload) = response.dnd_release_payload::<AssetDrag>() {
+        let before = graph.clone();
+        let dropped_id = match payload.as_ref() {
+            AssetDrag::Prefab(asset_id) => embedded_primitives_pack()
+                .ok()
+                .and_then(|pack| {
+                    instantiate_asset(&mut graph, &pack, asset_id, Some("root"), "drop_").ok()
+                })
+                .map(|instance| instance.root_id),
+            AssetDrag::Mesh { uri, name } => (1..=10000)
+                .map(|n| format!("mesh_drop_{n}"))
+                .find(|id| !graph.nodes.contains_key(id))
+                .and_then(|id| {
+                    aos_scene::insert_mesh_asset(
+                        &mut graph,
+                        "root",
+                        &id,
+                        name.clone(),
+                        uri,
+                        Transform::default(),
+                    )
+                    .ok()
+                    .map(|_| id)
+                }),
+        };
+        if let Some(root_id) = dropped_id {
+            let pointer = ui.input(|i| i.pointer.interact_pos());
+            let position = pointer
+                .and_then(|p| ground_drop_position(p, rect, eye, host.target, host.hfov_rad, fovy))
+                .unwrap_or(host.target);
+            if let Some(node) = graph.nodes.get_mut(&root_id) {
+                node.transform.translation = Vec3::new(position.x, 0.0, position.z);
+            }
+            if graph.validate().is_ok() {
+                selected = Some(root_id.clone());
+                host.selection = vec![root_id];
+                host.undo.push_applied(SceneOp::ReplaceGraph {
+                    before: Box::new(before),
+                    after: Box::new(graph.clone()),
+                });
+                host.mark_autosave_dirty();
+                patch = Some(Scene3dPatch {
+                    scene_key: scene_key.into(),
+                    scene: scene_val(&graph, &selected),
+                    selected_key: selected_key.into(),
+                    selected: json!(selected),
+                    beauty_path_key: None,
+                    beauty_path: None,
+                    request_autosave: false,
+                });
+            }
         }
     }
 
@@ -851,10 +986,7 @@ pub fn ui_scene3d(
             (EditTool::Scale, "Scale", "Échelle"),
         ] {
             let label = if fr { fr_l } else { en };
-            if ui
-                .selectable_label(host.tool == tool, label)
-                .clicked()
-            {
+            if ui.selectable_label(host.tool == tool, label).clicked() {
                 host.tool = tool;
             }
         }
@@ -983,7 +1115,9 @@ pub fn ui_scene3d(
             host.target = look;
             host.distance = dist.clamp(1.0, 40.0);
             host.yaw = yaw_deg.to_radians();
-            host.pitch = pitch_deg.to_radians().clamp(-FRAC_PI_2 + 0.05, FRAC_PI_2 - 0.05);
+            host.pitch = pitch_deg
+                .to_radians()
+                .clamp(-FRAC_PI_2 + 0.05, FRAC_PI_2 - 0.05);
             host.hfov_rad = fov_deg.to_radians();
             if push_orbit_to_scene(host, &mut graph) {
                 let yaml = scene_val(&graph, &selected);
@@ -1020,11 +1154,7 @@ pub fn ui_scene3d(
                 });
                 let mut t = node.transform.translation;
                 let (rx0, ry0, rz0) = node.transform.rotation.to_euler_xyz();
-                let mut r_deg = [
-                    rx0.to_degrees(),
-                    ry0.to_degrees(),
-                    rz0.to_degrees(),
-                ];
+                let mut r_deg = [rx0.to_degrees(), ry0.to_degrees(), rz0.to_degrees()];
                 let mut s = node.transform.scale;
                 let mut changed = false;
                 ui.horizontal(|ui| {
@@ -1134,6 +1264,268 @@ pub fn ui_scene3d(
     patch
 }
 
+fn ground_drop_position(
+    pointer: Pos2,
+    rect: Rect,
+    eye: Vec3,
+    target: Vec3,
+    hfov: f32,
+    fovy: f32,
+) -> Option<Vec3> {
+    let forward = (target - eye).normalized()?;
+    let right = forward.cross(Vec3::UNIT_Y).normalized()?;
+    let up = right.cross(forward).normalized()?;
+    let nx = (pointer.x - rect.center().x) / (rect.width() * 0.5);
+    let ny = (rect.center().y - pointer.y) / (rect.height() * 0.5);
+    let ray = (forward + right * (nx * (hfov * 0.5).tan()) + up * (ny * (fovy * 0.5).tan()))
+        .normalized()?;
+    if ray.y >= -0.001 {
+        return None;
+    }
+    let distance = -eye.y / ray.y;
+    let point = eye + ray * distance;
+    if !point.is_finite() || point.x.abs() > 20.0 || point.z.abs() > 20.0 {
+        return None;
+    }
+    Some(point)
+}
+
+pub fn ui_scene_asset_palette(ui: &mut Ui, language: &str) {
+    let fr = language.starts_with("fr");
+    ui.label(
+        egui::RichText::new(if fr {
+            "Glisser vers la vue 3D"
+        } else {
+            "Drag into the 3D view"
+        })
+        .weak()
+        .small(),
+    );
+    let items = [
+        ("prop.box", "Box", "Boîte"),
+        ("prop.chair", "Chair", "Chaise"),
+        ("prop.sofa", "Sofa", "Canapé"),
+        ("prop.desk", "Desk", "Bureau"),
+        ("prop.table", "Table", "Table"),
+        ("prop.lamp", "Lamp", "Lampe"),
+        ("prop.book", "Book", "Livre"),
+        ("prop.plant", "Plant", "Plante"),
+        ("humanoid.placeholder", "Person", "Personne"),
+    ];
+    ui.horizontal_wrapped(|ui| {
+        for (id, en, french) in items {
+            let label = if fr { french } else { en };
+            ui.dnd_drag_source(ui.id().with(id), AssetDrag::Prefab(id.into()), |ui| {
+                ui.label(egui::RichText::new(label).strong());
+            });
+        }
+    });
+    let storage =
+        crate::os_open::aos_home().join("var/storage/data/documents/illustrations/assets");
+    let imported = storage.join("imported");
+    if let Ok(files) = std::fs::read_dir(&imported) {
+        for entry in files.flatten().take(50) {
+            let path = entry.path();
+            let Some(filename) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Some(hash) = filename.strip_suffix(".metadata.json") else {
+                continue;
+            };
+            if hash.len() != 16
+                || !hash.bytes().all(|c| c.is_ascii_hexdigit())
+                || !imported.join(format!("{hash}.glb")).is_file()
+            {
+                continue;
+            }
+            let Ok(raw) = std::fs::read(&path) else {
+                continue;
+            };
+            let Ok(meta) = serde_json::from_slice::<Value>(&raw) else {
+                continue;
+            };
+            let name = meta
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("Imported GLB")
+                .to_owned();
+            let uri = format!("/documents/illustrations/assets/imported/{hash}.glb");
+            ui.dnd_drag_source(
+                ui.id().with(&uri),
+                AssetDrag::Mesh {
+                    uri,
+                    name: name.clone(),
+                },
+                |ui| {
+                    ui.label(format!("GLB · {name}"));
+                },
+            );
+        }
+    }
+    for id in ["WoodenChair_01", "SchoolDesk_01", "binder_notebook"] {
+        let path = storage.join("catalogue").join(id).join("1k");
+        if !path.join("source.gltf").is_file() {
+            continue;
+        }
+        let name = std::fs::read(path.join("metadata.json"))
+            .ok()
+            .and_then(|raw| serde_json::from_slice::<Value>(&raw).ok())
+            .and_then(|meta| meta.get("name").and_then(Value::as_str).map(str::to_owned))
+            .unwrap_or_else(|| id.into());
+        let uri = format!("/documents/illustrations/assets/catalogue/{id}/1k/source.gltf");
+        ui.dnd_drag_source(
+            ui.id().with(&uri),
+            AssetDrag::Mesh {
+                uri,
+                name: name.clone(),
+            },
+            |ui| {
+                ui.label(format!("CC0 · {name}"));
+            },
+        );
+    }
+}
+
+pub fn ui_scene_object_tools(
+    ui: &mut Ui,
+    w: &DeclUiWidget,
+    language: &str,
+    local_state: &HashMap<String, Value>,
+    host: &mut Scene3dHostState,
+) -> Option<Scene3dPatch> {
+    let scene_key = w.scene_key.as_deref().unwrap_or("scene");
+    let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
+    let (mut graph, locks, _) = project_from_local(local_state, scene_key);
+    host.selection.retain(|id| graph.nodes.contains_key(id));
+    if host.selection.is_empty() {
+        if let Some(id) =
+            selected_from_local(local_state, selected_key).filter(|id| graph.nodes.contains_key(id))
+        {
+            host.selection.push(id);
+        }
+    }
+    let fr = language.starts_with("fr");
+    ui.label(if fr {
+        format!(
+            "{} objet(s) sélectionné(s) · Maj + clic pour plusieurs",
+            host.selection.len()
+        )
+    } else {
+        format!(
+            "{} selected · Shift-click to select multiple",
+            host.selection.len()
+        )
+    });
+    enum Command {
+        Duplicate,
+        Group,
+        Snap,
+        Align(EditAxis),
+    }
+    let mut command = None;
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .add_enabled(
+                !host.selection.is_empty(),
+                egui::Button::new(if fr { "Dupliquer" } else { "Duplicate" }),
+            )
+            .clicked()
+        {
+            command = Some(Command::Duplicate);
+        }
+        if ui
+            .add_enabled(
+                host.selection.len() > 1,
+                egui::Button::new(if fr { "Grouper" } else { "Group" }),
+            )
+            .clicked()
+        {
+            command = Some(Command::Group);
+        }
+        ui.label(if fr { "Pas (m)" } else { "Grid (m)" });
+        ui.add(
+            egui::DragValue::new(&mut host.snap_grid_m)
+                .speed(0.01)
+                .range(0.01..=10.0),
+        );
+        if ui
+            .add_enabled(
+                !host.selection.is_empty(),
+                egui::Button::new(if fr { "Accrocher" } else { "Snap" }),
+            )
+            .clicked()
+        {
+            command = Some(Command::Snap);
+        }
+    });
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt("scene_align_mode")
+            .selected_text(match (fr, host.align_mode) {
+                (true, AlignMode::Min) => "Min",
+                (true, AlignMode::Center) => "Centre",
+                (true, AlignMode::Max) => "Max",
+                (false, AlignMode::Min) => "Min",
+                (false, AlignMode::Center) => "Center",
+                (false, AlignMode::Max) => "Max",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut host.align_mode, AlignMode::Min, "Min");
+                ui.selectable_value(
+                    &mut host.align_mode,
+                    AlignMode::Center,
+                    if fr { "Centre" } else { "Center" },
+                );
+                ui.selectable_value(&mut host.align_mode, AlignMode::Max, "Max");
+            });
+        for (axis, label) in [(EditAxis::X, "X"), (EditAxis::Y, "Y"), (EditAxis::Z, "Z")] {
+            if ui
+                .add_enabled(
+                    host.selection.len() > 1,
+                    egui::Button::new(format!("{} {label}", if fr { "Aligner" } else { "Align" })),
+                )
+                .clicked()
+            {
+                command = Some(Command::Align(axis));
+            }
+        }
+    });
+    if let Some(error) = &host.last_edit_error {
+        ui.colored_label(Color32::LIGHT_RED, error);
+    }
+    let command = command?;
+    let before = graph.clone();
+    let result = match command {
+        Command::Duplicate => {
+            duplicate_nodes(&mut graph, &host.selection).map(|ids| host.selection = ids)
+        }
+        Command::Group => {
+            group_nodes(&mut graph, &host.selection).map(|id| host.selection = vec![id])
+        }
+        Command::Snap => snap_nodes(&mut graph, &host.selection, host.snap_grid_m),
+        Command::Align(axis) => align_nodes(&mut graph, &host.selection, axis, host.align_mode),
+    };
+    if let Err(error) = result {
+        host.last_edit_error = Some(error.to_string());
+        return None;
+    }
+    host.last_edit_error = None;
+    let selected = host.selection.first().cloned();
+    host.undo.push_applied(SceneOp::ReplaceGraph {
+        before: Box::new(before),
+        after: Box::new(graph.clone()),
+    });
+    host.mark_autosave_dirty();
+    Some(Scene3dPatch {
+        scene_key: scene_key.into(),
+        scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
+        selected_key: selected_key.into(),
+        selected: json!(selected),
+        beauty_path_key: None,
+        beauty_path: None,
+        request_autosave: false,
+    })
+}
+
 fn fingerprint_value(v: &Value) -> u64 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -1173,9 +1565,7 @@ fn apply_tool_drag(
                 Some(GizmoAxis::Z) => Quat::from_axis_angle(Vec3::UNIT_Z, ang),
                 Some(GizmoAxis::Y) | None => Quat::from_axis_angle(Vec3::UNIT_Y, ang),
             };
-            after.rotation = (q * t0.rotation)
-                .normalized()
-                .unwrap_or(t0.rotation);
+            after.rotation = (q * t0.rotation).normalized().unwrap_or(t0.rotation);
         }
         DragMode::Scale => {
             let factor = (1.0 + (dx - dy) * 0.005).clamp(0.05, 20.0);
@@ -1220,7 +1610,13 @@ pub fn ui_scene_undo_redo(
         .labels
         .as_ref()
         .and_then(|l| l.resolve(language, "redo_label"))
-        .unwrap_or_else(|| if fr { "Rétablir".into() } else { "Redo".into() });
+        .unwrap_or_else(|| {
+            if fr {
+                "Rétablir".into()
+            } else {
+                "Redo".into()
+            }
+        });
 
     let mut patch = None;
     ui.horizontal(|ui| {
@@ -1258,13 +1654,9 @@ pub fn ui_scene_undo_redo(
         }
         if host.autosave_dirty {
             ui.label(
-                egui::RichText::new(if fr {
-                    "Enregistrement…"
-                } else {
-                    "Saving…"
-                })
-                .weak()
-                .small(),
+                egui::RichText::new(if fr { "Enregistrement…" } else { "Saving…" })
+                    .weak()
+                    .small(),
             );
         }
     });
@@ -1295,11 +1687,18 @@ pub fn ui_scene_tree(
     doc: &DeclUiDocument,
     language: &str,
     local_state: &HashMap<String, Value>,
+    host: &mut Scene3dHostState,
 ) -> Option<Scene3dPatch> {
     let scene_key = w.scene_key.as_deref().unwrap_or("scene");
     let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
     let (graph, locks, seeded) = project_from_local(local_state, scene_key);
     let mut selected = selected_from_local(local_state, selected_key);
+    host.selection.retain(|id| graph.nodes.contains_key(id));
+    if host.selection.is_empty() {
+        if let Some(id) = selected.as_ref().filter(|id| graph.nodes.contains_key(*id)) {
+            host.selection.push(id.clone());
+        }
+    }
     let mut patch = if seeded {
         Some(Scene3dPatch {
             scene_key: scene_key.into(),
@@ -1360,14 +1759,23 @@ pub fn ui_scene_tree(
                     },
                     lock_marker(&locks, &graph, &id)
                 );
-                let is_sel = selected.as_deref() == Some(id.as_str());
+                let is_sel = host.selection.iter().any(|s| s == &id);
                 if ui.selectable_label(is_sel, label).clicked() {
-                    selected = Some(id.clone());
+                    if ui.input(|i| i.modifiers.shift) {
+                        if host.selection.contains(&id) {
+                            host.selection.retain(|old| old != &id);
+                        } else if host.selection.len() < 32 {
+                            host.selection.push(id.clone());
+                        }
+                    } else {
+                        host.selection = vec![id.clone()];
+                    }
+                    selected = host.selection.last().cloned();
                     patch = Some(Scene3dPatch {
                         scene_key: scene_key.into(),
-                        scene: scene_to_value_with_locks(&graph, &locks, Some(id.clone())),
+                        scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
                         selected_key: selected_key.into(),
-                        selected: Value::String(id),
+                        selected: json!(selected),
                         beauty_path_key: None,
                         beauty_path: None,
                         request_autosave: false,
@@ -1377,4 +1785,25 @@ pub fn ui_scene_tree(
         });
 
     patch
+}
+
+#[cfg(test)]
+mod object_edit_tests {
+    use super::*;
+
+    #[test]
+    fn center_drop_intersects_ground_at_camera_target() {
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 500.0));
+        let target = Vec3::ZERO;
+        let hit = ground_drop_position(
+            rect.center(),
+            rect,
+            Vec3::new(0.0, 2.0, 5.0),
+            target,
+            1.0,
+            0.8,
+        )
+        .unwrap();
+        assert!(hit.x.abs() < 1e-4 && hit.y.abs() < 1e-4 && hit.z.abs() < 1e-4);
+    }
 }

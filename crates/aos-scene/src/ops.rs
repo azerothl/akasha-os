@@ -8,6 +8,11 @@ const MAX_UNDO: usize = 64;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum SceneOp {
+    /// Atomic multi-object edit (duplicate, group, alignment or snapping).
+    ReplaceGraph {
+        before: Box<SceneGraph>,
+        after: Box<SceneGraph>,
+    },
     SetTransform {
         id: String,
         before: Transform,
@@ -38,18 +43,19 @@ pub enum SceneOp {
         params: LightParams,
     },
     /// Remove a Light node (redo of InsertLight undo). Not constructed from DeclUI.
-    RemoveLight {
-        id: String,
-    },
+    RemoveLight { id: String },
     /// Multiple transforms as one undo step (pose presets / IK-lite).
-    Batch {
-        ops: Vec<SceneOp>,
-    },
+    Batch { ops: Vec<SceneOp> },
 }
 
 impl SceneOp {
     pub fn apply(&self, graph: &mut SceneGraph) -> Result<(), SceneError> {
         match self {
+            SceneOp::ReplaceGraph { after, .. } => {
+                after.validate()?;
+                *graph = (**after).clone();
+                Ok(())
+            }
             SceneOp::SetTransform { id, after, .. } => graph.set_transform(id, after.clone()),
             SceneOp::SetCamera {
                 id,
@@ -97,6 +103,10 @@ impl SceneOp {
 
     pub fn invert(&self) -> Self {
         match self {
+            SceneOp::ReplaceGraph { before, after } => SceneOp::ReplaceGraph {
+                before: after.clone(),
+                after: before.clone(),
+            },
             SceneOp::SetTransform { id, before, after } => SceneOp::SetTransform {
                 id: id.clone(),
                 before: after.clone(),

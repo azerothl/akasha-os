@@ -85,6 +85,8 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "scene3d",
     "scene_tree",
     "scene_candidate",
+    "scene_object_tools",
+    "scene_asset_palette",
     "section",
     "text_input",
     "file_picker",

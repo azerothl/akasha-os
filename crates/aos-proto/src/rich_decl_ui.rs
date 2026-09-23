@@ -570,6 +570,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 )));
             }
         }
+        "scene_asset_palette" => {}
         "scene_candidate" => {
             if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
@@ -577,7 +578,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 )));
             }
         }
-        "scene3d" | "scene_tree" => {
+        "scene3d" | "scene_tree" | "scene_object_tools" => {
             if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
                     "scene_key",

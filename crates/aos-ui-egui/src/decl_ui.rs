@@ -1689,13 +1689,27 @@ impl DeclUiPanelState {
                 }
             }
             "scene_tree" => {
+                let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "illustration_viewport".into());
+                let host = scene3d_viewports.entry(canvas_id).or_default();
                 if let Some(patch) =
-                    crate::scene3d_ui::ui_scene_tree(ui, w, doc, language, local_state)
+                    crate::scene3d_ui::ui_scene_tree(ui, w, doc, language, local_state, host)
                 {
                     for (k, v) in scene_patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
                     }
                 }
+            }
+            "scene_object_tools" => {
+                let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "illustration_viewport".into());
+                let host = scene3d_viewports.entry(canvas_id).or_default();
+                if let Some(patch) = crate::scene3d_ui::ui_scene_object_tools(ui, w, language, local_state, host) {
+                    for (k, v) in scene_patch_to_local_map(&patch) {
+                        actions.local_patch.insert(k, v);
+                    }
+                }
+            }
+            "scene_asset_palette" => {
+                crate::scene3d_ui::ui_scene_asset_palette(ui, language);
             }
             "scene_candidate" => {
                 if let Some(key) = w.scene_key.as_deref() {
