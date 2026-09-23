@@ -73,13 +73,15 @@ def y_up_to_blender(t, r_xyzw, s):
 
     Position: (x, y, z)_akasha → (x, -z, y)_blender.
     Rotation: q_blender = q_basis(+90° X) * q_akasha (xyzw).
-    Scale: permute to match the axis remap (x, z, y).
+    Scale: keep (sx, sy, sz) in object-local space — q_basis already remaps
+    local axes into Blender world. Permuting scale *and* applying q_basis
+    double-converts non-uniform boxes (ground thin-Y becomes a vertical wall).
     """
     tx, ty, tz = t
     sx, sy, sz = s
     qx, qy, qz, qw = r_xyzw
     pos = y_up_vec_to_blender((float(tx), float(ty), float(tz)))
-    scale = (float(sx), float(sz), float(sy))
+    scale = (float(sx), float(sy), float(sz))
     quat = y_up_quat_to_blender((float(qx), float(qy), float(qz), float(qw)))
     return pos, quat, scale
 
