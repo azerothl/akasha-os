@@ -302,6 +302,9 @@ pub struct DeclUiWidget {
     /// Typed predicate AST for enablement (contract v2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<serde_json::Value>,
+    /// Render a `text_input` as a display-only value while preserving its form-field styling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
     /// Layer array state key for `layer_canvas` / `layer_list` / `undo_redo`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layers_key: Option<String>,

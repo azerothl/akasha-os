@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Flow: Compose (keyword heuristics, not LLM) → Edit (wgpu edit view — not beauty) → Beauty (CPU/stub; Blender = mock unless opt-in GPL Renderer Pack). Autosave after edits.",
+      "tip_body": "Compose uses keyword heuristics, not a language model. Edit in the viewport, then render a beauty pass.",
       "compose_section": "1 · Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -44,8 +44,9 @@
       "stub_render_label": "Stub beauty",
       "cpu_render_label": "CPU beauty",
       "blender_render_label": "Blender beauty",
-      "blender_tip": "Blender beauty is opt-in: install the Illustration Renderer Pack (GPL adapter + Blender binary). Pack status “ready (binary+adapter)” runs a real spawn — spawn failures surface as errors (no silent paper mock). Without a binary, Auto uses an obvious mock frame. Cap render.blender · see share/illustration-renderer-pack/README.md.",
+      "blender_tip": "Install the GPL Renderer Pack and Blender for real output. Auto shows a marked mock if Blender is missing from an installed pack; without the pack, rendering is unavailable.",
       "blender_pack_status_label": "Refresh Blender pack status",
+      "blender_pack_status_value_label": "Blender pack status",
       "blender_pack_status_empty": "Blender pack status unknown — tap Refresh Blender pack status.",
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
@@ -68,6 +69,7 @@
       "mesh_stub_label": "Stub mesh (procedural)",
       "mesh_neural_label": "Neural mesh (pack)",
       "mesh_pack_status_label": "Refresh pack status",
+      "mesh_pack_status_value_label": "Neural mesh pack status",
       "mesh_pack_status_empty": "Pack status unknown — tap Refresh pack status.",
       "mesh_tip": "Stub builds MeshBox props from keywords. Neural spawns trellis.cpp / pack adapter (image→GLB) when runner + GGUF weights are installed; otherwise fixture mock. Cap mesh.neural · SceneGraph MeshAsset. No WebView.",
       "comic_section": "Comic page",
@@ -117,7 +119,7 @@
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Parcours : Composer (heuristiques mots-clés, pas de LLM) → Éditer (vue wgpu — pas beauté) → Beauté (CPU/stub ; Blender = mock sauf Renderer Pack GPL opt-in). Autosave après éditions.",
+      "tip_body": "La composition repose sur des heuristiques de mots-clés, pas sur un modèle de langue. Éditez dans le viewport, puis lancez un rendu beauté.",
       "compose_section": "1 · Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
@@ -154,8 +156,9 @@
       "stub_render_label": "Beauté stub",
       "cpu_render_label": "Beauté CPU",
       "blender_render_label": "Beauté Blender",
-      "blender_tip": "La beauté Blender est opt-in : installer le Illustration Renderer Pack (adaptateur GPL + binaire Blender). Statut « prêt (binaire+adaptateur) » lance un spawn réel — un échec de spawn remonte en erreur (pas de mock papier silencieux). Sans binaire, Auto utilise un cadre mock bien visible. Cap render.blender · voir share/illustration-renderer-pack/README.md.",
+      "blender_tip": "Installez le Renderer Pack GPL et Blender pour un rendu réel. Auto affiche un mock signalé si Blender manque dans un pack installé; sans pack, le rendu est indisponible.",
       "blender_pack_status_label": "Rafraîchir statut pack Blender",
+      "blender_pack_status_value_label": "Statut du pack Blender",
       "blender_pack_status_empty": "Statut pack Blender inconnu — appuyez sur Rafraîchir statut pack Blender.",
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
@@ -178,6 +181,7 @@
       "mesh_stub_label": "Mesh stub (procédural)",
       "mesh_neural_label": "Mesh neural (pack)",
       "mesh_pack_status_label": "Rafraîchir statut pack",
+      "mesh_pack_status_value_label": "Statut du pack de maillage neural",
       "mesh_pack_status_empty": "Statut pack inconnu — appuyez sur Rafraîchir statut pack.",
       "mesh_tip": "Le stub assemble des MeshBox. Le neural lance trellis.cpp / l’adaptateur du pack (image→GLB) si runner + poids GGUF sont installés ; sinon mock fixture. Cap mesh.neural · SceneGraph MeshAsset. Pas de WebView.",
       "comic_section": "Page BD",
@@ -524,8 +528,8 @@
         "path": "/documents/illustrations/beauty-cpu.png",
         "scene_yaml": "$local.scene",
         "style": "$local.style_id",
-        "width": 320,
-        "height": 240
+        "width": 640,
+        "height": 480
       },
       "refresh_binds": []
     },
@@ -538,8 +542,8 @@
         "path": "/documents/illustrations/beauty-blender.png",
         "scene_yaml": "$local.scene",
         "style": "$local.style_id",
-        "width": 256,
-        "height": 192
+        "width": 640,
+        "height": 480
       },
       "refresh_binds": []
     },
@@ -1182,7 +1186,8 @@
               {
                 "kind": "text_input",
                 "state_key": "blender_pack_status",
-                "label_key": "blender_pack_status_label",
+                "label_key": "blender_pack_status_value_label",
+                "read_only": true,
                 "visible": {
                   "ne": [
                     "$local.blender_pack_status",
@@ -1310,7 +1315,8 @@
               {
                 "kind": "text_input",
                 "state_key": "mesh_pack_status",
-                "label_key": "mesh_pack_status_label",
+                "label_key": "mesh_pack_status_value_label",
+                "read_only": true,
                 "visible": {
                   "ne": [
                     "$local.mesh_pack_status",
@@ -1478,6 +1484,7 @@
                 "kind": "text_input",
                 "state_key": "pack_summary",
                 "label_key": "packs_section",
+                "read_only": true,
                 "visible": {
                   "ne": [
                     "$local.pack_summary",
@@ -1559,8 +1566,7 @@
             "selected_key": "selected_id",
             "canvas_id": "illustration_viewport",
             "label_key": "viewport_label",
-            "empty_label_key": "scene_empty",
-            "size": 380
+            "empty_label_key": "scene_empty"
           },
           {
             "kind": "image_view",
