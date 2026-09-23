@@ -1836,13 +1836,60 @@ impl DeclUiPanelState {
                 }
             }
 
-            "scene3d" => {
+            "scene3d" | "illustration_stage" => {
                 let viewport_id = w
                     .canvas_id
                     .clone()
                     .or_else(|| w.scene_key.clone())
                     .unwrap_or_else(|| "scene3d".into());
                 let host = scene3d_viewports.entry(viewport_id).or_default();
+                if w.kind == "illustration_stage" {
+                    let project = local_state.get("project_id").and_then(Value::as_str);
+                    let render_project = local_state.get("render_project_id").and_then(Value::as_str);
+                    let render_kind = local_state.get("render_kind").and_then(Value::as_str);
+                    let source_key = if render_kind == Some("comic_render") { "comic" } else { "scene" };
+                    let revision_key = if source_key == "comic" { "render_comic_revision" } else { "render_scene_revision" };
+                    let revision_matches = local_state.get(source_key).and_then(Value::as_str).is_some_and(|yaml| {
+                        use sha2::Digest as _;
+                        let actual = format!("{:x}", sha2::Sha256::digest(yaml.as_bytes()));
+                        local_state.get(revision_key).and_then(Value::as_str) == Some(actual.as_str())
+                    });
+                    let path = local_state.get("beauty_path").and_then(Value::as_str).unwrap_or("");
+                    if !path.is_empty() && project.is_some() && project == render_project && revision_matches {
+                        if let Some(texture) = try_load_png(ui.ctx(), path) {
+                            let available = ui.available_size();
+                            let base = texture.size_vec2();
+                            let fit = (available.x / base.x.max(1.0)).min(available.y / base.y.max(1.0)).max(0.01);
+                            let response = ui.add(egui::Image::new(&texture)
+                                .fit_to_exact_size(base * fit)
+                                .sense(egui::Sense::click()));
+                            if response.clicked() {
+                                if let Some(pointer) = response.interact_pointer_pos() {
+                                    let x = ((pointer.x - response.rect.left()) / response.rect.width()).clamp(0.0, 0.999_999);
+                                    let y = ((pointer.y - response.rect.top()) / response.rect.height()).clamp(0.0, 0.999_999);
+                                    if render_kind == Some("comic_render") {
+                                        if let (Some(yaml), Some(page_id)) = (
+                                            local_state.get("comic").and_then(Value::as_str),
+                                            local_state.get("render_page_id").and_then(Value::as_str),
+                                        ) {
+                                            if let Some((panel_id, scene_yaml)) = comic_panel_at(yaml, page_id, x, y) {
+                                                actions.local_patch.insert("comic_panel_id".into(), Value::String(panel_id));
+                                                actions.local_patch.insert("scene".into(), Value::String(scene_yaml));
+                                                actions.local_patch.insert("selected_id".into(), Value::Null);
+                                                host.selection.clear();
+                                            }
+                                        }
+                                    } else if let Some(id) = render_node_at(local_state, x, y) {
+                                        host.selection = vec![id.clone()];
+                                        actions.local_patch.insert("selected_id".into(), Value::String(id));
+                                    }
+                                    actions.local_patch.insert("beauty_path".into(), Value::String(String::new()));
+                                }
+                            }
+                            return;
+                        }
+                    }
+                }
                 if let Some(patch) =
                     crate::scene3d_ui::ui_scene3d(ui, w, doc, language, local_state, host)
                 {
@@ -1851,6 +1898,7 @@ impl DeclUiPanelState {
                     for (k, v) in scene_patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
                     }
+                    actions.local_patch.insert("beauty_path".into(), Value::String(String::new()));
                     if autosave {
                         if actions.invoke.is_none() {
                             actions.invoke = Some(DeclUiInvokeAction {
@@ -3326,6 +3374,32 @@ pub(crate) fn try_load_png(ctx: &egui::Context, logical: &str) -> Option<egui::T
     Some(ctx.load_texture(logical, color, egui::TextureOptions::LINEAR))
 }
 
+fn render_node_at(local_state: &HashMap<String, Value>, x: f32, y: f32) -> Option<String> {
+    let path = local_state.get("render_id_map_path")?.as_str()?;
+    let nodes = local_state.get("render_id_map_nodes")?.as_array()?;
+    let image = image::open(host_file_from_logical(path)).ok()?.to_rgba8();
+    if image.width() != local_state.get("render_id_map_width")?.as_u64()? as u32
+        || image.height() != local_state.get("render_id_map_height")?.as_u64()? as u32
+    {
+        return None;
+    }
+    let px = image.get_pixel(
+        (x.clamp(0.0, 0.999_999) * image.width() as f32) as u32,
+        (y.clamp(0.0, 0.999_999) * image.height() as f32) as u32,
+    );
+    let index = (px[0] as usize) | ((px[1] as usize) << 8) | ((px[2] as usize) << 16);
+    index.checked_sub(1).and_then(|index| nodes.get(index))?.as_str().map(str::to_string)
+}
+
+fn comic_panel_at(yaml: &str, page_id: &str, x: f32, y: f32) -> Option<(String, String)> {
+    let comic = aos_scene::load_comic_yaml(yaml).ok()?;
+    let page = comic.pages.iter().find(|page| page.id == page_id)?;
+    page.panels.iter().find(|panel| {
+        x >= panel.rect.x && x <= panel.rect.x + panel.rect.w
+            && y >= panel.rect.y && y <= panel.rect.y + panel.rect.h
+    }).map(|panel| (panel.id.clone(), panel.scene_yaml.clone()))
+}
+
 fn try_load_asset_thumbnail(
     ctx: &egui::Context,
     logical: &str,
@@ -3394,5 +3468,27 @@ fn value_display(v: &Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Null => "—".into(),
         other => serde_json::to_string(other).unwrap_or_else(|_| "—".into()),
+    }
+}
+
+#[cfg(test)]
+mod illustration_stage_tests {
+    use super::comic_panel_at;
+
+    #[test]
+    fn comic_click_uses_the_panel_rect_and_scene_snapshot() {
+        let comic = aos_scene::apply_comic_layout(
+            aos_scene::ComicLayoutId::TwoHorizontal,
+            &aos_scene::SceneGraph::demo_scene(),
+            640,
+            480,
+        ).unwrap();
+        let yaml = aos_scene::save_comic_yaml(&comic).unwrap();
+        let left = comic_panel_at(&yaml, "page_1", 0.25, 0.5).unwrap();
+        let right = comic_panel_at(&yaml, "page_1", 0.75, 0.5).unwrap();
+        assert_eq!(left.0, "panel_1");
+        assert_eq!(right.0, "panel_2");
+        assert_eq!(left.1, comic.pages[0].panels[0].scene_yaml);
+        assert!(comic_panel_at(&yaml, "page_1", 0.5, 0.5).is_none());
     }
 }

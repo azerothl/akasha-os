@@ -1129,7 +1129,8 @@
         "antialias": "$local.antialias",
         "r": 48,
         "g": 72,
-        "b": 96
+        "b": 96,
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     },
@@ -1148,7 +1149,8 @@
         "hatching": "$local.hatching",
         "antialias": "$local.antialias",
         "width": "$local.output_width",
-        "height": "$local.output_height"
+        "height": "$local.output_height",
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     },
@@ -1167,7 +1169,8 @@
         "hatching": "$local.hatching",
         "antialias": "$local.antialias",
         "width": "$local.output_width",
-        "height": "$local.output_height"
+        "height": "$local.output_height",
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     },
@@ -1587,7 +1590,8 @@
         "backend": "cpu",
         "path": "/documents/illustrations/comic-page.png",
         "width": 640,
-        "height": 960
+        "height": 960,
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     },
@@ -1845,7 +1849,8 @@
         "path": "/documents/illustrations/beauty-3d-cpu.png",
         "scene_yaml": "$local.scene",
         "width": "$local.output_width",
-        "height": "$local.output_height"
+        "height": "$local.output_height",
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     },
@@ -1858,7 +1863,8 @@
         "path": "/documents/illustrations/beauty-3d-blender.png",
         "scene_yaml": "$local.scene",
         "width": "$local.output_width",
-        "height": "$local.output_height"
+        "height": "$local.output_height",
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     }
@@ -2695,41 +2701,13 @@
                       ]
                     },
                     {
-                      "kind": "split",
-                      "split_ratio": 0.67,
-                      "children": [
-                        {
-                          "kind": "scene3d",
-                          "scene_key": "scene",
-                          "selected_key": "selected_id",
-                          "canvas_id": "illustration_viewport",
-                          "label_key": "viewport_label",
-                          "empty_label_key": "scene_empty"
-                        },
-                        {
-                          "kind": "column",
-                          "children": [
-                            {
-                              "kind": "text_input",
-                              "state_key": "beauty_summary",
-                              "label_key": "beauty_summary_label",
-                              "read_only": true,
-                              "visible": {
-                                "ne": [
-                                  "$local.beauty_summary",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "image_view",
-                              "resource": "$local.beauty_path",
-                              "label_key": "preview_label",
-                              "empty_label_key": "beauty_empty"
-                            }
-                          ]
-                        }
-                      ]
+                      "kind": "illustration_stage",
+                      "scene_key": "scene",
+                      "selected_key": "selected_id",
+                      "canvas_id": "illustration_viewport",
+                      "label_key": "viewport_label",
+                      "empty_label_key": "scene_empty",
+                      "resource": "$local.beauty_path"
                     }
                   ]
                 }
@@ -2851,41 +2829,13 @@
                       ]
                     },
                     {
-                      "kind": "split",
-                      "split_ratio": 0.67,
-                      "children": [
-                        {
-                          "kind": "scene3d",
-                          "scene_key": "scene",
-                          "selected_key": "selected_id",
-                          "canvas_id": "illustration_viewport",
-                          "label_key": "viewport_label",
-                          "empty_label_key": "scene_empty"
-                        },
-                        {
-                          "kind": "column",
-                          "children": [
-                            {
-                              "kind": "text_input",
-                              "state_key": "beauty_summary",
-                              "label_key": "beauty_summary_label",
-                              "read_only": true,
-                              "visible": {
-                                "ne": [
-                                  "$local.beauty_summary",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "image_view",
-                              "resource": "$local.beauty_path",
-                              "label_key": "preview_label",
-                              "empty_label_key": "beauty_empty"
-                            }
-                          ]
-                        }
-                      ]
+                      "kind": "illustration_stage",
+                      "scene_key": "scene",
+                      "selected_key": "selected_id",
+                      "canvas_id": "illustration_viewport",
+                      "label_key": "viewport_label",
+                      "empty_label_key": "scene_empty",
+                      "resource": "$local.beauty_path"
                     }
                   ]
                 }
@@ -3037,41 +2987,13 @@
                       ]
                     },
                     {
-                      "kind": "split",
-                      "split_ratio": 0.67,
-                      "children": [
-                        {
-                          "kind": "scene3d",
-                          "scene_key": "scene",
-                          "selected_key": "selected_id",
-                          "canvas_id": "illustration_viewport",
-                          "label_key": "viewport_label",
-                          "empty_label_key": "scene_empty"
-                        },
-                        {
-                          "kind": "column",
-                          "children": [
-                            {
-                              "kind": "text_input",
-                              "state_key": "beauty_summary",
-                              "label_key": "beauty_summary_label",
-                              "read_only": true,
-                              "visible": {
-                                "ne": [
-                                  "$local.beauty_summary",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "image_view",
-                              "resource": "$local.beauty_path",
-                              "label_key": "preview_label",
-                              "empty_label_key": "beauty_empty"
-                            }
-                          ]
-                        }
-                      ]
+                      "kind": "illustration_stage",
+                      "scene_key": "scene",
+                      "selected_key": "selected_id",
+                      "canvas_id": "illustration_viewport",
+                      "label_key": "viewport_label",
+                      "empty_label_key": "scene_empty",
+                      "resource": "$local.beauty_path"
                     }
                   ]
                 }
@@ -3594,41 +3516,13 @@
                       ]
                     },
                     {
-                      "kind": "split",
-                      "split_ratio": 0.67,
-                      "children": [
-                        {
-                          "kind": "scene3d",
-                          "scene_key": "scene",
-                          "selected_key": "selected_id",
-                          "canvas_id": "illustration_viewport",
-                          "label_key": "viewport_label",
-                          "empty_label_key": "scene_empty"
-                        },
-                        {
-                          "kind": "column",
-                          "children": [
-                            {
-                              "kind": "text_input",
-                              "state_key": "beauty_summary",
-                              "label_key": "beauty_summary_label",
-                              "read_only": true,
-                              "visible": {
-                                "ne": [
-                                  "$local.beauty_summary",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "image_view",
-                              "resource": "$local.beauty_path",
-                              "label_key": "preview_label",
-                              "empty_label_key": "beauty_empty"
-                            }
-                          ]
-                        }
-                      ]
+                      "kind": "illustration_stage",
+                      "scene_key": "scene",
+                      "selected_key": "selected_id",
+                      "canvas_id": "illustration_viewport",
+                      "label_key": "viewport_label",
+                      "empty_label_key": "scene_empty",
+                      "resource": "$local.beauty_path"
                     }
                   ]
                 }

@@ -10,6 +10,7 @@ mod blender;
 mod cpu;
 mod export;
 mod isolate;
+mod object_map;
 mod service;
 mod stub;
 
@@ -20,6 +21,7 @@ pub use blender::{blender_pack_status, BlenderRenderBackend, DEFAULT_BLENDER_BEA
 pub use cpu::CpuWireframeBackend;
 pub use export::{AkashaSceneExport, AKASHA_SCENE_EXPORT_VERSION};
 pub use isolate::{isolation_matrix, BlenderPackStatus, BlenderRunMode, IsolationRow};
+pub use object_map::{render_object_id_map, ObjectIdMap};
 pub use service::{
     parse_backend, parse_pass, parse_style, JobState, RenderJobStatus, RenderResult, RenderService,
     RenderSubmit, DEFAULT_RENDER_BACKEND,

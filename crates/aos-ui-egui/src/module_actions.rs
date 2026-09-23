@@ -1020,10 +1020,25 @@ async fn run_render_submit(
     };
     use base64::Engine as _;
 
-    let path = input
+    let requested_path = input
         .get("path")
         .and_then(|v| v.as_str())
         .unwrap_or("/documents/illustrations/beauty.png");
+    let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("");
+    let path = if module == "illustration-studio" {
+        match managed_render_path(project_id, action_id) {
+            Ok(path) => path,
+            Err(error) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(), action_id: action_id.to_string(), ok: false,
+                    result: Value::Null, error: Some(error), refresh_binds,
+                });
+                return;
+            }
+        }
+    } else {
+        requested_path.to_string()
+    };
     let backend = match parse_backend(input.get("backend").and_then(|v| v.as_str())) {
         Ok(b) => b,
         Err(e) => {
@@ -1105,6 +1120,17 @@ async fn run_render_submit(
         }
     };
 
+    if module == "illustration-studio"
+        && input.get("scene_yaml").and_then(Value::as_str).is_none_or(|yaml| yaml.trim().is_empty())
+    {
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.to_string(), action_id: action_id.to_string(), ok: false,
+            result: Value::Null, error: Some("Open a scene before rendering".into()), refresh_binds,
+        });
+        return;
+    }
+    let scene_yaml = input.get("scene_yaml").and_then(Value::as_str).unwrap_or("");
+    let scene_revision = scene_revision(scene_yaml);
     let (scene, preset) = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
         if yaml.trim().is_empty() {
             (SceneGraph::demo_scene(), None)
@@ -1144,18 +1170,28 @@ async fn run_render_submit(
     };
 
     let svc = illustration_render_service();
+    let camera_id = scene.active_camera.clone();
+    let map_scene = scene.clone();
     let submit = RenderSubmit {
         scene,
         backend,
         pass,
         width,
         height,
-        output_path: path.to_string(),
+        output_path: path,
         stub_rgb: (r, g, b),
         style,
         preset,
     };
-    let rendered = match tokio::task::spawn_blocking(move || svc.submit_and_result(submit)).await {
+    let (rendered, object_map) = match tokio::task::spawn_blocking(move || {
+        let rendered = svc.submit_and_result(submit)?;
+        let map = if rendered.backend != RenderBackendId::Stub {
+            aos_scene::render_object_id_map(&map_scene, rendered.width, rendered.height).ok()
+        } else {
+            None
+        };
+        Ok::<_, aos_scene::RenderError>((rendered, map))
+    }).await {
         Ok(Ok(res)) => res,
         Ok(Err(e)) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -1196,6 +1232,28 @@ async fn run_render_submit(
         .await;
     match result {
         Ok(_) => {
+            let mut map_path = None;
+            let mut map_nodes = Vec::new();
+            let mut map_width = 0;
+            let mut map_height = 0;
+            if let Some(map) = object_map {
+                let path = rendered.path.strip_suffix(".png")
+                    .map(|stem| format!("{stem}.ids.png"))
+                    .unwrap_or_else(|| format!("{}.ids.png", rendered.path));
+                let request = FsWriteBytesRequest {
+                    path: path.clone(),
+                    content_b64: base64::engine::general_purpose::STANDARD.encode(&map.png),
+                    actor: "human:ui".into(),
+                    caps: vec![aos_proto::ILLUSTRATION_FS_WRITE_CAP.into(), render_cap.into()],
+                    trace_id: format!("decl-ui-{module}-object-map"),
+                };
+                if bus.call::<FsWriteBytesRequest, Value>("fs.write_bytes", &request, vec![]).await.is_ok() {
+                    map_path = Some(path);
+                    map_nodes = map.node_ids;
+                    map_width = map.width;
+                    map_height = map.height;
+                }
+            }
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
                 action_id: action_id.to_string(),
@@ -1216,6 +1274,13 @@ async fn run_render_submit(
                         .or_else(|| input.get("style_id"))
                         .and_then(|v| v.as_str())
                         .unwrap_or(""),
+                    "project_id": project_id,
+                    "scene_revision": scene_revision,
+                    "camera_id": camera_id,
+                    "id_map_path": map_path,
+                    "id_map_nodes": map_nodes,
+                    "id_map_width": map_width,
+                    "id_map_height": map_height,
                 }),
                 error: None,
                 refresh_binds,
@@ -2755,16 +2820,28 @@ async fn run_comic_render(
         }
     };
 
+    let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("");
+    let comic_revision = scene_revision(comic_yaml);
     let page_id = input
         .get("page_id")
         .and_then(|v| v.as_str())
         .map(str::to_string)
         .or_else(|| comic.active_page.clone())
         .unwrap_or_else(|| "page_1".to_string());
-    let path = input
-        .get("path")
-        .and_then(|v| v.as_str())
-        .unwrap_or(DEFAULT_COMIC_PAGE_PATH);
+    let path = if module == "illustration-studio" {
+        match managed_render_path(project_id, action_id) {
+            Ok(path) => path,
+            Err(error) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(), action_id: action_id.to_string(), ok: false,
+                    result: Value::Null, error: Some(error), refresh_binds,
+                });
+                return;
+            }
+        }
+    } else {
+        input.get("path").and_then(Value::as_str).unwrap_or(DEFAULT_COMIC_PAGE_PATH).to_string()
+    };
     let backend_str = input.get("backend").and_then(|v| v.as_str());
     let backend = match parse_backend(backend_str.or(Some("cpu"))) {
         Ok(b) => b,
@@ -2826,7 +2903,7 @@ async fn run_comic_render(
     };
 
     let req = FsWriteBytesRequest {
-        path: path.to_string(),
+        path: path.clone(),
         content_b64: base64::engine::general_purpose::STANDARD.encode(&rendered.png),
         actor: "human:ui".into(),
         caps: vec![
@@ -2852,6 +2929,9 @@ async fn run_comic_render(
                     "page_id": rendered.page_id,
                     "panel_count": rendered.panel_count,
                     "backend": rendered.backend.as_str(),
+                    "kind": "comic_render",
+                    "project_id": project_id,
+                    "comic_revision": comic_revision,
                 }),
                 error: None,
                 refresh_binds,
@@ -4143,6 +4223,30 @@ async fn run_media_image_generate(
             }
         }
     });
+}
+
+fn scene_revision(yaml: &str) -> String {
+    use sha2::Digest as _;
+    format!("{:x}", sha2::Sha256::digest(yaml.as_bytes()))
+}
+
+fn managed_render_path(project_id: &str, action_id: &str) -> Result<String, String> {
+    let digits = project_id.strip_prefix("project-").unwrap_or("");
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return Err("Open a project before rendering".into());
+    }
+    let safe_action: String = action_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .take(48)
+        .collect();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    Ok(format!(
+        "/documents/illustrations/projects/{project_id}/renders/{safe_action}-{stamp}.png"
+    ))
 }
 
 fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, String> {
