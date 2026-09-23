@@ -338,9 +338,9 @@ Paquet catalogue local **`illustration-studio` 0.7.7** (versionné **indépendam
 | Surface | Réalité |
 |---------|---------|
 | SceneGraph SoT (ADR 0011) + YAML projet + undo/redo + autosave | Réel |
-| **Fenêtre d’édition** wgpu (`scene3d`) | MeshBox/MeshAsset approximatif temps réel — **pas** beauté RenderService / NPR / Blender |
+| **Fenêtre d’édition** wgpu (`scene3d`) | Géométrie MeshBox/MeshAsset et couleur de base approximatives, avec hiérarchie GLB — **pas** rendu PBR/NPR complet |
 | Beauté via RenderService | **Stub** + **CPU** in-tree ; NPR Sketch/Pencil/Ink optionnel (approx CPU) |
-| Beauté Blender | Cap + chemin d’isolation réels ; **mock déterministe par défaut** ; beauté réelle = **Renderer Pack GPL** opt-in + binaire Blender (**pas** dans le zip Preview / module guest) |
+| Beauté Blender | Cap + chemin d’isolation réels ; **Renderer Pack GPL** opt-in et Blender téléchargeable depuis le Studio sur plateformes compatibles. Hiérarchie et matériaux PBR des GLB préservés ; Auto signale les erreurs de lancement. |
 | Compose | **Heuristiques mots-clés** EN/FR → templates — **pas** SceneIntent LLM / planners |
 | Pose IK/FK, caméra, lumières v0, extensions comic/storyboard | Réel (borné) |
 | Assist mesh neural | Cap + stub procédural réels ; `backend=neural` exige Model Pack opt-in (fixture/mock sans poids) |

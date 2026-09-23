@@ -1,7 +1,9 @@
 //! SceneGraph → mesh instances + camera math (ADR 0011). Shared by wgpu paint.
 
 use crate::math::{Mat4, Vec3};
-use crate::mesh_asset::{load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh};
+use crate::mesh_asset::{
+    default_mesh_search_roots, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh,
+};
 use crate::scene::{NodeKind, SceneGraph};
 use std::path::Path;
 
@@ -118,7 +120,18 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
                 out.push(MeshInstance {
                     id: id.clone(),
                     world,
-                    color: color_for_id(&id, selected_here),
+                    color: triangle_mesh
+                        .as_ref()
+                        .map(|mesh| {
+                            let mut color = mesh.base_color;
+                            if selected_here {
+                                color[0] = (color[0] * 0.55 + 0.35).min(1.0);
+                                color[1] = (color[1] * 0.55 + 0.55).min(1.0);
+                                color[2] = (color[2] * 0.55 + 0.85).min(1.0);
+                            }
+                            color
+                        })
+                        .unwrap_or_else(|| color_for_id(&id, selected_here)),
                     selected: selected_here,
                     triangle_mesh,
                 });
@@ -130,24 +143,7 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
 }
 
 fn mesh_search_roots() -> Vec<std::path::PathBuf> {
-    let mut roots = Vec::new();
-    if let Ok(p) = std::env::var("AOS_NEURAL_MESH_PACK") {
-        let pb = std::path::PathBuf::from(p.trim());
-        if pb.is_dir() {
-            roots.push(pb);
-        }
-    }
-    for cand in [
-        std::path::PathBuf::from("share/illustration-neural-mesh-pack"),
-        std::path::PathBuf::from("share/assets/illustration"),
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../share/illustration-neural-mesh-pack"),
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"),
-    ] {
-        if cand.is_dir() {
-            roots.push(cand);
-        }
-    }
-    roots
+    default_mesh_search_roots()
 }
 
 pub fn look_at_rh(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {

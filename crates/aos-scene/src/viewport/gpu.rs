@@ -320,7 +320,8 @@ impl ViewportRenderer {
         let mut cube_raw: Vec<InstanceRaw> = Vec::new();
         let mut asset_draws: Vec<(&crate::viewport::mesh::MeshInstance, InstanceRaw)> = Vec::new();
         for inst in &instances {
-            if instances.len() as u32 > MAX_INSTANCES && cube_raw.len() + asset_draws.len() >= MAX_INSTANCES as usize
+            if instances.len() as u32 > MAX_INSTANCES
+                && cube_raw.len() + asset_draws.len() >= MAX_INSTANCES as usize
             {
                 break;
             }
@@ -365,11 +366,7 @@ impl ViewportRenderer {
                     normal: [chunk[3], chunk[4], chunk[5]],
                 });
             }
-            let indices: Vec<u16> = mesh
-                .indices
-                .iter()
-                .map(|&i| i.min(u16::MAX as u32) as u16)
-                .collect();
+            let indices: Vec<u32> = mesh.indices.clone();
             if verts.is_empty() || indices.len() < 3 {
                 continue;
             }
@@ -390,7 +387,8 @@ impl ViewportRenderer {
             asset_gpu.push((vbuf, ibuf, indices.len() as u32, *raw));
         }
         // Pack asset instances into a small instance buffer slice after cubes.
-        let asset_instance_offset = (cube_count as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
+        let asset_instance_offset =
+            (cube_count as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
         if !asset_gpu.is_empty() {
             let asset_raw: Vec<InstanceRaw> = asset_gpu.iter().map(|(_, _, _, r)| *r).collect();
             if (cube_count as usize + asset_raw.len()) <= MAX_INSTANCES as usize {
@@ -496,14 +494,14 @@ impl ViewportRenderer {
             }
 
             for (i, (vbuf, ibuf, index_count, _)) in asset_gpu.iter().enumerate() {
-                let inst_start =
-                    asset_instance_offset + (i as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
+                let inst_start = asset_instance_offset
+                    + (i as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
                 let inst_end = inst_start + std::mem::size_of::<InstanceRaw>() as u64;
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
                 pass.set_vertex_buffer(0, vbuf.slice(..));
                 pass.set_vertex_buffer(1, self.instance_buf.slice(inst_start..inst_end));
-                pass.set_index_buffer(ibuf.slice(..), wgpu::IndexFormat::Uint16);
+                pass.set_index_buffer(ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..*index_count, 0, 0..1);
             }
         }
@@ -590,57 +588,27 @@ fn unit_cube_geometry() -> (Vec<Vertex>, Vec<u16>, Vec<u16>) {
     let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
         (
             [0.0, 0.0, 1.0],
-            [
-                [-h, -h, h],
-                [h, -h, h],
-                [h, h, h],
-                [-h, h, h],
-            ],
+            [[-h, -h, h], [h, -h, h], [h, h, h], [-h, h, h]],
         ),
         (
             [0.0, 0.0, -1.0],
-            [
-                [h, -h, -h],
-                [-h, -h, -h],
-                [-h, h, -h],
-                [h, h, -h],
-            ],
+            [[h, -h, -h], [-h, -h, -h], [-h, h, -h], [h, h, -h]],
         ),
         (
             [0.0, 1.0, 0.0],
-            [
-                [-h, h, -h],
-                [-h, h, h],
-                [h, h, h],
-                [h, h, -h],
-            ],
+            [[-h, h, -h], [-h, h, h], [h, h, h], [h, h, -h]],
         ),
         (
             [0.0, -1.0, 0.0],
-            [
-                [-h, -h, h],
-                [-h, -h, -h],
-                [h, -h, -h],
-                [h, -h, h],
-            ],
+            [[-h, -h, h], [-h, -h, -h], [h, -h, -h], [h, -h, h]],
         ),
         (
             [1.0, 0.0, 0.0],
-            [
-                [h, -h, h],
-                [h, -h, -h],
-                [h, h, -h],
-                [h, h, h],
-            ],
+            [[h, -h, h], [h, -h, -h], [h, h, -h], [h, h, h]],
         ),
         (
             [-1.0, 0.0, 0.0],
-            [
-                [-h, -h, -h],
-                [-h, -h, h],
-                [-h, h, h],
-                [-h, h, -h],
-            ],
+            [[-h, -h, -h], [-h, -h, h], [-h, h, h], [-h, h, -h]],
         ),
     ];
     let mut verts = Vec::with_capacity(24);
