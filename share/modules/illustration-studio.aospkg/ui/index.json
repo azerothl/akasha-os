@@ -7,10 +7,10 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Compose uses keyword heuristics, not a language model. Edit in the viewport, then render Beauty.",
+      "tip_body": "Describe the scene. The configured model proposes objects and relations; placements are checked before you choose a candidate. Keyword composition is used when the model is unavailable.",
       "compose_section": "1 · Compose",
       "prompt_label": "Prompt",
-      "compose_label": "Compose scene",
+      "compose_label": "Generate proposals",
       "pose_section": "Pose (IK / FK)",
       "pose_wave_label": "Wave right",
       "pose_look_label": "Look at box",
@@ -131,14 +131,20 @@
       "light_color_r_label": "Color R (sRGB)",
       "light_color_g_label": "Color G (sRGB)",
       "light_color_b_label": "Color B (sRGB)",
-      "beauty_summary_label": "Last render"
+      "beauty_summary_label": "Last render",
+      "compose_review": "Choose a proposed scene to replace the current scene. Nothing changes until you apply one.",
+      "compose_fallback_notice": "The model could not produce a valid plan. Review the keyword-based proposal.",
+      "compose_apply_1": "Apply proposal 1",
+      "compose_apply_2": "Apply proposal 2",
+      "compose_proposal_1": "Proposal 1 · placement",
+      "compose_proposal_2": "Proposal 2 · placement"
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "Compose : heuristiques mots-clés, pas de LLM. Éditez dans le viewport, puis lancez Beauté.",
+      "tip_body": "Décrivez la scène. Le modèle configuré propose objets et relations ; les placements sont vérifiés avant votre choix. Les mots clés servent de repli si le modèle est indisponible.",
       "compose_section": "1 · Composer",
       "prompt_label": "Invite",
-      "compose_label": "Composer la scène",
+      "compose_label": "Générer des propositions",
       "pose_section": "Pose (IK / FK)",
       "pose_wave_label": "Saluer (droite)",
       "pose_look_label": "Regarder la boîte",
@@ -259,7 +265,13 @@
       "light_color_r_label": "Couleur R (sRVB)",
       "light_color_g_label": "Couleur V (sRVB)",
       "light_color_b_label": "Couleur B (sRVB)",
-      "beauty_summary_label": "Dernier rendu"
+      "beauty_summary_label": "Dernier rendu",
+      "compose_review": "Choisissez une scène proposée pour remplacer la scène actuelle. Rien ne change avant votre choix.",
+      "compose_fallback_notice": "Le modèle n’a pas produit de plan valide. Vérifiez la proposition fondée sur les mots clés.",
+      "compose_apply_1": "Appliquer la proposition 1",
+      "compose_apply_2": "Appliquer la proposition 2",
+      "compose_proposal_1": "Proposition 1 · placement",
+      "compose_proposal_2": "Proposition 2 · placement"
     }
   },
   "state": {
@@ -414,6 +426,42 @@
     "more_open": {
       "type": "boolean",
       "default": false
+    },
+    "compose_pending": {
+      "type": "boolean",
+      "default": false
+    },
+    "compose_two_candidates": {
+      "type": "boolean",
+      "default": false
+    },
+    "compose_fallback": {
+      "type": "boolean",
+      "default": false
+    },
+    "compose_candidate_1_yaml": {
+      "type": "string",
+      "default": ""
+    },
+    "compose_candidate_1_root": {
+      "type": "string",
+      "default": ""
+    },
+    "compose_candidate_1_character": {
+      "type": "string",
+      "default": ""
+    },
+    "compose_candidate_2_yaml": {
+      "type": "string",
+      "default": ""
+    },
+    "compose_candidate_2_root": {
+      "type": "string",
+      "default": ""
+    },
+    "compose_candidate_2_character": {
+      "type": "string",
+      "default": ""
     }
   },
   "bindings": [
@@ -617,7 +665,9 @@
       "input": {
         "kind": "blender"
       },
-      "refresh_binds": ["blender_pack_status"]
+      "refresh_binds": [
+        "blender_pack_status"
+      ]
     },
     {
       "id": "install_trellis",
@@ -626,7 +676,9 @@
         "kind": "trellis",
         "quant": "$local.trellis_quant"
       },
-      "refresh_binds": ["mesh_pack_status"]
+      "refresh_binds": [
+        "mesh_pack_status"
+      ]
     },
     {
       "id": "cancel_dependency_download",
@@ -811,25 +863,40 @@
     {
       "id": "import_glb",
       "service": "illustration.asset.import",
-      "input": {"mode": "file", "scene_yaml": "$local.scene"},
+      "input": {
+        "mode": "file",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
       "id": "catalogue_add_chair",
       "service": "illustration.asset.import",
-      "input": {"mode": "polyhaven", "catalogue_id": "WoodenChair_01", "scene_yaml": "$local.scene"},
+      "input": {
+        "mode": "polyhaven",
+        "catalogue_id": "WoodenChair_01",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
       "id": "catalogue_add_desk",
       "service": "illustration.asset.import",
-      "input": {"mode": "polyhaven", "catalogue_id": "SchoolDesk_01", "scene_yaml": "$local.scene"},
+      "input": {
+        "mode": "polyhaven",
+        "catalogue_id": "SchoolDesk_01",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
       "id": "catalogue_add_notebook",
       "service": "illustration.asset.import",
-      "input": {"mode": "polyhaven", "catalogue_id": "binder_notebook", "scene_yaml": "$local.scene"},
+      "input": {
+        "mode": "polyhaven",
+        "catalogue_id": "binder_notebook",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
@@ -1000,6 +1067,28 @@
         "lang": "en"
       },
       "refresh_binds": []
+    },
+    {
+      "id": "apply_compose_candidate_1",
+      "service": "scene.compose",
+      "input": {
+        "mode": "apply",
+        "candidate_yaml": "$local.compose_candidate_1_yaml",
+        "candidate_root_id": "$local.compose_candidate_1_root",
+        "candidate_character_id": "$local.compose_candidate_1_character"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "apply_compose_candidate_2",
+      "service": "scene.compose",
+      "input": {
+        "mode": "apply",
+        "candidate_yaml": "$local.compose_candidate_2_yaml",
+        "candidate_root_id": "$local.compose_candidate_2_root",
+        "candidate_character_id": "$local.compose_candidate_2_character"
+      },
+      "refresh_binds": []
     }
   ],
   "subscriptions": [],
@@ -1038,6 +1127,76 @@
                 "label_key": "compose_label",
                 "action": "compose_scene",
                 "primary": true
+              },
+              {
+                "kind": "text",
+                "label_key": "compose_review",
+                "visible": {
+                  "eq": [
+                    "$local.compose_pending",
+                    true
+                  ]
+                }
+              },
+              {
+                "kind": "text",
+                "label_key": "compose_fallback_notice",
+                "visible": {
+                  "eq": [
+                    "$local.compose_fallback",
+                    true
+                  ]
+                }
+              },
+              {
+                "kind": "scene_candidate",
+                "label_key": "compose_proposal_1",
+                "scene_key": "compose_candidate_1_yaml",
+                "visible": {
+                  "eq": [
+                    "$local.compose_pending",
+                    true
+                  ]
+                }
+              },
+              {
+                "kind": "scene_candidate",
+                "label_key": "compose_proposal_2",
+                "scene_key": "compose_candidate_2_yaml",
+                "visible": {
+                  "eq": [
+                    "$local.compose_two_candidates",
+                    true
+                  ]
+                }
+              },
+              {
+                "kind": "row",
+                "visible": {
+                  "eq": [
+                    "$local.compose_pending",
+                    true
+                  ]
+                },
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "compose_apply_1",
+                    "action": "apply_compose_candidate_1",
+                    "primary": true
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "compose_apply_2",
+                    "action": "apply_compose_candidate_2",
+                    "visible": {
+                      "eq": [
+                        "$local.compose_two_candidates",
+                        true
+                      ]
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -1170,29 +1329,84 @@
                 "kind": "section",
                 "label_key": "catalogue_section",
                 "children": [
-                  {"kind": "button", "label_key": "import_glb_label", "action": "import_glb"},
-                  {"kind": "markdown", "label_key": "catalogue_intro"},
-                  {"kind": "row", "children": [
-                    {"kind": "image", "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"},
-                    {"kind": "column", "children": [
-                      {"kind": "text", "label_key": "catalogue_chair"},
-                      {"kind": "button", "label_key": "catalogue_add_label", "action": "catalogue_add_chair"}
-                    ]}
-                  ]},
-                  {"kind": "row", "children": [
-                    {"kind": "image", "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"},
-                    {"kind": "column", "children": [
-                      {"kind": "text", "label_key": "catalogue_desk"},
-                      {"kind": "button", "label_key": "catalogue_add_label", "action": "catalogue_add_desk"}
-                    ]}
-                  ]},
-                  {"kind": "row", "children": [
-                    {"kind": "image", "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"},
-                    {"kind": "column", "children": [
-                      {"kind": "text", "label_key": "catalogue_notebook"},
-                      {"kind": "button", "label_key": "catalogue_add_label", "action": "catalogue_add_notebook"}
-                    ]}
-                  ]}
+                  {
+                    "kind": "button",
+                    "label_key": "import_glb_label",
+                    "action": "import_glb"
+                  },
+                  {
+                    "kind": "markdown",
+                    "label_key": "catalogue_intro"
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "image",
+                        "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"
+                      },
+                      {
+                        "kind": "column",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "label_key": "catalogue_chair"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "catalogue_add_label",
+                            "action": "catalogue_add_chair"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "image",
+                        "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"
+                      },
+                      {
+                        "kind": "column",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "label_key": "catalogue_desk"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "catalogue_add_label",
+                            "action": "catalogue_add_desk"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "image",
+                        "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"
+                      },
+                      {
+                        "kind": "column",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "label_key": "catalogue_notebook"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "catalogue_add_label",
+                            "action": "catalogue_add_notebook"
+                          }
+                        ]
+                      }
+                    ]
+                  }
                 ],
                 "collapsible": true,
                 "open_state_key": "catalogue_open"
@@ -1533,8 +1747,14 @@
                     "state_key": "trellis_quant",
                     "label_key": "trellis_quant_label",
                     "inline": true,
-                    "items": ["q4", "q8"],
-                    "item_label_keys": ["trellis_q4_label", "trellis_q8_label"]
+                    "items": [
+                      "q4",
+                      "q8"
+                    ],
+                    "item_label_keys": [
+                      "trellis_q4_label",
+                      "trellis_q8_label"
+                    ]
                   },
                   {
                     "kind": "button",
@@ -1546,7 +1766,10 @@
                     "label_key": "dependency_download_cancel",
                     "action": "cancel_dependency_download",
                     "visible": {
-                      "eq": ["$local.dependency_download_active", true]
+                      "eq": [
+                        "$local.dependency_download_active",
+                        true
+                      ]
                     }
                   },
                   {

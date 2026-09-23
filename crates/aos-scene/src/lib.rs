@@ -25,6 +25,7 @@ mod assets;
 mod camera;
 mod comic;
 mod compose;
+mod scene_intent;
 mod edit;
 mod ik;
 mod light;
@@ -60,6 +61,10 @@ pub use camera::{
 pub use compose::{
     compose_from_prompt, compose_from_prompt_with_pack, ComposeError, ComposeIntent, ComposeResult,
     SCENE_COMPOSE_CAP, SCENE_COMPOSE_SERVICE,
+};
+pub use scene_intent::{
+    parse_scene_intent, plan_scene_intent, IntentError, IntentObject, RelationKind, SceneIntent,
+    SpatialRelation,
 };
 pub use comic::{
     apply_comic_layout, bind_panel_scene, layout_rects, load_comic_yaml, render_comic_page,

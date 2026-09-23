@@ -570,6 +570,13 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 )));
             }
         }
+        "scene_candidate" => {
+            if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
+                return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
+                    "scene_key",
+                )));
+            }
+        }
         "scene3d" | "scene_tree" => {
             if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
@@ -704,9 +711,10 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
         }
         crate::SCENE_GET_SERVICE => {
             // Read snapshot — require illustrations read or edit.
-            if !granted_caps.iter().any(|c| {
-                c == crate::ILLUSTRATION_FS_READ_CAP || c == crate::SCENE_EDIT_CAP
-            }) {
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ILLUSTRATION_FS_READ_CAP || c == crate::SCENE_EDIT_CAP)
+            {
                 return Err(RichDeclUiError::MissingCapability(
                     crate::SCENE_EDIT_CAP.into(),
                 ));
@@ -761,8 +769,13 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             Ok(())
         }
         crate::ILLUSTRATION_ASSET_IMPORT_SERVICE => {
-            if !granted_caps.iter().any(|c| c == crate::ILLUSTRATION_ASSET_IMPORT_CAP) {
-                return Err(RichDeclUiError::MissingCapability(crate::ILLUSTRATION_ASSET_IMPORT_CAP.into()));
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ILLUSTRATION_ASSET_IMPORT_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ILLUSTRATION_ASSET_IMPORT_CAP.into(),
+                ));
             }
             Ok(())
         }
@@ -812,8 +825,7 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-crate::ASSET_PACK_LIST_SERVICE
-        | crate::ASSET_PACK_DESCRIBE_SERVICE => {
+        crate::ASSET_PACK_LIST_SERVICE | crate::ASSET_PACK_DESCRIBE_SERVICE => {
             if !granted_caps
                 .iter()
                 .any(|c| c == crate::ASSET_ILLUSTRATION_READ_CAP)
@@ -1308,10 +1320,7 @@ mod tests {
         assert_eq!(panes[1].kind, "split", "stage is edit|beauty split");
 
         let rail = panes[0].children.as_ref().expect("rail");
-        let rail_labels: Vec<&str> = rail
-            .iter()
-            .filter_map(|w| w.label_key.as_deref())
-            .collect();
+        let rail_labels: Vec<&str> = rail.iter().filter_map(|w| w.label_key.as_deref()).collect();
         assert!(
             rail_labels.contains(&"compose_section"),
             "compose section in left rail"
@@ -1334,9 +1343,9 @@ mod tests {
         );
         assert!(
             rail.iter().any(|w| w.kind == "scene_tree"
-                || w.children.as_ref().is_some_and(|cs| {
-                    cs.iter().any(|c| c.kind == "scene_tree")
-                })),
+                || w.children
+                    .as_ref()
+                    .is_some_and(|cs| { cs.iter().any(|c| c.kind == "scene_tree") })),
             "scene_tree in rail"
         );
         assert!(
@@ -1358,10 +1367,7 @@ mod tests {
             .find(|w| w.label_key.as_deref() == Some("more_section"))
             .unwrap_or_else(|| panic!("missing more_section"));
         assert_eq!(more.collapsible, Some(true), "more_section collapsible");
-        let more_children = more
-            .children
-            .as_ref()
-            .expect("more_section children");
+        let more_children = more.children.as_ref().expect("more_section children");
         for secondary in [
             "pose_section",
             "locks_section",
@@ -1386,9 +1392,9 @@ mod tests {
         assert!(
             stage.iter().any(|w| w.kind == "image_view")
                 || stage.iter().any(|w| {
-                    w.children.as_ref().is_some_and(|cs| {
-                        cs.iter().any(|c| c.kind == "image_view")
-                    })
+                    w.children
+                        .as_ref()
+                        .is_some_and(|cs| cs.iter().any(|c| c.kind == "image_view"))
                 }),
             "beauty output on stage"
         );

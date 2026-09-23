@@ -530,7 +530,7 @@ pub fn compose_from_prompt_with_pack(
     })
 }
 
-fn empty_rooted_scene() -> SceneGraph {
+pub(crate) fn empty_rooted_scene() -> SceneGraph {
     let mut nodes = std::collections::HashMap::new();
     let root = SceneNode::empty("root", "Scene");
     nodes.insert(root.id.clone(), root);
@@ -557,7 +557,7 @@ fn place(
     Ok(inst.root_id)
 }
 
-fn add_camera(scene: &mut SceneGraph, translation: Vec3) -> Result<String, ComposeError> {
+pub(crate) fn add_camera(scene: &mut SceneGraph, translation: Vec3) -> Result<String, ComposeError> {
     let id = "camera".to_string();
     if scene.nodes.contains_key(&id) {
         return Ok(id);
@@ -581,7 +581,7 @@ fn add_camera(scene: &mut SceneGraph, translation: Vec3) -> Result<String, Compo
     Ok(id)
 }
 
-fn add_key_light(scene: &mut SceneGraph) -> Result<String, ComposeError> {
+pub(crate) fn add_key_light(scene: &mut SceneGraph) -> Result<String, ComposeError> {
     let id = "key_light".to_string();
     if scene.nodes.contains_key(&id) {
         return Ok(id);

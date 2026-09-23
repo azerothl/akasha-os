@@ -320,21 +320,75 @@ pub(crate) fn on_ui_service_done(
                         .local_state
                         .insert("beauty_path".into(), Value::String(path.to_string()));
                 }
-                let backend = result.get("backend").and_then(|v| v.as_str()).unwrap_or("?");
+                let backend = result
+                    .get("backend")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
                 let width = result.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
                 let height = result.get("height").and_then(|v| v.as_u64()).unwrap_or(0);
                 let style = result.get("style").and_then(|v| v.as_str());
                 let summary = if app.prefs.language.starts_with("fr") {
-                    format!("Moteur : {backend} · {width} × {height} · style : {}", style.unwrap_or("défaut"))
+                    format!(
+                        "Moteur : {backend} · {width} × {height} · style : {}",
+                        style.unwrap_or("défaut")
+                    )
                 } else {
-                    format!("Backend: {backend} · {width} × {height} · style: {}", style.unwrap_or("default"))
+                    format!(
+                        "Backend: {backend} · {width} × {height} · style: {}",
+                        style.unwrap_or("default")
+                    )
                 };
-                panel.local_state.insert("beauty_summary".into(), Value::String(summary));
+                panel
+                    .local_state
+                    .insert("beauty_summary".into(), Value::String(summary));
             }
-            if module == "illustration-studio"
-                && illustration_action_patches_scene(&action_id)
-            {
+            if module == "illustration-studio" && illustration_action_patches_scene(&action_id) {
                 apply_illustration_scene_result(&mut panel.local_state, &action_id, &result);
+            }
+            if module == "illustration-studio" && action_id == "compose_scene" {
+                if let Some(candidates) = result.get("candidates").and_then(Value::as_array) {
+                    panel.local_state.insert(
+                        "compose_pending".into(),
+                        Value::Bool(!candidates.is_empty()),
+                    );
+                    panel.local_state.insert(
+                        "compose_two_candidates".into(),
+                        Value::Bool(candidates.len() > 1),
+                    );
+                    panel.local_state.insert(
+                        "compose_fallback".into(),
+                        Value::Bool(
+                            result.get("source").and_then(Value::as_str)
+                                == Some("keyword fallback"),
+                        ),
+                    );
+                    for (index, candidate) in candidates.iter().take(2).enumerate() {
+                        for (field, key) in [
+                            ("scene_yaml", "yaml"),
+                            ("root_id", "root"),
+                            ("character_id", "character"),
+                        ] {
+                            panel.local_state.insert(
+                                format!("compose_candidate_{}_{}", index + 1, key),
+                                candidate.get(field).cloned().unwrap_or(Value::Null),
+                            );
+                        }
+                    }
+                }
+            }
+            if module == "illustration-studio" && action_id.starts_with("apply_compose_candidate_")
+            {
+                panel
+                    .local_state
+                    .insert("compose_pending".into(), Value::Bool(false));
+                panel
+                    .local_state
+                    .insert("compose_fallback".into(), Value::Bool(false));
+                if result.get("character_id").and_then(Value::as_str).is_none() {
+                    panel
+                        .local_state
+                        .insert("character_id".into(), Value::String(String::new()));
+                }
             }
             if module == "illustration-studio"
                 && (action_id == "comic_layout"
@@ -363,10 +417,7 @@ pub(crate) fn on_ui_service_done(
                         .local_state
                         .insert("pack_summary".into(), Value::String(summary.to_string()));
                 } else if let Some(name) = result.get("name").and_then(|p| p.as_str()) {
-                    let path = result
-                        .get("path")
-                        .and_then(|p| p.as_str())
-                        .unwrap_or("");
+                    let path = result.get("path").and_then(|p| p.as_str()).unwrap_or("");
                     let entries = result
                         .get("entry_ids")
                         .and_then(|p| p.as_array())
@@ -479,10 +530,9 @@ pub(crate) fn on_ui_service_progress(
     if let Some(panel) = app.decl_panels.get_mut(&module) {
         panel.status = message;
         if module == "illustration-studio" {
-            panel.local_state.insert(
-                "dependency_download_active".into(),
-                Value::Bool(active),
-            );
+            panel
+                .local_state
+                .insert("dependency_download_active".into(), Value::Bool(active));
         }
     }
 }
@@ -522,6 +572,8 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
     matches!(
         action_id,
         "compose_scene"
+            | "apply_compose_candidate_1"
+            | "apply_compose_candidate_2"
             | "import_glb"
             | "catalogue_add"
             | "pose_wave"
@@ -667,5 +719,19 @@ mod tests {
             Some("sofa_root")
         );
         assert!(!local.contains_key("character_id"));
+    }
+
+    #[test]
+    fn compose_proposals_do_not_replace_the_scene_before_acceptance() {
+        let mut local = HashMap::new();
+        local.insert("scene".into(), Value::String("existing scene".into()));
+        let proposal = serde_json::json!({
+            "candidates": [{"scene_yaml": "new scene", "root_id": "camera"}]
+        });
+        apply_illustration_scene_result(&mut local, "compose_scene", &proposal);
+        assert_eq!(local.get("scene").and_then(Value::as_str), Some("existing scene"));
+        let accepted = serde_json::json!({"scene_yaml": "new scene", "root_id": "camera"});
+        apply_illustration_scene_result(&mut local, "apply_compose_candidate_1", &accepted);
+        assert_eq!(local.get("scene").and_then(Value::as_str), Some("new scene"));
     }
 }

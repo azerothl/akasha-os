@@ -5383,6 +5383,17 @@ pub(crate) async fn enrich_layer_prompt_for_module(
     Ok(normalize_prose_prompt(&out))
 }
 
+/// Ask the user's configured model for a transient object/relation plan.
+/// The scene crate validates the answer and chooses all coordinates itself.
+pub(crate) async fn infer_scene_intent_json(
+    bus: &BusClient,
+    evt_tx: &Sender<Evt>,
+    prompt: &str,
+) -> Result<String, String> {
+    const SYSTEM: &str = "Return ONLY JSON matching {\"objects\":[{\"id\":\"unique_ascii_id\",\"asset_id\":\"asset.id\",\"attributes\":[\"short description\"]}],\"relations\":[{\"subject\":\"id\",\"target\":\"earlier_id\",\"kind\":\"on|in_front_of|near|facing\"}]}. 1-16 objects. Put support/target objects before subjects. No coordinates, paths, prose or Markdown. Available asset ids: prop.box, prop.chair, prop.sofa, prop.desk, prop.table, prop.counter, prop.bookshelf, prop.lamp, prop.book, prop.cup, prop.plant, prop.pedestal, prop.door, arch.window, arch.wall, arch.stairs, humanoid.placeholder, humanoid.slim, humanoid.female, quadruped.cat, quadruped.dog. Use only objects relevant to the user's scene.";
+    infer_llm_rewrite(bus, evt_tx, "Scene planning", SYSTEM, prompt).await
+}
+
 #[derive(Clone, Copy)]
 enum PromptEnhanceMode {
     Json,
