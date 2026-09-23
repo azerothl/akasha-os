@@ -139,7 +139,7 @@ pub use scene::{
 };
 pub use style::{
     embedded_styles, load_style_pack_manifest_yaml, load_style_yaml, parse_optional_style,
-    resolve_style, ResolvedStyle, StyleColor, StyleDef, StyleError, StyleFamily, StyleLine,
+    resolve_style, ResolvedStyle, StyleColor, StyleControls, StyleDef, StyleError, StyleFamily, StyleLine,
     StylePackManifest, StylePaper, StyleShading, DEFAULT_STYLE_ID, EMBEDDED_STYLE_INK_YAML,
     EMBEDDED_STYLE_PACK_MANIFEST_YAML, EMBEDDED_STYLE_PENCIL_YAML, EMBEDDED_STYLE_SKETCH_YAML,
     ILLUSTRATION_STYLES_PREFIX, STYLE_PACK_FORMAT_VERSION,

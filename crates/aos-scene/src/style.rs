@@ -14,9 +14,8 @@ pub const ILLUSTRATION_STYLES_PREFIX: &str = "/assets/illustration/styles/";
 pub const STYLE_PACK_FORMAT_VERSION: u32 = 1;
 
 /// Embedded traditional-drawing pack (offline defaults).
-pub const EMBEDDED_STYLE_PACK_MANIFEST_YAML: &str = include_str!(
-    "../../../share/assets/illustration/styles/traditional-drawing/manifest.yaml"
-);
+pub const EMBEDDED_STYLE_PACK_MANIFEST_YAML: &str =
+    include_str!("../../../share/assets/illustration/styles/traditional-drawing/manifest.yaml");
 pub const EMBEDDED_STYLE_SKETCH_YAML: &str =
     include_str!("../../../share/assets/illustration/styles/traditional-drawing/sketch.yaml");
 pub const EMBEDDED_STYLE_PENCIL_YAML: &str =
@@ -203,6 +202,12 @@ pub struct ResolvedStyle {
     pub contrast: f32,
     pub paper_tint: [u8; 3],
     pub paper_texture: String,
+    /// Fraction of eligible contour and crease lines to retain.
+    pub line_density: f32,
+    /// Bounded hand-drawn variation in line thickness and position.
+    pub variation: f32,
+    pub hatching: f32,
+    pub antialias: bool,
 }
 
 impl ResolvedStyle {
@@ -217,7 +222,35 @@ impl ResolvedStyle {
             contrast: def.shading.contrast.clamp(0.0, 1.0),
             paper_tint: def.paper.tint,
             paper_texture: def.paper.texture.clone(),
+            line_density: 1.0,
+            variation: def.line.jitter.clamp(0.0, 1.0),
+            hatching: if def.shading.r#type == "none" {
+                0.0
+            } else {
+                0.5
+            },
+            antialias: true,
         }
+    }
+
+    /// Apply bounded controls without changing the selected style preset.
+    pub fn with_controls(mut self, controls: StyleControls) -> Self {
+        if let Some(value) = controls.line_width.filter(|v| v.is_finite()) {
+            self.line_width = value.clamp(0.3, 4.0);
+        }
+        if let Some(value) = controls.line_density.filter(|v| v.is_finite()) {
+            self.line_density = value.clamp(0.0, 1.0);
+        }
+        if let Some(value) = controls.variation.filter(|v| v.is_finite()) {
+            self.variation = value.clamp(0.0, 1.0);
+        }
+        if let Some(value) = controls.hatching.filter(|v| v.is_finite()) {
+            self.hatching = value.clamp(0.0, 1.0);
+        }
+        if let Some(value) = controls.antialias {
+            self.antialias = value;
+        }
+        self
     }
 
     /// Ink / graphite stroke colour for CPU approximation.
@@ -237,6 +270,15 @@ impl ResolvedStyle {
             StyleFamily::Ink => [236, 236, 232],
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct StyleControls {
+    pub line_width: Option<f32>,
+    pub line_density: Option<f32>,
+    pub variation: Option<f32>,
+    pub hatching: Option<f32>,
+    pub antialias: Option<bool>,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -295,11 +337,7 @@ pub fn resolve_style(id: &str) -> Result<ResolvedStyle, StyleError> {
         if def.id.eq_ignore_ascii_case(&lower) {
             return Ok(ResolvedStyle::from_def(def));
         }
-        if def
-            .aliases
-            .iter()
-            .any(|a| a.eq_ignore_ascii_case(&lower))
-        {
+        if def.aliases.iter().any(|a| a.eq_ignore_ascii_case(&lower)) {
             return Ok(ResolvedStyle::from_def(def));
         }
     }
@@ -333,8 +371,14 @@ mod tests {
 
     #[test]
     fn resolve_aliases() {
-        assert_eq!(resolve_style("pencil_classic").unwrap().family, StyleFamily::Pencil);
-        assert_eq!(resolve_style("esquisse").unwrap().family, StyleFamily::Sketch);
+        assert_eq!(
+            resolve_style("pencil_classic").unwrap().family,
+            StyleFamily::Pencil
+        );
+        assert_eq!(
+            resolve_style("esquisse").unwrap().family,
+            StyleFamily::Sketch
+        );
         assert_eq!(resolve_style("encre").unwrap().family, StyleFamily::Ink);
         assert_eq!(resolve_style("INK").unwrap().id, "ink");
     }
@@ -351,5 +395,22 @@ mod tests {
     fn optional_empty_is_none() {
         assert!(parse_optional_style(None).unwrap().is_none());
         assert!(parse_optional_style(Some("")).unwrap().is_none());
+    }
+
+    #[test]
+    fn style_controls_are_bounded_and_keep_preset() {
+        let style = resolve_style("ink").unwrap().with_controls(StyleControls {
+            line_width: Some(50.0),
+            line_density: Some(-1.0),
+            variation: Some(0.75),
+            hatching: Some(f32::NAN),
+            antialias: Some(false),
+        });
+        assert_eq!(style.id, "ink");
+        assert_eq!(style.line_width, 4.0);
+        assert_eq!(style.line_density, 0.0);
+        assert_eq!(style.variation, 0.75);
+        assert_eq!(style.hatching, 0.5);
+        assert!(!style.antialias);
     }
 }

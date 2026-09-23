@@ -40,6 +40,14 @@
       "style_sketch": "Sketch",
       "style_pencil": "Pencil",
       "style_ink": "Ink",
+      "style_width": "Line width (0.3–4 px)",
+      "style_density": "Contour density (0–1)",
+      "style_variation": "Hand-drawn variation (0–1)",
+      "style_hatching": "Hatching (0–1)",
+      "style_antialias": "Smooth edges",
+      "style_aa_on": "On",
+      "style_aa_off": "Off",
+      "cpu_style_hint": "CPU: simplified line preview. Blender: full Freestyle render.",
       "viewport_label": "Edit viewport",
       "scene_label": "Scene graph",
       "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
@@ -175,6 +183,14 @@
       "style_sketch": "Esquisse",
       "style_pencil": "Crayon",
       "style_ink": "Encre",
+      "style_width": "Épaisseur du trait (0,3–4 px)",
+      "style_density": "Densité des contours (0–1)",
+      "style_variation": "Variation du trait (0–1)",
+      "style_hatching": "Hachures (0–1)",
+      "style_antialias": "Lisser les contours",
+      "style_aa_on": "Oui",
+      "style_aa_off": "Non",
+      "cpu_style_hint": "CPU : aperçu simplifié. Blender : rendu Freestyle complet.",
       "viewport_label": "Fenêtre d’édition",
       "scene_label": "Graphe de scène",
       "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
@@ -304,6 +320,11 @@
         "type": "string",
         "default": "pencil"
       },
+      "line_width": { "type": "number", "default": 1.2 },
+      "line_density": { "type": "number", "default": 1 },
+      "variation": { "type": "number", "default": 0.15 },
+      "hatching": { "type": "number", "default": 0.5 },
+      "antialias": { "type": "string", "default": "on" },
       "beauty_path": {
         "type": "string",
         "default": ""
@@ -619,6 +640,11 @@
         "path": "/documents/illustrations/beauty-stub.png",
         "scene_yaml": "$local.scene",
         "style": "$local.style_id",
+        "line_width": "$local.line_width",
+        "line_density": "$local.line_density",
+        "variation": "$local.variation",
+        "hatching": "$local.hatching",
+        "antialias": "$local.antialias",
         "r": 48,
         "g": 72,
         "b": 96
@@ -634,6 +660,11 @@
         "path": "/documents/illustrations/beauty-cpu.png",
         "scene_yaml": "$local.scene",
         "style": "$local.style_id",
+        "line_width": "$local.line_width",
+        "line_density": "$local.line_density",
+        "variation": "$local.variation",
+        "hatching": "$local.hatching",
+        "antialias": "$local.antialias",
         "width": 640,
         "height": 480
       },
@@ -648,6 +679,11 @@
         "path": "/documents/illustrations/beauty-blender.png",
         "scene_yaml": "$local.scene",
         "style": "$local.style_id",
+        "line_width": "$local.line_width",
+        "line_density": "$local.line_density",
+        "variation": "$local.variation",
+        "hatching": "$local.hatching",
+        "antialias": "$local.antialias",
         "width": 640,
         "height": 480
       },
@@ -1556,6 +1592,29 @@
                   "style_ink"
                 ]
               },
+              {
+                "kind": "row",
+                "children": [
+                  { "kind": "number", "state_key": "line_width", "min": 0.3, "max": 4, "label_key": "style_width" },
+                  { "kind": "number", "state_key": "line_density", "min": 0, "max": 1, "label_key": "style_density" }
+                ]
+              },
+              {
+                "kind": "row",
+                "children": [
+                  { "kind": "number", "state_key": "variation", "min": 0, "max": 1, "label_key": "style_variation" },
+                  { "kind": "number", "state_key": "hatching", "min": 0, "max": 1, "label_key": "style_hatching" }
+                ]
+              },
+              {
+                "kind": "radio",
+                "state_key": "antialias",
+                "label_key": "style_antialias",
+                "inline": true,
+                "items": ["on", "off"],
+                "item_label_keys": ["style_aa_on", "style_aa_off"]
+              },
+              { "kind": "text", "label_key": "cpu_style_hint" },
               {
                 "kind": "row",
                 "children": [

@@ -16,6 +16,7 @@ use crate::mesh_asset::{
 use crate::png::encode_rgba8_png;
 use crate::scene::{NodeKind, SceneGraph};
 use crate::style::{ResolvedStyle, StyleFamily};
+use std::collections::BTreeMap;
 
 // The CPU renderer also builds in the WASM module, where the viewport feature is disabled.
 /// Half-extent of unit `mesh_box` geometry (same as `viewport::mesh::UNIT_CUBE_HALF`).
@@ -47,12 +48,19 @@ impl RenderBackend for CpuWireframeBackend {
 
         let style = req.style.as_ref();
         let bg = background_rgba(req.pass, style);
-        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        let scale = if style.is_some_and(|s| s.antialias) {
+            2
+        } else {
+            1
+        };
+        let draw_w = w * scale;
+        let draw_h = h * scale;
+        let mut rgba = vec![0u8; (draw_w * draw_h * 4) as usize];
         for px in rgba.as_chunks_mut::<4>().0 {
             *px = bg;
         }
         if let Some(st) = style {
-            apply_paper_grain(&mut rgba, w, h, st);
+            apply_paper_grain(&mut rgba, draw_w, draw_h, st);
         }
 
         let mut boxes: Vec<(String, f32)> = Vec::new();
@@ -74,10 +82,11 @@ impl RenderBackend for CpuWireframeBackend {
 
         let mut raster = Raster {
             rgba: &mut rgba,
-            w,
-            h,
+            w: draw_w,
+            h: draw_h,
             view_proj: &view_proj,
             seed: 0xA05C_E11Eu64,
+            pixel_scale: scale as i32,
         };
         let lights = collect_lights(&req.scene);
         let search_roots = default_mesh_search_roots();
@@ -100,6 +109,7 @@ impl RenderBackend for CpuWireframeBackend {
                         &mut raster,
                         &mesh,
                         &world,
+                        eye,
                         req.pass,
                         style,
                         node.material.as_ref(),
@@ -118,6 +128,11 @@ impl RenderBackend for CpuWireframeBackend {
             );
         }
 
+        let rgba = if scale == 2 {
+            downsample_2x(&rgba, w, h)
+        } else {
+            rgba
+        };
         let png = encode_rgba8_png(w, h, &rgba).map_err(RenderError::Encode)?;
         Ok(RenderOutput {
             png,
@@ -143,6 +158,7 @@ fn draw_mesh(
     raster: &mut Raster<'_>,
     mesh: &CpuTriangleMesh,
     world: &Mat4,
+    eye: Vec3,
     pass: RenderPassKind,
     style: Option<&ResolvedStyle>,
     material: Option<&crate::scene::MaterialOverride>,
@@ -167,6 +183,7 @@ fn draw_mesh(
         .unwrap_or([38, 48, 56, 255]);
     // CPU beauty is a simplified geometry preview. Keep its raster work bounded
     // while preserving the actual mesh silhouette instead of a box proxy.
+    let mut edges: BTreeMap<(u32, u32), Vec<(Vec3, bool)>> = BTreeMap::new();
     for tri in mesh.indices.as_chunks::<3>().0.iter().take(30_000) {
         let vertex = |index: u32| {
             let start = index as usize * 6;
@@ -182,12 +199,73 @@ fn draw_mesh(
         if show_fill {
             raster.fill_tri(a, b, c, fill);
         }
-        if matches!(pass, RenderPassKind::Wireframe) || style.is_some() {
+        if style.is_some() {
+            let normal = (b - a).cross(c - a).normalized().unwrap_or(Vec3::UNIT_Y);
+            let center = (a + b + c) * (1.0 / 3.0);
+            let facing = normal.dot(eye - center) >= 0.0;
+            for (from, to) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                let key = (from.min(to), from.max(to));
+                edges.entry(key).or_default().push((normal, facing));
+            }
+        } else if matches!(pass, RenderPassKind::Wireframe) {
             raster.stroke_line(a, b, stroke);
             raster.stroke_line(b, c, stroke);
             raster.stroke_line(c, a, stroke);
         }
     }
+    if let Some(st) = style {
+        for ((from, to), adjacent) in edges {
+            let front_count = adjacent.iter().filter(|(_, front)| *front).count();
+            let silhouette = is_silhouette(&adjacent, front_count);
+            let crease = is_crease(&adjacent, front_count);
+            if !silhouette && !crease {
+                continue;
+            }
+            let sample = hash_u32(from.wrapping_mul(73856093) ^ to.wrapping_mul(19349663));
+            if !silhouette && (sample as f32 / u32::MAX as f32) > st.line_density {
+                continue;
+            }
+            let vertex = |index: u32| {
+                let start = index as usize * 6;
+                mesh.interleaved
+                    .get(start..start + 3)
+                    .map(|p| world.transform_point(Vec3::new(p[0], p[1], p[2])))
+            };
+            if let (Some(a), Some(b)) = (vertex(from), vertex(to)) {
+                let thickness = (st.line_width * raster.pixel_scale as f32)
+                    .round()
+                    .clamp(1.0, 8.0) as i32;
+                raster.stroke_line_thick(a, b, stroke, thickness);
+            }
+        }
+    }
+}
+
+fn is_silhouette(adjacent: &[(Vec3, bool)], front_count: usize) -> bool {
+    (adjacent.len() == 1 && front_count == 1) || (front_count > 0 && front_count < adjacent.len())
+}
+
+fn is_crease(adjacent: &[(Vec3, bool)], front_count: usize) -> bool {
+    adjacent.len() == 2 && front_count > 0 && adjacent[0].0.dot(adjacent[1].0) < 0.65
+}
+
+fn downsample_2x(src: &[u8], w: u32, h: u32) -> Vec<u8> {
+    let mut out = vec![0; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let dst = ((y * w + x) * 4) as usize;
+            for c in 0..4 {
+                let sum: u32 = [(0, 0), (1, 0), (0, 1), (1, 1)]
+                    .iter()
+                    .map(|(dx, dy)| {
+                        u32::from(src[((((y * 2 + dy) * w * 2) + (x * 2 + dx)) * 4) as usize + c])
+                    })
+                    .sum();
+                out[dst + c] = (sum / 4) as u8;
+            }
+        }
+    }
+    out
 }
 
 fn background_rgba(pass: RenderPassKind, style: Option<&ResolvedStyle>) -> [u8; 4] {
@@ -289,27 +367,16 @@ fn draw_box(
         StyleFamily::Pencil => 1,
         StyleFamily::Ink => 1,
     };
-    let thickness = match st.family {
-        StyleFamily::Sketch => 1,
-        StyleFamily::Pencil => {
-            if st.line_width >= 1.5 {
-                2
-            } else {
-                1
-            }
-        }
-        StyleFamily::Ink => {
-            if st.line_width >= 1.5 {
-                2
-            } else {
-                1
-            }
-        }
-    };
+    let thickness = (st.line_width * raster.pixel_scale as f32)
+        .round()
+        .clamp(1.0, 8.0) as i32;
     for _ in 0..passes {
-        for (i, j) in BOX_EDGES {
-            let a = jitter_point(corners[i], st.jitter, raster.next_f32());
-            let b = jitter_point(corners[j], st.jitter, raster.next_f32());
+        for (index, (i, j)) in BOX_EDGES.into_iter().enumerate() {
+            if index >= 4 && (hash_u32(index as u32) as f32 / u32::MAX as f32) > st.line_density {
+                continue;
+            }
+            let a = jitter_point(corners[i], st.variation, raster.next_f32());
+            let b = jitter_point(corners[j], st.variation, raster.next_f32());
             raster.stroke_line_thick(a, b, stroke, thickness);
         }
     }
@@ -340,11 +407,12 @@ fn hatch_face(raster: &mut Raster<'_>, a: Vec3, b: Vec3, c: Vec3, d: Vec3, style
     let rgb = style.stroke_rgb();
     let alpha = ((0.35 + style.contrast * 0.4) * 255.0) as u8;
     let col = [rgb[0], rgb[1], rgb[2], alpha];
-    let steps = match style.family {
+    let base_steps = match style.family {
         StyleFamily::Sketch => 0,
         StyleFamily::Pencil => 6,
         StyleFamily::Ink => 4,
     };
+    let steps = (base_steps as f32 * style.hatching * 2.0).round() as usize;
     if steps == 0 {
         return;
     }
@@ -478,6 +546,7 @@ struct Raster<'a> {
     h: u32,
     view_proj: &'a Mat4,
     seed: u64,
+    pixel_scale: i32,
 }
 
 impl Raster<'_> {
@@ -514,7 +583,7 @@ impl Raster<'_> {
     }
 
     fn stroke_line(&mut self, a: Vec3, b: Vec3, color: [u8; 4]) {
-        self.stroke_line_thick(a, b, color, 1);
+        self.stroke_line_thick(a, b, color, self.pixel_scale);
     }
 
     fn stroke_line_thick(&mut self, a: Vec3, b: Vec3, color: [u8; 4], thickness: i32) {
@@ -609,6 +678,14 @@ mod tests {
     }
 
     #[test]
+    fn shared_coplanar_mesh_edge_is_not_a_style_stroke() {
+        let adjacent = [(Vec3::UNIT_Y, true), (Vec3::UNIT_Y, true)];
+        assert!(!is_silhouette(&adjacent, 2));
+        assert!(!is_crease(&adjacent, 2));
+        assert!(is_silhouette(&adjacent[..1], 1));
+    }
+
+    #[test]
     fn cpu_preview_draws_glb_triangles() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/hierarchy_textured.glb");
@@ -621,6 +698,7 @@ mod tests {
             h: 64,
             view_proj: &view_proj,
             seed: 1,
+            pixel_scale: 1,
         };
         let world = Mat4::from_cols(
             [1.0, 0.0, 0.0, 0.0],
@@ -632,6 +710,7 @@ mod tests {
             &mut raster,
             &mesh,
             &world,
+            Vec3::new(0.0, 0.0, 3.0),
             RenderPassKind::Beauty,
             None,
             None,
