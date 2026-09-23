@@ -3,8 +3,90 @@
 use crate::cmd::Cmd;
 use crate::{decl_ui, Tab, UiApp};
 use aos_proto::decl_ui::ModuleUiResponse;
+use aos_proto::rich_decl_ui::resolve_action_input;
 use aos_proto::{ModuleCatalogue, ModuleInfo, SkillInfo};
 use serde_json::Value;
+
+/// Re-run DeclUI `refresh_binds` after a successful action.
+///
+/// Bind names are historically guest binding *tool* ids (e.g. `illustration.project.list`).
+/// Illustration Studio also lists DeclUI *action* ids that map to host services
+/// (`mesh_pack_status`, `blender_pack_status`). Those must not go through
+/// `module.invoke` — that yields `outil inconnu` and surfaces as an internal error
+/// even when the preceding install succeeded.
+fn dispatch_refresh_binds(app: &UiApp, module: &str, refresh_binds: Vec<String>) {
+    if refresh_binds.is_empty() {
+        return;
+    }
+    let panel = match app.decl_panels.get(module) {
+        Some(panel) => panel,
+        None => {
+            for bind in refresh_binds {
+                let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
+                    module: module.to_string(),
+                    tool: bind,
+                });
+            }
+            return;
+        }
+    };
+    let language = app.prefs.language.clone();
+    for bind in refresh_binds {
+        if let Some(action) = panel
+            .document
+            .as_ref()
+            .and_then(|doc| doc.actions.iter().find(|a| a.id == bind))
+        {
+            if action.service.is_some() || action.tool.is_some() {
+                let mut input = action
+                    .input
+                    .as_ref()
+                    .map(|t| resolve_action_input(t, &panel.local_state, &panel.document_state))
+                    .unwrap_or_else(|| Value::Object(Default::default()));
+                if matches!(
+                    action.service.as_deref(),
+                    Some(aos_proto::MESH_PACK_STATUS_SERVICE)
+                        | Some(aos_proto::RENDER_PACK_STATUS_SERVICE)
+                ) {
+                    if let Some(obj) = input.as_object_mut() {
+                        obj.insert("lang".into(), Value::String(language.clone()));
+                    }
+                }
+                let subscription_id = panel.document.as_ref().and_then(|doc| {
+                    doc.subscriptions
+                        .iter()
+                        .find(|s| s.action.as_deref() == Some(action.id.as_str()))
+                        .map(|s| s.id.clone())
+                });
+                let _ = app.cmd_tx.send(Cmd::ModuleUiServiceAction {
+                    module: module.to_string(),
+                    action_id: action.id.clone(),
+                    service: action.service.clone(),
+                    tool: action.tool.clone(),
+                    input,
+                    // Nested refreshes stay empty to avoid action→action loops.
+                    refresh_binds: Vec::new(),
+                    subscription_id,
+                });
+                continue;
+            }
+        }
+        let tool = panel
+            .document
+            .as_ref()
+            .and_then(|doc| {
+                doc.bindings
+                    .iter()
+                    .find(|b| b.id == bind || b.tool == bind)
+                    .map(|b| b.tool.clone())
+            })
+            .unwrap_or(bind);
+        let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
+            module: module.to_string(),
+            tool,
+        });
+    }
+}
 
 fn augment_create_catalog(mut result: Value, french: bool) -> Value {
     let Some(root) = result.as_object_mut() else {
@@ -303,12 +385,7 @@ pub(crate) fn on_ui_invoke_done(
                 });
             }
         }
-        for bind in refresh_binds {
-            let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
-                module: module.clone(),
-                tool: bind,
-            });
-        }
+        dispatch_refresh_binds(app, &module, refresh_binds);
     }
 }
 
@@ -553,12 +630,7 @@ pub(crate) fn on_ui_service_done(
         }
     }
     if ok {
-        for bind in refresh_binds {
-            let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
-                module: module.clone(),
-                tool: bind,
-            });
-        }
+        dispatch_refresh_binds(app, &module, refresh_binds);
     }
 }
 
