@@ -813,7 +813,35 @@ async fn run_render_submit(
             .or_else(|| input.get("style_id"))
             .and_then(|v| v.as_str()),
     ) {
-        Ok(s) => s,
+        Ok(s) => s.map(|style| {
+            style.with_controls(aos_scene::StyleControls {
+                line_width: input
+                    .get("line_width")
+                    .and_then(|v| v.as_f64())
+                    .map(|v| v as f32),
+                line_density: input
+                    .get("line_density")
+                    .and_then(|v| v.as_f64())
+                    .map(|v| v as f32),
+                variation: input
+                    .get("variation")
+                    .and_then(|v| v.as_f64())
+                    .map(|v| v as f32),
+                hatching: input
+                    .get("hatching")
+                    .and_then(|v| v.as_f64())
+                    .map(|v| v as f32),
+                antialias: input.get("antialias").and_then(|v| {
+                    v.as_bool().or_else(|| {
+                        v.as_str().and_then(|s| match s {
+                            "on" => Some(true),
+                            "off" => Some(false),
+                            _ => None,
+                        })
+                    })
+                }),
+            })
+        }),
         Err(e) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),

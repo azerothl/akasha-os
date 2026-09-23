@@ -42,6 +42,10 @@ pub struct ExportStyle {
     pub contrast: f32,
     pub paper_tint: [u8; 3],
     pub paper_texture: String,
+    pub line_density: f32,
+    pub variation: f32,
+    pub hatching: f32,
+    pub antialias: bool,
 }
 
 impl ExportStyle {
@@ -56,6 +60,10 @@ impl ExportStyle {
             contrast: s.contrast,
             paper_tint: s.paper_tint,
             paper_texture: s.paper_texture.clone(),
+            line_density: s.line_density,
+            variation: s.variation,
+            hatching: s.hatching,
+            antialias: s.antialias,
         }
     }
 }

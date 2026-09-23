@@ -506,6 +506,7 @@ def main() -> int:
     family = str(style.get("family") or "").lower()
     if family in ("sketch", "pencil", "ink"):
         scene.render.use_freestyle = True
+        scene.cycles.samples = 32 if style.get("antialias", True) else 8
         try:
             fs = bpy.context.view_layer.freestyle_settings
             if fs.linesets:
@@ -517,12 +518,21 @@ def main() -> int:
                 lineset.linestyle = bpy.data.linestyles.new("AosLineStyle")
             linestyle = lineset.linestyle
             linewidth = float(style.get("line_width") or 1.2)
-            linestyle.thickness = max(0.5, min(linewidth * 1.5, 6.0))
-            jitter = float(style.get("jitter") or 0.0)
-            if family == "sketch":
-                linestyle.thickness *= 0.85
-            elif family == "ink":
-                linestyle.thickness *= 1.35
+            linestyle.thickness = max(0.3, min(linewidth, 4.0))
+            density = max(0.0, min(float(style.get("line_density", 1.0)), 1.0))
+            lineset.select_silhouette = True
+            lineset.select_border = True
+            lineset.select_external_contour = True
+            lineset.select_crease = density >= 0.25
+            lineset.select_material_boundary = density >= 0.6
+            lineset.select_suggestive_contour = density >= 0.85
+            variation = max(0.0, min(float(style.get("variation", 0.0)), 1.0))
+            if variation > 0 and hasattr(linestyle, "geometry_modifiers"):
+                noise = linestyle.geometry_modifiers.get("AkashaStrokeVariation")
+                if noise is None:
+                    noise = linestyle.geometry_modifiers.new("AkashaStrokeVariation", "SPATIAL_NOISE")
+                noise.amplitude = variation * 2.0
+                noise.scale = 20.0
             stroke = style.get("stroke_rgb") or [20, 18, 16]
             if hasattr(linestyle, "color"):
                 linestyle.color = (
@@ -549,12 +559,36 @@ def main() -> int:
                     )
                     # Keep paper visible but not so bright it washes out Freestyle.
                     bg.inputs[1].default_value = 0.85
-            _ = jitter  # reserved for future noise modifiers in pack scripts
-        except Exception:
-            # Freestyle / lineset may be unavailable in minimal builds — still render.
-            pass
+        except (AttributeError, TypeError, ValueError, RuntimeError) as exc:
+            print(f"Akasha Freestyle configuration failed: {exc}")
 
     bpy.ops.render.render(write_still=True)
+    # A fixed-image graphite hatch pass. It alters only the rendered image, not
+    # imported PBR materials or the SceneGraph.
+    hatch = max(0.0, min(float(style.get("hatching", 0.0)), 1.0))
+    if family in ("sketch", "pencil", "ink") and hatch > 0:
+        image = bpy.data.images.load(out_path, check_existing=False)
+        pixels = list(image.pixels[:])
+        stride = max(5, int(15 - hatch * 10))
+        width_px, height_px = image.size
+        background = pixels[:3]
+        for y in range(height_px):
+            for x in range(width_px):
+                index = (y * width_px + x) * 4
+                luminance = sum(pixels[index:index + 3]) / 3.0
+                differs_from_paper = max(
+                    abs(pixels[index + channel] - background[channel])
+                    for channel in range(3)
+                ) > 0.12
+                if differs_from_paper and 0.15 < luminance < 0.85 and (x + y) % stride == 0:
+                    factor = 1.0 - 0.35 * hatch
+                    for channel in range(3):
+                        pixels[index + channel] *= factor
+        image.pixels[:] = pixels
+        image.filepath_raw = out_path
+        image.file_format = "PNG"
+        image.save()
+        bpy.data.images.remove(image)
     return 0
 
 
