@@ -33,7 +33,10 @@ not an editor. The interactive `scene3d` viewport is unchanged.
    EN/FR readiness (missing / mock-ready / binary ready).
 3. **Blender beauty** (`render.submit` backend=`blender`) is **fail-closed** when
    the pack is absent. With pack + adapter but no binary, Auto uses deterministic
-   mock. Explicit `AOS_BLENDER_MODE=mock` is the CI path (no pack required).
+   mock (thick frame + diagonal band — not a flat paper square). With pack +
+   binary, Auto/Require **spawn for real**; spawn failures surface as errors
+   (they do **not** silently fall back to mock paper). Explicit
+   `AOS_BLENDER_MODE=mock` is the CI path (no pack required).
 4. Cap `render.blender` remains fail-closed for both beauty and pack status.
 
 ### Y-up → Z-up (adapter contract)
@@ -90,7 +93,7 @@ Host export stays Akasha **Y-up RH** (`conventions: y_up_rh`). The pack adapter 
 
 | Mode | Pack absent | Pack + adapter, no binary | Pack + binary |
 |------|-------------|---------------------------|---------------|
-| `auto` | **Fail-closed** | Mock PNG | Real spawn (fallback mock on spawn failure) |
+| `auto` | **Fail-closed** | Mock PNG (obvious chrome) | Real spawn (**no** silent mock on failure) |
 | `mock` | Mock PNG (CI) | Mock PNG | Mock PNG |
 | `require` | **Fail-closed** | **Fail-closed** | Real spawn |
 

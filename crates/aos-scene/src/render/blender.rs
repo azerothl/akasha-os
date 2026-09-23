@@ -80,13 +80,10 @@ impl RenderBackend for BlenderRenderBackend {
             }
             BlenderRunMode::Auto => {
                 if status.ready_for_spawn {
-                    match self.render_real(req, &export, w, h) {
-                        Ok(out) => Ok(out),
-                        Err(_) if status.ready_for_mock => {
-                            mock_beauty(w, h, req.pass, &digest, req.style.as_ref())
-                        }
-                        Err(e) => Err(e),
-                    }
+                    // Never fall back to mock after a failed spawn: styled mock is
+                    // NPR paper + thin stroke frame and reads as a blank "white"
+                    // beauty pane while pack status still says binary+adapter ready.
+                    self.render_real(req, &export, w, h)
                 } else if status.ready_for_mock {
                     mock_beauty(w, h, req.pass, &digest, req.style.as_ref())
                 } else {
@@ -193,9 +190,10 @@ fn make_work_dir() -> Result<PathBuf, RenderError> {
     Ok(dir)
 }
 
-/// Deterministic mock beauty: paper/style field + digest-tinted strip.
-/// Distinct from stub and CPU so DeclUI can tell modes apart. Style-aware
-/// so Sketch / Pencil / Ink mock previews differ without Blender installed.
+/// Deterministic mock beauty: paper/style field + heavy mock chrome.
+/// Distinct from stub, CPU, and real Blender. Style-aware so Sketch / Pencil /
+/// Ink mock previews differ without Blender installed. Borders + diagonal band
+/// stay thick enough that DeclUI cannot mistake mock for a blank NPR beauty.
 fn mock_beauty(
     w: u32,
     h: u32,
@@ -222,13 +220,23 @@ fn mock_beauty(
         }
     };
     let stroke = style.map(|s| s.stroke_rgb()).unwrap_or([tint, tint.wrapping_add(40), 200]);
+    // Thick frame (≥12px) so mock remains obvious when DeclUI scales small PNGs.
+    let border = if style.is_some() { 12u32 } else { 4u32 };
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
-            let on_strip = y < 4 || (y >= h.saturating_sub(4));
-            let on_frame = style.is_some() && (x < 3 || x >= w.saturating_sub(3));
-            if on_strip || on_frame {
+            let on_frame = y < border
+                || y >= h.saturating_sub(border)
+                || x < border
+                || x >= w.saturating_sub(border);
+            // Diagonal band ≈ mock watermark (independent of style paper tint).
+            let diag = ((x + y) / 6) % 7 == 0
+                && x >= border
+                && y >= border
+                && x < w.saturating_sub(border)
+                && y < h.saturating_sub(border);
+            if on_frame || diag {
                 rgba[i] = stroke[0];
                 rgba[i + 1] = stroke[1];
                 rgba[i + 2] = stroke[2];
@@ -380,6 +388,107 @@ mod tests {
             Some(v) => std::env::set_var("AOS_BLENDER_MODE", v),
             None => std::env::remove_var("AOS_BLENDER_MODE"),
         }
+    }
+
+    #[test]
+    fn auto_spawn_failure_does_not_silent_mock() {
+        let _lock = crate::render::isolate::BLENDER_PACK_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prev_pack = std::env::var("AOS_ILLUSTRATION_RENDERER_PACK").ok();
+        let prev_bin = std::env::var("AOS_BLENDER_BIN").ok();
+        let prev_mode = std::env::var("AOS_BLENDER_MODE").ok();
+
+        let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/illustration-renderer-pack");
+        assert!(pack.is_dir(), "checkout pack must exist for this test");
+        let fail_bin = std::env::temp_dir().join("aos-blender-fail-bin-white-again.sh");
+        std::fs::write(
+            &fail_bin,
+            "#!/bin/sh\necho 'intentional blender spawn failure' >&2\nexit 42\n",
+        )
+        .expect("write fail bin");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&fail_bin).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&fail_bin, perms).unwrap();
+        }
+
+        std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", &pack);
+        std::env::set_var("AOS_BLENDER_BIN", &fail_bin);
+        std::env::set_var("AOS_BLENDER_MODE", "auto");
+
+        let backend = BlenderRenderBackend {
+            mode: BlenderRunMode::Auto,
+            prefer_bwrap: false,
+            timeout: Duration::from_secs(5),
+        };
+        let err = backend
+            .render(&RenderRequest {
+                scene: SceneGraph::demo_scene(),
+                pass: RenderPassKind::Beauty,
+                width: 64,
+                height: 48,
+                stub_rgb: (0, 0, 0),
+                style: Some(resolve_style("pencil").unwrap()),
+            })
+            .expect_err("spawn failure must not fall back to paper mock");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("exit 42") || msg.contains("blender"),
+            "unexpected error: {msg}"
+        );
+
+        match prev_pack {
+            Some(v) => std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", v),
+            None => std::env::remove_var("AOS_ILLUSTRATION_RENDERER_PACK"),
+        }
+        match prev_bin {
+            Some(v) => std::env::set_var("AOS_BLENDER_BIN", v),
+            None => std::env::remove_var("AOS_BLENDER_BIN"),
+        }
+        match prev_mode {
+            Some(v) => std::env::set_var("AOS_BLENDER_MODE", v),
+            None => std::env::remove_var("AOS_BLENDER_MODE"),
+        }
+        let _ = std::fs::remove_file(&fail_bin);
+    }
+
+    #[test]
+    fn mock_style_has_visible_chrome() {
+        let backend = BlenderRenderBackend {
+            mode: BlenderRunMode::Mock,
+            prefer_bwrap: false,
+            timeout: Duration::from_secs(5),
+        };
+        let out = backend
+            .render(&RenderRequest {
+                scene: SceneGraph::demo_scene(),
+                pass: RenderPassKind::Beauty,
+                width: 64,
+                height: 48,
+                stub_rgb: (0, 0, 0),
+                style: Some(resolve_style("pencil").unwrap()),
+            })
+            .expect("mock");
+        // Pure paper field (no chrome) for the same style must differ from mock PNG.
+        let paper = resolve_style("pencil").unwrap().paper_tint;
+        let mut flat = vec![0u8; (64 * 48 * 4) as usize];
+        for px in flat.chunks_exact_mut(4) {
+            px[0] = paper[0];
+            px[1] = paper[1];
+            px[2] = paper[2];
+            px[3] = 255;
+        }
+        let flat_png = encode_rgba8_png(64, 48, &flat).expect("flat");
+        assert_ne!(
+            out.png, flat_png,
+            "styled mock must include visible chrome, not flat paper alone"
+        );
+        // BM mock magic in the first two pixels of the raw buffer (before PNG).
+        assert_eq!(out.png[0], 0x89);
     }
 
     #[test]
