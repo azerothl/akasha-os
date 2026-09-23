@@ -3502,7 +3502,27 @@ fn value_display(v: &Value) -> String {
 
 #[cfg(test)]
 mod illustration_stage_tests {
-    use super::comic_panel_at;
+    use super::{comic_panel_at, render_node_at};
+
+    #[test]
+    fn render_click_selects_only_pixels_present_in_id_map() {
+        let path = std::env::temp_dir().join(format!(
+            "illustration-id-map-{}.png",
+            std::process::id()
+        ));
+        let mut map = image::RgbaImage::from_pixel(2, 1, image::Rgba([0, 0, 0, 255]));
+        map.put_pixel(1, 0, image::Rgba([1, 0, 0, 255]));
+        map.save(&path).unwrap();
+        let state = std::collections::HashMap::from([
+            ("render_id_map_path".into(), serde_json::json!(path.to_string_lossy())),
+            ("render_id_map_nodes".into(), serde_json::json!(["box"])),
+            ("render_id_map_width".into(), serde_json::json!(2)),
+            ("render_id_map_height".into(), serde_json::json!(1)),
+        ]);
+        assert_eq!(render_node_at(&state, 0.75, 0.5).as_deref(), Some("box"));
+        assert!(render_node_at(&state, 0.25, 0.5).is_none());
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn comic_click_uses_the_panel_rect_and_scene_snapshot() {
