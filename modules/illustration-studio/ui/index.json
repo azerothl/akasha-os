@@ -2074,7 +2074,7 @@
               {
                 "label_key": "workspace_scene3d",
                 "content": {
-                  "kind": "split",
+                  "kind": "illustration_work_split",
                   "split_ratio": 0.34,
                   "children": [
                     {
@@ -2715,7 +2715,7 @@
               {
                 "label_key": "workspace_illustration",
                 "content": {
-                  "kind": "split",
+                  "kind": "illustration_work_split",
                   "split_ratio": 0.34,
                   "children": [
                     {
@@ -2843,7 +2843,7 @@
               {
                 "label_key": "workspace_comic",
                 "content": {
-                  "kind": "split",
+                  "kind": "illustration_work_split",
                   "split_ratio": 0.34,
                   "children": [
                     {
@@ -3241,7 +3241,7 @@
               {
                 "label_key": "workspace_final",
                 "content": {
-                  "kind": "split",
+                  "kind": "illustration_work_split",
                   "split_ratio": 0.34,
                   "children": [
                     {

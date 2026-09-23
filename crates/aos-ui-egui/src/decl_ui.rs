@@ -1339,6 +1339,35 @@ impl DeclUiPanelState {
                         }
                     });
             }
+            "illustration_work_split" => {
+                if let Some(children) = w.children.as_ref().filter(|children| children.len() == 2) {
+                    let ratio = w.split_ratio.unwrap_or(0.34).clamp(0.1, 0.9);
+                    let available = ui.available_size();
+                    let (frame, _) = ui.allocate_exact_size(available, egui::Sense::hover());
+                    let gap = crate::theme::SPACE_UNIT;
+                    let left_width = ((frame.width() - gap) * ratio).max(1.0);
+                    let left = egui::Rect::from_min_size(frame.min, egui::vec2(left_width, frame.height()));
+                    let right = egui::Rect::from_min_max(
+                        egui::pos2(left.right() + gap, frame.top()), frame.max,
+                    );
+                    for (child, rect) in children.iter().zip([left, right]) {
+                        ui.scope_builder(
+                            egui::UiBuilder::new()
+                                .max_rect(rect)
+                                .layout(egui::Layout::top_down(egui::Align::LEFT)),
+                            |ui| {
+                                ui.set_clip_rect(rect);
+                                Self::render_widget(
+                                    ui, md_cache, child, doc, language, cache, binding_cache,
+                                    local_state, document_state, subscriptions, image_views,
+                                    layer_canvases, scene3d_viewports, form_fields, tool_schemas,
+                                    pending_invoke, actions,
+                                );
+                            },
+                        );
+                    }
+                }
+            }
             "split" => {
                 let ratio = w.split_ratio.unwrap_or(0.5).clamp(0.1, 0.9);
                 if let Some(children) = &w.children {

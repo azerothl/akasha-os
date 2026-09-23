@@ -457,7 +457,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 validate_widget_tree(c, contract)?;
             }
         }
-        "split" => {
+        "split" | "illustration_work_split" => {
             let children =
                 w.children
                     .as_ref()
@@ -1382,6 +1382,9 @@ mod tests {
         let tabs = workspaces.tabs.as_ref().expect("workspace tabs");
         assert_eq!(tabs.len(), 6);
         assert!(tabs[4].content.as_ref().is_some_and(|w| w.kind == "split"));
+        for index in [1, 2, 3, 5] {
+            assert_eq!(tabs[index].content.as_ref().map(|w| w.kind.as_str()), Some("illustration_work_split"));
+        }
         fn count_stages(widget: &DeclUiWidget) -> usize {
             usize::from(widget.kind == "illustration_stage")
                 + widget.children.as_ref().map_or(0, |children| children.iter().map(count_stages).sum())

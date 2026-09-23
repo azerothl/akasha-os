@@ -298,15 +298,12 @@ const ILLUSTRATION_MODULE: &str = "illustration-studio";
 /// Seed Illustration Studio DeclUI for compose→edit→beauty layout QA.
 pub fn seed_screenshot_illustration_layout(app: &mut UiApp, language: &str) {
     seed_screenshot_modules(app);
-    if !app
-        .settings_ui
-        .installed_modules
-        .iter()
-        .any(|m| m.name == ILLUSTRATION_MODULE)
-    {
+    if let Some(info) = app.settings_ui.installed_modules.iter_mut().find(|info| info.name == ILLUSTRATION_MODULE) {
+        info.version = "0.7.21".into();
+    } else {
         app.settings_ui.installed_modules.push(ModuleInfo {
             name: ILLUSTRATION_MODULE.into(),
-            version: "0.6.4".into(),
+            version: "0.7.21".into(),
             granted_caps: Vec::new(),
             tools: Vec::new(),
             quarantined: false,
@@ -350,6 +347,9 @@ pub fn seed_screenshot_illustration_layout(app: &mut UiApp, language: &str) {
             panel.local_state.insert("color_g".into(), json!(242));
             panel.local_state.insert("color_b".into(), json!(224));
             panel.local_state.insert("project_open".into(), json!(true));
+            panel.local_state.insert("project_id".into(), json!("project-1"));
+            panel.local_state.insert("project_title".into(), json!("Studio preview"));
+            panel.local_state.insert("work_area".into(), json!("scene3d"));
             // Logical virtual-fs path; host resolves under AOS_HOME/var/storage/data.
             panel.local_state.insert(
                 "beauty_path".into(),
@@ -705,14 +705,34 @@ impl UiScreenshotHarness {
             match self.step {
                 0 => {
                     seed_screenshot_illustration_layout(app, "en");
-                    self.request(ctx, "illustration-layout-en");
+                    if let Some(panel) = app.decl_panels.get_mut(ILLUSTRATION_MODULE) {
+                        panel.local_state.insert("project_id".into(), json!(""));
+                        panel.local_state.insert("project_title".into(), json!(""));
+                    }
+                    self.request(ctx, "illustration-home-en");
                     self.step = 1;
                     self.settle_left = 8;
                 }
                 1 => {
-                    seed_screenshot_illustration_layout(app, "fr");
-                    self.request(ctx, "illustration-layout-fr");
+                    seed_screenshot_illustration_layout(app, "en");
+                    self.request(ctx, "illustration-stage-en");
                     self.step = 2;
+                    self.settle_left = 8;
+                }
+                2 => {
+                    seed_screenshot_illustration_layout(app, "fr");
+                    self.request(ctx, "illustration-stage-fr");
+                    self.step = 3;
+                    self.settle_left = 8;
+                }
+                3 => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(900.0, 650.0)));
+                    self.step = 4;
+                    self.settle_left = 8;
+                }
+                4 => {
+                    self.request(ctx, "illustration-stage-compact-fr");
+                    self.step = 5;
                     self.settle_left = 8;
                 }
                 _ => {

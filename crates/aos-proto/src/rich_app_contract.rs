@@ -85,6 +85,7 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "undo_redo",
     "scene3d",
     "illustration_stage",
+    "illustration_work_split",
     "scene_tree",
     "scene_candidate",
     "scene_object_tools",
