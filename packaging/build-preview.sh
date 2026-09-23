@@ -362,6 +362,39 @@ for rel in manifest.yaml module.wasm ui/index.json; do
   fi
 done
 
+if [ -d "${ROOT}/share/modules/illustration-studio.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/illustration-studio.aospkg"
+  cp -a "${ROOT}/share/modules/illustration-studio.aospkg" "${OUT}/share/modules/illustration-studio.aospkg"
+elif [ -d "${ROOT}/modules/illustration-studio.aospkg" ]; then
+  rm -rf "${OUT}/share/modules/illustration-studio.aospkg"
+  cp -a "${ROOT}/modules/illustration-studio.aospkg" "${OUT}/share/modules/illustration-studio.aospkg"
+else
+  echo "ERROR: illustration-studio.aospkg absent — run modules/build-illustration-studio.sh" >&2
+  exit 1
+fi
+for rel in manifest.yaml module.wasm ui/index.json; do
+  if [ ! -s "${OUT}/share/modules/illustration-studio.aospkg/${rel}" ]; then
+    echo "ERROR: illustration-studio.aospkg incomplete — missing ${rel}" >&2
+    exit 1
+  fi
+done
+
+if [ -d "${ROOT}/share/assets/illustration" ]; then
+  rm -rf "${OUT}/share/assets/illustration"
+  mkdir -p "${OUT}/share/assets"
+  cp -a "${ROOT}/share/assets/illustration" "${OUT}/share/assets/illustration"
+else
+  echo "WARN: share/assets/illustration absent" >&2
+fi
+
+if [ -d "${ROOT}/share/illustration-renderer-pack" ]; then
+  rm -rf "${OUT}/share/illustration-renderer-pack"
+  mkdir -p "${OUT}/share"
+  cp -a "${ROOT}/share/illustration-renderer-pack" "${OUT}/share/illustration-renderer-pack"
+else
+  echo "WARN: share/illustration-renderer-pack absent (Blender beauty stays mock)" >&2
+fi
+
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   src="${ROOT}/share/modules/${cat}"
   if [ ! -f "${src}" ]; then

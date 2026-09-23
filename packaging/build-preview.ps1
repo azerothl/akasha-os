@@ -284,6 +284,20 @@ foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
     }
 }
 
+$assetsIllust = Join-Path $root "share\assets\illustration"
+if (Test-Path -LiteralPath $assetsIllust -PathType Container) {
+    Copy-ReplaceDir $assetsIllust (Join-Path $OutDir "share\assets\illustration")
+} else {
+    Write-Warning "share/assets/illustration absent"
+}
+
+$rendererPack = Join-Path $root "share\illustration-renderer-pack"
+if (Test-Path -LiteralPath $rendererPack -PathType Container) {
+    Copy-ReplaceDir $rendererPack (Join-Path $OutDir "share\illustration-renderer-pack")
+} else {
+    Write-Warning "share/illustration-renderer-pack absent (Blender beauty stays mock)"
+}
+
 foreach ($cat in @("catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub")) {
     $src = Join-Path $root "share\modules\$cat"
     if (-not (Test-Path $src)) { throw "manque $src (catalogue E10)" }
