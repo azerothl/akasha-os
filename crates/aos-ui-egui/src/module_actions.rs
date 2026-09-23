@@ -653,6 +653,9 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::SCENE_POSE_SERVICE => {
             run_scene_pose(evt_tx, module, action_id, input, refresh_binds);
         }
+        "scene.animation" => {
+            run_scene_animation(evt_tx, module, action_id, input, refresh_binds);
+        }
         aos_proto::SCENE_GET_SERVICE
         | aos_proto::SCENE_SELECT_SERVICE
         | aos_proto::SCENE_TRS_SERVICE
@@ -3200,6 +3203,118 @@ fn load_illustration_project(input: &Value) -> Result<aos_scene::ProjectFile, St
     } else {
         Ok(ProjectFile::new(SceneGraph::demo_scene()))
     }
+}
+
+fn animation_play_flags(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, Arc<std::sync::atomic::AtomicBool>>>
+{
+    static FLAGS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Arc<std::sync::atomic::AtomicBool>>>,
+    > = std::sync::OnceLock::new();
+    FLAGS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+fn run_scene_animation(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let operation = input.get("op").and_then(Value::as_str).unwrap_or("");
+    let root = input
+        .get("root_id")
+        .and_then(Value::as_str)
+        .unwrap_or("humanoid");
+    let result = load_illustration_project(&input).and_then(|mut project| {
+        let mut animation = project.animation.take().unwrap_or_default();
+        match operation {
+            "register" => animation.register_rig(&project.scene, root).map_err(|e| e.to_string())?,
+            "save_pose" => {
+                let name = input.get("name").and_then(Value::as_str).unwrap_or("");
+                animation.save_pose(&project.scene, root, name).map_err(|e| e.to_string())?;
+            }
+            "apply_pose" => {
+                let name = input.get("name").and_then(Value::as_str).unwrap_or("");
+                animation.apply_pose(&mut project.scene, root, name).map_err(|e| e.to_string())?;
+            }
+            "keyframe" => {
+                let time_ms = input.get("time_ms").and_then(Value::as_f64).unwrap_or(0.0);
+                if !time_ms.is_finite() || !(0.0..=60_000.0).contains(&time_ms) { return Err("time_ms must be 0..60000".into()); }
+                animation.add_keyframe(&project.scene, root, time_ms.round() as u32).map_err(|e| e.to_string())?;
+            }
+            "seek" => {
+                let time_ms = input.get("time_ms").and_then(Value::as_f64).unwrap_or(0.0);
+                if !time_ms.is_finite() || !(0.0..=60_000.0).contains(&time_ms) { return Err("time_ms must be 0..60000".into()); }
+                animation.seek(&mut project.scene, time_ms.round() as u32).map_err(|e| e.to_string())?;
+            }
+            "stop" => {
+                if let Some(flag) = animation_play_flags().lock().unwrap().remove(module) {
+                    flag.store(true, Ordering::Relaxed);
+                }
+            }
+            "play" => {
+                if animation.keyframes.is_empty() { return Err("no keyframes to play".into()); }
+                let flag = Arc::new(AtomicBool::new(false));
+                let mut flags = animation_play_flags().lock().unwrap();
+                if let Some(previous) = flags.insert(module.into(), flag.clone()) { previous.store(true, Ordering::Relaxed); }
+                drop(flags);
+                project.animation = Some(animation.clone());
+                let sender = evt_tx.clone();
+                let module_name = module.to_string();
+                let action_name = action_id.to_string();
+                let playback_refresh = refresh_binds.clone();
+                tokio::spawn(async move {
+                    let duration = animation.duration_ms();
+                    let step = (duration / 120).max(100);
+                    let mut time = 0;
+                    loop {
+                        if flag.load(Ordering::Relaxed) { break; }
+                        let mut frame_project = project.clone();
+                        let mut state = animation.clone();
+                        if state.seek(&mut frame_project.scene, time).is_err() { break; }
+                        frame_project.animation = Some(state.clone());
+                        if let Ok(yaml) = aos_scene::save_project_yaml(&frame_project) {
+                            let _ = sender.send(Evt::ModuleUiServiceDone {
+                                module: module_name.clone(), action_id: action_name.clone(), ok: true,
+                                result: serde_json::json!({"scene_yaml": yaml, "animation_summary": format!("{} ms / {} ms · {} keyframes", time, duration, state.keyframes.len())}),
+                                error: None, refresh_binds: playback_refresh.clone(),
+                            });
+                        }
+                        if time >= duration { break; }
+                        time = (time + step).min(duration);
+                        tokio::time::sleep(std::time::Duration::from_millis(u64::from(step))).await;
+                    }
+                    let mut flags = animation_play_flags().lock().unwrap();
+                    if flags.get(&module_name).is_some_and(|current| Arc::ptr_eq(current, &flag)) {
+                        flags.remove(&module_name);
+                    }
+                });
+                return Ok(None);
+            }
+            _ => return Err("unknown animation operation".into()),
+        }
+        project.animation = Some(animation.clone());
+        let yaml = aos_scene::save_project_yaml(&project).map_err(|e| e.to_string())?;
+        Ok(Some(serde_json::json!({
+            "scene_yaml": yaml,
+            "animation_summary": format!("{} rigs · {} poses · {} keyframes · {} ms", animation.rigs.len(), animation.poses.len(), animation.keyframes.len(), animation.current_ms),
+        })))
+    });
+    let (ok, payload, error) = match result {
+        Ok(Some(payload)) => (true, payload, None),
+        Ok(None) => return,
+        Err(error) => (false, Value::Null, Some(error)),
+    };
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.into(),
+        action_id: action_id.into(),
+        ok,
+        result: payload,
+        error,
+        refresh_binds,
+    });
 }
 
 fn save_scene_preserving_project(

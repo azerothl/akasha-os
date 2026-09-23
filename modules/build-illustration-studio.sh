@@ -50,7 +50,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.7.16
+version: 0.7.17
 hash: ${HASH}
 permissions:
   required_caps:
@@ -235,6 +235,30 @@ tools:
           type: string
         scene_yaml:
           type: string
+  - name: scene.animation
+    description: Register rigs, poses, keyframes and play the timeline
+    input_schema:
+      type: object
+      properties:
+        op:
+          type: string
+        root_id:
+          type: string
+        name:
+          type: string
+        time_ms:
+          type: number
+        scene_yaml:
+          type: string
+      required: [op]
+  - name: illustration.export_png
+    description: Export the latest illustration PNG via native file picker
+    input_schema:
+      type: object
+      properties:
+        source_path:
+          type: string
+      required: [source_path]
   - name: scene.instantiate
     description: Instantiate an illustration asset into the SceneGraph
     input_schema:
@@ -266,7 +290,7 @@ CATALOGUE="${ROOT}/share/modules/catalogue.yaml"
 if [[ -f "$CATALOGUE" ]]; then
   echo "== update catalogue.yaml illustration-studio hash =="
   perl -i -0pe "s/(  - name: illustration-studio\r?\n(?:(?!  - name: ).)*?    hash: )sha256:[a-f0-9]+/\${1}sha256:${HASH}/s" "$CATALOGUE"
-  perl -i -0pe "s/(  - name: illustration-studio\r?\n    version: )\"[^\"]+\"/\${1}\"0.7.16\"/" "$CATALOGUE"
+  perl -i -0pe "s/(  - name: illustration-studio\r?\n    version: )\"[^\"]+\"/\${1}\"0.7.17\"/" "$CATALOGUE"
   echo "== refresh catalogue signature (UPDATE_CATALOGUE=1) =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     committed_catalogue_signature_matches -- --nocapture) \

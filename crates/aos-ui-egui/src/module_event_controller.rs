@@ -597,6 +597,13 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
             | "add_fx"
             | "clear_fx"
             | "save_finish"
+            | "register_rig"
+            | "save_named_pose"
+            | "apply_named_pose"
+            | "add_keyframe"
+            | "seek_animation"
+            | "play_animation"
+            | "stop_animation"
             | "storyboard_capture"
             | "storyboard_prev"
             | "storyboard_next"
@@ -631,6 +638,9 @@ fn apply_illustration_scene_result(
 ) {
     if let Some(yaml) = result.get("scene_yaml").and_then(|p| p.as_str()) {
         local_state.insert("scene".into(), Value::String(yaml.to_string()));
+    }
+    if let Some(summary) = result.get("animation_summary").and_then(Value::as_str) {
+        local_state.insert("animation_summary".into(), Value::String(summary.into()));
     }
     if let Some(sel) = result.get("selected_id").and_then(|p| p.as_str()) {
         local_state.insert("selected_id".into(), Value::String(sel.to_string()));
