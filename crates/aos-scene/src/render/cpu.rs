@@ -7,12 +7,13 @@
 use super::backend::{
     RenderBackend, RenderBackendId, RenderError, RenderOutput, RenderPassKind, RenderRequest,
 };
-use crate::camera::{fovy_from_hfov, hfov_rad};
+use crate::camera::{active_camera_eye_target, fovy_from_hfov, hfov_rad};
 use crate::light::{collect_lights, linear_to_srgb_u8, shade_diffuse, ResolvedLight};
 use crate::math::{Mat4, Vec3};
 use crate::png::encode_rgba8_png;
 use crate::scene::{NodeKind, SceneGraph};
 use crate::style::{ResolvedStyle, StyleFamily};
+use crate::viewport::UNIT_CUBE_HALF;
 
 /// Soft caps to keep offline CPU renders cheap.
 pub const CPU_MAX_EDGE: u32 = 512;
@@ -77,10 +78,7 @@ impl RenderBackend for CpuWireframeBackend {
             let Ok(world) = req.scene.world_matrix(&id) else {
                 continue;
             };
-            let center = world.transform_point(Vec3::ZERO);
-            let half_v = world.transform_vector(Vec3::new(0.5, 0.5, 0.5));
-            let half = (half_v.length() * 0.5).max(0.15);
-            let corners = box_corners(center, half);
+            let corners = oriented_box_corners(&world);
             draw_box(&mut raster, &corners, req.pass, style, &lights);
         }
 
@@ -280,14 +278,12 @@ fn lerp3(a: Vec3, b: Vec3, t: f32) -> Vec3 {
 }
 
 fn camera_eye_target(scene: &SceneGraph) -> (Vec3, Vec3) {
-    if let Some(cam_id) = scene.active_camera.as_deref() {
-        if let Ok(eye) = scene.world_translation(cam_id) {
-            let forward = scene
-                .camera_forward_world(cam_id)
-                .unwrap_or(Vec3::new(0.0, 0.0, -1.0));
-            let target = eye + forward * 4.0;
-            return (eye, target);
-        }
+    // Prefer a look distance that reaches into the scene (viewport default orbit
+    // is ~8 m). The old fixed 4 m pulled the target short of ground/props and
+    // mismatched the edit orbit strip.
+    const DEFAULT_LOOK: f32 = 8.0;
+    if let Some((eye, target)) = active_camera_eye_target(scene, DEFAULT_LOOK) {
+        return (eye, target);
     }
     (Vec3::new(0.0, 1.5, 4.0), Vec3::new(0.0, 0.5, 0.0))
 }
@@ -330,17 +326,18 @@ fn perspective_rh(fovy: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
     Mat4 { m }
 }
 
-fn box_corners(center: Vec3, half: f32) -> [Vec3; 8] {
-    let h = half;
+/// World-space corners of the unit mesh_box after node TRS (viewport parity).
+fn oriented_box_corners(world: &Mat4) -> [Vec3; 8] {
+    let h = UNIT_CUBE_HALF;
     [
-        center + Vec3::new(-h, -h, -h),
-        center + Vec3::new(h, -h, -h),
-        center + Vec3::new(h, h, -h),
-        center + Vec3::new(-h, h, -h),
-        center + Vec3::new(-h, -h, h),
-        center + Vec3::new(h, -h, h),
-        center + Vec3::new(h, h, h),
-        center + Vec3::new(-h, h, h),
+        world.transform_point(Vec3::new(-h, -h, -h)),
+        world.transform_point(Vec3::new(h, -h, -h)),
+        world.transform_point(Vec3::new(h, h, -h)),
+        world.transform_point(Vec3::new(-h, h, -h)),
+        world.transform_point(Vec3::new(-h, -h, h)),
+        world.transform_point(Vec3::new(h, -h, h)),
+        world.transform_point(Vec3::new(h, h, h)),
+        world.transform_point(Vec3::new(-h, h, h)),
     ]
 }
 
@@ -531,5 +528,23 @@ mod tests {
         }
         assert_ne!(pngs[0], pngs[1]);
         assert_ne!(pngs[1], pngs[2]);
+    }
+
+    #[test]
+    fn oriented_ground_corners_stay_flat() {
+        let scene = SceneGraph::demo_scene();
+        let world = scene.world_matrix("ground").expect("ground world");
+        let corners = oriented_box_corners(&world);
+        let ys: Vec<f32> = corners.iter().map(|c| c.y).collect();
+        let y_span = ys.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+            - ys.iter().cloned().fold(f32::INFINITY, f32::min);
+        let xs: Vec<f32> = corners.iter().map(|c| c.x).collect();
+        let x_span = xs.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+            - xs.iter().cloned().fold(f32::INFINITY, f32::min);
+        assert!(
+            y_span < 0.2,
+            "ground must stay thin in Y (got span {y_span}), not an isotropic cube"
+        );
+        assert!(x_span > 4.0, "ground must keep wide X extent (got {x_span})");
     }
 }

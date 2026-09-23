@@ -42,6 +42,63 @@ class TestYUpToBlender(unittest.TestCase):
         look_old = ab.qrot_xyzw(old, (0.0, 0.0, -1.0))
         self.assertAlmostEqual(look_old[2], -1.0, places=5)
 
+    def test_ground_thin_y_stays_floor_not_wall(self):
+        """Non-uniform ground: thin Akasha Y must stay thin Blender Z (floor).
+
+        Permuting scale (sx,sz,sy) while also applying q_basis tipped floors
+        into vertical walls and laid characters on their side.
+        """
+        # Unit-cube corners in local space, half-extent 0.5 (Akasha mesh_box).
+        local = [
+            (-0.5, -0.5, -0.5),
+            (0.5, -0.5, -0.5),
+            (0.5, 0.5, -0.5),
+            (-0.5, 0.5, -0.5),
+            (-0.5, -0.5, 0.5),
+            (0.5, -0.5, 0.5),
+            (0.5, 0.5, 0.5),
+            (-0.5, 0.5, 0.5),
+        ]
+        pos, quat, scale = ab.y_up_to_blender(
+            (0.0, 0.04, 0.0), (0.0, 0.0, 0.0, 1.0), (6.0, 0.08, 6.0)
+        )
+        self.assertEqual(scale, (6.0, 0.08, 6.0))
+        xs, ys, zs = [], [], []
+        for lx, ly, lz in local:
+            # Blender object: scale local, then rotate, then translate.
+            sx, sy, sz = scale[0] * lx, scale[1] * ly, scale[2] * lz
+            wx, wy, wz = ab.qrot_xyzw(quat, (sx, sy, sz))
+            xs.append(pos[0] + wx)
+            ys.append(pos[1] + wy)
+            zs.append(pos[2] + wz)
+        ext_x = max(xs) - min(xs)
+        ext_y = max(ys) - min(ys)
+        ext_z = max(zs) - min(zs)
+        # Floor: wide in Blender X/Y, thin along Z (up).
+        self.assertAlmostEqual(ext_x, 6.0, places=4)
+        self.assertAlmostEqual(ext_y, 6.0, places=4)
+        self.assertAlmostEqual(ext_z, 0.08, places=4)
+        self.assertLess(ext_z, ext_x * 0.1)
+        self.assertLess(ext_z, ext_y * 0.1)
+
+    def test_character_tall_y_stays_upright(self):
+        """Tall Akasha Y limb must stay tall along Blender Z after convert."""
+        pos, quat, scale = ab.y_up_to_blender(
+            (0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0), (0.2, 0.8, 0.2)
+        )
+        local = [(0.0, -0.5, 0.0), (0.0, 0.5, 0.0)]  # local Y spine
+        world = []
+        for lx, ly, lz in local:
+            sx, sy, sz = scale[0] * lx, scale[1] * ly, scale[2] * lz
+            wx, wy, wz = ab.qrot_xyzw(quat, (sx, sy, sz))
+            world.append((pos[0] + wx, pos[1] + wy, pos[2] + wz))
+        dz = abs(world[1][2] - world[0][2])
+        dy = abs(world[1][1] - world[0][1])
+        dx = abs(world[1][0] - world[0][0])
+        self.assertAlmostEqual(dz, 0.8, places=4)
+        self.assertLess(dx, 0.05)
+        self.assertLess(dy, 0.05)
+
     def test_world_compose_parented_camera(self):
         nodes = {
             "root": {

@@ -48,7 +48,11 @@ Host export stays Akasha **Y-up RH** (`conventions: y_up_rh`). The pack adapter 
    component shuffle. Identity cameras look **−Z** in Akasha; after remap that
    forward is Blender **+Y**. Leaving identity looking −Z aimed past the scene
    and produced NPR paper-only (white) beauty frames.
-3. Prefer composed **world** TRS (bake parenting) before convert; aim the active
+3. Keep object-local **scale `(sx, sy, sz)` unchanged** when applying `q_basis`.
+   Permuting scale to `(sx, sz, sy)` *and* baking `q_basis` double-converts
+   non-uniform boxes (ground thin-Y becomes a vertical wall; characters tip
+   onto their side).
+4. Prefer composed **world** TRS (bake parenting) before convert; aim the active
    camera at the mesh centroid for parity with host CPU `look_at_rh`.
 
 ## Isolation model
