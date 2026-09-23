@@ -46,10 +46,10 @@ entries:
       - media.generate
       - tool.invoke:create
   - name: illustration-studio
-    version: "0.7.16"
+    version: "0.7.17"
     kind: module
     path: share/modules/illustration-studio.aospkg
-    hash: sha256:2e813daab7bde4efa19fe6524acaad8bc8ac968aa3b26d94f1baa71de3652e71
+    hash: sha256:14757e7ad238f89728bc98d40dfa31cca8e42bb7408f26a6d647b4236471fb04
     attested_caps:
       - fs.read:/documents/illustrations/**
       - fs.write:/documents/illustrations/**

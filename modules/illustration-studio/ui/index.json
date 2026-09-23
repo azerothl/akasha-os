@@ -21,6 +21,17 @@
       "pose_undo_label": "Undo pose",
       "pose_joint_label": "Joint (FK)",
       "pose_fk_label": "Rotate joint +30°",
+      "animation_section": "Rig and keyframes",
+      "register_rig_label": "Register character rig",
+      "named_pose_label": "Pose name",
+      "save_named_pose_label": "Save pose",
+      "apply_named_pose_label": "Apply pose",
+      "animation_time_label": "Time (ms)",
+      "add_keyframe_label": "Add / replace keyframe",
+      "seek_animation_label": "Go to time",
+      "play_animation_label": "Play",
+      "stop_animation_label": "Stop",
+      "animation_summary_label": "Animation",
       "locks_section": "Semantic locks",
       "lock_selected_label": "Lock selection",
       "lock_subtree_label": "Lock subtree",
@@ -195,6 +206,17 @@
       "pose_undo_label": "Annuler pose",
       "pose_joint_label": "Articulation (FK)",
       "pose_fk_label": "Tourner articulation +30°",
+      "animation_section": "Rig et images clés",
+      "register_rig_label": "Enregistrer le rig du personnage",
+      "named_pose_label": "Nom de la pose",
+      "save_named_pose_label": "Enregistrer la pose",
+      "apply_named_pose_label": "Appliquer la pose",
+      "animation_time_label": "Temps (ms)",
+      "add_keyframe_label": "Ajouter / remplacer l’image clé",
+      "seek_animation_label": "Aller à ce temps",
+      "play_animation_label": "Lire",
+      "stop_animation_label": "Arrêter",
+      "animation_summary_label": "Animation",
       "locks_section": "Verrous sémantiques",
       "lock_selected_label": "Verrouiller la sélection",
       "lock_subtree_label": "Verrouiller le sous-arbre",
@@ -374,6 +396,9 @@
         "type": "string",
         "default": "upper_arm_r"
       },
+      "named_pose": { "type": "string", "default": "pose-1" },
+      "animation_time": { "type": "number", "default": 0 },
+      "animation_summary": { "type": "string", "default": "" },
       "prompt": {
         "type": "string",
         "default": "A man enters an old library. He stands by the counter."
@@ -606,6 +631,41 @@
       "input": {
         "prompt": "$local.prompt"
       },
+      "refresh_binds": []
+    },
+    {
+      "id": "register_rig", "service": "scene.animation",
+      "input": { "op": "register", "root_id": "$local.character_id", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "save_named_pose", "service": "scene.animation",
+      "input": { "op": "save_pose", "root_id": "$local.character_id", "name": "$local.named_pose", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "apply_named_pose", "service": "scene.animation",
+      "input": { "op": "apply_pose", "root_id": "$local.character_id", "name": "$local.named_pose", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "add_keyframe", "service": "scene.animation",
+      "input": { "op": "keyframe", "root_id": "$local.character_id", "time_ms": "$local.animation_time", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "seek_animation", "service": "scene.animation",
+      "input": { "op": "seek", "time_ms": "$local.animation_time", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "play_animation", "service": "scene.animation",
+      "input": { "op": "play", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "stop_animation", "service": "scene.animation",
+      "input": { "op": "stop", "scene_yaml": "$local.scene" },
       "refresh_binds": []
     },
     {
@@ -1913,6 +1973,27 @@
                     "kind": "button",
                     "label_key": "pose_fk_label",
                     "action": "pose_fk_joint"
+                  },
+                  {
+                    "kind": "section", "label_key": "animation_section", "collapsible": true,
+                    "children": [
+                      { "kind": "button", "label_key": "register_rig_label", "action": "register_rig" },
+                      { "kind": "text_input", "state_key": "named_pose", "label_key": "named_pose_label" },
+                      { "kind": "row", "children": [
+                        { "kind": "button", "label_key": "save_named_pose_label", "action": "save_named_pose" },
+                        { "kind": "button", "label_key": "apply_named_pose_label", "action": "apply_named_pose" }
+                      ] },
+                      { "kind": "number", "state_key": "animation_time", "min": 0, "max": 60000, "label_key": "animation_time_label" },
+                      { "kind": "row", "children": [
+                        { "kind": "button", "label_key": "add_keyframe_label", "action": "add_keyframe" },
+                        { "kind": "button", "label_key": "seek_animation_label", "action": "seek_animation" }
+                      ] },
+                      { "kind": "row", "children": [
+                        { "kind": "button", "label_key": "play_animation_label", "action": "play_animation", "primary": true },
+                        { "kind": "button", "label_key": "stop_animation_label", "action": "stop_animation" }
+                      ] },
+                      { "kind": "text_input", "state_key": "animation_summary", "label_key": "animation_summary_label", "read_only": true }
+                    ]
                   }
                 ],
                 "collapsible": true,

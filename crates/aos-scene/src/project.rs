@@ -27,6 +27,8 @@ pub struct ProjectFile {
     pub storyboard: Option<Storyboard>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub render_preset: Option<crate::fx::RenderPreset>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animation: Option<crate::animation::AnimationState>,
 }
 
 fn adr_default() -> String {
@@ -35,6 +37,8 @@ fn adr_default() -> String {
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
+    #[error(transparent)]
+    Animation(#[from] crate::animation::AnimationError),
     #[error("invalid render preset")]
     InvalidRenderPreset,
     #[error(transparent)]
@@ -57,6 +61,7 @@ impl ProjectFile {
             selected_id: None,
             storyboard: None,
             render_preset: None,
+            animation: None,
         }
     }
 
@@ -69,6 +74,7 @@ impl ProjectFile {
             selected_id: None,
             storyboard: Some(storyboard),
             render_preset: None,
+            animation: None,
         }
     }
 
@@ -86,6 +92,9 @@ impl ProjectFile {
         }
         if let Some(board) = &self.storyboard {
             board.validate()?;
+        }
+        if let Some(animation) = &self.animation {
+            animation.validate(&self.scene)?;
         }
         Ok(())
     }
@@ -154,6 +163,22 @@ mod tests {
             loaded.render_preset.as_ref()
         )
         .is_ok());
+    }
+
+    #[test]
+    fn structured_rig_and_keyframes_round_trip() {
+        let mut project = ProjectFile::new(SceneGraph::demo_scene());
+        let mut animation = crate::animation::AnimationState::default();
+        animation.register_rig(&project.scene, "humanoid").unwrap();
+        animation
+            .save_pose(&project.scene, "humanoid", "rest")
+            .unwrap();
+        animation
+            .add_keyframe(&project.scene, "humanoid", 0)
+            .unwrap();
+        project.animation = Some(animation);
+        let loaded = load_project_yaml(&save_project_yaml(&project).unwrap()).unwrap();
+        assert_eq!(loaded, project);
     }
 
     #[test]

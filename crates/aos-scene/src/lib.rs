@@ -28,6 +28,7 @@ mod compose;
 mod scene_intent;
 mod object_edit;
 mod edit;
+pub mod animation;
 pub mod fx;
 mod ik;
 mod light;
@@ -126,6 +127,7 @@ pub use pose::{
 };
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use fx::{EffectKind, RenderPreset, RenderQuality, SceneEffect};
+pub use animation::{AnimationError, AnimationState, Keyframe, NamedPose, Rig};
 pub use render::{
     blender_pack_status, isolation_matrix, parse_backend, parse_pass, parse_style,
     AkashaSceneExport, BlenderPackStatus, BlenderRenderBackend, BlenderRunMode,

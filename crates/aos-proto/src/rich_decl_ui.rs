@@ -713,7 +713,7 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-        crate::SCENE_POSE_SERVICE => {
+        crate::SCENE_POSE_SERVICE | "scene.animation" => {
             if !granted_caps.iter().any(|c| c == crate::SCENE_POSE_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
                     crate::SCENE_POSE_CAP.into(),
