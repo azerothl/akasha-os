@@ -381,9 +381,7 @@ mod tests {
                 .unwrap_or(0)
         ));
         std::fs::create_dir_all(&root).expect("temp aos home");
-        let previous = std::env::var_os("AOS_HOME");
-        std::env::set_var("AOS_HOME", &root);
-
+        crate::os_open::with_aos_home_for_test(&root, || {
         let mut mask = InpaintMask::new(8, 8);
         assert!(!mask.has_paint());
         mask.paint_brush(0.5, 0.5, 0.25);
@@ -396,11 +394,7 @@ mod tests {
             host.display()
         );
         let _ = std::fs::remove_file(&host);
-
-        match previous {
-            Some(value) => std::env::set_var("AOS_HOME", value),
-            None => std::env::remove_var("AOS_HOME"),
-        }
+        });
         let _ = std::fs::remove_dir_all(&root);
     }
 

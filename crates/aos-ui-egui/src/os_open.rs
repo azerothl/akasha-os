@@ -129,6 +129,30 @@ pub(crate) fn aos_home() -> PathBuf {
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
+#[cfg(test)]
+static AOS_HOME_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Run `f` with `AOS_HOME` set, serialised against other tests that mutate it.
+#[cfg(test)]
+pub(crate) fn with_aos_home_for_test<T>(home: &Path, f: impl FnOnce() -> T) -> T {
+    let _guard = AOS_HOME_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let previous = std::env::var_os("AOS_HOME");
+    std::env::set_var("AOS_HOME", home);
+    let out = f();
+    match previous {
+        Some(value) => std::env::set_var("AOS_HOME", value),
+        None => std::env::remove_var("AOS_HOME"),
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn workspace_root_for_tests() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
 pub(crate) fn bin_aos_session() -> PathBuf {
     let exe = if cfg!(windows) {
         "aos-session.exe"

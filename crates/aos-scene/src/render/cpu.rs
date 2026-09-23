@@ -15,6 +15,7 @@ use crate::scene::{NodeKind, SceneGraph};
 use crate::style::{ResolvedStyle, StyleFamily};
 
 // The CPU renderer also builds in the WASM module, where the viewport feature is disabled.
+/// Half-extent of unit `mesh_box` geometry (same as `viewport::mesh::UNIT_CUBE_HALF`).
 const UNIT_CUBE_HALF: f32 = 0.5;
 
 /// Soft caps to keep offline CPU renders cheap.
