@@ -14,6 +14,7 @@ use super::isolate::{
     spawn_isolated, BlenderPackStatus, BlenderRunMode, BlenderSpawnPlan,
     DEFAULT_BLENDER_TIMEOUT_SECS,
 };
+use crate::mesh_asset::{default_mesh_search_roots, load_gltf_mesh, resolve_mesh_uri};
 use crate::png::encode_rgba8_png;
 use std::fs;
 use std::path::PathBuf;
@@ -112,8 +113,7 @@ impl BlenderRenderBackend {
     ) -> Result<RenderOutput, RenderError> {
         let pack = resolve_pack_root().ok_or_else(|| {
             RenderError::BackendUnavailable(
-                "illustration renderer pack not found (set AOS_ILLUSTRATION_RENDERER_PACK)"
-                    .into(),
+                "illustration renderer pack not found (set AOS_ILLUSTRATION_RENDERER_PACK)".into(),
             )
         })?;
         let blender = resolve_blender_bin(Some(&pack)).ok_or_else(|| {
@@ -132,7 +132,14 @@ impl BlenderRenderBackend {
         let work_dir = make_work_dir()?;
         let scene_json = work_dir.join("scene.json");
         let output_png = work_dir.join("beauty.png");
-        let json = export.to_canonical_json().map_err(RenderError::Scene)?;
+        let mut staged_export = export.clone();
+        if let Err(error) = stage_mesh_assets(&mut staged_export, &work_dir) {
+            let _ = fs::remove_dir_all(&work_dir);
+            return Err(error);
+        }
+        let json = staged_export
+            .to_canonical_json()
+            .map_err(RenderError::Scene)?;
         fs::write(&scene_json, &json).map_err(|e| RenderError::Isolation(e.to_string()))?;
 
         let plan = BlenderSpawnPlan {
@@ -156,8 +163,7 @@ impl BlenderRenderBackend {
             let _ = fs::remove_dir_all(&work_dir);
             return Err(RenderError::Isolation(format!(
                 "blender exit {}: {}",
-                result.exit_code,
-                result.stderr_tail
+                result.exit_code, result.stderr_tail
             )));
         }
         if !output_png.is_file() {
@@ -180,6 +186,67 @@ impl BlenderRenderBackend {
             pass: req.pass,
         })
     }
+}
+
+fn stage_mesh_assets(
+    export: &mut AkashaSceneExport,
+    work_dir: &std::path::Path,
+) -> Result<(), RenderError> {
+    let roots = default_mesh_search_roots();
+    let refs: Vec<_> = roots.iter().map(|p| p.as_path()).collect();
+    let assets = work_dir.join("assets");
+    for (count, node) in export
+        .nodes
+        .values_mut()
+        .filter(|n| n.kind == "mesh_asset" && n.visible)
+        .enumerate()
+    {
+        let uri = node
+            .mesh_uri
+            .as_deref()
+            .ok_or_else(|| RenderError::Scene(format!("MeshAsset {} has no mesh_uri", node.id)))?;
+        let path = resolve_mesh_uri(uri, &refs)
+            .ok_or_else(|| RenderError::Scene(format!("MeshAsset {} not found: {uri}", node.id)))?;
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("glb"))
+        {
+            return Err(RenderError::Scene(format!(
+                "MeshAsset {} must reference a GLB",
+                node.id
+            )));
+        }
+        let size = fs::metadata(&path)
+            .map_err(|e| RenderError::Isolation(e.to_string()))?
+            .len();
+        if size > 200_000_000 {
+            return Err(RenderError::Scene(format!(
+                "MeshAsset {} exceeds 200 MB",
+                node.id
+            )));
+        }
+        let gltf = gltf::Gltf::open(&path)
+            .map_err(|e| RenderError::Scene(format!("MeshAsset {} invalid GLB: {e}", node.id)))?;
+        if gltf
+            .buffers()
+            .any(|buffer| matches!(buffer.source(), gltf::buffer::Source::Uri(_)))
+            || gltf
+                .images()
+                .any(|image| matches!(image.source(), gltf::image::Source::Uri { .. }))
+        {
+            return Err(RenderError::Scene(format!(
+                "MeshAsset {} must embed buffers and textures in the GLB",
+                node.id
+            )));
+        }
+        load_gltf_mesh(&path)
+            .map_err(|e| RenderError::Scene(format!("MeshAsset {} invalid: {e}", node.id)))?;
+        fs::create_dir_all(&assets).map_err(|e| RenderError::Isolation(e.to_string()))?;
+        let name = format!("mesh-{count:04}.glb");
+        fs::copy(&path, assets.join(&name)).map_err(|e| RenderError::Isolation(e.to_string()))?;
+        node.mesh_uri = Some(format!("assets/{name}"));
+    }
+    Ok(())
 }
 
 fn make_work_dir() -> Result<PathBuf, RenderError> {
@@ -225,7 +292,9 @@ fn mock_beauty(
             RenderPassKind::Wireframe => [16u8, 48, 44, 255],
         }
     };
-    let stroke = style.map(|s| s.stroke_rgb()).unwrap_or([tint, tint.wrapping_add(40), 200]);
+    let stroke = style
+        .map(|s| s.stroke_rgb())
+        .unwrap_or([tint, tint.wrapping_add(40), 200]);
     // Thick frame (≥12px) so mock remains obvious when DeclUI scales small PNGs.
     let border = if style.is_some() { 12u32 } else { 4u32 };
     let mut rgba = vec![0u8; (w * h * 4) as usize];
@@ -282,8 +351,40 @@ fn mock_beauty(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mesh_asset::insert_mesh_asset;
     use crate::scene::SceneGraph;
+    use crate::scene::Transform;
     use crate::style::resolve_style;
+
+    #[test]
+    fn stages_glb_without_changing_scene_uri() {
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/hierarchy_textured.glb");
+        let mut scene = SceneGraph::demo_scene();
+        insert_mesh_asset(
+            &mut scene,
+            "root",
+            "asset",
+            "Asset",
+            source.to_string_lossy(),
+            Transform::default(),
+        )
+        .unwrap();
+        let original_uri = scene.nodes["asset"].mesh_uri.clone();
+        let mut export = AkashaSceneExport::from_scene(&scene, 64, 64, "beauty").unwrap();
+        let work = make_work_dir().unwrap();
+        stage_mesh_assets(&mut export, &work).unwrap();
+        assert_eq!(
+            export.nodes["asset"].mesh_uri.as_deref(),
+            Some("assets/mesh-0000.glb")
+        );
+        assert_eq!(
+            fs::read(work.join("assets/mesh-0000.glb")).unwrap(),
+            fs::read(source).unwrap()
+        );
+        assert_eq!(scene.nodes["asset"].mesh_uri, original_uri);
+        fs::remove_dir_all(work).unwrap();
+    }
 
     #[test]
     fn mock_mode_produces_png() {

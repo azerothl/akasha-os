@@ -1,10 +1,10 @@
 //! MeshAsset — load glTF/GLB into a CPU triangle mesh for SceneGraph.
 //!
 //! ADR 0011: Akasha is Y-up RH. glTF is also Y-up; we import positions as-is
-//! (no Blender Z-up conversion in the host). Textures / materials are out of
-//! scope for this foundation spike — positions + normals + indices only.
+//! (no Blender Z-up conversion in the host). The CPU mesh keeps positions and
+//! normals for edit previews; Blender imports the original GLB with PBR data.
 
-use crate::math::Vec3;
+use crate::math::{Mat4, Vec3};
 use crate::scene::{NodeKind, SceneError, SceneGraph, SceneNode, Transform};
 use std::path::Path;
 use thiserror::Error;
@@ -40,6 +40,8 @@ pub struct CpuTriangleMesh {
     pub bounds_min: Vec3,
     pub bounds_max: Vec3,
     pub triangle_count: usize,
+    /// First glTF material base color for lightweight previews. Full PBR stays in GLB.
+    pub base_color: [f32; 4],
 }
 
 impl CpuTriangleMesh {
@@ -67,49 +69,113 @@ impl CpuTriangleMesh {
 
 /// Load a `.glb` / `.gltf` file into a CPU mesh (first scene, all primitives).
 pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
-    let (doc, buffers, _images) = gltf::import(path).map_err(|e| MeshAssetError::Gltf(e.to_string()))?;
-    let mut interleaved = Vec::new();
-    let mut indices = Vec::new();
-    let mut bmin = [f32::INFINITY; 3];
-    let mut bmax = [f32::NEG_INFINITY; 3];
+    let (doc, buffers, _images) =
+        gltf::import(path).map_err(|e| MeshAssetError::Gltf(e.to_string()))?;
+    struct Acc {
+        interleaved: Vec<f32>,
+        indices: Vec<u32>,
+        bmin: [f32; 3],
+        bmax: [f32; 3],
+        base_color: [f32; 4],
+        material_seen: bool,
+    }
+    let mut acc = Acc {
+        interleaved: Vec::new(),
+        indices: Vec::new(),
+        bmin: [f32::INFINITY; 3],
+        bmax: [f32::NEG_INFINITY; 3],
+        base_color: [0.65, 0.67, 0.69, 1.0],
+        material_seen: false,
+    };
 
-    for mesh in doc.meshes() {
-        for prim in mesh.primitives() {
-            let reader = prim.reader(|buf| buffers.get(buf.index()).map(|b| &*b.0));
-            let positions: Vec<[f32; 3]> = reader
-                .read_positions()
-                .ok_or_else(|| MeshAssetError::Gltf("primitive missing POSITION".into()))?
-                .collect();
-            if positions.is_empty() {
-                continue;
-            }
-            let normals: Vec<[f32; 3]> = if let Some(n) = reader.read_normals() {
-                n.collect()
-            } else {
-                vec![[0.0, 1.0, 0.0]; positions.len()]
-            };
-            let base = (interleaved.len() / 6) as u32;
-            for (i, p) in positions.iter().enumerate() {
-                let n = normals.get(i).copied().unwrap_or([0.0, 1.0, 0.0]);
-                interleaved.extend_from_slice(&[p[0], p[1], p[2], n[0], n[1], n[2]]);
-                for c in 0..3 {
-                    bmin[c] = bmin[c].min(p[c]);
-                    bmax[c] = bmax[c].max(p[c]);
+    let scene = doc
+        .default_scene()
+        .or_else(|| doc.scenes().next())
+        .ok_or_else(|| MeshAssetError::Validation("glTF contains no scene".into()))?;
+    fn collect_node(
+        node: gltf::Node<'_>,
+        parent: Mat4,
+        buffers: &[gltf::buffer::Data],
+        acc: &mut Acc,
+    ) -> Result<(), MeshAssetError> {
+        let cols = node.transform().matrix();
+        let local = Mat4::from_cols(cols[0], cols[1], cols[2], cols[3]);
+        let world = parent * local;
+        if let Some(mesh) = node.mesh() {
+            for prim in mesh.primitives() {
+                if prim.mode() != gltf::mesh::Mode::Triangles {
+                    return Err(MeshAssetError::Validation(
+                        "only triangle primitives are supported".into(),
+                    ));
                 }
-            }
-            if let Some(idx) = reader.read_indices() {
-                for i in idx.into_u32() {
-                    indices.push(base + i);
+                if !acc.material_seen {
+                    acc.base_color = prim.material().pbr_metallic_roughness().base_color_factor();
+                    acc.material_seen = true;
                 }
-            } else {
-                for i in 0..positions.len() as u32 {
-                    indices.push(base + i);
+                let reader = prim.reader(|buf| buffers.get(buf.index()).map(|b| &*b.0));
+                let positions: Vec<[f32; 3]> = reader
+                    .read_positions()
+                    .ok_or_else(|| MeshAssetError::Gltf("primitive missing POSITION".into()))?
+                    .collect();
+                if positions.is_empty() {
+                    continue;
+                }
+                let normals: Vec<[f32; 3]> = if let Some(n) = reader.read_normals() {
+                    n.collect()
+                } else {
+                    vec![[0.0, 1.0, 0.0]; positions.len()]
+                };
+                let base = (acc.interleaved.len() / 6) as u32;
+                for (i, p) in positions.iter().enumerate() {
+                    let n = normals.get(i).copied().unwrap_or([0.0, 1.0, 0.0]);
+                    let position = world.transform_point(Vec3::new(p[0], p[1], p[2]));
+                    let normal = world
+                        .transform_vector(Vec3::new(n[0], n[1], n[2]))
+                        .normalized()
+                        .unwrap_or(Vec3::UNIT_Y);
+                    acc.interleaved.extend_from_slice(&[
+                        position.x, position.y, position.z, normal.x, normal.y, normal.z,
+                    ]);
+                    for c in 0..3 {
+                        let value = [position.x, position.y, position.z][c];
+                        acc.bmin[c] = acc.bmin[c].min(value);
+                        acc.bmax[c] = acc.bmax[c].max(value);
+                    }
+                }
+                if let Some(idx) = reader.read_indices() {
+                    for i in idx.into_u32() {
+                        if i as usize >= positions.len() {
+                            return Err(MeshAssetError::Validation(
+                                "mesh index out of bounds".into(),
+                            ));
+                        }
+                        acc.indices.push(base + i);
+                    }
+                } else {
+                    for i in 0..positions.len() as u32 {
+                        acc.indices.push(base + i);
+                    }
                 }
             }
         }
+        for child in node.children() {
+            collect_node(child, world, buffers, acc)?;
+        }
+        Ok(())
+    }
+    for node in scene.nodes() {
+        collect_node(node, Mat4::IDENTITY, &buffers, &mut acc)?;
     }
 
-    if interleaved.is_empty() || indices.len() < 3 {
+    let Acc {
+        interleaved,
+        indices,
+        bmin,
+        bmax,
+        base_color,
+        ..
+    } = acc;
+    if interleaved.is_empty() || indices.len() < 3 || indices.len() % 3 != 0 {
         return Err(MeshAssetError::Validation("empty mesh".into()));
     }
     let tri = indices.len() / 3;
@@ -133,6 +199,7 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
         bounds_min: Vec3::new(bmin[0], bmin[1], bmin[2]),
         bounds_max: Vec3::new(bmax[0], bmax[1], bmax[2]),
         triangle_count: tri,
+        base_color,
     })
 }
 
@@ -202,6 +269,34 @@ pub fn resolve_mesh_uri(uri: &str, search_roots: &[&Path]) -> Option<std::path::
     None
 }
 
+/// Shared lookup roots for edit and render previews.
+pub fn default_mesh_search_roots() -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(p) = std::env::var("AOS_NEURAL_MESH_PACK") {
+        let pb = std::path::PathBuf::from(p.trim());
+        if pb.is_dir() {
+            roots.push(pb);
+        }
+    }
+    if let Ok(home) = std::env::var("AOS_HOME") {
+        let home = std::path::PathBuf::from(home);
+        roots.push(home.join("documents/illustrations"));
+        roots.push(home.join("share/assets/illustration"));
+        roots.push(home.join("share/illustration-neural-mesh-pack"));
+    }
+    for cand in [
+        std::path::PathBuf::from("share/illustration-neural-mesh-pack"),
+        std::path::PathBuf::from("share/assets/illustration"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../share/illustration-neural-mesh-pack"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"),
+    ] {
+        if cand.is_dir() {
+            roots.push(cand);
+        }
+    }
+    roots
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,6 +313,18 @@ mod tests {
         assert!(mesh.vertex_count() >= 8);
         assert!((mesh.bounds_min.x + 0.5).abs() < 1e-3);
         assert!((mesh.bounds_max.y - 0.5).abs() < 1e-3);
+    }
+
+    #[test]
+    fn load_textured_glb_preserves_node_hierarchy() {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hierarchy_textured.glb");
+        let mesh = load_gltf_mesh(&path).expect("load textured GLB");
+        assert_eq!(mesh.triangle_count, 1);
+        assert!((mesh.bounds_min.x - 2.0).abs() < 1e-4);
+        assert!((mesh.bounds_max.x - 3.0).abs() < 1e-4);
+        assert!((mesh.bounds_min.y - 1.0).abs() < 1e-4);
+        assert!((mesh.bounds_max.y - 2.0).abs() < 1e-4);
     }
 
     #[test]

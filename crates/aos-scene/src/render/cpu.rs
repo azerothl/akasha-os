@@ -10,6 +10,9 @@ use super::backend::{
 use crate::camera::{active_camera_eye_target, fovy_from_hfov, hfov_rad};
 use crate::light::{collect_lights, linear_to_srgb_u8, shade_diffuse, ResolvedLight};
 use crate::math::{Mat4, Vec3};
+use crate::mesh_asset::{
+    default_mesh_search_roots, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh,
+};
 use crate::png::encode_rgba8_png;
 use crate::scene::{NodeKind, SceneGraph};
 use crate::style::{ResolvedStyle, StyleFamily};
@@ -77,10 +80,26 @@ impl RenderBackend for CpuWireframeBackend {
             seed: 0xA05C_E11Eu64,
         };
         let lights = collect_lights(&req.scene);
+        let search_roots = default_mesh_search_roots();
+        let search_refs: Vec<_> = search_roots.iter().map(|p| p.as_path()).collect();
         for (id, _) in boxes {
+            let Some(node) = req.scene.nodes.get(&id) else {
+                continue;
+            };
             let Ok(world) = req.scene.world_matrix(&id) else {
                 continue;
             };
+            if matches!(node.kind, NodeKind::MeshAsset) {
+                let mesh = node
+                    .mesh_uri
+                    .as_deref()
+                    .and_then(|uri| resolve_mesh_uri(uri, &search_refs))
+                    .and_then(|path| load_gltf_mesh(&path).ok());
+                if let Some(mesh) = mesh {
+                    draw_mesh(&mut raster, &mesh, &world, req.pass, style);
+                    continue;
+                }
+            }
             let corners = oriented_box_corners(&world);
             draw_box(&mut raster, &corners, req.pass, style, &lights);
         }
@@ -93,6 +112,55 @@ impl RenderBackend for CpuWireframeBackend {
             backend_id: RenderBackendId::Cpu,
             pass: req.pass,
         })
+    }
+}
+
+fn draw_mesh(
+    raster: &mut Raster<'_>,
+    mesh: &CpuTriangleMesh,
+    world: &Mat4,
+    pass: RenderPassKind,
+    style: Option<&ResolvedStyle>,
+) {
+    let fill = style
+        .map(|s| {
+            let rgb = s.fill_rgb();
+            [rgb[0], rgb[1], rgb[2], 255]
+        })
+        .unwrap_or([
+            (mesh.base_color[0] * 255.0).clamp(0.0, 255.0) as u8,
+            (mesh.base_color[1] * 255.0).clamp(0.0, 255.0) as u8,
+            (mesh.base_color[2] * 255.0).clamp(0.0, 255.0) as u8,
+            255,
+        ]);
+    let stroke = style
+        .map(|s| {
+            let rgb = s.stroke_rgb();
+            [rgb[0], rgb[1], rgb[2], 255]
+        })
+        .unwrap_or([38, 48, 56, 255]);
+    // CPU beauty is a simplified geometry preview. Keep its raster work bounded
+    // while preserving the actual mesh silhouette instead of a box proxy.
+    for tri in mesh.indices.as_chunks::<3>().0.iter().take(30_000) {
+        let vertex = |index: u32| {
+            let start = index as usize * 6;
+            mesh.interleaved
+                .get(start..start + 3)
+                .map(|p| world.transform_point(Vec3::new(p[0], p[1], p[2])))
+        };
+        let (Some(a), Some(b), Some(c)) = (vertex(tri[0]), vertex(tri[1]), vertex(tri[2])) else {
+            continue;
+        };
+        let show_fill = matches!(pass, RenderPassKind::Beauty)
+            && !style.is_some_and(|s| matches!(s.family, StyleFamily::Sketch));
+        if show_fill {
+            raster.fill_tri(a, b, c, fill);
+        }
+        if matches!(pass, RenderPassKind::Wireframe) || style.is_some() {
+            raster.stroke_line(a, b, stroke);
+            raster.stroke_line(b, c, stroke);
+            raster.stroke_line(c, a, stroke);
+        }
     }
 }
 
@@ -115,7 +183,10 @@ fn apply_paper_grain(rgba: &mut [u8], w: u32, h: u32, style: &ResolvedStyle) {
     };
     for y in 0..h {
         for x in 0..w {
-            let n = hash_u32(x.wrapping_mul(374761393).wrapping_add(y.wrapping_mul(668265263)));
+            let n = hash_u32(
+                x.wrapping_mul(374761393)
+                    .wrapping_add(y.wrapping_mul(668265263)),
+            );
             let delta = ((n >> 8) as u8) % (strength.max(1));
             let i = ((y * w + x) * 4) as usize;
             for channel in rgba[i..i + 3].iter_mut() {
@@ -176,12 +247,7 @@ fn draw_box(
             fill_base[2] as f32 / 255.0,
         ];
         let fill = lit_face_rgba(
-            lights,
-            corners[0],
-            corners[1],
-            corners[2],
-            albedo,
-            fill_base,
+            lights, corners[0], corners[1], corners[2], albedo, fill_base,
         );
         raster.fill_quad(corners[0], corners[1], corners[2], corners[3], fill);
         if st.shading != "none" {
@@ -196,8 +262,20 @@ fn draw_box(
     };
     let thickness = match st.family {
         StyleFamily::Sketch => 1,
-        StyleFamily::Pencil => if st.line_width >= 1.5 { 2 } else { 1 },
-        StyleFamily::Ink => if st.line_width >= 1.5 { 2 } else { 1 },
+        StyleFamily::Pencil => {
+            if st.line_width >= 1.5 {
+                2
+            } else {
+                1
+            }
+        }
+        StyleFamily::Ink => {
+            if st.line_width >= 1.5 {
+                2
+            } else {
+                1
+            }
+        }
     };
     for _ in 0..passes {
         for (i, j) in BOX_EDGES {
@@ -229,14 +307,7 @@ fn lit_face_rgba(
     }
 }
 
-fn hatch_face(
-    raster: &mut Raster<'_>,
-    a: Vec3,
-    b: Vec3,
-    c: Vec3,
-    d: Vec3,
-    style: &ResolvedStyle,
-) {
+fn hatch_face(raster: &mut Raster<'_>, a: Vec3, b: Vec3, c: Vec3, d: Vec3, style: &ResolvedStyle) {
     let rgb = style.stroke_rgb();
     let alpha = ((0.35 + style.contrast * 0.4) * 255.0) as u8;
     let col = [rgb[0], rgb[1], rgb[2], alpha];
@@ -297,7 +368,11 @@ fn camera_projection(scene: &SceneGraph, aspect: f32) -> (f32, f32, f32) {
             if let Some(params) = node.camera.as_ref() {
                 let hfov = hfov_rad(params);
                 let fovy = fovy_from_hfov(hfov, aspect);
-                return (fovy, params.near.max(0.01), params.far.max(params.near + 1.0));
+                return (
+                    fovy,
+                    params.near.max(0.01),
+                    params.far.max(params.near + 1.0),
+                );
             }
         }
     }
@@ -378,10 +453,7 @@ struct Raster<'a> {
 
 impl Raster<'_> {
     fn next_f32(&mut self) -> f32 {
-        self.seed = self
-            .seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1);
+        self.seed = self.seed.wrapping_mul(6364136223846793005).wrapping_add(1);
         ((self.seed >> 33) as u32) as f32 / u32::MAX as f32
     }
 
@@ -490,8 +562,33 @@ impl Raster<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mesh_asset::load_gltf_mesh;
     use crate::scene::SceneGraph;
     use crate::style::resolve_style;
+
+    #[test]
+    fn cpu_preview_draws_glb_triangles() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/hierarchy_textured.glb");
+        let mesh = load_gltf_mesh(&path).unwrap();
+        let mut rgba = vec![0u8; 64 * 64 * 4];
+        let view_proj = Mat4::IDENTITY;
+        let mut raster = Raster {
+            rgba: &mut rgba,
+            w: 64,
+            h: 64,
+            view_proj: &view_proj,
+            seed: 1,
+        };
+        let world = Mat4::from_cols(
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [-2.5, -1.5, 0.0, 1.0],
+        );
+        draw_mesh(&mut raster, &mesh, &world, RenderPassKind::Beauty, None);
+        assert!(rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] == 255));
+    }
 
     #[test]
     fn cpu_renders_demo_png() {
@@ -506,7 +603,10 @@ mod tests {
                 style: None,
             })
             .expect("cpu render");
-        assert_eq!(&out.png[0..8], &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        assert_eq!(
+            &out.png[0..8],
+            &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+        );
         assert_eq!(out.width, 128);
         assert_eq!(out.backend_id, RenderBackendId::Cpu);
     }
@@ -548,6 +648,9 @@ mod tests {
             y_span < 0.2,
             "ground must stay thin in Y (got span {y_span}), not an isotropic cube"
         );
-        assert!(x_span > 4.0, "ground must keep wide X extent (got {x_span})");
+        assert!(
+            x_span > 4.0,
+            "ground must keep wide X extent (got {x_span})"
+        );
     }
 }

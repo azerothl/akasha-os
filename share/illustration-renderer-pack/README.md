@@ -23,7 +23,8 @@ illustration-renderer-pack/
 
 1. Keep or copy this tree (adapters + notices). Preview does **not** ship the
    Blender binary.
-2. Download an official Blender build from https://www.blender.org/download/
+2. Download an official Blender build from Illustration Studio or
+   https://www.blender.org/download/
 3. Either put the binary on `PATH` as `blender`, set `AOS_BLENDER_BIN`, or
    place it at `bin/blender` under this pack.
 4. Point the host at the pack (required when not using checkout defaults):
@@ -35,6 +36,11 @@ illustration-renderer-pack/
    - **Refresh Blender pack status** → should show mock-ready or ready
    - **Blender beauty** (`render.submit` backend=`blender`)
    - Output: `/documents/illustrations/beauty-blender.png`
+
+For `MeshAsset` GLBs, the host validates and copies each file into the render
+job. The adapter imports the GLB with Blender's glTF importer, retaining its
+node hierarchy, textures and PBR materials. The viewport and CPU paths show
+the same geometry and a simplified material base color.
 
 ## Modes
 

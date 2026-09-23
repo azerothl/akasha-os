@@ -157,7 +157,7 @@ def mesh_centroid_akasha(nodes: Dict[str, Any], world: Dict[str, Any]) -> Tuple[
     for nid, node in nodes.items():
         if not node.get("visible", True):
             continue
-        if node.get("kind") != "mesh_box":
+        if node.get("kind") not in ("mesh_box", "mesh_asset"):
             continue
         if nid in world:
             pts.append(world[nid][0])
@@ -297,6 +297,39 @@ def main() -> int:
             else:
                 obj.data.materials.append(mat)
             blender_objs[node_id] = obj
+        elif kind == "mesh_asset":
+            # The host copies validated GLBs into this job's assets directory.
+            # Blender's glTF importer keeps the file's hierarchy and PBR nodes.
+            from mathutils import Matrix, Quaternion  # type: ignore
+
+            relative = str(node.get("mesh_uri") or "")
+            asset_path = os.path.realpath(os.path.join(work, relative))
+            work_path = os.path.realpath(work)
+            if not relative.lower().endswith(".glb") or os.path.commonpath((work_path, asset_path)) != work_path:
+                raise ValueError(f"invalid staged GLB path for {node_id}")
+            if not os.path.isfile(asset_path):
+                raise FileNotFoundError(f"staged GLB missing for {node_id}: {relative}")
+
+            before = set(bpy.data.objects)
+            bpy.ops.import_scene.gltf(filepath=asset_path)
+            imported = set(bpy.data.objects) - before
+            if not imported:
+                raise ValueError(f"GLB has no Blender objects: {relative}")
+
+            basis = Matrix.Rotation(math.pi / 2.0, 4, "X")
+            local = (
+                Matrix.Translation(wt)
+                @ Quaternion((wq[3], wq[0], wq[1], wq[2])).to_matrix().to_4x4()
+                @ Matrix.Diagonal((ws[0], ws[1], ws[2], 1.0))
+            )
+            anchor = bpy.data.objects.new(node.get("name") or node_id, None)
+            bpy.context.scene.collection.objects.link(anchor)
+            anchor.matrix_world = basis @ local @ basis.inverted()
+            for imported_root in (obj for obj in imported if obj.parent not in imported):
+                original_world = imported_root.matrix_world.copy()
+                imported_root.parent = anchor
+                imported_root.matrix_world = anchor.matrix_world @ original_world
+            blender_objs[node_id] = anchor
         elif kind == "camera":
             cam_data = bpy.data.cameras.new(name=node.get("name") or node_id)
             cam_obj = bpy.data.objects.new(cam_data.name, cam_data)
@@ -355,6 +388,24 @@ def main() -> int:
             empty.rotation_quaternion = (quat[3], quat[0], quat[1], quat[2])
             empty.scale = scale
             blender_objs[node_id] = empty
+
+    # Imported GLBs may contain their own offsets and nested transforms. Frame
+    # their actual world-space bounds instead of only the SceneGraph anchor.
+    from mathutils import Vector  # type: ignore
+
+    mesh_points = [obj.matrix_world @ Vector(corner)
+                   for obj in bpy.data.objects if obj.type == "MESH"
+                   for corner in obj.bound_box]
+    if mesh_points:
+        target_blender = tuple(
+            (min(p[axis] for p in mesh_points) + max(p[axis] for p in mesh_points)) * 0.5
+            for axis in range(3)
+        )
+        for obj in blender_objs.values():
+            if obj.type == "CAMERA":
+                eye = tuple(obj.location)
+                q = look_at_quat_blender(eye, target_blender)
+                obj.rotation_quaternion = (q[3], q[0], q[1], q[2])
 
     scene = bpy.context.scene
     active = data.get("active_camera")
