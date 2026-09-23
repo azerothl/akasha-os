@@ -41,7 +41,7 @@ Full catalogue: [docs/FEATURES.md](docs/FEATURES.md).
 | Caps | List / revoke capabilities in UI |
 | Models | Hardware-aware packs (incl. CPU); retryable failed loads; prefix-cache/speculation controls; optional image/TTS packs; live TTFT / tok/s / VRAM metrics |
 | Canvas | Layered vector drawing, grid and snapping, PNG/SVG/JSON export, agent scene checks and global geometry validation |
-| Illustration Studio | Experimental DeclUI module (local catalogue): SceneGraph edit → stub/CPU beauty; wgpu ≠ Blender; see [FEATURES §4c](docs/FEATURES.md#4c-illustration-studio-experimental-module) |
+| Illustration Studio | Experimental DeclUI module (local catalogue): SceneGraph edit → stub/CPU beauty; wgpu ≠ Blender; see [FEATURES §4c](docs/FEATURES.md#4c-illustration-studio-experimental-module); product spec **Draft v0.1** [in module](modules/illustration-studio/docs/akasha-illustration-studio-spec.md) |
 | Providers | OpenAI-compat cloud + loopback (Ollama / vLLM / LM Studio); keys in the vault |
 | Network | Opt-in search + `web.browse` (no JS) + fetch; JS/SPA pages via optional browser MCP |
 | Settings | Language, theme, density, trust, routing, gpu/cpu/auto, agent defaults, search engine |
@@ -96,6 +96,7 @@ cargo run -p aos-session --release
 | [docs/technical-specs.md](docs/technical-specs.md) | Architecture & APIs |
 | [docs/lan-cluster.md](docs/lan-cluster.md) | Configure and validate the experimental LAN cluster |
 | [docs/illustration-studio-caps.md](docs/illustration-studio-caps.md) | Illustration Studio caps + honesty (edit ≠ beauty, Blender GPL pack) |
+| [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](modules/illustration-studio/docs/akasha-illustration-studio-spec.md) | Illustration Studio product spec (**Draft v0.1**) |
 | [docs/development-plan.md](docs/development-plan.md) | Phase plan |
 | [docs/vision.md](docs/vision.md) | Product vision |
 | [docs/competitive-landscape.md](docs/competitive-landscape.md) | Agentic OS landscape vs Akasha OS |
