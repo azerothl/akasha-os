@@ -352,6 +352,7 @@ mod tests {
 
     #[test]
     fn blender_backend_registered() {
+        let _env = crate::render::isolate::BlenderPackTestEnv::checkout_auto_mock();
         let svc = RenderService::default();
         assert!(svc.has_backend(RenderBackendId::Blender));
         // Auto/mock path must succeed without a Blender binary.
