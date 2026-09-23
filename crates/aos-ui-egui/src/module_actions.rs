@@ -601,7 +601,7 @@ pub(crate) async fn run_decl_service_action(
             run_asset_instantiate(evt_tx, module, action_id, input, refresh_binds);
         }
         aos_proto::SCENE_COMPOSE_SERVICE => {
-            run_scene_compose(evt_tx, module, action_id, input, refresh_binds);
+            run_scene_compose(bus, evt_tx, module, action_id, input, refresh_binds).await;
         }
         aos_proto::SCENE_POSE_SERVICE => {
             run_scene_pose(evt_tx, module, action_id, input, refresh_binds);
@@ -615,14 +615,7 @@ pub(crate) async fn run_decl_service_action(
         | aos_proto::SCENE_LOCK_SERVICE
         | aos_proto::SCENE_UNLOCK_SERVICE
         | aos_proto::SCENE_LOCKS_SERVICE => {
-            run_scene_edit_service(
-                evt_tx,
-                module,
-                action_id,
-                service,
-                input,
-                refresh_binds,
-            );
+            run_scene_edit_service(evt_tx, module, action_id, service, input, refresh_binds);
         }
         aos_proto::ASSET_PACK_LIST_SERVICE => {
             run_asset_pack_list(evt_tx, module, action_id, input, refresh_binds);
@@ -1155,14 +1148,51 @@ fn run_asset_instantiate(
     });
 }
 
-fn run_scene_compose(
+async fn run_scene_compose(
+    bus: &BusClient,
     evt_tx: &Sender<Evt>,
     module: &str,
     action_id: &str,
     input: Value,
     refresh_binds: Vec<String>,
 ) {
-    use aos_scene::{compose_from_prompt, save_project_yaml, ProjectFile};
+    use aos_scene::{
+        compose_from_prompt, load_project_yaml, parse_scene_intent, plan_scene_intent,
+        save_project_yaml, ProjectFile,
+    };
+
+    if input.get("mode").and_then(Value::as_str) == Some("apply") {
+        let candidate_yaml = input
+            .get("candidate_yaml")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let result = load_project_yaml(candidate_yaml)
+            .map_err(|e| format!("Invalid scene candidate: {e}"))
+            .and_then(|project| {
+                save_project_yaml(&project).map_err(|e| format!("Save scene candidate: {e}"))
+            });
+        let (ok, result, error) = match result {
+            Ok(yaml) => (
+                true,
+                serde_json::json!({
+                    "scene_yaml": yaml,
+                    "root_id": input.get("candidate_root_id").and_then(Value::as_str).unwrap_or("camera"),
+                    "character_id": input.get("candidate_character_id").and_then(Value::as_str),
+                }),
+                None,
+            ),
+            Err(error) => (false, Value::Null, Some(error)),
+        };
+        let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+            module: module.into(),
+            action_id: action_id.into(),
+            ok,
+            result,
+            error,
+            refresh_binds,
+        });
+        return;
+    }
 
     let prompt = input
         .get("prompt")
@@ -1181,52 +1211,65 @@ fn run_scene_compose(
         return;
     }
 
-    let composed = match compose_from_prompt(prompt) {
-        Ok(c) => c,
-        Err(e) => {
-            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
-                module: module.to_string(),
-                action_id: action_id.to_string(),
-                ok: false,
-                result: Value::Null,
-                error: Some(format!("scene.compose: {e}")),
-                refresh_binds,
-            });
-            return;
-        }
+    let planned = crate::runtime::infer_scene_intent_json(bus, evt_tx, prompt)
+        .await
+        .map_err(|e| format!("Model unavailable: {e}"))
+        .and_then(|raw| parse_scene_intent(&raw).map_err(|e| e.to_string()))
+        .and_then(|intent| plan_scene_intent(&intent).map_err(|e| e.to_string()));
+    let (composed, source, note) = match planned {
+        Ok(scenes) => (scenes, "model + constraint solver", None),
+        Err(reason) => match compose_from_prompt(prompt) {
+            Ok(scene) => (vec![scene], "keyword fallback", Some(reason)),
+            Err(error) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.into(),
+                    action_id: action_id.into(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("Scene composition failed: {error}")),
+                    refresh_binds,
+                });
+                return;
+            }
+        },
     };
-
-    let selected = composed
-        .character_id
-        .clone()
-        .unwrap_or_else(|| composed.camera_id.clone());
-    let yaml = match save_project_yaml(&ProjectFile::new(composed.scene)) {
-        Ok(y) => y,
-        Err(e) => {
-            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
-                module: module.to_string(),
-                action_id: action_id.to_string(),
-                ok: false,
-                result: Value::Null,
-                error: Some(format!("scene.compose save: {e}")),
-                refresh_binds,
-            });
-            return;
+    let mut candidates = Vec::new();
+    for (index, candidate) in composed.into_iter().enumerate() {
+        let root_id = candidate
+            .character_id
+            .clone()
+            .unwrap_or_else(|| candidate.camera_id.clone());
+        match save_project_yaml(&ProjectFile::new(candidate.scene)) {
+            Ok(yaml) => candidates.push(serde_json::json!({
+                "label": format!("Proposal {}", index + 1),
+                "scene_yaml": yaml,
+                "root_id": root_id,
+                "character_id": candidate.character_id,
+                "template_id": candidate.template_id,
+                "placed_assets": candidate.placed_assets,
+            })),
+            Err(error) => {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.into(),
+                    action_id: action_id.into(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(format!("Scene candidate invalid: {error}")),
+                    refresh_binds,
+                });
+                return;
+            }
         }
-    };
-
+    }
     let _ = evt_tx.send(Evt::ModuleUiServiceDone {
         module: module.to_string(),
         action_id: action_id.to_string(),
         ok: true,
         result: serde_json::json!({
             "prompt": prompt,
-            "template_id": composed.template_id,
-            "placed_assets": composed.placed_assets,
-            "character_id": composed.character_id,
-            "camera_id": composed.camera_id,
-            "root_id": selected,
-            "scene_yaml": yaml,
+            "source": source,
+            "note": note,
+            "candidates": candidates,
         }),
         error: None,
         refresh_binds,
@@ -1282,10 +1325,7 @@ fn run_scene_pose(
         .or_else(|| input.get("root_id").and_then(|v| v.as_str()))
         .unwrap_or("humanoid");
 
-    let want_undo = input
-        .get("undo")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let want_undo = input.get("undo").and_then(|v| v.as_bool()).unwrap_or(false);
 
     if want_undo {
         let undone = {
@@ -1349,9 +1389,7 @@ fn run_scene_pose(
         return;
     }
 
-    let mut stacks = pose_undo_stacks()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut stacks = pose_undo_stacks().lock().unwrap_or_else(|e| e.into_inner());
     let undo_stack = stacks.entry(module.to_string()).or_default();
 
     let preset = input.get("preset").and_then(|v| v.as_str());
@@ -1458,12 +1496,7 @@ fn run_scene_pose(
         )
     } else {
         // Default DeclUI affordance: wave right.
-        apply_pose_preset(
-            &mut scene,
-            character_root,
-            "wave_right",
-            Some(undo_stack),
-        )
+        apply_pose_preset(&mut scene, character_root, "wave_right", Some(undo_stack))
     };
 
     let ops = match applied {
@@ -1794,16 +1827,28 @@ fn run_scene_edit_service(
                 },
                 None => {
                     // Build from separate DeclUI number fields when present.
-                    let r = input.get("color_r").and_then(|v| v.as_f64()).map(|v| v as u8);
-                    let g = input.get("color_g").and_then(|v| v.as_f64()).map(|v| v as u8);
-                    let b = input.get("color_b").and_then(|v| v.as_f64()).map(|v| v as u8);
+                    let r = input
+                        .get("color_r")
+                        .and_then(|v| v.as_f64())
+                        .map(|v| v as u8);
+                    let g = input
+                        .get("color_g")
+                        .and_then(|v| v.as_f64())
+                        .map(|v| v as u8);
+                    let b = input
+                        .get("color_b")
+                        .and_then(|v| v.as_f64())
+                        .map(|v| v as u8);
                     match (r, g, b) {
                         (Some(r), Some(g), Some(b)) => Some([r, g, b]),
                         _ => None,
                     }
                 }
             };
-            let range = input.get("range").and_then(|v| v.as_f64()).map(|v| v as f32);
+            let range = input
+                .get("range")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32);
             let spot_angle_deg = input
                 .get("spot_angle_deg")
                 .and_then(|v| v.as_f64())
@@ -1855,7 +1900,11 @@ fn run_scene_edit_service(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let scope = match input.get("scope").and_then(|v| v.as_str()).unwrap_or("node") {
+            let scope = match input
+                .get("scope")
+                .and_then(|v| v.as_str())
+                .unwrap_or("node")
+            {
                 "subtree" => LockScope::Subtree,
                 _ => LockScope::Node,
             };
@@ -2286,14 +2335,8 @@ fn run_comic_layout(
         SceneGraph::demo_scene()
     };
 
-    let width = input
-        .get("width")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(640) as u32;
-    let height = input
-        .get("height")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(960) as u32;
+    let width = input.get("width").and_then(|v| v.as_u64()).unwrap_or(640) as u32;
+    let height = input.get("height").and_then(|v| v.as_u64()).unwrap_or(960) as u32;
 
     let comic = match apply_comic_layout(layout, &scene, width, height) {
         Ok(c) => c,
@@ -2415,7 +2458,10 @@ async fn run_comic_render(
             return;
         }
     };
-    let width = input.get("width").and_then(|v| v.as_u64()).map(|v| v as u32);
+    let width = input
+        .get("width")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
     let height = input
         .get("height")
         .and_then(|v| v.as_u64())
@@ -3066,12 +3112,7 @@ fn storyboard_result_payload(
                 .active_frame()
                 .map(|f| f.id.clone())
                 .unwrap_or_default();
-            (
-                summary,
-                active_id,
-                board.frames.len(),
-                board.active_index,
-            )
+            (summary, active_id, board.frames.len(), board.active_index)
         } else {
             ("0 frames".into(), String::new(), 0usize, 0usize)
         };

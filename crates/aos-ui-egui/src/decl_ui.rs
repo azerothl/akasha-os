@@ -2,12 +2,10 @@
 
 use crate::icons;
 use crate::rich_composition_ui::{patch_to_local_map, LayerCanvasHostState};
-use crate::scene3d_ui::{
-    patch_to_local_map as scene_patch_to_local_map, Scene3dHostState,
-};
 use crate::rich_decl::{
     init_state_from_schema, ImageViewInteractionState, JobProgressThrottle, RichDeclSubscriptions,
 };
+use crate::scene3d_ui::{patch_to_local_map as scene_patch_to_local_map, Scene3dHostState};
 use aos_proto::decl_ui::{resolve_row_args, DeclUiDocument, DeclUiRowAction, DeclUiWidget};
 use aos_proto::rich_decl_ui::{eval_predicate, resolve_action_input, RichAction, RichJobHandle};
 use aos_proto::ModuleTool;
@@ -989,7 +987,9 @@ impl DeclUiPanelState {
             "image" => {
                 let path = media_path(w, cache);
                 let catalogue_thumb = path.starts_with("/assets/illustration/catalogue/thumbs/");
-                if !catalogue_thumb { ui.label(format!("image: {path}")); }
+                if !catalogue_thumb {
+                    ui.label(format!("image: {path}"));
+                }
                 if let Some(tex) = try_load_png(ui.ctx(), &path) {
                     if catalogue_thumb {
                         ui.add(egui::Image::new(&tex).fit_to_exact_size(egui::vec2(96.0, 96.0)));
@@ -1051,13 +1051,26 @@ impl DeclUiPanelState {
                 if clicked {
                     if w.action.as_deref() == Some("import_glb") {
                         if let Some(path) = crate::os_open::pick_os_file(
-                            &label, &[("GLB 3D", &["glb"])],
+                            &label,
+                            &[("GLB 3D", &["glb"])],
                             crate::os_open::user_downloads_dir().as_deref(),
                         ) {
-                            if let Some(action) = doc.actions.iter().find(|a| a.id == "import_glb") {
-                                queue_service_action(actions, action, local_state, document_state, doc);
-                                if let Some(Value::Object(input)) = actions.service_action.as_mut().map(|a| &mut a.input) {
-                                    input.insert("path".into(), Value::String(path.to_string_lossy().into_owned()));
+                            if let Some(action) = doc.actions.iter().find(|a| a.id == "import_glb")
+                            {
+                                queue_service_action(
+                                    actions,
+                                    action,
+                                    local_state,
+                                    document_state,
+                                    doc,
+                                );
+                                if let Some(Value::Object(input)) =
+                                    actions.service_action.as_mut().map(|a| &mut a.input)
+                                {
+                                    input.insert(
+                                        "path".into(),
+                                        Value::String(path.to_string_lossy().into_owned()),
+                                    );
                                 }
                             }
                         }
@@ -1445,8 +1458,7 @@ impl DeclUiPanelState {
                                 let base = tex.size_vec2();
                                 // Fill the assigned pane (Beauty stage); do not
                                 // cap at 1.0 or small NPR/CPU PNGs look like a stamp.
-                                let fit =
-                                    (max_w / base.x.max(1.0)).min(max_h / base.y.max(1.0));
+                                let fit = (max_w / base.x.max(1.0)).min(max_h / base.y.max(1.0));
                                 // Shared clamp for display and scroll so zoom state matches pixels.
                                 const ZOOM_MIN: f32 = 0.2;
                                 const ZOOM_MAX: f32 = 8.0;
@@ -1653,14 +1665,9 @@ impl DeclUiPanelState {
                     .or_else(|| w.scene_key.clone())
                     .unwrap_or_else(|| "scene3d".into());
                 let host = scene3d_viewports.entry(viewport_id).or_default();
-                if let Some(patch) = crate::scene3d_ui::ui_scene3d(
-                    ui,
-                    w,
-                    doc,
-                    language,
-                    local_state,
-                    host,
-                ) {
+                if let Some(patch) =
+                    crate::scene3d_ui::ui_scene3d(ui, w, doc, language, local_state, host)
+                {
                     let autosave = patch.request_autosave;
                     let yaml = patch.scene.clone();
                     for (k, v) in scene_patch_to_local_map(&patch) {
@@ -1682,15 +1689,50 @@ impl DeclUiPanelState {
                 }
             }
             "scene_tree" => {
-                if let Some(patch) = crate::scene3d_ui::ui_scene_tree(
-                    ui,
-                    w,
-                    doc,
-                    language,
-                    local_state,
-                ) {
+                if let Some(patch) =
+                    crate::scene3d_ui::ui_scene_tree(ui, w, doc, language, local_state)
+                {
                     for (k, v) in scene_patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
+                    }
+                }
+            }
+            "scene_candidate" => {
+                if let Some(key) = w.scene_key.as_deref() {
+                    if let Some(yaml) = local_state.get(key).and_then(Value::as_str) {
+                        if let Ok(project) = aos_scene::load_project_yaml(yaml) {
+                            ui.group(|ui| {
+                                ui.strong(
+                                    widget_text(w, doc, language)
+                                        .unwrap_or_else(|| "Proposal".into()),
+                                );
+                                let mut roots: Vec<_> = project
+                                    .scene
+                                    .nodes
+                                    .values()
+                                    .filter(|node| node.parent.as_deref() == Some("root"))
+                                    .filter(|node| {
+                                        !matches!(
+                                            node.kind,
+                                            aos_scene::NodeKind::Camera
+                                                | aos_scene::NodeKind::Light
+                                        )
+                                    })
+                                    .collect();
+                                roots.sort_by(|a, b| a.id.cmp(&b.id));
+                                for node in roots.iter().take(12) {
+                                    ui.label(format!(
+                                        "{} · x {:.1} m · z {:.1} m",
+                                        node.name,
+                                        node.transform.translation.x,
+                                        node.transform.translation.z
+                                    ));
+                                }
+                                if roots.len() > 12 {
+                                    ui.weak(format!("+{}", roots.len() - 12));
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -2832,8 +2874,14 @@ fn media_path(w: &DeclUiWidget, cache: &HashMap<String, Value>) -> String {
 
 pub(crate) fn host_file_from_logical(logical: &str) -> std::path::PathBuf {
     if let Some(name) = logical.strip_prefix("/assets/illustration/catalogue/thumbs/") {
-        if !name.is_empty() && name.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')) {
-            return crate::os_open::aos_home().join("share/assets/illustration/catalogue/thumbs").join(name);
+        if !name.is_empty()
+            && name
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
+        {
+            return crate::os_open::aos_home()
+                .join("share/assets/illustration/catalogue/thumbs")
+                .join(name);
         }
     }
     if let Ok(home) = std::env::var("AOS_HOME") {

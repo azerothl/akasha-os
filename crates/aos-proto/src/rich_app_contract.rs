@@ -84,6 +84,7 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "undo_redo",
     "scene3d",
     "scene_tree",
+    "scene_candidate",
     "section",
     "text_input",
     "file_picker",

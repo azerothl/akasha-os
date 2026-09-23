@@ -330,7 +330,7 @@ Slash commands:
 
 ## 4c. Illustration Studio (experimental module)
 
-Local catalogue package **`illustration-studio` 0.7.7** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
+Local catalogue package **`illustration-studio` 0.7.11** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
 
 **What ships (honest):**
 
@@ -340,12 +340,12 @@ Local catalogue package **`illustration-studio` 0.7.7** (versioned independently
 | wgpu **edit viewport** (`scene3d`) | Approximate realtime MeshBox/MeshAsset geometry and base color, including GLB node hierarchy — **not** full PBR/NPR beauty |
 | Beauty via RenderService | **Stub** + **CPU** in-tree; optional NPR Sketch/Pencil/Ink (CPU approx) |
 | Blender beauty | Cap + isolation path real; optional **GPL Renderer Pack** plus Blender binary, downloadable from Studio on supported platforms. GLB assets keep their hierarchy and PBR materials in Blender; Auto fails closed on spawn errors. |
-| Compose | **Keyword heuristics** EN/FR → templates — **not** LLM SceneIntent / planners |
+| Compose | Configured model proposes typed objects and spatial relations; deterministic bounded solver offers up to two candidates for explicit acceptance. EN/FR keyword templates remain the fallback. Assets are limited to the embedded primitives pack. |
 | Pose IK/FK, camera, lights v0, comic/storyboard extensions | Real (bounded) |
 | Neural mesh assist | Cap + stub procedural real; `backend=neural` needs opt-in Model Pack (fixture/mock without weights) |
 | Assets | Native GLB import plus three curated Poly Haven CC0 models downloaded on demand with source, licence and dimensions; general marketplace fetch remains disabled |
 
-**Do not read this as MVP §140–§145 complete.** Missing vs that written MVP include LLM SceneIntent planners, Blender-in-zip beauty QA, and a public marketplace. Blender stays a beauty backend behind a process boundary — never the project editor.
+**Do not read this as MVP §140–§145 complete.** Missing vs that written MVP include broad asset retrieval for scene planning, Blender-in-zip beauty QA, and a public marketplace. Blender stays a beauty backend behind a process boundary — never the project editor.
 
 Optional tester path: [TESTER.md](TESTER.md#31-illustration-studio-experimental-optional).
 
