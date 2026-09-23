@@ -13,7 +13,9 @@ use crate::math::{Mat4, Vec3};
 use crate::png::encode_rgba8_png;
 use crate::scene::{NodeKind, SceneGraph};
 use crate::style::{ResolvedStyle, StyleFamily};
-use crate::viewport::UNIT_CUBE_HALF;
+
+/// Half-extent of unit `mesh_box` geometry (same as `viewport::mesh::UNIT_CUBE_HALF`).
+const UNIT_CUBE_HALF: f32 = 0.5;
 
 /// Soft caps to keep offline CPU renders cheap.
 pub const CPU_MAX_EDGE: u32 = 512;
