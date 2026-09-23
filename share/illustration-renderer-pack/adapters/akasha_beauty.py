@@ -305,10 +305,10 @@ def main() -> int:
             relative = str(node.get("mesh_uri") or "")
             asset_path = os.path.realpath(os.path.join(work, relative))
             work_path = os.path.realpath(work)
-            if not relative.lower().endswith(".glb") or os.path.commonpath((work_path, asset_path)) != work_path:
-                raise ValueError(f"invalid staged GLB path for {node_id}")
+            if not relative.lower().endswith((".glb", ".gltf")) or os.path.commonpath((work_path, asset_path)) != work_path:
+                raise ValueError(f"invalid staged asset path for {node_id}")
             if not os.path.isfile(asset_path):
-                raise FileNotFoundError(f"staged GLB missing for {node_id}: {relative}")
+                raise FileNotFoundError(f"staged asset missing for {node_id}: {relative}")
 
             before = set(bpy.data.objects)
             bpy.ops.import_scene.gltf(filepath=asset_path)

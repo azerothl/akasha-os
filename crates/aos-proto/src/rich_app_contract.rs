@@ -246,6 +246,10 @@ pub const RENDER_PACK_STATUS_SERVICE: &str = "render.pack.status";
 /// Cap: install only the fixed, host-managed Illustration Studio dependencies.
 pub const ILLUSTRATION_DEPENDENCIES_INSTALL_CAP: &str = "illustration.dependencies.install";
 
+/// Host-only import or selected Poly Haven download into Illustration Studio.
+pub const ILLUSTRATION_ASSET_IMPORT_SERVICE: &str = "illustration.asset.import";
+pub const ILLUSTRATION_ASSET_IMPORT_CAP: &str = "illustration.asset.import";
+
 /// Cap: create / mutate comic page panel layouts.
 pub const COMIC_LAYOUT_CAP: &str = "comic.layout";
 

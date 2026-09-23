@@ -207,12 +207,14 @@ fn stage_mesh_assets(
             .ok_or_else(|| RenderError::Scene(format!("MeshAsset {} has no mesh_uri", node.id)))?;
         let path = resolve_mesh_uri(uri, &refs)
             .ok_or_else(|| RenderError::Scene(format!("MeshAsset {} not found: {uri}", node.id)))?;
-        if !path
+        let extension = path
             .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("glb"))
-        {
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if extension != "glb" && extension != "gltf" {
             return Err(RenderError::Scene(format!(
-                "MeshAsset {} must reference a GLB",
+                "MeshAsset {} must reference a GLB or glTF",
                 node.id
             )));
         }
@@ -227,13 +229,18 @@ fn stage_mesh_assets(
         }
         let gltf = gltf::Gltf::open(&path)
             .map_err(|e| RenderError::Scene(format!("MeshAsset {} invalid GLB: {e}", node.id)))?;
-        if gltf
+        let external: Vec<String> = gltf
             .buffers()
-            .any(|buffer| matches!(buffer.source(), gltf::buffer::Source::Uri(_)))
-            || gltf
-                .images()
-                .any(|image| matches!(image.source(), gltf::image::Source::Uri { .. }))
-        {
+            .filter_map(|b| match b.source() {
+                gltf::buffer::Source::Uri(uri) => Some(uri.to_string()),
+                _ => None,
+            })
+            .chain(gltf.images().filter_map(|image| match image.source() {
+                gltf::image::Source::Uri { uri, .. } => Some(uri.to_string()),
+                _ => None,
+            }))
+            .collect();
+        if extension == "glb" && !external.is_empty() {
             return Err(RenderError::Scene(format!(
                 "MeshAsset {} must embed buffers and textures in the GLB",
                 node.id
@@ -242,8 +249,70 @@ fn stage_mesh_assets(
         load_gltf_mesh(&path)
             .map_err(|e| RenderError::Scene(format!("MeshAsset {} invalid: {e}", node.id)))?;
         fs::create_dir_all(&assets).map_err(|e| RenderError::Isolation(e.to_string()))?;
-        let name = format!("mesh-{count:04}.glb");
-        fs::copy(&path, assets.join(&name)).map_err(|e| RenderError::Isolation(e.to_string()))?;
+        let name = if extension == "glb" {
+            let name = format!("mesh-{count:04}.glb");
+            fs::copy(&path, assets.join(&name))
+                .map_err(|e| RenderError::Isolation(e.to_string()))?;
+            name
+        } else {
+            let folder = format!("mesh-{count:04}");
+            let staged = assets.join(&folder);
+            fs::create_dir_all(&staged).map_err(|e| RenderError::Isolation(e.to_string()))?;
+            let source_root = fs::canonicalize(path.parent().unwrap_or(std::path::Path::new(".")))
+                .map_err(|e| RenderError::Isolation(e.to_string()))?;
+            let mut total_bytes = size;
+            for uri in &external {
+                let relative = std::path::Path::new(uri);
+                if uri.starts_with("data:")
+                    || relative.is_absolute()
+                    || relative
+                        .components()
+                        .any(|c| !matches!(c, std::path::Component::Normal(_)))
+                {
+                    return Err(RenderError::Scene(format!(
+                        "MeshAsset {} has unsafe external resource",
+                        node.id
+                    )));
+                }
+                let source = path
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join(relative);
+                let resolved =
+                    fs::canonicalize(&source).map_err(|e| RenderError::Isolation(e.to_string()))?;
+                if !resolved.starts_with(&source_root) {
+                    return Err(RenderError::Scene(format!(
+                        "MeshAsset {} resource escapes asset folder",
+                        node.id
+                    )));
+                }
+                total_bytes = total_bytes.saturating_add(
+                    fs::metadata(&resolved)
+                        .map_err(|e| RenderError::Isolation(e.to_string()))?
+                        .len(),
+                );
+                if total_bytes > 200_000_000 {
+                    return Err(RenderError::Scene(format!(
+                        "MeshAsset {} exceeds 200 MB with textures",
+                        node.id
+                    )));
+                }
+                let destination = staged.join(relative);
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| RenderError::Isolation(e.to_string()))?;
+                }
+                fs::copy(resolved, destination).map_err(|e| {
+                    RenderError::Isolation(format!(
+                        "MeshAsset {} texture/buffer {}: {e}",
+                        node.id, uri
+                    ))
+                })?;
+            }
+            fs::copy(&path, staged.join("source.gltf"))
+                .map_err(|e| RenderError::Isolation(e.to_string()))?;
+            format!("{folder}/source.gltf")
+        };
         node.mesh_uri = Some(format!("assets/{name}"));
     }
     Ok(())
@@ -383,6 +452,36 @@ mod tests {
             fs::read(source).unwrap()
         );
         assert_eq!(scene.nodes["asset"].mesh_uri, original_uri);
+        fs::remove_dir_all(work).unwrap();
+    }
+
+    #[test]
+    fn stages_gltf_with_external_texture_and_buffer() {
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/hierarchy_textured.gltf");
+        let mut scene = SceneGraph::demo_scene();
+        insert_mesh_asset(
+            &mut scene,
+            "root",
+            "external",
+            "External",
+            source.to_string_lossy(),
+            Transform::default(),
+        )
+        .unwrap();
+        let mut export = AkashaSceneExport::from_scene(&scene, 64, 64, "beauty").unwrap();
+        let work = make_work_dir().unwrap();
+        stage_mesh_assets(&mut export, &work).unwrap();
+        assert_eq!(
+            export.nodes["external"].mesh_uri.as_deref(),
+            Some("assets/mesh-0000/source.gltf")
+        );
+        assert!(work
+            .join("assets/mesh-0000/hierarchy_textured.bin")
+            .is_file());
+        assert!(work
+            .join("assets/mesh-0000/hierarchy_textured.png")
+            .is_file());
         fs::remove_dir_all(work).unwrap();
     }
 

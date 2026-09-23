@@ -26,6 +26,13 @@
       "lock_subtree_label": "Lock subtree",
       "unlock_selected_label": "Unlock",
       "assets_section": "Add to scene",
+      "import_glb_label": "Import a GLB…",
+      "catalogue_section": "Poly Haven · CC0 library",
+      "catalogue_intro": "Selected [Poly Haven](https://polyhaven.com) assets. Files download only when you choose an item. [CC0 licence](https://polyhaven.com/license).",
+      "catalogue_chair": "Wooden Chair 01 · 0.69 × 0.66 × 2.27 m · wood / chair · source pivot, faces −Y · Jake Mobley · Poly Haven · CC0",
+      "catalogue_desk": "School Desk 01 · 0.71 × 0.55 × 0.88 m · wood / desk · source pivot, faces −Y · Ethan Place · Poly Haven · CC0",
+      "catalogue_notebook": "Binder Notebook · 0.58 × 0.20 × 0.03 m · leather / paper · source pivot, faces −Y · DaDrood · Poly Haven · CC0",
+      "catalogue_add_label": "Download and add",
       "project_section": "Project",
       "render_section": "3 · Beauty pass",
       "style_section": "Illustration style",
@@ -147,6 +154,13 @@
       "lock_subtree_label": "Verrouiller le sous-arbre",
       "unlock_selected_label": "Déverrouiller",
       "assets_section": "Ajouter à la scène",
+      "import_glb_label": "Importer un GLB…",
+      "catalogue_section": "Bibliothèque Poly Haven · CC0",
+      "catalogue_intro": "Sélection d’assets [Poly Haven](https://polyhaven.com). Les fichiers sont téléchargés uniquement au clic. [Licence CC0](https://polyhaven.com/license).",
+      "catalogue_chair": "Chaise en bois 01 · 0,69 × 0,66 × 2,27 m · bois / chaise · pivot source, orientée −Y · Jake Mobley · Poly Haven · CC0",
+      "catalogue_desk": "Bureau d’école 01 · 0,71 × 0,55 × 0,88 m · bois / bureau · pivot source, orienté −Y · Ethan Place · Poly Haven · CC0",
+      "catalogue_notebook": "Carnet à anneaux · 0,58 × 0,20 × 0,03 m · cuir / papier · pivot source, orienté −Y · DaDrood · Poly Haven · CC0",
+      "catalogue_add_label": "Télécharger et ajouter",
       "project_section": "Projet",
       "render_section": "3 · Rendu beauté",
       "style_section": "Style d’illustration",
@@ -390,6 +404,10 @@
       "default": ""
     },
     "assets_open": {
+      "type": "boolean",
+      "default": false
+    },
+    "catalogue_open": {
       "type": "boolean",
       "default": false
     },
@@ -791,6 +809,30 @@
       "refresh_binds": []
     },
     {
+      "id": "import_glb",
+      "service": "illustration.asset.import",
+      "input": {"mode": "file", "scene_yaml": "$local.scene"},
+      "refresh_binds": []
+    },
+    {
+      "id": "catalogue_add_chair",
+      "service": "illustration.asset.import",
+      "input": {"mode": "polyhaven", "catalogue_id": "WoodenChair_01", "scene_yaml": "$local.scene"},
+      "refresh_binds": []
+    },
+    {
+      "id": "catalogue_add_desk",
+      "service": "illustration.asset.import",
+      "input": {"mode": "polyhaven", "catalogue_id": "SchoolDesk_01", "scene_yaml": "$local.scene"},
+      "refresh_binds": []
+    },
+    {
+      "id": "catalogue_add_notebook",
+      "service": "illustration.asset.import",
+      "input": {"mode": "polyhaven", "catalogue_id": "binder_notebook", "scene_yaml": "$local.scene"},
+      "refresh_binds": []
+    },
+    {
       "id": "lock_selected",
       "service": "scene.lock",
       "input": {
@@ -1123,6 +1165,37 @@
                 ],
                 "collapsible": true,
                 "open_state_key": "assets_open"
+              },
+              {
+                "kind": "section",
+                "label_key": "catalogue_section",
+                "children": [
+                  {"kind": "button", "label_key": "import_glb_label", "action": "import_glb"},
+                  {"kind": "markdown", "label_key": "catalogue_intro"},
+                  {"kind": "row", "children": [
+                    {"kind": "image", "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"},
+                    {"kind": "column", "children": [
+                      {"kind": "text", "label_key": "catalogue_chair"},
+                      {"kind": "button", "label_key": "catalogue_add_label", "action": "catalogue_add_chair"}
+                    ]}
+                  ]},
+                  {"kind": "row", "children": [
+                    {"kind": "image", "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"},
+                    {"kind": "column", "children": [
+                      {"kind": "text", "label_key": "catalogue_desk"},
+                      {"kind": "button", "label_key": "catalogue_add_label", "action": "catalogue_add_desk"}
+                    ]}
+                  ]},
+                  {"kind": "row", "children": [
+                    {"kind": "image", "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"},
+                    {"kind": "column", "children": [
+                      {"kind": "text", "label_key": "catalogue_notebook"},
+                      {"kind": "button", "label_key": "catalogue_add_label", "action": "catalogue_add_notebook"}
+                    ]}
+                  ]}
+                ],
+                "collapsible": true,
+                "open_state_key": "catalogue_open"
               },
               {
                 "kind": "section",
