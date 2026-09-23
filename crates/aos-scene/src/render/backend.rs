@@ -82,6 +82,8 @@ pub struct RenderOutput {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RenderError {
+    #[error("render job capacity reached ({0} retained jobs)")]
+    JobCapacityReached(usize),
     #[error("unknown backend `{0}`")]
     UnknownBackend(String),
     #[error("unknown pass `{0}`")]

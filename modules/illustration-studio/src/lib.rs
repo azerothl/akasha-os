@@ -43,7 +43,10 @@ fn scene_tool(service: &str, args: &serde_json::Value) -> Result<serde_json::Val
     if payload.get("scene_yaml").and_then(|v| v.as_str()).unwrap_or("").is_empty()
         && service != "scene.compose"
     {
-        let yaml = aos_module_sdk::fs_read(PROJECT_PATH).unwrap_or_default();
+        let yaml = project_ensure()?["yaml"]
+            .as_str()
+            .ok_or_else(|| "project ensure returned no yaml".to_string())?
+            .to_string();
         if let Some(obj) = payload.as_object_mut() {
             obj.insert("scene_yaml".into(), json!(yaml));
         }
@@ -52,6 +55,7 @@ fn scene_tool(service: &str, args: &serde_json::Value) -> Result<serde_json::Val
     // Persist when the host returned an updated scene (audit-friendly SoT on disk).
     if let Some(yaml) = result.get("scene_yaml").and_then(|v| v.as_str()) {
         if !yaml.trim().is_empty() && service != "scene.get" && service != "scene.locks" {
+            validate_project_yaml(yaml)?;
             let _ = aos_module_sdk::fs_write(PROJECT_PATH, yaml)?;
         }
     }
@@ -59,11 +63,30 @@ fn scene_tool(service: &str, args: &serde_json::Value) -> Result<serde_json::Val
 }
 
 fn project_ensure() -> Result<serde_json::Value, String> {
-    if aos_module_sdk::fs_read(PROJECT_PATH).is_err() {
-        let _ = aos_module_sdk::fs_write(PROJECT_PATH, DEMO_PROJECT_YAML)?;
+    match aos_module_sdk::fs_read(PROJECT_PATH) {
+        Ok(yaml) => {
+            validate_project_yaml(&yaml)?;
+            Ok(json!({ "path": PROJECT_PATH, "yaml": yaml }))
+        }
+        Err(read_error) => {
+            let paths = aos_module_sdk::fs_list("/documents/illustrations/")
+                .map_err(|list_error| format!("cannot inspect illustration project: {list_error}; read failed: {read_error}"))?;
+            if paths.iter().any(|path| path == PROJECT_PATH) {
+                return Err(format!("cannot read existing project {PROJECT_PATH}: {read_error}"));
+            }
+            validate_project_yaml(DEMO_PROJECT_YAML)?;
+            aos_module_sdk::fs_write(PROJECT_PATH, DEMO_PROJECT_YAML)?;
+            let yaml = aos_module_sdk::fs_read(PROJECT_PATH)?;
+            validate_project_yaml(&yaml)?;
+            Ok(json!({ "path": PROJECT_PATH, "yaml": yaml }))
+        }
     }
-    let yaml = aos_module_sdk::fs_read(PROJECT_PATH)?;
-    Ok(json!({ "path": PROJECT_PATH, "yaml": yaml }))
+}
+
+fn validate_project_yaml(yaml: &str) -> Result<(), String> {
+    aos_scene::load_project_yaml(yaml)
+        .map(|_| ())
+        .map_err(|error| format!("invalid illustration project yaml: {error}"))
 }
 
 fn project_load() -> Result<serde_json::Value, String> {
@@ -79,6 +102,7 @@ fn project_save(args: &serde_json::Value) -> Result<serde_json::Value, String> {
     if yaml.trim().is_empty() {
         return Err("empty yaml".into());
     }
+    validate_project_yaml(yaml)?;
     let _ = aos_module_sdk::fs_write(PROJECT_PATH, yaml)?;
     Ok(json!({ "path": PROJECT_PATH, "ok": true }))
 }
@@ -113,5 +137,15 @@ mod tests {
         assert!(super::DEMO_PROJECT_YAML.contains("upper_arm_r"));
         assert!(super::DEMO_PROJECT_YAML.contains("ground"));
         assert!(super::DEMO_PROJECT_YAML.contains("pedestal"));
+    }
+
+    #[test]
+    fn demo_project_yaml_is_valid() {
+        super::validate_project_yaml(super::DEMO_PROJECT_YAML).unwrap();
+    }
+
+    #[test]
+    fn malformed_project_yaml_is_rejected() {
+        assert!(super::validate_project_yaml("scene: [broken").is_err());
     }
 }

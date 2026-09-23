@@ -858,7 +858,7 @@ async fn run_render_submit(
     };
 
     let svc = illustration_render_service();
-    let rendered = match svc.submit_and_result(RenderSubmit {
+    let submit = RenderSubmit {
         scene,
         backend,
         pass,
@@ -867,15 +867,27 @@ async fn run_render_submit(
         output_path: path.to_string(),
         stub_rgb: (r, g, b),
         style,
-    }) {
-        Ok(res) => res,
-        Err(e) => {
+    };
+    let rendered = match tokio::task::spawn_blocking(move || svc.submit_and_result(submit)).await {
+        Ok(Ok(res)) => res,
+        Ok(Err(e)) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
                 action_id: action_id.to_string(),
                 ok: false,
                 result: Value::Null,
                 error: Some(format!("render.submit: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("render.submit task failed: {e}")),
                 refresh_binds,
             });
             return;
@@ -2375,8 +2387,9 @@ async fn run_comic_render(
     let page_id = input
         .get("page_id")
         .and_then(|v| v.as_str())
-        .or(comic.active_page.as_deref())
-        .unwrap_or("page_1");
+        .map(str::to_string)
+        .or_else(|| comic.active_page.clone())
+        .unwrap_or_else(|| "page_1".to_string());
     let path = input
         .get("path")
         .and_then(|v| v.as_str())
@@ -2402,15 +2415,30 @@ async fn run_comic_render(
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
 
-    let rendered = match render_comic_page(&comic, page_id, backend, width, height) {
-        Ok(r) => r,
-        Err(e) => {
+    let rendered = match tokio::task::spawn_blocking(move || {
+        render_comic_page(&comic, &page_id, backend, width, height)
+    })
+    .await
+    {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
                 action_id: action_id.to_string(),
                 ok: false,
                 result: Value::Null,
                 error: Some(format!("comic.render: {e}")),
+                refresh_binds,
+            });
+            return;
+        }
+        Err(e) => {
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: false,
+                result: Value::Null,
+                error: Some(format!("comic.render task failed: {e}")),
                 refresh_binds,
             });
             return;
