@@ -476,7 +476,7 @@ mod tests {
         // Pure paper field (no chrome) for the same style must differ from mock PNG.
         let paper = resolve_style("pencil").unwrap().paper_tint;
         let mut flat = vec![0u8; (64 * 48 * 4) as usize];
-        for px in flat.chunks_exact_mut(4) {
+        for px in flat.as_chunks_mut::<4>().0 {
             px[0] = paper[0];
             px[1] = paper[1];
             px[2] = paper[2];
