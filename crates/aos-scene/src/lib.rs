@@ -29,6 +29,7 @@ mod scene_intent;
 mod object_edit;
 mod edit;
 pub mod animation;
+pub mod history;
 pub mod fx;
 mod ik;
 mod light;
@@ -108,7 +109,7 @@ pub use locks::{
 };
 pub use math::{Mat4, Quat, Vec3, EPSILON};
 pub use mesh_asset::{
-    insert_mesh_asset, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
+    default_mesh_search_roots, insert_mesh_asset, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
     MAX_MESH_TRIANGLES, MAX_MESH_VERTICES,
 };
 pub use neural_mesh::{
@@ -128,6 +129,7 @@ pub use pose::{
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
 pub use fx::{EffectKind, RenderPreset, RenderQuality, SceneEffect};
 pub use animation::{AnimationError, AnimationState, Keyframe, NamedPose, Rig};
+pub use history::{HistoryError, ProjectHistory, SceneVariant, SceneVersion};
 pub use render::{
     blender_pack_status, isolation_matrix, parse_backend, parse_pass, parse_style,
     AkashaSceneExport, BlenderPackStatus, BlenderRenderBackend, BlenderRunMode,

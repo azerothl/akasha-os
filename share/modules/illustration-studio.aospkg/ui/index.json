@@ -141,7 +141,23 @@
       "comic_layout_label": "Layout",
       "comic_apply_label": "Apply layout",
       "comic_render_label": "Render page",
-      "comic_bind_label": "Bind scene → panel 1",
+      "comic_bind_label": "Bind scene → selected panel",
+      "panel_1": "1", "panel_2": "2", "panel_3": "3", "panel_4": "4",
+      "comic_panel_label": "Panel",
+      "comic_caption_label": "Panel caption (metadata)",
+      "comic_link_hint": "Bind the current scene and storyboard shot to the selected panel, then render and export the page as PNG.",
+      "history_section": "Versions and variants",
+      "history_name_label": "Name",
+      "history_version_id_label": "Version number",
+      "history_save_version": "Save version",
+      "history_restore_version": "Restore version",
+      "history_save_variant": "Save variant",
+      "history_apply_variant": "Apply variant",
+      "history_summary_label": "Project history",
+      "diagnostics_section": "Diagnostics",
+      "diagnostics_refresh": "Check scene",
+      "diagnostics_result": "Scene status",
+      "shortcuts_hint": "Shortcuts: Ctrl/⌘+S saves · Ctrl/⌘+Shift+R renders with Blender · Ctrl/⌘+Z undoes viewport edits.",
       "storyboard_section": "Storyboard",
       "storyboard_summary_label": "Timeline",
       "packs_section": "Local packs",
@@ -326,7 +342,23 @@
       "comic_layout_label": "Mise en page",
       "comic_apply_label": "Appliquer la mise en page",
       "comic_render_label": "Rendre la page",
-      "comic_bind_label": "Lier scène → case 1",
+      "comic_bind_label": "Lier scène → case choisie",
+      "panel_1": "1", "panel_2": "2", "panel_3": "3", "panel_4": "4",
+      "comic_panel_label": "Case",
+      "comic_caption_label": "Légende de case (métadonnée)",
+      "comic_link_hint": "Liez la scène et le plan actif à la case choisie, puis rendez et exportez la planche en PNG.",
+      "history_section": "Versions et variantes",
+      "history_name_label": "Nom",
+      "history_version_id_label": "Numéro de version",
+      "history_save_version": "Enregistrer une version",
+      "history_restore_version": "Restaurer la version",
+      "history_save_variant": "Enregistrer la variante",
+      "history_apply_variant": "Appliquer la variante",
+      "history_summary_label": "Historique du projet",
+      "diagnostics_section": "Diagnostic",
+      "diagnostics_refresh": "Vérifier la scène",
+      "diagnostics_result": "État de la scène",
+      "shortcuts_hint": "Raccourcis : Ctrl/⌘+S enregistre · Ctrl/⌘+Maj+R lance Blender · Ctrl/⌘+Z annule une édition dans la vue.",
       "storyboard_section": "Storyboard",
       "storyboard_summary_label": "Timeline",
       "packs_section": "Packs locaux",
@@ -468,6 +500,13 @@
         "type": "number",
         "default": 0
       },
+      "comic_panel_id": { "type": "string", "default": "panel_1" },
+      "comic_caption": { "type": "string", "default": "" },
+      "frame_id": { "type": "string", "default": "" },
+      "history_name": { "type": "string", "default": "version-1" },
+      "version_id": { "type": "number", "default": 1 },
+      "history_summary": { "type": "string", "default": "" },
+      "diagnostics": { "type": "string", "default": "" },
       "frame_label": {
         "type": "string",
         "default": ""
@@ -1202,7 +1241,9 @@
       "input": {
         "comic_yaml": "$local.comic",
         "page_id": "page_1",
-        "panel_id": "panel_1",
+        "panel_id": "$local.comic_panel_id",
+        "caption": "$local.comic_caption",
+        "frame_id": "$local.frame_id",
         "scene_yaml": "$local.scene"
       },
       "refresh_binds": []
@@ -1218,6 +1259,31 @@
         "width": 640,
         "height": 960
       },
+      "refresh_binds": []
+    },
+    {
+      "id": "save_version", "service": "scene.history",
+      "input": { "op": "save_version", "name": "$local.history_name", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "restore_version", "service": "scene.history",
+      "input": { "op": "restore_version", "version_id": "$local.version_id", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "save_variant", "service": "scene.history",
+      "input": { "op": "save_variant", "name": "$local.history_name", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "apply_variant", "service": "scene.history",
+      "input": { "op": "apply_variant", "name": "$local.history_name", "scene_yaml": "$local.scene" },
+      "refresh_binds": []
+    },
+    {
+      "id": "scene_diagnostics", "service": "scene.diagnostics",
+      "input": { "scene_yaml": "$local.scene" },
       "refresh_binds": []
     },
     {
@@ -2125,6 +2191,10 @@
                 "kind": "section",
                 "label_key": "comic_section",
                 "children": [
+                  { "kind": "radio", "state_key": "comic_panel_id", "label_key": "comic_panel_label", "inline": true,
+                    "items": ["panel_1", "panel_2", "panel_3", "panel_4"],
+                    "item_label_keys": ["panel_1", "panel_2", "panel_3", "panel_4"] },
+                  { "kind": "text_input", "state_key": "comic_caption", "label_key": "comic_caption_label" },
                   {
                     "kind": "radio",
                     "state_key": "comic_layout",
@@ -2166,6 +2236,7 @@
                       }
                     ]
                   }
+                  ,{ "kind": "text", "label_key": "comic_link_hint" }
                 ],
                 "collapsible": true,
                 "open_state_key": "comic_open"
@@ -2228,6 +2299,30 @@
                 ],
                 "collapsible": true,
                 "open_state_key": "storyboard_open"
+              },
+              {
+                "kind": "section", "label_key": "history_section", "collapsible": true,
+                "children": [
+                  { "kind": "text_input", "state_key": "history_name", "label_key": "history_name_label" },
+                  { "kind": "number", "state_key": "version_id", "min": 1, "max": 1000000, "label_key": "history_version_id_label" },
+                  { "kind": "row", "children": [
+                    { "kind": "button", "label_key": "history_save_version", "action": "save_version" },
+                    { "kind": "button", "label_key": "history_restore_version", "action": "restore_version" }
+                  ] },
+                  { "kind": "row", "children": [
+                    { "kind": "button", "label_key": "history_save_variant", "action": "save_variant" },
+                    { "kind": "button", "label_key": "history_apply_variant", "action": "apply_variant" }
+                  ] },
+                  { "kind": "text_input", "state_key": "history_summary", "label_key": "history_summary_label", "read_only": true }
+                ]
+              },
+              {
+                "kind": "section", "label_key": "diagnostics_section", "collapsible": true,
+                "children": [
+                  { "kind": "button", "label_key": "diagnostics_refresh", "action": "scene_diagnostics" },
+                  { "kind": "text_input", "state_key": "diagnostics", "label_key": "diagnostics_result", "read_only": true },
+                  { "kind": "text", "label_key": "shortcuts_hint" }
+                ]
               },
               {
                 "kind": "section",

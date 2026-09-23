@@ -250,6 +250,31 @@ impl DeclUiPanelState {
             self.pending_invoke,
             &mut actions,
         );
+        if self.module == "illustration-studio" && actions.service_action.is_none() {
+            let shortcut = ui.input(|input| {
+                if input.modifiers.command && input.key_pressed(egui::Key::S) {
+                    Some("save_project")
+                } else if input.modifiers.command
+                    && input.modifiers.shift
+                    && input.key_pressed(egui::Key::R)
+                {
+                    Some("blender_beauty")
+                } else {
+                    None
+                }
+            });
+            if let Some(id) = shortcut {
+                if let Some(action) = doc.actions.iter().find(|action| action.id == id) {
+                    queue_service_action(
+                        &mut actions,
+                        action,
+                        &self.local_state,
+                        &self.document_state,
+                        &doc,
+                    );
+                }
+            }
+        }
         actions
     }
 
@@ -1689,7 +1714,10 @@ impl DeclUiPanelState {
                 }
             }
             "scene_tree" => {
-                let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "illustration_viewport".into());
+                let canvas_id = w
+                    .canvas_id
+                    .clone()
+                    .unwrap_or_else(|| "illustration_viewport".into());
                 let host = scene3d_viewports.entry(canvas_id).or_default();
                 if let Some(patch) =
                     crate::scene3d_ui::ui_scene_tree(ui, w, doc, language, local_state, host)
@@ -1700,18 +1728,28 @@ impl DeclUiPanelState {
                 }
             }
             "scene_object_tools" => {
-                let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "illustration_viewport".into());
+                let canvas_id = w
+                    .canvas_id
+                    .clone()
+                    .unwrap_or_else(|| "illustration_viewport".into());
                 let host = scene3d_viewports.entry(canvas_id).or_default();
-                if let Some(patch) = crate::scene3d_ui::ui_scene_object_tools(ui, w, language, local_state, host) {
+                if let Some(patch) =
+                    crate::scene3d_ui::ui_scene_object_tools(ui, w, language, local_state, host)
+                {
                     for (k, v) in scene_patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
                     }
                 }
             }
             "scene_material_editor" => {
-                let canvas_id = w.canvas_id.clone().unwrap_or_else(|| "illustration_viewport".into());
+                let canvas_id = w
+                    .canvas_id
+                    .clone()
+                    .unwrap_or_else(|| "illustration_viewport".into());
                 let host = scene3d_viewports.entry(canvas_id).or_default();
-                if let Some(patch) = crate::scene3d_ui::ui_scene_material_editor(ui, w, language, local_state, host) {
+                if let Some(patch) =
+                    crate::scene3d_ui::ui_scene_material_editor(ui, w, language, local_state, host)
+                {
                     for (k, v) in scene_patch_to_local_map(&patch) {
                         actions.local_patch.insert(k, v);
                     }

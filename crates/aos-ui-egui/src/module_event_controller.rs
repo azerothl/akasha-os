@@ -353,6 +353,13 @@ pub(crate) fn on_ui_service_done(
             if module == "illustration-studio" && illustration_action_patches_scene(&action_id) {
                 apply_illustration_scene_result(&mut panel.local_state, &action_id, &result);
             }
+            if module == "illustration-studio" && action_id == "scene_diagnostics" {
+                if let Some(summary) = result.get("diagnostics").and_then(Value::as_str) {
+                    panel
+                        .local_state
+                        .insert("diagnostics".into(), Value::String(summary.into()));
+                }
+            }
             if module == "illustration-studio" && action_id == "compose_scene" {
                 if let Some(candidates) = result.get("candidates").and_then(Value::as_array) {
                     panel.local_state.insert(
@@ -604,6 +611,10 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
             | "seek_animation"
             | "play_animation"
             | "stop_animation"
+            | "save_version"
+            | "restore_version"
+            | "save_variant"
+            | "apply_variant"
             | "storyboard_capture"
             | "storyboard_prev"
             | "storyboard_next"
@@ -641,6 +652,18 @@ fn apply_illustration_scene_result(
     }
     if let Some(summary) = result.get("animation_summary").and_then(Value::as_str) {
         local_state.insert("animation_summary".into(), Value::String(summary.into()));
+    }
+    if let Some(summary) = result.get("history_summary").and_then(Value::as_str) {
+        local_state.insert("history_summary".into(), Value::String(summary.into()));
+    }
+    if let Some(summary) = result.get("storyboard_summary").and_then(Value::as_str) {
+        local_state.insert("storyboard_summary".into(), Value::String(summary.into()));
+    }
+    if let Some(id) = result.get("frame_id").and_then(Value::as_str) {
+        local_state.insert("frame_id".into(), Value::String(id.into()));
+    }
+    if let Some(id) = result.get("version_id").and_then(Value::as_u64) {
+        local_state.insert("version_id".into(), Value::from(id));
     }
     if let Some(sel) = result.get("selected_id").and_then(|p| p.as_str()) {
         local_state.insert("selected_id".into(), Value::String(sel.to_string()));

@@ -50,7 +50,7 @@ HASH="$(sha256_file "${STAGING}/module.wasm")"
 
 cat > "${STAGING}/manifest.yaml" <<EOF
 name: illustration-studio
-version: 0.7.17
+version: 0.7.18
 hash: ${HASH}
 permissions:
   required_caps:
@@ -251,6 +251,27 @@ tools:
         scene_yaml:
           type: string
       required: [op]
+  - name: scene.history
+    description: Save and restore scene versions and variants
+    input_schema:
+      type: object
+      properties:
+        op:
+          type: string
+        name:
+          type: string
+        version_id:
+          type: number
+        scene_yaml:
+          type: string
+      required: [op]
+  - name: scene.diagnostics
+    description: Report scene counts and missing imported assets
+    input_schema:
+      type: object
+      properties:
+        scene_yaml:
+          type: string
   - name: illustration.export_png
     description: Export the latest illustration PNG via native file picker
     input_schema:
@@ -290,7 +311,7 @@ CATALOGUE="${ROOT}/share/modules/catalogue.yaml"
 if [[ -f "$CATALOGUE" ]]; then
   echo "== update catalogue.yaml illustration-studio hash =="
   perl -i -0pe "s/(  - name: illustration-studio\r?\n(?:(?!  - name: ).)*?    hash: )sha256:[a-f0-9]+/\${1}sha256:${HASH}/s" "$CATALOGUE"
-  perl -i -0pe "s/(  - name: illustration-studio\r?\n    version: )\"[^\"]+\"/\${1}\"0.7.17\"/" "$CATALOGUE"
+  perl -i -0pe "s/(  - name: illustration-studio\r?\n    version: )\"[^\"]+\"/\${1}\"0.7.18\"/" "$CATALOGUE"
   echo "== refresh catalogue signature (UPDATE_CATALOGUE=1) =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     committed_catalogue_signature_matches -- --nocapture) \
