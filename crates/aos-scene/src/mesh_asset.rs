@@ -278,12 +278,12 @@ pub fn default_mesh_search_roots() -> Vec<std::path::PathBuf> {
             roots.push(pb);
         }
     }
-    if let Ok(home) = std::env::var("AOS_HOME") {
-        let home = std::path::PathBuf::from(home);
-        roots.push(home.join("documents/illustrations"));
-        roots.push(home.join("share/assets/illustration"));
-        roots.push(home.join("share/illustration-neural-mesh-pack"));
-    }
+    let home = std::env::var("AOS_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+    roots.push(home.join("var/storage/data/documents/illustrations"));
+    roots.push(home.join("share/assets/illustration"));
+    roots.push(home.join("share/illustration-neural-mesh-pack"));
     for cand in [
         std::path::PathBuf::from("share/illustration-neural-mesh-pack"),
         std::path::PathBuf::from("share/assets/illustration"),

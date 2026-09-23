@@ -516,12 +516,14 @@ pub(crate) fn on_ui_layers_generated(
 /// Illustration Studio. Prefer `instantiate_*` prefix so prefab Add buttons
 /// (#312) patch `$local.scene` without maintaining a brittle per-asset list.
 fn illustration_action_patches_scene(action_id: &str) -> bool {
-    if action_id.starts_with("instantiate_") {
+    if action_id.starts_with("instantiate_") || action_id.starts_with("catalogue_add_") {
         return true;
     }
     matches!(
         action_id,
         "compose_scene"
+            | "import_glb"
+            | "catalogue_add"
             | "pose_wave"
             | "pose_look"
             | "pose_rest"

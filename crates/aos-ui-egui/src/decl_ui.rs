@@ -988,9 +988,14 @@ impl DeclUiPanelState {
             }
             "image" => {
                 let path = media_path(w, cache);
-                ui.label(format!("image: {path}"));
+                let catalogue_thumb = path.starts_with("/assets/illustration/catalogue/thumbs/");
+                if !catalogue_thumb { ui.label(format!("image: {path}")); }
                 if let Some(tex) = try_load_png(ui.ctx(), &path) {
-                    ui.image(&tex);
+                    if catalogue_thumb {
+                        ui.add(egui::Image::new(&tex).fit_to_exact_size(egui::vec2(96.0, 96.0)));
+                    } else {
+                        ui.image(&tex);
+                    }
                 }
             }
             "audio" => {
@@ -1039,12 +1044,24 @@ impl DeclUiPanelState {
                         w.primary.unwrap_or(false),
                     )
                 } else {
-                    let response = ui.add_enabled(can_run, egui::Button::new(label));
+                    let response = ui.add_enabled(can_run, egui::Button::new(&label));
                     let response = response.on_hover_text(tooltip);
                     response.clicked()
                 };
                 if clicked {
-                    if w.action.as_deref() == Some("clear_preview") {
+                    if w.action.as_deref() == Some("import_glb") {
+                        if let Some(path) = crate::os_open::pick_os_file(
+                            &label, &[("GLB 3D", &["glb"])],
+                            crate::os_open::user_downloads_dir().as_deref(),
+                        ) {
+                            if let Some(action) = doc.actions.iter().find(|a| a.id == "import_glb") {
+                                queue_service_action(actions, action, local_state, document_state, doc);
+                                if let Some(Value::Object(input)) = actions.service_action.as_mut().map(|a| &mut a.input) {
+                                    input.insert("path".into(), Value::String(path.to_string_lossy().into_owned()));
+                                }
+                            }
+                        }
+                    } else if w.action.as_deref() == Some("clear_preview") {
                         actions
                             .local_patch
                             .insert("result_path".into(), Value::String(String::new()));
@@ -2814,6 +2831,11 @@ fn media_path(w: &DeclUiWidget, cache: &HashMap<String, Value>) -> String {
 }
 
 pub(crate) fn host_file_from_logical(logical: &str) -> std::path::PathBuf {
+    if let Some(name) = logical.strip_prefix("/assets/illustration/catalogue/thumbs/") {
+        if !name.is_empty() && name.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_')) {
+            return crate::os_open::aos_home().join("share/assets/illustration/catalogue/thumbs").join(name);
+        }
+    }
     if let Ok(home) = std::env::var("AOS_HOME") {
         let rel = logical.trim_start_matches('/');
         return std::path::PathBuf::from(home)

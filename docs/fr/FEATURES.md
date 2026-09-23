@@ -344,7 +344,7 @@ Paquet catalogue local **`illustration-studio` 0.7.7** (versionné **indépendam
 | Compose | **Heuristiques mots-clés** EN/FR → templates — **pas** SceneIntent LLM / planners |
 | Pose IK/FK, caméra, lumières v0, extensions comic/storyboard | Réel (borné) |
 | Assist mesh neural | Cap + stub procédural réels ; `backend=neural` exige Model Pack opt-in (fixture/mock sans poids) |
-| Marketplace | **Packs locaux hors-ligne seulement** ; fetch distant fail-closed |
+| Assets | Import GLB natif et trois modèles Poly Haven CC0 téléchargés à la demande, avec provenance, licence et dimensions ; marketplace général toujours désactivé |
 
 **Ne pas lire ceci comme le MVP §140–§145 complet.** Manquent notamment les planners SceneIntent LLM, la QA beauté Blender dans le zip, et un marketplace public. Blender reste un backend beauté derrière une frontière process — jamais l’éditeur de projet.
 

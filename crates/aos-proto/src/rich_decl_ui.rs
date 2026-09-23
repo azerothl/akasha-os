@@ -760,6 +760,12 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        crate::ILLUSTRATION_ASSET_IMPORT_SERVICE => {
+            if !granted_caps.iter().any(|c| c == crate::ILLUSTRATION_ASSET_IMPORT_CAP) {
+                return Err(RichDeclUiError::MissingCapability(crate::ILLUSTRATION_ASSET_IMPORT_CAP.into()));
+            }
+            Ok(())
+        }
         crate::COMIC_LAYOUT_SERVICE => {
             if !granted_caps.iter().any(|c| c == crate::COMIC_LAYOUT_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
@@ -1269,6 +1275,7 @@ mod tests {
             crate::RENDER_CPU_CAP.into(),
             crate::RENDER_BLENDER_CAP.into(),
             crate::ILLUSTRATION_DEPENDENCIES_INSTALL_CAP.into(),
+            crate::ILLUSTRATION_ASSET_IMPORT_CAP.into(),
             crate::ASSET_ILLUSTRATION_READ_CAP.into(),
             crate::SCENE_COMPOSE_CAP.into(),
             crate::SCENE_POSE_CAP.into(),
