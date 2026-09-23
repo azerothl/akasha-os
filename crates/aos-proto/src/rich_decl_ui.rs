@@ -1398,6 +1398,82 @@ mod tests {
         }
     }
 
+    /// Akasha-cm lock: Illustration Studio painted chrome (empty / Beauty / Pose).
+    #[test]
+    fn illustration_studio_cm_chrome_copy_locked() {
+        const EN_SCENE_EMPTY: &str = "No illustration yet.";
+        const FR_SCENE_EMPTY: &str = "Pas encore d'illustration.";
+        const EN_RENDER_SECTION: &str = "Beauty";
+        const FR_RENDER_SECTION: &str = "Beauté";
+        const EN_POSE_SECTION: &str = "Pose";
+        const FR_POSE_SECTION: &str = "Pose";
+        const EN_POSE_JOINT: &str = "Joints";
+        const FR_POSE_JOINT: &str = "Articulations";
+
+        let module_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../modules/illustration-studio/ui/index.json");
+        let raw = std::fs::read_to_string(&module_path).expect("illustration-studio ui");
+        let doc: DeclUiDocument = serde_json::from_str(&raw).expect("parse json");
+        let labels = doc.labels.as_ref().expect("labels");
+        let en = &labels.en;
+        let fr = &labels.fr;
+
+        assert_eq!(en.get("scene_empty").map(String::as_str), Some(EN_SCENE_EMPTY));
+        assert_eq!(fr.get("scene_empty").map(String::as_str), Some(FR_SCENE_EMPTY));
+        assert_eq!(
+            en.get("render_section").map(String::as_str),
+            Some(EN_RENDER_SECTION)
+        );
+        assert_eq!(
+            fr.get("render_section").map(String::as_str),
+            Some(FR_RENDER_SECTION)
+        );
+        assert_eq!(
+            en.get("pose_section").map(String::as_str),
+            Some(EN_POSE_SECTION)
+        );
+        assert_eq!(
+            fr.get("pose_section").map(String::as_str),
+            Some(FR_POSE_SECTION)
+        );
+        assert_eq!(
+            en.get("pose_joint_label").map(String::as_str),
+            Some(EN_POSE_JOINT)
+        );
+        assert_eq!(
+            fr.get("pose_joint_label").map(String::as_str),
+            Some(FR_POSE_JOINT)
+        );
+
+        let shipped = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../share/modules/illustration-studio.aospkg/ui/index.json"),
+        )
+        .expect("illustration-studio shipped ui");
+        assert_eq!(raw, shipped, "module ui must match share aospkg ui");
+
+        const FORBIDDEN: &[&str] = &[
+            "SceneGraph",
+            "IK / FK",
+            "(IK",
+            "(FK",
+            "Beauty pass",
+            "Rendu beauté",
+            "3 · Beauty",
+            "3 · Rendu",
+        ];
+        for (lang, map) in [("en", en), ("fr", fr)] {
+            for (key, value) in map {
+                for token in FORBIDDEN {
+                    assert!(
+                        !value.contains(token),
+                        "{lang}.{key} must not contain `{token}`: {value}"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn render_stub_service_requires_caps() {
         let action = RichAction {

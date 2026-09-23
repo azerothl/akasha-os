@@ -563,10 +563,10 @@ pub(crate) fn illustration_blender_error(language: &str, raw: &str) -> String {
         || lower.contains("renderer pack")
     {
         return if fr {
-            "Le rendu Blender est indisponible : le Renderer Pack, son adaptateur ou le binaire Blender manque. Actualisez le statut du pack dans « Beauty pass », installez les éléments manquants ou choisissez le rendu CPU."
+            "Le rendu Blender est indisponible : le Renderer Pack, son adaptateur ou le binaire Blender manque. Actualisez le statut du pack dans « Beauté », installez les éléments manquants ou choisissez le rendu CPU."
                 .into()
         } else {
-            "Blender rendering is unavailable: the Renderer Pack, its adapter, or the Blender binary is missing. Refresh the pack status in Beauty pass, install the missing component, or choose CPU rendering."
+            "Blender rendering is unavailable: the Renderer Pack, its adapter, or the Blender binary is missing. Refresh the pack status in Beauty, install the missing component, or choose CPU rendering."
                 .into()
         };
     }
