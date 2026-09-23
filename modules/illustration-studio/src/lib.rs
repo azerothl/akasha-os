@@ -28,6 +28,19 @@ struct ProjectEntry {
     work_area: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProjectAsset {
+    project_id: String,
+    id: String,
+    name: String,
+    kind: String,
+    uri: String,
+    #[serde(default)]
+    metadata: Value,
+    #[serde(default)]
+    prompt: Option<String>,
+}
+
 fn default_work_area() -> String {
     "start".into()
 }
@@ -44,6 +57,10 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         }
         "illustration.project.work_area" => project_work_area(args),
         "illustration.project.import_legacy" => project_import_legacy(),
+        "illustration.asset.list" => asset_list(args),
+        "illustration.asset.register" => asset_register(args),
+        "illustration.asset.add" => asset_add(args),
+        "illustration.asset.select" => asset_select(args),
         "illustration.document.load" => document_load(args),
         "illustration.document.save" => document_save(args),
         "scene.get" | "scene.select" | "scene.trs" | "scene.camera" | "scene.light"
@@ -66,6 +83,11 @@ fn project_path(id: &str) -> Result<String, String> {
 fn state_path(id: &str) -> Result<String, String> {
     project_path(id)?;
     Ok(format!("{ROOT}/projects/{id}/state.json"))
+}
+
+fn assets_path(id: &str) -> Result<String, String> {
+    project_path(id)?;
+    Ok(format!("{ROOT}/projects/{id}/assets.json"))
 }
 
 fn read_index() -> Result<ProjectIndex, String> {
@@ -165,7 +187,7 @@ fn project_create(args: &Value) -> Result<Value, String> {
     aos_module_sdk::fs_write(&project_path(&id)?, &yaml)?;
     index.projects.push(entry.clone());
     write_index(&index)?;
-    Ok(json!({ "project_id": id, "title": title, "yaml": yaml, "work_area": entry.work_area }))
+    Ok(json!({ "project_id": id, "title": title, "yaml": yaml, "work_area": entry.work_area, "assets": [] }))
 }
 
 fn project_open(args: &Value) -> Result<Value, String> {
@@ -179,7 +201,7 @@ fn project_open(args: &Value) -> Result<Value, String> {
         item.last_opened = index.sequence;
     }
     write_index(&index)?;
-    Ok(json!({ "project_id": id, "title": entry.title, "yaml": yaml, "work_area": entry.work_area }))
+    Ok(json!({ "project_id": id, "title": entry.title, "yaml": yaml, "work_area": entry.work_area, "assets": read_assets(id)? }))
 }
 
 fn project_save(args: &Value) -> Result<Value, String> {
@@ -214,7 +236,7 @@ fn project_work_area(args: &Value) -> Result<Value, String> {
         .ok_or_else(|| format!("project {id} does not exist"))?;
     entry.work_area = area.into();
     write_index(&index)?;
-    Ok(json!({ "project_id": id, "work_area": area }))
+    Ok(json!({ "project_id": id, "work_area": area, "compose": args.get("compose").and_then(Value::as_bool).unwrap_or(false) }))
 }
 
 fn project_import_legacy() -> Result<Value, String> {
@@ -238,6 +260,131 @@ fn document_save(args: &Value) -> Result<Value, String> {
     let raw = serde_json::to_string_pretty(args).map_err(|e| e.to_string())?;
     aos_module_sdk::fs_write(&state_path(id)?, &raw)?;
     Ok(json!({ "project_id": id, "ok": true }))
+}
+
+fn read_assets(id: &str) -> Result<Vec<ProjectAsset>, String> {
+    known_project(&read_index()?, id)?;
+    let path = assets_path(id)?;
+    match aos_module_sdk::fs_read(&path) {
+        Ok(raw) => serde_json::from_str(&raw).map_err(|e| format!("invalid asset inventory: {e}")),
+        Err(read_error) => {
+            if aos_module_sdk::fs_list(&format!("{ROOT}/projects/{id}/"))?
+                .iter()
+                .any(|existing| existing == &path)
+            {
+                Err(format!("cannot read asset inventory: {read_error}"))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    }
+}
+
+fn write_assets(id: &str, assets: &[ProjectAsset]) -> Result<(), String> {
+    let raw = serde_json::to_string_pretty(assets).map_err(|e| e.to_string())?;
+    aos_module_sdk::fs_write(&assets_path(id)?, &raw).map(|_| ())
+}
+
+fn asset_list(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    Ok(json!({ "project_id": id, "items": read_assets(id)? }))
+}
+
+fn asset_register(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    let name = args.get("name").and_then(Value::as_str).unwrap_or("").trim();
+    let kind = args.get("kind").and_then(Value::as_str).unwrap_or("");
+    let uri = args.get("uri").and_then(Value::as_str).unwrap_or("");
+    if name.is_empty() || name.chars().count() > 120 {
+        return Err("asset name must contain 1–120 characters".into());
+    }
+    if !matches!(kind, "image" | "mesh") {
+        return Err("asset kind must be image or mesh".into());
+    }
+    if !uri.starts_with(&format!("{ROOT}/projects/{id}/assets/"))
+        && !uri.starts_with(&format!("{ROOT}/assets/"))
+    {
+        return Err("asset URI is outside Illustration Studio storage".into());
+    }
+    if uri.contains("..") || uri.contains('\\') {
+        return Err("invalid asset URI".into());
+    }
+    let mut assets = read_assets(id)?;
+    if let Some(existing) = assets.iter().find(|asset| asset.uri == uri) {
+        return Ok(json!({ "project_id": id, "asset": existing, "items": assets }));
+    }
+    let next = assets
+        .iter()
+        .filter_map(|asset| asset.id.strip_prefix("asset-")?.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    let asset = ProjectAsset {
+        project_id: id.to_owned(),
+        id: format!("asset-{next:06}"),
+        name: name.to_owned(),
+        kind: kind.to_owned(),
+        uri: uri.to_owned(),
+        metadata: args.get("metadata").cloned().unwrap_or(Value::Null),
+        prompt: args.get("prompt").and_then(Value::as_str).map(str::to_owned),
+    };
+    assets.push(asset.clone());
+    write_assets(id, &assets)?;
+    Ok(json!({ "project_id": id, "asset": asset, "items": assets }))
+}
+
+fn asset_select(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    let asset_id = args
+        .get("asset_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing asset_id".to_string())?;
+    let asset = read_assets(id)?
+        .into_iter()
+        .find(|asset| asset.id == asset_id)
+        .ok_or_else(|| "asset not found in this project".to_string())?;
+    Ok(json!({ "project_id": id, "asset": asset }))
+}
+
+fn asset_add(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    let asset_id = args
+        .get("asset_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing asset_id".to_string())?;
+    let asset = read_assets(id)?
+        .into_iter()
+        .find(|asset| asset.id == asset_id)
+        .ok_or_else(|| "asset not found in this project".to_string())?;
+    if asset.kind != "mesh" {
+        return Err("convert the image to a GLB before adding it to the 3D scene".into());
+    }
+    let yaml = aos_module_sdk::fs_read(&project_path(id)?)?;
+    let mut project = aos_scene::load_project_yaml(&yaml).map_err(|e| e.to_string())?;
+    if !project.scene.nodes.contains_key("root") {
+        project.scene.nodes.insert("root".into(), aos_scene::SceneNode::empty("root", "Scene"));
+        project.scene.roots.push("root".into());
+    }
+    let mut ordinal = 1u64;
+    let node_id = loop {
+        let candidate = format!("library_asset_{ordinal}");
+        if !project.scene.nodes.contains_key(&candidate) {
+            break candidate;
+        }
+        ordinal = ordinal.saturating_add(1);
+    };
+    aos_scene::insert_mesh_asset(
+        &mut project.scene,
+        "root",
+        &node_id,
+        asset.name,
+        &asset.uri,
+        aos_scene::Transform::default(),
+    )
+    .map_err(|e| e.to_string())?;
+    let yaml = aos_scene::save_project_yaml(&project).map_err(|e| e.to_string())?;
+    aos_module_sdk::fs_write(&project_path(id)?, &yaml)?;
+    Ok(json!({ "project_id": id, "scene_yaml": yaml, "root_id": node_id }))
 }
 
 fn scene_tool(service: &str, args: &Value) -> Result<Value, String> {

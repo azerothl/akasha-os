@@ -70,6 +70,7 @@ pub const UI_V1_WIDGET_KINDS: &[&str] = &[
 
 /// Additional widget kinds introduced with [`UI_CONTRACT_V2`] (lot 1+).
 pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
+    "plain_column",
     "slider",
     "number",
     "progress",
@@ -87,6 +88,7 @@ pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
     "scene_candidate",
     "scene_object_tools",
     "scene_asset_palette",
+    "illustration_asset_library",
     "scene_material_editor",
     "section",
     "text_input",

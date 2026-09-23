@@ -1,5 +1,5 @@
 name: illustration-studio
-version: 0.7.19
+version: 0.7.20
 hash: BUILD_HASH
 permissions:
   required_caps:
@@ -10,6 +10,7 @@ permissions:
     - render.blender
     - illustration.dependencies.install
     - illustration.asset.import
+    - media.generate
     - asset.read:/assets/illustration/**
     - scene.compose
     - scene.pose
@@ -21,6 +22,52 @@ permissions:
     - storyboard.edit
     - tool.invoke:illustration-studio
 tools:
+  - name: illustration.asset.list
+    description: List the current project's assets
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+      required: [project_id]
+  - name: illustration.asset.register
+    description: Register an imported or generated project asset
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        uri:
+          type: string
+        metadata:
+          type: object
+        prompt:
+          type: string
+      required: [project_id, name, kind, uri]
+  - name: illustration.asset.select
+    description: Select a project asset for conversion or preview
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+        asset_id:
+          type: string
+      required: [project_id, asset_id]
+  - name: illustration.asset.add
+    description: Add a library mesh to the active SceneGraph
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+        asset_id:
+          type: string
+      required: [project_id, asset_id]
   - name: illustration.project.list
     description: List managed projects and the legacy import opportunity
     input_schema:

@@ -67,7 +67,7 @@ impl UiApp {
                 if actions.service_action.as_ref().is_some_and(|action| {
                     matches!(
                         action.action_id.as_str(),
-                        "cpu_beauty" | "stub_beauty" | "blender_beauty" | "comic_render"
+                        "cpu_beauty" | "stub_beauty" | "blender_beauty" | "cpu_3d" | "blender_3d" | "comic_render"
                     )
                 }) {
                     let fr = self.prefs.language.starts_with("fr");

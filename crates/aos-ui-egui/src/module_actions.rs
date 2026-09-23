@@ -761,6 +761,151 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::ILLUSTRATION_DEPENDENCIES_INSTALL_SERVICE => {
             crate::illustration_install::dispatch(evt_tx, module, action_id, &input, refresh_binds);
         }
+        "illustration.library.convert" => {
+            let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
+            let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
+            let prompt = input.get("prompt").and_then(Value::as_str).unwrap_or("").to_string();
+            let prefix = format!("/documents/illustrations/projects/{project_id}/assets/");
+            let outcome = if !project_id.starts_with("project-")
+                || !project_id["project-".len()..].chars().all(|c| c.is_ascii_digit())
+                || !image_uri.starts_with(&prefix)
+                || image_uri.contains("..")
+                || image_uri.contains('\\')
+            {
+                Err("Select a generated image from the active project library".into())
+            } else {
+                let image_path = logical_downloads_path(&image_uri);
+                let project_for_conversion = project_id.clone();
+                let conversion = tokio::task::spawn_blocking(move || {
+                    use aos_scene::{MeshAssistBackendId, MeshAssistRequest, SceneGraph, SceneNode};
+                    let project_root = crate::os_open::aos_home()
+                        .join("var/storage/data/documents/illustrations/projects")
+                        .join(&project_for_conversion);
+                    let canonical_root = std::fs::canonicalize(project_root.join("assets")).map_err(|e| e.to_string())?;
+                    let image_path = std::fs::canonicalize(&image_path).map_err(|e| e.to_string())?;
+                    if !image_path.starts_with(&canonical_root) {
+                        return Err("image path escapes the project library".into());
+                    }
+                    let mut scene = SceneGraph {
+                        effects: Vec::new(),
+                        nodes: Default::default(),
+                        roots: vec!["root".into()],
+                        active_camera: None,
+                    };
+                    scene.nodes.insert("root".into(), SceneNode::empty("root", "Asset conversion"));
+                    let request = MeshAssistRequest {
+                        prompt: prompt.clone(),
+                        parent_id: "root".into(),
+                        prefix: "converted_".into(),
+                        backend: MeshAssistBackendId::Neural,
+                        image_path: Some(image_path.to_string_lossy().into_owned()),
+                    };
+                    let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
+                    if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
+                        return Err("TRELLIS returned a mock asset; install the real runtime and model".into());
+                    }
+                    let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
+                    let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
+                    if output_path.extension().and_then(|e| e.to_str()) != Some("glb") {
+                        return Err("TRELLIS output is not a GLB".into());
+                    }
+                    let stamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_err(|e| e.to_string())?
+                        .as_nanos();
+                    let file_name = format!("trellis-{stamp}.glb");
+                    std::fs::copy(output_path, canonical_root.join(&file_name)).map_err(|e| e.to_string())?;
+                    let uri = format!(
+                        "/documents/illustrations/projects/{project_for_conversion}/assets/{file_name}"
+                    );
+                    Ok((uri, prompt))
+                }).await;
+                match conversion {
+                    Ok(Ok((uri, prompt))) => invoke_module_tool_quiet(
+                        bus,
+                        module,
+                        "illustration.asset.register",
+                        serde_json::json!({
+                            "project_id": project_id,
+                            "name": format!("{} · 3D", prompt.chars().take(60).collect::<String>()),
+                            "kind": "mesh",
+                            "uri": uri,
+                            "prompt": prompt,
+                            "metadata": { "provenance": "TRELLIS conversion", "source_image": image_uri },
+                        }),
+                    ).await,
+                    Ok(Err(error)) => Err(error),
+                    Err(error) => Err(error.to_string()),
+                }
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: outcome.is_ok(),
+                result: outcome.clone().unwrap_or(Value::Null),
+                error: outcome.err(),
+                refresh_binds,
+            });
+        }
+        "illustration.library.import" => {
+            let project_id = input
+                .get("project_id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let mut request = input;
+            let mode = request.get("mode").and_then(Value::as_str).unwrap_or("");
+            let source = if mode == "file" {
+                crate::os_open::pick_os_file(
+                    "Import a GLB into the project library",
+                    &[("GLB 3D asset", &["glb"])],
+                    None,
+                )
+                .map(|p| p.to_string_lossy().into_owned())
+            } else {
+                Some(String::new())
+            };
+            let outcome = match source {
+                None => Err("Import cancelled".into()),
+                Some(path) => {
+                    if mode == "file" {
+                        request["path"] = Value::String(path);
+                    }
+                    match tokio::task::spawn_blocking(move || {
+                        crate::illustration_assets::import_to_library(&request)
+                    })
+                    .await
+                    {
+                        Ok(Ok(imported)) => {
+                            let metadata = imported.get("metadata").cloned().unwrap_or(Value::Null);
+                            invoke_module_tool_quiet(
+                                bus,
+                                module,
+                                "illustration.asset.register",
+                                serde_json::json!({
+                                    "project_id": project_id,
+                                    "name": metadata.get("name").and_then(Value::as_str).unwrap_or("3D asset"),
+                                    "kind": "mesh",
+                                    "uri": imported.get("uri"),
+                                    "metadata": metadata,
+                                }),
+                            )
+                            .await
+                        }
+                        Ok(Err(error)) => Err(error),
+                        Err(error) => Err(error.to_string()),
+                    }
+                }
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: outcome.is_ok(),
+                result: outcome.clone().unwrap_or(Value::Null),
+                error: outcome.err(),
+                refresh_binds,
+            });
+        }
         aos_proto::ILLUSTRATION_ASSET_IMPORT_SERVICE => {
             crate::illustration_assets::dispatch(evt_tx, module, action_id, &input, refresh_binds);
         }
@@ -3535,6 +3680,10 @@ async fn run_media_image_generate(
     refresh_binds: Vec<String>,
     subscription_id: Option<String>,
 ) {
+    let library_project_id = input
+        .get("project_id")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let request = match parse_media_generate_request(&input) {
         Ok(r) => r,
         Err(e) => {
@@ -3549,7 +3698,7 @@ async fn run_media_image_generate(
             return;
         }
     };
-    if module == "create" {
+    if module == "create" || module == "illustration-studio" {
         if request.prompt.trim().is_empty() {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),
@@ -3800,7 +3949,9 @@ async fn run_media_image_generate(
 
         match result {
             Ok(response) => {
-                if module_bg == "create" && !media_engine_is_real(&response.engine) {
+                if (module_bg == "create" || module_bg == "illustration-studio")
+                    && !media_engine_is_real(&response.engine)
+                {
                     let message =
                         "Create requires a real image engine; the Preview stub was rejected";
                     if response.path.starts_with("/downloads/") {
@@ -3902,6 +4053,61 @@ async fn run_media_image_generate(
                     )
                     .await;
                 }
+                if module_bg == "illustration-studio" && action_id_bg == "library_generate_image" {
+                    let registration = match library_project_id.as_deref() {
+                        Some(project_id) => copy_image_into_project(
+                            project_id,
+                            &response.path,
+                        )
+                        .map(|uri| {
+                            serde_json::json!({
+                                "project_id": project_id,
+                                "name": prompt.chars().take(60).collect::<String>(),
+                                "kind": "image",
+                                "uri": uri,
+                                "prompt": prompt,
+                                "metadata": {
+                                    "provenance": "Generated in Illustration Studio",
+                                    "model_id": response.model_id,
+                                    "engine": response.engine
+                                }
+                            })
+                        }),
+                        None => Err("Open a project before generating an asset".into()),
+                    };
+                    let registration = match registration {
+                        Ok(args) => invoke_module_tool_quiet(
+                            &bus_bg,
+                            &module_bg,
+                            "illustration.asset.register",
+                            args,
+                        ).await,
+                        Err(error) => Err(error),
+                    };
+                    match registration {
+                        Ok(asset) => {
+                            let _ = evt_tx_bg.send(Evt::ModuleUiServiceDone {
+                                module: module_bg.clone(),
+                                action_id: action_id_bg.clone(),
+                                ok: true,
+                                result: asset,
+                                error: None,
+                                refresh_binds: refresh,
+                            });
+                        }
+                        Err(error) => {
+                            let _ = evt_tx_bg.send(Evt::ModuleUiServiceDone {
+                                module: module_bg.clone(),
+                                action_id: action_id_bg.clone(),
+                                ok: false,
+                                result: Value::Null,
+                                error: Some(format!("Image created but could not be added to the project library: {error}")),
+                                refresh_binds: Vec::new(),
+                            });
+                        }
+                    }
+                    return;
+                }
                 let _ = evt_tx_bg.send(Evt::ModuleUiServiceDone {
                     module: module_bg.clone(),
                     action_id: action_id_bg.clone(),
@@ -3937,6 +4143,49 @@ async fn run_media_image_generate(
             }
         }
     });
+}
+
+fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, String> {
+    let digits = project_id.strip_prefix("project-").unwrap_or("");
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return Err("invalid project id".into());
+    }
+    if !source.starts_with("/downloads/") {
+        return Err("generated image is outside Downloads".into());
+    }
+    let root = crate::os_open::aos_home().join("var/storage/data");
+    let downloads = root.join("downloads");
+    let path = std::fs::canonicalize(logical_downloads_path(source)).map_err(|e| e.to_string())?;
+    let safe_root = std::fs::canonicalize(downloads).map_err(|e| e.to_string())?;
+    if !path.starts_with(&safe_root) {
+        return Err("generated image path escapes Downloads".into());
+    }
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp") {
+        return Err("generated image has an unsupported format".into());
+    }
+    if std::fs::metadata(&path).map_err(|e| e.to_string())?.len() > 100_000_000 {
+        return Err("generated image exceeds 100 MB".into());
+    }
+    let project_root = root.join("documents/illustrations/projects").join(project_id);
+    if !project_root.join("scene.yaml").is_file() {
+        return Err("project is no longer available".into());
+    }
+    let target_dir = project_root.join("assets");
+    std::fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let file_name = format!("generated-{stamp}.{extension}");
+    std::fs::copy(path, target_dir.join(&file_name)).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "/documents/illustrations/projects/{project_id}/assets/{file_name}"
+    ))
 }
 
 fn logical_downloads_path(logical: &str) -> PathBuf {
