@@ -1302,9 +1302,10 @@ mod tests {
             .expect("illustration-studio ui valid");
     }
 
-    /// Layout lock: Create-like split rail — Compose → Edit → Beauty, Camera
-    /// section wired to viewport strip copy, secondary tools collapsible under
-    /// `more_section` (collapsed advanced parent; do not flatten), beauty on stage.
+    /// Layout lock: Create-like split rail — Compose → Edit → Beauty, scene-intent
+    /// tip copy, Camera section wired to viewport strip copy, secondary tools
+    /// collapsible under `more_section` (collapsed advanced parent; do not flatten),
+    /// beauty on stage.
     #[test]
     fn illustration_studio_ui_keeps_compose_edit_beauty_flow() {
         let raw = std::fs::read_to_string(
@@ -1321,17 +1322,15 @@ mod tests {
 
         let rail = panes[0].children.as_ref().expect("rail");
         let rail_labels: Vec<&str> = rail.iter().filter_map(|w| w.label_key.as_deref()).collect();
-        assert!(
-            rail_labels.contains(&"compose_section"),
-            "compose section in left rail"
-        );
-        assert!(
-            rail_labels.contains(&"edit_section"),
-            "edit section in left rail"
-        );
-        assert!(
-            rail_labels.contains(&"render_section"),
-            "beauty/render section in left rail"
+        let section_order: Vec<&str> = rail
+            .iter()
+            .filter_map(|w| w.label_key.as_deref())
+            .filter(|key| matches!(*key, "compose_section" | "edit_section" | "render_section"))
+            .collect();
+        assert_eq!(
+            section_order,
+            ["compose_section", "edit_section", "render_section"],
+            "left rail sections follow Compose → Edit → Beauty"
         );
         assert!(
             rail_labels.contains(&"camera_section")
@@ -1398,15 +1397,25 @@ mod tests {
                 }),
             "beauty output on stage"
         );
-        let tip = doc
-            .labels
-            .as_ref()
-            .and_then(|l| l.en.get("tip_body"))
-            .map(String::as_str)
-            .unwrap_or("");
+        let en_labels = &doc.labels.as_ref().expect("labels").en;
         assert!(
-            tip.contains("Compose") && tip.contains("Beauty"),
-            "ADHD flow tip names Compose then Beauty"
+            en_labels
+                .get("compose_section")
+                .is_some_and(|s| s.contains("Compose")),
+            "compose section title names Compose step"
+        );
+        assert!(
+            en_labels
+                .get("render_section")
+                .is_some_and(|s| s.contains("Beauty")),
+            "render section title names Beauty step"
+        );
+        let tip = en_labels.get("tip_body").map(String::as_str).unwrap_or("");
+        assert!(
+            tip.contains("Describe")
+                && tip.contains("proposes")
+                && tip.contains("choose a candidate"),
+            "ADHD flow tip explains describe → validated proposals → apply before edit/beauty"
         );
     }
 
