@@ -141,7 +141,7 @@ fn draw_mesh(
         .unwrap_or([38, 48, 56, 255]);
     // CPU beauty is a simplified geometry preview. Keep its raster work bounded
     // while preserving the actual mesh silhouette instead of a box proxy.
-    for tri in mesh.indices.chunks_exact(3).take(30_000) {
+    for tri in mesh.indices.as_chunks::<3>().0.iter().take(30_000) {
         let vertex = |index: u32| {
             let start = index as usize * 6;
             mesh.interleaved
