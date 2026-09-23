@@ -339,7 +339,7 @@ Local catalogue package **`illustration-studio` 0.7.3** (versioned independently
 | SceneGraph SoT (ADR 0011) + project YAML + undo/redo + autosave | Real |
 | wgpu **edit viewport** (`scene3d`) | Approximate realtime MeshBox/MeshAsset — **not** RenderService beauty / NPR / Blender |
 | Beauty via RenderService | **Stub** + **CPU** in-tree; optional NPR Sketch/Pencil/Ink (CPU approx) |
-| Blender beauty | Cap + isolation path real; **deterministic mock by default**; real beauty needs opt-in **GPL Renderer Pack** + Blender binary (**not** in the Preview zip / guest module) |
+| Blender beauty | Cap + isolation path real; **mock only when pack present without binary** (or `AOS_BLENDER_MODE=mock`); pack+binary → **real spawn** (Auto fails closed on spawn error — no silent paper mock); needs opt-in **GPL Renderer Pack** + Blender binary (**not** in the Preview zip / guest module) |
 | Compose | **Keyword heuristics** EN/FR → templates — **not** LLM SceneIntent / planners |
 | Pose IK/FK, camera, lights v0, comic/storyboard extensions | Real (bounded) |
 | Neural mesh assist | Cap + stub procedural real; `backend=neural` needs opt-in Model Pack (fixture/mock without weights) |
