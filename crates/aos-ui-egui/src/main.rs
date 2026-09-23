@@ -113,6 +113,7 @@ mod ui_chat_sidebar;
 mod ui_chat_transcript;
 mod ui_chat_workspace;
 mod ui_decl_module;
+mod illustration_install;
 mod ui_feedback;
 mod ui_files;
 mod ui_format;
@@ -3453,6 +3454,9 @@ impl eframe::App for UiApp {
                     subscription_id,
                     job,
                 } => module_event_controller::on_ui_job_update(self, module, subscription_id, job),
+                Evt::ModuleUiServiceProgress { module, message, active } => {
+                    module_event_controller::on_ui_service_progress(self, module, message, active)
+                }
                 Evt::ModuleUiPromptGenerated { module, prompt } => {
                     module_event_controller::on_ui_prompt_generated(self, module, prompt)
                 }

@@ -888,6 +888,11 @@ pub(crate) enum Evt {
         subscription_id: String,
         job: aos_proto::rich_decl_ui::RichJobHandle,
     },
+    ModuleUiServiceProgress {
+        module: String,
+        message: String,
+        active: bool,
+    },
     /// Prompt produced by the Create assistant, published before generation
     /// so the editable enriched-prompt field reflects the actual request.
     ModuleUiPromptGenerated {

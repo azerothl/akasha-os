@@ -46,16 +46,17 @@ entries:
       - media.generate
       - tool.invoke:create
   - name: illustration-studio
-    version: "0.7.7"
+    version: "0.7.8"
     kind: module
     path: share/modules/illustration-studio.aospkg
-    hash: sha256:b0a841366b37480cb4d6b7f3c30c8617b782063d44f9c3a27ea5d709820c610c
+    hash: sha256:1a6b0f96f795cd2b5e6abcc696d60f6fa8466f8cf412bcd9f30c72c60ad04dba
     attested_caps:
       - fs.read:/documents/illustrations/**
       - fs.write:/documents/illustrations/**
       - render.stub
       - render.cpu
       - render.blender
+      - illustration.dependencies.install
       - asset.read:/assets/illustration/**
       - scene.compose
       - scene.pose

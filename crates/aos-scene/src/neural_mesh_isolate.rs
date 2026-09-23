@@ -222,16 +222,24 @@ pub fn resolve_runner_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
             return Some(pb);
         }
     }
+    {
+        let home = std::env::var("AOS_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let runtime = home
+            .join("var/illustration-studio/integrations/trellis/runtime/v0.6.0");
+        let name = if cfg!(windows) { "trellis-cli.exe" } else { "trellis-cli" };
+        if let Some(bin) = find_managed_binary(&runtime, name, 6) {
+            return Some(bin);
+        }
+    }
     if let Some(root) = pack_root {
-        for rel in [
-            "adapters/trellis_gguf.sh",
-            "adapters/trellis_gguf.cmd",
-            "bin/trellis-cli",
-            "bin/trellis-cli.exe",
-            "trellis-cli",
-            "bin/local-ai",
-            "bin/localai",
-        ] {
+        let rels: &[&str] = if cfg!(windows) {
+            &["bin/trellis-cli.exe", "adapters/trellis_gguf.cmd", "trellis-cli.exe", "bin/localai.exe"]
+        } else {
+            &["adapters/trellis_gguf.sh", "bin/trellis-cli", "trellis-cli", "bin/local-ai", "bin/localai"]
+        };
+        for rel in rels {
             let cand = root.join(rel);
             if cand.is_file() {
                 return Some(cand);
@@ -269,10 +277,50 @@ pub fn resolve_weights_dir(pack_root: Option<&Path>) -> Option<PathBuf> {
             return Some(pb);
         }
     }
+    {
+        let home = std::env::var("AOS_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let base = home
+            .join("var/illustration-studio/integrations/trellis/weights");
+        if let Ok(current) = std::fs::read_to_string(base.join("current.txt")) {
+            let quant = current.trim();
+            if quant == "q4" || quant == "q8" {
+                let selected = base.join(quant);
+                if selected.join(".aos-weights-ready").is_file() && weights_dir_ready(&selected) {
+                    return Some(selected);
+                }
+            }
+        }
+        for quant in ["q4", "q8"] {
+            let selected = base.join(quant);
+            if selected.join(".aos-weights-ready").is_file() && weights_dir_ready(&selected) {
+                return Some(selected);
+            }
+        }
+    }
     if let Some(root) = pack_root {
         let cand = root.join("weights");
         if weights_dir_ready(&cand) {
             return Some(cand);
+        }
+    }
+    None
+}
+
+fn find_managed_binary(root: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    if depth == 0 || !root.is_dir() {
+        return None;
+    }
+    for entry in std::fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_file() && path.file_name().is_some_and(|file| file == name) {
+            return Some(path);
+        }
+        if path.is_dir() {
+            if let Some(found) = find_managed_binary(&path, name, depth - 1) {
+                return Some(found);
+            }
         }
     }
     None
