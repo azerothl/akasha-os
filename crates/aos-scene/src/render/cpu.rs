@@ -130,7 +130,7 @@ impl RenderBackend for CpuWireframeBackend {
 
         draw_static_effects(&mut raster, &req.scene.effects);
         if let Some(preset) = &req.preset {
-            for pixel in raster.rgba.chunks_exact_mut(4) {
+            for pixel in raster.rgba.as_chunks_mut::<4>().0 {
                 pixel[0] =
                     (f32::from(pixel[0]) * (1.0 + preset.color_warmth * 0.12)).min(255.0) as u8;
                 pixel[2] = (f32::from(pixel[2]) * (1.0 - preset.color_warmth * 0.1)) as u8;
