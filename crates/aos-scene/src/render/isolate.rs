@@ -169,7 +169,7 @@ pub struct BlenderSpawnResult {
     pub isolated_with_bwrap: bool,
 }
 
-/// Resolve Blender binary: `AOS_BLENDER_BIN` → pack `bin/blender` → PATH `blender`.
+/// Resolve Blender binary: `AOS_BLENDER_BIN` → pack `bin/` → PATH → Windows installs.
 pub fn resolve_blender_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
     if let Ok(p) = std::env::var("AOS_BLENDER_BIN") {
         let pb = PathBuf::from(p.trim());
@@ -186,16 +186,68 @@ pub fn resolve_blender_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
         }
         #[cfg(windows)]
         {
-            let cand = root.join("blender.exe");
-            if cand.is_file() {
-                return Some(cand);
+            for rel in ["bin/blender.exe", "blender.exe"] {
+                let cand = root.join(rel);
+                if cand.is_file() {
+                    return Some(cand);
+                }
             }
         }
     }
-    which_on_path("blender")
+    if let Some(p) = which_on_path("blender") {
+        return Some(p);
+    }
+    #[cfg(windows)]
+    {
+        if let Some(p) = windows_installed_blender() {
+            return Some(p);
+        }
+    }
+    None
 }
 
-/// Resolve Renderer Pack root: `AOS_ILLUSTRATION_RENDERER_PACK` → relative defaults.
+/// Official Windows installs under `Program Files\Blender Foundation\Blender X.Y\`
+/// often omit `blender` from PATH.
+#[cfg(windows)]
+fn windows_installed_blender() -> Option<PathBuf> {
+    let mut roots = Vec::new();
+    for key in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"] {
+        if let Ok(base) = std::env::var(key) {
+            let base = PathBuf::from(base);
+            if key == "LOCALAPPDATA" {
+                roots.push(base.join("Programs"));
+            } else {
+                roots.push(base.join("Blender Foundation"));
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for root in roots {
+        let Ok(rd) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for ent in rd.flatten() {
+            let path = ent.path();
+            let direct = path.join("blender.exe");
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.eq_ignore_ascii_case("blender.exe"))
+                && path.is_file()
+            {
+                found.push(path);
+                continue;
+            }
+            if direct.is_file() {
+                found.push(direct);
+            }
+        }
+    }
+    found.sort();
+    found.pop()
+}
+
+/// Resolve Renderer Pack root: `AOS_ILLUSTRATION_RENDERER_PACK` → AOS_HOME → CWD.
 /// When the env var is set to a non-empty path that is not a directory, returns
 /// `None` (fail-closed) — do not fall through to checkout defaults.
 pub fn resolve_pack_root() -> Option<PathBuf> {
@@ -206,13 +258,24 @@ pub fn resolve_pack_root() -> Option<PathBuf> {
             return pb.is_dir().then_some(pb);
         }
     }
-    // Dev checkout defaults (repo-relative from CWD or crate).
-    let candidates = [
+    let mut candidates = Vec::new();
+    if let Ok(home) = std::env::var("AOS_HOME") {
+        let home = PathBuf::from(home.trim());
+        if !home.as_os_str().is_empty() {
+            candidates.push(home.join("share/illustration-renderer-pack"));
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin_dir) = exe.parent() {
+            candidates.push(bin_dir.join("../share/illustration-renderer-pack"));
+        }
+    }
+    candidates.extend([
         PathBuf::from("share/illustration-renderer-pack"),
         PathBuf::from("../share/illustration-renderer-pack"),
         PathBuf::from("../../share/illustration-renderer-pack"),
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../share/illustration-renderer-pack"),
-    ];
+    ]);
     candidates.into_iter().find(|p| p.is_dir())
 }
 
@@ -385,10 +448,39 @@ fn minimal_child_env(blender_bin: &Path) -> HashMap<String, String> {
     if let Some(parent) = blender_bin.parent() {
         path_dirs.push(parent.to_string_lossy().into_owned());
     }
-    path_dirs.push("/usr/bin".into());
-    path_dirs.push("/bin".into());
-    env.insert("PATH".into(), path_dirs.join(":"));
-    env.insert("HOME".into(), String::new());
+    #[cfg(windows)]
+    {
+        // Windows CreateProcess + Blender need SystemRoot / Win32 PATH.
+        // Using `:` (Unix) here breaks DLL lookup and often makes spawn fail
+        // while DeclUI pack status still reports "ready" (path probe only).
+        let system_root = std::env::var("SystemRoot")
+            .or_else(|_| std::env::var("WINDIR"))
+            .unwrap_or_else(|_| r"C:\Windows".into());
+        path_dirs.push(format!(r"{system_root}\System32"));
+        path_dirs.push(system_root.clone());
+        env.insert("PATH".into(), path_dirs.join(";"));
+        env.insert("SystemRoot".into(), system_root.clone());
+        env.insert("WINDIR".into(), system_root);
+        for key in ["TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA"] {
+            if let Ok(v) = std::env::var(key) {
+                if !v.is_empty() {
+                    env.insert(key.into(), v);
+                }
+            }
+        }
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            env.insert("HOME".into(), profile);
+        } else {
+            env.insert("HOME".into(), String::new());
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        path_dirs.push("/usr/bin".into());
+        path_dirs.push("/bin".into());
+        env.insert("PATH".into(), path_dirs.join(":"));
+        env.insert("HOME".into(), String::new());
+    }
     env.insert("LANG".into(), "C".into());
     // Discourage network-touching Python in adapter (honor if possible).
     env.insert("PYTHONNOUSERSITE".into(), "1".into());
@@ -576,6 +668,25 @@ mod tests {
         let rows = isolation_matrix();
         assert!(rows.iter().any(|r| r.status.contains("gap")));
         assert!(rows.iter().any(|r| r.status.contains("fail-closed")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_child_env_uses_semicolon_path_and_systemroot() {
+        let env = minimal_child_env(Path::new(
+            r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
+        ));
+        let path = env.get("PATH").expect("PATH");
+        assert!(
+            path.contains(';'),
+            "Windows PATH must use ';', got {path:?}"
+        );
+        assert!(
+            !path.contains("/usr/bin"),
+            "Unix PATH fragments must not appear on Windows: {path:?}"
+        );
+        assert!(env.contains_key("SystemRoot"));
+        assert!(env.contains_key("WINDIR"));
     }
 
     #[test]

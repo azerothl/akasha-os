@@ -145,7 +145,13 @@ impl BlenderRenderBackend {
             timeout: self.timeout,
         };
 
-        let result = spawn_isolated(&plan).map_err(RenderError::Isolation)?;
+        let result = match spawn_isolated(&plan) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = fs::remove_dir_all(&work_dir);
+                return Err(RenderError::Isolation(e));
+            }
+        };
         if result.exit_code != 0 {
             let _ = fs::remove_dir_all(&work_dir);
             return Err(RenderError::Isolation(format!(

@@ -69,13 +69,15 @@ foreach ($binary in $binaries) {
     $requiredFiles += "bin\$binary"
 }
 
-foreach ($module in @("notes", "ext-rt", "canvas", "create")) {
+foreach ($module in @("notes", "ext-rt", "canvas", "create", "illustration-studio")) {
     $requiredFiles += "share\modules\$module.aospkg\manifest.yaml"
     $requiredFiles += "share\modules\$module.aospkg\module.wasm"
-    if ($module -eq "create") {
-        $requiredFiles += "share\modules\create.aospkg\ui\index.json"
+    if ($module -eq "create" -or $module -eq "illustration-studio") {
+        $requiredFiles += "share\modules\$module.aospkg\ui\index.json"
     }
 }
+$requiredFiles += "share\assets\illustration\primitives\pack.yaml"
+$requiredFiles += "share\illustration-renderer-pack\adapters\akasha_beauty.py"
 
 $profilePath = Join-Path $resolvedOut "share\preview-profile.yaml"
 $previewProfile = "standard"
@@ -96,7 +98,7 @@ foreach ($relativePath in $requiredFiles) {
 
 $catalogueText = Get-Content -LiteralPath `
     (Join-Path $resolvedOut "share\modules\catalogue.yaml") -Raw
-$modulesToVerify = @("notes", "ext-rt", "canvas", "create")
+$modulesToVerify = @("notes", "ext-rt", "canvas", "create", "illustration-studio")
 if ($previewProfile -ne "minimal") {
     $modulesToVerify += "tasks"
 }
