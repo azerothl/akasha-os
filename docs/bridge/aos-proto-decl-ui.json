@@ -344,6 +344,13 @@
                 "null"
               ]
             },
+            "read_only": {
+              "description": "Render a `text_input` as a display-only value while preserving its form-field styling.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "refresh_binds": {
               "description": "Bind tools to re-fetch after a successful invoke from this widget.",
               "items": {
@@ -1119,6 +1126,13 @@
                 "null"
               ]
             },
+            "read_only": {
+              "description": "Render a `text_input` as a display-only value while preserving its form-field styling.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "refresh_binds": {
               "description": "Bind tools to re-fetch after a successful invoke from this widget.",
               "items": {
@@ -1469,6 +1483,13 @@
         },
         "primary": {
           "description": "Accent primary styling for painted `button` chrome.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "read_only": {
+          "description": "Render a `text_input` as a display-only value while preserving its form-field styling.",
           "type": [
             "boolean",
             "null"
@@ -2030,6 +2051,13 @@
             },
             "primary": {
               "description": "Accent primary styling for painted `button` chrome.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "read_only": {
+              "description": "Render a `text_input` as a display-only value while preserving its form-field styling.",
               "type": [
                 "boolean",
                 "null"

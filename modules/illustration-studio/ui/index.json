@@ -7,7 +7,7 @@
     "fallback": "en",
     "en": {
       "app_title": "Illustration Studio",
-      "tip_body": "Compose uses keyword heuristics, not a language model. Edit in the viewport, then render a beauty pass.",
+      "tip_body": "Compose uses keyword heuristics, not a language model. Edit in the viewport, then render Beauty.",
       "compose_section": "1 · Compose",
       "prompt_label": "Prompt",
       "compose_label": "Compose scene",
@@ -119,7 +119,7 @@
     },
     "fr": {
       "app_title": "Studio Illustration",
-      "tip_body": "La composition repose sur des heuristiques de mots-clés, pas sur un modèle de langue. Éditez dans le viewport, puis lancez un rendu beauté.",
+      "tip_body": "Compose : heuristiques mots-clés, pas de LLM. Éditez dans le viewport, puis lancez Beauté.",
       "compose_section": "1 · Composer",
       "prompt_label": "Invite",
       "compose_label": "Composer la scène",
