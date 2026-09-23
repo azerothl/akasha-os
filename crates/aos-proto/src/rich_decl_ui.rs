@@ -721,7 +721,7 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-        crate::SCENE_GET_SERVICE => {
+        crate::SCENE_GET_SERVICE | "scene.diagnostics" => {
             // Read snapshot — require illustrations read or edit.
             if !granted_caps
                 .iter()
@@ -737,7 +737,8 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
         | crate::SCENE_TRS_SERVICE
         | crate::SCENE_CAMERA_SERVICE
         | crate::SCENE_LIGHT_SERVICE
-        | crate::SCENE_APPLY_SERVICE => {
+        | crate::SCENE_APPLY_SERVICE
+        | "scene.history" => {
             if !granted_caps.iter().any(|c| c == crate::SCENE_EDIT_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
                     crate::SCENE_EDIT_CAP.into(),

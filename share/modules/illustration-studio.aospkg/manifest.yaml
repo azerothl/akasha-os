@@ -1,6 +1,6 @@
 name: illustration-studio
-version: 0.7.17
-hash: 14757e7ad238f89728bc98d40dfa31cca8e42bb7408f26a6d647b4236471fb04
+version: 0.7.18
+hash: c1dd7a6e43b14bb50d8b54ca3ae014f99c97d9356eea464a3899e510cd1b09a1
 permissions:
   required_caps:
     - fs.read:/documents/illustrations/**
@@ -200,6 +200,27 @@ tools:
         scene_yaml:
           type: string
       required: [op]
+  - name: scene.history
+    description: Save and restore scene versions and variants
+    input_schema:
+      type: object
+      properties:
+        op:
+          type: string
+        name:
+          type: string
+        version_id:
+          type: number
+        scene_yaml:
+          type: string
+      required: [op]
+  - name: scene.diagnostics
+    description: Report scene counts and missing imported assets
+    input_schema:
+      type: object
+      properties:
+        scene_yaml:
+          type: string
   - name: illustration.export_png
     description: Export the latest illustration PNG via native file picker
     input_schema:

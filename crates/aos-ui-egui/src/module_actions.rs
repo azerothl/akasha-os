@@ -656,6 +656,12 @@ pub(crate) async fn run_decl_service_action(
         "scene.animation" => {
             run_scene_animation(evt_tx, module, action_id, input, refresh_binds);
         }
+        "scene.history" => {
+            run_scene_history(evt_tx, module, action_id, input, refresh_binds);
+        }
+        "scene.diagnostics" => {
+            run_scene_diagnostics(evt_tx, module, action_id, input, refresh_binds);
+        }
         aos_proto::SCENE_GET_SERVICE
         | aos_proto::SCENE_SELECT_SERVICE
         | aos_proto::SCENE_TRS_SERVICE
@@ -2376,6 +2382,22 @@ fn run_comic_layout(
             });
             return;
         }
+        if let Ok(page) = comic.page_mut(page_id) {
+            if let Some(panel) = page.panels.iter_mut().find(|panel| panel.id == panel_id) {
+                panel.caption = input
+                    .get("caption")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+                panel.source_frame_id = input
+                    .get("frame_id")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+            }
+        }
         let yaml = match save_comic_yaml(&comic) {
             Ok(y) => y,
             Err(e) => {
@@ -3212,6 +3234,110 @@ fn animation_play_flags(
         std::sync::Mutex<std::collections::HashMap<String, Arc<std::sync::atomic::AtomicBool>>>,
     > = std::sync::OnceLock::new();
     FLAGS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+fn run_scene_history(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    let result = load_illustration_project(&input).and_then(|mut project| {
+        let operation = input.get("op").and_then(Value::as_str).unwrap_or("");
+        let label = input.get("name").and_then(Value::as_str).unwrap_or("");
+        let mut history = project.history.take().unwrap_or_default();
+        let mut version_id = None;
+        match operation {
+            "save_version" => version_id = Some(history.save_version(&project.scene, label).map_err(|e| e.to_string())?),
+            "restore_version" => {
+                let id = input.get("version_id").and_then(Value::as_f64).unwrap_or(0.0);
+                if !id.is_finite() || id < 1.0 || id.fract() != 0.0 { return Err("invalid version id".into()); }
+                project.scene = history.restore_version(id as u32).map_err(|e| e.to_string())?;
+            }
+            "save_variant" => history.save_variant(&project.scene, label).map_err(|e| e.to_string())?,
+            "apply_variant" => project.scene = history.apply_variant(label).map_err(|e| e.to_string())?,
+            _ => return Err("unknown history operation".into()),
+        }
+        if project.animation.as_ref().is_some_and(|a| a.validate(&project.scene).is_err()) { project.animation = None; }
+        if project.selected_id.as_ref().is_some_and(|id| !project.scene.nodes.contains_key(id)) { project.selected_id = None; }
+        let summary = format!("{} versions · {} variants{}", history.versions.len(), history.variants.len(),
+            history.active_variant.as_ref().map(|name| format!(" · active: {name}")).unwrap_or_default());
+        project.history = Some(history);
+        let yaml = aos_scene::save_project_yaml(&project).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({"scene_yaml": yaml, "history_summary": summary, "version_id": version_id}))
+    });
+    let (ok, payload, error) = match result {
+        Ok(value) => (true, value, None),
+        Err(e) => (false, Value::Null, Some(e)),
+    };
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.into(),
+        action_id: action_id.into(),
+        ok,
+        result: payload,
+        error,
+        refresh_binds,
+    });
+}
+
+fn run_scene_diagnostics(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    action_id: &str,
+    input: Value,
+    refresh_binds: Vec<String>,
+) {
+    let result = load_illustration_project(&input).map(|project| {
+        let roots = aos_scene::default_mesh_search_roots();
+        let search: Vec<_> = roots.iter().map(|path| path.as_path()).collect();
+        let mut missing = Vec::new();
+        let mut mesh_count = 0;
+        for node in project.scene.nodes.values() {
+            if node.kind == aos_scene::NodeKind::MeshAsset {
+                mesh_count += 1;
+                if node
+                    .mesh_uri
+                    .as_deref()
+                    .and_then(|uri| aos_scene::resolve_mesh_uri(uri, &search))
+                    .is_none()
+                {
+                    missing.push(node.name.clone());
+                }
+            }
+        }
+        missing.sort();
+        let summary = format!(
+            "{} nodes · {} imported meshes · {} effects · {} shots · {} missing assets{}",
+            project.scene.nodes.len(),
+            mesh_count,
+            project.scene.effects.len(),
+            project
+                .storyboard
+                .as_ref()
+                .map(|s| s.frames.len())
+                .unwrap_or(0),
+            missing.len(),
+            if missing.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", missing.join(", "))
+            }
+        );
+        serde_json::json!({"diagnostics": summary})
+    });
+    let (ok, payload, error) = match result {
+        Ok(value) => (true, value, None),
+        Err(e) => (false, Value::Null, Some(e)),
+    };
+    let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+        module: module.into(),
+        action_id: action_id.into(),
+        ok,
+        result: payload,
+        error,
+        refresh_binds,
+    });
 }
 
 fn run_scene_animation(

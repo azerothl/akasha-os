@@ -29,6 +29,8 @@ pub struct ProjectFile {
     pub render_preset: Option<crate::fx::RenderPreset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animation: Option<crate::animation::AnimationState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history: Option<crate::history::ProjectHistory>,
 }
 
 fn adr_default() -> String {
@@ -37,6 +39,8 @@ fn adr_default() -> String {
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
+    #[error(transparent)]
+    History(#[from] crate::history::HistoryError),
     #[error(transparent)]
     Animation(#[from] crate::animation::AnimationError),
     #[error("invalid render preset")]
@@ -62,6 +66,7 @@ impl ProjectFile {
             storyboard: None,
             render_preset: None,
             animation: None,
+            history: None,
         }
     }
 
@@ -75,6 +80,7 @@ impl ProjectFile {
             storyboard: Some(storyboard),
             render_preset: None,
             animation: None,
+            history: None,
         }
     }
 
@@ -95,6 +101,9 @@ impl ProjectFile {
         }
         if let Some(animation) = &self.animation {
             animation.validate(&self.scene)?;
+        }
+        if let Some(history) = &self.history {
+            history.validate()?;
         }
         Ok(())
     }
@@ -133,6 +142,19 @@ mod tests {
         assert!((box_t.y - 0.675).abs() < 1e-5);
         assert!(loaded.scene.nodes.contains_key("ground"));
         assert!(loaded.scene.nodes.contains_key("humanoid"));
+    }
+
+    #[test]
+    fn history_round_trip_preserves_versions_and_variants() {
+        let mut project = ProjectFile::new(SceneGraph::demo_scene());
+        let mut history = crate::history::ProjectHistory::default();
+        let id = history.save_version(&project.scene, "First draft").unwrap();
+        history.save_variant(&project.scene, "Alternate").unwrap();
+        project.history = Some(history);
+        let loaded = load_project_yaml(&save_project_yaml(&project).unwrap()).unwrap();
+        let loaded_history = loaded.history.unwrap();
+        assert_eq!(loaded_history.restore_version(id).unwrap(), project.scene);
+        assert_eq!(loaded_history.variants[0].name, "Alternate");
     }
 
     #[test]

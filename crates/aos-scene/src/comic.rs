@@ -168,6 +168,8 @@ pub struct ComicPanel {
     /// Optional camera variant label (`default`, `orbit_left`, …).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera_variant: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_frame_id: Option<String>,
 }
 
 /// One comic page.
@@ -349,6 +351,7 @@ pub fn apply_comic_layout(
             scene_yaml: yaml,
             caption: None,
             camera_variant: Some(variant.into()),
+            source_frame_id: None,
         });
     }
     let page = ComicPage {
@@ -705,5 +708,22 @@ mod tests {
         bind_panel_scene(&mut comic, "page_1", "panel_1", &other).unwrap();
         let loaded = load_project_yaml(&comic.pages[0].panels[0].scene_yaml).unwrap();
         assert!((loaded.scene.nodes["box"].transform.translation.y - 1.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn panel_caption_and_storyboard_link_round_trip() {
+        let scene = SceneGraph::demo_scene();
+        let mut comic = apply_comic_layout(ComicLayoutId::Single, &scene, 200, 200).unwrap();
+        comic.pages[0].panels[0].caption = Some("The library".into());
+        comic.pages[0].panels[0].source_frame_id = Some("frame_1".into());
+        let loaded = load_comic_yaml(&save_comic_yaml(&comic).unwrap()).unwrap();
+        assert_eq!(
+            loaded.pages[0].panels[0].caption.as_deref(),
+            Some("The library")
+        );
+        assert_eq!(
+            loaded.pages[0].panels[0].source_frame_id.as_deref(),
+            Some("frame_1")
+        );
     }
 }
