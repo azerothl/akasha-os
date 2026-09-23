@@ -635,6 +635,14 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        "illustration.project.import_yaml" => {
+            if !granted_caps.iter().any(|c| c == crate::ILLUSTRATION_FS_WRITE_CAP) {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ILLUSTRATION_FS_WRITE_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         crate::RENDER_STUB_SERVICE => {
             if !granted_caps.iter().any(|c| c == crate::RENDER_STUB_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
@@ -1306,9 +1314,14 @@ mod tests {
         let doc = DeclUiDocument::parse_json_with_contract(raw.as_bytes(), UI_CONTRACT_V2)
             .expect("parse");
         let tools = [
+            "illustration.project.list",
+            "illustration.project.create",
+            "illustration.project.open",
+            "illustration.project.close",
+            "illustration.project.work_area",
+            "illustration.project.import_legacy",
             "illustration.project.load",
             "illustration.project.save",
-            "illustration.project.ensure",
             "illustration.document.load",
             "illustration.document.save",
         ];
@@ -1346,8 +1359,12 @@ mod tests {
         )
         .expect("illustration-studio ui");
         let doc: DeclUiDocument = serde_json::from_str(&raw).expect("parse json");
-        assert_eq!(doc.root.kind, "split");
-        let panes = doc.root.children.as_ref().expect("split children");
+        assert_eq!(doc.root.kind, "column");
+        let screens = doc.root.children.as_ref().expect("project screens");
+        assert_eq!(screens.len(), 2);
+        assert!(screens[0].children.as_ref().is_some_and(|items| items.iter().any(|w| w.kind == "table")));
+        assert_eq!(screens[1].kind, "split");
+        let panes = screens[1].children.as_ref().expect("studio split children");
         assert_eq!(panes.len(), 2);
         assert_eq!(panes[0].kind, "scroll");
         assert_eq!(panes[1].kind, "split", "stage is edit|beauty split");

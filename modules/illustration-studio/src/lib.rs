@@ -1,86 +1,105 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Illustration Studio — SceneGraph project save/load (YAML).
-//!
-//! Host owns `scene3d` orbit/select/TRS. This guest only persists project YAML
-//! under `/documents/illustrations/**` and seeds a Preview starter SceneGraph.
+//! Managed Illustration Studio projects. SceneGraph YAML remains the scene source of truth.
+#![allow(clippy::not_unsafe_ptr_arg_deref)] // Generated WASM ABI export in aos_module_sdk.
 
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
-const PROJECT_PATH: &str = "/documents/illustrations/project.scene.yaml";
-const STATE_PATH: &str = "/documents/illustrations/state.json";
+const ROOT: &str = "/documents/illustrations";
+const INDEX_PATH: &str = "/documents/illustrations/projects/index.json";
+const LEGACY_PATH: &str = "/documents/illustrations/project.scene.yaml";
 
-/// Preview starter (ADR 0011: Y-up, quat xyzw, metres). Mirrors
-/// `SceneGraph::demo_scene` articulated humanoid (Empty joints + MeshBox visuals).
-const DEMO_PROJECT_YAML: &str = include_str!("../demo.scene.yaml");
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct ProjectIndex {
+    #[serde(default)]
+    next_id: u64,
+    #[serde(default)]
+    sequence: u64,
+    #[serde(default)]
+    projects: Vec<ProjectEntry>,
+}
 
-fn handle(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProjectEntry {
+    id: String,
+    title: String,
+    last_opened: u64,
+    #[serde(default = "default_work_area")]
+    work_area: String,
+}
+
+fn default_work_area() -> String {
+    "start".into()
+}
+
+fn handle(tool: &str, args: &Value) -> Result<Value, String> {
     match tool {
-        "illustration.project.load" => project_load(),
+        "illustration.project.list" => project_list(),
+        "illustration.project.create" => project_create(args),
+        "illustration.project.open" | "illustration.project.load" => project_open(args),
         "illustration.project.save" => project_save(args),
-        "illustration.project.ensure" => project_ensure(),
-        "illustration.document.load" => document_load(),
+        "illustration.project.close" => {
+            project_save(args)?;
+            Ok(json!({ "closed": true }))
+        }
+        "illustration.project.work_area" => project_work_area(args),
+        "illustration.project.import_legacy" => project_import_legacy(),
+        "illustration.document.load" => document_load(args),
         "illustration.document.save" => document_save(args),
-        // Agent co-edit surface (host_call → platform scene_host).
-        "scene.get"
-        | "scene.select"
-        | "scene.trs"
-        | "scene.camera"
-        | "scene.light"
-        | "scene.apply"
-        | "scene.lock"
-        | "scene.unlock"
-        | "scene.locks"
-        | "scene.compose"
-        | "scene.pose"
-        | "scene.instantiate" => scene_tool(tool, args),
+        "scene.get" | "scene.select" | "scene.trs" | "scene.camera" | "scene.light"
+        | "scene.apply" | "scene.lock" | "scene.unlock" | "scene.locks"
+        | "scene.compose" | "scene.pose" | "scene.instantiate" => scene_tool(tool, args),
         _ => Err(format!("unknown tool: {tool}")),
     }
 }
 
-/// Ensure `scene_yaml` is present (from args or project file) then host_call.
-fn scene_tool(service: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let mut payload = args.clone();
-    if payload.get("scene_yaml").and_then(|v| v.as_str()).unwrap_or("").is_empty()
-        && service != "scene.compose"
+fn project_path(id: &str) -> Result<String, String> {
+    if !id.starts_with("project-")
+        || !id["project-".len()..].chars().all(|c| c.is_ascii_digit())
+        || id.len() > 32
     {
-        let yaml = project_ensure()?["yaml"]
-            .as_str()
-            .ok_or_else(|| "project ensure returned no yaml".to_string())?
-            .to_string();
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert("scene_yaml".into(), json!(yaml));
-        }
+        return Err("invalid project id".into());
     }
-    let result = aos_module_sdk::call(service, &payload)?;
-    // Persist when the host returned an updated scene (audit-friendly SoT on disk).
-    if let Some(yaml) = result.get("scene_yaml").and_then(|v| v.as_str()) {
-        if !yaml.trim().is_empty() && service != "scene.get" && service != "scene.locks" {
-            validate_project_yaml(yaml)?;
-            let _ = aos_module_sdk::fs_write(PROJECT_PATH, yaml)?;
-        }
-    }
-    Ok(result)
+    Ok(format!("{ROOT}/projects/{id}/scene.yaml"))
 }
 
-fn project_ensure() -> Result<serde_json::Value, String> {
-    match aos_module_sdk::fs_read(PROJECT_PATH) {
-        Ok(yaml) => {
-            validate_project_yaml(&yaml)?;
-            Ok(json!({ "path": PROJECT_PATH, "yaml": yaml }))
-        }
+fn state_path(id: &str) -> Result<String, String> {
+    project_path(id)?;
+    Ok(format!("{ROOT}/projects/{id}/state.json"))
+}
+
+fn read_index() -> Result<ProjectIndex, String> {
+    match aos_module_sdk::fs_read(INDEX_PATH) {
+        Ok(raw) => serde_json::from_str(&raw).map_err(|e| format!("invalid project index: {e}")),
         Err(read_error) => {
-            let paths = aos_module_sdk::fs_list("/documents/illustrations/")
-                .map_err(|list_error| format!("cannot inspect illustration project: {list_error}; read failed: {read_error}"))?;
-            if paths.iter().any(|path| path == PROJECT_PATH) {
-                return Err(format!("cannot read existing project {PROJECT_PATH}: {read_error}"));
+            let paths = aos_module_sdk::fs_list(&format!("{ROOT}/projects/"))?;
+            if paths.iter().any(|p| p == INDEX_PATH) {
+                Err(format!("cannot read project index: {read_error}"))
+            } else {
+                Ok(ProjectIndex::default())
             }
-            validate_project_yaml(DEMO_PROJECT_YAML)?;
-            aos_module_sdk::fs_write(PROJECT_PATH, DEMO_PROJECT_YAML)?;
-            let yaml = aos_module_sdk::fs_read(PROJECT_PATH)?;
-            validate_project_yaml(&yaml)?;
-            Ok(json!({ "path": PROJECT_PATH, "yaml": yaml }))
         }
     }
+}
+
+fn write_index(index: &ProjectIndex) -> Result<(), String> {
+    let raw = serde_json::to_string_pretty(index).map_err(|e| e.to_string())?;
+    aos_module_sdk::fs_write(INDEX_PATH, &raw).map(|_| ())
+}
+
+fn required_project_id(args: &Value) -> Result<&str, String> {
+    args.get("project_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| "open a project first".into())
+}
+
+fn known_project<'a>(index: &'a ProjectIndex, id: &str) -> Result<&'a ProjectEntry, String> {
+    index
+        .projects
+        .iter()
+        .find(|entry| entry.id == id)
+        .ok_or_else(|| format!("project {id} does not exist"))
 }
 
 fn validate_project_yaml(yaml: &str) -> Result<(), String> {
@@ -89,39 +108,158 @@ fn validate_project_yaml(yaml: &str) -> Result<(), String> {
         .map_err(|error| format!("invalid illustration project yaml: {error}"))
 }
 
-fn project_load() -> Result<serde_json::Value, String> {
-    project_ensure()
+fn empty_project_yaml() -> Result<String, String> {
+    let scene = aos_scene::SceneGraph {
+        effects: Vec::new(),
+        nodes: Default::default(),
+        roots: Vec::new(),
+        active_camera: None,
+    };
+    aos_scene::save_project_yaml(&aos_scene::ProjectFile::new(scene))
+        .map_err(|e| e.to_string())
 }
 
-fn project_save(args: &serde_json::Value) -> Result<serde_json::Value, String> {
+fn project_list() -> Result<Value, String> {
+    let mut entries = read_index()?.projects;
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.last_opened));
+    let legacy_available = aos_module_sdk::fs_list(&format!("{ROOT}/"))?
+        .iter()
+        .any(|path| path == LEGACY_PATH);
+    Ok(json!({ "projects": entries, "legacy_available": legacy_available }))
+}
+
+fn project_create(args: &Value) -> Result<Value, String> {
+    let title = args
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    if title.is_empty() || title.chars().count() > 80 {
+        return Err("project name must contain 1–80 characters".into());
+    }
+    let yaml = match args.get("yaml").and_then(Value::as_str) {
+        Some(yaml) => {
+            validate_project_yaml(yaml)?;
+            yaml.to_owned()
+        }
+        None => empty_project_yaml()?,
+    };
+    let mut index = read_index()?;
+    let existing = aos_module_sdk::fs_list(&format!("{ROOT}/projects/"))?;
+    let id = loop {
+        index.next_id = index.next_id.saturating_add(1);
+        let candidate = format!("project-{:06}", index.next_id);
+        if !index.projects.iter().any(|p| p.id == candidate)
+            && !existing.iter().any(|p| p == &project_path(&candidate).unwrap())
+        {
+            break candidate;
+        }
+    };
+    index.sequence = index.sequence.saturating_add(1);
+    let entry = ProjectEntry {
+        id: id.clone(),
+        title: title.to_owned(),
+        last_opened: index.sequence,
+        work_area: default_work_area(),
+    };
+    aos_module_sdk::fs_write(&project_path(&id)?, &yaml)?;
+    index.projects.push(entry.clone());
+    write_index(&index)?;
+    Ok(json!({ "project_id": id, "title": title, "yaml": yaml, "work_area": entry.work_area }))
+}
+
+fn project_open(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    let mut index = read_index()?;
+    let entry = known_project(&index, id)?.clone();
+    let yaml = aos_module_sdk::fs_read(&project_path(id)?)?;
+    validate_project_yaml(&yaml)?;
+    index.sequence = index.sequence.saturating_add(1);
+    if let Some(item) = index.projects.iter_mut().find(|p| p.id == id) {
+        item.last_opened = index.sequence;
+    }
+    write_index(&index)?;
+    Ok(json!({ "project_id": id, "title": entry.title, "yaml": yaml, "work_area": entry.work_area }))
+}
+
+fn project_save(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    known_project(&read_index()?, id)?;
     let yaml = args
         .get("yaml")
-        .and_then(|v| v.as_str())
-        .or_else(|| args.get("scene_yaml").and_then(|v| v.as_str()))
-        .ok_or_else(|| "missing yaml".to_string())?;
-    if yaml.trim().is_empty() {
-        return Err("empty yaml".into());
-    }
+        .and_then(Value::as_str)
+        .or_else(|| args.get("scene_yaml").and_then(Value::as_str))
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "missing project yaml".to_string())?;
     validate_project_yaml(yaml)?;
-    let _ = aos_module_sdk::fs_write(PROJECT_PATH, yaml)?;
-    Ok(json!({ "path": PROJECT_PATH, "ok": true }))
+    let path = project_path(id)?;
+    aos_module_sdk::fs_write(&path, yaml)?;
+    Ok(json!({ "project_id": id, "path": path, "ok": true }))
 }
 
-fn document_load() -> Result<serde_json::Value, String> {
-    match aos_module_sdk::fs_read(STATE_PATH) {
-        Ok(raw) => {
-            let v: serde_json::Value =
-                serde_json::from_str(&raw).unwrap_or_else(|_| json!({ "selected_id": "box" }));
-            Ok(v)
-        }
-        Err(_) => Ok(json!({ "selected_id": "box" })),
+fn project_work_area(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    let area = args
+        .get("work_area")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing work_area".to_string())?;
+    if !matches!(area, "start" | "scene3d" | "illustration" | "comic" | "library" | "final") {
+        return Err("unknown work area".into());
+    }
+    let mut index = read_index()?;
+    let entry = index
+        .projects
+        .iter_mut()
+        .find(|entry| entry.id == id)
+        .ok_or_else(|| format!("project {id} does not exist"))?;
+    entry.work_area = area.into();
+    write_index(&index)?;
+    Ok(json!({ "project_id": id, "work_area": area }))
+}
+
+fn project_import_legacy() -> Result<Value, String> {
+    let yaml = aos_module_sdk::fs_read(LEGACY_PATH)?;
+    validate_project_yaml(&yaml)?;
+    project_create(&json!({ "title": "Imported legacy project", "yaml": yaml }))
+}
+
+fn document_load(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    known_project(&read_index()?, id)?;
+    match aos_module_sdk::fs_read(&state_path(id)?) {
+        Ok(raw) => serde_json::from_str(&raw).map_err(|e| format!("invalid project state: {e}")),
+        Err(_) => Ok(json!({})),
     }
 }
 
-fn document_save(args: &serde_json::Value) -> Result<serde_json::Value, String> {
+fn document_save(args: &Value) -> Result<Value, String> {
+    let id = required_project_id(args)?;
+    known_project(&read_index()?, id)?;
     let raw = serde_json::to_string_pretty(args).map_err(|e| e.to_string())?;
-    let _ = aos_module_sdk::fs_write(STATE_PATH, &raw)?;
-    Ok(json!({ "ok": true }))
+    aos_module_sdk::fs_write(&state_path(id)?, &raw)?;
+    Ok(json!({ "project_id": id, "ok": true }))
+}
+
+fn scene_tool(service: &str, args: &Value) -> Result<Value, String> {
+    let mut payload = args.clone();
+    let id = required_project_id(args)?;
+    known_project(&read_index()?, id)?;
+    if payload.get("scene_yaml").and_then(Value::as_str).unwrap_or("").is_empty()
+        && service != "scene.compose"
+    {
+        let yaml = aos_module_sdk::fs_read(&project_path(id)?)?;
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("scene_yaml".into(), json!(yaml));
+        }
+    }
+    let result = aos_module_sdk::call(service, &payload)?;
+    if let Some(yaml) = result.get("scene_yaml").and_then(Value::as_str) {
+        if !yaml.trim().is_empty() && service != "scene.get" && service != "scene.locks" {
+            validate_project_yaml(yaml)?;
+            aos_module_sdk::fs_write(&project_path(id)?, yaml)?;
+        }
+    }
+    Ok(result)
 }
 
 aos_module_sdk::export_module!(handle);
@@ -129,23 +267,15 @@ aos_module_sdk::export_module!(handle);
 #[cfg(test)]
 mod tests {
     #[test]
-    fn demo_yaml_mentions_adr_and_starter_nodes() {
-        assert!(super::DEMO_PROJECT_YAML.contains("ADR-0011"));
-        assert!(super::DEMO_PROJECT_YAML.contains("mesh_box"));
-        assert!(super::DEMO_PROJECT_YAML.contains("humanoid"));
-        assert!(super::DEMO_PROJECT_YAML.contains("pelvis"));
-        assert!(super::DEMO_PROJECT_YAML.contains("upper_arm_r"));
-        assert!(super::DEMO_PROJECT_YAML.contains("ground"));
-        assert!(super::DEMO_PROJECT_YAML.contains("pedestal"));
+    fn empty_project_is_valid_and_contains_no_demo_assets() {
+        let yaml = super::empty_project_yaml().unwrap();
+        let project = aos_scene::load_project_yaml(&yaml).unwrap();
+        assert!(project.scene.nodes.is_empty());
     }
 
     #[test]
-    fn demo_project_yaml_is_valid() {
-        super::validate_project_yaml(super::DEMO_PROJECT_YAML).unwrap();
-    }
-
-    #[test]
-    fn malformed_project_yaml_is_rejected() {
-        assert!(super::validate_project_yaml("scene: [broken").is_err());
+    fn project_ids_cannot_escape_managed_root() {
+        assert!(super::project_path("../project-1").is_err());
+        assert!(super::project_path("project-000001").is_ok());
     }
 }
