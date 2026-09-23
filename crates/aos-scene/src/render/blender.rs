@@ -185,6 +185,7 @@ impl BlenderRenderBackend {
             height: h,
             backend_id: RenderBackendId::Blender,
             pass: req.pass,
+            engine: "Cycles",
         })
     }
 }
@@ -415,6 +416,7 @@ fn mock_beauty(
         height: h,
         backend_id: RenderBackendId::Blender,
         pass,
+        engine: "Mock preview",
     })
 }
 
@@ -505,6 +507,7 @@ mod tests {
             })
             .expect("mock");
         assert_eq!(out.backend_id, RenderBackendId::Blender);
+        assert_eq!(out.engine, "Mock preview");
         assert!(out.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
         assert_eq!(out.width, 64);
         assert_eq!(out.height, 48);

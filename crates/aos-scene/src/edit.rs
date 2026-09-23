@@ -738,6 +738,7 @@ mod tests {
             depth_of_field: 0.4,
             glow: 0.5,
             color_warmth: 0.2,
+            ..Default::default()
         };
         apply_batch(
             &mut snap,

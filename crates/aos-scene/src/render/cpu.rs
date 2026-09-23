@@ -47,7 +47,14 @@ impl RenderBackend for CpuWireframeBackend {
         let view_proj = proj * view;
 
         let style = req.style.as_ref();
-        let bg = background_rgba(req.pass, style);
+        let mut bg = background_rgba(req.pass, style);
+        if req
+            .preset
+            .as_ref()
+            .is_some_and(|p| p.transparent_background)
+        {
+            bg[3] = 0;
+        }
         let scale = if style.is_some_and(|s| s.antialias) {
             2
         } else {
@@ -149,6 +156,7 @@ impl RenderBackend for CpuWireframeBackend {
             height: h,
             backend_id: RenderBackendId::Cpu,
             pass: req.pass,
+            engine: "CPU preview",
         })
     }
 }

@@ -125,7 +125,7 @@ pub use pose::{
     PoseOp, PosePreset, SCENE_POSE_CAP, SCENE_POSE_SERVICE,
 };
 pub use project::{load_project_yaml, save_project_yaml, ProjectFile, PROJECT_FORMAT_VERSION};
-pub use fx::{EffectKind, RenderPreset, SceneEffect};
+pub use fx::{EffectKind, RenderPreset, RenderQuality, SceneEffect};
 pub use render::{
     blender_pack_status, isolation_matrix, parse_backend, parse_pass, parse_style,
     AkashaSceneExport, BlenderPackStatus, BlenderRenderBackend, BlenderRunMode,

@@ -585,6 +585,53 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             });
         }
+        "illustration.export_png" => {
+            let source = input
+                .get("source_path")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let checked = aos_scene::RenderService::assert_illustration_path(source)
+                .map_err(|e| e.to_string())
+                .and_then(|_| {
+                    let root =
+                        crate::os_open::aos_home().join("var/storage/data/documents/illustrations");
+                    let path = logical_downloads_path(source);
+                    let canonical_root = std::fs::canonicalize(root).map_err(|e| e.to_string())?;
+                    let canonical_path = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
+                    if canonical_path.starts_with(&canonical_root)
+                        && canonical_path.extension().and_then(|s| s.to_str()) == Some("png")
+                    {
+                        Ok(canonical_path)
+                    } else {
+                        Err("Illustration PNG source is outside the project folder".into())
+                    }
+                });
+            let outcome = checked.and_then(|path| {
+                let destination = crate::os_open::save_os_file(
+                    "Export illustration PNG",
+                    "illustration.png",
+                    &[("PNG image", &["png"])],
+                    crate::os_open::user_downloads_dir().as_deref(),
+                )
+                .ok_or_else(|| "cancelled".to_string())?;
+                std::fs::copy(&path, &destination)
+                    .map(|_| serde_json::json!({"path": destination.display().to_string()}))
+                    .map_err(|e| e.to_string())
+            });
+            let ok = outcome.is_ok();
+            let (result, error) = match outcome {
+                Ok(value) => (value, None),
+                Err(err) => (Value::Null, Some(err)),
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok,
+                result,
+                error,
+                refresh_binds,
+            });
+        }
         aos_proto::RENDER_STUB_SERVICE => {
             run_render_stub_beauty(bus, evt_tx, module, action_id, input, refresh_binds).await;
         }
@@ -802,8 +849,8 @@ async fn run_render_submit(
             return;
         }
     };
-    let width = input.get("width").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
-    let height = input.get("height").and_then(|v| v.as_u64()).unwrap_or(256) as u32;
+    let mut width = input.get("width").and_then(Value::as_f64).unwrap_or(256.0) as u32;
+    let mut height = input.get("height").and_then(Value::as_f64).unwrap_or(256.0) as u32;
     let r = input.get("r").and_then(|v| v.as_u64()).unwrap_or(48) as u8;
     let g = input.get("g").and_then(|v| v.as_u64()).unwrap_or(72) as u8;
     let b = input.get("b").and_then(|v| v.as_u64()).unwrap_or(96) as u8;
@@ -877,6 +924,15 @@ async fn run_render_submit(
     } else {
         (SceneGraph::demo_scene(), None)
     };
+    if let Some(saved) = &preset {
+        width = saved.width;
+        height = saved.height;
+    }
+    let quality = preset
+        .as_ref()
+        .map(|p| p.quality.as_str())
+        .unwrap_or("standard");
+    let quality = quality.to_string();
 
     let render_cap = match backend {
         RenderBackendId::Stub => aos_proto::RENDER_STUB_CAP,
@@ -950,6 +1006,8 @@ async fn run_render_submit(
                     "width": rendered.width,
                     "height": rendered.height,
                     "status": "succeeded",
+                    "engine": rendered.engine,
+                    "preset": quality,
                     "style": input
                         .get("style")
                         .or_else(|| input.get("style_id"))
@@ -1903,7 +1961,27 @@ fn run_scene_edit_service(
                 .get("ops")
                 .cloned()
                 .ok_or_else(|| "ops required".to_string())
-                .and_then(|v| serde_json::from_value(v).map_err(|e| e.to_string()));
+                .and_then(|mut value| {
+                    if let Some(items) = value.as_array_mut() {
+                        for item in items {
+                            if let Some(preset) =
+                                item.get_mut("preset").and_then(Value::as_object_mut)
+                            {
+                                for key in ["width", "height"] {
+                                    if let Some(number) = preset.get(key).and_then(Value::as_f64) {
+                                        if number.is_finite()
+                                            && number.fract() == 0.0
+                                            && (0.0..=4096.0).contains(&number)
+                                        {
+                                            preset.insert(key.into(), Value::from(number as u64));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    serde_json::from_value(value).map_err(|e| e.to_string())
+                });
             match ops {
                 Ok(ops) => apply_batch(&mut snap, &ops, actor, kind),
                 Err(e) => {

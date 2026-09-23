@@ -548,6 +548,12 @@ def main() -> int:
     scene.render.filepath = out_path
     scene.render.image_settings.file_format = "PNG"
     preset = data.get("render_preset") or {}
+    quality = preset.get("quality", "standard")
+    scene.cycles.samples = {"draft": 8, "standard": 32, "final": 96}.get(quality, 32)
+    scene.render.film_transparent = bool(preset.get("transparent_background", False))
+    if bool(preset.get("denoise", False)):
+        if hasattr(view_layer, "cycles") and hasattr(view_layer.cycles, "use_denoising"):
+            view_layer.cycles.use_denoising = True
     dof = max(0.0, min(float(preset.get("depth_of_field", 0.0)), 1.0))
     if dof > 0 and scene.camera and scene.camera.type == "CAMERA":
         scene.camera.data.dof.use_dof = True
@@ -560,7 +566,8 @@ def main() -> int:
     family = str(style.get("family") or "").lower()
     if family in ("sketch", "pencil", "ink"):
         scene.render.use_freestyle = True
-        scene.cycles.samples = 32 if style.get("antialias", True) else 8
+        if not style.get("antialias", True):
+            scene.cycles.samples = min(scene.cycles.samples, 8)
         try:
             fs = bpy.context.view_layer.freestyle_settings
             if fs.linesets:
