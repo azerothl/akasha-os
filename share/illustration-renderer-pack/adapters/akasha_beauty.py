@@ -239,6 +239,52 @@ def _argv_work_dir() -> str:
     return os.getcwd()
 
 
+def apply_material_override(obj, override, bpy):
+    """Copy imported PBR materials before changing this scene instance."""
+    if not override or obj.type != "MESH":
+        return
+    tint = override.get("tint")
+    roughness = override.get("roughness")
+    metallic = override.get("metallic")
+    if not obj.material_slots:
+        material = bpy.data.materials.new(name=f"override_{obj.name}")
+        material.use_nodes = True
+        obj.data.materials.append(material)
+    for slot in obj.material_slots:
+        original = slot.material
+        if original is None:
+            continue
+        material = original.copy()
+        material.use_nodes = True
+        slot.material = material
+        bsdf = next((node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None:
+            continue
+        if tint is not None:
+            rgb = tuple(float(v) for v in tint)
+            color = bsdf.inputs["Base Color"]
+            incoming = next(iter(color.links), None)
+            if incoming is not None:
+                source = incoming.from_socket
+                material.node_tree.links.remove(incoming)
+                multiply = material.node_tree.nodes.new("ShaderNodeMixRGB")
+                multiply.blend_type = "MULTIPLY"
+                multiply.inputs[0].default_value = 1.0
+                multiply.inputs[2].default_value = (*rgb, 1.0)
+                material.node_tree.links.new(source, multiply.inputs[1])
+                material.node_tree.links.new(multiply.outputs[0], color)
+            else:
+                base = color.default_value
+                color.default_value = (base[0] * rgb[0], base[1] * rgb[1], base[2] * rgb[2], base[3])
+        for input_name, value in (("Roughness", roughness), ("Metallic", metallic)):
+            if value is None:
+                continue
+            socket = bsdf.inputs[input_name]
+            for link in list(socket.links):
+                material.node_tree.links.remove(link)
+            socket.default_value = float(value)
+
+
 def main() -> int:
     import bpy  # type: ignore  # only available inside Blender
 
@@ -296,6 +342,7 @@ def main() -> int:
                 obj.data.materials[0] = mat
             else:
                 obj.data.materials.append(mat)
+            apply_material_override(obj, node.get("material"), bpy)
             blender_objs[node_id] = obj
         elif kind == "mesh_asset":
             # The host copies validated GLBs into this job's assets directory.
@@ -329,6 +376,8 @@ def main() -> int:
                 original_world = imported_root.matrix_world.copy()
                 imported_root.parent = anchor
                 imported_root.matrix_world = anchor.matrix_world @ original_world
+            for imported_obj in imported:
+                apply_material_override(imported_obj, node.get("material"), bpy)
             blender_objs[node_id] = anchor
         elif kind == "camera":
             cam_data = bpy.data.cameras.new(name=node.get("name") or node_id)

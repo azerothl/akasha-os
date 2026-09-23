@@ -158,6 +158,9 @@ pub struct SceneNode {
     /// Prefer project-local `/documents/illustrations/**` or pack fixtures.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mesh_uri: Option<String>,
+    /// Optional appearance changes stored separately from source GLB materials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<MaterialOverride>,
     #[serde(default)]
     pub visible: bool,
 }
@@ -174,8 +177,32 @@ impl SceneNode {
             camera: None,
             light: None,
             mesh_uri: None,
+            material: None,
             visible: true,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MaterialOverride {
+    /// Linear RGB multiplier. Imported texture colours remain in the source asset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<[f32; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roughness: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metallic: Option<f32>,
+}
+
+impl MaterialOverride {
+    pub fn validate(&self) -> Result<(), SceneError> {
+        if self.tint.is_some_and(|rgb| rgb.iter().any(|v| !v.is_finite() || !(0.0..=1.0).contains(v)))
+            || self.roughness.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
+            || self.metallic.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
+        {
+            return Err(SceneError::InvalidMaterial);
+        }
+        Ok(())
     }
 }
 
@@ -193,6 +220,8 @@ pub struct SceneGraph {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SceneError {
+    #[error("invalid material override")]
+    InvalidMaterial,
     #[error("non-finite transform")]
     NonFiniteTransform,
     #[error("degenerate quaternion")]
@@ -401,6 +430,7 @@ impl SceneGraph {
                 )));
             }
             node.transform.validate()?;
+            if let Some(material) = &node.material { material.validate()?; }
             if let Some(p) = &node.parent {
                 if !self.nodes.contains_key(p) {
                     return Err(SceneError::UnknownNode(p.clone()));

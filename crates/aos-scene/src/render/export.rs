@@ -4,13 +4,13 @@
 //! (`akasha_beauty.py`) performs Y-up → Blender Z-up conversion. Host crates
 //! never import `bpy` and never speak Blender axes in core types.
 
-use crate::scene::{NodeKind, SceneGraph, SceneNode};
+use crate::scene::{MaterialOverride, NodeKind, SceneGraph, SceneNode};
 use crate::style::ResolvedStyle;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
 /// Stable export format version for the Renderer Pack contract.
-pub const AKASHA_SCENE_EXPORT_VERSION: u32 = 1;
+pub const AKASHA_SCENE_EXPORT_VERSION: u32 = 2;
 
 /// Deterministic render package written into the isolated work directory.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -74,6 +74,8 @@ pub struct ExportNode {
     pub visible: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mesh_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub material: Option<MaterialOverride>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<ExportCamera>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -171,16 +173,25 @@ fn export_node(n: &SceneNode) -> ExportNode {
             c.sort();
             c
         },
-        translation: [n.transform.translation.x, n.transform.translation.y, n.transform.translation.z],
+        translation: [
+            n.transform.translation.x,
+            n.transform.translation.y,
+            n.transform.translation.z,
+        ],
         rotation_xyzw: [
             n.transform.rotation.x,
             n.transform.rotation.y,
             n.transform.rotation.z,
             n.transform.rotation.w,
         ],
-        scale: [n.transform.scale.x, n.transform.scale.y, n.transform.scale.z],
+        scale: [
+            n.transform.scale.x,
+            n.transform.scale.y,
+            n.transform.scale.z,
+        ],
         visible: n.visible,
         mesh_uri: n.mesh_uri.clone(),
+        material: n.material.clone(),
         camera: n.camera.as_ref().map(|c| ExportCamera {
             focal_mm: c.focal_mm,
             sensor_width_mm: c.sensor_width_mm,
@@ -211,7 +222,8 @@ fn fnv1a64(data: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scene::SceneGraph;
+    use crate::scene::{MaterialOverride, SceneGraph};
+    use crate::{load_project_yaml, save_project_yaml, ProjectFile, SceneOp, UndoStack};
 
     #[test]
     fn export_is_byte_stable() {
@@ -230,5 +242,50 @@ mod tests {
             .digest_hex()
             .unwrap();
         assert_eq!(dig.len(), 16);
+    }
+
+    #[test]
+    fn material_override_is_optional_persistent_and_undoable() {
+        let mut scene = SceneGraph::demo_scene();
+        let legacy = save_project_yaml(&ProjectFile::new(scene.clone())).unwrap();
+        assert_eq!(
+            load_project_yaml(&legacy).unwrap().scene.nodes["box"].material,
+            None
+        );
+        let material = MaterialOverride {
+            tint: Some([0.8, 0.4, 0.2]),
+            roughness: Some(0.35),
+            metallic: Some(0.6),
+        };
+        let mut undo = UndoStack::default();
+        undo.push_apply(
+            &mut scene,
+            SceneOp::SetMaterial {
+                id: "box".into(),
+                before: None,
+                after: Some(material.clone()),
+            },
+        )
+        .unwrap();
+        let yaml = save_project_yaml(&ProjectFile::new(scene.clone())).unwrap();
+        assert_eq!(
+            load_project_yaml(&yaml).unwrap().scene.nodes["box"].material,
+            Some(material.clone())
+        );
+        let export = AkashaSceneExport::from_scene(&scene, 64, 64, "beauty").unwrap();
+        assert_eq!(export.version, 2);
+        assert_eq!(export.nodes["box"].material, Some(material));
+        assert!(undo.undo(&mut scene).unwrap());
+        assert_eq!(scene.nodes["box"].material, None);
+    }
+
+    #[test]
+    fn invalid_material_is_rejected() {
+        let mut scene = SceneGraph::demo_scene();
+        scene.nodes.get_mut("box").unwrap().material = Some(MaterialOverride {
+            tint: Some([2.0, 0.0, 0.0]),
+            ..Default::default()
+        });
+        assert!(scene.validate().is_err());
     }
 }

@@ -137,7 +137,8 @@
       "compose_apply_1": "Apply proposal 1",
       "compose_apply_2": "Apply proposal 2",
       "compose_proposal_1": "Proposal 1 · placement",
-      "compose_proposal_2": "Proposal 2 · placement"
+      "compose_proposal_2": "Proposal 2 · placement",
+      "materials_section": "Materials and finishes"
     },
     "fr": {
       "app_title": "Studio Illustration",
@@ -271,7 +272,8 @@
       "compose_apply_1": "Appliquer la proposition 1",
       "compose_apply_2": "Appliquer la proposition 2",
       "compose_proposal_1": "Proposition 1 · placement",
-      "compose_proposal_2": "Proposition 2 · placement"
+      "compose_proposal_2": "Proposition 2 · placement",
+      "materials_section": "Matières et finitions"
     }
   },
   "state": {
@@ -1333,6 +1335,18 @@
                 ],
                 "collapsible": true,
                 "open_state_key": "assets_open"
+              },
+              {
+                "kind": "section",
+                "label_key": "materials_section",
+                "children": [
+                  {
+                    "kind": "scene_material_editor",
+                    "scene_key": "scene",
+                    "selected_key": "selected_id",
+                    "canvas_id": "illustration_viewport"
+                  }
+                ]
               },
               {
                 "kind": "section",

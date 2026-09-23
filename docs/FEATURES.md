@@ -330,7 +330,7 @@ Slash commands:
 
 ## 4c. Illustration Studio (experimental module)
 
-Local catalogue package **`illustration-studio` 0.7.12** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
+Local catalogue package **`illustration-studio` 0.7.13** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
 
 **What ships (honest):**
 
@@ -341,6 +341,7 @@ Local catalogue package **`illustration-studio` 0.7.12** (versioned independentl
 | Beauty via RenderService | **Stub** + **CPU** in-tree; optional NPR Sketch/Pencil/Ink (CPU approx) |
 | Blender beauty | Cap + isolation path real; optional **GPL Renderer Pack** plus Blender binary, downloadable from Studio on supported platforms. GLB assets keep their hierarchy and PBR materials in Blender; Auto fails closed on spawn errors. |
 | Compose | Configured model proposes typed objects and spatial relations; deterministic bounded solver offers up to two candidates for explicit acceptance. EN/FR keyword templates remain the fallback. Assets are limited to the embedded primitives pack. |
+| Materials | Per-object optional tint and roughness/metallic finishes; imported GLB materials are copied at render time and source files remain intact. CPU and viewport show simplified tint. |
 | Multi-object editing | Shift-click selection, duplicate, group, align, grid snap and numeric TRS; edits use the SceneGraph undo stack |
 | Pose IK/FK, camera, lights v0, comic/storyboard extensions | Real (bounded) |
 | Neural mesh assist | Cap + stub procedural real; `backend=neural` needs opt-in Model Pack (fixture/mock without weights) |
