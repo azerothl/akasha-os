@@ -587,7 +587,7 @@ mod tests {
             [-2.5, -1.5, 0.0, 1.0],
         );
         draw_mesh(&mut raster, &mesh, &world, RenderPassKind::Beauty, None);
-        assert!(rgba.chunks_exact(4).any(|pixel| pixel[3] == 255));
+        assert!(rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] == 255));
     }
 
     #[test]
