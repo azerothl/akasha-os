@@ -1,12 +1,7 @@
 # Illustration Studio — host capabilities (IK/FK poses + agent co-edit + NPR)
 
-<<<<<<< HEAD
 **Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2) + lights v0 (0.7.3) + TRELLIS.2 GGUF real runner (0.7.4) + Blender Renderer Pack opt-in / pack status (0.7.5) + Blender Auto fail-closed on spawn (0.7.6)**
-**Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), [Storyboard](illustration-studio-storyboard.md), [Asset packs](illustration-asset-packs.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md` / `illustration-studio-prefab-pack.md`
-=======
-**Status:** marketplace hooks + storyboard + comic panels + articulated IK/FK + pose library + neural mesh assist on co-edit/NPR + **MVP prefab pack §142 (0.7.0) + MeshAsset/TRELLIS spike (0.7.1) + edit chrome TRS/autosave/undo (0.7.2) + lights v0 (0.7.3) + TRELLIS.2 GGUF real runner (0.7.4) + Blender Renderer Pack opt-in / pack status (0.7.5)**
 **Related:** [ADR 0011](adr/0011-scenegraph-numeric-conventions.md), [NPR styles](illustration-npr-styles.md), [Renderer Pack pointer](illustration-renderer-pack.md), [Blender backend](illustration-blender-backend.md), [Neural mesh](illustration-neural-mesh.md), [Comic panels](illustration-comic-panels.md), [Storyboard](illustration-studio-storyboard.md), [Asset packs](illustration-asset-packs.md), product spec **Draft v0.1** [`modules/illustration-studio/docs/akasha-illustration-studio-spec.md`](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md), store notes `illustration-studio-ik-poses.md` / `illustration-studio-agent-coedit.md` / `illustration-studio-prefab-pack.md`
->>>>>>> origin/main
 
 > **Preview honesty:** wgpu `scene3d` is an **edit view**, not RenderService beauty. Beauty = stub/CPU in-tree; Blender = mock unless opt-in **GPL Renderer Pack** + binary. Compose = keyword heuristics (not LLM SceneIntent). Neural mesh = stub default; weights opt-in. Marketplace = offline packs only. This is **not** a claim of full MVP §140–§145. Tester-facing summary: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module).
 
