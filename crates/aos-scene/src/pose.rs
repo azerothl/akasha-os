@@ -422,10 +422,7 @@ pub fn joint_node_id(
                 continue;
             }
             let id_l = id.to_ascii_lowercase();
-            if id_l == *alias
-                || id_l.ends_with(&format!("_{alias}"))
-                || id_l.ends_with(alias)
-            {
+            if id_l == *alias || id_l.ends_with(&format!("_{alias}")) || id_l.ends_with(alias) {
                 return Ok(id);
             }
             if let Some(n) = scene.nodes.get(&id) {
@@ -590,15 +587,8 @@ fn apply_ik(
     let lower = joint_node_id(scene, character_root, lower_j)?;
     let tip = joint_node_id(scene, character_root, tip_j)?;
 
-    let solved = solve_two_bone(
-        scene,
-        &upper,
-        &lower,
-        &tip,
-        target_world,
-        pole_world,
-    )
-    .map_err(|e| PoseError::Ik(e.to_string()))?;
+    let solved = solve_two_bone(scene, &upper, &lower, &tip, target_world, pole_world)
+        .map_err(|e| PoseError::Ik(e.to_string()))?;
 
     let ops = vec![
         set_local_rotation(scene, &upper, solved.upper_local)?,
@@ -740,7 +730,11 @@ fn apply_preset(
             }
             for joint in [JointId::UpperArmL, JointId::UpperArmR] {
                 if let Ok(id) = joint_node_id(scene, character_root, joint) {
-                    let sign = if joint == JointId::UpperArmL { 1.0 } else { -1.0 };
+                    let sign = if joint == JointId::UpperArmL {
+                        1.0
+                    } else {
+                        -1.0
+                    };
                     ops.push(set_local_rotation(
                         scene,
                         &id,
@@ -837,8 +831,8 @@ pub fn apply_pose_preset(
     preset_name: &str,
     undo: Option<&mut UndoStack>,
 ) -> Result<Vec<SceneOp>, PoseError> {
-    let preset =
-        PosePreset::parse(preset_name).ok_or_else(|| PoseError::UnknownPreset(preset_name.into()))?;
+    let preset = PosePreset::parse(preset_name)
+        .ok_or_else(|| PoseError::UnknownPreset(preset_name.into()))?;
     apply_pose(
         scene,
         &PoseOp::Preset {
@@ -980,6 +974,7 @@ mod tests {
             },
             roots: vec!["root".into()],
             active_camera: None,
+            effects: Vec::new(),
         };
         let r = instantiate_asset(
             &mut scene,

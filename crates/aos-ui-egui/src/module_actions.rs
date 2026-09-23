@@ -855,12 +855,12 @@ async fn run_render_submit(
         }
     };
 
-    let scene = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
+    let (scene, preset) = if let Some(yaml) = input.get("scene_yaml").and_then(|v| v.as_str()) {
         if yaml.trim().is_empty() {
-            SceneGraph::demo_scene()
+            (SceneGraph::demo_scene(), None)
         } else {
             match load_project_yaml(yaml) {
-                Ok(p) => p.scene,
+                Ok(p) => (p.scene, p.render_preset),
                 Err(e) => {
                     let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                         module: module.to_string(),
@@ -875,7 +875,7 @@ async fn run_render_submit(
             }
         }
     } else {
-        SceneGraph::demo_scene()
+        (SceneGraph::demo_scene(), None)
     };
 
     let render_cap = match backend {
@@ -894,6 +894,7 @@ async fn run_render_submit(
         output_path: path.to_string(),
         stub_rgb: (r, g, b),
         style,
+        preset,
     };
     let rendered = match tokio::task::spawn_blocking(move || svc.submit_and_result(submit)).await {
         Ok(Ok(res)) => res,
@@ -1077,10 +1078,7 @@ fn run_asset_instantiate(
     input: Value,
     refresh_binds: Vec<String>,
 ) {
-    use aos_scene::{
-        embedded_primitives_pack, instantiate_asset, load_project_yaml, save_project_yaml,
-        ProjectFile, SceneGraph,
-    };
+    use aos_scene::{embedded_primitives_pack, instantiate_asset, load_project_yaml, SceneGraph};
 
     let asset_id = input
         .get("asset_id")
@@ -1145,7 +1143,7 @@ fn run_asset_instantiate(
         }
     };
 
-    let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+    let yaml = match save_scene_preserving_project(&input, scene) {
         Ok(y) => y,
         Err(e) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -1312,8 +1310,8 @@ fn run_scene_pose(
     refresh_binds: Vec<String>,
 ) {
     use aos_scene::{
-        apply_ik_chain, apply_pose, apply_pose_preset, load_project_yaml, save_project_yaml,
-        IkChain, JointId, PoseOp, ProjectFile, SceneGraph, UndoStack, Vec3,
+        apply_ik_chain, apply_pose, apply_pose_preset, load_project_yaml, IkChain, JointId, PoseOp,
+        SceneGraph, UndoStack, Vec3,
     };
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
@@ -1386,7 +1384,7 @@ fn run_scene_pose(
                 return;
             }
         }
-        let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+        let yaml = match save_scene_preserving_project(&input, scene) {
             Ok(y) => y,
             Err(e) => {
                 let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -1543,7 +1541,7 @@ fn run_scene_pose(
     };
     drop(stacks);
 
-    let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+    let yaml = match save_scene_preserving_project(&input, scene) {
         Ok(y) => y,
         Err(e) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -2020,8 +2018,7 @@ fn run_mesh_assist(
     refresh_binds: Vec<String>,
 ) {
     use aos_scene::{
-        load_project_yaml, mesh_assist, save_project_yaml, MeshAssistBackendId, MeshAssistRequest,
-        ProjectFile, SceneGraph,
+        load_project_yaml, mesh_assist, MeshAssistBackendId, MeshAssistRequest, SceneGraph,
     };
 
     let prompt = input
@@ -2118,7 +2115,7 @@ fn run_mesh_assist(
         }
     };
 
-    let yaml = match save_project_yaml(&ProjectFile::new(scene)) {
+    let yaml = match save_scene_preserving_project(&input, scene) {
         Ok(y) => y,
         Err(e) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -3125,6 +3122,15 @@ fn load_illustration_project(input: &Value) -> Result<aos_scene::ProjectFile, St
     } else {
         Ok(ProjectFile::new(SceneGraph::demo_scene()))
     }
+}
+
+fn save_scene_preserving_project(
+    input: &Value,
+    scene: aos_scene::SceneGraph,
+) -> Result<String, String> {
+    let mut project = load_illustration_project(input)?;
+    project.scene = scene;
+    aos_scene::save_project_yaml(&project).map_err(|e| e.to_string())
 }
 
 fn storyboard_result_payload(

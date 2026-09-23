@@ -56,6 +56,52 @@ def y_up_vec_to_blender(v: Tuple[float, float, float]) -> Tuple[float, float, fl
     return (x, -z, y)
 
 
+def add_static_effects(bpy, effects):
+    """Build bounded still-image effect geometry; no simulation or timeline."""
+    for effect in effects[:32]:
+        kind = effect.get("kind")
+        pos = y_up_vec_to_blender(_as_vec3(effect.get("position"), (0.0, 0.0, 0.0)))
+        radius = max(0.05, min(float(effect.get("radius", 1.0)), 100.0))
+        strength = max(0.0, min(float(effect.get("intensity", 0.0)), 1.0))
+        if strength <= 0:
+            continue
+        if kind in ("fog", "smoke"):
+            bpy.ops.mesh.primitive_cube_add(size=1, location=pos)
+            obj = bpy.context.object
+            obj.name = "Akasha " + kind.title()
+            obj.scale = (radius * 2,) * 3
+            mat = bpy.data.materials.new(obj.name + " Volume")
+            mat.use_nodes = True
+            nodes = mat.node_tree.nodes
+            nodes.clear()
+            output = nodes.new("ShaderNodeOutputMaterial")
+            volume = nodes.new("ShaderNodeVolumePrincipled")
+            volume.inputs["Density"].default_value = strength * (0.06 if kind == "fog" else 0.25)
+            volume.inputs["Color"].default_value = (0.8, 0.82, 0.86, 1) if kind == "fog" else (0.22, 0.24, 0.28, 1)
+            mat.node_tree.links.new(volume.outputs["Volume"], output.inputs["Volume"])
+            obj.data.materials.append(mat)
+        elif kind in ("particles", "fire"):
+            count = min(32, max(4, int(24 * strength)))
+            mat = bpy.data.materials.new("Akasha " + kind.title())
+            mat.diffuse_color = (1.0, 0.35, 0.05, 1.0) if kind == "fire" else (0.9, 0.85, 0.65, 1.0)
+            mat.use_nodes = True
+            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf is not None:
+                bsdf.inputs["Base Color"].default_value = mat.diffuse_color
+                bsdf.inputs["Emission Color"].default_value = mat.diffuse_color
+                bsdf.inputs["Emission Strength"].default_value = 2.0 if kind == "fire" else 0.4
+            for index in range(count):
+                angle = index * 2.399963
+                distance = radius * math.sqrt((index + 0.5) / count)
+                z_offset = radius * (index / count) if kind == "fire" else radius * math.sin(index * 1.7) * 0.4
+                location = (pos[0] + math.cos(angle) * distance * 0.5,
+                            pos[1] + math.sin(angle) * distance * 0.5,
+                            pos[2] + z_offset)
+                bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=radius * (0.035 if kind == "fire" else 0.012), location=location)
+                bpy.context.object.name = "Akasha " + kind.title() + " Dot"
+                bpy.context.object.data.materials.append(mat)
+
+
 def y_up_quat_to_blender(
     r_xyzw: Tuple[float, float, float, float],
 ) -> Tuple[float, float, float, float]:
@@ -477,6 +523,8 @@ def main() -> int:
         )
         scene.camera.rotation_quaternion = (la[3], la[0], la[1], la[2])
 
+    add_static_effects(bpy, data.get("effects") or [])
+
     # Default area light if none
     if not any(o.type == "LIGHT" for o in bpy.data.objects):
         light_data = bpy.data.lights.new(name="AosKey", type="AREA")
@@ -499,6 +547,12 @@ def main() -> int:
     scene.render.resolution_y = height
     scene.render.filepath = out_path
     scene.render.image_settings.file_format = "PNG"
+    preset = data.get("render_preset") or {}
+    dof = max(0.0, min(float(preset.get("depth_of_field", 0.0)), 1.0))
+    if dof > 0 and scene.camera and scene.camera.type == "CAMERA":
+        scene.camera.data.dof.use_dof = True
+        scene.camera.data.dof.focus_distance = max(0.1, (scene.camera.location - __import__("mathutils").Vector(target_blender)).length)
+        scene.camera.data.dof.aperture_fstop = max(0.7, 8.0 - dof * 7.0)
 
     # Optional NPR style from Akasha export (Sketch / Pencil / Ink).
     # Freestyle line art is the pack-side approximation; host stays bpy-free.
@@ -566,7 +620,9 @@ def main() -> int:
     # A fixed-image graphite hatch pass. It alters only the rendered image, not
     # imported PBR materials or the SceneGraph.
     hatch = max(0.0, min(float(style.get("hatching", 0.0)), 1.0))
-    if family in ("sketch", "pencil", "ink") and hatch > 0:
+    glow = max(0.0, min(float(preset.get("glow", 0.0)), 1.0))
+    warmth = max(0.0, min(float(preset.get("color_warmth", 0.0)), 1.0))
+    if (family in ("sketch", "pencil", "ink") and hatch > 0) or glow > 0 or warmth > 0:
         image = bpy.data.images.load(out_path, check_existing=False)
         pixels = list(image.pixels[:])
         stride = max(5, int(15 - hatch * 10))
@@ -580,10 +636,30 @@ def main() -> int:
                     abs(pixels[index + channel] - background[channel])
                     for channel in range(3)
                 ) > 0.12
-                if differs_from_paper and 0.15 < luminance < 0.85 and (x + y) % stride == 0:
+                if hatch > 0 and differs_from_paper and 0.15 < luminance < 0.85 and (x + y) % stride == 0:
                     factor = 1.0 - 0.35 * hatch
                     for channel in range(3):
                         pixels[index + channel] *= factor
+                if warmth > 0:
+                    pixels[index] = min(1.0, pixels[index] * (1.0 + warmth * 0.12))
+                    pixels[index + 2] *= 1.0 - warmth * 0.10
+        if glow > 0:
+            source = pixels[:]
+            for y in range(height_px):
+                for x in range(width_px):
+                    index = (y * width_px + x) * 4
+                    if max(source[index:index + 3]) <= 0.8:
+                        continue
+                    if max(abs(source[index + c] - background[c]) for c in range(3)) <= 0.12:
+                        continue
+                    for oy in range(-2, 3):
+                        for ox in range(-2, 3):
+                            nx, ny = x + ox, y + oy
+                            if 0 <= nx < width_px and 0 <= ny < height_px:
+                                nearby = (ny * width_px + nx) * 4
+                                weight = glow * 0.04 / (1 + abs(ox) + abs(oy))
+                                for channel in range(3):
+                                    pixels[nearby + channel] = min(1.0, pixels[nearby + channel] + source[index + channel] * weight)
         image.pixels[:] = pixels
         image.filepath_raw = out_path
         image.file_format = "PNG"

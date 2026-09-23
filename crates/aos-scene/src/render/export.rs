@@ -25,6 +25,10 @@ pub struct AkashaSceneExport {
     /// Optional NPR style payload for Renderer Pack adapters (Sketch / Pencil / Ink).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<ExportStyle>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<crate::fx::SceneEffect>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_preset: Option<crate::fx::RenderPreset>,
     pub active_camera: Option<String>,
     /// Nodes keyed by id in sorted order for byte-stable JSON.
     pub nodes: BTreeMap<String, ExportNode>,
@@ -125,7 +129,21 @@ impl AkashaSceneExport {
         pass: &str,
         style: Option<&ResolvedStyle>,
     ) -> Result<Self, String> {
+        Self::from_scene_with_preset(scene, width, height, pass, style, None)
+    }
+
+    pub fn from_scene_with_preset(
+        scene: &SceneGraph,
+        width: u32,
+        height: u32,
+        pass: &str,
+        style: Option<&ResolvedStyle>,
+        preset: Option<&crate::fx::RenderPreset>,
+    ) -> Result<Self, String> {
         scene.validate().map_err(|e| e.to_string())?;
+        if preset.is_some_and(|p| !p.validate()) {
+            return Err("invalid render preset".into());
+        }
         let mut nodes = BTreeMap::new();
         let mut ids: Vec<_> = scene.nodes.keys().cloned().collect();
         ids.sort();
@@ -145,6 +163,8 @@ impl AkashaSceneExport {
             height,
             pass: pass.to_string(),
             style: style.map(ExportStyle::from_resolved),
+            effects: scene.effects.clone(),
+            render_preset: preset.cloned(),
             active_camera: scene.active_camera.clone(),
             nodes,
             roots,

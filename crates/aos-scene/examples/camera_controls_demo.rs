@@ -34,9 +34,14 @@ fn main() {
             height: 320,
             stub_rgb: (0, 0, 0),
             style: Some(aos_scene::resolve_style("pencil").unwrap()),
+            preset: None,
         })
         .unwrap();
-    fs::write("/opt/cursor/artifacts/camera-controls-wide-fov-cpu.png", &wide.png).unwrap();
+    fs::write(
+        "/opt/cursor/artifacts/camera-controls-wide-fov-cpu.png",
+        &wide.png,
+    )
+    .unwrap();
 
     apply_one(
         &mut snap,
@@ -61,9 +66,14 @@ fn main() {
             height: 320,
             stub_rgb: (0, 0, 0),
             style: Some(aos_scene::resolve_style("pencil").unwrap()),
+            preset: None,
         })
         .unwrap();
-    fs::write("/opt/cursor/artifacts/camera-controls-tight-fov-cpu.png", &tight.png).unwrap();
+    fs::write(
+        "/opt/cursor/artifacts/camera-controls-tight-fov-cpu.png",
+        &tight.png,
+    )
+    .unwrap();
     // also persist into project media for the store note
     fs::copy(
         "/opt/cursor/artifacts/camera-controls-wide-fov-cpu.png",

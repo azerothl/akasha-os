@@ -88,17 +88,19 @@ pub fn solve_two_bone(
     let root = parent_inv.transform_point(scene.world_translation(upper_id)?);
     let target_p = parent_inv.transform_point(target_world);
     let mid_p = parent_inv.transform_point(scene.world_translation(lower_id)?);
-    let pole_p = pole_world.map(|p| parent_inv.transform_point(p)).unwrap_or_else(|| {
-        let dir_guess = (target_p - root)
-            .normalized()
-            .unwrap_or(Vec3::new(0.0, -1.0, 0.0));
-        let lateral = (mid_p - root) - dir_guess * (mid_p - root).dot(dir_guess);
-        if lateral.length_squared() > 1e-6 {
-            mid_p
-        } else {
-            root + Vec3::UNIT_X
-        }
-    });
+    let pole_p = pole_world
+        .map(|p| parent_inv.transform_point(p))
+        .unwrap_or_else(|| {
+            let dir_guess = (target_p - root)
+                .normalized()
+                .unwrap_or(Vec3::new(0.0, -1.0, 0.0));
+            let lateral = (mid_p - root) - dir_guess * (mid_p - root).dot(dir_guess);
+            if lateral.length_squared() > 1e-6 {
+                mid_p
+            } else {
+                root + Vec3::UNIT_X
+            }
+        });
 
     let mut to_target = target_p - root;
     let mut dist = to_target.length();
@@ -133,9 +135,7 @@ pub fn solve_two_bone(
         .normalized()
         .unwrap_or(dir);
     let elbow = root + upper_dir * len1;
-    let lower_dir = (target_clamped - elbow)
-        .normalized()
-        .unwrap_or(upper_dir);
+    let lower_dir = (target_clamped - elbow).normalized().unwrap_or(upper_dir);
 
     // Local rotations in parent / upper frames (scale ignored for orientation).
     let upper_local = Quat::from_rotation_arc(rest_upper, upper_dir);
@@ -200,6 +200,7 @@ pub fn fixture_two_bone_scene() -> (SceneGraph, &'static str, &'static str, &'st
         nodes,
         roots: vec!["root".into()],
         active_camera: None,
+        effects: Vec::new(),
     };
     (scene, "upper", "lower", "tip")
 }
@@ -213,9 +214,15 @@ mod tests {
     fn two_bone_reaches_reachable_target() {
         let (mut scene, upper, lower, tip) = fixture_two_bone_scene();
         let target = Vec3::new(0.5, 0.6, 0.0);
-        let solved =
-            solve_two_bone(&scene, upper, lower, tip, target, Some(Vec3::new(0.0, 1.0, 1.0)))
-                .expect("ik");
+        let solved = solve_two_bone(
+            &scene,
+            upper,
+            lower,
+            tip,
+            target,
+            Some(Vec3::new(0.0, 1.0, 1.0)),
+        )
+        .expect("ik");
         let u = scene.nodes[upper].transform.clone();
         scene
             .set_transform(
