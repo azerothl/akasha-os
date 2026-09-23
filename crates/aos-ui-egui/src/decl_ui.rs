@@ -920,12 +920,14 @@ impl DeclUiPanelState {
                         ui.vertical(|ui| {
                             ui.label(label);
                             let field_w = ui.available_width().clamp(120.0, 480.0);
+                            let read_only = w.read_only.unwrap_or(false);
                             if crate::theme::add_form_field(
                                 ui,
                                 field_w,
-                                egui::TextEdit::singleline(&mut text),
+                                egui::TextEdit::singleline(&mut text).interactive(!read_only),
                             )
                             .changed()
+                                && !read_only
                             {
                                 actions
                                     .local_patch
