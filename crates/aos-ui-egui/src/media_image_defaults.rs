@@ -571,15 +571,7 @@ mod tests {
     use super::*;
 
     fn with_workspace_home<T>(f: impl FnOnce() -> T) -> T {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let previous = std::env::var_os("AOS_HOME");
-        std::env::set_var("AOS_HOME", &root);
-        let out = f();
-        match previous {
-            Some(value) => std::env::set_var("AOS_HOME", value),
-            None => std::env::remove_var("AOS_HOME"),
-        }
-        out
+        crate::os_open::with_aos_home_for_test(&crate::os_open::workspace_root_for_tests(), f)
     }
 
     #[test]

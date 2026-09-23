@@ -812,7 +812,7 @@ mod vision_catalog_tests {
     #[test]
     fn multi_file_pack_without_annexes_is_incomplete() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        std::env::set_var("AOS_HOME", &root);
+        crate::os_open::with_aos_home_for_test(&root, || {
         let missing = super::missing_model_annexes("local:ltx2.3-dev");
         assert!(
             !missing.is_empty(),
@@ -827,5 +827,6 @@ mod vision_catalog_tests {
             "expected incomplete/missing, got {state:?}"
         );
         assert!(!super::is_model_installed("local:ltx2.3-dev"));
+        });
     }
 }
