@@ -545,6 +545,50 @@ pub(crate) fn user_visible_create_or_module_error(
     user_visible_module_error(t, module, raw)
 }
 
+/// Actionable, localized error copy for the Illustration Studio Blender path.
+pub(crate) fn illustration_blender_error(language: &str, raw: &str) -> String {
+    let fr = language.starts_with("fr");
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("render.submit write") || lower.contains("fs.write_bytes") {
+        return if fr {
+            "Le rendu Blender a abouti, mais l’image n’a pas pu être enregistrée. Vérifiez le dossier de destination et l’espace disque, puis relancez le rendu."
+                .into()
+        } else {
+            "Blender rendered the image, but it could not be saved. Check the destination folder and available disk space, then render again."
+                .into()
+        };
+    }
+    if lower.contains("backend unavailable")
+        || lower.contains("blender binary not found")
+        || lower.contains("adapter")
+        || lower.contains("renderer pack")
+    {
+        return if fr {
+            "Le rendu Blender est indisponible : le Renderer Pack, son adaptateur ou le binaire Blender manque. Actualisez le statut du pack dans « Beauty pass », installez les éléments manquants ou choisissez le rendu CPU."
+                .into()
+        } else {
+            "Blender rendering is unavailable: the Renderer Pack, its adapter, or the Blender binary is missing. Refresh the pack status in Beauty pass, install the missing component, or choose CPU rendering."
+                .into()
+        };
+    }
+    if lower.contains("isolation") || lower.contains("spawn") || lower.contains("process") {
+        return if fr {
+            "Blender n’a pas pu démarrer dans son environnement isolé. Vérifiez que le binaire Blender du Renderer Pack est accessible, actualisez son statut, puis réessayez ou utilisez le rendu CPU."
+                .into()
+        } else {
+            "Blender could not start in its isolated environment. Check that the Renderer Pack’s Blender binary is accessible, refresh its status, then retry or use CPU rendering."
+                .into()
+        };
+    }
+    if fr {
+        "Le rendu Blender a échoué. Actualisez le statut du Renderer Pack et vérifiez que le pack, l’adaptateur et Blender sont prêts. Vous pouvez relancer le rendu ou choisir le rendu CPU."
+            .into()
+    } else {
+        "Blender rendering failed. Refresh the Renderer Pack status and check that the pack, adapter, and Blender are ready. You can retry or choose CPU rendering."
+            .into()
+    }
+}
+
 fn is_incomplete_model_message(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
     lower.contains("modèle incomplet")

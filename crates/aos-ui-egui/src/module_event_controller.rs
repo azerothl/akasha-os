@@ -301,6 +301,7 @@ pub(crate) fn on_ui_service_done(
     refresh_binds: Vec<String>,
 ) {
     let t = crate::i18n::strings(&app.prefs.language);
+    let language = app.prefs.language.clone();
     if let Some(panel) = app.decl_panels.get_mut(&module) {
         panel.set_pending_invoke(false);
         if ok {
@@ -412,6 +413,9 @@ pub(crate) fn on_ui_service_done(
             }
         } else {
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
+                Some(raw) if module == "illustration-studio" && action_id == "blender_beauty" => {
+                    crate::chat_error_copy::illustration_blender_error(&language, raw)
+                }
                 Some(raw) => {
                     crate::chat_error_copy::user_visible_create_or_module_error(&t, &module, raw)
                 }

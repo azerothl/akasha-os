@@ -213,6 +213,15 @@ impl DeclUiPanelState {
         let heading = doc.chrome_title(language);
         ui.horizontal(|ui| {
             ui.heading(&heading);
+            if self.module == "illustration-studio" {
+                if let Some(version) = self
+                    .local_state
+                    .get("installed_version")
+                    .and_then(Value::as_str)
+                {
+                    ui.weak(format!("v{version}"));
+                }
+            }
             if ui.button(refresh_label).clicked() {
                 actions.refresh = true;
             }
