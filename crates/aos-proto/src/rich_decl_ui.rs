@@ -1329,6 +1329,15 @@ mod tests {
             }),
             "global scene undo_redo chrome in project section"
         );
+        let more = rail
+            .iter()
+            .find(|w| w.label_key.as_deref() == Some("more_section"))
+            .unwrap_or_else(|| panic!("missing more_section"));
+        assert_eq!(more.collapsible, Some(true), "more_section collapsible");
+        let more_children = more
+            .children
+            .as_ref()
+            .expect("more_section children");
         for secondary in [
             "pose_section",
             "locks_section",
@@ -1337,10 +1346,10 @@ mod tests {
             "storyboard_section",
             "packs_section",
         ] {
-            let sec = rail
+            let sec = more_children
                 .iter()
                 .find(|w| w.label_key.as_deref() == Some(secondary))
-                .unwrap_or_else(|| panic!("missing {secondary}"));
+                .unwrap_or_else(|| panic!("missing {secondary} under more_section"));
             assert_eq!(sec.collapsible, Some(true), "{secondary} collapsible");
         }
 
@@ -1351,7 +1360,12 @@ mod tests {
             "edit viewport on stage"
         );
         assert!(
-            stage.iter().any(|w| w.kind == "image_view"),
+            stage.iter().any(|w| w.kind == "image_view")
+                || stage.iter().any(|w| {
+                    w.children.as_ref().is_some_and(|cs| {
+                        cs.iter().any(|c| c.kind == "image_view")
+                    })
+                }),
             "beauty output on stage"
         );
         let tip = doc
