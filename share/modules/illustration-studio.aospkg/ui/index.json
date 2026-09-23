@@ -1211,6 +1211,12 @@
                 "selected_key": "selected_id"
               },
               {
+                "kind": "scene_object_tools",
+                "scene_key": "scene",
+                "selected_key": "selected_id",
+                "canvas_id": "illustration_viewport"
+              },
+              {
                 "kind": "text",
                 "label_key": "autosave_hint"
               },
@@ -1241,6 +1247,9 @@
                 "kind": "section",
                 "label_key": "assets_section",
                 "children": [
+                  {
+                    "kind": "scene_asset_palette"
+                  },
                   {
                     "kind": "row",
                     "children": [

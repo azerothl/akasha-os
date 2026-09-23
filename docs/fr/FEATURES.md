@@ -331,7 +331,7 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 ## 4c. Studio Illustration (module expérimental)
 
-Paquet catalogue local **`illustration-studio` 0.7.11** (versionné **indépendamment** de l’hôte Preview **0.18.0**). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (aussi dans le paquet `share/modules/illustration-studio.aospkg/docs/`).
+Paquet catalogue local **`illustration-studio` 0.7.12** (versionné **indépendamment** de l’hôte Preview **0.18.0**). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (aussi dans le paquet `share/modules/illustration-studio.aospkg/docs/`).
 
 **Ce qui est livré (honnête) :**
 
@@ -342,9 +342,10 @@ Paquet catalogue local **`illustration-studio` 0.7.11** (versionné **indépenda
 | Beauté via RenderService | **Stub** + **CPU** in-tree ; NPR Sketch/Pencil/Ink optionnel (approx CPU) |
 | Beauté Blender | Cap + chemin d’isolation réels ; **Renderer Pack GPL** opt-in et Blender téléchargeable depuis le Studio sur plateformes compatibles. Hiérarchie et matériaux PBR des GLB préservés ; Auto signale les erreurs de lancement. |
 | Compose | Le modèle configuré propose des objets et relations typés ; un solveur borné produit jusqu’à deux scènes à accepter explicitement. Les heuristiques EN/FR restent en repli. Le choix d’assets est limité au pack de primitives intégré. |
+| Édition multi-objets | Maj + clic, duplication, groupes, alignement, accrochage sur grille et TRS numérique ; opérations dans l’historique SceneGraph |
 | Pose IK/FK, caméra, lumières v0, extensions comic/storyboard | Réel (borné) |
 | Assist mesh neural | Cap + stub procédural réels ; `backend=neural` exige Model Pack opt-in (fixture/mock sans poids) |
-| Assets | Import GLB natif et trois modèles Poly Haven CC0 téléchargés à la demande, avec provenance, licence et dimensions ; marketplace général toujours désactivé |
+| Assets | Import GLB natif et trois modèles Poly Haven CC0 téléchargés à la demande, avec provenance, licence et dimensions ; les assets déjà téléchargés ou importés se glissent dans la vue 3D ; marketplace général toujours désactivé |
 
 **Ne pas lire ceci comme le MVP §140–§145 complet.** Manquent notamment une recherche étendue d’assets pour la composition, la QA beauté Blender dans le zip et un marketplace public. Blender reste un backend beauté derrière une frontière process — jamais l’éditeur de projet.
 

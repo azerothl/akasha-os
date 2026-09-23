@@ -26,6 +26,7 @@ mod camera;
 mod comic;
 mod compose;
 mod scene_intent;
+mod object_edit;
 mod edit;
 mod ik;
 mod light;
@@ -66,6 +67,7 @@ pub use scene_intent::{
     parse_scene_intent, plan_scene_intent, IntentError, IntentObject, RelationKind, SceneIntent,
     SpatialRelation,
 };
+pub use object_edit::{align_nodes, duplicate_nodes, group_nodes, snap_nodes, AlignMode, EditAxis};
 pub use comic::{
     apply_comic_layout, bind_panel_scene, layout_rects, load_comic_yaml, render_comic_page,
     save_comic_yaml, ComicError, ComicLayoutId, ComicPage, ComicPanel, ComicProject,
