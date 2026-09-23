@@ -132,6 +132,7 @@ pub use animation::{AnimationError, AnimationState, Keyframe, NamedPose, Rig};
 pub use history::{HistoryError, ProjectHistory, SceneVariant, SceneVersion};
 pub use render::{
     blender_pack_status, isolation_matrix, parse_backend, parse_pass, parse_style,
+    render_object_id_map, ObjectIdMap,
     AkashaSceneExport, BlenderPackStatus, BlenderRenderBackend, BlenderRunMode,
     CpuWireframeBackend, IsolationRow, JobState, RenderBackend, RenderBackendId, RenderError,
     RenderJobStatus, RenderOutput, RenderPassKind, RenderRequest, RenderResult, RenderService,

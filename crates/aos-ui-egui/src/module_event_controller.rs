@@ -355,10 +355,30 @@ pub(crate) fn on_ui_service_done(
                     || action_id == aos_proto::RENDER_SUBMIT_SERVICE
                     || action_id == aos_proto::COMIC_RENDER_SERVICE)
             {
+                let current_project = panel.local_state.get("project_id").and_then(Value::as_str);
+                let result_project = result.get("project_id").and_then(Value::as_str);
+                let source_key = if result.get("kind").and_then(Value::as_str) == Some("comic_render") {
+                    "comic"
+                } else {
+                    "scene"
+                };
+                let revision_key = if source_key == "comic" { "comic_revision" } else { "scene_revision" };
+                let current_revision = panel.local_state.get(source_key).and_then(Value::as_str).map(|yaml| {
+                    use sha2::Digest as _;
+                    format!("{:x}", sha2::Sha256::digest(yaml.as_bytes()))
+                });
+                if current_project != result_project
+                    || current_revision.as_deref() != result.get(revision_key).and_then(Value::as_str)
+                {
+                    return;
+                }
                 if let Some(path) = result.get("path").and_then(|p| p.as_str()) {
                     panel
                         .local_state
                         .insert("beauty_path".into(), Value::String(path.to_string()));
+                }
+                for key in ["kind", "project_id", "scene_revision", "comic_revision", "camera_id", "page_id", "id_map_path", "id_map_nodes", "id_map_width", "id_map_height"] {
+                    panel.local_state.insert(format!("render_{key}"), result.get(key).cloned().unwrap_or(Value::Null));
                 }
                 let backend = result
                     .get("backend")
@@ -392,6 +412,9 @@ pub(crate) fn on_ui_service_done(
             }
             if module == "illustration-studio" && illustration_action_patches_scene(&action_id) {
                 apply_illustration_scene_result(&mut panel.local_state, &action_id, &result);
+                if result.get("scene_yaml").is_some() || result.get("comic_yaml").is_some() {
+                    panel.local_state.insert("beauty_path".into(), Value::String(String::new()));
+                }
             }
             if module == "illustration-studio" && action_id == "scene_diagnostics" {
                 if let Some(summary) = result.get("diagnostics").and_then(Value::as_str) {

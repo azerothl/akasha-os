@@ -457,7 +457,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 validate_widget_tree(c, contract)?;
             }
         }
-        "split" => {
+        "split" | "illustration_work_split" => {
             let children =
                 w.children
                     .as_ref()
@@ -578,7 +578,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 )));
             }
         }
-        "scene3d" | "scene_tree" | "scene_object_tools" | "scene_material_editor" => {
+        "scene3d" | "illustration_stage" | "scene_tree" | "scene_object_tools" | "scene_material_editor" => {
             if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
                     "scene_key",
@@ -1382,6 +1382,20 @@ mod tests {
         let tabs = workspaces.tabs.as_ref().expect("workspace tabs");
         assert_eq!(tabs.len(), 6);
         assert!(tabs[4].content.as_ref().is_some_and(|w| w.kind == "split"));
+        for index in [1, 2, 3, 5] {
+            assert_eq!(tabs[index].content.as_ref().map(|w| w.kind.as_str()), Some("illustration_work_split"));
+        }
+        fn count_stages(widget: &DeclUiWidget) -> usize {
+            usize::from(widget.kind == "illustration_stage")
+                + widget.children.as_ref().map_or(0, |children| children.iter().map(count_stages).sum())
+                + widget.tabs.as_ref().map_or(0, |tabs| tabs.iter().filter_map(|tab| tab.content.as_deref()).map(count_stages).sum())
+        }
+        assert_eq!(count_stages(&doc.root), 4);
+        for action in &doc.actions {
+            if matches!(action.service.as_deref(), Some("render.submit" | "comic.render")) {
+                assert_eq!(action.input.as_ref().and_then(|input| input.get("project_id")).and_then(Value::as_str), Some("$local.project_id"));
+            }
+        }
     }
 
     #[test]

@@ -978,7 +978,7 @@ pub fn ui_scene3d(
 
     // Tool + undo/redo chrome (global edit chrome)
     let fr = language.starts_with("fr");
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(egui::RichText::new(if fr { "Outil" } else { "Tool" }).strong());
         for (tool, en, fr_l) in [
             (EditTool::Translate, "Move", "Déplacer"),
@@ -1064,7 +1064,7 @@ pub fn ui_scene3d(
         });
         let mut changed = false;
         let mut look = host.target;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(look_l);
             changed |= ui
                 .add(egui::DragValue::new(&mut look.x).speed(0.01).prefix("x "))
@@ -1080,7 +1080,7 @@ pub fn ui_scene3d(
         let mut yaw_deg = host.yaw.to_degrees();
         let mut pitch_deg = host.pitch.to_degrees();
         let mut fov_deg = host.hfov_rad.to_degrees();
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(dist_l);
             changed |= ui
                 .add(
