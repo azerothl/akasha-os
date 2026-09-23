@@ -252,8 +252,7 @@ mod tests {
 
     #[test]
     fn switching_to_ltx_video_sets_catalogue_recipe_not_square() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        std::env::set_var("AOS_HOME", &root);
+        crate::os_open::with_aos_home_for_test(&crate::os_open::workspace_root_for_tests(), || {
         let mut panel = DeclUiPanelState::new("create");
         panel
             .local_state
@@ -296,12 +295,12 @@ mod tests {
             panel.local_state.get("sd_mode").and_then(|v| v.as_str()),
             Some("vid_gen")
         );
+        });
     }
 
     #[test]
     fn wan_image_pack_syncs_catalogue_vid_gen_mode() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        std::env::set_var("AOS_HOME", &root);
+        crate::os_open::with_aos_home_for_test(&crate::os_open::workspace_root_for_tests(), || {
         let mut panel = DeclUiPanelState::new("create");
         panel
             .local_state
@@ -318,5 +317,6 @@ mod tests {
             panel.local_state.get("sd_mode").and_then(|v| v.as_str()),
             Some("vid_gen")
         );
+        });
     }
 }
