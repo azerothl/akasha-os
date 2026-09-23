@@ -13,6 +13,11 @@ pub enum SceneOp {
         before: Box<SceneGraph>,
         after: Box<SceneGraph>,
     },
+    SetMaterial {
+        id: String,
+        before: Option<crate::scene::MaterialOverride>,
+        after: Option<crate::scene::MaterialOverride>,
+    },
     SetTransform {
         id: String,
         before: Transform,
@@ -51,6 +56,17 @@ pub enum SceneOp {
 impl SceneOp {
     pub fn apply(&self, graph: &mut SceneGraph) -> Result<(), SceneError> {
         match self {
+            SceneOp::SetMaterial { id, after, .. } => {
+                if let Some(material) = after {
+                    material.validate()?;
+                }
+                graph
+                    .nodes
+                    .get_mut(id)
+                    .ok_or_else(|| SceneError::UnknownNode(id.clone()))?
+                    .material = after.clone();
+                Ok(())
+            }
             SceneOp::ReplaceGraph { after, .. } => {
                 after.validate()?;
                 *graph = (**after).clone();
@@ -103,6 +119,11 @@ impl SceneOp {
 
     pub fn invert(&self) -> Self {
         match self {
+            SceneOp::SetMaterial { id, before, after } => SceneOp::SetMaterial {
+                id: id.clone(),
+                before: after.clone(),
+                after: before.clone(),
+            },
             SceneOp::ReplaceGraph { before, after } => SceneOp::ReplaceGraph {
                 before: after.clone(),
                 after: before.clone(),

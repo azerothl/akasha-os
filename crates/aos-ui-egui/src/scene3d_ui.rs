@@ -10,8 +10,8 @@ use aos_scene::{
     align_nodes, apply_orbit_to_active_camera, duplicate_nodes, embedded_primitives_pack,
     eye_from_orbit as orbit_eye, fovy_from_hfov, group_nodes, instantiate_asset, load_project_yaml,
     look_at_rh, orbit_from_active_camera, perspective_rh, save_project_yaml, snap_nodes, AlignMode,
-    EditAxis, LockKind, LockScope, LockTable, Mat4, NodeKind, ProjectFile, Quat, SceneGraph,
-    SceneOp, Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
+    EditAxis, LockKind, LockScope, LockTable, Mat4, MaterialOverride, NodeKind, ProjectFile, Quat,
+    SceneGraph, SceneOp, Transform, UndoStack, Vec3, ViewportCamera, ViewportRenderer,
 };
 use eframe::egui::{
     self, Color32, ColorImage, Pos2, Rect, Sense, Stroke, TextureOptions, Ui, Vec2,
@@ -1520,6 +1520,131 @@ pub fn ui_scene_object_tools(
         scene: scene_to_value_with_locks(&graph, &locks, selected.clone()),
         selected_key: selected_key.into(),
         selected: json!(selected),
+        beauty_path_key: None,
+        beauty_path: None,
+        request_autosave: false,
+    })
+}
+
+pub fn ui_scene_material_editor(
+    ui: &mut Ui,
+    w: &DeclUiWidget,
+    language: &str,
+    local_state: &HashMap<String, Value>,
+    host: &mut Scene3dHostState,
+) -> Option<Scene3dPatch> {
+    let scene_key = w.scene_key.as_deref().unwrap_or("scene");
+    let selected_key = w.selected_key.as_deref().unwrap_or("selected_id");
+    let (mut graph, locks, _) = project_from_local(local_state, scene_key);
+    let fr = language.starts_with("fr");
+    let Some(id) = selected_from_local(local_state, selected_key) else {
+        ui.weak(if fr {
+            "Sélectionnez un objet pour régler sa matière."
+        } else {
+            "Select an object to edit its material."
+        });
+        return None;
+    };
+    let node = graph.nodes.get(&id)?;
+    if !matches!(node.kind, NodeKind::MeshBox | NodeKind::MeshAsset) {
+        ui.weak(if fr {
+            "Sélectionnez un objet visible."
+        } else {
+            "Select a visible object."
+        });
+        return None;
+    }
+    ui.label(egui::RichText::new(&node.name).strong());
+    ui.weak(if fr {
+        "Les GLB conservent leurs matériaux source."
+    } else {
+        "Source GLB materials are preserved."
+    });
+    let before = node.material.clone();
+    let mut after = before.clone();
+    let mut edited = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(if fr { "Source" } else { "Original" }).clicked() {
+            after = None;
+            edited = true;
+        }
+        for (label, rgb) in [
+            (if fr { "Ivoire" } else { "Ivory" }, [1.0, 0.92, 0.78]),
+            (if fr { "Argile" } else { "Clay" }, [0.82, 0.48, 0.34]),
+            (if fr { "Bleu" } else { "Blue" }, [0.36, 0.58, 0.95]),
+            (if fr { "Encre" } else { "Ink" }, [0.22, 0.27, 0.35]),
+        ] {
+            if ui.button(label).clicked() {
+                after.get_or_insert_with(MaterialOverride::default).tint = Some(rgb);
+                edited = true;
+            }
+        }
+    });
+    let mut tint = after
+        .as_ref()
+        .and_then(|m| m.tint)
+        .unwrap_or([1.0, 1.0, 1.0]);
+    if ui.color_edit_button_rgb(&mut tint).changed() {
+        after.get_or_insert_with(MaterialOverride::default).tint = Some(tint);
+        edited = true;
+    }
+    ui.horizontal_wrapped(|ui| {
+        for (label, roughness, metallic) in [
+            (if fr { "Mat" } else { "Matte" }, 0.9, 0.0),
+            ("Satin", 0.45, 0.0),
+            (if fr { "Métal" } else { "Metal" }, 0.24, 0.9),
+        ] {
+            if ui.button(label).clicked() {
+                let material = after.get_or_insert_with(MaterialOverride::default);
+                material.roughness = Some(roughness);
+                material.metallic = Some(metallic);
+                edited = true;
+            }
+        }
+    });
+    let mut roughness = after.as_ref().and_then(|m| m.roughness).unwrap_or(0.65);
+    let mut metallic = after.as_ref().and_then(|m| m.metallic).unwrap_or(0.0);
+    if ui
+        .add(egui::Slider::new(&mut roughness, 0.0..=1.0).text(if fr {
+            "Rugosité"
+        } else {
+            "Roughness"
+        }))
+        .changed()
+    {
+        after
+            .get_or_insert_with(MaterialOverride::default)
+            .roughness = Some(roughness);
+        edited = true;
+    }
+    if ui
+        .add(egui::Slider::new(&mut metallic, 0.0..=1.0).text(if fr {
+            "Métallique"
+        } else {
+            "Metallic"
+        }))
+        .changed()
+    {
+        after.get_or_insert_with(MaterialOverride::default).metallic = Some(metallic);
+        edited = true;
+    }
+    if !edited || before == after {
+        return None;
+    }
+    let op = SceneOp::SetMaterial {
+        id: id.clone(),
+        before,
+        after,
+    };
+    if host.undo.push_apply(&mut graph, op).is_err() {
+        return None;
+    }
+    host.mark_autosave_dirty();
+    Some(Scene3dPatch {
+        scene_key: scene_key.into(),
+        scene: scene_to_value_with_locks(&graph, &locks, Some(id.clone())),
+        selected_key: selected_key.into(),
+        selected: Value::String(id),
         beauty_path_key: None,
         beauty_path: None,
         request_autosave: false,

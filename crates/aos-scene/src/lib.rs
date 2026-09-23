@@ -134,7 +134,7 @@ pub use render::{
 };
 pub use render_stub::{stub_beauty_png, STUB_BEAUTY_SIZE};
 pub use scene::{
-    CameraParams, LightParams, LightType, NodeKind, SceneGraph, SceneNode, Transform,
+    CameraParams, LightParams, LightType, MaterialOverride, NodeKind, SceneGraph, SceneNode, Transform,
     DEFAULT_SCENE_YAML_PATH, ILLUSTRATIONS_DOCUMENTS_PREFIX,
 };
 pub use style::{

@@ -96,12 +96,26 @@ impl RenderBackend for CpuWireframeBackend {
                     .and_then(|uri| resolve_mesh_uri(uri, &search_refs))
                     .and_then(|path| load_gltf_mesh(&path).ok());
                 if let Some(mesh) = mesh {
-                    draw_mesh(&mut raster, &mesh, &world, req.pass, style);
+                    draw_mesh(
+                        &mut raster,
+                        &mesh,
+                        &world,
+                        req.pass,
+                        style,
+                        node.material.as_ref(),
+                    );
                     continue;
                 }
             }
             let corners = oriented_box_corners(&world);
-            draw_box(&mut raster, &corners, req.pass, style, &lights);
+            draw_box(
+                &mut raster,
+                &corners,
+                req.pass,
+                style,
+                &lights,
+                node.material.as_ref(),
+            );
         }
 
         let png = encode_rgba8_png(w, h, &rgba).map_err(RenderError::Encode)?;
@@ -115,14 +129,25 @@ impl RenderBackend for CpuWireframeBackend {
     }
 }
 
+fn tint_rgba(color: &mut [u8; 4], material: Option<&crate::scene::MaterialOverride>) {
+    if let Some(tint) = material.and_then(|m| m.tint) {
+        for index in 0..3 {
+            color[index] = (f32::from(color[index]) * tint[index])
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
 fn draw_mesh(
     raster: &mut Raster<'_>,
     mesh: &CpuTriangleMesh,
     world: &Mat4,
     pass: RenderPassKind,
     style: Option<&ResolvedStyle>,
+    material: Option<&crate::scene::MaterialOverride>,
 ) {
-    let fill = style
+    let mut fill = style
         .map(|s| {
             let rgb = s.fill_rgb();
             [rgb[0], rgb[1], rgb[2], 255]
@@ -133,6 +158,7 @@ fn draw_mesh(
             (mesh.base_color[2] * 255.0).clamp(0.0, 255.0) as u8,
             255,
         ]);
+    tint_rgba(&mut fill, material);
     let stroke = style
         .map(|s| {
             let rgb = s.stroke_rgb();
@@ -203,6 +229,7 @@ fn draw_box(
     pass: RenderPassKind,
     style: Option<&ResolvedStyle>,
     lights: &[ResolvedLight],
+    material: Option<&crate::scene::MaterialOverride>,
 ) {
     let Some(st) = style else {
         let line = match pass {
@@ -210,7 +237,7 @@ fn draw_box(
             RenderPassKind::Wireframe => [160u8, 200, 220, 255],
         };
         if matches!(pass, RenderPassKind::Beauty) {
-            let fill = lit_face_rgba(
+            let mut fill = lit_face_rgba(
                 lights,
                 corners[0],
                 corners[1],
@@ -218,6 +245,7 @@ fn draw_box(
                 [70.0 / 255.0, 78.0 / 255.0, 90.0 / 255.0],
                 [70, 78, 90, 255],
             );
+            tint_rgba(&mut fill, material);
             raster.fill_quad(corners[0], corners[1], corners[2], corners[3], fill);
         }
         for (i, j) in BOX_EDGES {
@@ -231,10 +259,11 @@ fn draw_box(
         let a = (st.opacity * 255.0).round().clamp(0.0, 255.0) as u8;
         [rgb[0], rgb[1], rgb[2], a]
     };
-    let fill_base = {
+    let mut fill_base = {
         let rgb = st.fill_rgb();
         [rgb[0], rgb[1], rgb[2], 255]
     };
+    tint_rgba(&mut fill_base, material);
 
     let do_fill = match st.family {
         StyleFamily::Sketch => false,
@@ -567,6 +596,19 @@ mod tests {
     use crate::style::resolve_style;
 
     #[test]
+    fn cpu_preview_applies_optional_tint() {
+        let mut color = [200, 100, 50, 255];
+        tint_rgba(
+            &mut color,
+            Some(&crate::scene::MaterialOverride {
+                tint: Some([0.5, 1.0, 0.0]),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(color, [100, 100, 0, 255]);
+    }
+
+    #[test]
     fn cpu_preview_draws_glb_triangles() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/hierarchy_textured.glb");
@@ -586,7 +628,14 @@ mod tests {
             [0.0, 0.0, 1.0, 0.0],
             [-2.5, -1.5, 0.0, 1.0],
         );
-        draw_mesh(&mut raster, &mesh, &world, RenderPassKind::Beauty, None);
+        draw_mesh(
+            &mut raster,
+            &mesh,
+            &world,
+            RenderPassKind::Beauty,
+            None,
+            None,
+        );
         assert!(rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] == 255));
     }
 

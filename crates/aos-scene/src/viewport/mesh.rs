@@ -101,7 +101,7 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
                 out.push(MeshInstance {
                     id: id.clone(),
                     world,
-                    color: color_for_id(&id, selected_here),
+                    color: material_tint(color_for_id(&id, selected_here), node.material.as_ref()),
                     selected: selected_here,
                     triangle_mesh: None,
                 });
@@ -129,9 +129,11 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
                                 color[1] = (color[1] * 0.55 + 0.55).min(1.0);
                                 color[2] = (color[2] * 0.55 + 0.85).min(1.0);
                             }
-                            color
+                            material_tint(color, node.material.as_ref())
                         })
-                        .unwrap_or_else(|| color_for_id(&id, selected_here)),
+                        .unwrap_or_else(|| {
+                            material_tint(color_for_id(&id, selected_here), node.material.as_ref())
+                        }),
                     selected: selected_here,
                     triangle_mesh,
                 });
@@ -140,6 +142,18 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
         }
     }
     out
+}
+
+fn material_tint(
+    mut color: [f32; 4],
+    material: Option<&crate::scene::MaterialOverride>,
+) -> [f32; 4] {
+    if let Some(tint) = material.and_then(|m| m.tint) {
+        for i in 0..3 {
+            color[i] *= tint[i];
+        }
+    }
+    color
 }
 
 fn mesh_search_roots() -> Vec<std::path::PathBuf> {
@@ -178,4 +192,24 @@ pub fn project_point_ndc(p: Vec3, view_proj: &Mat4) -> Option<(f32, f32, f32)> {
         return None;
     }
     Some((clip.x, clip.y, clip.z))
+}
+
+#[cfg(test)]
+mod material_tests {
+    use super::*;
+
+    #[test]
+    fn viewport_uses_scene_tint_for_mesh_box() {
+        let mut scene = SceneGraph::demo_scene();
+        let original = collect_mesh_instances(&scene, None)
+            .into_iter().find(|m| m.id == "box").unwrap().color;
+        scene.nodes.get_mut("box").unwrap().material = Some(crate::scene::MaterialOverride {
+            tint: Some([0.5, 1.0, 0.0]), ..Default::default()
+        });
+        let tinted = collect_mesh_instances(&scene, None)
+            .into_iter().find(|m| m.id == "box").unwrap().color;
+        assert!((tinted[0] - original[0] * 0.5).abs() < 1e-5);
+        assert_eq!(tinted[1], original[1]);
+        assert_eq!(tinted[2], 0.0);
+    }
 }
