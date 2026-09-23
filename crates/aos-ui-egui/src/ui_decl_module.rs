@@ -44,11 +44,27 @@ impl UiApp {
                     if inv.tool == "illustration.project.save" {
                         let fr = self.prefs.language.starts_with("fr");
                         panel.status = if fr {
-                            "Projet enregistré (autosave)".into()
+                            "Enregistrement du projet…".into()
                         } else {
-                            "Project saved (autosave)".into()
+                            "Saving project…".into()
                         };
                     }
+                }
+                if actions.service_action.as_ref().is_some_and(|action| {
+                    matches!(
+                        action.action_id.as_str(),
+                        "cpu_beauty" | "stub_beauty" | "blender_beauty" | "comic_render"
+                    )
+                }) {
+                    let fr = self.prefs.language.starts_with("fr");
+                    panel
+                        .local_state
+                        .insert("beauty_path".into(), serde_json::Value::String(String::new()));
+                    panel.local_state.insert(
+                        "beauty_summary".into(),
+                        serde_json::Value::String(String::new()),
+                    );
+                    panel.status = if fr { "Rendu en cours…".into() } else { "Rendering…".into() };
                 }
             }
         }

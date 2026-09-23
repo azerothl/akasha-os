@@ -269,6 +269,21 @@ foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
     }
 }
 
+# Illustration Studio is discoverable through the bundled local catalogue, so
+# ship its package alongside the catalogue entry used by a fresh Preview.
+$illustrationShare = Join-Path $root "share\modules\illustration-studio.aospkg"
+$illustrationOut = Join-Path $OutDir "share\modules\illustration-studio.aospkg"
+if (-not (Test-Path -LiteralPath $illustrationShare -PathType Container)) {
+    throw "illustration-studio.aospkg absent — run modules\build-illustration-studio.sh"
+}
+Copy-ReplaceDir $illustrationShare $illustrationOut
+foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
+    $path = Join-Path $illustrationOut $rel
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+        throw "illustration-studio.aospkg incomplete — missing or empty $rel"
+    }
+}
+
 foreach ($cat in @("catalogue.yaml", "catalogue.yaml.sig", "catalogue.pub")) {
     $src = Join-Path $root "share\modules\$cat"
     if (-not (Test-Path $src)) { throw "manque $src (catalogue E10)" }

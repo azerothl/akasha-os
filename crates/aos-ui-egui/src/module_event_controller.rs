@@ -262,7 +262,15 @@ pub(crate) fn on_ui_invoke_done(
             if !clear_form_keys.is_empty() {
                 panel.clear_form_keys(&clear_form_keys);
             }
-            panel.status.clear();
+            if module == "illustration-studio" && tool == "illustration.project.save" {
+                panel.status = if app.prefs.language.starts_with("fr") {
+                    "Projet enregistré".into()
+                } else {
+                    "Project saved".into()
+                };
+            } else {
+                panel.status.clear();
+            }
         } else {
             let t = crate::i18n::strings(&app.prefs.language);
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -311,6 +319,16 @@ pub(crate) fn on_ui_service_done(
                         .local_state
                         .insert("beauty_path".into(), Value::String(path.to_string()));
                 }
+                let backend = result.get("backend").and_then(|v| v.as_str()).unwrap_or("?");
+                let width = result.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
+                let height = result.get("height").and_then(|v| v.as_u64()).unwrap_or(0);
+                let style = result.get("style").and_then(|v| v.as_str());
+                let summary = if app.prefs.language.starts_with("fr") {
+                    format!("Moteur : {backend} · {width} × {height} · style : {}", style.unwrap_or("défaut"))
+                } else {
+                    format!("Backend: {backend} · {width} × {height} · style: {}", style.unwrap_or("default"))
+                };
+                panel.local_state.insert("beauty_summary".into(), Value::String(summary));
             }
             if module == "illustration-studio"
                 && illustration_action_patches_scene(&action_id)

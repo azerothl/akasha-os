@@ -141,7 +141,6 @@ impl ComposeIntent {
             "animal",
         ]) && !has(&["dog", "chien", "puppy", "chiot", "hound"]);
         let wants_dog = has(&["dog", "chien", "puppy", "chiot", "hound"]);
-        let animal_only = (wants_cat || wants_dog) && !wants_adult && !wants_child;
         Self {
             wants_library,
             wants_door,
@@ -159,7 +158,7 @@ impl ComposeIntent {
             wants_cup,
             wants_plant,
             wants_child,
-            wants_adult: wants_adult || (!wants_child && !animal_only && !prompt.trim().is_empty()),
+            wants_adult,
             wants_female,
             wants_second_character,
             wants_cat,
@@ -666,6 +665,13 @@ mod tests {
         assert_eq!(r.template_id, "default_stage");
         assert!(r.character_id.is_some());
         assert!(r.placed_assets.iter().any(|a| a == "prop.pedestal"));
+    }
+
+    #[test]
+    fn object_only_prompt_does_not_add_a_humanoid() {
+        let intent = ComposeIntent::from_prompt("A quiet room with a table and a window");
+        assert!(!intent.wants_adult);
+        assert!(!intent.wants_child);
     }
 
     #[test]

@@ -14,6 +14,8 @@ use std::sync::{Arc, Mutex};
 
 /// Default backend id string for DeclUI when omitted.
 pub const DEFAULT_RENDER_BACKEND: &str = "stub";
+/// Bound retained job metadata and PNG buffers for the lifetime of the host.
+pub const MAX_RETAINED_RENDER_JOBS: usize = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobState {
@@ -134,6 +136,27 @@ impl RenderService {
         let job_id = format!("rj-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
         {
             let mut jobs = self.jobs.lock().expect("render jobs lock");
+            if jobs.len() >= MAX_RETAINED_RENDER_JOBS {
+                let oldest_finished = jobs
+                    .iter()
+                    .filter(|(_, record)| {
+                        matches!(
+                            record.status.state,
+                            JobState::Succeeded | JobState::Failed | JobState::Cancelled
+                        )
+                    })
+                    .min_by_key(|(id, _)| {
+                        id.strip_prefix("rj-")
+                            .and_then(|number| number.parse::<u64>().ok())
+                            .unwrap_or(u64::MAX)
+                    })
+                    .map(|(id, _)| id.clone());
+                if let Some(id) = oldest_finished {
+                    jobs.remove(&id);
+                } else {
+                    return Err(RenderError::JobCapacityReached(MAX_RETAINED_RENDER_JOBS));
+                }
+            }
             jobs.insert(
                 job_id.clone(),
                 JobRecord {
@@ -292,6 +315,29 @@ mod tests {
         let res = svc.result(&job).expect("result");
         assert!(res.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
         assert_eq!(res.path, "/documents/illustrations/beauty-stub.png");
+    }
+
+    #[test]
+    fn completed_jobs_are_evicted_at_retention_limit() {
+        let svc = RenderService::default();
+        let mut job_ids = Vec::new();
+        for index in 0..=MAX_RETAINED_RENDER_JOBS {
+            let job = svc
+                .submit(RenderSubmit {
+                    scene: SceneGraph::demo_scene(),
+                    backend: RenderBackendId::Stub,
+                    pass: RenderPassKind::Beauty,
+                    width: 8,
+                    height: 8,
+                    output_path: format!("/documents/illustrations/capacity-{index}.png"),
+                    stub_rgb: (10, 20, 30),
+                    style: None,
+                })
+                .expect("completed job should fit after evicting the oldest result");
+            job_ids.push(job);
+        }
+        assert!(matches!(svc.status(&job_ids[0]), Err(RenderError::UnknownJob(_))));
+        assert_eq!(svc.status(job_ids.last().unwrap()).unwrap().state, JobState::Succeeded);
     }
 
     #[test]

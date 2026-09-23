@@ -330,7 +330,7 @@ Slash commands:
 
 ## 4c. Illustration Studio (experimental module)
 
-Local catalogue package **`illustration-studio` 0.7.5** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
+Local catalogue package **`illustration-studio` 0.7.7** (versioned independently of Preview host **0.18.0**). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
 
 **What ships (honest):**
 
