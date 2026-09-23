@@ -1272,7 +1272,8 @@ mod tests {
     }
 
     /// Layout lock: Create-like split rail — Compose → Edit → Beauty, Camera
-    /// section wired to viewport strip copy, secondary tools collapsible, beauty on stage.
+    /// section wired to viewport strip copy, secondary tools collapsible under
+    /// `more_section` (collapsed advanced parent; do not flatten), beauty on stage.
     #[test]
     fn illustration_studio_ui_keeps_compose_edit_beauty_flow() {
         let raw = std::fs::read_to_string(
@@ -1299,6 +1300,10 @@ mod tests {
         assert!(
             rail_labels.contains(&"edit_section"),
             "edit section in left rail"
+        );
+        assert!(
+            rail_labels.contains(&"render_section"),
+            "beauty/render section in left rail"
         );
         assert!(
             rail_labels.contains(&"camera_section")
