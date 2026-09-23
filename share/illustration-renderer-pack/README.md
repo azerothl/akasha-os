@@ -40,7 +40,7 @@ illustration-renderer-pack/
 
 | `AOS_BLENDER_MODE` | Behaviour |
 |--------------------|-----------|
-| `auto` (default) | Pack + binary → real spawn; pack only → mock; **pack missing → fail-closed** |
+| `auto` (default) | Pack + binary → real spawn (errors on failure, **no** silent mock); pack only → obvious mock; **pack missing → fail-closed** |
 | `mock` | Deterministic teal/digest PNG — **no** Blender (CI) |
 | `require` | Real spawn only; fail-closed if pack or binary missing |
 
