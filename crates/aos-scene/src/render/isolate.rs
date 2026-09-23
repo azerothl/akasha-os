@@ -481,42 +481,77 @@ static ISOLATION_MATRIX: [IsolationRow; 6] = [
 pub(crate) static BLENDER_PACK_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
+struct BlenderPackEnvRestore {
+    pack: Option<String>,
+    mode: Option<String>,
+    bin: Option<String>,
+}
+
+#[cfg(test)]
+impl BlenderPackEnvRestore {
+    fn capture() -> Self {
+        Self {
+            pack: std::env::var("AOS_ILLUSTRATION_RENDERER_PACK").ok(),
+            mode: std::env::var("AOS_BLENDER_MODE").ok(),
+            bin: std::env::var("AOS_BLENDER_BIN").ok(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Drop for BlenderPackEnvRestore {
+    fn drop(&mut self) {
+        match &self.pack {
+            Some(v) => std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", v),
+            None => std::env::remove_var("AOS_ILLUSTRATION_RENDERER_PACK"),
+        }
+        match &self.mode {
+            Some(v) => std::env::set_var("AOS_BLENDER_MODE", v),
+            None => std::env::remove_var("AOS_BLENDER_MODE"),
+        }
+        match &self.bin {
+            Some(v) => std::env::set_var("AOS_BLENDER_BIN", v),
+            None => std::env::remove_var("AOS_BLENDER_BIN"),
+        }
+    }
+}
+
+/// Holds pack-env lock + restores `AOS_*` vars on drop (parallel test safety).
+#[cfg(test)]
+pub(crate) struct BlenderPackTestEnv {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    _restore: BlenderPackEnvRestore,
+}
+
+#[cfg(test)]
+impl BlenderPackTestEnv {
+    /// Checkout Renderer Pack + default Auto mode, no explicit `AOS_BLENDER_BIN`.
+    pub(crate) fn checkout_auto_mock() -> Self {
+        use std::path::PathBuf;
+        let lock = BLENDER_PACK_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let restore = BlenderPackEnvRestore::capture();
+        let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/illustration-renderer-pack");
+        if pack.is_dir() {
+            std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", &pack);
+        } else {
+            std::env::remove_var("AOS_ILLUSTRATION_RENDERER_PACK");
+        }
+        std::env::remove_var("AOS_BLENDER_BIN");
+        std::env::remove_var("AOS_BLENDER_MODE");
+        Self {
+            _lock: lock,
+            _restore: restore,
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
-
-    struct EnvRestore {
-        pack: Option<String>,
-        mode: Option<String>,
-        bin: Option<String>,
-    }
-
-    impl EnvRestore {
-        fn capture() -> Self {
-            Self {
-                pack: std::env::var("AOS_ILLUSTRATION_RENDERER_PACK").ok(),
-                mode: std::env::var("AOS_BLENDER_MODE").ok(),
-                bin: std::env::var("AOS_BLENDER_BIN").ok(),
-            }
-        }
-    }
-
-    impl Drop for EnvRestore {
-        fn drop(&mut self) {
-            match &self.pack {
-                Some(v) => std::env::set_var("AOS_ILLUSTRATION_RENDERER_PACK", v),
-                None => std::env::remove_var("AOS_ILLUSTRATION_RENDERER_PACK"),
-            }
-            match &self.mode {
-                Some(v) => std::env::set_var("AOS_BLENDER_MODE", v),
-                None => std::env::remove_var("AOS_BLENDER_MODE"),
-            }
-            match &self.bin {
-                Some(v) => std::env::set_var("AOS_BLENDER_BIN", v),
-                None => std::env::remove_var("AOS_BLENDER_BIN"),
-            }
-        }
-    }
 
     #[test]
     fn argv_is_fixed_shape() {
@@ -548,7 +583,7 @@ mod tests {
         let _lock = BLENDER_PACK_ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        let _restore = EnvRestore::capture();
+        let _restore = BlenderPackEnvRestore::capture();
         std::env::set_var(
             "AOS_ILLUSTRATION_RENDERER_PACK",
             "/tmp/aos-missing-blender-renderer-pack",
@@ -566,7 +601,7 @@ mod tests {
         let _lock = BLENDER_PACK_ENV_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        let _restore = EnvRestore::capture();
+        let _restore = BlenderPackEnvRestore::capture();
         let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../share/illustration-renderer-pack");
         assert!(pack.is_dir());
