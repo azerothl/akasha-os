@@ -68,7 +68,7 @@ pub fn render_object_id_map(
                 .and_then(|uri| resolve_mesh_uri(uri, &roots))
                 .and_then(|path| load_gltf_mesh(&path).ok())
             {
-                for tri in mesh.indices.chunks_exact(3) {
+                for tri in mesh.indices.as_chunks::<3>().0 {
                     let point = |index: u32| -> Option<Vec3> {
                         let offset = index as usize * 6;
                         let xyz = mesh.interleaved.get(offset..offset + 3)?;
@@ -107,7 +107,7 @@ pub fn render_object_id_map(
         }
     }
     let mut rgba = vec![0u8; indices.len() * 4];
-    for (pixel, index) in rgba.chunks_exact_mut(4).zip(&indices) {
+    for (pixel, index) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(&indices) {
         pixel[0] = (index & 0xff) as u8;
         pixel[1] = ((index >> 8) & 0xff) as u8;
         pixel[2] = ((index >> 16) & 0xff) as u8;
