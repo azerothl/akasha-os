@@ -121,17 +121,7 @@ fn send_done(
 }
 
 fn import_and_insert(input: &Value) -> Result<Value, String> {
-    let mode = input.get("mode").and_then(Value::as_str).unwrap_or("");
-    let (uri, metadata) = match mode {
-        "file" => import_local_glb(input.get("path").and_then(Value::as_str).unwrap_or(""))?,
-        "polyhaven" => download_curated(
-            input
-                .get("catalogue_id")
-                .and_then(Value::as_str)
-                .unwrap_or(""),
-        )?,
-        _ => return Err("Unknown asset source".into()),
-    };
+    let (uri, metadata) = import_uri_metadata(input)?;
     let mut scene = match input.get("scene_yaml").and_then(Value::as_str) {
         Some(yaml) if !yaml.trim().is_empty() => {
             aos_scene::load_project_yaml(yaml)
@@ -158,6 +148,25 @@ fn import_and_insert(input: &Value) -> Result<Value, String> {
     let scene_yaml = aos_scene::save_project_yaml(&aos_scene::ProjectFile::new(scene))
         .map_err(|e| e.to_string())?;
     Ok(json!({"scene_yaml": scene_yaml, "root_id": id, "mesh_uri": uri, "metadata": metadata}))
+}
+
+pub(crate) fn import_to_library(input: &Value) -> Result<Value, String> {
+    let (uri, metadata) = import_uri_metadata(input)?;
+    Ok(json!({ "uri": uri, "metadata": metadata }))
+}
+
+fn import_uri_metadata(input: &Value) -> Result<(String, AssetMetadata), String> {
+    let mode = input.get("mode").and_then(Value::as_str).unwrap_or("");
+    match mode {
+        "file" => import_local_glb(input.get("path").and_then(Value::as_str).unwrap_or("")),
+        "polyhaven" => download_curated(
+            input
+                .get("catalogue_id")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+        ),
+        _ => Err("Unknown asset source".into()),
+    }
 }
 
 fn storage_root() -> PathBuf {

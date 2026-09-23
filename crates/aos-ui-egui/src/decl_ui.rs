@@ -173,9 +173,44 @@ impl DeclUiPanelState {
                     .cloned()
                     .unwrap_or(Value::Bool(false)),
             );
+        } else if tool == "illustration.project.work_area" {
+            if self.local_state.get("project_id") == result.get("project_id") {
+                if let Some(area) = result.get("work_area") {
+                    self.local_state.insert("work_area".into(), area.clone());
+                    self.local_state.insert("last_work_area".into(), area.clone());
+                }
+            }
+        } else if tool == "illustration.asset.register" {
+            if self.local_state.get("project_id") == result.get("project_id") {
+                let items = result.get("items").cloned().unwrap_or(Value::Array(Vec::new()));
+                self.local_state.insert("project_assets".into(), items.clone());
+                self.bind_cache.insert("illustration.asset.list".into(), serde_json::json!({ "items": items }));
+            }
+        } else if tool == "illustration.asset.select" {
+            if self.local_state.get("project_id") == result.get("project_id") {
+                let asset = &result["asset"];
+                if asset.get("kind").and_then(Value::as_str) == Some("image") {
+                    for (key, field) in [
+                        ("library_image_uri", "uri"),
+                        ("library_image_name", "name"),
+                        ("library_image_prompt", "prompt"),
+                    ] {
+                        self.local_state.insert(
+                            key.into(),
+                            asset.get(field).cloned().unwrap_or(Value::String(String::new())),
+                        );
+                    }
+                }
+            }
+        } else if tool == "illustration.asset.add" {
+            if self.local_state.get("project_id") == result.get("project_id") {
+                if let Some(yaml) = result.get("scene_yaml") {
+                    self.local_state.insert("scene".into(), yaml.clone());
+                }
+            }
         } else if tool == "illustration.project.close" && result.get("closed") == Some(&Value::Bool(true)) {
             self.scene3d_viewports.clear();
-            for key in ["project_id", "project_title", "scene", "beauty_path"] {
+            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt"] {
                 self.local_state.insert(key.into(), Value::String(String::new()));
             }
         }
@@ -197,10 +232,19 @@ impl DeclUiPanelState {
             ("beauty_path", Value::String(String::new())),
             ("selected_id", Value::String(String::new())),
             ("compose_pending", Value::Bool(false)),
-            ("work_area", result.get("work_area").cloned().unwrap_or_else(|| Value::String("start".into()))),
+            ("project_assets", result.get("assets").cloned().unwrap_or(Value::Array(Vec::new()))),
+            ("library_image_uri", Value::String(String::new())),
+            ("library_image_name", Value::String(String::new())),
+            ("library_image_prompt", Value::String(String::new())),
+            ("work_area", Value::String("start".into())),
+            ("last_work_area", result.get("work_area").cloned().unwrap_or_else(|| Value::String("start".into()))),
         ] {
             self.local_state.insert(key.into(), value);
         }
+        self.bind_cache.insert(
+            "illustration.asset.list".into(),
+            serde_json::json!({ "items": result.get("assets").cloned().unwrap_or(Value::Array(Vec::new())) }),
+        );
     }
 
     pub fn set_pending_invoke(&mut self, pending: bool) {
@@ -261,6 +305,15 @@ impl DeclUiPanelState {
                     .and_then(Value::as_str)
                 {
                     ui.weak(format!("v{version}"));
+                }
+                if let Some(project) = self
+                    .local_state
+                    .get("project_title")
+                    .and_then(Value::as_str)
+                    .filter(|title| !title.is_empty())
+                {
+                    ui.separator();
+                    ui.strong(project);
                 }
             }
             if ui.button(refresh_label).clicked() {
@@ -351,6 +404,31 @@ impl DeclUiPanelState {
             .map(|p| eval_predicate(p, local_state, document_state))
             .unwrap_or(true);
         match w.kind.as_str() {
+            "plain_column" => {
+                if let Some(children) = &w.children {
+                    for child in children {
+                        Self::render_widget(
+                            ui,
+                            md_cache,
+                            child,
+                            doc,
+                            language,
+                            cache,
+                            binding_cache,
+                            local_state,
+                            document_state,
+                            subscriptions,
+                            image_views,
+                            layer_canvases,
+                            scene3d_viewports,
+                            form_fields,
+                            tool_schemas,
+                            pending_invoke,
+                            actions,
+                        );
+                    }
+                }
+            }
             "column" => {
                 let h = ui.available_height();
                 let column_salt = (
@@ -1355,18 +1433,47 @@ impl DeclUiPanelState {
                     let tab_id = ui
                         .id()
                         .with(("decl-tabs", w.label_key.as_deref(), labels.len()));
-                    let mut selected = ui
-                        .memory(|memory| memory.data.get_temp::<usize>(tab_id))
-                        .unwrap_or(0)
-                        .min(labels.len().saturating_sub(1));
+                    let controlled = w
+                        .state_key
+                        .as_ref()
+                        .zip(w.items.as_ref())
+                        .filter(|(_, items)| items.len() == labels.len());
+                    let mut selected = if let Some((key, items)) = controlled {
+                        let current = local_state.get(key).and_then(Value::as_str);
+                        items.iter().position(|item| Some(item.as_str()) == current).unwrap_or(0)
+                    } else {
+                        ui.memory(|memory| memory.data.get_temp::<usize>(tab_id))
+                            .unwrap_or(0)
+                            .min(labels.len().saturating_sub(1))
+                    };
                     ui.horizontal(|ui| {
                         for (i, label) in labels.iter().enumerate() {
-                            if ui.selectable_label(selected == i, label).clicked() {
+                            if ui.add_enabled(
+                                !pending_invoke,
+                                egui::SelectableLabel::new(selected == i, label),
+                            ).clicked() {
                                 selected = i;
+                                if let Some((key, items)) = controlled {
+                                    actions.local_patch.insert(key.clone(), Value::String(items[i].clone()));
+                                    if key == "work_area" {
+                                        if let Some(project_id) = local_state.get("project_id").and_then(Value::as_str) {
+                                            queue_invoke(
+                                                actions,
+                                                "illustration.project.work_area",
+                                                serde_json::json!({ "project_id": project_id, "work_area": items[i] }),
+                                                Vec::new(),
+                                                Vec::new(),
+                                                tool_schemas,
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     });
-                    ui.memory_mut(|memory| memory.data.insert_temp(tab_id, selected));
+                    if controlled.is_none() {
+                        ui.memory_mut(|memory| memory.data.insert_temp(tab_id, selected));
+                    }
                     ui.separator();
                     if let Some(tab) = tabs.get(selected) {
                         if let Some(content) = &tab.content {
@@ -1806,6 +1913,89 @@ impl DeclUiPanelState {
             }
             "scene_asset_palette" => {
                 crate::scene3d_ui::ui_scene_asset_palette(ui, language);
+            }
+            "illustration_asset_library" => {
+                let assets = local_state
+                    .get("project_assets")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                if assets.is_empty() {
+                    if let Some(label) = widget_text_from_key(Some("library_empty"), doc, language) {
+                        ui.weak(label);
+                    }
+                }
+                for asset in assets {
+                    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+                    let project_id = asset.get("project_id").and_then(Value::as_str).unwrap_or("");
+                    let kind = asset.get("kind").and_then(Value::as_str).unwrap_or("");
+                    let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
+                    let uri = asset.get("uri").and_then(Value::as_str).unwrap_or("");
+                    let meta = &asset["metadata"];
+                    let thumbnail = if kind == "image" {
+                        uri
+                    } else {
+                        meta.get("thumbnail").and_then(Value::as_str).unwrap_or("")
+                    };
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            if !thumbnail.contains("..")
+                                && (thumbnail.starts_with("/assets/illustration/")
+                                    || thumbnail.starts_with(&format!("/documents/illustrations/projects/{project_id}/assets/")))
+                            {
+                                let texture_id = ui.id().with(("illustration-asset-thumb", thumbnail));
+                                let texture = ui.ctx().data(|data| data.get_temp::<egui::TextureHandle>(texture_id))
+                                    .or_else(|| {
+                                        let loaded = try_load_asset_thumbnail(ui.ctx(), thumbnail)?;
+                                        ui.ctx().data_mut(|data| data.insert_temp(texture_id, loaded.clone()));
+                                        Some(loaded)
+                                    });
+                                if let Some(texture) = texture {
+                                    ui.add(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(72.0, 72.0)));
+                                }
+                            }
+                            ui.vertical(|ui| {
+                                ui.strong(name);
+                                ui.weak(if kind == "image" {
+                                    widget_text_from_key(Some("library_kind_image"), doc, language).unwrap_or_else(|| "Image".into())
+                                } else {
+                                    widget_text_from_key(Some("library_kind_mesh"), doc, language).unwrap_or_else(|| "3D".into())
+                                });
+                                if let Some(dimensions) = meta.get("dimensions_m").and_then(Value::as_array) {
+                                    let values: Vec<String> = dimensions.iter().filter_map(Value::as_f64).map(|v| format!("{v:.2}")).collect();
+                                    if values.len() == 3 {
+                                        ui.weak(format!("{} × {} × {} m", values[0], values[1], values[2]));
+                                    }
+                                }
+                                for field in ["license", "provenance"] {
+                                    if let Some(value) = meta.get(field).and_then(Value::as_str).filter(|value| !value.is_empty()) {
+                                        ui.weak(value);
+                                    }
+                                }
+                                let tool = if kind == "image" && w.state_key.as_deref() != Some("scene") {
+                                    Some(("illustration.asset.select", "library_select_image"))
+                                } else if kind == "mesh" && w.state_key.as_deref() == Some("scene") {
+                                    Some(("illustration.asset.add", "library_add_to_scene"))
+                                } else {
+                                    None
+                                };
+                                if let Some((tool, action_label)) = tool {
+                                    let label = widget_text_from_key(Some(action_label), doc, language).unwrap_or_else(|| "Select".into());
+                                    if ui.add_enabled(!pending_invoke, egui::Button::new(label)).clicked() {
+                                        queue_invoke(
+                                            actions,
+                                            tool,
+                                            serde_json::json!({ "project_id": project_id, "asset_id": id }),
+                                            Vec::new(),
+                                            Vec::new(),
+                                            tool_schemas,
+                                        );
+                                    }
+                                }
+                            });
+                        });
+                    });
+                }
             }
             "scene_candidate" => {
                 if let Some(key) = w.scene_key.as_deref() {
@@ -3133,6 +3323,20 @@ pub(crate) fn try_load_png(ctx: &egui::Context, logical: &str) -> Option<egui::T
     let rgba = img.to_rgba8();
     let size = [rgba.width() as usize, rgba.height() as usize];
     let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+    Some(ctx.load_texture(logical, color, egui::TextureOptions::LINEAR))
+}
+
+fn try_load_asset_thumbnail(
+    ctx: &egui::Context,
+    logical: &str,
+) -> Option<egui::TextureHandle> {
+    let path = host_file_from_logical(logical);
+    if std::fs::metadata(&path).ok()?.len() > 100_000_000 {
+        return None;
+    }
+    let img = image::open(path).ok()?.thumbnail(144, 144).to_rgba8();
+    let size = [img.width() as usize, img.height() as usize];
+    let color = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
     Some(ctx.load_texture(logical, color, egui::TextureOptions::LINEAR))
 }
 

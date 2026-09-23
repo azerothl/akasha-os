@@ -570,7 +570,7 @@ fn validate_widget_tree(w: &DeclUiWidget, contract: u32) -> Result<(), RichDeclU
                 )));
             }
         }
-        "scene_asset_palette" => {}
+        "scene_asset_palette" | "illustration_asset_library" | "plain_column" => {}
         "scene_candidate" => {
             if w.scene_key.as_ref().is_none_or(|k| k.is_empty()) {
                 return Err(RichDeclUiError::Widget(DeclUiError::MissingField(
@@ -789,7 +789,7 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-        crate::ILLUSTRATION_ASSET_IMPORT_SERVICE => {
+        crate::ILLUSTRATION_ASSET_IMPORT_SERVICE | "illustration.library.import" => {
             if !granted_caps
                 .iter()
                 .any(|c| c == crate::ILLUSTRATION_ASSET_IMPORT_CAP)
@@ -797,6 +797,12 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
                 return Err(RichDeclUiError::MissingCapability(
                     crate::ILLUSTRATION_ASSET_IMPORT_CAP.into(),
                 ));
+            }
+            Ok(())
+        }
+        "illustration.library.convert" => {
+            if !granted_caps.iter().any(|c| c == crate::MESH_NEURAL_CAP) {
+                return Err(RichDeclUiError::MissingCapability(crate::MESH_NEURAL_CAP.into()));
             }
             Ok(())
         }
@@ -1314,6 +1320,10 @@ mod tests {
         let doc = DeclUiDocument::parse_json_with_contract(raw.as_bytes(), UI_CONTRACT_V2)
             .expect("parse");
         let tools = [
+            "illustration.asset.list",
+            "illustration.asset.register",
+            "illustration.asset.select",
+            "illustration.asset.add",
             "illustration.project.list",
             "illustration.project.create",
             "illustration.project.open",
@@ -1333,6 +1343,7 @@ mod tests {
             crate::RENDER_BLENDER_CAP.into(),
             crate::ILLUSTRATION_DEPENDENCIES_INSTALL_CAP.into(),
             crate::ILLUSTRATION_ASSET_IMPORT_CAP.into(),
+            crate::rich_app_contract::MEDIA_GENERATE_CAP.into(),
             crate::ASSET_ILLUSTRATION_READ_CAP.into(),
             crate::SCENE_COMPOSE_CAP.into(),
             crate::SCENE_POSE_CAP.into(),
@@ -1347,125 +1358,30 @@ mod tests {
             .expect("illustration-studio ui valid");
     }
 
-    /// Layout lock: Create-like split rail — Compose → Edit → Beauty, scene-intent
-    /// tip copy, Camera section wired to viewport strip copy, secondary tools
-    /// collapsible under `more_section` (collapsed advanced parent; do not flatten),
-    /// beauty on stage.
+    /// The first screen is the project browser; a managed project opens
+    /// contextual work areas rather than a single scroll of unrelated controls.
     #[test]
-    fn illustration_studio_ui_keeps_compose_edit_beauty_flow() {
+    fn illustration_studio_ui_has_project_browser_and_workspaces() {
         let raw = std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../modules/illustration-studio/ui/index.json"),
         )
         .expect("illustration-studio ui");
         let doc: DeclUiDocument = serde_json::from_str(&raw).expect("parse json");
-        assert_eq!(doc.root.kind, "column");
+        assert_eq!(doc.root.kind, "plain_column");
         let screens = doc.root.children.as_ref().expect("project screens");
         assert_eq!(screens.len(), 2);
-        assert!(screens[0].children.as_ref().is_some_and(|items| items.iter().any(|w| w.kind == "table")));
-        assert_eq!(screens[1].kind, "split");
-        let panes = screens[1].children.as_ref().expect("studio split children");
-        assert_eq!(panes.len(), 2);
-        assert_eq!(panes[0].kind, "scroll");
-        assert_eq!(panes[1].kind, "split", "stage is edit|beauty split");
-
-        let rail = panes[0].children.as_ref().expect("rail");
-        let rail_labels: Vec<&str> = rail.iter().filter_map(|w| w.label_key.as_deref()).collect();
-        let section_order: Vec<&str> = rail
-            .iter()
-            .filter_map(|w| w.label_key.as_deref())
-            .filter(|key| matches!(*key, "compose_section" | "edit_section" | "render_section"))
-            .collect();
+        let home = screens[0].children.as_ref().expect("project home");
+        assert!(home.iter().any(|w| w.kind == "table" && w.bind.as_deref() == Some("illustration.project.list")));
+        let studio = screens[1].children.as_ref().expect("studio");
+        let workspaces = studio.iter().find(|w| w.kind == "tabs").expect("workspaces");
         assert_eq!(
-            section_order,
-            ["compose_section", "edit_section", "render_section"],
-            "left rail sections follow Compose → Edit → Beauty"
+            workspaces.items.as_deref(),
+            Some(&["start".into(), "scene3d".into(), "illustration".into(), "comic".into(), "library".into(), "final".into()][..])
         );
-        assert!(
-            rail_labels.contains(&"camera_section")
-                || rail.iter().any(|w| w.children.as_ref().is_some_and(|cs| {
-                    cs.iter()
-                        .any(|c| c.label_key.as_deref() == Some("camera_section"))
-                })),
-            "camera section nested under edit"
-        );
-        assert!(
-            rail.iter().any(|w| w.kind == "scene_tree"
-                || w.children
-                    .as_ref()
-                    .is_some_and(|cs| { cs.iter().any(|c| c.kind == "scene_tree") })),
-            "scene_tree in rail"
-        );
-        assert!(
-            rail.iter().any(|w| {
-                fn has_undo(w: &DeclUiWidget) -> bool {
-                    if w.kind == "undo_redo" && w.scene_key.as_deref() == Some("scene") {
-                        return true;
-                    }
-                    w.children
-                        .as_ref()
-                        .is_some_and(|cs| cs.iter().any(has_undo))
-                }
-                has_undo(w)
-            }),
-            "global scene undo_redo chrome in project section"
-        );
-        let more = rail
-            .iter()
-            .find(|w| w.label_key.as_deref() == Some("more_section"))
-            .unwrap_or_else(|| panic!("missing more_section"));
-        assert_eq!(more.collapsible, Some(true), "more_section collapsible");
-        let more_children = more.children.as_ref().expect("more_section children");
-        for secondary in [
-            "pose_section",
-            "locks_section",
-            "mesh_section",
-            "comic_section",
-            "storyboard_section",
-            "packs_section",
-        ] {
-            let sec = more_children
-                .iter()
-                .find(|w| w.label_key.as_deref() == Some(secondary))
-                .unwrap_or_else(|| panic!("missing {secondary} under more_section"));
-            assert_eq!(sec.collapsible, Some(true), "{secondary} collapsible");
-        }
-
-        let stage = panes[1].children.as_ref().expect("stage panes");
-        assert_eq!(stage.len(), 2);
-        assert!(
-            stage.iter().any(|w| w.kind == "scene3d"),
-            "edit viewport on stage"
-        );
-        assert!(
-            stage.iter().any(|w| w.kind == "image_view")
-                || stage.iter().any(|w| {
-                    w.children
-                        .as_ref()
-                        .is_some_and(|cs| cs.iter().any(|c| c.kind == "image_view"))
-                }),
-            "beauty output on stage"
-        );
-        let en_labels = &doc.labels.as_ref().expect("labels").en;
-        assert!(
-            en_labels
-                .get("compose_section")
-                .is_some_and(|s| s.contains("Compose")),
-            "compose section title names Compose step"
-        );
-        assert!(
-            en_labels
-                .get("render_section")
-                .is_some_and(|s| s.contains("Beauty")),
-            "render section title names Beauty step"
-        );
-        let tip = en_labels.get("tip_body").map(String::as_str).unwrap_or("");
-        assert!(
-            tip.contains("Describe")
-                && tip.contains("proposes")
-                && tip.contains("choose a candidate"),
-            "ADHD flow tip explains describe → validated proposals → apply before edit/beauty"
-        );
+        let tabs = workspaces.tabs.as_ref().expect("workspace tabs");
+        assert_eq!(tabs.len(), 6);
+        assert!(tabs[4].content.as_ref().is_some_and(|w| w.kind == "split"));
     }
 
     #[test]

@@ -282,6 +282,27 @@ pub(crate) fn on_ui_invoke_done(
         }
     }
     if ok {
+        if module == "illustration-studio"
+            && tool == "illustration.project.work_area"
+            && result.get("compose").and_then(Value::as_bool) == Some(true)
+        {
+            if let Some(panel) = app.decl_panels.get(&module) {
+                let prompt = panel
+                    .local_state
+                    .get("prompt")
+                    .cloned()
+                    .unwrap_or(Value::String(String::new()));
+                let _ = app.cmd_tx.send(Cmd::ModuleUiServiceAction {
+                    module: module.clone(),
+                    action_id: "compose_scene".into(),
+                    service: Some("scene.compose".into()),
+                    tool: None,
+                    input: serde_json::json!({ "prompt": prompt }),
+                    refresh_binds: Vec::new(),
+                    subscription_id: None,
+                });
+            }
+        }
         for bind in refresh_binds {
             let _ = app.cmd_tx.send(Cmd::ModuleUiBind {
                 module: module.clone(),
@@ -310,9 +331,25 @@ pub(crate) fn on_ui_service_done(
                 panel.activate_illustration_project(&result);
             }
             if module == "illustration-studio"
+                && matches!(
+                    action_id.as_str(),
+                    "library_import_glb"
+                        | "library_import_chair"
+                        | "library_import_desk"
+                        | "library_import_notebook"
+                        | "library_generate_image"
+                        | "library_convert_trellis"
+                )
+                && panel.local_state.get("project_id") == result.get("project_id")
+            {
+                panel.set_bind_result("illustration.asset.register", result.clone());
+            }
+            if module == "illustration-studio"
                 && (action_id == "stub_beauty"
                     || action_id == "cpu_beauty"
                     || action_id == "blender_beauty"
+                    || action_id == "cpu_3d"
+                    || action_id == "blender_3d"
                     || action_id == "comic_render"
                     || action_id == aos_proto::RENDER_STUB_SERVICE
                     || action_id == aos_proto::RENDER_SUBMIT_SERVICE
