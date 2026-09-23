@@ -22,6 +22,20 @@ impl UiApp {
         let t = i18n::strings(&self.prefs.language);
         let mut actions = decl_ui::DeclUiActions::default();
         if let Some(panel) = self.decl_panels.get_mut(module) {
+            if module == "illustration-studio" {
+                let version = self
+                    .settings_ui
+                    .installed_modules
+                    .iter()
+                    .find(|installed| installed.name == module)
+                    .map(|installed| installed.version.clone());
+                if let Some(version) = version {
+                    panel.local_state.insert(
+                        "installed_version".into(),
+                        serde_json::Value::String(version),
+                    );
+                }
+            }
             if module == "create" {
                 sync_create_generation_defaults(panel);
             }
