@@ -660,6 +660,9 @@ pub(crate) async fn run_decl_service_action(
         aos_proto::RENDER_PACK_STATUS_SERVICE => {
             run_render_pack_status(evt_tx, module, action_id, input, refresh_binds);
         }
+        aos_proto::ILLUSTRATION_DEPENDENCIES_INSTALL_SERVICE => {
+            crate::illustration_install::dispatch(evt_tx, module, action_id, &input, refresh_binds);
+        }
         other => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                 module: module.to_string(),

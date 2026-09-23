@@ -48,6 +48,9 @@
       "blender_pack_status_label": "Refresh Blender pack status",
       "blender_pack_status_value_label": "Blender pack status",
       "blender_pack_status_empty": "Blender pack status unknown — tap Refresh Blender pack status.",
+      "blender_download_label": "Download Blender 4.5.14 LTS (~380 MB)",
+      "blender_download_info": "Official [Blender 4.5 LTS](https://www.blender.org/download/lts/4-5/) portable build · [GPL license](https://www.blender.org/about/license/). Download starts only when you click the button.",
+      "dependency_download_cancel": "Cancel download",
       "add_box_label": "Add box",
       "add_humanoid_label": "Add humanoid",
       "add_female_label": "Add woman",
@@ -71,6 +74,11 @@
       "mesh_pack_status_label": "Refresh pack status",
       "mesh_pack_status_value_label": "Neural mesh pack status",
       "mesh_pack_status_empty": "Pack status unknown — tap Refresh pack status.",
+      "trellis_download_info": "Image-to-3D runtime: [trellis.cpp](https://github.com/pwilkin/trellis.cpp/releases/tag/v0.6.0) (Windows/Linux) · [model card and terms](https://huggingface.co/ilintar/trellis2-gguf). Q4: ~6.5 GB · Q8: ~10 GB. Needs Vulkan; macOS requires a manually configured runner.",
+      "trellis_quant_label": "Model size",
+      "trellis_q4_label": "Q4 · ~6.5 GB",
+      "trellis_q8_label": "Q8 · ~10 GB",
+      "trellis_download_label": "Accept terms & download TRELLIS",
       "mesh_tip": "Stub builds MeshBox props from keywords. Neural spawns trellis.cpp / pack adapter (image→GLB) when runner + GGUF weights are installed; otherwise fixture mock. Cap mesh.neural · SceneGraph MeshAsset. No WebView.",
       "comic_section": "Comic page",
       "comic_layout_label": "Layout",
@@ -161,6 +169,9 @@
       "blender_pack_status_label": "Rafraîchir statut pack Blender",
       "blender_pack_status_value_label": "Statut du pack Blender",
       "blender_pack_status_empty": "Statut pack Blender inconnu — appuyez sur Rafraîchir statut pack Blender.",
+      "blender_download_label": "Télécharger Blender 4.5.14 LTS (~380 Mo)",
+      "blender_download_info": "Archive portable [Blender 4.5 LTS](https://www.blender.org/download/lts/4-5/) officielle · [licence GPL](https://www.blender.org/about/license/). Le téléchargement commence après votre clic.",
+      "dependency_download_cancel": "Annuler le téléchargement",
       "add_box_label": "Ajouter boîte",
       "add_humanoid_label": "Ajouter humanoïde",
       "add_female_label": "Ajouter femme",
@@ -184,6 +195,11 @@
       "mesh_pack_status_label": "Rafraîchir statut pack",
       "mesh_pack_status_value_label": "Statut du pack de maillage neural",
       "mesh_pack_status_empty": "Statut pack inconnu — appuyez sur Rafraîchir statut pack.",
+      "trellis_download_info": "Moteur image-vers-3D : [trellis.cpp](https://github.com/pwilkin/trellis.cpp/releases/tag/v0.6.0) (Windows/Linux) · [fiche modèle et conditions](https://huggingface.co/ilintar/trellis2-gguf). Q4 : ~6,5 Go · Q8 : ~10 Go. GPU Vulkan requis ; sur macOS, configurez un runner manuellement.",
+      "trellis_quant_label": "Taille du modèle",
+      "trellis_q4_label": "Q4 · ~6,5 Go",
+      "trellis_q8_label": "Q8 · ~10 Go",
+      "trellis_download_label": "Accepter les conditions et télécharger TRELLIS",
       "mesh_tip": "Le stub assemble des MeshBox. Le neural lance trellis.cpp / l’adaptateur du pack (image→GLB) si runner + poids GGUF sont installés ; sinon mock fixture. Cap mesh.neural · SceneGraph MeshAsset. Pas de WebView.",
       "comic_section": "Page BD",
       "comic_layout_label": "Mise en page",
@@ -279,6 +295,14 @@
       "blender_pack_status": {
         "type": "string",
         "default": ""
+      },
+      "trellis_quant": {
+        "type": "string",
+        "default": "q4"
+      },
+      "dependency_download_active": {
+        "type": "boolean",
+        "default": false
       },
       "comic": {
         "type": "string",
@@ -566,6 +590,31 @@
       "service": "render.pack.status",
       "input": {
         "lang": "en"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "install_blender",
+      "service": "illustration.dependencies.install",
+      "input": {
+        "kind": "blender"
+      },
+      "refresh_binds": ["blender_pack_status"]
+    },
+    {
+      "id": "install_trellis",
+      "service": "illustration.dependencies.install",
+      "input": {
+        "kind": "trellis",
+        "quant": "$local.trellis_quant"
+      },
+      "refresh_binds": ["mesh_pack_status"]
+    },
+    {
+      "id": "cancel_dependency_download",
+      "service": "illustration.dependencies.install",
+      "input": {
+        "kind": "cancel"
       },
       "refresh_binds": []
     },
@@ -1248,6 +1297,16 @@
                 "kind": "button",
                 "label_key": "blender_pack_status_label",
                 "action": "blender_pack_status"
+              },
+              {
+                "kind": "markdown",
+                "label_key": "blender_download_info"
+              },
+              {
+                "kind": "button",
+                "label_key": "blender_download_label",
+                "action": "install_blender",
+                "primary": true
               }
             ]
           },
@@ -1391,6 +1450,31 @@
                     "kind": "button",
                     "label_key": "mesh_pack_status_label",
                     "action": "mesh_pack_status"
+                  },
+                  {
+                    "kind": "markdown",
+                    "label_key": "trellis_download_info"
+                  },
+                  {
+                    "kind": "radio",
+                    "state_key": "trellis_quant",
+                    "label_key": "trellis_quant_label",
+                    "inline": true,
+                    "items": ["q4", "q8"],
+                    "item_label_keys": ["trellis_q4_label", "trellis_q8_label"]
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "trellis_download_label",
+                    "action": "install_trellis"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "dependency_download_cancel",
+                    "action": "cancel_dependency_download",
+                    "visible": {
+                      "eq": ["$local.dependency_download_active", true]
+                    }
                   },
                   {
                     "kind": "button",

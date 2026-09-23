@@ -470,6 +470,23 @@ pub(crate) fn on_ui_job_update(
     }
 }
 
+pub(crate) fn on_ui_service_progress(
+    app: &mut UiApp,
+    module: String,
+    message: String,
+    active: bool,
+) {
+    if let Some(panel) = app.decl_panels.get_mut(&module) {
+        panel.status = message;
+        if module == "illustration-studio" {
+            panel.local_state.insert(
+                "dependency_download_active".into(),
+                Value::Bool(active),
+            );
+        }
+    }
+}
+
 pub(crate) fn on_ui_prompt_generated(app: &mut UiApp, module: String, prompt: String) {
     if module == "create" {
         if let Some(panel) = app.decl_panels.get_mut(&module) {

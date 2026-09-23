@@ -177,6 +177,23 @@ pub fn resolve_blender_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
             return Some(pb);
         }
     }
+    {
+        let home = std::env::var("AOS_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let managed = home
+            .join("var/illustration-studio/integrations/blender/4.5.14");
+        let name = if cfg!(windows) {
+            "blender.exe"
+        } else if cfg!(target_os = "macos") {
+            "Blender"
+        } else {
+            "blender"
+        };
+        if let Some(bin) = find_managed_binary(&managed, name, 6) {
+            return Some(bin);
+        }
+    }
     if let Some(root) = pack_root {
         for rel in ["bin/blender", "blender", "Blender.app/Contents/MacOS/Blender"] {
             let cand = root.join(rel);
@@ -201,6 +218,24 @@ pub fn resolve_blender_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
     {
         if let Some(p) = windows_installed_blender() {
             return Some(p);
+        }
+    }
+    None
+}
+
+fn find_managed_binary(root: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    if depth == 0 || !root.is_dir() {
+        return None;
+    }
+    for entry in std::fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_file() && path.file_name().is_some_and(|file| file == name) {
+            return Some(path);
+        }
+        if path.is_dir() {
+            if let Some(found) = find_managed_binary(&path, name, depth - 1) {
+                return Some(found);
+            }
         }
     }
     None

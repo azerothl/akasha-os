@@ -817,6 +817,7 @@ mod tests {
         assert_eq!(err, NeuralMeshError::BackendUnavailable);
     }
 
+    #[cfg(unix)]
     #[test]
     fn neural_gguf_adapter_spawn_inserts_validated_mesh_asset() {
         let _lock = NEURAL_MESH_ENV_LOCK

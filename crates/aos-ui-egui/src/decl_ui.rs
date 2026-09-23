@@ -1007,7 +1007,18 @@ impl DeclUiPanelState {
                     .or_else(|| w.label.clone())
                     .or_else(|| w.text.clone())
                     .unwrap_or_else(|| "Run".into());
-                let can_run = enabled && !pending_invoke && actions.invoke.is_none();
+                let downloading = local_state
+                    .get("dependency_download_active")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let install_action = matches!(
+                    w.action.as_deref(),
+                    Some("install_blender" | "install_trellis")
+                );
+                let can_run = enabled
+                    && !pending_invoke
+                    && actions.invoke.is_none()
+                    && !(install_action && downloading);
                 let tooltip = widget_tooltip(w, doc, language).unwrap_or_else(|| label.clone());
                 let icon = w
                     .icon_key

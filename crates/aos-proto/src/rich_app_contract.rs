@@ -237,8 +237,14 @@ pub const MESH_ASSIST_SERVICE: &str = "mesh.assist";
 /// DeclUI service: probe Neural Mesh Model Pack status (EN/FR summary).
 pub const MESH_PACK_STATUS_SERVICE: &str = "mesh.pack.status";
 
+/// DeclUI service: download the host-managed Illustration Studio runtimes.
+pub const ILLUSTRATION_DEPENDENCIES_INSTALL_SERVICE: &str = "illustration.dependencies.install";
+
 /// DeclUI service: probe Illustration Renderer Pack (Blender) status (EN/FR summary).
 pub const RENDER_PACK_STATUS_SERVICE: &str = "render.pack.status";
+
+/// Cap: install only the fixed, host-managed Illustration Studio dependencies.
+pub const ILLUSTRATION_DEPENDENCIES_INSTALL_CAP: &str = "illustration.dependencies.install";
 
 /// Cap: create / mutate comic page panel layouts.
 pub const COMIC_LAYOUT_CAP: &str = "comic.layout";
