@@ -139,20 +139,19 @@ pub(crate) fn is_tasks_open_or_install_error(msg: &str) -> bool {
     if lower.contains("__tasks_open_failed__") {
         return true;
     }
-    if lower.contains("ui déclarative invalide")
-        || lower.contains("decluiinvalid")
-        || lower.contains("declarative_ui")
-        || lower.contains("missing field")
-        || lower.contains("type must be declarative_ui")
-    {
-        return true;
-    }
+    // Do not treat generic DeclUI failures as Tasks — other modules (e.g.
+    // illustration-studio) also surface "UI déclarative invalide".
     lower.contains("tasks")
         && (lower.contains("catalogue")
             || lower.contains("hash")
             || lower.contains("install")
             || lower.contains("badrequest")
-            || lower.contains(".aospkg"))
+            || lower.contains(".aospkg")
+            || lower.contains("ui déclarative invalide")
+            || lower.contains("decluiinvalid")
+            || lower.contains("declarative_ui")
+            || lower.contains("missing field")
+            || lower.contains("type must be declarative_ui"))
 }
 
 /// True when a catalogue/module install failure targets Create.

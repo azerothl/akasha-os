@@ -21,6 +21,9 @@ permissions:
     - comic.render
     - storyboard.edit
     - tool.invoke:illustration-studio
+services:
+  jobs: 1
+  media_image: 1
 tools:
   - name: illustration.asset.list
     description: List the current project's assets
