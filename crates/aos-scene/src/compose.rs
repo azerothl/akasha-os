@@ -5,7 +5,9 @@
 
 use crate::assets::{embedded_primitives_pack, instantiate_asset, AssetError, AssetPack};
 use crate::math::{Quat, Vec3};
-use crate::scene::{CameraParams, LightParams, NodeKind, SceneError, SceneGraph, SceneNode, Transform};
+use crate::scene::{
+    CameraParams, LightParams, NodeKind, SceneError, SceneGraph, SceneNode, Transform,
+};
 use thiserror::Error;
 
 /// DeclUI / host service id: compose a SceneGraph from a short prompt.
@@ -92,27 +94,29 @@ impl ComposeIntent {
         let wants_table = has(&["table"]) && !wants_desk;
         let wants_counter = has(&["counter", "comptoir"]) || wants_library;
         let wants_bookshelf = wants_library
-            || has(&["shelf", "shelves", "bookshelf", "rayonnage", "étagère", "etagere"]);
+            || has(&[
+                "shelf",
+                "shelves",
+                "bookshelf",
+                "rayonnage",
+                "étagère",
+                "etagere",
+            ]);
         let wants_wall = wants_library || has(&["wall", "mur", "walls", "murs"]);
-        let wants_window =
-            wants_library || has(&["window", "fenêtre", "fenetre", "vitrine"]);
+        let wants_window = wants_library || has(&["window", "fenêtre", "fenetre", "vitrine"]);
         let wants_stairs = has(&["stair", "stairs", "escalier", "steps", "marches"]);
         let wants_lamp =
             wants_library || has(&["lamp", "lampe", "lantern", "lanterne", "lumière", "lumiere"]);
         let wants_book = wants_library || has(&["book", "livre", "tome", "novel", "roman"]);
-        let wants_cup = has(&["cup", "mug", "tasse", "coffee", "café", "cafe", "tea", "thé"]);
-        let wants_plant =
-            wants_library || has(&["plant", "plante", "flower", "fleur", "fern", "fougère", "fougere"]);
-        let wants_child = has(&["child", "kid", "enfant", "fille", "garçon", "garcon"]);
-        let wants_female = has(&[
-            "woman",
-            "female",
-            "femme",
-            "lady",
-            "dame",
-            "girl",
-            "fille",
+        let wants_cup = has(&[
+            "cup", "mug", "tasse", "coffee", "café", "cafe", "tea", "thé",
         ]);
+        let wants_plant = wants_library
+            || has(&[
+                "plant", "plante", "flower", "fleur", "fern", "fougère", "fougere",
+            ]);
+        let wants_child = has(&["child", "kid", "enfant", "fille", "garçon", "garcon"]);
+        let wants_female = has(&["woman", "female", "femme", "lady", "dame", "girl", "fille"]);
         let wants_adult = has(&[
             "man",
             "woman",
@@ -452,15 +456,14 @@ pub fn compose_from_prompt_with_pack(
         character_id = Some(root);
 
         if intent.wants_second_character {
-            let secondary = if primary_asset == "humanoid.placeholder"
-                || primary_asset == "humanoid.female"
-            {
-                "humanoid.slim"
-            } else if intent.wants_female {
-                "humanoid.female"
-            } else {
-                "humanoid.placeholder"
-            };
+            let secondary =
+                if primary_asset == "humanoid.placeholder" || primary_asset == "humanoid.female" {
+                    "humanoid.slim"
+                } else if intent.wants_female {
+                    "humanoid.female"
+                } else {
+                    "humanoid.placeholder"
+                };
             let _ = place(
                 &mut scene,
                 pack,
@@ -538,6 +541,7 @@ pub(crate) fn empty_rooted_scene() -> SceneGraph {
         nodes,
         roots: vec!["root".into()],
         active_camera: None,
+        effects: Vec::new(),
     }
 }
 
@@ -557,7 +561,10 @@ fn place(
     Ok(inst.root_id)
 }
 
-pub(crate) fn add_camera(scene: &mut SceneGraph, translation: Vec3) -> Result<String, ComposeError> {
+pub(crate) fn add_camera(
+    scene: &mut SceneGraph,
+    translation: Vec3,
+) -> Result<String, ComposeError> {
     let id = "camera".to_string();
     if scene.nodes.contains_key(&id) {
         return Ok(id);

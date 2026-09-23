@@ -178,8 +178,7 @@ pub fn instantiate_asset(
                 rotation: Quat::IDENTITY,
                 scale: Vec3::new(size[0], size[1], size[2]),
             };
-            attach_child(scene, &parent, node)
-                .map_err(|e| AssetError::Scene(e.to_string()))?;
+            attach_child(scene, &parent, node).map_err(|e| AssetError::Scene(e.to_string()))?;
             Ok(InstantiateResult {
                 root_id: id.clone(),
                 created_ids: vec![id],
@@ -205,11 +204,14 @@ pub fn instantiate_asset(
 
             for n in nodes {
                 let id = id_map[&n.id].clone();
-                let mut node = SceneNode::empty(&id, if n.id == prefab_root_local {
-                    name.clone()
-                } else {
-                    n.name.clone()
-                });
+                let mut node = SceneNode::empty(
+                    &id,
+                    if n.id == prefab_root_local {
+                        name.clone()
+                    } else {
+                        n.name.clone()
+                    },
+                );
                 node.kind = match n.kind {
                     PrefabNodeKind::Empty => NodeKind::Empty,
                     PrefabNodeKind::MeshBox => NodeKind::MeshBox,
@@ -326,7 +328,11 @@ mod tests {
         .expect("instantiate");
         assert!(scene.nodes.contains_key(&r.root_id));
         assert!(scene.nodes.values().any(|n| {
-            n.kind == NodeKind::MeshBox && (n.name.contains("Chest") || n.id.contains("chest") || n.name.contains("Torso") || n.id.contains("torso"))
+            n.kind == NodeKind::MeshBox
+                && (n.name.contains("Chest")
+                    || n.id.contains("chest")
+                    || n.name.contains("Torso")
+                    || n.id.contains("torso"))
         }));
         scene.validate().expect("valid");
     }
@@ -344,6 +350,7 @@ mod tests {
             },
             roots: vec!["root".into()],
             active_camera: None,
+            effects: Vec::new(),
         };
         let r = instantiate_asset(&mut scene, &pack, "scene.starter", Some("root"), "s_")
             .expect("starter");

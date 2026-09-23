@@ -94,12 +94,24 @@ fn undo_set_transform_round_trips() {
         .unwrap();
     assert!(stack.can_undo());
     assert!(!stack.can_redo());
-    assert_vec_close(g.nodes["box"].transform.translation, after.translation, 1e-5);
+    assert_vec_close(
+        g.nodes["box"].transform.translation,
+        after.translation,
+        1e-5,
+    );
     assert!(stack.undo(&mut g).unwrap());
     assert!(stack.can_redo());
-    assert_vec_close(g.nodes["box"].transform.translation, before.translation, 1e-5);
+    assert_vec_close(
+        g.nodes["box"].transform.translation,
+        before.translation,
+        1e-5,
+    );
     assert!(stack.redo(&mut g).unwrap());
-    assert_vec_close(g.nodes["box"].transform.translation, after.translation, 1e-5);
+    assert_vec_close(
+        g.nodes["box"].transform.translation,
+        after.translation,
+        1e-5,
+    );
 }
 
 #[test]
@@ -156,6 +168,7 @@ fn two_bone_ik_fixture_within_tolerance() {
         nodes,
         roots: vec!["root".into()],
         active_camera: None,
+        effects: Vec::new(),
     };
     let target = Vec3::new(0.5, 0.6, 0.0);
     let solved = solve_two_bone(
@@ -167,10 +180,7 @@ fn two_bone_ik_fixture_within_tolerance() {
         Some(Vec3::new(0.0, 1.0, 1.0)),
     )
     .unwrap();
-    for (id, rot) in [
-        ("upper", solved.upper_local),
-        ("lower", solved.lower_local),
-    ] {
+    for (id, rot) in [("upper", solved.upper_local), ("lower", solved.lower_local)] {
         let t = scene.nodes[id].transform.clone();
         scene
             .set_transform(
@@ -193,6 +203,8 @@ fn two_bone_ik_fixture_within_tolerance() {
 
 #[test]
 fn project_yaml_path_prefix() {
-    assert!(aos_scene::DEFAULT_SCENE_YAML_PATH.starts_with(aos_scene::ILLUSTRATIONS_DOCUMENTS_PREFIX));
+    assert!(
+        aos_scene::DEFAULT_SCENE_YAML_PATH.starts_with(aos_scene::ILLUSTRATIONS_DOCUMENTS_PREFIX)
+    );
     let _ = ProjectFile::new(SceneGraph::demo_scene());
 }

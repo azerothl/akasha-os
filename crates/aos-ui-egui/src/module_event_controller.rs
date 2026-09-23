@@ -586,6 +586,9 @@ fn illustration_action_patches_scene(action_id: &str) -> bool {
             | "mesh_assist_neural"
             | "add_light"
             | "apply_light"
+            | "add_fx"
+            | "clear_fx"
+            | "save_finish"
             | "storyboard_capture"
             | "storyboard_prev"
             | "storyboard_next"
@@ -729,9 +732,15 @@ mod tests {
             "candidates": [{"scene_yaml": "new scene", "root_id": "camera"}]
         });
         apply_illustration_scene_result(&mut local, "compose_scene", &proposal);
-        assert_eq!(local.get("scene").and_then(Value::as_str), Some("existing scene"));
+        assert_eq!(
+            local.get("scene").and_then(Value::as_str),
+            Some("existing scene")
+        );
         let accepted = serde_json::json!({"scene_yaml": "new scene", "root_id": "camera"});
         apply_illustration_scene_result(&mut local, "apply_compose_candidate_1", &accepted);
-        assert_eq!(local.get("scene").and_then(Value::as_str), Some("new scene"));
+        assert_eq!(
+            local.get("scene").and_then(Value::as_str),
+            Some("new scene")
+        );
     }
 }

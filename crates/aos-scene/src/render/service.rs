@@ -1,8 +1,6 @@
 //! In-process RenderService: submit / status / result.
 
-use super::backend::{
-    RenderBackend, RenderBackendId, RenderError, RenderPassKind, RenderRequest,
-};
+use super::backend::{RenderBackend, RenderBackendId, RenderError, RenderPassKind, RenderRequest};
 use super::blender::BlenderRenderBackend;
 use super::cpu::CpuWireframeBackend;
 use super::stub::StubRenderBackend;
@@ -49,6 +47,7 @@ pub struct RenderSubmit {
     pub stub_rgb: (u8, u8, u8),
     /// Optional NPR style id resolved before submit (or `None` for legacy look).
     pub style: Option<ResolvedStyle>,
+    pub preset: Option<crate::fx::RenderPreset>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +95,10 @@ impl RenderService {
         let mut backends: HashMap<RenderBackendId, Arc<dyn RenderBackend>> = HashMap::new();
         backends.insert(RenderBackendId::Stub, Arc::new(StubRenderBackend));
         backends.insert(RenderBackendId::Cpu, Arc::new(CpuWireframeBackend));
-        backends.insert(RenderBackendId::Blender, Arc::new(BlenderRenderBackend::default()));
+        backends.insert(
+            RenderBackendId::Blender,
+            Arc::new(BlenderRenderBackend::default()),
+        );
         Self {
             backends,
             default_backend: RenderBackendId::Stub,
@@ -179,6 +181,7 @@ impl RenderService {
             height: submit.height,
             stub_rgb: submit.stub_rgb,
             style: submit.style,
+            preset: submit.preset,
         };
 
         match backend.render(&req) {
@@ -236,21 +239,14 @@ impl RenderService {
                 .ok_or_else(|| RenderError::JobNotReady(job_id.into())),
             JobState::Failed => Err(RenderError::JobFailed(
                 job_id.into(),
-                rec.status
-                    .error
-                    .clone()
-                    .unwrap_or_else(|| "failed".into()),
+                rec.status.error.clone().unwrap_or_else(|| "failed".into()),
             )),
             _ => Err(RenderError::JobNotReady(job_id.into())),
         }
     }
 
     /// Helper used by DeclUI when only a solid stub is requested.
-    pub fn stub_beauty(
-        &self,
-        path: &str,
-        rgb: (u8, u8, u8),
-    ) -> Result<RenderResult, RenderError> {
+    pub fn stub_beauty(&self, path: &str, rgb: (u8, u8, u8)) -> Result<RenderResult, RenderError> {
         self.submit_and_result(RenderSubmit {
             scene: SceneGraph::demo_scene(),
             backend: RenderBackendId::Stub,
@@ -260,6 +256,7 @@ impl RenderService {
             output_path: path.into(),
             stub_rgb: rgb,
             style: None,
+            preset: None,
         })
     }
 }
@@ -268,17 +265,14 @@ impl RenderService {
 pub fn parse_backend(s: Option<&str>) -> Result<RenderBackendId, RenderError> {
     match s {
         None | Some("") => Ok(RenderBackendId::Stub),
-        Some(v) => RenderBackendId::parse(v)
-            .ok_or_else(|| RenderError::UnknownBackend(v.into())),
+        Some(v) => RenderBackendId::parse(v).ok_or_else(|| RenderError::UnknownBackend(v.into())),
     }
 }
 
 pub fn parse_pass(s: Option<&str>) -> Result<RenderPassKind, RenderError> {
     match s {
         None | Some("") => Ok(RenderPassKind::Beauty),
-        Some(v) => {
-            RenderPassKind::parse(v).ok_or_else(|| RenderError::UnknownPass(v.into()))
-        }
+        Some(v) => RenderPassKind::parse(v).ok_or_else(|| RenderError::UnknownPass(v.into())),
     }
 }
 
@@ -308,6 +302,7 @@ mod tests {
                 output_path: "/documents/illustrations/beauty-stub.png".into(),
                 stub_rgb: (10, 20, 30),
                 style: None,
+                preset: None,
             })
             .expect("submit");
         let st = svc.status(&job).expect("status");
@@ -332,12 +327,19 @@ mod tests {
                     output_path: format!("/documents/illustrations/capacity-{index}.png"),
                     stub_rgb: (10, 20, 30),
                     style: None,
+                    preset: None,
                 })
                 .expect("completed job should fit after evicting the oldest result");
             job_ids.push(job);
         }
-        assert!(matches!(svc.status(&job_ids[0]), Err(RenderError::UnknownJob(_))));
-        assert_eq!(svc.status(job_ids.last().unwrap()).unwrap().state, JobState::Succeeded);
+        assert!(matches!(
+            svc.status(&job_ids[0]),
+            Err(RenderError::UnknownJob(_))
+        ));
+        assert_eq!(
+            svc.status(job_ids.last().unwrap()).unwrap().state,
+            JobState::Succeeded
+        );
     }
 
     #[test]
@@ -353,6 +355,7 @@ mod tests {
                 output_path: "/tmp/evil.png".into(),
                 stub_rgb: (0, 0, 0),
                 style: None,
+                preset: None,
             })
             .unwrap_err();
         assert!(matches!(err, RenderError::PathDenied(_)));
@@ -371,6 +374,7 @@ mod tests {
                 output_path: "/documents/illustrations/beauty-cpu.png".into(),
                 stub_rgb: (0, 0, 0),
                 style: None,
+                preset: None,
             })
             .expect("cpu");
         assert_eq!(res.backend, RenderBackendId::Cpu);
@@ -391,6 +395,7 @@ mod tests {
                 output_path: "/documents/illustrations/beauty-pencil.png".into(),
                 stub_rgb: (0, 0, 0),
                 style: Some(style),
+                preset: None,
             })
             .expect("cpu pencil");
         assert!(res.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));
@@ -412,6 +417,7 @@ mod tests {
                 output_path: "/documents/illustrations/beauty-blender.png".into(),
                 stub_rgb: (0, 0, 0),
                 style: None,
+                preset: None,
             })
             .expect("blender auto/mock");
         assert_eq!(res.backend, RenderBackendId::Blender);

@@ -80,10 +80,9 @@ fn main() {
     );
 
     // 4) Cat + man library → quad_sit
-    let with_cat = compose_from_prompt(
-        "A man enters an old library. A cat is sitting on the counter.",
-    )
-    .expect("cat compose");
+    let with_cat =
+        compose_from_prompt("A man enters an old library. A cat is sitting on the counter.")
+            .expect("cat compose");
     let mut cat_scene = with_cat.scene;
     let cat_root = cat_scene
         .node_ids_depth_first()
@@ -134,11 +133,16 @@ fn write_yaml_and_beauty(out_dir: &Path, scene: &SceneGraph, yaml_name: &str, pn
             height: 320,
             stub_rgb: (48, 72, 96),
             style: None,
+            preset: None,
         })
         .expect("cpu beauty");
     let beauty_path = out_dir.join(png_name);
     std::fs::write(&beauty_path, &beauty.png).expect("write beauty");
-    println!("wrote {} ({} bytes)", beauty_path.display(), beauty.png.len());
+    println!(
+        "wrote {} ({} bytes)",
+        beauty_path.display(),
+        beauty.png.len()
+    );
     let _ = std::fs::copy(&beauty_path, format!("/opt/cursor/artifacts/{png_name}"));
 }
 

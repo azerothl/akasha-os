@@ -60,12 +60,13 @@ impl RenderBackend for BlenderRenderBackend {
     fn render(&self, req: &RenderRequest) -> Result<RenderOutput, RenderError> {
         let w = req.width.clamp(16, BLENDER_MAX_EDGE);
         let h = req.height.clamp(16, BLENDER_MAX_EDGE);
-        let export = AkashaSceneExport::from_scene_with_style(
+        let export = AkashaSceneExport::from_scene_with_preset(
             &req.scene,
             w,
             h,
             req.pass.as_str(),
             req.style.as_ref(),
+            req.preset.as_ref(),
         )
         .map_err(RenderError::Scene)?;
         let digest = export.digest_hex().map_err(RenderError::Scene)?;
@@ -500,6 +501,7 @@ mod tests {
                 height: 48,
                 stub_rgb: (0, 0, 0),
                 style: None,
+                preset: None,
             })
             .expect("mock");
         assert_eq!(out.backend_id, RenderBackendId::Blender);
@@ -522,6 +524,7 @@ mod tests {
             height: 32,
             stub_rgb: (0, 0, 0),
             style: None,
+            preset: None,
         };
         let a = backend.render(&req).unwrap();
         let b = backend.render(&req).unwrap();
@@ -543,6 +546,7 @@ mod tests {
                 height: 32,
                 stub_rgb: (0, 0, 0),
                 style: Some(resolve_style("pencil").unwrap()),
+                preset: None,
             })
             .unwrap();
         let ink = backend
@@ -553,6 +557,7 @@ mod tests {
                 height: 32,
                 stub_rgb: (0, 0, 0),
                 style: Some(resolve_style("ink").unwrap()),
+                preset: None,
             })
             .unwrap();
         assert_ne!(pencil.png, ink.png);
@@ -583,6 +588,7 @@ mod tests {
                 height: 32,
                 stub_rgb: (0, 0, 0),
                 style: None,
+                preset: None,
             })
             .expect_err("pack absent must fail closed");
         assert!(matches!(err, RenderError::BackendUnavailable(_)));
@@ -639,6 +645,7 @@ mod tests {
                 height: 48,
                 stub_rgb: (0, 0, 0),
                 style: Some(resolve_style("pencil").unwrap()),
+                preset: None,
             })
             .expect_err("spawn failure must not fall back to paper mock");
         let msg = err.to_string();
@@ -677,6 +684,7 @@ mod tests {
                 height: 48,
                 stub_rgb: (0, 0, 0),
                 style: Some(resolve_style("pencil").unwrap()),
+                preset: None,
             })
             .expect("mock");
         // Pure paper field (no chrome) for the same style must differ from mock PNG.
@@ -716,6 +724,7 @@ mod tests {
                 height: 96,
                 stub_rgb: (0, 0, 0),
                 style: Some(resolve_style("ink").unwrap()),
+                preset: None,
             })
             .expect("real blender");
         assert!(out.png.starts_with(&[0x89, 0x50, 0x4e, 0x47]));

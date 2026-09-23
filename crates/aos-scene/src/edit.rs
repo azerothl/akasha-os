@@ -106,6 +106,15 @@ pub enum AgentEditOp {
         #[serde(default)]
         spot_angle_deg: Option<f32>,
     },
+    /// Add a fixed-image effect to the SceneGraph.
+    Fx {
+        effect: crate::fx::SceneEffect,
+    },
+    FxClear,
+    /// Save camera and finishing controls with the project.
+    RenderPreset {
+        preset: crate::fx::RenderPreset,
+    },
     Pose {
         humanoid_root: String,
         #[serde(default)]
@@ -240,6 +249,24 @@ pub fn apply_one(
     actor_kind: EditActorKind,
 ) -> Result<(), EditError> {
     match op {
+        AgentEditOp::Fx { effect } => {
+            if !effect.validate() || snap.project.scene.effects.len() >= 32 {
+                return Err(EditError::Scene(SceneError::InvalidEffect));
+            }
+            snap.project.scene.effects.push(effect.clone());
+            Ok(())
+        }
+        AgentEditOp::FxClear => {
+            snap.project.scene.effects.clear();
+            Ok(())
+        }
+        AgentEditOp::RenderPreset { preset } => {
+            if !preset.validate() {
+                return Err(EditError::Project(ProjectError::InvalidRenderPreset));
+            }
+            snap.project.render_preset = Some(preset.clone());
+            Ok(())
+        }
         AgentEditOp::Select { id } => {
             if !snap.project.scene.nodes.contains_key(id) {
                 return Err(EditError::UnknownNode(id.clone()));
@@ -369,9 +396,9 @@ pub fn apply_one(
             spot_angle_deg,
         } => {
             let parsed_type = match light_type {
-                Some(s) => Some(parse_light_type(s).ok_or_else(|| {
-                    EditError::UnknownLightType(s.clone())
-                })?),
+                Some(s) => Some(
+                    parse_light_type(s).ok_or_else(|| EditError::UnknownLightType(s.clone()))?,
+                ),
                 None => None,
             };
             let linear_color = color.or_else(|| color_srgb.map(color_from_srgb_u8));
@@ -392,7 +419,9 @@ pub fn apply_one(
                         MutateKind::Structure,
                     )?;
                 }
-                let new_id = id.clone().unwrap_or_else(|| next_light_id(&snap.project.scene));
+                let new_id = id
+                    .clone()
+                    .unwrap_or_else(|| next_light_id(&snap.project.scene));
                 let mut params = LightParams::default();
                 if let Some(t) = parsed_type {
                     params.light_type = t;
@@ -494,12 +523,7 @@ pub fn apply_one(
             }
             let mut undo = UndoStack::default();
             if let Some(p) = preset {
-                apply_pose_preset(
-                    &mut snap.project.scene,
-                    humanoid_root,
-                    p,
-                    Some(&mut undo),
-                )?;
+                apply_pose_preset(&mut snap.project.scene, humanoid_root, p, Some(&mut undo))?;
             } else if let Some(target) = look_at {
                 apply_pose(
                     &mut snap.project.scene,
@@ -542,9 +566,7 @@ pub fn apply_one(
             let composed = compose_from_prompt(prompt)?;
             snap.project.scene = composed.scene;
             snap.project.locks = LockTable::default();
-            snap.selected_id = composed
-                .character_id
-                .or(Some(composed.camera_id));
+            snap.selected_id = composed.character_id.or(Some(composed.camera_id));
             Ok(())
         }
         AgentEditOp::Instantiate {
@@ -617,6 +639,9 @@ pub fn apply_batch(
 pub fn require_edit_caps(op: &AgentEditOp, granted: &[String]) -> Result<(), EditError> {
     let need = match op {
         AgentEditOp::Select { .. }
+        | AgentEditOp::Fx { .. }
+        | AgentEditOp::FxClear
+        | AgentEditOp::RenderPreset { .. }
         | AgentEditOp::Trs { .. }
         | AgentEditOp::Camera { .. }
         | AgentEditOp::Light { .. }
@@ -690,6 +715,7 @@ fn next_light_id(scene: &SceneGraph) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fx::{EffectKind, RenderPreset, SceneEffect};
     use crate::math::Vec3;
 
     fn demo_snap() -> EditSnapshot {
@@ -697,6 +723,54 @@ mod tests {
             project: ProjectFile::new(SceneGraph::demo_scene()),
             selected_id: Some("box".into()),
         }
+    }
+
+    #[test]
+    fn fx_and_render_preset_actions_persist_and_validate() {
+        let mut snap = demo_snap();
+        let effect = SceneEffect {
+            kind: EffectKind::Fire,
+            position: [0.0, 1.0, 0.0],
+            radius: 0.8,
+            intensity: 0.6,
+        };
+        let preset = RenderPreset {
+            depth_of_field: 0.4,
+            glow: 0.5,
+            color_warmth: 0.2,
+        };
+        apply_batch(
+            &mut snap,
+            &[
+                AgentEditOp::Fx {
+                    effect: effect.clone(),
+                },
+                AgentEditOp::RenderPreset {
+                    preset: preset.clone(),
+                },
+            ],
+            "human:ui",
+            EditActorKind::Human,
+        )
+        .unwrap();
+        let loaded = EditSnapshot::from_yaml(&snap.to_yaml().unwrap()).unwrap();
+        assert_eq!(loaded.project.scene.effects, vec![effect]);
+        assert_eq!(loaded.project.render_preset, Some(preset));
+        let before = snap.clone();
+        let invalid = SceneEffect {
+            kind: EffectKind::Fog,
+            position: [0.0, 0.0, 0.0],
+            radius: -1.0,
+            intensity: 0.5,
+        };
+        assert!(apply_batch(
+            &mut snap,
+            &[AgentEditOp::Fx { effect: invalid }],
+            "human:ui",
+            EditActorKind::Human
+        )
+        .is_err());
+        assert_eq!(snap, before);
     }
 
     #[test]
@@ -746,9 +820,7 @@ mod tests {
                     rotation: None,
                     scale: None,
                 },
-                AgentEditOp::Select {
-                    id: "box".into(),
-                },
+                AgentEditOp::Select { id: "box".into() },
             ],
             "agent:test",
             EditActorKind::Agent,

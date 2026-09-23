@@ -13,9 +13,7 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/opt/cursor/artifacts"));
     let _ = fs::create_dir_all(&out_dir);
-    let media = PathBuf::from(
-        "/cursor/stores/bc-27b0be1e-7e32-4372-8a8d-6b1d68445b8c/media",
-    );
+    let media = PathBuf::from("/cursor/stores/bc-27b0be1e-7e32-4372-8a8d-6b1d68445b8c/media");
     let _ = fs::create_dir_all(&media);
 
     let backend = CpuWireframeBackend;
@@ -51,6 +49,7 @@ fn main() {
             height: 320,
             stub_rgb: (0, 0, 0),
             style: None,
+            preset: None,
         })
         .unwrap();
     let dim_path = out_dir.join("lights-v0-dim-warm.png");
@@ -83,13 +82,17 @@ fn main() {
             height: 320,
             stub_rgb: (0, 0, 0),
             style: None,
+            preset: None,
         })
         .unwrap();
     let bright_path = out_dir.join("lights-v0-bright-cool.png");
     fs::write(&bright_path, &bright.png).unwrap();
 
     let _ = fs::copy(&dim_path, media.join("illustration-lights-v0-dim.png"));
-    let _ = fs::copy(&bright_path, media.join("illustration-lights-v0-bright.png"));
+    let _ = fs::copy(
+        &bright_path,
+        media.join("illustration-lights-v0-bright.png"),
+    );
     println!(
         "wrote dim={} bright={} (bytes {} vs {})",
         dim_path.display(),

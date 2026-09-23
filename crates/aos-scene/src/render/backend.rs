@@ -69,6 +69,7 @@ pub struct RenderRequest {
     pub stub_rgb: (u8, u8, u8),
     /// Optional NPR style (Sketch / Pencil / Ink). `None` = legacy wireframe look.
     pub style: Option<ResolvedStyle>,
+    pub preset: Option<crate::fx::RenderPreset>,
 }
 
 #[derive(Debug, Clone)]

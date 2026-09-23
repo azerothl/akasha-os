@@ -128,6 +128,15 @@ impl RenderBackend for CpuWireframeBackend {
             );
         }
 
+        draw_static_effects(&mut raster, &req.scene.effects);
+        if let Some(preset) = &req.preset {
+            for pixel in raster.rgba.chunks_exact_mut(4) {
+                pixel[0] =
+                    (f32::from(pixel[0]) * (1.0 + preset.color_warmth * 0.12)).min(255.0) as u8;
+                pixel[2] = (f32::from(pixel[2]) * (1.0 - preset.color_warmth * 0.1)) as u8;
+            }
+        }
+
         let rgba = if scale == 2 {
             downsample_2x(&rgba, w, h)
         } else {
@@ -141,6 +150,50 @@ impl RenderBackend for CpuWireframeBackend {
             backend_id: RenderBackendId::Cpu,
             pass: req.pass,
         })
+    }
+}
+
+fn draw_static_effects(raster: &mut Raster<'_>, effects: &[crate::fx::SceneEffect]) {
+    use crate::fx::EffectKind;
+    for effect in effects {
+        let center = Vec3::new(effect.position[0], effect.position[1], effect.position[2]);
+        let Some((cx, cy)) = raster.project(center) else {
+            continue;
+        };
+        let radius = (effect.radius * effect.intensity * raster.pixel_scale as f32 * 14.0)
+            .round()
+            .clamp(1.0, 80.0) as i32;
+        match effect.kind {
+            EffectKind::Fog | EffectKind::Smoke => {
+                let color = if effect.kind == EffectKind::Fog {
+                    [220, 226, 232, 12]
+                } else {
+                    [75, 78, 86, 20]
+                };
+                for y in -radius..=radius {
+                    for x in -radius..=radius {
+                        if x * x + y * y <= radius * radius {
+                            raster.put_px(cx + x, cy + y, color);
+                        }
+                    }
+                }
+            }
+            EffectKind::Particles | EffectKind::Fire => {
+                let color = if effect.kind == EffectKind::Fire {
+                    [255, 103, 16, 235]
+                } else {
+                    [255, 239, 189, 210]
+                };
+                let count = (effect.intensity * 24.0).round().clamp(4.0, 24.0) as i32;
+                for i in 0..count {
+                    let hash = hash_u32(i as u32 * 17 + 73);
+                    let span = (radius * 2 + 1) as u32;
+                    let ox = (hash % span) as i32 - radius;
+                    let oy = ((hash >> 16) % span) as i32 - radius;
+                    raster.put_px(cx + ox, cy + oy, color);
+                }
+            }
+        }
     }
 }
 
@@ -729,6 +782,7 @@ mod tests {
                 height: 96,
                 stub_rgb: (0, 0, 0),
                 style: None,
+                preset: None,
             })
             .expect("cpu render");
         assert_eq!(
@@ -753,6 +807,7 @@ mod tests {
                     height: 72,
                     stub_rgb: (0, 0, 0),
                     style: Some(resolve_style(id).unwrap()),
+                    preset: None,
                 })
                 .expect("npr");
             pngs.push(out.png);

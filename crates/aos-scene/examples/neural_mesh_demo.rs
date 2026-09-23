@@ -80,8 +80,8 @@ fn main() {
     std::env::remove_var("AOS_NEURAL_MESH_PACK");
 
     // Mock path: pack present + fixture GLB → MeshAsset.
-    let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../share/illustration-neural-mesh-pack");
+    let pack =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../share/illustration-neural-mesh-pack");
     std::env::set_var("AOS_NEURAL_MESH_PACK", &pack);
     std::env::set_var("AOS_NEURAL_MESH_MODE", "mock");
     let neural_res = mesh_assist(
@@ -137,10 +137,15 @@ fn write_yaml_and_beauty(out_dir: &Path, scene: &SceneGraph, yaml_name: &str, pn
             height: 320,
             stub_rgb: (48, 72, 96),
             style: None,
+            preset: None,
         })
         .expect("cpu beauty");
     let beauty_path = out_dir.join(png_name);
     std::fs::write(&beauty_path, &beauty.png).expect("write beauty");
-    println!("wrote {} ({} bytes)", beauty_path.display(), beauty.png.len());
+    println!(
+        "wrote {} ({} bytes)",
+        beauty_path.display(),
+        beauty.png.len()
+    );
     let _ = std::fs::copy(&beauty_path, format!("/opt/cursor/artifacts/{png_name}"));
 }

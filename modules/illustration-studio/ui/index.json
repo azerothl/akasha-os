@@ -48,6 +48,25 @@
       "style_aa_on": "On",
       "style_aa_off": "Off",
       "cpu_style_hint": "CPU: simplified line preview. Blender: full Freestyle render.",
+      "fx_section": "Static effects",
+      "fx_kind": "Effect",
+      "fx_fog": "Fog",
+      "fx_particles": "Particles",
+      "fx_smoke": "Smoke",
+      "fx_fire": "Fire",
+      "fx_position_x": "Position X",
+      "fx_position_y": "Position Y",
+      "fx_position_z": "Position Z",
+      "fx_radius": "Radius (m)",
+      "fx_intensity": "Intensity",
+      "fx_add": "Add effect",
+      "fx_clear": "Clear effects",
+      "fx_note": "Still-image effects only; no simulation or timeline.",
+      "finish_section": "Camera and finish",
+      "finish_dof": "Depth of field",
+      "finish_glow": "Glow",
+      "finish_warmth": "Color warmth",
+      "finish_apply": "Save render preset",
       "viewport_label": "Edit viewport",
       "scene_label": "Scene graph",
       "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
@@ -191,6 +210,25 @@
       "style_aa_on": "Oui",
       "style_aa_off": "Non",
       "cpu_style_hint": "CPU : aperçu simplifié. Blender : rendu Freestyle complet.",
+      "fx_section": "Effets statiques",
+      "fx_kind": "Effet",
+      "fx_fog": "Brouillard",
+      "fx_particles": "Particules",
+      "fx_smoke": "Fumée",
+      "fx_fire": "Feu",
+      "fx_position_x": "Position X",
+      "fx_position_y": "Position Y",
+      "fx_position_z": "Position Z",
+      "fx_radius": "Rayon (m)",
+      "fx_intensity": "Intensité",
+      "fx_add": "Ajouter l’effet",
+      "fx_clear": "Effacer les effets",
+      "fx_note": "Effets pour image fixe, sans simulation ni chronologie.",
+      "finish_section": "Caméra et finition",
+      "finish_dof": "Profondeur de champ",
+      "finish_glow": "Halo lumineux",
+      "finish_warmth": "Chaleur des couleurs",
+      "finish_apply": "Enregistrer le préréglage",
       "viewport_label": "Fenêtre d’édition",
       "scene_label": "Graphe de scène",
       "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
@@ -325,6 +363,15 @@
       "variation": { "type": "number", "default": 0.15 },
       "hatching": { "type": "number", "default": 0.5 },
       "antialias": { "type": "string", "default": "on" },
+      "fx_kind": { "type": "string", "default": "fog" },
+      "fx_x": { "type": "number", "default": 0 },
+      "fx_y": { "type": "number", "default": 1 },
+      "fx_z": { "type": "number", "default": 0 },
+      "fx_radius": { "type": "number", "default": 1 },
+      "fx_intensity": { "type": "number", "default": 0.5 },
+      "finish_dof": { "type": "number", "default": 0 },
+      "finish_glow": { "type": "number", "default": 0 },
+      "finish_warmth": { "type": "number", "default": 0 },
       "beauty_path": {
         "type": "string",
         "default": ""
@@ -687,6 +734,37 @@
         "width": 640,
         "height": 480
       },
+      "refresh_binds": []
+    },
+    {
+      "id": "add_fx",
+      "service": "scene.apply",
+      "input": {
+        "scene_yaml": "$local.scene",
+        "ops": [{ "op": "fx", "effect": {
+          "kind": "$local.fx_kind",
+          "position": ["$local.fx_x", "$local.fx_y", "$local.fx_z"],
+          "radius": "$local.fx_radius", "intensity": "$local.fx_intensity"
+        }}]
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "clear_fx",
+      "service": "scene.apply",
+      "input": { "scene_yaml": "$local.scene", "ops": [{ "op": "fx_clear" }] },
+      "refresh_binds": []
+    },
+    {
+      "id": "save_finish",
+      "service": "scene.apply",
+      "input": { "scene_yaml": "$local.scene", "ops": [{
+        "op": "render_preset", "preset": {
+          "depth_of_field": "$local.finish_dof",
+          "glow": "$local.finish_glow",
+          "color_warmth": "$local.finish_warmth"
+        }
+      }] },
       "refresh_binds": []
     },
     {
@@ -1615,6 +1693,39 @@
                 "item_label_keys": ["style_aa_on", "style_aa_off"]
               },
               { "kind": "text", "label_key": "cpu_style_hint" },
+              {
+                "kind": "section",
+                "label_key": "fx_section",
+                "collapsible": true,
+                "children": [
+                  { "kind": "radio", "state_key": "fx_kind", "label_key": "fx_kind", "inline": true,
+                    "items": ["fog", "particles", "smoke", "fire"],
+                    "item_label_keys": ["fx_fog", "fx_particles", "fx_smoke", "fx_fire"] },
+                  { "kind": "row", "children": [
+                    { "kind": "number", "state_key": "fx_x", "min": -1000, "max": 1000, "label_key": "fx_position_x" },
+                    { "kind": "number", "state_key": "fx_y", "min": -1000, "max": 1000, "label_key": "fx_position_y" },
+                    { "kind": "number", "state_key": "fx_z", "min": -1000, "max": 1000, "label_key": "fx_position_z" }
+                  ] },
+                  { "kind": "row", "children": [
+                    { "kind": "number", "state_key": "fx_radius", "min": 0.05, "max": 100, "label_key": "fx_radius" },
+                    { "kind": "number", "state_key": "fx_intensity", "min": 0, "max": 1, "label_key": "fx_intensity" }
+                  ] },
+                  { "kind": "row", "children": [
+                    { "kind": "button", "label_key": "fx_add", "action": "add_fx", "primary": true },
+                    { "kind": "button", "label_key": "fx_clear", "action": "clear_fx" }
+                  ] },
+                  { "kind": "text", "label_key": "fx_note" }
+                ]
+              },
+              {
+                "kind": "section", "label_key": "finish_section", "collapsible": true,
+                "children": [
+                  { "kind": "number", "state_key": "finish_dof", "min": 0, "max": 1, "label_key": "finish_dof" },
+                  { "kind": "number", "state_key": "finish_glow", "min": 0, "max": 1, "label_key": "finish_glow" },
+                  { "kind": "number", "state_key": "finish_warmth", "min": 0, "max": 1, "label_key": "finish_warmth" },
+                  { "kind": "button", "label_key": "finish_apply", "action": "save_finish" }
+                ]
+              },
               {
                 "kind": "row",
                 "children": [

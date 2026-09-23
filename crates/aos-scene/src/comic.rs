@@ -104,9 +104,7 @@ impl ComicLayoutId {
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "single" | "one" | "plein" | "full" => Some(Self::Single),
-            "two_h" | "two_horizontal" | "h2" | "split_h" | "deux_h" => {
-                Some(Self::TwoHorizontal)
-            }
+            "two_h" | "two_horizontal" | "h2" | "split_h" | "deux_h" => Some(Self::TwoHorizontal),
             "two_v" | "two_vertical" | "v2" | "split_v" | "deux_v" => Some(Self::TwoVertical),
             "grid_2x2" | "2x2" | "quad" | "grille" => Some(Self::Grid2x2),
             "strip_3" | "three" | "strip" | "bande_3" | "bande" => Some(Self::Strip3),
@@ -597,6 +595,7 @@ pub fn render_comic_page(
             height: ph,
             stub_rgb: (40, 48, 58),
             style: None,
+            preset: None,
         };
         let out = match backend {
             RenderBackendId::Stub => stub.render(&req)?,
@@ -680,10 +679,7 @@ mod tests {
     #[test]
     fn unknown_layout_parse() {
         assert!(ComicLayoutId::parse("hexagon").is_none());
-        assert_eq!(
-            ComicLayoutId::parse("grille"),
-            Some(ComicLayoutId::Grid2x2)
-        );
+        assert_eq!(ComicLayoutId::parse("grille"), Some(ComicLayoutId::Grid2x2));
         assert_eq!(ComicLayoutId::parse("bande"), Some(ComicLayoutId::Strip3));
     }
 
@@ -691,14 +687,8 @@ mod tests {
     fn render_grid_cpu_produces_png() {
         let scene = SceneGraph::demo_scene();
         let comic = apply_comic_layout(ComicLayoutId::TwoHorizontal, &scene, 320, 240).unwrap();
-        let res = render_comic_page(
-            &comic,
-            "page_1",
-            RenderBackendId::Cpu,
-            Some(320),
-            Some(240),
-        )
-        .unwrap();
+        let res = render_comic_page(&comic, "page_1", RenderBackendId::Cpu, Some(320), Some(240))
+            .unwrap();
         assert!(res.png.starts_with(b"\x89PNG"));
         assert_eq!(res.panel_count, 2);
         assert_eq!(res.width, 320);

@@ -196,9 +196,15 @@ pub struct MaterialOverride {
 
 impl MaterialOverride {
     pub fn validate(&self) -> Result<(), SceneError> {
-        if self.tint.is_some_and(|rgb| rgb.iter().any(|v| !v.is_finite() || !(0.0..=1.0).contains(v)))
-            || self.roughness.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
-            || self.metallic.is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
+        if self.tint.is_some_and(|rgb| {
+            rgb.iter()
+                .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+        }) || self
+            .roughness
+            .is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
+            || self
+                .metallic
+                .is_some_and(|v| !v.is_finite() || !(0.0..=1.0).contains(&v))
         {
             return Err(SceneError::InvalidMaterial);
         }
@@ -208,6 +214,8 @@ impl MaterialOverride {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SceneGraph {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<crate::fx::SceneEffect>,
     #[serde(default)]
     pub nodes: HashMap<String, SceneNode>,
     /// Root node ids (no parent).
@@ -220,6 +228,8 @@ pub struct SceneGraph {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SceneError {
+    #[error("invalid static effect")]
+    InvalidEffect,
     #[error("invalid material override")]
     InvalidMaterial,
     #[error("non-finite transform")]
@@ -354,7 +364,12 @@ impl SceneGraph {
             );
             // Legacy alias for viewport smoke / flat-rig callers.
             let alias = format!("arm_{side}");
-            demo_insert_alias(&mut nodes, &alias, &format!("Arm{}", side.to_uppercase()), &upper);
+            demo_insert_alias(
+                &mut nodes,
+                &alias,
+                &format!("Arm{}", side.to_uppercase()),
+                &upper,
+            );
 
             let uleg = format!("upper_leg_{side}");
             let lleg = format!("lower_leg_{side}");
@@ -384,7 +399,12 @@ impl SceneGraph {
                 Some((Vec3::new(0.0, -0.02, 0.04), Vec3::new(0.1, 0.08, 0.2))),
             );
             let lalias = format!("leg_{side}");
-            demo_insert_alias(&mut nodes, &lalias, &format!("Leg{}", side.to_uppercase()), &uleg);
+            demo_insert_alias(
+                &mut nodes,
+                &lalias,
+                &format!("Leg{}", side.to_uppercase()),
+                &uleg,
+            );
         }
         demo_insert_alias(&mut nodes, "torso", "Torso", "chest");
 
@@ -418,10 +438,14 @@ impl SceneGraph {
             nodes,
             roots: vec!["root".into()],
             active_camera: Some("camera".into()),
+            effects: Vec::new(),
         }
     }
 
     pub fn validate(&self) -> Result<(), SceneError> {
+        if self.effects.len() > 32 || self.effects.iter().any(|effect| !effect.validate()) {
+            return Err(SceneError::InvalidEffect);
+        }
         for (id, node) in &self.nodes {
             if id != &node.id {
                 return Err(SceneError::UnknownNode(format!(
@@ -430,7 +454,9 @@ impl SceneGraph {
                 )));
             }
             node.transform.validate()?;
-            if let Some(material) = &node.material { material.validate()?; }
+            if let Some(material) = &node.material {
+                material.validate()?;
+            }
             if let Some(p) = &node.parent {
                 if !self.nodes.contains_key(p) {
                     return Err(SceneError::UnknownNode(p.clone()));

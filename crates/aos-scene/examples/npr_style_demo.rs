@@ -5,8 +5,8 @@
 //! ```
 
 use aos_scene::{
-    compose_from_prompt, resolve_style, CpuWireframeBackend, RenderBackend, RenderPassKind,
-    RenderRequest, RenderService, RenderSubmit, RenderBackendId,
+    compose_from_prompt, resolve_style, CpuWireframeBackend, RenderBackend, RenderBackendId,
+    RenderPassKind, RenderRequest, RenderService, RenderSubmit,
 };
 use std::path::PathBuf;
 
@@ -16,10 +16,8 @@ fn main() {
     let out = PathBuf::from(std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into()))
         .join("npr-style-demo");
     let _ = std::fs::create_dir_all(&out);
-    let composed = compose_from_prompt(
-        "A man enters an old library. He stands by the counter.",
-    )
-    .expect("compose");
+    let composed = compose_from_prompt("A man enters an old library. He stands by the counter.")
+        .expect("compose");
     let scene = composed.scene;
     let svc = RenderService::default();
 
@@ -33,6 +31,7 @@ fn main() {
                 height: 320,
                 stub_rgb: (0, 0, 0),
                 style: Some(style.clone()),
+                preset: None,
             })
             .expect("cpu npr");
         let name = format!("beauty-cpu-{id}.png");
@@ -57,6 +56,7 @@ fn main() {
                 output_path: format!("/documents/illustrations/beauty-blender-{id}.png"),
                 stub_rgb: (0, 0, 0),
                 style: Some(style),
+                preset: None,
             })
             .expect("blender mock");
         let mock_name = format!("beauty-blender-mock-{id}.png");
