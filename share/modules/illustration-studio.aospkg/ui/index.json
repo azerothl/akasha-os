@@ -67,6 +67,18 @@
       "finish_glow": "Glow",
       "finish_warmth": "Color warmth",
       "finish_apply": "Save render preset",
+      "quality_label": "Quality",
+      "quality_draft": "Draft",
+      "quality_standard": "Standard",
+      "quality_final": "Final",
+      "output_width_label": "Width (px)",
+      "output_height_label": "Height (px)",
+      "denoise_label": "Denoise",
+      "transparent_label": "Transparent background",
+      "preset_hint": "Save the preset before rendering. CPU previews are limited to 512 px.",
+      "export_png_label": "Export PNG…",
+      "light_range_label": "Range (m)",
+      "light_spot_angle_label": "Spot half-angle (°)",
       "viewport_label": "Edit viewport",
       "scene_label": "Scene graph",
       "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
@@ -229,6 +241,18 @@
       "finish_glow": "Halo lumineux",
       "finish_warmth": "Chaleur des couleurs",
       "finish_apply": "Enregistrer le préréglage",
+      "quality_label": "Qualité",
+      "quality_draft": "Brouillon",
+      "quality_standard": "Standard",
+      "quality_final": "Finale",
+      "output_width_label": "Largeur (px)",
+      "output_height_label": "Hauteur (px)",
+      "denoise_label": "Débruitage",
+      "transparent_label": "Fond transparent",
+      "preset_hint": "Enregistrez le préréglage avant de lancer le rendu. L’aperçu CPU est limité à 512 px.",
+      "export_png_label": "Exporter en PNG…",
+      "light_range_label": "Portée (m)",
+      "light_spot_angle_label": "Demi-angle du spot (°)",
       "viewport_label": "Fenêtre d’édition",
       "scene_label": "Graphe de scène",
       "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
@@ -372,6 +396,13 @@
       "finish_dof": { "type": "number", "default": 0 },
       "finish_glow": { "type": "number", "default": 0 },
       "finish_warmth": { "type": "number", "default": 0 },
+      "render_quality": { "type": "string", "default": "standard" },
+      "output_width": { "type": "number", "default": 640 },
+      "output_height": { "type": "number", "default": 480 },
+      "render_denoise": { "type": "boolean", "default": false },
+      "transparent_background": { "type": "boolean", "default": false },
+      "light_range": { "type": "number", "default": 8 },
+      "light_spot_angle": { "type": "number", "default": 45 },
       "beauty_path": {
         "type": "string",
         "default": ""
@@ -712,8 +743,8 @@
         "variation": "$local.variation",
         "hatching": "$local.hatching",
         "antialias": "$local.antialias",
-        "width": 640,
-        "height": 480
+        "width": "$local.output_width",
+        "height": "$local.output_height"
       },
       "refresh_binds": []
     },
@@ -731,8 +762,8 @@
         "variation": "$local.variation",
         "hatching": "$local.hatching",
         "antialias": "$local.antialias",
-        "width": 640,
-        "height": 480
+        "width": "$local.output_width",
+        "height": "$local.output_height"
       },
       "refresh_binds": []
     },
@@ -762,9 +793,20 @@
         "op": "render_preset", "preset": {
           "depth_of_field": "$local.finish_dof",
           "glow": "$local.finish_glow",
-          "color_warmth": "$local.finish_warmth"
+          "color_warmth": "$local.finish_warmth",
+          "quality": "$local.render_quality",
+          "width": "$local.output_width",
+          "height": "$local.output_height",
+          "denoise": "$local.render_denoise",
+          "transparent_background": "$local.transparent_background"
         }
       }] },
+      "refresh_binds": []
+    },
+    {
+      "id": "export_png",
+      "service": "illustration.export_png",
+      "input": { "source_path": "$local.beauty_path" },
       "refresh_binds": []
     },
     {
@@ -811,6 +853,8 @@
         "add": true,
         "light_type": "$local.light_type",
         "intensity": "$local.light_intensity",
+        "range": "$local.light_range",
+        "spot_angle_deg": "$local.light_spot_angle",
         "color_r": "$local.color_r",
         "color_g": "$local.color_g",
         "color_b": "$local.color_b",
@@ -826,6 +870,8 @@
         "add": false,
         "light_type": "$local.light_type",
         "intensity": "$local.light_intensity",
+        "range": "$local.light_range",
+        "spot_angle_deg": "$local.light_spot_angle",
         "color_r": "$local.color_r",
         "color_g": "$local.color_g",
         "color_b": "$local.color_b",
@@ -1603,6 +1649,10 @@
                     "max": 20,
                     "label_key": "light_intensity_label"
                   },
+                  { "kind": "row", "children": [
+                    { "kind": "number", "state_key": "light_range", "min": 0.1, "max": 1000, "label_key": "light_range_label" },
+                    { "kind": "number", "state_key": "light_spot_angle", "min": 1, "max": 89, "label_key": "light_spot_angle_label" }
+                  ] },
                   {
                     "kind": "row",
                     "children": [
@@ -1720,10 +1770,20 @@
               {
                 "kind": "section", "label_key": "finish_section", "collapsible": true,
                 "children": [
+                  { "kind": "radio", "state_key": "render_quality", "label_key": "quality_label", "inline": true,
+                    "items": ["draft", "standard", "final"],
+                    "item_label_keys": ["quality_draft", "quality_standard", "quality_final"] },
+                  { "kind": "row", "children": [
+                    { "kind": "number", "state_key": "output_width", "min": 64, "max": 4096, "label_key": "output_width_label" },
+                    { "kind": "number", "state_key": "output_height", "min": 64, "max": 4096, "label_key": "output_height_label" }
+                  ] },
+                  { "kind": "checkbox", "state_key": "render_denoise", "label_key": "denoise_label" },
+                  { "kind": "checkbox", "state_key": "transparent_background", "label_key": "transparent_label" },
                   { "kind": "number", "state_key": "finish_dof", "min": 0, "max": 1, "label_key": "finish_dof" },
                   { "kind": "number", "state_key": "finish_glow", "min": 0, "max": 1, "label_key": "finish_glow" },
                   { "kind": "number", "state_key": "finish_warmth", "min": 0, "max": 1, "label_key": "finish_warmth" },
-                  { "kind": "button", "label_key": "finish_apply", "action": "save_finish" }
+                  { "kind": "button", "label_key": "finish_apply", "action": "save_finish" },
+                  { "kind": "text", "label_key": "preset_hint" }
                 ]
               },
               {
@@ -2185,6 +2245,12 @@
                 "resource": "$local.beauty_path",
                 "label_key": "preview_label",
                 "empty_label_key": "beauty_empty"
+              },
+              {
+                "kind": "button",
+                "label_key": "export_png_label",
+                "action": "export_png",
+                "visible": { "ne": ["$local.beauty_path", ""] }
               }
             ]
           }

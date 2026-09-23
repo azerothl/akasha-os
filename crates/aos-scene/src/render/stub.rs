@@ -42,6 +42,7 @@ impl RenderBackend for StubRenderBackend {
             height: STUB_BEAUTY_SIZE,
             backend_id: RenderBackendId::Stub,
             pass: RenderPassKind::Beauty,
+            engine: "Placeholder",
         })
     }
 }

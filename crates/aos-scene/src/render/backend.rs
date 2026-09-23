@@ -79,6 +79,7 @@ pub struct RenderOutput {
     pub height: u32,
     pub backend_id: RenderBackendId,
     pub pass: RenderPassKind,
+    pub engine: &'static str,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

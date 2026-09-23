@@ -68,6 +68,7 @@ pub struct RenderResult {
     pub backend: RenderBackendId,
     pub pass: RenderPassKind,
     pub png: Vec<u8>,
+    pub engine: &'static str,
 }
 
 struct JobRecord {
@@ -126,7 +127,12 @@ impl RenderService {
 
     pub fn submit(&self, submit: RenderSubmit) -> Result<String, RenderError> {
         Self::assert_illustration_path(&submit.output_path)?;
-        if submit.width == 0 || submit.height == 0 {
+        if submit.width == 0
+            || submit.height == 0
+            || submit.width > 4096
+            || submit.height > 4096
+            || u64::from(submit.width) * u64::from(submit.height) > 16_777_216
+        {
             return Err(RenderError::InvalidDimensions(submit.width, submit.height));
         }
         let backend = self
@@ -194,6 +200,7 @@ impl RenderService {
                     backend: out.backend_id,
                     pass: out.pass,
                     png: out.png,
+                    engine: out.engine,
                 };
                 let mut jobs = self.jobs.lock().expect("render jobs lock");
                 if let Some(rec) = jobs.get_mut(&job_id) {

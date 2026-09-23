@@ -624,6 +624,17 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
+        "illustration.export_png" => {
+            if !granted_caps
+                .iter()
+                .any(|c| c == crate::ILLUSTRATION_FS_READ_CAP)
+            {
+                return Err(RichDeclUiError::MissingCapability(
+                    crate::ILLUSTRATION_FS_READ_CAP.into(),
+                ));
+            }
+            Ok(())
+        }
         crate::RENDER_STUB_SERVICE => {
             if !granted_caps.iter().any(|c| c == crate::RENDER_STUB_CAP) {
                 return Err(RichDeclUiError::MissingCapability(
@@ -1250,6 +1261,25 @@ mod tests {
             .expect("downloads read cap");
         let err = action.validate(&HashSet::new(), &[]).unwrap_err();
         assert!(matches!(err, RichDeclUiError::MissingCapability(_)));
+    }
+
+    #[test]
+    fn illustration_export_requires_illustrations_read_cap() {
+        let action = RichAction {
+            id: "export_png".into(),
+            tool: None,
+            service: Some("illustration.export_png".into()),
+            input: Some(serde_json::json!({"source_path": "$local.beauty_path"})),
+            refresh_binds: vec![],
+            invalidate_on: vec![],
+        };
+        action
+            .validate(&HashSet::new(), &[crate::ILLUSTRATION_FS_READ_CAP.into()])
+            .unwrap();
+        assert!(matches!(
+            action.validate(&HashSet::new(), &[]),
+            Err(RichDeclUiError::MissingCapability(_))
+        ));
     }
 
     #[test]

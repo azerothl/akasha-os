@@ -141,6 +141,7 @@ mod tests {
             depth_of_field: 0.3,
             glow: 0.2,
             color_warmth: 0.1,
+            ..Default::default()
         });
         let loaded = load_project_yaml(&save_project_yaml(&project).unwrap()).unwrap();
         assert_eq!(loaded, project);

@@ -327,14 +327,22 @@ pub(crate) fn on_ui_service_done(
                 let width = result.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
                 let height = result.get("height").and_then(|v| v.as_u64()).unwrap_or(0);
                 let style = result.get("style").and_then(|v| v.as_str());
+                let engine = result
+                    .get("engine")
+                    .and_then(Value::as_str)
+                    .unwrap_or(backend);
+                let preset = result
+                    .get("preset")
+                    .and_then(Value::as_str)
+                    .unwrap_or("standard");
                 let summary = if app.prefs.language.starts_with("fr") {
                     format!(
-                        "Moteur : {backend} · {width} × {height} · style : {}",
+                        "Moteur : {engine} · préréglage : {preset} · {width} × {height} · style : {}",
                         style.unwrap_or("défaut")
                     )
                 } else {
                     format!(
-                        "Backend: {backend} · {width} × {height} · style: {}",
+                        "Engine: {engine} · preset: {preset} · {width} × {height} · style: {}",
                         style.unwrap_or("default")
                     )
                 };
