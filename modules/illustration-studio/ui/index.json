@@ -92,7 +92,7 @@
       "light_spot_angle_label": "Spot half-angle (°)",
       "viewport_label": "Edit viewport",
       "scene_label": "Scene graph",
-      "scene_empty": "No scene loaded yet. Compose from a prompt, Load project, or add an asset.",
+      "scene_empty": "Add an object or compose a scene from a prompt.",
       "save_label": "Save",
       "load_label": "Load",
       "undo_label": "Undo",
@@ -142,7 +142,10 @@
       "comic_apply_label": "Apply layout",
       "comic_render_label": "Render page",
       "comic_bind_label": "Bind scene → selected panel",
-      "panel_1": "1", "panel_2": "2", "panel_3": "3", "panel_4": "4",
+      "panel_1": "1",
+      "panel_2": "2",
+      "panel_3": "3",
+      "panel_4": "4",
       "comic_panel_label": "Panel",
       "comic_caption_label": "Panel caption (metadata)",
       "comic_link_hint": "Bind the current scene and storyboard shot to the selected panel, then render and export the page as PNG.",
@@ -204,7 +207,23 @@
       "compose_apply_2": "Apply proposal 2",
       "compose_proposal_1": "Proposal 1 · placement",
       "compose_proposal_2": "Proposal 2 · placement",
-      "materials_section": "Materials and finishes"
+      "materials_section": "Materials and finishes",
+      "projects_heading": "Your projects",
+      "projects_intro": "Create a project or open a recent one to start working.",
+      "project_name_label": "Project name",
+      "project_create_label": "Create project",
+      "project_import_label": "Import project YAML…",
+      "project_legacy_label": "Import earlier Illustration Studio project",
+      "project_recent_label": "Recent projects",
+      "project_empty_label": "No projects yet. Name a project to start.",
+      "project_open_label": "Open",
+      "project_back_label": "All projects",
+      "project_start_heading": "What would you like to make?",
+      "project_scene3d_label": "3D scene",
+      "project_illustration_label": "Illustration",
+      "project_comic_label": "Comic",
+      "project_prompt_label": "Create scene from prompt",
+      "project_resume_label": "Resume"
     },
     "fr": {
       "app_title": "Studio Illustration",
@@ -293,7 +312,7 @@
       "light_spot_angle_label": "Demi-angle du spot (°)",
       "viewport_label": "Fenêtre d’édition",
       "scene_label": "Graphe de scène",
-      "scene_empty": "Aucune scène chargée. Composez depuis une invite, chargez un projet, ou ajoutez un asset.",
+      "scene_empty": "Ajoutez un objet ou composez une scène depuis une invite.",
       "save_label": "Enregistrer",
       "load_label": "Charger",
       "undo_label": "Annuler",
@@ -343,7 +362,10 @@
       "comic_apply_label": "Appliquer la mise en page",
       "comic_render_label": "Rendre la page",
       "comic_bind_label": "Lier scène → case choisie",
-      "panel_1": "1", "panel_2": "2", "panel_3": "3", "panel_4": "4",
+      "panel_1": "1",
+      "panel_2": "2",
+      "panel_3": "3",
+      "panel_4": "4",
       "comic_panel_label": "Case",
       "comic_caption_label": "Légende de case (métadonnée)",
       "comic_link_hint": "Liez la scène et le plan actif à la case choisie, puis rendez et exportez la planche en PNG.",
@@ -405,7 +427,23 @@
       "compose_apply_2": "Appliquer la proposition 2",
       "compose_proposal_1": "Proposition 1 · placement",
       "compose_proposal_2": "Proposition 2 · placement",
-      "materials_section": "Matières et finitions"
+      "materials_section": "Matières et finitions",
+      "projects_heading": "Vos projets",
+      "projects_intro": "Créez un projet ou ouvrez un projet récent pour commencer.",
+      "project_name_label": "Nom du projet",
+      "project_create_label": "Créer le projet",
+      "project_import_label": "Importer un projet YAML…",
+      "project_legacy_label": "Importer l’ancien projet Illustration Studio",
+      "project_recent_label": "Projets récents",
+      "project_empty_label": "Aucun projet pour le moment. Nommez-en un pour commencer.",
+      "project_open_label": "Ouvrir",
+      "project_back_label": "Tous les projets",
+      "project_start_heading": "Que souhaitez-vous créer ?",
+      "project_scene3d_label": "Scène 3D",
+      "project_illustration_label": "Illustration",
+      "project_comic_label": "Comic",
+      "project_prompt_label": "Créer une scène depuis une invite",
+      "project_resume_label": "Reprendre"
     }
   },
   "state": {
@@ -428,9 +466,18 @@
         "type": "string",
         "default": "upper_arm_r"
       },
-      "named_pose": { "type": "string", "default": "pose-1" },
-      "animation_time": { "type": "number", "default": 0 },
-      "animation_summary": { "type": "string", "default": "" },
+      "named_pose": {
+        "type": "string",
+        "default": "pose-1"
+      },
+      "animation_time": {
+        "type": "number",
+        "default": 0
+      },
+      "animation_summary": {
+        "type": "string",
+        "default": ""
+      },
       "prompt": {
         "type": "string",
         "default": "A man enters an old library. He stands by the counter."
@@ -439,27 +486,90 @@
         "type": "string",
         "default": "pencil"
       },
-      "line_width": { "type": "number", "default": 1.2 },
-      "line_density": { "type": "number", "default": 1 },
-      "variation": { "type": "number", "default": 0.15 },
-      "hatching": { "type": "number", "default": 0.5 },
-      "antialias": { "type": "string", "default": "on" },
-      "fx_kind": { "type": "string", "default": "fog" },
-      "fx_x": { "type": "number", "default": 0 },
-      "fx_y": { "type": "number", "default": 1 },
-      "fx_z": { "type": "number", "default": 0 },
-      "fx_radius": { "type": "number", "default": 1 },
-      "fx_intensity": { "type": "number", "default": 0.5 },
-      "finish_dof": { "type": "number", "default": 0 },
-      "finish_glow": { "type": "number", "default": 0 },
-      "finish_warmth": { "type": "number", "default": 0 },
-      "render_quality": { "type": "string", "default": "standard" },
-      "output_width": { "type": "number", "default": 640 },
-      "output_height": { "type": "number", "default": 480 },
-      "render_denoise": { "type": "boolean", "default": false },
-      "transparent_background": { "type": "boolean", "default": false },
-      "light_range": { "type": "number", "default": 8 },
-      "light_spot_angle": { "type": "number", "default": 45 },
+      "line_width": {
+        "type": "number",
+        "default": 1.2
+      },
+      "line_density": {
+        "type": "number",
+        "default": 1
+      },
+      "variation": {
+        "type": "number",
+        "default": 0.15
+      },
+      "hatching": {
+        "type": "number",
+        "default": 0.5
+      },
+      "antialias": {
+        "type": "string",
+        "default": "on"
+      },
+      "fx_kind": {
+        "type": "string",
+        "default": "fog"
+      },
+      "fx_x": {
+        "type": "number",
+        "default": 0
+      },
+      "fx_y": {
+        "type": "number",
+        "default": 1
+      },
+      "fx_z": {
+        "type": "number",
+        "default": 0
+      },
+      "fx_radius": {
+        "type": "number",
+        "default": 1
+      },
+      "fx_intensity": {
+        "type": "number",
+        "default": 0.5
+      },
+      "finish_dof": {
+        "type": "number",
+        "default": 0
+      },
+      "finish_glow": {
+        "type": "number",
+        "default": 0
+      },
+      "finish_warmth": {
+        "type": "number",
+        "default": 0
+      },
+      "render_quality": {
+        "type": "string",
+        "default": "standard"
+      },
+      "output_width": {
+        "type": "number",
+        "default": 640
+      },
+      "output_height": {
+        "type": "number",
+        "default": 480
+      },
+      "render_denoise": {
+        "type": "boolean",
+        "default": false
+      },
+      "transparent_background": {
+        "type": "boolean",
+        "default": false
+      },
+      "light_range": {
+        "type": "number",
+        "default": 8
+      },
+      "light_spot_angle": {
+        "type": "number",
+        "default": 45
+      },
       "beauty_path": {
         "type": "string",
         "default": ""
@@ -500,13 +610,34 @@
         "type": "number",
         "default": 0
       },
-      "comic_panel_id": { "type": "string", "default": "panel_1" },
-      "comic_caption": { "type": "string", "default": "" },
-      "frame_id": { "type": "string", "default": "" },
-      "history_name": { "type": "string", "default": "version-1" },
-      "version_id": { "type": "number", "default": 1 },
-      "history_summary": { "type": "string", "default": "" },
-      "diagnostics": { "type": "string", "default": "" },
+      "comic_panel_id": {
+        "type": "string",
+        "default": "panel_1"
+      },
+      "comic_caption": {
+        "type": "string",
+        "default": ""
+      },
+      "frame_id": {
+        "type": "string",
+        "default": ""
+      },
+      "history_name": {
+        "type": "string",
+        "default": "version-1"
+      },
+      "version_id": {
+        "type": "number",
+        "default": 1
+      },
+      "history_summary": {
+        "type": "string",
+        "default": ""
+      },
+      "diagnostics": {
+        "type": "string",
+        "default": ""
+      },
       "frame_label": {
         "type": "string",
         "default": ""
@@ -574,6 +705,26 @@
       "color_b": {
         "type": "number",
         "default": 224
+      },
+      "project_id": {
+        "type": "string",
+        "default": ""
+      },
+      "project_title": {
+        "type": "string",
+        "default": ""
+      },
+      "project_name": {
+        "type": "string",
+        "default": ""
+      },
+      "legacy_available": {
+        "type": "boolean",
+        "default": false
+      },
+      "work_area": {
+        "type": "string",
+        "default": "start"
       }
     },
     "beauty_summary": {
@@ -631,38 +782,66 @@
   },
   "bindings": [
     {
-      "id": "project",
-      "tool": "illustration.project.load",
-      "target": "/yaml",
+      "id": "projects",
+      "tool": "illustration.project.list",
+      "target": "/projects",
       "invalidate_on": []
-    },
-    {
-      "id": "beauty",
-      "tool": "illustration.document.load",
-      "target": "/beauty_path",
-      "invalidate_on": [
-        "local.beauty_path"
-      ]
     }
   ],
   "actions": [
     {
-      "id": "save_project",
-      "tool": "illustration.project.save",
+      "id": "close_project",
+      "tool": "illustration.project.close",
       "input": {
+        "project_id": "$local.project_id",
         "yaml": "$local.scene"
       },
       "refresh_binds": [
-        "illustration.project.load"
+        "illustration.project.list"
       ]
+    },
+    {
+      "id": "create_project",
+      "tool": "illustration.project.create",
+      "input": {
+        "title": "$local.project_name"
+      },
+      "refresh_binds": [
+        "illustration.project.list"
+      ]
+    },
+    {
+      "id": "import_legacy_project",
+      "tool": "illustration.project.import_legacy",
+      "input": {},
+      "refresh_binds": [
+        "illustration.project.list"
+      ]
+    },
+    {
+      "id": "import_project_file",
+      "service": "illustration.project.import_yaml",
+      "input": {},
+      "refresh_binds": [
+        "illustration.project.list"
+      ]
+    },
+    {
+      "id": "save_project",
+      "tool": "illustration.project.save",
+      "input": {
+        "project_id": "$local.project_id",
+        "yaml": "$local.scene"
+      },
+      "refresh_binds": []
     },
     {
       "id": "load_project",
       "tool": "illustration.project.load",
-      "input": {},
-      "refresh_binds": [
-        "illustration.project.load"
-      ]
+      "input": {
+        "project_id": "$local.project_id"
+      },
+      "refresh_binds": []
     },
     {
       "id": "compose_scene",
@@ -673,38 +852,74 @@
       "refresh_binds": []
     },
     {
-      "id": "register_rig", "service": "scene.animation",
-      "input": { "op": "register", "root_id": "$local.character_id", "scene_yaml": "$local.scene" },
+      "id": "register_rig",
+      "service": "scene.animation",
+      "input": {
+        "op": "register",
+        "root_id": "$local.character_id",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "save_named_pose", "service": "scene.animation",
-      "input": { "op": "save_pose", "root_id": "$local.character_id", "name": "$local.named_pose", "scene_yaml": "$local.scene" },
+      "id": "save_named_pose",
+      "service": "scene.animation",
+      "input": {
+        "op": "save_pose",
+        "root_id": "$local.character_id",
+        "name": "$local.named_pose",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "apply_named_pose", "service": "scene.animation",
-      "input": { "op": "apply_pose", "root_id": "$local.character_id", "name": "$local.named_pose", "scene_yaml": "$local.scene" },
+      "id": "apply_named_pose",
+      "service": "scene.animation",
+      "input": {
+        "op": "apply_pose",
+        "root_id": "$local.character_id",
+        "name": "$local.named_pose",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "add_keyframe", "service": "scene.animation",
-      "input": { "op": "keyframe", "root_id": "$local.character_id", "time_ms": "$local.animation_time", "scene_yaml": "$local.scene" },
+      "id": "add_keyframe",
+      "service": "scene.animation",
+      "input": {
+        "op": "keyframe",
+        "root_id": "$local.character_id",
+        "time_ms": "$local.animation_time",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "seek_animation", "service": "scene.animation",
-      "input": { "op": "seek", "time_ms": "$local.animation_time", "scene_yaml": "$local.scene" },
+      "id": "seek_animation",
+      "service": "scene.animation",
+      "input": {
+        "op": "seek",
+        "time_ms": "$local.animation_time",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "play_animation", "service": "scene.animation",
-      "input": { "op": "play", "scene_yaml": "$local.scene" },
+      "id": "play_animation",
+      "service": "scene.animation",
+      "input": {
+        "op": "play",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "stop_animation", "service": "scene.animation",
-      "input": { "op": "stop", "scene_yaml": "$local.scene" },
+      "id": "stop_animation",
+      "service": "scene.animation",
+      "input": {
+        "op": "stop",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
@@ -871,41 +1086,66 @@
       "service": "scene.apply",
       "input": {
         "scene_yaml": "$local.scene",
-        "ops": [{ "op": "fx", "effect": {
-          "kind": "$local.fx_kind",
-          "position": ["$local.fx_x", "$local.fx_y", "$local.fx_z"],
-          "radius": "$local.fx_radius", "intensity": "$local.fx_intensity"
-        }}]
+        "ops": [
+          {
+            "op": "fx",
+            "effect": {
+              "kind": "$local.fx_kind",
+              "position": [
+                "$local.fx_x",
+                "$local.fx_y",
+                "$local.fx_z"
+              ],
+              "radius": "$local.fx_radius",
+              "intensity": "$local.fx_intensity"
+            }
+          }
+        ]
       },
       "refresh_binds": []
     },
     {
       "id": "clear_fx",
       "service": "scene.apply",
-      "input": { "scene_yaml": "$local.scene", "ops": [{ "op": "fx_clear" }] },
+      "input": {
+        "scene_yaml": "$local.scene",
+        "ops": [
+          {
+            "op": "fx_clear"
+          }
+        ]
+      },
       "refresh_binds": []
     },
     {
       "id": "save_finish",
       "service": "scene.apply",
-      "input": { "scene_yaml": "$local.scene", "ops": [{
-        "op": "render_preset", "preset": {
-          "depth_of_field": "$local.finish_dof",
-          "glow": "$local.finish_glow",
-          "color_warmth": "$local.finish_warmth",
-          "quality": "$local.render_quality",
-          "width": "$local.output_width",
-          "height": "$local.output_height",
-          "denoise": "$local.render_denoise",
-          "transparent_background": "$local.transparent_background"
-        }
-      }] },
+      "input": {
+        "scene_yaml": "$local.scene",
+        "ops": [
+          {
+            "op": "render_preset",
+            "preset": {
+              "depth_of_field": "$local.finish_dof",
+              "glow": "$local.finish_glow",
+              "color_warmth": "$local.finish_warmth",
+              "quality": "$local.render_quality",
+              "width": "$local.output_width",
+              "height": "$local.output_height",
+              "denoise": "$local.render_denoise",
+              "transparent_background": "$local.transparent_background"
+            }
+          }
+        ]
+      },
       "refresh_binds": []
     },
     {
       "id": "export_png",
       "service": "illustration.export_png",
-      "input": { "source_path": "$local.beauty_path" },
+      "input": {
+        "source_path": "$local.beauty_path"
+      },
       "refresh_binds": []
     },
     {
@@ -1262,28 +1502,51 @@
       "refresh_binds": []
     },
     {
-      "id": "save_version", "service": "scene.history",
-      "input": { "op": "save_version", "name": "$local.history_name", "scene_yaml": "$local.scene" },
+      "id": "save_version",
+      "service": "scene.history",
+      "input": {
+        "op": "save_version",
+        "name": "$local.history_name",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "restore_version", "service": "scene.history",
-      "input": { "op": "restore_version", "version_id": "$local.version_id", "scene_yaml": "$local.scene" },
+      "id": "restore_version",
+      "service": "scene.history",
+      "input": {
+        "op": "restore_version",
+        "version_id": "$local.version_id",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "save_variant", "service": "scene.history",
-      "input": { "op": "save_variant", "name": "$local.history_name", "scene_yaml": "$local.scene" },
+      "id": "save_variant",
+      "service": "scene.history",
+      "input": {
+        "op": "save_variant",
+        "name": "$local.history_name",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "apply_variant", "service": "scene.history",
-      "input": { "op": "apply_variant", "name": "$local.history_name", "scene_yaml": "$local.scene" },
+      "id": "apply_variant",
+      "service": "scene.history",
+      "input": {
+        "op": "apply_variant",
+        "name": "$local.history_name",
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
-      "id": "scene_diagnostics", "service": "scene.diagnostics",
-      "input": { "scene_yaml": "$local.scene" },
+      "id": "scene_diagnostics",
+      "service": "scene.diagnostics",
+      "input": {
+        "scene_yaml": "$local.scene"
+      },
       "refresh_binds": []
     },
     {
@@ -1381,292 +1644,610 @@
   ],
   "subscriptions": [],
   "root": {
-    "kind": "split",
-    "split_ratio": 0.36,
+    "kind": "column",
     "children": [
       {
-        "kind": "scroll",
+        "kind": "column",
+        "visible": {
+          "eq": [
+            "$local.project_id",
+            ""
+          ]
+        },
         "children": [
           {
-            "kind": "text",
-            "label_key": "tip_body"
+            "kind": "heading",
+            "label_key": "projects_heading"
           },
           {
             "kind": "text",
-            "label_key": "scene_empty",
-            "visible": {
-              "eq": [
-                "$local.scene",
-                ""
-              ]
-            }
+            "label_key": "projects_intro"
           },
           {
             "kind": "section",
-            "label_key": "compose_section",
             "children": [
               {
                 "kind": "text_input",
-                "state_key": "prompt",
-                "label_key": "prompt_label"
-              },
-              {
-                "kind": "button",
-                "label_key": "compose_label",
-                "action": "compose_scene",
-                "primary": true
-              },
-              {
-                "kind": "text",
-                "label_key": "compose_review",
-                "visible": {
-                  "eq": [
-                    "$local.compose_pending",
-                    true
-                  ]
-                }
-              },
-              {
-                "kind": "text",
-                "label_key": "compose_fallback_notice",
-                "visible": {
-                  "eq": [
-                    "$local.compose_fallback",
-                    true
-                  ]
-                }
-              },
-              {
-                "kind": "scene_candidate",
-                "label_key": "compose_proposal_1",
-                "scene_key": "compose_candidate_1_yaml",
-                "visible": {
-                  "eq": [
-                    "$local.compose_pending",
-                    true
-                  ]
-                }
-              },
-              {
-                "kind": "scene_candidate",
-                "label_key": "compose_proposal_2",
-                "scene_key": "compose_candidate_2_yaml",
-                "visible": {
-                  "eq": [
-                    "$local.compose_two_candidates",
-                    true
-                  ]
-                }
+                "state_key": "project_name",
+                "label_key": "project_name_label"
               },
               {
                 "kind": "row",
-                "visible": {
-                  "eq": [
-                    "$local.compose_pending",
-                    true
-                  ]
-                },
+                "toolbar": true,
                 "children": [
                   {
                     "kind": "button",
-                    "label_key": "compose_apply_1",
-                    "action": "apply_compose_candidate_1",
-                    "primary": true
+                    "label_key": "project_create_label",
+                    "action": "create_project",
+                    "primary": true,
+                    "enabled": {
+                      "ne": [
+                        "$local.project_name",
+                        ""
+                      ]
+                    }
                   },
                   {
                     "kind": "button",
-                    "label_key": "compose_apply_2",
-                    "action": "apply_compose_candidate_2",
+                    "label_key": "project_import_label",
+                    "action": "import_project_file"
+                  }
+                ]
+              },
+              {
+                "kind": "button",
+                "label_key": "project_legacy_label",
+                "action": "import_legacy_project",
+                "visible": {
+                  "eq": [
+                    "$local.legacy_available",
+                    true
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "kind": "heading",
+            "label_key": "project_recent_label"
+          },
+          {
+            "kind": "empty_state",
+            "bind": "illustration.project.list",
+            "source": "projects",
+            "label_key": "project_empty_label"
+          },
+          {
+            "kind": "table",
+            "bind": "illustration.project.list",
+            "source": "projects",
+            "columns": [
+              "title"
+            ],
+            "hide_headers": true,
+            "row_actions": [
+              {
+                "tool": "illustration.project.open",
+                "label_key": "project_open_label",
+                "args": {
+                  "project_id": "$row.id"
+                },
+                "refresh_binds": [
+                  "illustration.project.list"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "split",
+        "split_ratio": 0.36,
+        "children": [
+          {
+            "kind": "scroll",
+            "children": [
+              {
+                "kind": "row",
+                "toolbar": true,
+                "children": [
+                  {
+                    "kind": "button",
+                    "label_key": "project_back_label",
+                    "action": "close_project"
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "label_key": "tip_body"
+              },
+              {
+                "kind": "text",
+                "label_key": "scene_empty",
+                "visible": {
+                  "eq": [
+                    "$local.scene",
+                    ""
+                  ]
+                }
+              },
+              {
+                "kind": "section",
+                "label_key": "compose_section",
+                "children": [
+                  {
+                    "kind": "text_input",
+                    "state_key": "prompt",
+                    "label_key": "prompt_label"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "compose_label",
+                    "action": "compose_scene",
+                    "primary": true
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "compose_review",
+                    "visible": {
+                      "eq": [
+                        "$local.compose_pending",
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "compose_fallback_notice",
+                    "visible": {
+                      "eq": [
+                        "$local.compose_fallback",
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "scene_candidate",
+                    "label_key": "compose_proposal_1",
+                    "scene_key": "compose_candidate_1_yaml",
+                    "visible": {
+                      "eq": [
+                        "$local.compose_pending",
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "scene_candidate",
+                    "label_key": "compose_proposal_2",
+                    "scene_key": "compose_candidate_2_yaml",
                     "visible": {
                       "eq": [
                         "$local.compose_two_candidates",
                         true
                       ]
                     }
+                  },
+                  {
+                    "kind": "row",
+                    "visible": {
+                      "eq": [
+                        "$local.compose_pending",
+                        true
+                      ]
+                    },
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "compose_apply_1",
+                        "action": "apply_compose_candidate_1",
+                        "primary": true
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "compose_apply_2",
+                        "action": "apply_compose_candidate_2",
+                        "visible": {
+                          "eq": [
+                            "$local.compose_two_candidates",
+                            true
+                          ]
+                        }
+                      }
+                    ]
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "kind": "section",
-            "label_key": "project_section",
-            "children": [
-              {
-                "kind": "undo_redo",
-                "canvas_id": "illustration_viewport",
-                "scene_key": "scene",
-                "selected_key": "selected_id"
-              },
-              {
-                "kind": "scene_object_tools",
-                "scene_key": "scene",
-                "selected_key": "selected_id",
-                "canvas_id": "illustration_viewport"
-              },
-              {
-                "kind": "text",
-                "label_key": "autosave_hint"
-              },
-              {
-                "kind": "row",
-                "children": [
-                  {
-                    "kind": "button",
-                    "label_key": "save_label",
-                    "action": "save_project"
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "load_label",
-                    "action": "load_project"
-                  }
-                ]
-              }
-            ],
-            "collapsible": true,
-            "open_state_key": "project_open"
-          },
-          {
-            "kind": "section",
-            "label_key": "edit_section",
-            "children": [
-              {
-                "kind": "section",
-                "label_key": "assets_section",
-                "children": [
-                  {
-                    "kind": "scene_asset_palette"
-                  },
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "add_humanoid_label",
-                        "action": "instantiate_humanoid"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_female_label",
-                        "action": "instantiate_female"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_slim_label",
-                        "action": "instantiate_slim"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_cat_label",
-                        "action": "instantiate_cat"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_dog_label",
-                        "action": "instantiate_dog"
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "add_sofa_label",
-                        "action": "instantiate_sofa"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_desk_label",
-                        "action": "instantiate_desk"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_lamp_label",
-                        "action": "instantiate_lamp"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_plant_label",
-                        "action": "instantiate_plant"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_book_label",
-                        "action": "instantiate_book"
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "add_wall_label",
-                        "action": "instantiate_wall"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_window_label",
-                        "action": "instantiate_window"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "add_box_label",
-                        "action": "instantiate_box"
-                      }
-                    ]
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "assets_open"
               },
               {
                 "kind": "section",
-                "label_key": "materials_section",
+                "label_key": "project_section",
                 "children": [
                   {
-                    "kind": "scene_material_editor",
+                    "kind": "undo_redo",
+                    "canvas_id": "illustration_viewport",
+                    "scene_key": "scene",
+                    "selected_key": "selected_id"
+                  },
+                  {
+                    "kind": "scene_object_tools",
                     "scene_key": "scene",
                     "selected_key": "selected_id",
                     "canvas_id": "illustration_viewport"
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "autosave_hint"
+                  },
+                  {
+                    "kind": "row",
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "save_label",
+                        "action": "save_project"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "load_label",
+                        "action": "load_project"
+                      }
+                    ]
+                  }
+                ],
+                "collapsible": true,
+                "open_state_key": "project_open"
+              },
+              {
+                "kind": "section",
+                "label_key": "edit_section",
+                "children": [
+                  {
+                    "kind": "section",
+                    "label_key": "assets_section",
+                    "children": [
+                      {
+                        "kind": "scene_asset_palette"
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "add_humanoid_label",
+                            "action": "instantiate_humanoid"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_female_label",
+                            "action": "instantiate_female"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_slim_label",
+                            "action": "instantiate_slim"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_cat_label",
+                            "action": "instantiate_cat"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_dog_label",
+                            "action": "instantiate_dog"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "add_sofa_label",
+                            "action": "instantiate_sofa"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_desk_label",
+                            "action": "instantiate_desk"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_lamp_label",
+                            "action": "instantiate_lamp"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_plant_label",
+                            "action": "instantiate_plant"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_book_label",
+                            "action": "instantiate_book"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "add_wall_label",
+                            "action": "instantiate_wall"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_window_label",
+                            "action": "instantiate_window"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "add_box_label",
+                            "action": "instantiate_box"
+                          }
+                        ]
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "assets_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "materials_section",
+                    "children": [
+                      {
+                        "kind": "scene_material_editor",
+                        "scene_key": "scene",
+                        "selected_key": "selected_id",
+                        "canvas_id": "illustration_viewport"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "catalogue_section",
+                    "children": [
+                      {
+                        "kind": "button",
+                        "label_key": "import_glb_label",
+                        "action": "import_glb"
+                      },
+                      {
+                        "kind": "markdown",
+                        "label_key": "catalogue_intro"
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "image",
+                            "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"
+                          },
+                          {
+                            "kind": "column",
+                            "children": [
+                              {
+                                "kind": "text",
+                                "label_key": "catalogue_chair"
+                              },
+                              {
+                                "kind": "button",
+                                "label_key": "catalogue_add_label",
+                                "action": "catalogue_add_chair"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "image",
+                            "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"
+                          },
+                          {
+                            "kind": "column",
+                            "children": [
+                              {
+                                "kind": "text",
+                                "label_key": "catalogue_desk"
+                              },
+                              {
+                                "kind": "button",
+                                "label_key": "catalogue_add_label",
+                                "action": "catalogue_add_desk"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "image",
+                            "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"
+                          },
+                          {
+                            "kind": "column",
+                            "children": [
+                              {
+                                "kind": "text",
+                                "label_key": "catalogue_notebook"
+                              },
+                              {
+                                "kind": "button",
+                                "label_key": "catalogue_add_label",
+                                "action": "catalogue_add_notebook"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "catalogue_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "camera_section",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "label_key": "camera_orbit_hint"
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "camera_controls_strip"
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "camera_look_hint"
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "camera_fov_hint"
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "camera_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "lights_section",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "label_key": "lights_hint"
+                      },
+                      {
+                        "kind": "radio",
+                        "state_key": "light_type",
+                        "label_key": "light_type_label",
+                        "inline": true,
+                        "items": [
+                          "point",
+                          "directional",
+                          "spot"
+                        ],
+                        "item_label_keys": [
+                          "light_type_point",
+                          "light_type_directional",
+                          "light_type_spot"
+                        ]
+                      },
+                      {
+                        "kind": "number",
+                        "state_key": "light_intensity",
+                        "min": 0,
+                        "max": 20,
+                        "label_key": "light_intensity_label"
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "number",
+                            "state_key": "light_range",
+                            "min": 0.1,
+                            "max": 1000,
+                            "label_key": "light_range_label"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "light_spot_angle",
+                            "min": 1,
+                            "max": 89,
+                            "label_key": "light_spot_angle_label"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "number",
+                            "state_key": "color_r",
+                            "min": 0,
+                            "max": 255,
+                            "label_key": "light_color_r_label"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "color_g",
+                            "min": 0,
+                            "max": 255,
+                            "label_key": "light_color_g_label"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "color_b",
+                            "min": 0,
+                            "max": 255,
+                            "label_key": "light_color_b_label"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "add_light_label",
+                            "action": "add_light"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "apply_light_label",
+                            "action": "apply_light"
+                          }
+                        ]
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "lights_open"
                   }
                 ]
               },
               {
                 "kind": "section",
-                "label_key": "catalogue_section",
+                "label_key": "render_section",
                 "children": [
                   {
-                    "kind": "button",
-                    "label_key": "import_glb_label",
-                    "action": "import_glb"
-                  },
-                  {
-                    "kind": "markdown",
-                    "label_key": "catalogue_intro"
+                    "kind": "radio",
+                    "state_key": "style_id",
+                    "label_key": "style_label",
+                    "inline": true,
+                    "items": [
+                      "sketch",
+                      "pencil",
+                      "ink"
+                    ],
+                    "item_label_keys": [
+                      "style_sketch",
+                      "style_pencil",
+                      "style_ink"
+                    ]
                   },
                   {
                     "kind": "row",
                     "children": [
                       {
-                        "kind": "image",
-                        "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"
+                        "kind": "number",
+                        "state_key": "line_width",
+                        "min": 0.3,
+                        "max": 4,
+                        "label_key": "style_width"
                       },
                       {
-                        "kind": "column",
-                        "children": [
-                          {
-                            "kind": "text",
-                            "label_key": "catalogue_chair"
-                          },
-                          {
-                            "kind": "button",
-                            "label_key": "catalogue_add_label",
-                            "action": "catalogue_add_chair"
-                          }
-                        ]
+                        "kind": "number",
+                        "state_key": "line_density",
+                        "min": 0,
+                        "max": 1,
+                        "label_key": "style_density"
                       }
                     ]
                   },
@@ -1674,134 +2255,208 @@
                     "kind": "row",
                     "children": [
                       {
-                        "kind": "image",
-                        "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"
+                        "kind": "number",
+                        "state_key": "variation",
+                        "min": 0,
+                        "max": 1,
+                        "label_key": "style_variation"
                       },
                       {
-                        "kind": "column",
-                        "children": [
-                          {
-                            "kind": "text",
-                            "label_key": "catalogue_desk"
-                          },
-                          {
-                            "kind": "button",
-                            "label_key": "catalogue_add_label",
-                            "action": "catalogue_add_desk"
-                          }
-                        ]
+                        "kind": "number",
+                        "state_key": "hatching",
+                        "min": 0,
+                        "max": 1,
+                        "label_key": "style_hatching"
                       }
                     ]
-                  },
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "image",
-                        "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"
-                      },
-                      {
-                        "kind": "column",
-                        "children": [
-                          {
-                            "kind": "text",
-                            "label_key": "catalogue_notebook"
-                          },
-                          {
-                            "kind": "button",
-                            "label_key": "catalogue_add_label",
-                            "action": "catalogue_add_notebook"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "catalogue_open"
-              },
-              {
-                "kind": "section",
-                "label_key": "camera_section",
-                "children": [
-                  {
-                    "kind": "text",
-                    "label_key": "camera_orbit_hint"
-                  },
-                  {
-                    "kind": "text",
-                    "label_key": "camera_controls_strip"
-                  },
-                  {
-                    "kind": "text",
-                    "label_key": "camera_look_hint"
-                  },
-                  {
-                    "kind": "text",
-                    "label_key": "camera_fov_hint"
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "camera_open"
-              },
-              {
-                "kind": "section",
-                "label_key": "lights_section",
-                "children": [
-                  {
-                    "kind": "text",
-                    "label_key": "lights_hint"
                   },
                   {
                     "kind": "radio",
-                    "state_key": "light_type",
-                    "label_key": "light_type_label",
+                    "state_key": "antialias",
+                    "label_key": "style_antialias",
                     "inline": true,
                     "items": [
-                      "point",
-                      "directional",
-                      "spot"
+                      "on",
+                      "off"
                     ],
                     "item_label_keys": [
-                      "light_type_point",
-                      "light_type_directional",
-                      "light_type_spot"
+                      "style_aa_on",
+                      "style_aa_off"
                     ]
                   },
                   {
-                    "kind": "number",
-                    "state_key": "light_intensity",
-                    "min": 0,
-                    "max": 20,
-                    "label_key": "light_intensity_label"
+                    "kind": "text",
+                    "label_key": "cpu_style_hint"
                   },
-                  { "kind": "row", "children": [
-                    { "kind": "number", "state_key": "light_range", "min": 0.1, "max": 1000, "label_key": "light_range_label" },
-                    { "kind": "number", "state_key": "light_spot_angle", "min": 1, "max": 89, "label_key": "light_spot_angle_label" }
-                  ] },
                   {
-                    "kind": "row",
+                    "kind": "section",
+                    "label_key": "fx_section",
+                    "collapsible": true,
                     "children": [
                       {
-                        "kind": "number",
-                        "state_key": "color_r",
-                        "min": 0,
-                        "max": 255,
-                        "label_key": "light_color_r_label"
+                        "kind": "radio",
+                        "state_key": "fx_kind",
+                        "label_key": "fx_kind",
+                        "inline": true,
+                        "items": [
+                          "fog",
+                          "particles",
+                          "smoke",
+                          "fire"
+                        ],
+                        "item_label_keys": [
+                          "fx_fog",
+                          "fx_particles",
+                          "fx_smoke",
+                          "fx_fire"
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "number",
+                            "state_key": "fx_x",
+                            "min": -1000,
+                            "max": 1000,
+                            "label_key": "fx_position_x"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "fx_y",
+                            "min": -1000,
+                            "max": 1000,
+                            "label_key": "fx_position_y"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "fx_z",
+                            "min": -1000,
+                            "max": 1000,
+                            "label_key": "fx_position_z"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "number",
+                            "state_key": "fx_radius",
+                            "min": 0.05,
+                            "max": 100,
+                            "label_key": "fx_radius"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "fx_intensity",
+                            "min": 0,
+                            "max": 1,
+                            "label_key": "fx_intensity"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "fx_add",
+                            "action": "add_fx",
+                            "primary": true
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "fx_clear",
+                            "action": "clear_fx"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "fx_note"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "finish_section",
+                    "collapsible": true,
+                    "children": [
+                      {
+                        "kind": "radio",
+                        "state_key": "render_quality",
+                        "label_key": "quality_label",
+                        "inline": true,
+                        "items": [
+                          "draft",
+                          "standard",
+                          "final"
+                        ],
+                        "item_label_keys": [
+                          "quality_draft",
+                          "quality_standard",
+                          "quality_final"
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "number",
+                            "state_key": "output_width",
+                            "min": 64,
+                            "max": 4096,
+                            "label_key": "output_width_label"
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "output_height",
+                            "min": 64,
+                            "max": 4096,
+                            "label_key": "output_height_label"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "checkbox",
+                        "state_key": "render_denoise",
+                        "label_key": "denoise_label"
+                      },
+                      {
+                        "kind": "checkbox",
+                        "state_key": "transparent_background",
+                        "label_key": "transparent_label"
                       },
                       {
                         "kind": "number",
-                        "state_key": "color_g",
+                        "state_key": "finish_dof",
                         "min": 0,
-                        "max": 255,
-                        "label_key": "light_color_g_label"
+                        "max": 1,
+                        "label_key": "finish_dof"
                       },
                       {
                         "kind": "number",
-                        "state_key": "color_b",
+                        "state_key": "finish_glow",
                         "min": 0,
-                        "max": 255,
-                        "label_key": "light_color_b_label"
+                        "max": 1,
+                        "label_key": "finish_glow"
+                      },
+                      {
+                        "kind": "number",
+                        "state_key": "finish_warmth",
+                        "min": 0,
+                        "max": 1,
+                        "label_key": "finish_warmth"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "finish_apply",
+                        "action": "save_finish"
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "preset_hint"
                       }
                     ]
                   },
@@ -1810,627 +2465,663 @@
                     "children": [
                       {
                         "kind": "button",
-                        "label_key": "add_light_label",
-                        "action": "add_light"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "apply_light_label",
-                        "action": "apply_light"
-                      }
-                    ]
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "lights_open"
-              }
-            ]
-          },
-          {
-            "kind": "section",
-            "label_key": "render_section",
-            "children": [
-              {
-                "kind": "radio",
-                "state_key": "style_id",
-                "label_key": "style_label",
-                "inline": true,
-                "items": [
-                  "sketch",
-                  "pencil",
-                  "ink"
-                ],
-                "item_label_keys": [
-                  "style_sketch",
-                  "style_pencil",
-                  "style_ink"
-                ]
-              },
-              {
-                "kind": "row",
-                "children": [
-                  { "kind": "number", "state_key": "line_width", "min": 0.3, "max": 4, "label_key": "style_width" },
-                  { "kind": "number", "state_key": "line_density", "min": 0, "max": 1, "label_key": "style_density" }
-                ]
-              },
-              {
-                "kind": "row",
-                "children": [
-                  { "kind": "number", "state_key": "variation", "min": 0, "max": 1, "label_key": "style_variation" },
-                  { "kind": "number", "state_key": "hatching", "min": 0, "max": 1, "label_key": "style_hatching" }
-                ]
-              },
-              {
-                "kind": "radio",
-                "state_key": "antialias",
-                "label_key": "style_antialias",
-                "inline": true,
-                "items": ["on", "off"],
-                "item_label_keys": ["style_aa_on", "style_aa_off"]
-              },
-              { "kind": "text", "label_key": "cpu_style_hint" },
-              {
-                "kind": "section",
-                "label_key": "fx_section",
-                "collapsible": true,
-                "children": [
-                  { "kind": "radio", "state_key": "fx_kind", "label_key": "fx_kind", "inline": true,
-                    "items": ["fog", "particles", "smoke", "fire"],
-                    "item_label_keys": ["fx_fog", "fx_particles", "fx_smoke", "fx_fire"] },
-                  { "kind": "row", "children": [
-                    { "kind": "number", "state_key": "fx_x", "min": -1000, "max": 1000, "label_key": "fx_position_x" },
-                    { "kind": "number", "state_key": "fx_y", "min": -1000, "max": 1000, "label_key": "fx_position_y" },
-                    { "kind": "number", "state_key": "fx_z", "min": -1000, "max": 1000, "label_key": "fx_position_z" }
-                  ] },
-                  { "kind": "row", "children": [
-                    { "kind": "number", "state_key": "fx_radius", "min": 0.05, "max": 100, "label_key": "fx_radius" },
-                    { "kind": "number", "state_key": "fx_intensity", "min": 0, "max": 1, "label_key": "fx_intensity" }
-                  ] },
-                  { "kind": "row", "children": [
-                    { "kind": "button", "label_key": "fx_add", "action": "add_fx", "primary": true },
-                    { "kind": "button", "label_key": "fx_clear", "action": "clear_fx" }
-                  ] },
-                  { "kind": "text", "label_key": "fx_note" }
-                ]
-              },
-              {
-                "kind": "section", "label_key": "finish_section", "collapsible": true,
-                "children": [
-                  { "kind": "radio", "state_key": "render_quality", "label_key": "quality_label", "inline": true,
-                    "items": ["draft", "standard", "final"],
-                    "item_label_keys": ["quality_draft", "quality_standard", "quality_final"] },
-                  { "kind": "row", "children": [
-                    { "kind": "number", "state_key": "output_width", "min": 64, "max": 4096, "label_key": "output_width_label" },
-                    { "kind": "number", "state_key": "output_height", "min": 64, "max": 4096, "label_key": "output_height_label" }
-                  ] },
-                  { "kind": "checkbox", "state_key": "render_denoise", "label_key": "denoise_label" },
-                  { "kind": "checkbox", "state_key": "transparent_background", "label_key": "transparent_label" },
-                  { "kind": "number", "state_key": "finish_dof", "min": 0, "max": 1, "label_key": "finish_dof" },
-                  { "kind": "number", "state_key": "finish_glow", "min": 0, "max": 1, "label_key": "finish_glow" },
-                  { "kind": "number", "state_key": "finish_warmth", "min": 0, "max": 1, "label_key": "finish_warmth" },
-                  { "kind": "button", "label_key": "finish_apply", "action": "save_finish" },
-                  { "kind": "text", "label_key": "preset_hint" }
-                ]
-              },
-              {
-                "kind": "row",
-                "children": [
-                  {
-                    "kind": "button",
-                    "label_key": "cpu_render_label",
-                    "action": "cpu_beauty",
-                    "primary": true
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "stub_render_label",
-                    "action": "stub_beauty"
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "blender_render_label",
-                    "action": "blender_beauty"
-                  }
-                ]
-              },
-              {
-                "kind": "text",
-                "label_key": "blender_tip"
-              },
-              {
-                "kind": "text",
-                "label_key": "blender_pack_status_empty",
-                "visible": {
-                  "eq": [
-                    "$local.blender_pack_status",
-                    ""
-                  ]
-                }
-              },
-              {
-                "kind": "text_input",
-                "state_key": "blender_pack_status",
-                "label_key": "blender_pack_status_value_label",
-                "read_only": true,
-                "visible": {
-                  "ne": [
-                    "$local.blender_pack_status",
-                    ""
-                  ]
-                }
-              },
-              {
-                "kind": "button",
-                "label_key": "blender_pack_status_label",
-                "action": "blender_pack_status"
-              },
-              {
-                "kind": "markdown",
-                "label_key": "blender_download_info"
-              },
-              {
-                "kind": "button",
-                "label_key": "blender_download_label",
-                "action": "install_blender",
-                "primary": true
-              }
-            ]
-          },
-          {
-            "kind": "section",
-            "label_key": "more_section",
-            "children": [
-              {
-                "kind": "section",
-                "label_key": "pose_section",
-                "children": [
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "pose_wave_label",
-                        "action": "pose_wave",
+                        "label_key": "cpu_render_label",
+                        "action": "cpu_beauty",
                         "primary": true
                       },
                       {
                         "kind": "button",
-                        "label_key": "pose_look_label",
-                        "action": "pose_look"
+                        "label_key": "stub_render_label",
+                        "action": "stub_beauty"
                       },
                       {
                         "kind": "button",
-                        "label_key": "pose_rest_label",
-                        "action": "pose_rest"
+                        "label_key": "blender_render_label",
+                        "action": "blender_beauty"
                       }
                     ]
-                  },
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "pose_sit_label",
-                        "action": "pose_sit"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "pose_point_label",
-                        "action": "pose_point"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "pose_ik_label",
-                        "action": "pose_ik_reach"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "pose_undo_label",
-                        "action": "pose_undo"
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "text_input",
-                    "state_key": "pose_joint",
-                    "label_key": "pose_joint_label"
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "pose_fk_label",
-                    "action": "pose_fk_joint"
-                  },
-                  {
-                    "kind": "section", "label_key": "animation_section", "collapsible": true,
-                    "children": [
-                      { "kind": "button", "label_key": "register_rig_label", "action": "register_rig" },
-                      { "kind": "text_input", "state_key": "named_pose", "label_key": "named_pose_label" },
-                      { "kind": "row", "children": [
-                        { "kind": "button", "label_key": "save_named_pose_label", "action": "save_named_pose" },
-                        { "kind": "button", "label_key": "apply_named_pose_label", "action": "apply_named_pose" }
-                      ] },
-                      { "kind": "number", "state_key": "animation_time", "min": 0, "max": 60000, "label_key": "animation_time_label" },
-                      { "kind": "row", "children": [
-                        { "kind": "button", "label_key": "add_keyframe_label", "action": "add_keyframe" },
-                        { "kind": "button", "label_key": "seek_animation_label", "action": "seek_animation" }
-                      ] },
-                      { "kind": "row", "children": [
-                        { "kind": "button", "label_key": "play_animation_label", "action": "play_animation", "primary": true },
-                        { "kind": "button", "label_key": "stop_animation_label", "action": "stop_animation" }
-                      ] },
-                      { "kind": "text_input", "state_key": "animation_summary", "label_key": "animation_summary_label", "read_only": true }
-                    ]
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "pose_open"
-              },
-              {
-                "kind": "section",
-                "label_key": "locks_section",
-                "children": [
-                  {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "lock_selected_label",
-                        "action": "lock_selected"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "lock_subtree_label",
-                        "action": "lock_subtree"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "unlock_selected_label",
-                        "action": "unlock_selected"
-                      }
-                    ]
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "locks_open"
-              },
-              {
-                "kind": "section",
-                "label_key": "mesh_section",
-                "children": [
-                  {
-                    "kind": "text",
-                    "label_key": "mesh_tip"
                   },
                   {
                     "kind": "text",
-                    "label_key": "mesh_pack_status_empty",
+                    "label_key": "blender_tip"
+                  },
+                  {
+                    "kind": "text",
+                    "label_key": "blender_pack_status_empty",
                     "visible": {
                       "eq": [
-                        "$local.mesh_pack_status",
+                        "$local.blender_pack_status",
                         ""
                       ]
                     }
                   },
                   {
                     "kind": "text_input",
-                    "state_key": "mesh_pack_status",
-                    "label_key": "mesh_pack_status_value_label",
+                    "state_key": "blender_pack_status",
+                    "label_key": "blender_pack_status_value_label",
                     "read_only": true,
                     "visible": {
                       "ne": [
-                        "$local.mesh_pack_status",
+                        "$local.blender_pack_status",
                         ""
                       ]
                     }
                   },
                   {
-                    "kind": "text_input",
-                    "state_key": "mesh_prompt",
-                    "label_key": "mesh_prompt_label"
-                  },
-                  {
-                    "kind": "text_input",
-                    "state_key": "mesh_image_path",
-                    "label_key": "mesh_image_label"
-                  },
-                  {
                     "kind": "button",
-                    "label_key": "mesh_pack_status_label",
-                    "action": "mesh_pack_status"
+                    "label_key": "blender_pack_status_label",
+                    "action": "blender_pack_status"
                   },
                   {
                     "kind": "markdown",
-                    "label_key": "trellis_download_info"
-                  },
-                  {
-                    "kind": "radio",
-                    "state_key": "trellis_quant",
-                    "label_key": "trellis_quant_label",
-                    "inline": true,
-                    "items": [
-                      "q4",
-                      "q8"
-                    ],
-                    "item_label_keys": [
-                      "trellis_q4_label",
-                      "trellis_q8_label"
-                    ]
+                    "label_key": "blender_download_info"
                   },
                   {
                     "kind": "button",
-                    "label_key": "trellis_download_label",
-                    "action": "install_trellis"
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "dependency_download_cancel",
-                    "action": "cancel_dependency_download",
-                    "visible": {
-                      "eq": [
-                        "$local.dependency_download_active",
-                        true
-                      ]
-                    }
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "mesh_stub_label",
-                    "action": "mesh_assist_stub",
+                    "label_key": "blender_download_label",
+                    "action": "install_blender",
                     "primary": true
-                  },
-                  {
-                    "kind": "button",
-                    "label_key": "mesh_neural_label",
-                    "action": "mesh_assist_neural"
                   }
-                ],
-                "collapsible": true,
-                "open_state_key": "mesh_open"
+                ]
               },
               {
                 "kind": "section",
-                "label_key": "comic_section",
+                "label_key": "more_section",
                 "children": [
-                  { "kind": "radio", "state_key": "comic_panel_id", "label_key": "comic_panel_label", "inline": true,
-                    "items": ["panel_1", "panel_2", "panel_3", "panel_4"],
-                    "item_label_keys": ["panel_1", "panel_2", "panel_3", "panel_4"] },
-                  { "kind": "text_input", "state_key": "comic_caption", "label_key": "comic_caption_label" },
                   {
-                    "kind": "radio",
-                    "state_key": "comic_layout",
-                    "label_key": "comic_layout_label",
-                    "inline": true,
-                    "items": [
-                      "single",
-                      "two_h",
-                      "two_v",
-                      "grid_2x2",
-                      "strip_3"
+                    "kind": "section",
+                    "label_key": "pose_section",
+                    "children": [
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "pose_wave_label",
+                            "action": "pose_wave",
+                            "primary": true
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "pose_look_label",
+                            "action": "pose_look"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "pose_rest_label",
+                            "action": "pose_rest"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "pose_sit_label",
+                            "action": "pose_sit"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "pose_point_label",
+                            "action": "pose_point"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "pose_ik_label",
+                            "action": "pose_ik_reach"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "pose_undo_label",
+                            "action": "pose_undo"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "pose_joint",
+                        "label_key": "pose_joint_label"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "pose_fk_label",
+                        "action": "pose_fk_joint"
+                      },
+                      {
+                        "kind": "section",
+                        "label_key": "animation_section",
+                        "collapsible": true,
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "register_rig_label",
+                            "action": "register_rig"
+                          },
+                          {
+                            "kind": "text_input",
+                            "state_key": "named_pose",
+                            "label_key": "named_pose_label"
+                          },
+                          {
+                            "kind": "row",
+                            "children": [
+                              {
+                                "kind": "button",
+                                "label_key": "save_named_pose_label",
+                                "action": "save_named_pose"
+                              },
+                              {
+                                "kind": "button",
+                                "label_key": "apply_named_pose_label",
+                                "action": "apply_named_pose"
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "number",
+                            "state_key": "animation_time",
+                            "min": 0,
+                            "max": 60000,
+                            "label_key": "animation_time_label"
+                          },
+                          {
+                            "kind": "row",
+                            "children": [
+                              {
+                                "kind": "button",
+                                "label_key": "add_keyframe_label",
+                                "action": "add_keyframe"
+                              },
+                              {
+                                "kind": "button",
+                                "label_key": "seek_animation_label",
+                                "action": "seek_animation"
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "row",
+                            "children": [
+                              {
+                                "kind": "button",
+                                "label_key": "play_animation_label",
+                                "action": "play_animation",
+                                "primary": true
+                              },
+                              {
+                                "kind": "button",
+                                "label_key": "stop_animation_label",
+                                "action": "stop_animation"
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "text_input",
+                            "state_key": "animation_summary",
+                            "label_key": "animation_summary_label",
+                            "read_only": true
+                          }
+                        ]
+                      }
                     ],
-                    "item_label_keys": [
-                      "layout_single",
-                      "layout_two_h",
-                      "layout_two_v",
-                      "layout_grid",
-                      "layout_strip"
-                    ]
+                    "collapsible": true,
+                    "open_state_key": "pose_open"
                   },
                   {
-                    "kind": "row",
+                    "kind": "section",
+                    "label_key": "locks_section",
                     "children": [
                       {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "lock_selected_label",
+                            "action": "lock_selected"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "lock_subtree_label",
+                            "action": "lock_subtree"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "unlock_selected_label",
+                            "action": "unlock_selected"
+                          }
+                        ]
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "locks_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "mesh_section",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "label_key": "mesh_tip"
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "mesh_pack_status_empty",
+                        "visible": {
+                          "eq": [
+                            "$local.mesh_pack_status",
+                            ""
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "mesh_pack_status",
+                        "label_key": "mesh_pack_status_value_label",
+                        "read_only": true,
+                        "visible": {
+                          "ne": [
+                            "$local.mesh_pack_status",
+                            ""
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "mesh_prompt",
+                        "label_key": "mesh_prompt_label"
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "mesh_image_path",
+                        "label_key": "mesh_image_label"
+                      },
+                      {
                         "kind": "button",
-                        "label_key": "comic_apply_label",
-                        "action": "comic_layout",
+                        "label_key": "mesh_pack_status_label",
+                        "action": "mesh_pack_status"
+                      },
+                      {
+                        "kind": "markdown",
+                        "label_key": "trellis_download_info"
+                      },
+                      {
+                        "kind": "radio",
+                        "state_key": "trellis_quant",
+                        "label_key": "trellis_quant_label",
+                        "inline": true,
+                        "items": [
+                          "q4",
+                          "q8"
+                        ],
+                        "item_label_keys": [
+                          "trellis_q4_label",
+                          "trellis_q8_label"
+                        ]
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "trellis_download_label",
+                        "action": "install_trellis"
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "dependency_download_cancel",
+                        "action": "cancel_dependency_download",
+                        "visible": {
+                          "eq": [
+                            "$local.dependency_download_active",
+                            true
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "button",
+                        "label_key": "mesh_stub_label",
+                        "action": "mesh_assist_stub",
                         "primary": true
                       },
                       {
                         "kind": "button",
-                        "label_key": "comic_bind_label",
-                        "action": "comic_bind_panel"
+                        "label_key": "mesh_neural_label",
+                        "action": "mesh_assist_neural"
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "mesh_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "comic_section",
+                    "children": [
+                      {
+                        "kind": "radio",
+                        "state_key": "comic_panel_id",
+                        "label_key": "comic_panel_label",
+                        "inline": true,
+                        "items": [
+                          "panel_1",
+                          "panel_2",
+                          "panel_3",
+                          "panel_4"
+                        ],
+                        "item_label_keys": [
+                          "panel_1",
+                          "panel_2",
+                          "panel_3",
+                          "panel_4"
+                        ]
                       },
                       {
-                        "kind": "button",
-                        "label_key": "comic_render_label",
-                        "action": "comic_render"
+                        "kind": "text_input",
+                        "state_key": "comic_caption",
+                        "label_key": "comic_caption_label"
+                      },
+                      {
+                        "kind": "radio",
+                        "state_key": "comic_layout",
+                        "label_key": "comic_layout_label",
+                        "inline": true,
+                        "items": [
+                          "single",
+                          "two_h",
+                          "two_v",
+                          "grid_2x2",
+                          "strip_3"
+                        ],
+                        "item_label_keys": [
+                          "layout_single",
+                          "layout_two_h",
+                          "layout_two_v",
+                          "layout_grid",
+                          "layout_strip"
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "comic_apply_label",
+                            "action": "comic_layout",
+                            "primary": true
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "comic_bind_label",
+                            "action": "comic_bind_panel"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "comic_render_label",
+                            "action": "comic_render"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "label_key": "comic_link_hint"
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "comic_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "storyboard_section",
+                    "children": [
+                      {
+                        "kind": "text_input",
+                        "state_key": "storyboard_summary",
+                        "label_key": "storyboard_summary_label"
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "frame_label",
+                        "label_key": "frame_label_input"
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "capture_frame_label",
+                            "action": "storyboard_capture",
+                            "primary": true
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "frame_prev_label",
+                            "action": "storyboard_prev"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "frame_next_label",
+                            "action": "storyboard_next"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "move_earlier_label",
+                            "action": "storyboard_move_earlier"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "move_later_label",
+                            "action": "storyboard_move_later"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "delete_frame_label",
+                            "action": "storyboard_delete"
+                          }
+                        ]
+                      }
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "storyboard_open"
+                  },
+                  {
+                    "kind": "section",
+                    "label_key": "history_section",
+                    "collapsible": true,
+                    "children": [
+                      {
+                        "kind": "text_input",
+                        "state_key": "history_name",
+                        "label_key": "history_name_label"
+                      },
+                      {
+                        "kind": "number",
+                        "state_key": "version_id",
+                        "min": 1,
+                        "max": 1000000,
+                        "label_key": "history_version_id_label"
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "history_save_version",
+                            "action": "save_version"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "history_restore_version",
+                            "action": "restore_version"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "history_save_variant",
+                            "action": "save_variant"
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "history_apply_variant",
+                            "action": "apply_variant"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "history_summary",
+                        "label_key": "history_summary_label",
+                        "read_only": true
                       }
                     ]
-                  }
-                  ,{ "kind": "text", "label_key": "comic_link_hint" }
-                ],
-                "collapsible": true,
-                "open_state_key": "comic_open"
-              },
-              {
-                "kind": "section",
-                "label_key": "storyboard_section",
-                "children": [
-                  {
-                    "kind": "text_input",
-                    "state_key": "storyboard_summary",
-                    "label_key": "storyboard_summary_label"
                   },
                   {
-                    "kind": "text_input",
-                    "state_key": "frame_label",
-                    "label_key": "frame_label_input"
-                  },
-                  {
-                    "kind": "row",
+                    "kind": "section",
+                    "label_key": "diagnostics_section",
+                    "collapsible": true,
                     "children": [
                       {
                         "kind": "button",
-                        "label_key": "capture_frame_label",
-                        "action": "storyboard_capture",
-                        "primary": true
+                        "label_key": "diagnostics_refresh",
+                        "action": "scene_diagnostics"
                       },
                       {
-                        "kind": "button",
-                        "label_key": "frame_prev_label",
-                        "action": "storyboard_prev"
+                        "kind": "text_input",
+                        "state_key": "diagnostics",
+                        "label_key": "diagnostics_result",
+                        "read_only": true
                       },
                       {
-                        "kind": "button",
-                        "label_key": "frame_next_label",
-                        "action": "storyboard_next"
+                        "kind": "text",
+                        "label_key": "shortcuts_hint"
                       }
                     ]
                   },
                   {
-                    "kind": "row",
-                    "children": [
-                      {
-                        "kind": "button",
-                        "label_key": "move_earlier_label",
-                        "action": "storyboard_move_earlier"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "move_later_label",
-                        "action": "storyboard_move_later"
-                      },
-                      {
-                        "kind": "button",
-                        "label_key": "delete_frame_label",
-                        "action": "storyboard_delete"
-                      }
-                    ]
-                  }
-                ],
-                "collapsible": true,
-                "open_state_key": "storyboard_open"
-              },
-              {
-                "kind": "section", "label_key": "history_section", "collapsible": true,
-                "children": [
-                  { "kind": "text_input", "state_key": "history_name", "label_key": "history_name_label" },
-                  { "kind": "number", "state_key": "version_id", "min": 1, "max": 1000000, "label_key": "history_version_id_label" },
-                  { "kind": "row", "children": [
-                    { "kind": "button", "label_key": "history_save_version", "action": "save_version" },
-                    { "kind": "button", "label_key": "history_restore_version", "action": "restore_version" }
-                  ] },
-                  { "kind": "row", "children": [
-                    { "kind": "button", "label_key": "history_save_variant", "action": "save_variant" },
-                    { "kind": "button", "label_key": "history_apply_variant", "action": "apply_variant" }
-                  ] },
-                  { "kind": "text_input", "state_key": "history_summary", "label_key": "history_summary_label", "read_only": true }
-                ]
-              },
-              {
-                "kind": "section", "label_key": "diagnostics_section", "collapsible": true,
-                "children": [
-                  { "kind": "button", "label_key": "diagnostics_refresh", "action": "scene_diagnostics" },
-                  { "kind": "text_input", "state_key": "diagnostics", "label_key": "diagnostics_result", "read_only": true },
-                  { "kind": "text", "label_key": "shortcuts_hint" }
-                ]
-              },
-              {
-                "kind": "section",
-                "label_key": "packs_section",
-                "children": [
-                  {
-                    "kind": "text",
-                    "label_key": "packs_hint"
-                  },
-                  {
-                    "kind": "text",
-                    "label_key": "pack_summary_empty",
-                    "visible": {
-                      "eq": [
-                        "$local.pack_summary",
-                        ""
-                      ]
-                    }
-                  },
-                  {
-                    "kind": "text_input",
-                    "state_key": "pack_summary",
+                    "kind": "section",
                     "label_key": "packs_section",
-                    "read_only": true,
-                    "visible": {
-                      "ne": [
-                        "$local.pack_summary",
-                        ""
-                      ]
-                    }
-                  },
-                  {
-                    "kind": "row",
                     "children": [
                       {
-                        "kind": "button",
-                        "label_key": "list_packs_label",
-                        "action": "list_local_packs",
-                        "primary": true
+                        "kind": "text",
+                        "label_key": "packs_hint"
                       },
                       {
-                        "kind": "button",
-                        "label_key": "describe_pack_label",
-                        "action": "describe_primitives_pack"
+                        "kind": "text",
+                        "label_key": "pack_summary_empty",
+                        "visible": {
+                          "eq": [
+                            "$local.pack_summary",
+                            ""
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "text_input",
+                        "state_key": "pack_summary",
+                        "label_key": "packs_section",
+                        "read_only": true,
+                        "visible": {
+                          "ne": [
+                            "$local.pack_summary",
+                            ""
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "row",
+                        "children": [
+                          {
+                            "kind": "button",
+                            "label_key": "list_packs_label",
+                            "action": "list_local_packs",
+                            "primary": true
+                          },
+                          {
+                            "kind": "button",
+                            "label_key": "describe_pack_label",
+                            "action": "describe_primitives_pack"
+                          }
+                        ]
                       }
-                    ]
+                    ],
+                    "collapsible": true,
+                    "open_state_key": "packs_open"
                   }
                 ],
                 "collapsible": true,
-                "open_state_key": "packs_open"
+                "open_state_key": "more_open"
+              },
+              {
+                "kind": "scene_tree",
+                "scene_key": "scene",
+                "selected_key": "selected_id",
+                "canvas_id": "illustration_viewport",
+                "label_key": "scene_label",
+                "empty_label_key": "scene_empty"
               }
             ],
-            "collapsible": true,
-            "open_state_key": "more_open"
+            "label_key": "studio_controls"
           },
           {
-            "kind": "scene_tree",
-            "scene_key": "scene",
-            "selected_key": "selected_id",
-            "canvas_id": "illustration_viewport",
-            "label_key": "scene_label",
-            "empty_label_key": "scene_empty"
-          }
-        ],
-        "label_key": "studio_controls"
-      },
-      {
-        "kind": "split",
-        "split_ratio": 0.48,
-        "children": [
-          {
-            "kind": "scene3d",
-            "scene_key": "scene",
-            "selected_key": "selected_id",
-            "canvas_id": "illustration_viewport",
-            "label_key": "viewport_label",
-            "empty_label_key": "scene_empty"
-          },
-          {
-            "kind": "column",
+            "kind": "split",
+            "split_ratio": 0.48,
             "children": [
               {
-                "kind": "text_input",
-                "state_key": "beauty_summary",
-                "label_key": "beauty_summary_label",
-                "read_only": true,
-                "visible": {
-                  "ne": [
-                    "$local.beauty_summary",
-                    ""
-                  ]
-                }
+                "kind": "scene3d",
+                "scene_key": "scene",
+                "selected_key": "selected_id",
+                "canvas_id": "illustration_viewport",
+                "label_key": "viewport_label",
+                "empty_label_key": "scene_empty"
               },
               {
-                "kind": "image_view",
-                "resource": "$local.beauty_path",
-                "label_key": "preview_label",
-                "empty_label_key": "beauty_empty"
-              },
-              {
-                "kind": "button",
-                "label_key": "export_png_label",
-                "action": "export_png",
-                "visible": { "ne": ["$local.beauty_path", ""] }
+                "kind": "column",
+                "children": [
+                  {
+                    "kind": "text_input",
+                    "state_key": "beauty_summary",
+                    "label_key": "beauty_summary_label",
+                    "read_only": true,
+                    "visible": {
+                      "ne": [
+                        "$local.beauty_summary",
+                        ""
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "image_view",
+                    "resource": "$local.beauty_path",
+                    "label_key": "preview_label",
+                    "empty_label_key": "beauty_empty"
+                  },
+                  {
+                    "kind": "button",
+                    "label_key": "export_png_label",
+                    "action": "export_png",
+                    "visible": {
+                      "ne": [
+                        "$local.beauty_path",
+                        ""
+                      ]
+                    }
+                  }
+                ]
               }
             ]
           }
-        ]
+        ],
+        "visible": {
+          "ne": [
+            "$local.project_id",
+            ""
+          ]
+        }
       }
     ]
   }

@@ -306,6 +306,9 @@ pub(crate) fn on_ui_service_done(
         panel.set_pending_invoke(false);
         if ok {
             panel.status.clear();
+            if module == "illustration-studio" && action_id == "import_project_file" {
+                panel.activate_illustration_project(&result);
+            }
             if module == "illustration-studio"
                 && (action_id == "stub_beauty"
                     || action_id == "cpu_beauty"

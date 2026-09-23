@@ -151,13 +151,56 @@ impl DeclUiPanelState {
                     .insert("result_path".into(), Value::String(path.into()));
             }
         }
-        if tool == "illustration.project.load" || tool == "illustration.project.ensure" {
-            if let Some(yaml) = result.get("yaml").and_then(Value::as_str) {
-                self.local_state
-                    .insert("scene".into(), Value::String(yaml.into()));
+        if matches!(
+            tool,
+            "illustration.project.create"
+                | "illustration.project.open"
+                | "illustration.project.import_legacy"
+        ) {
+            self.activate_illustration_project(&result);
+        } else if tool == "illustration.project.load" {
+            let expected = self.local_state.get("project_id").and_then(Value::as_str);
+            if expected == result.get("project_id").and_then(Value::as_str) {
+                if let Some(yaml) = result.get("yaml").and_then(Value::as_str) {
+                    self.local_state.insert("scene".into(), Value::String(yaml.into()));
+                }
+            }
+        } else if tool == "illustration.project.list" {
+            self.local_state.insert(
+                "legacy_available".into(),
+                result
+                    .get("legacy_available")
+                    .cloned()
+                    .unwrap_or(Value::Bool(false)),
+            );
+        } else if tool == "illustration.project.close" && result.get("closed") == Some(&Value::Bool(true)) {
+            self.scene3d_viewports.clear();
+            for key in ["project_id", "project_title", "scene", "beauty_path"] {
+                self.local_state.insert(key.into(), Value::String(String::new()));
             }
         }
         self.bind_cache.insert(tool.to_string(), result);
+    }
+
+    pub fn activate_illustration_project(&mut self, result: &Value) {
+        let (Some(id), Some(yaml)) = (
+            result.get("project_id").and_then(Value::as_str),
+            result.get("yaml").and_then(Value::as_str),
+        ) else {
+            return;
+        };
+        self.scene3d_viewports.clear();
+        for (key, value) in [
+            ("project_id", Value::String(id.into())),
+            ("project_title", result.get("title").cloned().unwrap_or(Value::Null)),
+            ("scene", Value::String(yaml.into())),
+            ("beauty_path", Value::String(String::new())),
+            ("selected_id", Value::String(String::new())),
+            ("compose_pending", Value::Bool(false)),
+            ("work_area", result.get("work_area").cloned().unwrap_or_else(|| Value::String("start".into()))),
+        ] {
+            self.local_state.insert(key.into(), value);
+        }
     }
 
     pub fn set_pending_invoke(&mut self, pending: bool) {
@@ -1657,7 +1700,10 @@ impl DeclUiPanelState {
                             let yaml = patch.scene.clone();
                             actions.invoke = Some(DeclUiInvokeAction {
                                 tool: "illustration.project.save".into(),
-                                args: serde_json::json!({ "yaml": yaml }),
+                                args: serde_json::json!({
+                                    "project_id": local_state.get("project_id"),
+                                    "yaml": yaml
+                                }),
                                 refresh_binds: vec![],
                                 clear_form_keys: vec![],
                             });
@@ -1702,7 +1748,10 @@ impl DeclUiPanelState {
                         if actions.invoke.is_none() {
                             actions.invoke = Some(DeclUiInvokeAction {
                                 tool: "illustration.project.save".into(),
-                                args: serde_json::json!({ "yaml": yaml }),
+                                args: serde_json::json!({
+                                    "project_id": local_state.get("project_id"),
+                                    "yaml": yaml
+                                }),
                                 refresh_binds: vec![],
                                 clear_form_keys: vec![],
                             });

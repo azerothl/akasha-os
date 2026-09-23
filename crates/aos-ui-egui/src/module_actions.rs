@@ -531,6 +531,55 @@ pub(crate) async fn run_decl_service_action(
                 refresh_binds,
             });
         }
+        "illustration.project.import_yaml" => {
+            let outcome = match crate::os_open::pick_os_file(
+                "Import Illustration Studio project",
+                &[("Illustration project", &["yaml", "yml"])],
+                None,
+            ) {
+                Some(path) => {
+                    let title = path
+                        .file_stem()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("Imported project")
+                        .to_string();
+                    let yaml = std::fs::metadata(&path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|metadata| {
+                            if metadata.len() > 10 * 1024 * 1024 {
+                                Err("Project YAML exceeds the 10 MB import limit".into())
+                            } else {
+                                std::fs::read_to_string(&path).map_err(|e| e.to_string())
+                            }
+                        });
+                    match yaml {
+                        Ok(yaml) => {
+                            if let Err(error) = aos_scene::load_project_yaml(&yaml) {
+                                Err(format!("Invalid Illustration Studio project: {error}"))
+                            } else {
+                                invoke_module_tool_quiet(
+                                    bus,
+                                    module,
+                                    "illustration.project.create",
+                                    serde_json::json!({ "title": title, "yaml": yaml }),
+                                )
+                                .await
+                            }
+                        }
+                        Err(error) => Err(error),
+                    }
+                }
+                None => Err("Import cancelled".into()),
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: outcome.is_ok(),
+                result: outcome.clone().unwrap_or(Value::Null),
+                error: outcome.err(),
+                refresh_binds,
+            });
+        }
         "files.save_as" => {
             let source = input
                 .get("source_path")
