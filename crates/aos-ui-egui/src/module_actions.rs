@@ -21,6 +21,23 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
+fn convert_progress(
+    evt_tx: &Sender<Evt>,
+    module: &str,
+    message: String,
+    active: bool,
+    percent: Option<u32>,
+) {
+    let _ = evt_tx.send(Evt::ModuleUiServiceProgress {
+        module: module.to_string(),
+        message,
+        active,
+        active_key: Some("library_convert_active".into()),
+        percent,
+        progress_key: Some("library_convert_progress".into()),
+    });
+}
+
 pub(crate) async fn load_module_ui(bus: &Arc<BusClient>, evt_tx: &Sender<Evt>, module: &str) {
     match bus
         .call::<ModuleIdRequest, ModuleUiResponse>(
@@ -790,9 +807,18 @@ pub(crate) async fn run_decl_service_action(
             } else {
                 None
             };
-            let outcome = if let Some(error) = quality_error {
-                Err(error)
-            } else if !project_id.starts_with("project-")
+            if let Some(error) = quality_error {
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some(error),
+                    refresh_binds,
+                });
+                return;
+            }
+            if !project_id.starts_with("project-")
                 || !project_id["project-".len()..].chars().all(|c| c.is_ascii_digit())
                 || !image_uri.starts_with(&prefix)
                 || image_uri.contains("..")
@@ -800,25 +826,69 @@ pub(crate) async fn run_decl_service_action(
                 || !matches!(geometry_res, 512 | 1024)
                 || !matches!(provider.as_str(), "trellis" | "triposr")
             {
-                Err("Select an image in the active project and a valid 3D converter".into())
-            } else {
-                let image_path = logical_downloads_path(&image_uri);
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.to_string(),
+                    action_id: action_id.to_string(),
+                    ok: false,
+                    result: Value::Null,
+                    error: Some("Select an image in the active project and a valid 3D converter".into()),
+                    refresh_binds,
+                });
+                return;
+            }
+            // Keep the DeclUI shell responsive while TRELLIS runs (minutes).
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: true,
+                result: serde_json::json!({"started": true}),
+                error: None,
+                refresh_binds: vec![],
+            });
+            convert_progress(
+                evt_tx,
+                module,
+                "Starting image → GLB conversion…".into(),
+                true,
+                Some(2),
+            );
+            let bus = Arc::clone(bus);
+            let evt_tx = evt_tx.clone();
+            let module = module.to_string();
+            let action_id = action_id.to_string();
+            let image_path = logical_downloads_path(&image_uri);
+            let image_uri_for_meta = image_uri.clone();
+            let provider_for_conversion = provider.clone();
+            let settings_for_conversion = (provider == "trellis").then_some(trellis_settings);
+            tokio::spawn(async move {
                 let project_for_conversion = project_id.clone();
-                let provider_for_conversion = provider.clone();
-                let settings_for_conversion = (provider == "trellis").then_some(trellis_settings);
+                let prompt_for_conversion = prompt.clone();
+                let evt_progress = evt_tx.clone();
+                let module_progress = module.clone();
                 let conversion = tokio::task::spawn_blocking(move || {
-                    use aos_scene::{MeshAssistBackendId, MeshAssistRequest, SceneGraph, SceneNode};
+                    use aos_scene::{
+                        mesh_assist_with_progress, MeshAssistBackendId, MeshAssistRequest, SceneGraph,
+                        SceneNode,
+                    };
                     let project_root = crate::os_open::aos_home()
                         .join("var/storage/data/documents/illustrations/projects")
                         .join(&project_for_conversion);
-                    let canonical_root = std::fs::canonicalize(project_root.join("assets")).map_err(|e| e.to_string())?;
+                    let canonical_root =
+                        std::fs::canonicalize(project_root.join("assets")).map_err(|e| e.to_string())?;
                     let image_path = std::fs::canonicalize(&image_path).map_err(|e| e.to_string())?;
                     if !image_path.starts_with(&canonical_root) {
                         return Err("image path escapes the project library".into());
                     }
-                    let (file_name, provenance) = if provider_for_conversion == "triposr" {
+                    let (file_name, provenance, trellis_settings_out) = if provider_for_conversion == "triposr" {
+                        convert_progress(
+                            &evt_progress,
+                            &module_progress,
+                            "Running TripoSR experimental conversion…".into(),
+                            true,
+                            Some(10),
+                        );
                         let file_name = run_triposr_experiment(&image_path, &canonical_root)?;
-                        (file_name, "TripoSR experimental conversion")
+                        (file_name, "TripoSR experimental conversion", None)
                     } else {
                         let mut scene = SceneGraph {
                             effects: Vec::new(),
@@ -828,7 +898,7 @@ pub(crate) async fn run_decl_service_action(
                         };
                         scene.nodes.insert("root".into(), SceneNode::empty("root", "Asset conversion"));
                         let request = MeshAssistRequest {
-                            prompt: prompt.clone(),
+                            prompt: prompt_for_conversion.clone(),
                             parent_id: "root".into(),
                             prefix: "converted_".into(),
                             backend: MeshAssistBackendId::Neural,
@@ -836,12 +906,36 @@ pub(crate) async fn run_decl_service_action(
                             geometry_res: Some(geometry_res as u32),
                             trellis_settings: settings_for_conversion,
                         };
-                        let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
-                        if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
+                        let output = mesh_assist_with_progress(&mut scene, &request, |p| {
+                            convert_progress(
+                                &evt_progress,
+                                &module_progress,
+                                p.message,
+                                true,
+                                Some(p.percent.min(95)),
+                            );
+                        })
+                        .map_err(|e| e.to_string())?;
+                        if output.is_stub
+                            || output
+                                .notes
+                                .iter()
+                                .any(|note| note.contains("mock") || note.contains("fixture"))
+                        {
                             return Err(crate::chat_error_copy::TRELLIS_TEST_MODEL_WIRE.into());
                         }
-                        let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
-                        let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
+                        convert_progress(
+                            &evt_progress,
+                            &module_progress,
+                            "Copying GLB into the project library…".into(),
+                            true,
+                            Some(97),
+                        );
+                        let output_path = output
+                            .mesh_uri
+                            .ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
+                        let output_path =
+                            std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
                         if output_path.extension().and_then(|e| e.to_str()) != Some("glb") {
                             return Err("TRELLIS output is not a GLB".into());
                         }
@@ -850,50 +944,78 @@ pub(crate) async fn run_decl_service_action(
                             .map_err(|e| e.to_string())?
                             .as_nanos();
                         let file_name = format!("trellis-{stamp}.glb");
-                        std::fs::copy(output_path, canonical_root.join(&file_name)).map_err(|e| e.to_string())?;
-                        (file_name, "TRELLIS conversion")
+                        std::fs::copy(&output_path, canonical_root.join(&file_name))
+                            .map_err(|e| e.to_string())?;
+                        (
+                            file_name,
+                            "TRELLIS conversion",
+                            settings_for_conversion,
+                        )
                     };
                     let uri = format!(
                         "/documents/illustrations/projects/{project_for_conversion}/assets/{file_name}"
                     );
-                    Ok((uri, prompt, geometry_res, provenance, settings_for_conversion))
-                }).await;
-                match conversion {
-                    Ok(Ok((uri, prompt, geometry_res, provenance, trellis_settings))) => invoke_module_tool_quiet(
-                        bus,
-                        module,
-                        "illustration.asset.register",
-                        serde_json::json!({
-                            "project_id": project_id,
-                            "name": format!("{} · 3D", prompt.chars().take(60).collect::<String>()),
-                            "kind": "mesh",
-                            "uri": uri,
-                            "prompt": prompt,
-                            "metadata": {
-                                "provenance": provenance,
-                                "source_image": image_uri,
-                                "geometry_resolution": if provider == "trellis" { Some(geometry_res) } else { None },
-                                "trellis_settings": trellis_settings.map(|settings| serde_json::json!({
-                                    "steps": settings.steps,
-                                    "structure_guidance": settings.structure_guidance,
-                                    "shape_guidance": settings.shape_guidance,
-                                    "seed": settings.seed,
-                                    "atlas_resolution": if settings.atlas_resolution == 0 { serde_json::json!("auto") } else { serde_json::json!(settings.atlas_resolution) }
-                                }))
-                            },
-                        }),
-                    ).await,
+                    Ok((uri, prompt_for_conversion, geometry_res, provenance, trellis_settings_out))
+                })
+                .await;
+                let outcome = match conversion {
+                    Ok(Ok((uri, prompt, geometry_res, provenance, trellis_settings))) => {
+                        convert_progress(
+                            &evt_tx,
+                            &module,
+                            "Registering GLB asset…".into(),
+                            true,
+                            Some(99),
+                        );
+                        invoke_module_tool_quiet(
+                            &bus,
+                            &module,
+                            "illustration.asset.register",
+                            serde_json::json!({
+                                "project_id": project_id,
+                                "name": format!("{} · 3D", prompt.chars().take(60).collect::<String>()),
+                                "kind": "mesh",
+                                "uri": uri,
+                                "prompt": prompt,
+                                "metadata": {
+                                    "provenance": provenance,
+                                    "source_image": image_uri_for_meta,
+                                    "geometry_resolution": if provider == "trellis" { Some(geometry_res) } else { None },
+                                    "trellis_settings": trellis_settings.map(|settings| serde_json::json!({
+                                        "steps": settings.steps,
+                                        "structure_guidance": settings.structure_guidance,
+                                        "shape_guidance": settings.shape_guidance,
+                                        "seed": settings.seed,
+                                        "atlas_resolution": if settings.atlas_resolution == 0 { serde_json::json!("auto") } else { serde_json::json!(settings.atlas_resolution) }
+                                    }))
+                                },
+                            }),
+                        )
+                        .await
+                    }
                     Ok(Err(error)) => Err(error),
                     Err(error) => Err(error.to_string()),
-                }
-            };
-            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
-                module: module.to_string(),
-                action_id: action_id.to_string(),
-                ok: outcome.is_ok(),
-                result: outcome.clone().unwrap_or_else(|_| serde_json::json!({"project_id": project_id})),
-                error: outcome.err(),
-                refresh_binds,
+                };
+                let ok = outcome.is_ok();
+                let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                    module: module.clone(),
+                    action_id,
+                    ok,
+                    result: outcome.clone().unwrap_or(Value::Null),
+                    error: outcome.err(),
+                    refresh_binds,
+                });
+                convert_progress(
+                    &evt_tx,
+                    &module,
+                    if ok {
+                        "Image → GLB conversion complete.".into()
+                    } else {
+                        "Image → GLB conversion failed.".into()
+                    },
+                    false,
+                    Some(if ok { 100 } else { 0 }),
+                );
             });
         }
         "illustration.library.import" => {

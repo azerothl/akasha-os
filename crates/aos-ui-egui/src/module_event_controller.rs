@@ -825,13 +825,36 @@ pub(crate) fn on_ui_service_progress(
     module: String,
     message: String,
     active: bool,
+    active_key: Option<String>,
+    percent: Option<u32>,
+    progress_key: Option<String>,
 ) {
     if let Some(panel) = app.decl_panels.get_mut(&module) {
-        panel.status = message;
+        panel.status = message.clone();
         if module == "illustration-studio" {
+            let key = active_key
+                .as_deref()
+                .filter(|k| !k.is_empty())
+                .unwrap_or("dependency_download_active");
             panel
                 .local_state
-                .insert("dependency_download_active".into(), Value::Bool(active));
+                .insert(key.into(), Value::Bool(active));
+            if let (Some(pct), Some(pkey)) = (percent, progress_key.as_deref()) {
+                if !pkey.is_empty() {
+                    panel
+                        .local_state
+                        .insert(pkey.into(), Value::from(pct.min(100)));
+                }
+            }
+            if let Some(status_key) = active_key
+                .as_deref()
+                .filter(|k| *k == "library_convert_active")
+                .map(|_| "library_convert_status")
+            {
+                panel
+                    .local_state
+                    .insert(status_key.into(), Value::String(message));
+            }
         }
     }
 }

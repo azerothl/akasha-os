@@ -276,6 +276,7 @@
       "library_add_to_scene": "Add to 3D scene",
       "library_convert": "Convert selected image to GLB with TRELLIS",
       "library_convert_triposr": "Test conversion with TripoSR",
+      "library_convert_progress_label": "TRELLIS conversion",
       "library_selected_image": "Selected image",
       "library_import_glb": "Import GLB…",
       "output_kind_label": "Final format",
@@ -558,6 +559,7 @@
       "library_add_to_scene": "Ajouter à la scène 3D",
       "library_convert": "Convertir l’image sélectionnée en GLB avec TRELLIS",
       "library_convert_triposr": "Tester la conversion avec TripoSR",
+      "library_convert_progress_label": "Conversion TRELLIS",
       "library_selected_image": "Image sélectionnée",
       "library_import_glb": "Importer un GLB…",
       "output_kind_label": "Format final",
@@ -721,6 +723,18 @@
       "dependency_download_active": {
         "type": "boolean",
         "default": false
+      },
+      "library_convert_active": {
+        "type": "boolean",
+        "default": false
+      },
+      "library_convert_progress": {
+        "type": "number",
+        "default": 0
+      },
+      "library_convert_status": {
+        "type": "string",
+        "default": ""
       },
       "comic": {
         "type": "string",

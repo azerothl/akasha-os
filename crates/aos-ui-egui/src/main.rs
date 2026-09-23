@@ -3455,9 +3455,22 @@ impl eframe::App for UiApp {
                     subscription_id,
                     job,
                 } => module_event_controller::on_ui_job_update(self, module, subscription_id, job),
-                Evt::ModuleUiServiceProgress { module, message, active } => {
-                    module_event_controller::on_ui_service_progress(self, module, message, active)
-                }
+                Evt::ModuleUiServiceProgress {
+                    module,
+                    message,
+                    active,
+                    active_key,
+                    percent,
+                    progress_key,
+                } => module_event_controller::on_ui_service_progress(
+                    self,
+                    module,
+                    message,
+                    active,
+                    active_key,
+                    percent,
+                    progress_key,
+                ),
                 Evt::ModuleUiPromptGenerated { module, prompt } => {
                     module_event_controller::on_ui_prompt_generated(self, module, prompt)
                 }
