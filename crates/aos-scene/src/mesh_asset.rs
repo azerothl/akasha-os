@@ -247,7 +247,7 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
                     gltf::image::Format::R8G8B8A8 => image.pixels.clone(),
                     gltf::image::Format::R8G8B8 => image
                         .pixels
-                        .chunks_exact(3)
+                        .as_chunks::<3>().0.iter()
                         .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 255])
                         .collect(),
                     _ => return None,
