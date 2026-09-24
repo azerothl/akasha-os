@@ -802,7 +802,7 @@ pub(crate) async fn run_decl_service_action(
                     };
                     let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
                     if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
-                        return Err("TRELLIS returned a mock asset; install the real runtime and model".into());
+                        return Err(crate::chat_error_copy::TRELLIS_TEST_MODEL_WIRE.into());
                     }
                     let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
                     let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
