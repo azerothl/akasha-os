@@ -21,8 +21,8 @@
       "pose_undo_label": "Undo pose",
       "pose_joint_label": "Joints",
       "pose_fk_label": "Rotate joint +30°",
-      "animation_section": "Rig and keyframes",
-      "register_rig_label": "Register character rig",
+      "animation_section": "Saved poses and keyframes",
+      "register_rig_label": "Register character joints",
       "named_pose_label": "Pose name",
       "save_named_pose_label": "Save pose",
       "apply_named_pose_label": "Apply pose",
@@ -32,9 +32,9 @@
       "play_animation_label": "Play",
       "stop_animation_label": "Stop",
       "animation_summary_label": "Animation",
-      "locks_section": "Semantic locks",
+      "locks_section": "Locks",
       "lock_selected_label": "Lock selection",
-      "lock_subtree_label": "Lock subtree",
+      "lock_subtree_label": "Lock with children",
       "unlock_selected_label": "Unlock",
       "assets_section": "Add to scene",
       "import_glb_label": "Import a GLB…",
@@ -162,7 +162,7 @@
       "diagnostics_result": "Scene status",
       "shortcuts_hint": "Shortcuts: Ctrl/⌘+S saves · Ctrl/⌘+Shift+R renders with Blender · Ctrl/⌘+Z undoes viewport edits.",
       "storyboard_section": "Storyboard",
-      "storyboard_summary_label": "Timeline",
+      "storyboard_summary_label": "Storyboard",
       "packs_section": "Local packs",
       "packs_hint": "Offline catalogue only — not a public marketplace. Remote fetch stays fail-closed without network.fetch.",
       "list_packs_label": "List local packs",
@@ -227,6 +227,7 @@
       "workspace_start": "Start",
       "workspace_scene3d": "3D scene",
       "workspace_illustration": "Illustration",
+      "workspace_beauty": "Beauty",
       "workspace_comic": "Comic",
       "workspace_library": "Library",
       "workspace_final": "Final output",
@@ -270,8 +271,8 @@
       "pose_undo_label": "Annuler pose",
       "pose_joint_label": "Articulations",
       "pose_fk_label": "Tourner articulation +30°",
-      "animation_section": "Rig et images clés",
-      "register_rig_label": "Enregistrer le rig du personnage",
+      "animation_section": "Poses enregistrées et images clés",
+      "register_rig_label": "Enregistrer les articulations du personnage",
       "named_pose_label": "Nom de la pose",
       "save_named_pose_label": "Enregistrer la pose",
       "apply_named_pose_label": "Appliquer la pose",
@@ -281,9 +282,9 @@
       "play_animation_label": "Lire",
       "stop_animation_label": "Arrêter",
       "animation_summary_label": "Animation",
-      "locks_section": "Verrous sémantiques",
+      "locks_section": "Verrous",
       "lock_selected_label": "Verrouiller la sélection",
-      "lock_subtree_label": "Verrouiller le sous-arbre",
+      "lock_subtree_label": "Verrouiller avec les enfants",
       "unlock_selected_label": "Déverrouiller",
       "assets_section": "Ajouter à la scène",
       "import_glb_label": "Importer un GLB…",
@@ -411,7 +412,7 @@
       "diagnostics_result": "État de la scène",
       "shortcuts_hint": "Raccourcis : Ctrl/⌘+S enregistre · Ctrl/⌘+Maj+R lance Blender · Ctrl/⌘+Z annule une édition dans la vue.",
       "storyboard_section": "Storyboard",
-      "storyboard_summary_label": "Timeline",
+      "storyboard_summary_label": "Storyboard",
       "packs_section": "Packs locaux",
       "packs_hint": "Catalogue hors-ligne uniquement — pas de marketplace public. Le téléchargement distant reste refusé sans network.fetch.",
       "list_packs_label": "Lister les packs locaux",
@@ -470,13 +471,14 @@
       "project_start_heading": "Que souhaitez-vous créer ?",
       "project_scene3d_label": "Scène 3D",
       "project_illustration_label": "Illustration",
-      "project_comic_label": "Comic",
+      "project_comic_label": "BD",
       "project_prompt_label": "Créer une scène depuis une invite",
       "project_resume_label": "Reprendre",
       "workspace_start": "Accueil",
       "workspace_scene3d": "Scène 3D",
       "workspace_illustration": "Illustration",
-      "workspace_comic": "Comic",
+      "workspace_beauty": "Beauté",
+      "workspace_comic": "BD",
       "workspace_library": "Bibliothèque",
       "workspace_final": "Sortie finale",
       "workspace_intro": "Choisissez un espace ou commencez depuis une invite. Tous les espaces partagent ce projet.",
@@ -497,7 +499,7 @@
       "output_kind_label": "Format final",
       "output_kind_3d": "3D",
       "output_kind_illustration": "Illustration",
-      "output_kind_comic": "Comic",
+      "output_kind_comic": "BD",
       "output_heading": "Rendu et export",
       "project_current_label": "Projet",
       "render_3d_cpu": "Rendu 3D · aperçu CPU",
@@ -1754,6 +1756,15 @@
       "refresh_binds": []
     },
     {
+      "id": "workspace_beauty",
+      "tool": "illustration.project.work_area",
+      "input": {
+        "project_id": "$local.project_id",
+        "work_area": "beauty"
+      },
+      "refresh_binds": []
+    },
+    {
       "id": "workspace_comic",
       "tool": "illustration.project.work_area",
       "input": {
@@ -1995,6 +2006,7 @@
               "start",
               "scene3d",
               "illustration",
+              "beauty",
               "comic",
               "library",
               "final"
@@ -2169,7 +2181,7 @@
                         },
                         {
                           "kind": "section",
-                          "label_key": "project_section",
+                          "label_key": "edit_section",
                           "children": [
                             {
                               "kind": "undo_redo",
@@ -2800,11 +2812,6 @@
                           ]
                         },
                         {
-                          "kind": "button",
-                          "action": "cpu_beauty",
-                          "label_key": "cpu_render_label"
-                        },
-                        {
                           "kind": "section",
                           "label_key": "diagnostics_section",
                           "collapsible": true,
@@ -2835,6 +2842,93 @@
                       "canvas_id": "illustration_viewport",
                       "label_key": "viewport_label",
                       "empty_label_key": "scene_empty",
+                      "resource": "$local.beauty_path"
+                    }
+                  ]
+                }
+              },
+              {
+                "label_key": "workspace_beauty",
+                "content": {
+                  "kind": "illustration_work_split",
+                  "split_ratio": 0.34,
+                  "children": [
+                    {
+                      "kind": "scroll",
+                      "children": [
+                        {
+                          "kind": "section",
+                          "label_key": "render_section",
+                          "children": [
+                            {
+                              "kind": "row",
+                              "children": [
+                                {
+                                  "kind": "button",
+                                  "action": "cpu_beauty",
+                                  "label_key": "cpu_render_label",
+                                  "primary": true
+                                },
+                                {
+                                  "kind": "button",
+                                  "action": "blender_beauty",
+                                  "label_key": "blender_render_label"
+                                },
+                                {
+                                  "kind": "button",
+                                  "action": "stub_beauty",
+                                  "label_key": "stub_render_label"
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text_input",
+                              "state_key": "beauty_summary",
+                              "label_key": "beauty_summary_label",
+                              "read_only": true
+                            },
+                            {
+                              "kind": "text",
+                              "label_key": "blender_tip"
+                            },
+                            {
+                              "kind": "text",
+                              "label_key": "blender_pack_status_empty",
+                              "visible": {
+                                "eq": [
+                                  "$local.blender_pack_status",
+                                  ""
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "text_input",
+                              "state_key": "blender_pack_status",
+                              "label_key": "blender_pack_status_value_label",
+                              "read_only": true,
+                              "visible": {
+                                "ne": [
+                                  "$local.blender_pack_status",
+                                  ""
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "button",
+                              "label_key": "blender_pack_status_label",
+                              "action": "blender_pack_status"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "illustration_stage",
+                      "scene_key": "scene",
+                      "selected_key": "selected_id",
+                      "canvas_id": "illustration_viewport",
+                      "label_key": "viewport_label",
+                      "empty_label_key": "beauty_empty",
                       "resource": "$local.beauty_path"
                     }
                   ]
@@ -3352,29 +3446,6 @@
                             {
                               "kind": "row",
                               "children": [
-                                {
-                                  "kind": "button",
-                                  "label_key": "cpu_render_label",
-                                  "action": "cpu_beauty",
-                                  "primary": true,
-                                  "visible": {
-                                    "eq": [
-                                      "$local.output_kind",
-                                      "illustration"
-                                    ]
-                                  }
-                                },
-                                {
-                                  "kind": "button",
-                                  "label_key": "blender_render_label",
-                                  "action": "blender_beauty",
-                                  "visible": {
-                                    "eq": [
-                                      "$local.output_kind",
-                                      "illustration"
-                                    ]
-                                  }
-                                },
                                 {
                                   "kind": "button",
                                   "action": "cpu_3d",
