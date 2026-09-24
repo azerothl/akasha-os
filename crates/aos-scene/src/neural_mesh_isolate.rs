@@ -799,9 +799,6 @@ fn discover_windows_nvidia_vk_icd(system_root: &str) -> Option<String> {
     None
 }
 
-#[cfg(not(windows))]
-fn prefer_discrete_nvidia_vk_icd(_env: &mut HashMap<String, String>) {}
-
 /// Shared with `neural_mesh` tests that mutate `AOS_NEURAL_MESH_*` env vars.
 #[cfg(test)]
 pub(crate) static NEURAL_MESH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
