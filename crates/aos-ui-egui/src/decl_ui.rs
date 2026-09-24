@@ -246,6 +246,7 @@ impl DeclUiPanelState {
             ("library_job_id", Value::String(String::new())),
             ("library_busy", Value::Bool(false)),
             ("library_section", Value::String("assets".into())),
+            ("library_image_framing", Value::String("standard".into())),
             ("work_area", Value::String("start".into())),
             ("last_work_area", result.get("work_area").cloned().unwrap_or_else(|| Value::String("start".into()))),
         ] {
@@ -3803,6 +3804,8 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
         (if fr { "Licence" } else { "License" }, metadata.get("license").and_then(Value::as_str)),
         (if fr { "Auteur" } else { "Author" }, metadata.get("author").and_then(Value::as_str)),
         (if fr { "Modèle" } else { "Model" }, metadata.get("model_id").and_then(Value::as_str)),
+        (if fr { "Cadrage" } else { "Framing" }, metadata.get("asset_preset").and_then(Value::as_str)),
+        (if fr { "Prompt envoyé" } else { "Sent prompt" }, metadata.get("generation_prompt").and_then(Value::as_str)),
         ("Orientation", metadata.get("orientation").and_then(Value::as_str)),
         ("Source", metadata.get("source_url").and_then(Value::as_str)),
         (if fr { "Invite" } else { "Prompt" }, asset.get("prompt").and_then(Value::as_str)),
@@ -3829,6 +3832,9 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
         if !labels.is_empty() {
             ui.label(format!("Tags: {}", labels.join(", ")));
         }
+    }
+    if let Some(seed) = metadata.get("seed").and_then(Value::as_i64) {
+        ui.label(format!("Seed: {seed}"));
     }
 }
 

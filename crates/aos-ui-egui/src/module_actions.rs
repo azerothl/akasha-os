@@ -3770,7 +3770,8 @@ async fn run_media_image_generate(
     let library_error_result = library_project_id.as_ref()
         .map(|id| serde_json::json!({"project_id": id}))
         .unwrap_or(Value::Null);
-    let request = match parse_media_generate_request(&input) {
+    let asset_preset = input.get("asset_preset").and_then(Value::as_str).map(str::to_owned);
+    let mut request = match parse_media_generate_request(&input) {
         Ok(r) => r,
         Err(e) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -3784,6 +3785,9 @@ async fn run_media_image_generate(
             return;
         }
     };
+    if module == "illustration-studio" && action_id == "library_generate_image" {
+        prepare_library_image_request(&mut request, asset_preset.as_deref());
+    }
     if module == "create" || module == "illustration-studio" {
         if request.prompt.trim().is_empty() {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -4155,7 +4159,12 @@ async fn run_media_image_generate(
                                 "metadata": {
                                     "provenance": "Generated in Illustration Studio",
                                     "model_id": response.model_id,
-                                    "engine": response.engine
+                                    "engine": response.engine,
+                                    "seed": req.options.seed,
+                                    "width": req.options.width,
+                                    "height": req.options.height,
+                                    "generation_prompt": req.generation_prompt,
+                                    "asset_preset": asset_preset
                                 }
                             })
                         }),
@@ -4409,6 +4418,31 @@ async fn enhance_create_layer_prompts(
     changed
 }
 
+fn prepare_library_image_request(req: &mut aos_proto::MediaImageGenerateRequest, preset: Option<&str>) {
+    // Store an explicit seed so repeated prompts vary and assets remain reproducible.
+    if req.options.seed.is_none() {
+        static NEXT_SEED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| (value.as_nanos() % (i64::MAX as u128)) as i64)
+            .unwrap_or(1);
+        let previous = NEXT_SEED.fetch_max(now, std::sync::atomic::Ordering::Relaxed);
+        req.options.seed = Some(now.max(previous.saturating_add(1)));
+    }
+    if preset == Some("full_body") {
+        req.options.width.get_or_insert(512);
+        req.options.height.get_or_insert(768);
+        let framing = "Full length standing person, entire body visible from the top of the head to the soles of both shoes, feet and head inside the frame with clear margins, centered, front view, neutral standing pose, plain background. No crop, no close-up.";
+        req.generation_prompt = Some(format!("{framing} {}", req.prompt.trim()));
+        req.use_edited_enriched = true;
+        let negative = req.options.negative_prompt.get_or_insert_with(String::new);
+        if !negative.is_empty() {
+            negative.push_str(", ");
+        }
+        negative.push_str("cropped feet, cropped head, half body, close-up, bust portrait, cut off limbs");
+    }
+}
+
 fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
     let options = &mut req.options;
     // Native Create applies an aspect ratio to the current model dimensions;
@@ -4521,9 +4555,34 @@ pub(crate) async fn cancel_decl_job(
 mod create_regression_tests {
     use super::{
         apply_create_presets, library_convert_mesh_assist_prompt, normalize_create_options,
-        parse_composition_blocks,
+        parse_composition_blocks, prepare_library_image_request,
     };
     use aos_proto::MediaImageGenerateRequest;
+
+    #[test]
+    fn library_full_body_preset_keeps_user_prompt_and_sets_portrait_framing() {
+        let mut req: MediaImageGenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "a person in a blue jacket"
+        })).expect("request");
+        prepare_library_image_request(&mut req, Some("full_body"));
+        assert_eq!(req.prompt, "a person in a blue jacket");
+        assert_eq!((req.options.width, req.options.height), (Some(512), Some(768)));
+        assert!(req.generation_prompt.as_deref().unwrap().contains("soles of both shoes"));
+        assert!(req.use_edited_enriched);
+        assert!(req.options.seed.is_some());
+        assert!(req.options.negative_prompt.as_deref().unwrap().contains("cropped feet"));
+    }
+
+    #[test]
+    fn library_standard_image_keeps_explicit_seed() {
+        let mut req: MediaImageGenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "a chair", "options": { "seed": 42 }
+        })).expect("request");
+        prepare_library_image_request(&mut req, Some("standard"));
+        assert_eq!(req.options.seed, Some(42));
+        assert!(req.generation_prompt.is_none());
+        assert!(req.options.width.is_none());
+    }
 
     #[test]
     fn native_create_presets_keep_dimensions_and_steps() {

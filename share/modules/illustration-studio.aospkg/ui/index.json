@@ -251,6 +251,10 @@
       "library_intro": "Create an image, import a GLB, or download a CC0 asset. Add a 3D asset to the scene when you are ready.",
       "library_asset_prompt": "Asset image prompt",
       "library_model_id": "Image model (optional)",
+      "library_image_framing": "Framing",
+      "library_image_framing_standard": "Standard image",
+      "library_image_framing_full_body": "Full body for 3D",
+      "library_full_body_hint": "Full body uses a portrait frame and asks for the whole person, including the feet. Each generation creates a new variation.",
       "library_generate": "Generate image",
       "library_job": "Image generation",
       "library_empty": "No project assets yet.",
@@ -516,6 +520,10 @@
       "library_intro": "Créez une image, importez un GLB ou téléchargez un asset CC0. Ajoutez-le à la scène 3D au moment voulu.",
       "library_asset_prompt": "Invite pour l’image de l’asset",
       "library_model_id": "Modèle d’image (facultatif)",
+      "library_image_framing": "Cadrage",
+      "library_image_framing_standard": "Image standard",
+      "library_image_framing_full_body": "Personnage entier pour la 3D",
+      "library_full_body_hint": "Ce mode utilise un format portrait et demande une personne entière, pieds compris. Chaque génération crée une nouvelle variation.",
       "library_generate": "Générer l’image",
       "library_job": "Génération de l’image",
       "library_empty": "La bibliothèque du projet est vide.",
@@ -851,6 +859,10 @@
       "library_model_id": {
         "type": "string",
         "default": ""
+      },
+      "library_image_framing": {
+        "type": "string",
+        "default": "standard"
       },
       "library_image_uri": {
         "type": "string",
@@ -1887,7 +1899,8 @@
       "input": {
         "project_id": "$local.project_id",
         "prompt": "$local.library_asset_prompt",
-        "model_id": "$local.library_model_id"
+        "model_id": "$local.library_model_id",
+        "asset_preset": "$local.library_image_framing"
       },
       "refresh_binds": []
     },
@@ -3217,6 +3230,23 @@
                               "kind": "text_input",
                               "state_key": "library_model_id",
                               "label_key": "library_model_id"
+                            },
+                            {
+                              "kind": "radio",
+                              "state_key": "library_image_framing",
+                              "label_key": "library_image_framing",
+                              "items": ["standard", "full_body"],
+                              "item_label_keys": [
+                                "library_image_framing_standard",
+                                "library_image_framing_full_body"
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "label_key": "library_full_body_hint",
+                              "visible": {
+                                "eq": ["$local.library_image_framing", "full_body"]
+                              }
                             },
                             {
                               "kind": "button",
