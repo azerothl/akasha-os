@@ -180,7 +180,7 @@ impl DeclUiPanelState {
                     self.local_state.insert("last_work_area".into(), area.clone());
                 }
             }
-        } else if tool == "illustration.asset.register" {
+        } else if tool == "illustration.asset.register" || tool == "illustration.asset.update" {
             if self.local_state.get("project_id") == result.get("project_id") {
                 let items = result.get("items").cloned().unwrap_or(Value::Array(Vec::new()));
                 self.local_state.insert("project_assets".into(), items.clone());
@@ -3391,6 +3391,38 @@ impl Default for LibraryOrbit {
     }
 }
 
+#[derive(Clone)]
+struct LibraryAssetDraft {
+    name: String,
+    category: String,
+    tags: String,
+    orientation: String,
+    dimensions: [f64; 3],
+    pivot: [f64; 3],
+    has_dimensions: bool,
+    has_pivot: bool,
+}
+
+impl LibraryAssetDraft {
+    fn from_asset(asset: &Value) -> Self {
+        let metadata = &asset["metadata"];
+        let vector = |key: &str| -> Option<[f64; 3]> {
+            let values = metadata.get(key)?.as_array()?;
+            Some([values.first()?.as_f64()?, values.get(1)?.as_f64()?, values.get(2)?.as_f64()?])
+        };
+        Self {
+            name: asset.get("name").and_then(Value::as_str).unwrap_or("").into(),
+            category: metadata.get("category").and_then(Value::as_str).unwrap_or("").into(),
+            tags: metadata.get("tags").and_then(Value::as_array).map(|tags| tags.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default(),
+            orientation: metadata.get("orientation").and_then(Value::as_str).unwrap_or("").into(),
+            dimensions: vector("dimensions_m").unwrap_or([0.0; 3]),
+            pivot: vector("pivot_m").unwrap_or([0.0; 3]),
+            has_dimensions: vector("dimensions_m").is_some(),
+            has_pivot: vector("pivot_m").is_some(),
+        }
+    }
+}
+
 fn library_label(doc: &DeclUiDocument, language: &str, key: &str) -> String {
     widget_text_from_key(Some(key), doc, language).unwrap_or_else(|| key.to_owned())
 }
@@ -3430,7 +3462,7 @@ fn library_mesh_texture(
         return Err("Invalid GLB path".into());
     }
     let path = host_file_from_logical(uri);
-    let mesh = aos_scene::load_gltf_mesh(&path).map_err(|error| error.to_string())?;
+    let mesh = aos_scene::load_gltf_mesh_cached(&path).map_err(|error| error.to_string())?;
     let target = mesh.aabb_center();
     let extent = mesh.aabb_half_extents();
     let radius = (extent.x * extent.x + extent.y * extent.y + extent.z * extent.z)
@@ -3682,6 +3714,8 @@ fn render_library_details(
     ui.strong(name);
     ui.weak(library_label(doc, language, if kind == "image" { "library_kind_image" } else { "library_kind_mesh" }));
     ui.add_space(8.0);
+    render_library_asset_editor(ui, asset, project_id, language, pending_invoke, actions, tool_schemas);
+    ui.add_space(8.0);
     if kind == "image" {
         let key = ui.id().with(("library-image-detail", project_id, id));
         let texture = ui.ctx().data(|data| data.get_temp::<egui::TextureHandle>(key))
@@ -3742,6 +3776,80 @@ fn render_library_details(
     }
 }
 
+fn render_library_asset_editor(
+    ui: &mut Ui,
+    asset: &Value,
+    project_id: &str,
+    language: &str,
+    pending_invoke: bool,
+    actions: &mut DeclUiActions,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    let fr = language.starts_with("fr");
+    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+    let edit_key = ui.id().with(("asset-edit-open", project_id, id));
+    let draft_key = ui.id().with(("asset-edit-draft", project_id, id));
+    let mut open = ui.ctx().data(|data| data.get_temp::<bool>(edit_key)).unwrap_or(false);
+    if ui.button(if fr { "Modifier les informations" } else { "Edit details" }).clicked() {
+        open = !open;
+        if open {
+            ui.ctx().data_mut(|data| data.insert_temp(draft_key, LibraryAssetDraft::from_asset(asset)));
+        }
+    }
+    if !open {
+        ui.ctx().data_mut(|data| data.insert_temp(edit_key, false));
+        return;
+    }
+    let mut draft = ui.ctx().data(|data| data.get_temp::<LibraryAssetDraft>(draft_key))
+        .unwrap_or_else(|| LibraryAssetDraft::from_asset(asset));
+    ui.separator();
+    ui.label(if fr { "Nom" } else { "Name" });
+    ui.text_edit_singleline(&mut draft.name);
+    ui.label(if fr { "Catégorie" } else { "Category" });
+    ui.text_edit_singleline(&mut draft.category);
+    ui.label("Tags");
+    ui.text_edit_singleline(&mut draft.tags);
+    ui.label("Orientation");
+    ui.text_edit_singleline(&mut draft.orientation);
+    ui.checkbox(&mut draft.has_dimensions, if fr { "Dimensions en mètres" } else { "Dimensions in metres" });
+    if draft.has_dimensions {
+        ui.horizontal(|ui| {
+            for component in &mut draft.dimensions {
+                ui.add(egui::DragValue::new(component).range(0.0..=1000.0).speed(0.01));
+            }
+        });
+    }
+    ui.checkbox(&mut draft.has_pivot, if fr { "Pivot en mètres" } else { "Pivot in metres" });
+    if draft.has_pivot {
+        ui.horizontal(|ui| {
+            for component in &mut draft.pivot {
+                ui.add(egui::DragValue::new(component).range(-1000.0..=1000.0).speed(0.01));
+            }
+        });
+    }
+    let tags = draft.tags.split(',').map(str::trim).filter(|tag| !tag.is_empty()).collect::<Vec<_>>();
+    let valid = !draft.name.trim().is_empty() && draft.name.chars().count() <= 120
+        && draft.category.chars().count() <= 80 && draft.orientation.chars().count() <= 80
+        && tags.len() <= 16 && tags.iter().all(|tag| tag.chars().count() <= 32);
+    if ui.add_enabled(valid && !pending_invoke, egui::Button::new(if fr { "Enregistrer" } else { "Save" })).clicked() {
+        let mut metadata = serde_json::json!({
+            "category": draft.category.trim(),
+            "tags": tags,
+            "orientation": draft.orientation.trim(),
+        });
+        metadata["dimensions_m"] = if draft.has_dimensions { serde_json::json!(draft.dimensions) } else { Value::Null };
+        metadata["pivot_m"] = if draft.has_pivot { serde_json::json!(draft.pivot) } else { Value::Null };
+        queue_invoke(actions, "illustration.asset.update", serde_json::json!({
+            "project_id": project_id, "asset_id": id, "name": draft.name.trim(), "metadata": metadata,
+        }), Vec::new(), Vec::new(), tool_schemas);
+        open = false;
+    }
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(edit_key, open);
+        data.insert_temp(draft_key, draft);
+    });
+}
+
 fn render_library_mesh_preview(
     ui: &mut Ui,
     doc: &DeclUiDocument,
@@ -3797,6 +3905,24 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
     let fr = language.starts_with("fr");
     let metadata = &asset["metadata"];
     let missing = if fr { "Non renseigné" } else { "Not specified" };
+    if asset.get("kind").and_then(Value::as_str) == Some("mesh") {
+        if let Some(uri) = asset.get("uri").and_then(Value::as_str)
+            .filter(|uri| uri.starts_with("/documents/illustrations/") && !uri.contains("..") && !uri.contains('\\'))
+        {
+            let path = host_file_from_logical(uri);
+            if let Ok(mesh) = aos_scene::load_gltf_mesh_cached(&path) {
+                ui.label(format!("Triangles: {}", mesh.triangle_count));
+                ui.label(format!("{}: {}", if fr { "Sommets" } else { "Vertices" }, mesh.vertex_count()));
+                if let Some(texture) = &mesh.base_color_texture {
+                    ui.label(format!("Texture: {} × {} px", texture.width, texture.height));
+                }
+            }
+            if let Ok(file) = std::fs::metadata(path) {
+                ui.label(format!("{}: {:.2} Mio", if fr { "Fichier" } else { "File" }, file.len() as f64 / 1_048_576.0));
+            }
+            ui.separator();
+        }
+    }
     for (label, value) in [
         (if fr { "Identifiant" } else { "ID" }, asset.get("id").and_then(Value::as_str)),
         (if fr { "Catégorie" } else { "Category" }, metadata.get("category").and_then(Value::as_str)),

@@ -1,5 +1,5 @@
 name: illustration-studio
-version: 0.7.22
+version: 0.7.23
 hash: BUILD_HASH
 permissions:
   required_caps:
@@ -51,6 +51,20 @@ tools:
         prompt:
           type: string
       required: [project_id, name, kind, uri]
+  - name: illustration.asset.update
+    description: Edit project asset details without changing its source file
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+        asset_id:
+          type: string
+        name:
+          type: string
+        metadata:
+          type: object
+      required: [project_id, asset_id]
   - name: illustration.asset.select
     description: Select a project asset for conversion or preview
     input_schema:

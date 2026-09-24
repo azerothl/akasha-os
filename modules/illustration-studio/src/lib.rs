@@ -80,6 +80,7 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "illustration.project.import_legacy" => project_import_legacy(),
         "illustration.asset.list" => asset_list(args),
         "illustration.asset.register" => asset_register(args),
+        "illustration.asset.update" => asset_update(args),
         "illustration.asset.add" => asset_add(args),
         "illustration.asset.select" => asset_select(args),
         "illustration.document.load" => document_load(args),
@@ -350,6 +351,59 @@ fn asset_register(args: &Value) -> Result<Value, String> {
     assets.push(asset.clone());
     write_assets(id, &assets)?;
     Ok(json!({ "project_id": id, "asset": asset, "items": assets }))
+}
+
+fn asset_update(args: &Value) -> Result<Value, String> {
+    let project_id = required_project_id(args)?;
+    let asset_id = args.get("asset_id").and_then(Value::as_str)
+        .ok_or_else(|| "missing asset_id".to_string())?;
+    let mut assets = read_assets(project_id)?;
+    let asset = assets.iter_mut().find(|asset| asset.id == asset_id)
+        .ok_or_else(|| "asset not found in this project".to_string())?;
+    if let Some(name) = args.get("name").and_then(Value::as_str) {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 120 {
+            return Err("asset name must contain 1–120 characters".into());
+        }
+        asset.name = name.into();
+    }
+    if let Some(updates) = args.get("metadata").and_then(Value::as_object) {
+        let mut metadata = asset.metadata.as_object().cloned().unwrap_or_default();
+        for (key, value) in updates {
+            match key.as_str() {
+                "category" | "orientation" => {
+                    let text = value.as_str().ok_or_else(|| format!("{key} must be text"))?.trim();
+                    if text.chars().count() > 80 {
+                        return Err(format!("{key} is too long"));
+                    }
+                    metadata.insert(key.clone(), json!(text));
+                }
+                "tags" => {
+                    let tags = value.as_array().ok_or("tags must be a list")?;
+                    if tags.len() > 16 || tags.iter().any(|tag| tag.as_str().is_none_or(|text| text.chars().count() > 32)) {
+                        return Err("tags must contain at most 16 short labels".into());
+                    }
+                    metadata.insert(key.clone(), value.clone());
+                }
+                "dimensions_m" | "pivot_m" => {
+                    if value.is_null() {
+                        metadata.remove(key);
+                        continue;
+                    }
+                    let values = value.as_array().ok_or_else(|| format!("{key} must be a 3D vector"))?;
+                    if values.len() != 3 || values.iter().any(|item| item.as_f64().is_none_or(|number| !number.is_finite() || number.abs() > 1000.0 || key == "dimensions_m" && number < 0.0)) {
+                        return Err(format!("{key} must contain three finite metre values"));
+                    }
+                    metadata.insert(key.clone(), value.clone());
+                }
+                _ => return Err(format!("{key} cannot be edited")),
+            }
+        }
+        asset.metadata = Value::Object(metadata);
+    }
+    let updated = asset.clone();
+    write_assets(project_id, &assets)?;
+    Ok(json!({ "project_id": project_id, "asset": updated, "items": assets }))
 }
 
 fn asset_select(args: &Value) -> Result<Value, String> {

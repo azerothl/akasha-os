@@ -8,6 +8,9 @@
 use crate::math::{Mat4, Vec3};
 use crate::scene::{NodeKind, SceneError, SceneGraph, SceneNode, Transform};
 use std::path::Path;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 use thiserror::Error;
 
 /// Soft caps for imported meshes (fail-closed).
@@ -76,6 +79,46 @@ impl CpuTriangleMesh {
             (self.bounds_min.z + self.bounds_max.z) * 0.5,
         )
     }
+}
+
+struct CachedMesh {
+    path: PathBuf,
+    len: u64,
+    modified: Option<SystemTime>,
+    mesh: Arc<CpuTriangleMesh>,
+}
+
+/// Reuse decoded geometry and image data while an asset is being orbited.
+/// File length and modification time invalidate entries after replacement.
+pub fn load_gltf_mesh_cached(path: &Path) -> Result<Arc<CpuTriangleMesh>, MeshAssetError> {
+    static CACHE: OnceLock<Mutex<Vec<CachedMesh>>> = OnceLock::new();
+    let metadata = std::fs::metadata(path).map_err(|error| MeshAssetError::Io(error.to_string()))?;
+    let modified = metadata.modified().ok();
+    let cache = CACHE.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut entries) = cache.lock() {
+        if let Some(index) = entries.iter().position(|entry| {
+            entry.path == path && entry.len == metadata.len() && entry.modified == modified
+        }) {
+            let entry = entries.remove(index);
+            let mesh = Arc::clone(&entry.mesh);
+            entries.push(entry);
+            return Ok(mesh);
+        }
+    }
+    let mesh = Arc::new(load_gltf_mesh(path)?);
+    if let Ok(mut entries) = cache.lock() {
+        entries.retain(|entry| entry.path != path);
+        if entries.len() >= 8 {
+            entries.remove(0);
+        }
+        entries.push(CachedMesh {
+            path: path.to_path_buf(),
+            len: metadata.len(),
+            modified,
+            mesh: Arc::clone(&mesh),
+        });
+    }
+    Ok(mesh)
 }
 
 /// Load a `.glb` / `.gltf` file into a CPU mesh (first scene, all primitives).
@@ -387,6 +430,13 @@ mod tests {
         assert!(mesh.vertex_count() >= 8);
         assert!((mesh.bounds_min.x + 0.5).abs() < 1e-3);
         assert!((mesh.bounds_max.y - 0.5).abs() < 1e-3);
+    }
+
+    #[test]
+    fn cached_mesh_reuses_decoded_geometry() {
+        let first = load_gltf_mesh_cached(&fixture_glb()).expect("first load");
+        let second = load_gltf_mesh_cached(&fixture_glb()).expect("cached load");
+        assert!(Arc::ptr_eq(&first, &second));
     }
 
     #[test]

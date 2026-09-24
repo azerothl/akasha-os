@@ -220,7 +220,7 @@ dependencies = [
 
 [[package]]
 name = "module-illustration-studio"
-version = "0.7.22"
+version = "0.7.23"
 dependencies = [
  "aos-module-sdk",
  "aos-scene",
