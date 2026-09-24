@@ -110,6 +110,16 @@ impl SignedCatalogue {
         &self.path
     }
 
+    /// Root directory for catalogue paths such as `share/modules/*.aospkg`.
+    ///
+    /// Preview keeps shipped packages next to the signed bundled index while
+    /// `AOS_HOME` may point at a user data tree that only contains `var/`.
+    pub fn install_root(&self) -> Option<PathBuf> {
+        let modules_dir = self.path.parent()?;
+        let share_dir = modules_dir.parent()?;
+        share_dir.parent().map(PathBuf::from)
+    }
+
     pub fn entry(&self, name: &str) -> Option<&CatalogueEntry> {
         self.inner.entries.iter().find(|e| e.name == name)
     }
@@ -474,11 +484,12 @@ pub fn resolve_package(
     entry: &CatalogueEntry,
     extra: &ExtraCatalogueSource,
     home: &Path,
+    bundled: Option<&SignedCatalogue>,
     fetch: impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<ResolvedPackage, CatalogueError> {
     match entry.kind.as_str() {
         "skill" => {
-            let bytes = resolve_file_bytes(entry, extra, home, &fetch)?;
+            let bytes = resolve_file_bytes(entry, extra, home, bundled, &fetch)?;
             let hash = sha256_catalogue_content_hex(&bytes);
             if !hashes_equal(&entry.hash, &hash) {
                 return Err(CatalogueError::HashMismatch(entry.name.clone()));
@@ -486,7 +497,7 @@ pub fn resolve_package(
             Ok(ResolvedPackage::Skill { bytes })
         }
         "module" => {
-            let dir = resolve_module_dir(entry, extra, home, &fetch)?;
+            let dir = resolve_module_dir(entry, extra, home, bundled, &fetch)?;
             let wasm = std::fs::read(dir.join("module.wasm"))?;
             let hash = sha256_hex(&wasm);
             if !hashes_equal(&entry.hash, &hash) {
@@ -495,7 +506,7 @@ pub fn resolve_package(
             Ok(ResolvedPackage::ModuleDir { path: dir })
         }
         _ => {
-            let bytes = resolve_file_bytes(entry, extra, home, &fetch)?;
+            let bytes = resolve_file_bytes(entry, extra, home, bundled, &fetch)?;
             let hash = sha256_catalogue_content_hex(&bytes);
             if !hashes_equal(&entry.hash, &hash) {
                 return Err(CatalogueError::HashMismatch(entry.name.clone()));
@@ -514,15 +525,38 @@ pub fn resolve_package(
     }
 }
 
+fn bundled_local_paths(
+    entry: &CatalogueEntry,
+    home: &Path,
+    bundled: Option<&SignedCatalogue>,
+) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let mut push = |p: PathBuf| {
+        if !paths.iter().any(|existing| existing == &p) {
+            paths.push(p);
+        }
+    };
+    push(home.join(&entry.path));
+    if let Some(cat) = bundled {
+        if let Some(root) = cat.install_root() {
+            push(root.join(&entry.path));
+        }
+    }
+    push(PathBuf::from(&entry.path));
+    paths
+}
+
 fn resolve_file_bytes(
     entry: &CatalogueEntry,
     extra: &ExtraCatalogueSource,
     home: &Path,
+    bundled: Option<&SignedCatalogue>,
     fetch: &impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<Vec<u8>, CatalogueError> {
-    let local = home.join(&entry.path);
-    if local.is_file() {
-        return Ok(std::fs::read(local)?);
+    for local in bundled_local_paths(entry, home, bundled) {
+        if local.is_file() {
+            return Ok(std::fs::read(local)?);
+        }
     }
     let cached = extra
         .cache_dir
@@ -545,11 +579,13 @@ fn resolve_module_dir(
     entry: &CatalogueEntry,
     extra: &ExtraCatalogueSource,
     home: &Path,
+    bundled: Option<&SignedCatalogue>,
     fetch: &impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<PathBuf, CatalogueError> {
-    let local = home.join(&entry.path);
-    if local.is_dir() && local.join("module.wasm").is_file() {
-        return Ok(local);
+    for local in bundled_local_paths(entry, home, bundled) {
+        if local.is_dir() && local.join("module.wasm").is_file() {
+            return Ok(local);
+        }
     }
     let dest = extra.cache_dir.join("packages").join(&entry.name);
     if dest.join("module.wasm").is_file() && dest.join("manifest.yaml").is_file() {
@@ -869,6 +905,40 @@ mod tests {
         assert!(matches!(err, CatalogueError::BadSignature));
         assert!(extra.loaded.is_none());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bundled_module_resolves_from_catalogue_install_root_when_aos_home_lacks_share() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let pkg = root.join("share/modules/illustration-studio.aospkg");
+        let catalogue_path = root.join("share/modules/catalogue.yaml");
+        if !pkg.join("module.wasm").is_file() {
+            eprintln!("skip: illustration-studio.aospkg missing");
+            return;
+        }
+        let bundled = SignedCatalogue::load(&catalogue_path).expect("bundled catalogue");
+        let entry = bundled
+            .entry("illustration-studio")
+            .expect("illustration-studio catalogue row")
+            .clone();
+        let aos_home = temp_dir("illust-home");
+        std::fs::create_dir_all(aos_home.join("var/modules")).unwrap();
+        let extra = ExtraCatalogueSource::open(&aos_home, aos_home.join("var/catalogue/community"));
+        let resolved = resolve_package(
+            &entry,
+            &extra,
+            &aos_home,
+            Some(&bundled),
+            |_| Err(CatalogueError::Fetch("fetch should not run".into())),
+        )
+        .expect("resolve bundled illustration-studio without network");
+        match resolved {
+            ResolvedPackage::ModuleDir { path } => {
+                assert_eq!(path, pkg);
+            }
+            other => panic!("expected module dir, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&aos_home);
     }
 
     #[test]

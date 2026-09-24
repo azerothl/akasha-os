@@ -5521,6 +5521,7 @@ fn install_catalogue_entry(
         &entry,
         &extra,
         &home,
+        bundled.as_ref(),
         aos_platform::catalogue::fetch_bytes,
     )
     .map_err(|e| e.to_string())?;
