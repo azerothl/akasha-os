@@ -729,6 +729,7 @@ fn apply_vk_device_pin(env: &mut HashMap<String, String>) {
 }
 
 /// When multiple ICD JSON paths are listed, keep NVIDIA so ggml sees the discrete GPU.
+#[cfg(windows)]
 fn prefer_nvidia_vk_icd_filenames(filenames: &str) -> String {
     let sep = if filenames.contains(';') { ';' } else { ',' };
     let parts: Vec<&str> = filenames
@@ -887,6 +888,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn prefer_nvidia_icd_picks_nv_from_semicolon_list() {
         let both = r"C:\AMD\amd_icd64.json;C:\Windows\System32\DriverStore\FileRepository\nv_dispig\nv_dispig.json";
