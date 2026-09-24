@@ -3584,7 +3584,7 @@ fn render_library_grid(
                 let is_image = asset.get("kind").and_then(Value::as_str) == Some("image");
                 let frame = egui::Frame::group(ui.style())
                     .stroke(if id == selected_id {
-                        egui::Stroke::new(2.0, ui.visuals().selection.stroke.color)
+                        egui::Stroke::new(2.0_f32, ui.visuals().selection.stroke.color)
                     } else {
                         ui.visuals().widgets.noninteractive.bg_stroke
                     });
