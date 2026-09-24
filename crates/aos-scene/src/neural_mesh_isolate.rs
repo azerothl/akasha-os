@@ -17,6 +17,7 @@
 //! Gaps (same class as Blender P0-B): Windows AppContainer and macOS
 //! sandbox-exec are not wired yet.
 
+use crate::neural_mesh::TrellisQualitySettings;
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -230,11 +231,14 @@ pub fn resolve_runner_bin(pack_root: Option<&Path>) -> Option<PathBuf> {
         let home = std::env::var("AOS_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-        let runtime = home
-            .join("var/illustration-studio/integrations/trellis/runtime/v0.6.0");
         let name = if cfg!(windows) { "trellis-cli.exe" } else { "trellis-cli" };
-        if let Some(bin) = find_managed_binary(&runtime, name, 6) {
-            return Some(bin);
+        for version in ["v0.8.0", "v0.6.0"] {
+            let runtime = home
+                .join("var/illustration-studio/integrations/trellis/runtime")
+                .join(version);
+            if let Some(bin) = find_managed_binary(&runtime, name, 6) {
+                return Some(bin);
+            }
         }
     }
     if let Some(root) = pack_root {
@@ -461,6 +465,7 @@ pub struct NeuralMeshSpawnPlan {
     pub output_glb: PathBuf,
     pub weights_dir: PathBuf,
     pub geometry_res: u32,
+    pub trellis_settings: TrellisQualitySettings,
     pub use_bwrap: bool,
     pub timeout: Duration,
 }
@@ -489,6 +494,28 @@ pub fn build_trellis_argv(plan: &NeuralMeshSpawnPlan) -> Vec<String> {
     argv.push(plan.weights_dir.to_string_lossy().into_owned());
     argv.push("--res".into());
     argv.push(plan.geometry_res.to_string());
+    let settings = plan.trellis_settings;
+    let defaults = TrellisQualitySettings::default();
+    if settings.steps != defaults.steps {
+        argv.push("--steps".into());
+        argv.push(settings.steps.to_string());
+    }
+    if settings.structure_guidance != defaults.structure_guidance {
+        argv.push("--gss".into());
+        argv.push(format!("{:.1}", settings.structure_guidance));
+    }
+    if settings.shape_guidance != defaults.shape_guidance {
+        argv.push("--gsh".into());
+        argv.push(format!("{:.1}", settings.shape_guidance));
+    }
+    if settings.seed != defaults.seed {
+        argv.push("--seed".into());
+        argv.push(settings.seed.to_string());
+    }
+    if settings.atlas_resolution != defaults.atlas_resolution {
+        argv.push("--atlas".into());
+        argv.push(settings.atlas_resolution.to_string());
+    }
     // The GLB reader used by Illustration Studio does not support
     // EXT_texture_webp. TRELLIS defaults to WebP when it is available.
     if matches!(plan.runner_kind, NeuralMeshRunnerKind::TrellisCli) {
@@ -935,6 +962,7 @@ mod tests {
             output_glb: PathBuf::from("/tmp/work/out.glb"),
             weights_dir: PathBuf::from("/models/trellis2"),
             geometry_res: 512,
+            trellis_settings: TrellisQualitySettings::default(),
             use_bwrap: false,
             timeout: Duration::from_secs(1),
         }
@@ -968,6 +996,26 @@ mod tests {
         expected.push("--require-gpu".to_string());
         assert_eq!(argv, expected);
 
+        let mut tuned_plan = plan.clone();
+        tuned_plan.trellis_settings = TrellisQualitySettings {
+            steps: 20,
+            structure_guidance: 6.2,
+            shape_guidance: 8.1,
+            seed: 1234,
+            atlas_resolution: 4096,
+        };
+        let tuned_argv = build_trellis_argv(&tuned_plan);
+        for (flag, value) in [
+            ("--steps", "20"),
+            ("--gss", "6.2"),
+            ("--gsh", "8.1"),
+            ("--seed", "1234"),
+            ("--atlas", "4096"),
+        ] {
+            let pair = [flag.to_string(), value.to_string()];
+            assert!(tuned_argv.windows(2).any(|window| window == pair));
+        }
+
         let adapter_plan = NeuralMeshSpawnPlan {
             runner_bin: PathBuf::from("/pack/adapters/trellis_gguf.sh"),
             runner_kind: NeuralMeshRunnerKind::Adapter,
@@ -976,6 +1024,7 @@ mod tests {
             output_glb: plan.output_glb.clone(),
             weights_dir: plan.weights_dir.clone(),
             geometry_res: plan.geometry_res,
+            trellis_settings: plan.trellis_settings,
             use_bwrap: false,
             timeout: plan.timeout,
         };

@@ -38,6 +38,57 @@ pub const MAX_ABS_TRANSLATION: f32 = 50.0;
 pub const MAX_ABS_SCALE: f32 = 20.0;
 pub const MIN_ABS_SCALE: f32 = 0.01;
 
+/// Advanced options supported by the bundled trellis.cpp runner.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TrellisQualitySettings {
+    pub steps: u32,
+    pub structure_guidance: f32,
+    pub shape_guidance: f32,
+    pub seed: u32,
+    /// 0 lets TRELLIS choose its default atlas size for the geometry resolution.
+    pub atlas_resolution: u32,
+}
+
+impl Default for TrellisQualitySettings {
+    fn default() -> Self {
+        Self {
+            steps: 12,
+            structure_guidance: 7.5,
+            shape_guidance: 7.5,
+            seed: 42,
+            atlas_resolution: 0,
+        }
+    }
+}
+
+impl TrellisQualitySettings {
+    pub fn validate(self) -> Result<(), NeuralMeshError> {
+        if !(1..=50).contains(&self.steps) {
+            return Err(NeuralMeshError::Validation(
+                "TRELLIS steps must be between 1 and 50".into(),
+            ));
+        }
+        if !self.structure_guidance.is_finite()
+            || !(1.0..=10.0).contains(&self.structure_guidance)
+        {
+            return Err(NeuralMeshError::Validation(
+                "TRELLIS structure guidance must be between 1 and 10".into(),
+            ));
+        }
+        if !self.shape_guidance.is_finite() || !(1.0..=10.0).contains(&self.shape_guidance) {
+            return Err(NeuralMeshError::Validation(
+                "TRELLIS shape guidance must be between 1 and 10".into(),
+            ));
+        }
+        if !matches!(self.atlas_resolution, 0 | 1024 | 2048 | 4096) {
+            return Err(NeuralMeshError::Validation(
+                "TRELLIS atlas resolution must be auto, 1024, 2048 or 4096".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Which assist backend to invoke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeshAssistBackendId {
@@ -123,6 +174,8 @@ pub struct MeshAssistRequest {
     pub image_path: Option<String>,
     /// Optional per-request TRELLIS resolution. Omitted requests retain the host default.
     pub geometry_res: Option<u32>,
+    /// Optional quality controls for TRELLIS image-to-3D conversion.
+    pub trellis_settings: Option<TrellisQualitySettings>,
 }
 
 impl Default for MeshAssistRequest {
@@ -134,6 +187,7 @@ impl Default for MeshAssistRequest {
             backend: MeshAssistBackendId::Stub,
             image_path: None,
             geometry_res: None,
+            trellis_settings: None,
         }
     }
 }
@@ -219,7 +273,14 @@ pub fn propose_mesh_assist(req: &MeshAssistRequest) -> Result<MeshAssistProposal
             if req.geometry_res.is_some_and(|res| !matches!(res, 512 | 1024 | 1536)) {
                 return Err(NeuralMeshError::Validation("TRELLIS resolution must be 512, 1024 or 1536".into()));
             }
-            let proposal = neural_propose(prompt, req.image_path.as_deref(), req.geometry_res)?;
+            let settings = req.trellis_settings.unwrap_or_default();
+            settings.validate()?;
+            let proposal = neural_propose(
+                prompt,
+                req.image_path.as_deref(),
+                req.geometry_res,
+                settings,
+            )?;
             validate_proposal(&proposal)?;
             Ok(proposal)
         }
@@ -314,6 +375,7 @@ fn neural_propose(
     prompt: &str,
     image_path: Option<&str>,
     geometry_res: Option<u32>,
+    trellis_settings: TrellisQualitySettings,
 ) -> Result<MeshAssistProposal, NeuralMeshError> {
     let status = probe_pack_status();
     let Some(pack_root) = status.pack_root.clone() else {
@@ -326,20 +388,20 @@ fn neural_propose(
             if !status.ready_for_spawn {
                 return Err(NeuralMeshError::BackendUnavailable);
             }
-            neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res)
+            neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res, trellis_settings)
         }
         NeuralMeshRunMode::Auto => {
             // A requested image-to-3D conversion cannot use the fixture. Preserve
             // the actual runner failure so the user can diagnose it.
             if image_path.is_some_and(|path| !path.trim().is_empty()) {
                 return if status.ready_for_spawn {
-                    neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res)
+                    neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res, trellis_settings)
                 } else {
                     Err(NeuralMeshError::BackendUnavailable)
                 };
             }
             if status.ready_for_spawn {
-                match neural_from_spawn(&pack_root, prompt, image_path, false, geometry_res) {
+                match neural_from_spawn(&pack_root, prompt, image_path, false, geometry_res, trellis_settings) {
                     Ok(p) => Ok(p),
                     Err(_) if status.ready_for_mock => neural_from_fixture(&pack_root, prompt, true),
                     Err(_) => Err(NeuralMeshError::BackendUnavailable),
@@ -390,6 +452,7 @@ fn neural_from_spawn(
     image_path: Option<&str>,
     require_image: bool,
     requested_geometry_res: Option<u32>,
+    trellis_settings: TrellisQualitySettings,
 ) -> Result<MeshAssistProposal, NeuralMeshError> {
     let Some(runner) = resolve_runner_bin(Some(pack_root)) else {
         return Err(NeuralMeshError::BackendUnavailable);
@@ -458,6 +521,7 @@ fn neural_from_spawn(
         output_glb: output.clone(),
         weights_dir: weights,
         geometry_res,
+        trellis_settings,
         use_bwrap: want_bwrap(),
         timeout: Duration::from_secs(timeout_secs),
     };
@@ -784,6 +848,42 @@ mod tests {
     }
 
     #[test]
+    fn trellis_quality_settings_reject_values_outside_cli_ranges() {
+        let invalid = [
+            TrellisQualitySettings {
+                steps: 0,
+                ..Default::default()
+            },
+            TrellisQualitySettings {
+                steps: 51,
+                ..Default::default()
+            },
+            TrellisQualitySettings {
+                structure_guidance: f32::NAN,
+                ..Default::default()
+            },
+            TrellisQualitySettings {
+                shape_guidance: 11.0,
+                ..Default::default()
+            },
+            TrellisQualitySettings {
+                atlas_resolution: 512,
+                ..Default::default()
+            },
+        ];
+        for settings in invalid {
+            let error = propose_mesh_assist(&MeshAssistRequest {
+                prompt: "person".into(),
+                backend: MeshAssistBackendId::Neural,
+                trellis_settings: Some(settings),
+                ..Default::default()
+            })
+            .unwrap_err();
+            assert!(matches!(error, NeuralMeshError::Validation(_)));
+        }
+    }
+
+    #[test]
     fn neural_backend_fail_closed_without_pack() {
         let _lock = NEURAL_MESH_ENV_LOCK
             .lock()
@@ -820,6 +920,7 @@ mod tests {
             backend: MeshAssistBackendId::Neural,
             image_path: None,
             geometry_res: None,
+            trellis_settings: None,
         };
         let res = mesh_assist(&mut scene, &req).expect("neural mock assist");
         assert!(!res.is_stub);
@@ -902,6 +1003,7 @@ mod tests {
                 backend: MeshAssistBackendId::Neural,
                 image_path: Some(img.to_string_lossy().into_owned()),
                 geometry_res: None,
+                trellis_settings: None,
             },
         )
         .expect("gguf adapter spawn");
@@ -980,6 +1082,7 @@ mod tests {
             backend: MeshAssistBackendId::Stub,
             image_path: None,
             geometry_res: None,
+            trellis_settings: None,
         };
         let res = mesh_assist(&mut scene, &req).expect("assist");
         assert!(res.is_stub);
