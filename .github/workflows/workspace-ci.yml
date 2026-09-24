@@ -1,3 +1,4 @@
+# Full workspace clippy + tests (PR + main).
 name: workspace-ci
 
 on:
