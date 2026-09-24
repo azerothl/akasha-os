@@ -254,7 +254,9 @@
       "library_image_framing": "Framing",
       "library_image_framing_standard": "Standard image",
       "library_image_framing_full_body": "Full body for 3D",
+      "library_image_framing_rig_ready": "Standing pose for rigging",
       "library_full_body_hint": "Full body uses a portrait frame and asks for the whole person, including the feet. Each generation creates a new variation.",
+      "library_rig_ready_hint": "For character rigging: asks for a standing A-pose with visible hands and feet, separated arms and legs, and no props. Use another framing for seated or lying characters.",
       "library_generate": "Generate image",
       "library_job": "Image generation",
       "library_empty": "No project assets yet.",
@@ -523,7 +525,9 @@
       "library_image_framing": "Cadrage",
       "library_image_framing_standard": "Image standard",
       "library_image_framing_full_body": "Personnage entier pour la 3D",
+      "library_image_framing_rig_ready": "Pose debout pour le rigging",
       "library_full_body_hint": "Ce mode utilise un format portrait et demande une personne entière, pieds compris. Chaque génération crée une nouvelle variation.",
+      "library_rig_ready_hint": "Pour le rigging d’un personnage : demande une pose en A debout, avec mains et pieds visibles, bras et jambes séparés, sans accessoires. Choisissez un autre cadrage pour un personnage assis ou couché.",
       "library_generate": "Générer l’image",
       "library_job": "Génération de l’image",
       "library_empty": "La bibliothèque du projet est vide.",
@@ -3235,10 +3239,11 @@
                               "kind": "radio",
                               "state_key": "library_image_framing",
                               "label_key": "library_image_framing",
-                              "items": ["standard", "full_body"],
+                              "items": ["standard", "full_body", "rig_ready"],
                               "item_label_keys": [
                                 "library_image_framing_standard",
-                                "library_image_framing_full_body"
+                                "library_image_framing_full_body",
+                                "library_image_framing_rig_ready"
                               ]
                             },
                             {
@@ -3246,6 +3251,13 @@
                               "label_key": "library_full_body_hint",
                               "visible": {
                                 "eq": ["$local.library_image_framing", "full_body"]
+                              }
+                            },
+                            {
+                              "kind": "text",
+                              "label_key": "library_rig_ready_hint",
+                              "visible": {
+                                "eq": ["$local.library_image_framing", "rig_ready"]
                               }
                             },
                             {
