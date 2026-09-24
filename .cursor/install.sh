@@ -16,6 +16,9 @@ sudo apt-get install -y -qq \
   libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
   libwayland-dev libasound2-dev libudev-dev xz-utils zstd findutils lld
 
+# Runtime libs for aos-ui-egui under X11/Xvfb (issue #361).
+bash packaging/install-debian-preview-ui-runtime.sh
+
 # The base image points cc/c++ at clang, whose driver cannot locate libstdc++
 # when building llama.cpp (llama-cpp-sys-2) via CMake ("cannot find -lstdc++").
 # Force gcc/g++ as the default C/C++ compiler, matching the CI toolchain.
