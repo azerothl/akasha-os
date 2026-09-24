@@ -2,10 +2,11 @@
 
 use crate::math::{Mat4, Vec3};
 use crate::mesh_asset::{
-    default_mesh_search_roots, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh,
+    default_mesh_search_roots, load_gltf_mesh_cached, resolve_mesh_uri, CpuTriangleMesh,
 };
 use crate::scene::{NodeKind, SceneGraph};
 use std::path::Path;
+use std::sync::Arc;
 
 pub use crate::camera::eye_from_orbit;
 
@@ -53,7 +54,7 @@ pub struct MeshInstance {
     pub color: [f32; 4],
     pub selected: bool,
     /// When set, draw this triangle mesh instead of the unit cube.
-    pub triangle_mesh: Option<CpuTriangleMesh>,
+    pub triangle_mesh: Option<Arc<CpuTriangleMesh>>,
 }
 
 /// Stable palette so ground / pedestal / props / limbs read as a “dev viewport”.
@@ -114,7 +115,7 @@ pub fn collect_mesh_instances(scene: &SceneGraph, selected: Option<&str>) -> Vec
                     .mesh_uri
                     .as_deref()
                     .and_then(|uri| resolve_mesh_uri(uri, &search_refs))
-                    .and_then(|path| load_gltf_mesh(&path).ok());
+                    .and_then(|path| load_gltf_mesh_cached(&path).ok());
                 // If load fails, still show an AABB proxy as a unit cube so the
                 // node is visible in the edit view (SceneGraph remains SoT).
                 out.push(MeshInstance {

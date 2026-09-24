@@ -109,7 +109,7 @@ pub use locks::{
 };
 pub use math::{Mat4, Quat, Vec3, EPSILON};
 pub use mesh_asset::{
-    default_mesh_search_roots, insert_mesh_asset, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
+    default_mesh_search_roots, insert_mesh_asset, load_gltf_mesh, load_gltf_mesh_cached, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
     MAX_MESH_TRIANGLES, MAX_MESH_VERTICES,
 };
 pub use neural_mesh::{
