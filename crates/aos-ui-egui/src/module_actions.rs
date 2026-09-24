@@ -4429,10 +4429,14 @@ fn prepare_library_image_request(req: &mut aos_proto::MediaImageGenerateRequest,
         let previous = NEXT_SEED.fetch_max(now, std::sync::atomic::Ordering::Relaxed);
         req.options.seed = Some(now.max(previous.saturating_add(1)));
     }
-    if preset == Some("full_body") {
+    if matches!(preset, Some("full_body" | "rig_ready")) {
         req.options.width.get_or_insert(512);
         req.options.height.get_or_insert(768);
-        let framing = "Full length standing person, entire body visible from the top of the head to the soles of both shoes, feet and head inside the frame with clear margins, centered, front view, neutral standing pose, plain background. No crop, no close-up.";
+        let framing = if preset == Some("rig_ready") {
+            "Single full-length standing person in a symmetric A-pose, front view, arms slightly away from the torso, hands open and clearly separated from hips and clothing, legs slightly apart, both feet visible and separated, head and feet inside the frame with clear margins. Plain background, no props, no occlusion, no seated or lying pose."
+        } else {
+            "Full length standing person, entire body visible from the top of the head to the soles of both shoes, feet and head inside the frame with clear margins, centered, front view, neutral standing pose, plain background. No crop, no close-up."
+        };
         req.generation_prompt = Some(format!("{framing} {}", req.prompt.trim()));
         req.use_edited_enriched = true;
         let negative = req.options.negative_prompt.get_or_insert_with(String::new);
@@ -4440,6 +4444,9 @@ fn prepare_library_image_request(req: &mut aos_proto::MediaImageGenerateRequest,
             negative.push_str(", ");
         }
         negative.push_str("cropped feet, cropped head, half body, close-up, bust portrait, cut off limbs");
+        if preset == Some("rig_ready") {
+            negative.push_str(", arms touching torso, hands hidden, hands touching hips, crossed legs, joined legs, seated, lying down, props, overlapping limbs");
+        }
     }
 }
 
@@ -4582,6 +4589,18 @@ mod create_regression_tests {
         assert_eq!(req.options.seed, Some(42));
         assert!(req.generation_prompt.is_none());
         assert!(req.options.width.is_none());
+    }
+
+    #[test]
+    fn library_rig_ready_preset_separates_limbs_without_changing_user_prompt() {
+        let mut req: MediaImageGenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "a person in a blue jacket"
+        })).expect("request");
+        prepare_library_image_request(&mut req, Some("rig_ready"));
+        assert_eq!(req.prompt, "a person in a blue jacket");
+        assert_eq!((req.options.width, req.options.height), (Some(512), Some(768)));
+        assert!(req.generation_prompt.as_deref().unwrap().contains("hands open and clearly separated"));
+        assert!(req.options.negative_prompt.as_deref().unwrap().contains("overlapping limbs"));
     }
 
     #[test]
