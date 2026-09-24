@@ -1487,6 +1487,8 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         format!("__create_install_failed__:{raw}")
                     } else if name == "tasks" {
                         format!("__tasks_open_failed__:{raw}")
+                    } else if name == "illustration-studio" {
+                        format!("__illustration_install_failed__:{raw}")
                     } else {
                         raw
                     }));

@@ -3,7 +3,6 @@
 use crate::cmd::Cmd;
 use crate::models_page;
 use crate::onboarding::save_onboarding;
-use crate::os_open::aos_home;
 use crate::prefs::{
     hash_secrets_reveal_pin, save_preferences, secrets_reveal_pin_matches, UiDensity,
     UiPresentationMode, UI_SCALE_PRESETS,
@@ -1796,18 +1795,9 @@ impl UiApp {
                                                     name: e.name.clone(),
                                                 });
                                             }
-                                        } else if e.source == "community" {
-                                            if ui.button(t.settings_catalogue_install).clicked() {
-                                                let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
-                                                    name: e.name.clone(),
-                                                });
-                                            }
-                                        } else if ui.button(t.settings_catalogue_install).clicked()
-                                        {
-                                            let src = aos_home().join(&e.path);
-                                            let _ = self.cmd_tx.send(Cmd::ModuleInstall {
-                                                source_dir: src.to_string_lossy().into_owned(),
-                                                approved_caps: None,
+                                        } else if ui.button(t.settings_catalogue_install).clicked() {
+                                            let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
+                                                name: e.name.clone(),
                                             });
                                         }
                                     }
