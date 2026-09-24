@@ -322,7 +322,7 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 
 Hors chemin court de cohorte. Catalogue honnête : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md).
 
-- **Paramètres → Catalogue local de modules** : trouver **`illustration-studio`** (~0.7.5) → **Installer** → accepter la revue de caps.
+- **Paramètres → Catalogue local de modules** : trouver **`illustration-studio`** (**0.7.21**, selon le catalogue embarqué) → **Installer** → accepter la revue de caps.
 - Ouvrir l’onglet DeclUI **Studio Illustration**. Confirmer le tip Compose → Éditer → Beauté ; le chrome hôte sur la vue 3D affiche **édition · pas beauté** (EN : **edit view · not beauty**).
 - Composer une courte invite EN ou FR (ex. librairie / bibliothèque). Attendre des proxys MeshBox via **heuristiques mots-clés** — pas un planner SceneIntent LLM.
 - Orbite / sélection / Déplacer·Rotation·Échelle ; confirmer bandeau TRS + Annuler/Rétablir. Lancer **Beauté CPU** et/ou **Beauté stub** → PNG sous `/documents/illustrations/`.

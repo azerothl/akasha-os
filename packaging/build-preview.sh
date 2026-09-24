@@ -131,6 +131,10 @@ EOF
     echo "== create module =="
     "${ROOT}/modules/build-create.sh"
   fi
+  if [ -f "${ROOT}/modules/build-illustration-studio.sh" ]; then
+    echo "== illustration-studio module =="
+    "${ROOT}/modules/build-illustration-studio.sh"
+  fi
   if [ -f "${ROOT}/modules/build-ext-rt.ps1" ] && command -v pwsh >/dev/null 2>&1; then
     echo "== ext-rt module =="
     pwsh -NoProfile -File "${ROOT}/modules/build-ext-rt.ps1"
@@ -403,6 +407,39 @@ for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do
   fi
   cp -f "${src}" "${OUT}/share/modules/${cat}"
 done
+
+verify_packaged_catalogue_module() {
+  local module="$1"
+  local wasm="${OUT}/share/modules/${module}.aospkg/module.wasm"
+  local manifest="${OUT}/share/modules/${module}.aospkg/manifest.yaml"
+  local catalogue="${OUT}/share/modules/catalogue.yaml"
+  if [ ! -s "${wasm}" ] || [ ! -s "${manifest}" ]; then
+    echo "ERROR: packaged ${module}.aospkg incomplete" >&2
+    exit 1
+  fi
+  local wasm_hash manifest_hash catalogue_hash
+  wasm_hash="$(sha256_file "${wasm}")"
+  manifest_hash="$(awk '$1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' "${manifest}")"
+  catalogue_hash="$(awk -v module="${module}" \
+    '$1 == "-" && $2 == "name:" { active = ($3 == module) }
+     active && $1 == "hash:" { sub(/^sha256:/, "", $2); print $2; exit }' \
+    "${catalogue}")"
+  if [ -z "${catalogue_hash}" ]; then
+    echo "ERROR: catalogue.yaml missing entry for ${module} (Preview must list shipped modules)" >&2
+    exit 1
+  fi
+  if [ "${wasm_hash}" != "${manifest_hash}" ] || [ "${wasm_hash}" != "${catalogue_hash}" ]; then
+    echo "ERROR: module hash mismatch for ${module} (wasm=${wasm_hash}, manifest=${manifest_hash}, catalogue=${catalogue_hash})" >&2
+    exit 1
+  fi
+}
+
+for module in notes ext-rt canvas create illustration-studio; do
+  verify_packaged_catalogue_module "${module}"
+done
+if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
+  verify_packaged_catalogue_module "tasks"
+fi
 
 mkdir -p "${OUT}/share"
 echo "profile: ${PREVIEW_PROFILE}" > "${OUT}/share/preview-profile.yaml"
