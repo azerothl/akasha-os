@@ -130,6 +130,15 @@ pub(crate) fn is_tasks_quarantine_error(msg: &str) -> bool {
     lower.contains("tasks") && (lower.contains("quarantaine") || lower.contains("quarantined"))
 }
 
+fn is_tasks_declui_open_failure(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("ui déclarative invalide")
+        || lower.contains("decluiinvalid")
+        || lower.contains("declarative_ui")
+        || lower.contains("missing field")
+        || lower.contains("type must be declarative_ui")
+}
+
 /// True when a Tasks open/install failure should use locked human chrome copy.
 pub(crate) fn is_tasks_open_or_install_error(msg: &str) -> bool {
     if is_tasks_quarantine_error(msg) {
@@ -147,11 +156,12 @@ pub(crate) fn is_tasks_open_or_install_error(msg: &str) -> bool {
             || lower.contains("install")
             || lower.contains("badrequest")
             || lower.contains(".aospkg")
-            || lower.contains("ui déclarative invalide")
-            || lower.contains("decluiinvalid")
-            || lower.contains("declarative_ui")
-            || lower.contains("missing field")
-            || lower.contains("type must be declarative_ui"))
+            || is_tasks_declui_open_failure(msg))
+}
+
+fn is_tasks_open_failure_for_module(module: &str, msg: &str) -> bool {
+    module == "tasks"
+        && (is_tasks_open_or_install_error(msg) || is_tasks_declui_open_failure(msg))
 }
 
 /// True when a catalogue/module install failure targets Create.
@@ -490,7 +500,7 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
             },
         );
     }
-    if module == "tasks" && is_tasks_open_or_install_error(stripped) {
+    if is_tasks_open_failure_for_module(module, stripped) {
         return format_chat_error(
             t,
             &ChatErrorClassified {
