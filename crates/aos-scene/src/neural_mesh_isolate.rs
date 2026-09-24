@@ -4,7 +4,7 @@
 //! - Fixed argv only — never libre shell from modules
 //! - Work directory quarantines image in + GLB out
 //! - Optional Linux `bwrap --unshare-net` when available
-//! - Clear env of ambient secrets; keep a minimal PATH
+//! - Clear env of ambient secrets; keep a minimal platform PATH (+ Vulkan ICD discovery on Windows)
 //!
 //! Real runner shape matches **trellis.cpp** `trellis-cli`:
 //! `trellis-cli <input.png> <output.glb> --models <GGUF_DIR> [--res 512|1024|…]`
@@ -17,6 +17,7 @@
 //! Gaps (same class as Blender P0-B): Windows AppContainer and macOS
 //! sandbox-exec are not wired yet.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -532,9 +533,7 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env_clear()
-        .env("PATH", "/usr/bin:/bin")
-        .env("HOME", plan.work_dir.as_os_str())
-        .env("TMPDIR", plan.work_dir.as_os_str())
+        .envs(minimal_neural_mesh_child_env(&plan.runner_bin, &plan.work_dir))
         .current_dir(&plan.work_dir);
     if let Some(pack) = &pack_root_guess {
         cmd.env("AOS_NEURAL_MESH_PACK", pack.as_os_str());
@@ -550,6 +549,13 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                 cmd.env(key, v);
             }
         }
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
     let mut child = cmd.spawn().map_err(|e| format!("spawn: {e}"))?;
@@ -596,6 +602,202 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
             Err(e) => return Err(format!("wait: {e}")),
         }
     }
+}
+
+/// Trim stderr for DeclUI / error strings (matches Blender isolate tail budget).
+pub fn trim_stderr_tail(stderr: &str, max_chars: usize) -> String {
+    if stderr.len() <= max_chars {
+        return stderr.to_string();
+    }
+    stderr[stderr.len() - max_chars..].to_string()
+}
+
+/// Human-readable spawn failure (exit code, Vulkan device lines, stderr tail).
+pub fn format_spawn_failure(result: &NeuralMeshSpawnResult, missing_output_glb: bool) -> String {
+    let mut parts = vec![format!("neural mesh runner exit={}", result.exit_code)];
+    if missing_output_glb {
+        parts.push("output.glb missing".into());
+    }
+    if let Some(hint) = vulkan_device_lines(&result.stderr_tail) {
+        parts.push(hint);
+    }
+    let tail = trim_stderr_tail(&result.stderr_tail, 2000);
+    if !tail.is_empty() {
+        parts.push(format!("stderr_tail: {tail}"));
+    }
+    parts.join("; ")
+}
+
+fn vulkan_device_lines(stderr: &str) -> Option<String> {
+    let mut hits = Vec::new();
+    for line in stderr.lines() {
+        let t = line.trim();
+        if t.contains("ggml_vulkan:")
+            || t.contains("[deform_vk]")
+            || t.contains("[trellis]")
+            || t.contains("Vulkan devices")
+        {
+            hits.push(t);
+        }
+    }
+    if hits.is_empty() {
+        None
+    } else {
+        Some(hits.join(" | "))
+    }
+}
+
+/// Minimal env for trellis-cli after `env_clear()` — secrets scrubbed; Vulkan ICD discovery on Windows.
+pub fn minimal_neural_mesh_child_env(runner_bin: &Path, work_dir: &Path) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    let mut path_dirs = Vec::new();
+    if let Some(parent) = runner_bin.parent() {
+        path_dirs.push(parent.to_string_lossy().into_owned());
+    }
+    #[cfg(windows)]
+    {
+        let system_root = std::env::var("SystemRoot")
+            .or_else(|_| std::env::var("WINDIR"))
+            .unwrap_or_else(|_| r"C:\Windows".into());
+        path_dirs.push(format!(r"{system_root}\System32"));
+        path_dirs.push(system_root.clone());
+        env.insert("PATH".into(), path_dirs.join(";"));
+        env.insert("SystemRoot".into(), system_root.clone());
+        env.insert("WINDIR".into(), system_root);
+        for key in ["TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA"] {
+            if let Ok(v) = std::env::var(key) {
+                if !v.is_empty() {
+                    env.insert(key.into(), v);
+                }
+            }
+        }
+        let work = work_dir.to_string_lossy().into_owned();
+        env.insert("TEMP".into(), work.clone());
+        env.insert("TMP".into(), work.clone());
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            env.insert("HOME".into(), profile);
+        } else {
+            env.insert("HOME".into(), work);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        path_dirs.push("/usr/bin".into());
+        path_dirs.push("/bin".into());
+        env.insert("PATH".into(), path_dirs.join(":"));
+        env.insert("HOME".into(), work_dir.to_string_lossy().into_owned());
+        env.insert("TMPDIR".into(), work_dir.to_string_lossy().into_owned());
+    }
+    env.insert("LANG".into(), "C".into());
+    forward_vk_discovery_env(&mut env);
+    apply_vk_device_pin(&mut env);
+    #[cfg(windows)]
+    {
+        prefer_discrete_nvidia_vk_icd(&mut env);
+    }
+    if let Ok(disp) = std::env::var("DISPLAY") {
+        if !disp.is_empty() {
+            env.insert("DISPLAY".into(), disp);
+        }
+    }
+    env
+}
+
+fn forward_vk_discovery_env(env: &mut HashMap<String, String>) {
+    for (key, value) in std::env::vars() {
+        if value.is_empty() {
+            continue;
+        }
+        let forward = key.starts_with("VK_")
+            || matches!(
+                key.as_str(),
+                "GGML_VK_VISIBLE_DEVICES" | "CUDA_VISIBLE_DEVICES" | "HIP_VISIBLE_DEVICES"
+            );
+        if forward {
+            env.insert(key, value);
+        }
+    }
+}
+
+fn apply_vk_device_pin(env: &mut HashMap<String, String>) {
+    if let Ok(pin) = std::env::var("AOS_NEURAL_MESH_VK_DEVICE") {
+        let pin = pin.trim();
+        if !pin.is_empty() {
+            env.insert("GGML_VK_VISIBLE_DEVICES".into(), pin.to_string());
+        }
+    }
+}
+
+/// When multiple ICD JSON paths are listed, keep NVIDIA so ggml sees the discrete GPU.
+#[cfg(windows)]
+fn prefer_nvidia_vk_icd_filenames(filenames: &str) -> String {
+    let sep = if filenames.contains(';') { ';' } else { ',' };
+    let parts: Vec<&str> = filenames
+        .split(sep)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.len() <= 1 {
+        return filenames.to_string();
+    }
+    for part in &parts {
+        let lower = part.to_ascii_lowercase();
+        if lower.contains("nvidia") || lower.contains("nv_disp") || lower.contains("\\nv") {
+            return (*part).to_string();
+        }
+    }
+    filenames.to_string()
+}
+
+#[cfg(windows)]
+fn prefer_discrete_nvidia_vk_icd(env: &mut HashMap<String, String>) {
+    if std::env::var("AOS_NEURAL_MESH_VK_PREFER_DISCRETE")
+        .ok()
+        .is_some_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"))
+    {
+        return;
+    }
+    if let Some(existing) = env.get("VK_ICD_FILENAMES") {
+        let narrowed = prefer_nvidia_vk_icd_filenames(existing);
+        if narrowed != *existing {
+            env.insert("VK_ICD_FILENAMES".into(), narrowed);
+        }
+        return;
+    }
+    let system_root = env
+        .get("SystemRoot")
+        .cloned()
+        .unwrap_or_else(|| r"C:\Windows".into());
+    if let Some(icd) = discover_windows_nvidia_vk_icd(&system_root) {
+        env.insert("VK_ICD_FILENAMES".into(), icd);
+    }
+}
+
+#[cfg(windows)]
+fn discover_windows_nvidia_vk_icd(system_root: &str) -> Option<String> {
+    let repo = Path::new(system_root)
+        .join("System32")
+        .join("DriverStore")
+        .join("FileRepository");
+    if !repo.is_dir() {
+        return None;
+    }
+    let Ok(entries) = std::fs::read_dir(&repo) else {
+        return None;
+    };
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        for name in ["nv_dispc.json", "nv_dispig.json", "nv_disp.json"] {
+            let cand = dir.join(name);
+            if cand.is_file() {
+                return Some(cand.to_string_lossy().into_owned());
+            }
+        }
+    }
+    None
 }
 
 /// Shared with `neural_mesh` tests that mutate `AOS_NEURAL_MESH_*` env vars.
@@ -684,6 +886,64 @@ mod tests {
             NeuralMeshRunnerKind::detect(Path::new("bin/local-ai")),
             NeuralMeshRunnerKind::LocalAi
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn prefer_nvidia_icd_picks_nv_from_semicolon_list() {
+        let both = r"C:\AMD\amd_icd64.json;C:\Windows\System32\DriverStore\FileRepository\nv_dispig\nv_dispig.json";
+        let picked = prefer_nvidia_vk_icd_filenames(both);
+        assert!(picked.to_ascii_lowercase().contains("nv"));
+        assert!(!picked.contains(';'));
+    }
+
+    #[test]
+    fn linux_child_env_uses_unix_path() {
+        let env = minimal_neural_mesh_child_env(
+            Path::new("/opt/trellis-cli"),
+            Path::new("/tmp/aos-neural-work"),
+        );
+        let path = env.get("PATH").expect("PATH");
+        assert!(path.contains("/usr/bin"));
+        assert!(path.contains("/opt"));
+        assert!(!path.contains(';'));
+        assert_eq!(
+            env.get("TMPDIR").map(String::as_str),
+            Some("/tmp/aos-neural-work")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_child_env_uses_semicolon_path_and_systemroot() {
+        let env = minimal_neural_mesh_child_env(
+            Path::new(r"C:\aos\trellis-cli.exe"),
+            Path::new(r"C:\Temp\aos-neural-work"),
+        );
+        let path = env.get("PATH").expect("PATH");
+        assert!(path.contains(';'));
+        assert!(!path.contains("/usr/bin"));
+        assert!(env.contains_key("SystemRoot"));
+        assert!(env.contains_key("WINDIR"));
+        assert_eq!(
+            env.get("TEMP").map(String::as_str),
+            Some(r"C:\Temp\aos-neural-work")
+        );
+    }
+
+    #[test]
+    fn format_spawn_failure_includes_stderr_tail() {
+        let result = NeuralMeshSpawnResult {
+            exit_code: 1,
+            stderr_tail: "ggml_vulkan: Found 1 Vulkan devices:\nggml_vulkan: 0 = AMD Radeon\nfail\n".into(),
+            argv: vec![],
+            isolated_with_bwrap: false,
+        };
+        let msg = format_spawn_failure(&result, true);
+        assert!(msg.contains("exit=1"));
+        assert!(msg.contains("output.glb missing"));
+        assert!(msg.contains("AMD Radeon"));
+        assert!(msg.contains("stderr_tail"));
     }
 
     #[test]

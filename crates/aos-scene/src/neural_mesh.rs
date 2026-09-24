@@ -17,7 +17,8 @@ use crate::math::{Quat, Vec3};
 use crate::mesh_asset::{insert_mesh_asset, load_gltf_mesh};
 use crate::neural_mesh_isolate::{
     probe_pack_status, resolve_fixture_glb, resolve_geometry_res, resolve_runner_bin,
-    resolve_weights_dir, spawn_isolated, NeuralMeshRunMode, NeuralMeshRunnerKind,
+    format_spawn_failure, resolve_weights_dir, spawn_isolated, NeuralMeshRunMode,
+    NeuralMeshRunnerKind,
     NeuralMeshSpawnPlan, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
 };
 use crate::scene::{NodeKind, SceneError, SceneGraph, SceneNode, Transform};
@@ -447,8 +448,10 @@ fn neural_from_spawn(
         NeuralMeshError::Validation(format!("neural mesh spawn failed: {e}"))
     })?;
     if spawn.exit_code != 0 || !output.is_file() {
+        let missing_glb = !output.is_file();
+        let detail = format_spawn_failure(&spawn, missing_glb);
         let _ = std::fs::remove_dir_all(&work);
-        return Err(NeuralMeshError::BackendUnavailable);
+        return Err(NeuralMeshError::Validation(detail));
     }
     // Fail-closed: reject non-mesh / over-budget GLB before SceneGraph insert.
     let mesh = load_gltf_mesh(&output).map_err(|e| {

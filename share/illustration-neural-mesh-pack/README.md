@@ -67,6 +67,7 @@ trellis-cli <input.png> <output.glb> --models <GGUF_DIR> --res 512
 - Workdir quarantine for image in + GLB out
 - Optional Linux `bwrap --unshare-net`
 - Env cleared of ambient secrets (allowlist: `AOS_NEURAL_MESH_ADAPTER_MOCK`, `FIXTURE`, `TRELLIS_CLI`, `PACK`)
+- Windows: minimal `SystemRoot` / `System32` PATH + forwarded `VK_*` ICD discovery (optional `AOS_NEURAL_MESH_VK_DEVICE` to pin ggml device index; `AOS_NEURAL_MESH_VK_PREFER_DISCRETE=0` to disable NVIDIA ICD narrowing)
 - Gaps: Windows AppContainer / macOS sandbox-exec (same class as Blender P0-B)
 
 ## Host contract
