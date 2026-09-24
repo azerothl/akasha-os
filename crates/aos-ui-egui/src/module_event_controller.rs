@@ -402,10 +402,38 @@ pub(crate) fn on_ui_service_done(
     let language = app.prefs.language.clone();
     if let Some(panel) = app.decl_panels.get_mut(&module) {
         panel.set_pending_invoke(false);
+        let library_action = module == "illustration-studio" && action_id.starts_with("library_");
+        let library_result_matches = result.get("project_id").and_then(Value::as_str)
+            .is_none_or(|id| panel.local_state.get("project_id").and_then(Value::as_str) == Some(id));
+        if library_action && library_result_matches {
+            panel.local_state.insert("library_busy".into(), Value::Bool(false));
+        }
         if ok {
             panel.status.clear();
+            if library_action && action_id == "library_generate_image" && library_result_matches {
+                if let Some(job_id) = result.get("job_id").and_then(Value::as_str) {
+                    panel.local_state.insert("library_job_id".into(), Value::String(job_id.into()));
+                }
+            }
             if module == "illustration-studio" && action_id == "import_project_file" {
                 panel.activate_illustration_project(&result);
+            }
+            if library_action && library_result_matches {
+                if let Some(asset) = result.get("asset") {
+                    if let Some(asset_id) = asset.get("id").and_then(Value::as_str) {
+                        panel.local_state.insert("library_selected_asset_id".into(), Value::String(asset_id.into()));
+                        panel.local_state.insert("library_selected_project_id".into(), result.get("project_id").cloned().unwrap_or(Value::Null));
+                        panel.local_state.insert("library_section".into(), Value::String("assets".into()));
+                        panel.local_state.insert("library_error".into(), Value::String(String::new()));
+                        let image = asset.get("kind").and_then(Value::as_str) == Some("image");
+                        panel.local_state.insert("library_image_uri".into(), Value::String(
+                            if image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()
+                        ));
+                        panel.local_state.insert("library_image_prompt".into(), Value::String(
+                            if image { asset.get("prompt").and_then(Value::as_str).unwrap_or("") } else { "" }.into()
+                        ));
+                    }
+                }
             }
             if module == "illustration-studio"
                 && matches!(
@@ -618,6 +646,15 @@ pub(crate) fn on_ui_service_done(
                 }
             }
         } else {
+            if library_action {
+                if library_result_matches {
+                    let raw = error.as_deref().unwrap_or("");
+                    panel.local_state.insert("library_error".into(), Value::String(
+                        illustration_library_error(&language, &action_id, raw)
+                    ));
+                }
+                return;
+            }
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
                 Some(raw) if module == "illustration-studio" && action_id == "blender_beauty" => {
                     crate::chat_error_copy::illustration_blender_error(&language, raw)
@@ -634,6 +671,44 @@ pub(crate) fn on_ui_service_done(
     }
 }
 
+fn illustration_library_error(language: &str, action: &str, raw: &str) -> String {
+    let fr = language.starts_with("fr");
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("cancel") || lower.contains("annul") {
+        return String::new();
+    }
+    let message = if lower.contains("could not be added to the project library") {
+        if fr { "L’image a été générée, mais son ajout à la bibliothèque du projet a échoué. Vérifiez l’espace disque et réessayez." }
+        else { "The image was generated, but could not be added to the project library. Check disk space and try again." }
+    } else if lower.contains("not installed") || lower.contains("modèle incomplet") || lower.contains("model unavailable") {
+        if fr { "Le modèle d’image n’est pas prêt. Installez ou complétez le modèle dans Modèles, puis réessayez." }
+        else { "The image model is not ready. Install or complete it in Models, then try again." }
+    } else if lower.contains("vulkan") || lower.contains("trellis") || lower.contains("mesh pack") || lower.contains("runner") {
+        if fr { "La conversion 3D est indisponible. Ouvrez TRELLIS, vérifiez le moteur, le modèle Q4/Q8 et le GPU Vulkan, puis relancez la conversion." }
+        else { "3D conversion is unavailable. Open TRELLIS, check the runtime, Q4/Q8 model and Vulkan GPU, then retry." }
+    } else if lower.contains("glb") || lower.contains("gltf") || lower.contains("asset source") {
+        if fr { "L’asset 3D n’a pas pu être importé. Choisissez un fichier GLB valide de moins de 200 Mo, puis réessayez." }
+        else { "The 3D asset could not be imported. Choose a valid GLB under 200 MB, then try again." }
+    } else if lower.contains("disk") || lower.contains("space") || lower.contains("write") || lower.contains("copy") {
+        if fr { "L’asset a été créé mais n’a pas pu être enregistré. Vérifiez l’espace disque et le dossier du projet, puis réessayez." }
+        else { "The asset was created but could not be saved. Check disk space and the project folder, then try again." }
+    } else if lower.contains("network") || lower.contains("download") || lower.contains("timeout") || lower.contains("http") {
+        if fr { "Le téléchargement a échoué. Vérifiez la connexion et relancez l’opération." }
+        else { "The download failed. Check your connection and retry." }
+    } else if action == "library_generate_image" {
+        if fr { "L’image n’a pas pu être générée. Vérifiez le modèle choisi et relancez la création." }
+        else { "The image could not be generated. Check the selected model and try again." }
+    } else if action == "library_convert_trellis" {
+        if fr { "La conversion 3D a échoué. Vérifiez TRELLIS et relancez la conversion depuis la fiche de l’image." }
+        else { "3D conversion failed. Check TRELLIS and retry from the image details." }
+    } else {
+        if fr { "L’import a échoué. Vérifiez la source de l’asset et réessayez." }
+        else { "Import failed. Check the asset source and try again." }
+    };
+    eprintln!("Illustration Studio library {action}: {raw}");
+    message.into()
+}
+
 pub(crate) fn on_ui_job_update(
     app: &mut UiApp,
     module: String,
@@ -641,6 +716,19 @@ pub(crate) fn on_ui_job_update(
     job: aos_proto::rich_decl_ui::RichJobHandle,
 ) {
     if let Some(panel) = app.decl_panels.get_mut(&module) {
+        if module == "illustration-studio" && subscription_id == "library_image_job" {
+            if panel.local_state.get("project_id") != panel.local_state.get("library_job_project_id") {
+                return;
+            }
+            let current_job = panel.local_state.get("library_job_id").and_then(Value::as_str).unwrap_or("");
+            if let Some(incoming) = job.job_id.as_deref() {
+                if current_job != incoming {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
         panel.set_job_update(&subscription_id, job.clone());
         if module == "create" && job.state.as_deref() == Some("succeeded") {
             if let Some(path) = job
@@ -827,6 +915,17 @@ fn apply_illustration_scene_result(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn library_errors_are_actionable_and_cancellation_is_quiet() {
+        assert!(illustration_library_error("fr", "library_convert_trellis", "Vulkan unavailable")
+            .contains("TRELLIS"));
+        assert!(illustration_library_error("en", "library_import_glb", "Invalid GLB")
+            .contains("valid GLB"));
+        assert!(illustration_library_error("en", "library_generate_image", "Image created but could not be added to the project library")
+            .contains("was generated"));
+        assert_eq!(illustration_library_error("fr", "library_import_glb", "Import cancelled"), "");
+    }
 
     #[test]
     fn prefab_instantiate_action_ids_patch_scene() {
