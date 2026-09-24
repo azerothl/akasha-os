@@ -165,6 +165,25 @@ fn is_tasks_open_or_install_error_for_module(msg: &str, module_is_tasks: bool) -
     module_is_tasks || lower.contains("tasks")
 }
 
+/// Wire sentinel when image→TRELLIS produced fixture/mock geometry (not an install failure).
+pub(crate) const TRELLIS_TEST_MODEL_WIRE: &str = "__trellis_test_model__";
+
+/// True when mesh assist / `illustration.library.convert` rejected a TRELLIS stub or fixture GLB.
+pub(crate) fn is_trellis_test_model_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    if lower.contains(TRELLIS_TEST_MODEL_WIRE) {
+        return true;
+    }
+    if lower.contains("trellis returned a mock asset") {
+        return true;
+    }
+    lower.contains("trellis")
+        && (lower.contains("mock")
+            || lower.contains("fixture")
+            || lower.contains("test model")
+            || lower.contains("modèle de test"))
+}
+
 /// True when a catalogue/module install failure targets Illustration Studio.
 pub(crate) fn is_illustration_install_error(msg: &str) -> bool {
     is_illustration_install_error_for_module(msg, false)
@@ -339,6 +358,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         return ChatErrorClassified {
             code: "create.install_failed",
             cause: t.chat_error_create_install.to_string(),
+        };
+    }
+    if is_trellis_test_model_error(raw) {
+        return ChatErrorClassified {
+            code: "illustration.trellis_test_model",
+            cause: t.chat_error_trellis_test_model.to_string(),
         };
     }
     if is_illustration_install_error(raw) {
@@ -560,6 +585,15 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
             &ChatErrorClassified {
                 code: "tasks.open_failed",
                 cause: t.chat_error_tasks_open.to_string(),
+            },
+        );
+    }
+    if is_trellis_test_model_error(stripped) {
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "illustration.trellis_test_model",
+                cause: t.chat_error_trellis_test_model.to_string(),
             },
         );
     }
@@ -837,6 +871,22 @@ mod tests {
         assert!(out.contains(en.chat_error_illustration_install));
         assert!(!out.contains(en.chat_error_tasks_open));
         assert!(out.contains("services mismatch"));
+    }
+
+    #[test]
+    fn trellis_test_model_does_not_map_to_illustration_install() {
+        let en = crate::i18n::strings("en");
+        let fr = crate::i18n::strings("fr");
+        let legacy =
+            "TRELLIS returned a mock asset; install the real runtime and model";
+        let en_out = user_visible_module_error(&en, "illustration-studio", legacy);
+        assert!(en_out.contains(en.chat_error_trellis_test_model));
+        assert!(!en_out.contains(en.chat_error_illustration_install));
+        assert!(!en_out.contains("mock asset"));
+
+        let fr_out = user_visible_module_error(&fr, "illustration-studio", TRELLIS_TEST_MODEL_WIRE);
+        assert!(fr_out.contains(fr.chat_error_trellis_test_model));
+        assert!(!fr_out.contains(fr.chat_error_illustration_install));
     }
 
     #[test]

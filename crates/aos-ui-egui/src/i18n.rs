@@ -555,6 +555,8 @@ pub struct UiStrings {
     pub chat_error_tasks_open: &'static str,
     pub chat_error_create_install: &'static str,
     pub chat_error_illustration_install: &'static str,
+    /// CM-locked: TRELLIS image→mesh returned fixture/mock geometry, not an install failure.
+    pub chat_error_trellis_test_model: &'static str,
     pub chat_error_tasks_quarantined: &'static str,
     pub create_install_failed: &'static str,
     pub tasks_open_failed: &'static str,
@@ -1863,6 +1865,8 @@ const EN: UiStrings = UiStrings {
     chat_error_tasks_open: "Couldn't open Tasks.",
     chat_error_create_install: "Couldn't install Create.",
     chat_error_illustration_install: "Couldn't install Illustration Studio.",
+    chat_error_trellis_test_model:
+        "TRELLIS returned a test model. Install the real runtime and model, then try again.",
     chat_error_tasks_quarantined: "Tasks is quarantined.",
     create_install_failed: "Couldn't install Create. Try again.",
     tasks_open_failed: "Couldn't open Tasks. Try again.",
@@ -3161,6 +3165,8 @@ const FR: UiStrings = UiStrings {
     chat_error_tasks_open: "Impossible d'ouvrir Tâches.",
     chat_error_create_install: "Impossible d'installer Créer.",
     chat_error_illustration_install: "Impossible d'installer Illustration Studio.",
+    chat_error_trellis_test_model:
+        "TRELLIS a renvoyé un modèle de test. Installez le runtime et le modèle, puis réessayez.",
     chat_error_tasks_quarantined: "Tâches en quarantaine.",
     create_install_failed: "Impossible d'installer Créer. Réessayez.",
     tasks_open_failed: "Impossible d'ouvrir Tâches. Réessayez.",
