@@ -913,6 +913,27 @@ mod tests {
     }
 
     #[test]
+    fn bundled_catalogue_lists_illustration_studio() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let wasm = root.join("share/modules/illustration-studio.aospkg/module.wasm");
+        assert!(
+            wasm.is_file(),
+            "illustration-studio ships in Preview share/modules; wasm missing at {}",
+            wasm.display()
+        );
+        let catalogue = SignedCatalogue::load(root.join("share/modules/catalogue.yaml"))
+            .expect("signed bundled catalogue");
+        assert!(
+            catalogue
+                .inner
+                .entries
+                .iter()
+                .any(|e| e.name == "illustration-studio"),
+            "bundled catalogue.yaml must list illustration-studio when the aospkg ships (Preview local catalogue install)"
+        );
+    }
+
+    #[test]
     fn catalogue_hashes_match_packaged_content() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let catalogue = SignedCatalogue::load(root.join("share/modules/catalogue.yaml"))
