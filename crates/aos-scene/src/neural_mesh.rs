@@ -450,7 +450,7 @@ fn neural_from_spawn(
     if spawn.exit_code != 0 || !output.is_file() {
         let missing_glb = !output.is_file();
         let detail = format_spawn_failure(&spawn, missing_glb);
-        let _ = std::fs::remove_dir_all(&work);
+        // Keep work dir (spawn.out / spawn.err) for post-mortem diagnosis.
         return Err(NeuralMeshError::Validation(detail));
     }
     // Fail-closed: reject non-mesh / over-budget GLB before SceneGraph insert.
