@@ -23,7 +23,7 @@ fn wgpu_samples_glb_base_color_texture() {
         ..ViewportCamera::default()
     };
     let rgba = gpu.render_rgba(&scene, &camera, 256, 256, None).expect("render textured mesh");
-    let red = rgba.chunks_exact(4).filter(|px| px[0] > 90 && (px[0] as u16) > (px[1] as u16) * 2 && (px[0] as u16) > (px[2] as u16) * 2).count();
+    let red = rgba.as_chunks::<4>().0.iter().filter(|px| px[0] > 90 && (px[0] as u16) > (px[1] as u16) * 2 && (px[0] as u16) > (px[2] as u16) * 2).count();
     assert!(red > 100, "texture red pixels missing: {red}");
 }
 
