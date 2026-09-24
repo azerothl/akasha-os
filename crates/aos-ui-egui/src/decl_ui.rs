@@ -3811,24 +3811,43 @@ fn render_library_details(
     }
     ui.add_space(8.0);
     if kind == "image" {
+        let provider_key = ui.id().with(("mesh-provider", project_id, id));
+        let mut provider = ui.ctx().data(|data| data.get_temp::<String>(provider_key)).unwrap_or_else(|| "trellis".into());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(if language.starts_with("fr") { "Convertisseur 3D" } else { "3D converter" });
+            ui.selectable_value(&mut provider, "trellis".into(), "TRELLIS");
+            ui.selectable_value(&mut provider, "triposr".into(), "TripoSR · test");
+        });
+        ui.ctx().data_mut(|data| data.insert_temp(provider_key, provider.clone()));
+        if provider == "triposr" {
+            ui.weak(if language.starts_with("fr") {
+                "Expérimental : configurez AOS_TRIPOSR_RUNNER avec un runner local. La qualité peut être inférieure à TRELLIS."
+            } else {
+                "Experimental: set AOS_TRIPOSR_RUNNER to a local runner. Quality may be lower than TRELLIS."
+            });
+        }
         let quality_key = ui.id().with(("trellis-resolution", project_id, id));
         let mut geometry_res = ui.ctx().data(|data| data.get_temp::<u32>(quality_key)).unwrap_or(512);
-        ui.horizontal_wrapped(|ui| {
-            ui.label(if language.starts_with("fr") { "Détail TRELLIS" } else { "TRELLIS detail" });
-            ui.selectable_value(&mut geometry_res, 512, if language.starts_with("fr") { "Rapide · 512" } else { "Fast · 512" });
-            ui.selectable_value(&mut geometry_res, 1024, if language.starts_with("fr") { "Détaillé · 1024" } else { "Detailed · 1024" });
-        });
+        if provider == "trellis" {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(if language.starts_with("fr") { "Détail TRELLIS" } else { "TRELLIS detail" });
+                ui.selectable_value(&mut geometry_res, 512, if language.starts_with("fr") { "Rapide · 512" } else { "Fast · 512" });
+                ui.selectable_value(&mut geometry_res, 1024, if language.starts_with("fr") { "Détaillé · 1024" } else { "Detailed · 1024" });
+            });
+        }
         ui.ctx().data_mut(|data| data.insert_temp(quality_key, geometry_res));
-        if geometry_res == 1024 {
+        if provider == "trellis" && geometry_res == 1024 {
             ui.weak(if language.starts_with("fr") { "Plus lent et plus lourd ; utile si le GLB 512 manque de détail." } else { "Slower and larger; use when the 512 GLB lacks detail." });
         }
         if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
-            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_convert"))).clicked() {
+            let label = if provider == "triposr" { "library_convert_triposr" } else { "library_convert" };
+            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, label))).clicked() {
                 let mut state = HashMap::new();
                 state.insert("project_id".into(), Value::String(project_id.into()));
                 state.insert("library_image_uri".into(), Value::String(uri.into()));
                 state.insert("library_image_prompt".into(), asset.get("prompt").cloned().unwrap_or(Value::String(String::new())));
                 state.insert("library_trellis_resolution".into(), serde_json::json!(geometry_res));
+                state.insert("library_mesh_provider".into(), Value::String(provider));
                 queue_service_action(actions, action, &state, &HashMap::new(), doc);
             }
         }

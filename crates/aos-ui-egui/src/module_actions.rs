@@ -15,7 +15,9 @@ use aos_proto::{
     ModuleInvokeResponse,
 };
 use serde_json::Value;
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -765,6 +767,7 @@ pub(crate) async fn run_decl_service_action(
             let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
             let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
             let geometry_res = input.get("geometry_res").and_then(Value::as_u64).unwrap_or(512);
+            let provider = input.get("provider").and_then(Value::as_str).unwrap_or("trellis").to_string();
             let prompt = library_convert_mesh_assist_prompt(
                 input.get("prompt").and_then(Value::as_str).unwrap_or(""),
                 &image_uri,
@@ -776,11 +779,13 @@ pub(crate) async fn run_decl_service_action(
                 || image_uri.contains("..")
                 || image_uri.contains('\\')
                 || !matches!(geometry_res, 512 | 1024)
+                || !matches!(provider.as_str(), "trellis" | "triposr")
             {
-                Err("Select an image in the active project and a TRELLIS resolution of 512 or 1024".into())
+                Err("Select an image in the active project and a valid 3D converter".into())
             } else {
                 let image_path = logical_downloads_path(&image_uri);
                 let project_for_conversion = project_id.clone();
+                let provider_for_conversion = provider.clone();
                 let conversion = tokio::task::spawn_blocking(move || {
                     use aos_scene::{MeshAssistBackendId, MeshAssistRequest, SceneGraph, SceneNode};
                     let project_root = crate::os_open::aos_home()
@@ -791,43 +796,49 @@ pub(crate) async fn run_decl_service_action(
                     if !image_path.starts_with(&canonical_root) {
                         return Err("image path escapes the project library".into());
                     }
-                    let mut scene = SceneGraph {
-                        effects: Vec::new(),
-                        nodes: Default::default(),
-                        roots: vec!["root".into()],
-                        active_camera: None,
+                    let (file_name, provenance) = if provider_for_conversion == "triposr" {
+                        let file_name = run_triposr_experiment(&image_path, &canonical_root)?;
+                        (file_name, "TripoSR experimental conversion")
+                    } else {
+                        let mut scene = SceneGraph {
+                            effects: Vec::new(),
+                            nodes: Default::default(),
+                            roots: vec!["root".into()],
+                            active_camera: None,
+                        };
+                        scene.nodes.insert("root".into(), SceneNode::empty("root", "Asset conversion"));
+                        let request = MeshAssistRequest {
+                            prompt: prompt.clone(),
+                            parent_id: "root".into(),
+                            prefix: "converted_".into(),
+                            backend: MeshAssistBackendId::Neural,
+                            image_path: Some(image_path.to_string_lossy().into_owned()),
+                            geometry_res: Some(geometry_res as u32),
+                        };
+                        let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
+                        if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
+                            return Err(crate::chat_error_copy::TRELLIS_TEST_MODEL_WIRE.into());
+                        }
+                        let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
+                        let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
+                        if output_path.extension().and_then(|e| e.to_str()) != Some("glb") {
+                            return Err("TRELLIS output is not a GLB".into());
+                        }
+                        let stamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_err(|e| e.to_string())?
+                            .as_nanos();
+                        let file_name = format!("trellis-{stamp}.glb");
+                        std::fs::copy(output_path, canonical_root.join(&file_name)).map_err(|e| e.to_string())?;
+                        (file_name, "TRELLIS conversion")
                     };
-                    scene.nodes.insert("root".into(), SceneNode::empty("root", "Asset conversion"));
-                    let request = MeshAssistRequest {
-                        prompt: prompt.clone(),
-                        parent_id: "root".into(),
-                        prefix: "converted_".into(),
-                        backend: MeshAssistBackendId::Neural,
-                        image_path: Some(image_path.to_string_lossy().into_owned()),
-                        geometry_res: Some(geometry_res as u32),
-                    };
-                    let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
-                    if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
-                        return Err(crate::chat_error_copy::TRELLIS_TEST_MODEL_WIRE.into());
-                    }
-                    let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
-                    let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
-                    if output_path.extension().and_then(|e| e.to_str()) != Some("glb") {
-                        return Err("TRELLIS output is not a GLB".into());
-                    }
-                    let stamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_err(|e| e.to_string())?
-                        .as_nanos();
-                    let file_name = format!("trellis-{stamp}.glb");
-                    std::fs::copy(output_path, canonical_root.join(&file_name)).map_err(|e| e.to_string())?;
                     let uri = format!(
                         "/documents/illustrations/projects/{project_for_conversion}/assets/{file_name}"
                     );
-                    Ok((uri, prompt, geometry_res))
+                    Ok((uri, prompt, geometry_res, provenance))
                 }).await;
                 match conversion {
-                    Ok(Ok((uri, prompt, geometry_res))) => invoke_module_tool_quiet(
+                    Ok(Ok((uri, prompt, geometry_res, provenance))) => invoke_module_tool_quiet(
                         bus,
                         module,
                         "illustration.asset.register",
@@ -837,7 +848,7 @@ pub(crate) async fn run_decl_service_action(
                             "kind": "mesh",
                             "uri": uri,
                             "prompt": prompt,
-                            "metadata": { "provenance": "TRELLIS conversion", "source_image": image_uri, "geometry_resolution": geometry_res },
+                            "metadata": { "provenance": provenance, "source_image": image_uri, "geometry_resolution": if provider == "trellis" { Some(geometry_res) } else { None } },
                         }),
                     ).await,
                     Ok(Err(error)) => Err(error),
@@ -4311,6 +4322,92 @@ fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, Str
     ))
 }
 
+/// Opt-in adapter contract: executable `<input image> <output GLB>`.
+/// The adapter owns its model environment. Only a validated GLB reaches the library.
+fn run_triposr_experiment(input: &Path, assets: &Path) -> Result<String, String> {
+    let configured = std::env::var("AOS_TRIPOSR_RUNNER").unwrap_or_default();
+    let runner = Path::new(configured.trim());
+    if configured.trim().is_empty() || !runner.is_absolute() || !runner.is_file() {
+        return Err("TripoSR test is not configured. Set AOS_TRIPOSR_RUNNER to a local executable that accepts an input image and an output GLB path, then retry.".into());
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let name = format!("triposr-{stamp}.glb");
+    let output = assets.join(&name);
+    let error_log = assets.join(format!(".triposr-{stamp}.err"));
+    let error_file = std::fs::File::create(&error_log).map_err(|e| e.to_string())?;
+    let mut child = Command::new(runner)
+        .arg(input)
+        .arg(&output)
+        .current_dir(assets)
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(error_file))
+        .spawn()
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&error_log);
+            format!("Could not start TripoSR runner: {e}")
+        })?;
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < std::time::Duration::from_secs(600) => {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&output);
+                let _ = std::fs::remove_file(&error_log);
+                return Err("TripoSR timed out after 10 minutes. Check the runner and GPU memory, then retry.".into());
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&output);
+                let _ = std::fs::remove_file(&error_log);
+                return Err(format!("TripoSR runner status failed: {e}"));
+            }
+        }
+    };
+    let details = std::fs::read_to_string(&error_log).unwrap_or_default();
+    let _ = std::fs::remove_file(&error_log);
+    if !status.success() {
+        let _ = std::fs::remove_file(&output);
+        let cause = details.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or("no error detail");
+        return Err(format!("TripoSR runner failed: {}", cause.chars().take(500).collect::<String>()));
+    }
+    let validation = validate_triposr_glb(&output);
+    if validation.is_err() {
+        let _ = std::fs::remove_file(&output);
+    }
+    validation.map(|()| name)
+}
+
+fn validate_triposr_glb(output: &Path) -> Result<(), String> {
+    let size = std::fs::metadata(output)
+        .map_err(|e| format!("TripoSR did not produce a readable GLB: {e}"))?
+        .len();
+    if size > 200 * 1024 * 1024 {
+        return Err("TripoSR GLB exceeds the 200 MB experimental limit".into());
+    }
+    let mut magic = [0u8; 4];
+    std::fs::File::open(output)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .map_err(|e| format!("TripoSR did not produce a readable GLB: {e}"))?;
+    if &magic != b"glTF" {
+        return Err("TripoSR output is not a GLB. Its textured export may be an OBJ with a .glb name; convert it to GLB first.".into());
+    }
+    let mesh = aos_scene::load_gltf_mesh(output)
+        .map_err(|e| format!("TripoSR GLB could not be loaded: {e}"))?;
+    if mesh.triangle_count == 0 {
+        return Err("TripoSR GLB contains no triangles".into());
+    }
+    Ok(())
+}
+
 /// Mesh assist still requires a non-empty label; image→GLB uses the image as conditioner.
 fn library_convert_mesh_assist_prompt(prompt: &str, image_uri: &str) -> String {
     let trimmed = prompt.trim();
@@ -4566,7 +4663,7 @@ pub(crate) async fn cancel_decl_job(
 mod create_regression_tests {
     use super::{
         apply_create_presets, library_convert_mesh_assist_prompt, normalize_create_options,
-        parse_composition_blocks, prepare_library_image_request,
+        parse_composition_blocks, prepare_library_image_request, validate_triposr_glb,
     };
     use aos_proto::MediaImageGenerateRequest;
 
@@ -4683,6 +4780,22 @@ mod create_regression_tests {
             library_convert_mesh_assist_prompt("  keep me  ", "/documents/x/a.png"),
             "keep me"
         );
+    }
+
+    #[test]
+    fn triposr_rejects_an_obj_named_glb() {
+        let path = std::env::temp_dir().join(format!("triposr-fake-{}.glb", std::process::id()));
+        std::fs::write(&path, b"o mesh\nv 0 0 0\n").expect("write fake OBJ");
+        let error = validate_triposr_glb(&path).expect_err("OBJ must not enter library");
+        let _ = std::fs::remove_file(&path);
+        assert!(error.contains("not a GLB"));
+    }
+
+    #[test]
+    fn triposr_accepts_a_loadable_glb() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../aos-scene/tests/fixtures/unit_cube.glb");
+        validate_triposr_glb(&path).expect("valid GLB");
     }
 
     #[test]

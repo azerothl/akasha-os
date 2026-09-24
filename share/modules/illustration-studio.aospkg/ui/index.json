@@ -265,6 +265,7 @@
       "library_select_image": "Select image",
       "library_add_to_scene": "Add to 3D scene",
       "library_convert": "Convert selected image to GLB with TRELLIS",
+      "library_convert_triposr": "Test conversion with TripoSR",
       "library_selected_image": "Selected image",
       "library_import_glb": "Import GLB…",
       "output_kind_label": "Final format",
@@ -536,6 +537,7 @@
       "library_select_image": "Sélectionner l’image",
       "library_add_to_scene": "Ajouter à la scène 3D",
       "library_convert": "Convertir l’image sélectionnée en GLB avec TRELLIS",
+      "library_convert_triposr": "Tester la conversion avec TripoSR",
       "library_selected_image": "Image sélectionnée",
       "library_import_glb": "Importer un GLB…",
       "output_kind_label": "Format final",
@@ -1915,7 +1917,8 @@
         "project_id": "$local.project_id",
         "image_uri": "$local.library_image_uri",
         "prompt": "$local.library_image_prompt",
-        "geometry_res": "$local.library_trellis_resolution"
+        "geometry_res": "$local.library_trellis_resolution",
+        "provider": "$local.library_mesh_provider"
       },
       "refresh_binds": []
     },
