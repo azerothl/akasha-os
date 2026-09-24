@@ -165,6 +165,22 @@ fn is_tasks_open_or_install_error_for_module(msg: &str, module_is_tasks: bool) -
     module_is_tasks || lower.contains("tasks")
 }
 
+/// True when a catalogue/module install failure targets Illustration Studio.
+pub(crate) fn is_illustration_install_error(msg: &str) -> bool {
+    is_illustration_install_error_for_module(msg, false)
+}
+
+fn is_illustration_install_error_for_module(msg: &str, module_is_illustration: bool) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    if lower.contains("__illustration_install_failed__") {
+        return true;
+    }
+    if !tasks_open_install_error_signals(&lower) {
+        return false;
+    }
+    module_is_illustration || lower.contains("illustration-studio")
+}
+
 /// True when a catalogue/module install failure targets Create.
 pub(crate) fn is_create_install_error(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
@@ -325,6 +341,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
             cause: t.chat_error_create_install.to_string(),
         };
     }
+    if is_illustration_install_error(raw) {
+        return ChatErrorClassified {
+            code: "illustration.install_failed",
+            cause: t.chat_error_illustration_install.to_string(),
+        };
+    }
     if is_tasks_open_or_install_error(raw) {
         return ChatErrorClassified {
             code: "tasks.open_failed",
@@ -450,6 +472,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
                 cause: t.chat_error_create_install.to_string(),
             };
         }
+        if lower.contains("illustration-studio") {
+            return ChatErrorClassified {
+                code: "illustration.install_failed",
+                cause: t.chat_error_illustration_install.to_string(),
+            };
+        }
         if lower.contains("tasks") {
             return ChatErrorClassified {
                 code: "tasks.open_failed",
@@ -510,12 +538,23 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
             },
         );
     }
-    if is_tasks_open_or_install_error(stripped) {
+    if module == "illustration-studio"
+        && is_illustration_install_error_for_module(stripped, true)
+    {
         return format_chat_error(
             t,
             &ChatErrorClassified {
-                code: "tasks.open_failed",
-                cause: t.chat_error_tasks_open.to_string(),
+                code: "illustration.install_failed",
+                cause: t.chat_error_illustration_install.to_string(),
+            },
+        );
+    }
+    if is_illustration_install_error(stripped) {
+        return format_chat_error(
+            t,
+            &ChatErrorClassified {
+                code: "illustration.install_failed",
+                cause: t.chat_error_illustration_install.to_string(),
             },
         );
     }
@@ -770,6 +809,16 @@ mod tests {
         let en = crate::i18n::strings("en");
         let raw = "statut BadRequest: UI déclarative invalide: type must be declarative_ui, got missing field `root` at line 6 column 1";
         let out = user_visible_module_error(&en, "illustration-studio", raw);
+        assert!(!out.contains(en.chat_error_tasks_open));
+        assert!(out.contains(en.chat_error_illustration_install));
+    }
+
+    #[test]
+    fn illustration_install_failure_maps_to_human_cause_not_tasks() {
+        let en = crate::i18n::strings("en");
+        let raw = "__illustration_install_failed__:statut InternalError: UI déclarative invalide: services mismatch";
+        let out = user_visible_chat_error(&en, raw);
+        assert!(out.contains(en.chat_error_illustration_install));
         assert!(!out.contains(en.chat_error_tasks_open));
     }
 

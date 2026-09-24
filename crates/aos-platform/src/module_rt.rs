@@ -2211,6 +2211,54 @@ min_os_api: 1
         ]
     }
 
+    fn illustration_test_caps() -> Vec<String> {
+        vec![
+            "fs.read:/documents/illustrations/**".into(),
+            "fs.write:/documents/illustrations/**".into(),
+            "render.stub".into(),
+            "render.cpu".into(),
+            "render.blender".into(),
+            "illustration.dependencies.install".into(),
+            "illustration.asset.import".into(),
+            "media.generate".into(),
+            "asset.read:/assets/illustration/**".into(),
+            "scene.compose".into(),
+            "scene.pose".into(),
+            "scene.edit".into(),
+            "scene.lock".into(),
+            "mesh.neural".into(),
+            "comic.layout".into(),
+            "comic.render".into(),
+            "storyboard.edit".into(),
+            "tool.invoke:illustration-studio".into(),
+        ]
+    }
+
+    #[test]
+    fn illustration_package_validates_at_install() {
+        let share = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/modules/illustration-studio.aospkg");
+        if !share.join("module.wasm").is_file() {
+            eprintln!("skip illustration test: package missing");
+            return;
+        }
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalogue =
+            crate::catalogue::SignedCatalogue::load(root.join("share/modules/catalogue.yaml"))
+                .expect("bundled catalogue");
+        let base = tmpbase("illustration");
+        let caps = illustration_test_caps();
+        let mut rt = ModuleRuntime::open(base.join("modules"), Arc::new(EchoServices)).unwrap();
+        rt.set_catalogue(catalogue);
+        let info = rt
+            .install(&share, Some(caps))
+            .expect("illustration-studio install");
+        assert_eq!(info.name, "illustration-studio");
+        let ui = rt.load_ui("illustration-studio").expect("load ui");
+        assert_eq!(ui.document.doc_type, "declarative_ui");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn create_invalid_upgrade_keeps_last_good_version() {
         let share =
