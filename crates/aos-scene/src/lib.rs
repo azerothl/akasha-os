@@ -115,7 +115,7 @@ pub use mesh_asset::{
 pub use neural_mesh::{
     apply_proposal, mesh_assist, neural_mesh_pack_status, propose_mesh_assist, validate_proposal,
     MeshAssistBackendId, MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart,
-    NeuralMeshError, NeuralMeshPackStatus, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
+    NeuralMeshError, NeuralMeshPackStatus, TrellisQualitySettings, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
     MESH_ASSIST_SERVICE, MESH_NEURAL_CAP, MIN_ABS_SCALE,
 };
 pub use neural_mesh_isolate::{

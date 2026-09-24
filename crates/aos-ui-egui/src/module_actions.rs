@@ -768,12 +768,31 @@ pub(crate) async fn run_decl_service_action(
             let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
             let geometry_res = input.get("geometry_res").and_then(Value::as_u64).unwrap_or(512);
             let provider = input.get("provider").and_then(Value::as_str).unwrap_or("trellis").to_string();
+            let seed_value = input.get("seed").and_then(Value::as_u64).unwrap_or(42);
+            let steps_value = input.get("steps").and_then(Value::as_u64).unwrap_or(12);
+            let atlas_value = input.get("atlas_resolution").and_then(Value::as_u64).unwrap_or(0);
+            let trellis_settings = aos_scene::TrellisQualitySettings {
+                steps: u32::try_from(steps_value).unwrap_or(u32::MAX),
+                structure_guidance: input.get("structure_guidance").and_then(Value::as_f64).unwrap_or(7.5) as f32,
+                shape_guidance: input.get("shape_guidance").and_then(Value::as_f64).unwrap_or(7.5) as f32,
+                seed: u32::try_from(seed_value).unwrap_or(u32::MAX),
+                atlas_resolution: u32::try_from(atlas_value).unwrap_or(u32::MAX),
+            };
             let prompt = library_convert_mesh_assist_prompt(
                 input.get("prompt").and_then(Value::as_str).unwrap_or(""),
                 &image_uri,
             );
             let prefix = format!("/documents/illustrations/projects/{project_id}/assets/");
-            let outcome = if !project_id.starts_with("project-")
+            let quality_error = if provider == "trellis" {
+                trellis_settings.validate().err().map(|error| error.to_string()).or_else(|| {
+                    (u32::try_from(seed_value).is_err()).then(|| "TRELLIS seed must fit in 32 bits".to_string())
+                })
+            } else {
+                None
+            };
+            let outcome = if let Some(error) = quality_error {
+                Err(error)
+            } else if !project_id.starts_with("project-")
                 || !project_id["project-".len()..].chars().all(|c| c.is_ascii_digit())
                 || !image_uri.starts_with(&prefix)
                 || image_uri.contains("..")
@@ -786,6 +805,7 @@ pub(crate) async fn run_decl_service_action(
                 let image_path = logical_downloads_path(&image_uri);
                 let project_for_conversion = project_id.clone();
                 let provider_for_conversion = provider.clone();
+                let settings_for_conversion = (provider == "trellis").then_some(trellis_settings);
                 let conversion = tokio::task::spawn_blocking(move || {
                     use aos_scene::{MeshAssistBackendId, MeshAssistRequest, SceneGraph, SceneNode};
                     let project_root = crate::os_open::aos_home()
@@ -814,6 +834,7 @@ pub(crate) async fn run_decl_service_action(
                             backend: MeshAssistBackendId::Neural,
                             image_path: Some(image_path.to_string_lossy().into_owned()),
                             geometry_res: Some(geometry_res as u32),
+                            trellis_settings: settings_for_conversion,
                         };
                         let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
                         if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
@@ -835,10 +856,10 @@ pub(crate) async fn run_decl_service_action(
                     let uri = format!(
                         "/documents/illustrations/projects/{project_for_conversion}/assets/{file_name}"
                     );
-                    Ok((uri, prompt, geometry_res, provenance))
+                    Ok((uri, prompt, geometry_res, provenance, settings_for_conversion))
                 }).await;
                 match conversion {
-                    Ok(Ok((uri, prompt, geometry_res, provenance))) => invoke_module_tool_quiet(
+                    Ok(Ok((uri, prompt, geometry_res, provenance, trellis_settings))) => invoke_module_tool_quiet(
                         bus,
                         module,
                         "illustration.asset.register",
@@ -848,7 +869,18 @@ pub(crate) async fn run_decl_service_action(
                             "kind": "mesh",
                             "uri": uri,
                             "prompt": prompt,
-                            "metadata": { "provenance": provenance, "source_image": image_uri, "geometry_resolution": if provider == "trellis" { Some(geometry_res) } else { None } },
+                            "metadata": {
+                                "provenance": provenance,
+                                "source_image": image_uri,
+                                "geometry_resolution": if provider == "trellis" { Some(geometry_res) } else { None },
+                                "trellis_settings": trellis_settings.map(|settings| serde_json::json!({
+                                    "steps": settings.steps,
+                                    "structure_guidance": settings.structure_guidance,
+                                    "shape_guidance": settings.shape_guidance,
+                                    "seed": settings.seed,
+                                    "atlas_resolution": if settings.atlas_resolution == 0 { serde_json::json!("auto") } else { serde_json::json!(settings.atlas_resolution) }
+                                }))
+                            },
                         }),
                     ).await,
                     Ok(Err(error)) => Err(error),
@@ -2462,6 +2494,7 @@ fn run_mesh_assist(
         backend,
         image_path,
         geometry_res: None,
+        trellis_settings: None,
     };
 
     let applied = match mesh_assist(&mut scene, &req) {

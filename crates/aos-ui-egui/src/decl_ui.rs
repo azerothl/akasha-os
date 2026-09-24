@@ -3839,6 +3839,46 @@ fn render_library_details(
         if provider == "trellis" && geometry_res == 1024 {
             ui.weak(if language.starts_with("fr") { "Plus lent et plus lourd ; utile si le GLB 512 manque de détail." } else { "Slower and larger; use when the 512 GLB lacks detail." });
         }
+        let steps_key = ui.id().with(("trellis-steps", project_id, id));
+        let structure_key = ui.id().with(("trellis-structure-guidance", project_id, id));
+        let shape_key = ui.id().with(("trellis-shape-guidance", project_id, id));
+        let seed_key = ui.id().with(("trellis-seed", project_id, id));
+        let atlas_key = ui.id().with(("trellis-atlas", project_id, id));
+        let mut steps = ui.ctx().data(|data| data.get_temp::<u32>(steps_key)).unwrap_or(12);
+        let mut structure_guidance = ui.ctx().data(|data| data.get_temp::<f32>(structure_key)).unwrap_or(7.5);
+        let mut shape_guidance = ui.ctx().data(|data| data.get_temp::<f32>(shape_key)).unwrap_or(7.5);
+        let mut seed = ui.ctx().data(|data| data.get_temp::<u32>(seed_key)).unwrap_or(42);
+        let mut atlas_resolution = ui.ctx().data(|data| data.get_temp::<u32>(atlas_key)).unwrap_or(0);
+        if provider == "trellis" {
+            ui.collapsing(library_label(doc, language, "library_trellis_advanced"), |ui| {
+                ui.label(library_label(doc, language, "library_trellis_steps"));
+                ui.add(egui::Slider::new(&mut steps, 1..=50));
+                ui.label(library_label(doc, language, "library_trellis_structure_guidance"));
+                ui.add(egui::Slider::new(&mut structure_guidance, 1.0..=10.0).step_by(0.1));
+                ui.label(library_label(doc, language, "library_trellis_shape_guidance"));
+                ui.add(egui::Slider::new(&mut shape_guidance, 1.0..=10.0).step_by(0.1));
+                ui.label(library_label(doc, language, "library_trellis_atlas"));
+                ui.horizontal_wrapped(|ui| {
+                    ui.selectable_value(&mut atlas_resolution, 0, library_label(doc, language, "library_trellis_atlas_auto"));
+                    ui.selectable_value(&mut atlas_resolution, 1024, "1024");
+                    ui.selectable_value(&mut atlas_resolution, 2048, "2048");
+                    ui.selectable_value(&mut atlas_resolution, 4096, "4096");
+                });
+                ui.horizontal(|ui| {
+                    ui.label(library_label(doc, language, "library_trellis_seed"));
+                    ui.add(egui::DragValue::new(&mut seed).range(0..=u32::MAX));
+                });
+                ui.small(library_label(doc, language, "library_trellis_steps_hint"));
+                ui.small(library_label(doc, language, "library_trellis_seed_hint"));
+            });
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(steps_key, steps);
+                data.insert_temp(structure_key, structure_guidance);
+                data.insert_temp(shape_key, shape_guidance);
+                data.insert_temp(seed_key, seed);
+                data.insert_temp(atlas_key, atlas_resolution);
+            });
+        }
         if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
             let label = if provider == "triposr" { "library_convert_triposr" } else { "library_convert" };
             if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, label))).clicked() {
@@ -3848,6 +3888,11 @@ fn render_library_details(
                 state.insert("library_image_prompt".into(), asset.get("prompt").cloned().unwrap_or(Value::String(String::new())));
                 state.insert("library_trellis_resolution".into(), serde_json::json!(geometry_res));
                 state.insert("library_mesh_provider".into(), Value::String(provider));
+                state.insert("library_trellis_steps".into(), serde_json::json!(steps));
+                state.insert("library_trellis_structure_guidance".into(), serde_json::json!(structure_guidance));
+                state.insert("library_trellis_shape_guidance".into(), serde_json::json!(shape_guidance));
+                state.insert("library_trellis_seed".into(), serde_json::json!(seed));
+                state.insert("library_trellis_atlas_resolution".into(), serde_json::json!(atlas_resolution));
                 queue_service_action(actions, action, &state, &HashMap::new(), doc);
             }
         }
@@ -4048,6 +4093,24 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
     }
     if let Some(seed) = metadata.get("seed").and_then(Value::as_i64) {
         ui.label(format!("Seed: {seed}"));
+    }
+    if let Some(settings) = metadata.get("trellis_settings").and_then(Value::as_object) {
+        ui.separator();
+        ui.strong(if fr { "Réglages TRELLIS utilisés" } else { "TRELLIS settings used" });
+        if let Some(resolution) = metadata.get("geometry_resolution").and_then(Value::as_u64) {
+            ui.label(format!("{}: {resolution}", if fr { "Résolution de géométrie" } else { "Geometry resolution" }));
+        }
+        for (label, key) in [
+            (if fr { "Étapes" } else { "Steps" }, "steps"),
+            ("GSS", "structure_guidance"),
+            ("GSH", "shape_guidance"),
+            (if fr { "Graine" } else { "Seed" }, "seed"),
+            (if fr { "Atlas de texture" } else { "Texture atlas" }, "atlas_resolution"),
+        ] {
+            if let Some(value) = settings.get(key) {
+                ui.label(format!("{label}: {}", value_display(value)));
+            }
+        }
     }
 }
 

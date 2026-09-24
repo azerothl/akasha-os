@@ -35,6 +35,7 @@ fn main() {
             backend: MeshAssistBackendId::Stub,
             image_path: None,
             geometry_res: None,
+            trellis_settings: None,
         },
     )
     .expect("crate assist");
@@ -47,6 +48,7 @@ fn main() {
             backend: MeshAssistBackendId::Stub,
             image_path: None,
             geometry_res: None,
+            trellis_settings: None,
         },
     )
     .expect("column assist");
@@ -95,6 +97,7 @@ fn main() {
             backend: MeshAssistBackendId::Neural,
             image_path: None,
             geometry_res: None,
+            trellis_settings: None,
         },
     )
     .expect("neural mock MeshAsset");

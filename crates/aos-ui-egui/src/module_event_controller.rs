@@ -725,6 +725,18 @@ fn illustration_trellis_conversion_error(fr: bool, raw: &str) -> String {
         }
         .into();
     }
+    if lower.contains("--steps")
+        && (lower.contains("unknown option")
+            || lower.contains("unrecognized option")
+            || lower.contains("unknown argument"))
+    {
+        return if fr {
+            "Cette version du moteur TRELLIS ne prend pas en charge le réglage des étapes. Mettez à jour TRELLIS.cpp vers v0.8.0 ou ultérieur, ou configurez un runner plus récent, puis réessayez."
+        } else {
+            "This TRELLIS runtime does not support the steps setting. Update to TRELLIS.cpp v0.8.0 or newer, or configure a newer runner manually, then retry."
+        }
+        .into();
+    }
     if lower.contains("timed out") {
         return if fr { "TRELLIS a dépassé le délai de conversion. Réessayez avec une image plus simple ou vérifiez les diagnostics du moteur." }
         else { "TRELLIS exceeded the conversion time limit. Try a simpler image or inspect the runtime diagnostics." }.into();
@@ -976,6 +988,12 @@ mod tests {
         );
         assert!(runtime_error.contains("shape decode failed"));
         assert!(!runtime_error.contains("check the runtime, Q4/Q8 model and Vulkan GPU"));
+        assert!(illustration_library_error(
+            "en",
+            "library_convert_trellis",
+            "stderr_tail: unknown option --steps"
+        )
+        .contains("v0.8.0"));
         assert!(illustration_library_error("en", "library_convert_trellis", "__trellis_test_model__")
             .contains("demo model"));
         assert!(illustration_library_error("en", "library_import_glb", "Invalid GLB")
