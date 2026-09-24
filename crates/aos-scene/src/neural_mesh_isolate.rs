@@ -812,12 +812,11 @@ fn apply_vk_device_pin(env: &mut HashMap<String, String>) {
             return;
         }
     }
-    if env.contains_key("GGML_VK_VISIBLE_DEVICES") {
-        return;
-    }
-    #[cfg(windows)]
-    if let Some(gpu) = resolve_neural_mesh_gpu_index() {
-        env.insert("GGML_VK_VISIBLE_DEVICES".into(), gpu.to_string());
+    if !env.contains_key("GGML_VK_VISIBLE_DEVICES") {
+        #[cfg(windows)]
+        if let Some(gpu) = resolve_neural_mesh_gpu_index() {
+            env.insert("GGML_VK_VISIBLE_DEVICES".into(), gpu.to_string());
+        }
     }
 }
 
