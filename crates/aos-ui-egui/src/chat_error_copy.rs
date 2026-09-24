@@ -130,8 +130,28 @@ pub(crate) fn is_tasks_quarantine_error(msg: &str) -> bool {
     lower.contains("tasks") && (lower.contains("quarantaine") || lower.contains("quarantined"))
 }
 
+fn tasks_open_install_error_signals(lower: &str) -> bool {
+    lower.contains("catalogue")
+        || lower.contains("hash")
+        || lower.contains("install")
+        || lower.contains("badrequest")
+        || lower.contains(".aospkg")
+        || lower.contains("ui déclarative invalide")
+        || lower.contains("decluiinvalid")
+        || lower.contains("declarative_ui")
+        || lower.contains("missing field")
+        || lower.contains("type must be declarative_ui")
+}
+
 /// True when a Tasks open/install failure should use locked human chrome copy.
 pub(crate) fn is_tasks_open_or_install_error(msg: &str) -> bool {
+    is_tasks_open_or_install_error_for_module(msg, false)
+}
+
+/// Module-aware Tasks open/install detection. When `module_is_tasks`, DeclUI
+/// failures map to Tasks chrome even if the wire message omits the module id
+/// (illustration-studio and others share the same DeclUI error phrasing).
+fn is_tasks_open_or_install_error_for_module(msg: &str, module_is_tasks: bool) -> bool {
     if is_tasks_quarantine_error(msg) {
         return false;
     }
@@ -139,19 +159,10 @@ pub(crate) fn is_tasks_open_or_install_error(msg: &str) -> bool {
     if lower.contains("__tasks_open_failed__") {
         return true;
     }
-    // Do not treat generic DeclUI failures as Tasks — other modules (e.g.
-    // illustration-studio) also surface "UI déclarative invalide".
-    lower.contains("tasks")
-        && (lower.contains("catalogue")
-            || lower.contains("hash")
-            || lower.contains("install")
-            || lower.contains("badrequest")
-            || lower.contains(".aospkg")
-            || lower.contains("ui déclarative invalide")
-            || lower.contains("decluiinvalid")
-            || lower.contains("declarative_ui")
-            || lower.contains("missing field")
-            || lower.contains("type must be declarative_ui"))
+    if !tasks_open_install_error_signals(&lower) {
+        return false;
+    }
+    module_is_tasks || lower.contains("tasks")
 }
 
 /// True when a catalogue/module install failure targets Create.
@@ -490,7 +501,7 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
             },
         );
     }
-    if module == "tasks" && is_tasks_open_or_install_error(stripped) {
+    if module == "tasks" && is_tasks_open_or_install_error_for_module(stripped, true) {
         return format_chat_error(
             t,
             &ChatErrorClassified {
@@ -752,6 +763,14 @@ mod tests {
         assert!(out.contains(en.chat_error_tasks_open));
         assert!(!out.contains("BadRequest"));
         assert!(!out.contains("root"));
+    }
+
+    #[test]
+    fn declui_failure_without_tasks_token_not_mapped_for_other_modules() {
+        let en = crate::i18n::strings("en");
+        let raw = "statut BadRequest: UI déclarative invalide: type must be declarative_ui, got missing field `root` at line 6 column 1";
+        let out = user_visible_module_error(&en, "illustration-studio", raw);
+        assert!(!out.contains(en.chat_error_tasks_open));
     }
 
     #[test]
