@@ -1377,12 +1377,22 @@ mod tests {
         let workspaces = studio.iter().find(|w| w.kind == "tabs").expect("workspaces");
         assert_eq!(
             workspaces.items.as_deref(),
-            Some(&["start".into(), "scene3d".into(), "illustration".into(), "comic".into(), "library".into(), "final".into()][..])
+            Some(
+                &[
+                    "start".into(),
+                    "scene3d".into(),
+                    "illustration".into(),
+                    "beauty".into(),
+                    "comic".into(),
+                    "library".into(),
+                    "final".into()
+                ][..]
+            )
         );
         let tabs = workspaces.tabs.as_ref().expect("workspace tabs");
-        assert_eq!(tabs.len(), 6);
-        assert!(tabs[4].content.as_ref().is_some_and(|w| w.kind == "split"));
-        for index in [1, 2, 3, 5] {
+        assert_eq!(tabs.len(), 7);
+        assert!(tabs[5].content.as_ref().is_some_and(|w| w.kind == "split"));
+        for index in [1, 2, 3, 4, 6] {
             assert_eq!(tabs[index].content.as_ref().map(|w| w.kind.as_str()), Some("illustration_work_split"));
         }
         fn count_stages(widget: &DeclUiWidget) -> usize {
@@ -1390,7 +1400,7 @@ mod tests {
                 + widget.children.as_ref().map_or(0, |children| children.iter().map(count_stages).sum())
                 + widget.tabs.as_ref().map_or(0, |tabs| tabs.iter().filter_map(|tab| tab.content.as_deref()).map(count_stages).sum())
         }
-        assert_eq!(count_stages(&doc.root), 4);
+        assert_eq!(count_stages(&doc.root), 5);
         for action in &doc.actions {
             if matches!(action.service.as_deref(), Some("render.submit" | "comic.render")) {
                 assert_eq!(action.input.as_ref().and_then(|input| input.get("project_id")).and_then(Value::as_str), Some("$local.project_id"));

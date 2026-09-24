@@ -764,7 +764,10 @@ pub(crate) async fn run_decl_service_action(
         "illustration.library.convert" => {
             let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
             let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
-            let prompt = input.get("prompt").and_then(Value::as_str).unwrap_or("").to_string();
+            let prompt = library_convert_mesh_assist_prompt(
+                input.get("prompt").and_then(Value::as_str).unwrap_or(""),
+                &image_uri,
+            );
             let prefix = format!("/documents/illustrations/projects/{project_id}/assets/");
             let outcome = if !project_id.starts_with("project-")
                 || !project_id["project-".len()..].chars().all(|c| c.is_ascii_digit())
@@ -4292,6 +4295,26 @@ fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, Str
     ))
 }
 
+/// Mesh assist still requires a non-empty label; image→GLB uses the image as conditioner.
+fn library_convert_mesh_assist_prompt(prompt: &str, image_uri: &str) -> String {
+    let trimmed = prompt.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_owned();
+    }
+    let image_path = std::path::Path::new(image_uri);
+    if image_path.extension().is_some() {
+        if let Some(stem) = image_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            return stem.to_owned();
+        }
+    }
+    "image".to_owned()
+}
+
 fn logical_downloads_path(logical: &str) -> PathBuf {
     let rel = logical.trim_start_matches('/');
     crate::os_open::aos_home()
@@ -4493,7 +4516,10 @@ pub(crate) async fn cancel_decl_job(
 
 #[cfg(test)]
 mod create_regression_tests {
-    use super::{apply_create_presets, normalize_create_options, parse_composition_blocks};
+    use super::{
+        apply_create_presets, library_convert_mesh_assist_prompt, normalize_create_options,
+        parse_composition_blocks,
+    };
     use aos_proto::MediaImageGenerateRequest;
 
     #[test]
@@ -4551,6 +4577,27 @@ mod create_regression_tests {
         assert_eq!(blocks[0].id, 7);
         assert_eq!(blocks[0].desc, "a red fox");
         assert!((blocks[0].w - 0.4).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn library_convert_uses_image_stem_when_prompt_blank() {
+        assert_eq!(
+            library_convert_mesh_assist_prompt(
+                "  ",
+                "/documents/illustrations/projects/project-1/assets/generated-42.png",
+            ),
+            "generated-42"
+        );
+        assert_eq!(
+            library_convert_mesh_assist_prompt("", "/documents/x/assets/foo.png"),
+            "foo"
+        );
+        assert_eq!(library_convert_mesh_assist_prompt("", "/documents/x/assets/"), "image");
+        assert_eq!(library_convert_mesh_assist_prompt("", ""), "image");
+        assert_eq!(
+            library_convert_mesh_assist_prompt("  keep me  ", "/documents/x/a.png"),
+            "keep me"
+        );
     }
 
     #[test]
