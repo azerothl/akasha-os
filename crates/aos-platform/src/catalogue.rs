@@ -590,9 +590,7 @@ pub fn bundled_install_approved_caps(
     if approved.is_some() {
         return approved;
     }
-    let Some(cat) = bundled else {
-        return None;
-    };
+    let cat = bundled?;
     if !cat.inner.signature_ok || cat.entry(&entry.name).is_none() {
         return None;
     }
