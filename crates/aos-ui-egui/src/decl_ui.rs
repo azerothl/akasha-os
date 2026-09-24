@@ -190,16 +190,30 @@ impl DeclUiPanelState {
             if self.local_state.get("project_id") == result.get("project_id") {
                 let asset = &result["asset"];
                 if asset.get("kind").and_then(Value::as_str) == Some("image") {
-                    for (key, field) in [
-                        ("library_image_uri", "uri"),
-                        ("library_image_name", "name"),
-                        ("library_image_prompt", "prompt"),
-                    ] {
+                    for (key, field) in [("library_image_uri", "uri"), ("library_image_name", "name")] {
                         self.local_state.insert(
                             key.into(),
                             asset.get(field).cloned().unwrap_or(Value::String(String::new())),
                         );
                     }
+                    let prompt = asset
+                        .get("prompt")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| {
+                            asset
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                        })
+                        .map(str::to_owned)
+                        .unwrap_or_default();
+                    self.local_state.insert(
+                        "library_image_prompt".into(),
+                        Value::String(prompt),
+                    );
                 }
             }
         } else if tool == "illustration.asset.add" {
