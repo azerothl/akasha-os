@@ -7,12 +7,14 @@
 
 use crate::module_rt::HostCallCtx;
 use aos_scene::{
-    apply_batch, apply_one, require_batch_caps, require_edit_caps, AgentEditOp, EditActorKind,
-    EditSnapshot, LockKind, LockScope, SemanticLock, ASSET_ILLUSTRATION_READ_CAP,
-    DEFAULT_SCENE_YAML_PATH, SCENE_APPLY_SERVICE, SCENE_CAMERA_SERVICE, SCENE_COMPOSE_CAP,
-    SCENE_COMPOSE_SERVICE, SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LIGHT_SERVICE,
-    SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP, SCENE_LOCK_SERVICE, SCENE_POSE_CAP, SCENE_POSE_SERVICE,
-    SCENE_SELECT_SERVICE, SCENE_TRS_SERVICE, SCENE_UNLOCK_SERVICE,
+    apply_batch, apply_one, default_mesh_search_roots, load_project_yaml, require_batch_caps,
+    require_edit_caps, resolve_mesh_uri, save_project_yaml, AgentEditOp, EditActorKind,
+    EditSnapshot, LockKind, LockScope, NodeKind, ProjectFile, SceneGraph, SemanticLock,
+    ASSET_ILLUSTRATION_READ_CAP, DEFAULT_SCENE_YAML_PATH,
+    SCENE_APPLY_SERVICE, SCENE_CAMERA_SERVICE, SCENE_COMPOSE_CAP, SCENE_COMPOSE_SERVICE,
+    SCENE_EDIT_CAP, SCENE_GET_SERVICE, SCENE_LIGHT_SERVICE, SCENE_LOCKS_SERVICE, SCENE_LOCK_CAP,
+    SCENE_LOCK_SERVICE, SCENE_POSE_CAP, SCENE_POSE_SERVICE, SCENE_SELECT_SERVICE,
+    SCENE_TRS_SERVICE, SCENE_UNLOCK_SERVICE,
 };
 use serde_json::{json, Value};
 
@@ -37,6 +39,179 @@ fn load_snap(args: &Value) -> Result<EditSnapshot, String> {
         .and_then(|v| v.as_str())
         .unwrap_or("");
     EditSnapshot::from_yaml(yaml).map_err(|e| e.to_string())
+}
+
+fn load_project_from_args(args: &Value) -> Result<ProjectFile, String> {
+    if let Some(yaml) = args.get("scene_yaml").and_then(|v| v.as_str()) {
+        if yaml.trim().is_empty() {
+            Ok(ProjectFile::new(SceneGraph::demo_scene()))
+        } else {
+            load_project_yaml(yaml).map_err(|e| format!("scene_yaml: {e}"))
+        }
+    } else {
+        Ok(ProjectFile::new(SceneGraph::demo_scene()))
+    }
+}
+
+fn scene_diagnostics(project: &ProjectFile) -> Value {
+    let roots = default_mesh_search_roots();
+    let search: Vec<_> = roots.iter().map(|path| path.as_path()).collect();
+    let mut missing = Vec::new();
+    let mut mesh_count = 0;
+    for node in project.scene.nodes.values() {
+        if node.kind == NodeKind::MeshAsset {
+            mesh_count += 1;
+            if node
+                .mesh_uri
+                .as_deref()
+                .and_then(|uri| resolve_mesh_uri(uri, &search))
+                .is_none()
+            {
+                missing.push(node.name.clone());
+            }
+        }
+    }
+    missing.sort();
+    let summary = format!(
+        "{} nodes · {} imported meshes · {} effects · {} shots · {} missing assets{}",
+        project.scene.nodes.len(),
+        mesh_count,
+        project.scene.effects.len(),
+        project
+            .storyboard
+            .as_ref()
+            .map(|s| s.frames.len())
+            .unwrap_or(0),
+        missing.len(),
+        if missing.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", missing.join(", "))
+        }
+    );
+    json!({"diagnostics": summary})
+}
+
+fn scene_history_op(args: &Value) -> Result<Value, String> {
+    let mut project = load_project_from_args(args)?;
+    let operation = args.get("op").and_then(Value::as_str).unwrap_or("");
+    let label = args.get("name").and_then(Value::as_str).unwrap_or("");
+    let mut history = project.history.take().unwrap_or_default();
+    let mut version_id = None;
+    match operation {
+        "save_version" => {
+            version_id = Some(history.save_version(&project.scene, label).map_err(|e| e.to_string())?);
+        }
+        "restore_version" => {
+            let id = args.get("version_id").and_then(Value::as_f64).unwrap_or(0.0);
+            if !id.is_finite() || id < 1.0 || id.fract() != 0.0 {
+                return Err("invalid version id".into());
+            }
+            project.scene = history
+                .restore_version(id as u32)
+                .map_err(|e| e.to_string())?;
+        }
+        "save_variant" => history
+            .save_variant(&project.scene, label)
+            .map_err(|e| e.to_string())?,
+        "apply_variant" => {
+            project.scene = history.apply_variant(label).map_err(|e| e.to_string())?;
+        }
+        _ => return Err("unknown history operation".into()),
+    }
+    if project
+        .animation
+        .as_ref()
+        .is_some_and(|a| a.validate(&project.scene).is_err())
+    {
+        project.animation = None;
+    }
+    if project
+        .selected_id
+        .as_ref()
+        .is_some_and(|id| !project.scene.nodes.contains_key(id))
+    {
+        project.selected_id = None;
+    }
+    let summary = format!(
+        "{} versions · {} variants{}",
+        history.versions.len(),
+        history.variants.len(),
+        history
+            .active_variant
+            .as_ref()
+            .map(|name| format!(" · active: {name}"))
+            .unwrap_or_default()
+    );
+    project.history = Some(history);
+    let yaml = save_project_yaml(&project).map_err(|e| e.to_string())?;
+    Ok(json!({
+        "scene_yaml": yaml,
+        "history_summary": summary,
+        "version_id": version_id
+    }))
+}
+
+fn scene_animation_op(args: &Value) -> Result<Value, String> {
+    let operation = args.get("op").and_then(Value::as_str).unwrap_or("");
+    let root = args
+        .get("root_id")
+        .and_then(Value::as_str)
+        .unwrap_or("humanoid");
+    if operation == "play" {
+        return Err("scene.animation play requires DeclUI runtime".into());
+    }
+    let mut project = load_project_from_args(args)?;
+    let mut animation = project.animation.take().unwrap_or_default();
+    match operation {
+        "register" => animation
+            .register_rig(&project.scene, root)
+            .map_err(|e| e.to_string())?,
+        "save_pose" => {
+            let name = args.get("name").and_then(Value::as_str).unwrap_or("");
+            animation
+                .save_pose(&project.scene, root, name)
+                .map_err(|e| e.to_string())?;
+        }
+        "apply_pose" => {
+            let name = args.get("name").and_then(Value::as_str).unwrap_or("");
+            animation
+                .apply_pose(&mut project.scene, root, name)
+                .map_err(|e| e.to_string())?;
+        }
+        "keyframe" => {
+            let time_ms = args.get("time_ms").and_then(Value::as_f64).unwrap_or(0.0);
+            if !time_ms.is_finite() || !(0.0..=60_000.0).contains(&time_ms) {
+                return Err("time_ms must be 0..60000".into());
+            }
+            animation
+                .add_keyframe(&project.scene, root, time_ms.round() as u32)
+                .map_err(|e| e.to_string())?;
+        }
+        "seek" => {
+            let time_ms = args.get("time_ms").and_then(Value::as_f64).unwrap_or(0.0);
+            if !time_ms.is_finite() || !(0.0..=60_000.0).contains(&time_ms) {
+                return Err("time_ms must be 0..60000".into());
+            }
+            animation
+                .seek(&mut project.scene, time_ms.round() as u32)
+                .map_err(|e| e.to_string())?;
+        }
+        "stop" => {}
+        _ => return Err("unknown animation operation".into()),
+    }
+    project.animation = Some(animation.clone());
+    let yaml = save_project_yaml(&project).map_err(|e| e.to_string())?;
+    Ok(json!({
+        "scene_yaml": yaml,
+        "animation_summary": format!(
+            "{} rigs · {} poses · {} keyframes · {} ms",
+            animation.rigs.len(),
+            animation.poses.len(),
+            animation.keyframes.len(),
+            animation.current_ms
+        ),
+    }))
 }
 
 fn parse_ops(args: &Value) -> Result<Vec<AgentEditOp>, String> {
@@ -378,6 +553,19 @@ pub fn handle_scene_host_call(
             apply_one(&mut snap, &op, &ctx.actor, actor_kind(ctx)).map_err(|e| e.to_string())?;
             Ok(Some(snap.result_json().map_err(|e| e.to_string())?))
         }
+        "scene.diagnostics" => {
+            require_any_cap(ctx, &[SCENE_EDIT_CAP, "fs.read:/documents/illustrations/**"])?;
+            let project = load_project_from_args(args)?;
+            Ok(Some(scene_diagnostics(&project)))
+        }
+        "scene.history" => {
+            require_any_cap(ctx, &[SCENE_EDIT_CAP])?;
+            Ok(Some(scene_history_op(args)?))
+        }
+        "scene.animation" => {
+            require_any_cap(ctx, &[SCENE_POSE_CAP])?;
+            Ok(Some(scene_animation_op(args)?))
+        }
         other if other.starts_with("scene.") => {
             Err(format!("service scene inconnu: {other} (path défaut {DEFAULT_SCENE_YAML_PATH})"))
         }
@@ -425,6 +613,17 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("blocked") || err.contains("lock") || err.contains("box"));
+    }
+
+    #[test]
+    fn diagnostics_reports_node_counts() {
+        let yaml = save_project_yaml(&ProjectFile::new(SceneGraph::demo_scene())).unwrap();
+        let args = json!({ "scene_yaml": yaml });
+        let out = handle_scene_host_call("scene.diagnostics", &ctx(&[SCENE_EDIT_CAP]), &args)
+            .unwrap()
+            .unwrap();
+        let summary = out["diagnostics"].as_str().unwrap_or("");
+        assert!(summary.contains("nodes"));
     }
 
     #[test]
