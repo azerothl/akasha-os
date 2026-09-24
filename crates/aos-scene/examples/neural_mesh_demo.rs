@@ -34,6 +34,7 @@ fn main() {
             prefix: "assist_".into(),
             backend: MeshAssistBackendId::Stub,
             image_path: None,
+            geometry_res: None,
         },
     )
     .expect("crate assist");
@@ -45,6 +46,7 @@ fn main() {
             prefix: "assist2_".into(),
             backend: MeshAssistBackendId::Stub,
             image_path: None,
+            geometry_res: None,
         },
     )
     .expect("column assist");
@@ -92,6 +94,7 @@ fn main() {
             prefix: "neural_".into(),
             backend: MeshAssistBackendId::Neural,
             image_path: None,
+            geometry_res: None,
         },
     )
     .expect("neural mock MeshAsset");
