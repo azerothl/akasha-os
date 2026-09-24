@@ -425,6 +425,7 @@ pub(crate) fn on_ui_service_done(
                         panel.local_state.insert("library_selected_project_id".into(), result.get("project_id").cloned().unwrap_or(Value::Null));
                         panel.local_state.insert("library_section".into(), Value::String("assets".into()));
                         panel.local_state.insert("library_error".into(), Value::String(String::new()));
+                        panel.local_state.insert("library_error_action".into(), Value::String(String::new()));
                         let image = asset.get("kind").and_then(Value::as_str) == Some("image");
                         panel.local_state.insert("library_image_uri".into(), Value::String(
                             if image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()
@@ -652,6 +653,7 @@ pub(crate) fn on_ui_service_done(
                     panel.local_state.insert("library_error".into(), Value::String(
                         illustration_library_error(&language, &action_id, raw)
                     ));
+                    panel.local_state.insert("library_error_action".into(), Value::String(action_id.clone()));
                 }
                 return;
             }

@@ -210,7 +210,7 @@ impl DeclUiPanelState {
             }
         } else if tool == "illustration.project.close" && result.get("closed") == Some(&Value::Bool(true)) {
             self.scene3d_viewports.clear();
-            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_job_project_id", "library_job_id"] {
+            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_error_action", "library_job_project_id", "library_job_id"] {
                 self.local_state.insert(key.into(), Value::String(String::new()));
             }
             self.local_state.insert("library_section".into(), Value::String("assets".into()));
@@ -241,6 +241,7 @@ impl DeclUiPanelState {
             ("library_selected_asset_id", Value::String(String::new())),
             ("library_selected_project_id", Value::String(String::new())),
             ("library_error", Value::String(String::new())),
+            ("library_error_action", Value::String(String::new())),
             ("library_job_project_id", Value::String(String::new())),
             ("library_job_id", Value::String(String::new())),
             ("library_busy", Value::Bool(false)),
@@ -2130,6 +2131,7 @@ fn queue_service_action(
 ) {
     if action.id.starts_with("library_") {
         actions.local_patch.insert("library_error".into(), Value::String(String::new()));
+        actions.local_patch.insert("library_error_action".into(), Value::String(String::new()));
         if action.id != "library_generate_image" {
             actions.local_patch.insert("library_busy".into(), Value::Bool(true));
         } else {
@@ -3491,6 +3493,7 @@ fn render_illustration_asset_library(
         local_state.get("library_selected_project_id").and_then(Value::as_str).unwrap_or(""),
         selected_id,
     ));
+    let conversion_error = library_conversion_error(local_state);
     let wide = ui.available_width() >= 760.0;
     let height = ui.available_height().max(360.0);
     if wide {
@@ -3512,7 +3515,7 @@ fn render_illustration_asset_library(
                 |ui| {
                     ui.set_min_height(height);
                     egui::ScrollArea::vertical().id_salt("library-inspector").show(ui, |ui| {
-                        render_library_details(ui, doc, language, selected, project_id, pending_invoke, actions, tool_schemas);
+                        render_library_details(ui, doc, language, selected, project_id, conversion_error, pending_invoke, actions, tool_schemas);
                     });
                 },
             );
@@ -3525,9 +3528,21 @@ fn render_illustration_asset_library(
         );
         ui.separator();
         egui::ScrollArea::vertical().id_salt("library-inspector-compact").show(ui, |ui| {
-            render_library_details(ui, doc, language, selected, project_id, pending_invoke, actions, tool_schemas);
+            render_library_details(ui, doc, language, selected, project_id, conversion_error, pending_invoke, actions, tool_schemas);
         });
     }
+}
+
+fn library_conversion_error(local_state: &HashMap<String, Value>) -> Option<&str> {
+    if local_state.get("library_error_action").and_then(Value::as_str)
+        != Some("library_convert_trellis")
+    {
+        return None;
+    }
+    local_state
+        .get("library_error")
+        .and_then(Value::as_str)
+        .filter(|message| !message.is_empty())
 }
 
 fn library_image_detail_texture(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {
@@ -3629,6 +3644,8 @@ fn render_library_grid(
                 if clicked.clicked() || (clicked.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Space))) {
                     actions.local_patch.insert("library_selected_asset_id".into(), Value::String(id.into()));
                     actions.local_patch.insert("library_selected_project_id".into(), Value::String(project_id.into()));
+                    actions.local_patch.insert("library_error".into(), Value::String(String::new()));
+                    actions.local_patch.insert("library_error_action".into(), Value::String(String::new()));
                     actions.local_patch.insert("library_image_uri".into(), Value::String(if is_image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
                     actions.local_patch.insert("library_image_prompt".into(), Value::String(if is_image { asset.get("prompt").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
                 }
@@ -3647,6 +3664,7 @@ fn render_library_details(
     language: &str,
     selected: Option<&Value>,
     project_id: &str,
+    conversion_error: Option<&str>,
     pending_invoke: bool,
     actions: &mut DeclUiActions,
     tool_schemas: &HashMap<String, Value>,
@@ -3710,6 +3728,9 @@ fn render_library_details(
                 state.insert("library_image_prompt".into(), asset.get("prompt").cloned().unwrap_or(Value::String(String::new())));
                 queue_service_action(actions, action, &state, &HashMap::new(), doc);
             }
+        }
+        if let Some(message) = conversion_error {
+            ui.colored_label(egui::Color32::from_rgb(240, 145, 130), message);
         }
     } else if kind == "mesh"
         && ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_add_to_scene"))).clicked()
@@ -3910,8 +3931,9 @@ fn value_display(v: &Value) -> String {
 
 #[cfg(test)]
 mod illustration_library_tests {
-    use super::library_selected_asset;
+    use super::{library_conversion_error, library_selected_asset};
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn selection_is_scoped_to_the_active_project() {
@@ -3924,6 +3946,16 @@ mod illustration_library_tests {
             Some(&assets[1])
         );
         assert!(library_selected_asset(&assets, "project-2", "project-1", "asset-1").is_none());
+    }
+
+    #[test]
+    fn trellis_error_is_attached_only_to_its_conversion_action() {
+        let mut state = HashMap::new();
+        state.insert("library_error".into(), json!("Vulkan unavailable"));
+        state.insert("library_error_action".into(), json!("library_import_glb"));
+        assert_eq!(library_conversion_error(&state), None);
+        state.insert("library_error_action".into(), json!("library_convert_trellis"));
+        assert_eq!(library_conversion_error(&state), Some("Vulkan unavailable"));
     }
 }
 

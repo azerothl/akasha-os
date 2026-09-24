@@ -940,6 +940,13 @@ fn ensure_layout(home: &Path) -> Vec<String> {
         }
     }
 
+    // Illustration Studio is installed on demand from the bundled catalogue.
+    // Keep an existing install in sync with the packaged UI as well as the WASM:
+    // a UI-only update can keep the same module version and manifest hash.
+    if sync_installed_illustration_studio(home) {
+        synced.push("illustration-studio".into());
+    }
+
     // Runtime scripté ext-rt (template pour modules agent) — package partagé.
     let extrt_share = home.join("share/modules/ext-rt.aospkg");
     let extrt_repo = home.join("modules/ext-rt.aospkg");
@@ -961,6 +968,121 @@ fn ensure_layout(home: &Path) -> Vec<String> {
         let _ = fs::write(onboard, serde_json::to_string_pretty(&state).unwrap());
     }
     synced
+}
+
+fn sync_installed_illustration_studio(home: &Path) -> bool {
+    const NAME: &str = "illustration-studio";
+    let modules = home.join("var/modules");
+    let registry = module_registry::load_registry(&modules.join("registry.yaml"));
+    if registry.user_removed(NAME) || !registry.installed.iter().any(|entry| entry.name == NAME) {
+        return false;
+    }
+    let share = home.join("share/modules/illustration-studio.aospkg");
+    let installed = modules.join(NAME);
+    if !bootstrap::should_upgrade_packaged_module(&share, &installed) {
+        return false;
+    }
+    bootstrap::sync_packaged_module(&share, &installed)
+}
+
+#[cfg(test)]
+mod illustration_sync_tests {
+    use super::sync_installed_illustration_studio;
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn fixture() -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!(
+            "aos-illustration-sync-{}-{stamp}",
+            std::process::id()
+        ));
+        for dir in [
+            "share/modules/illustration-studio.aospkg/ui",
+            "var/modules/illustration-studio/ui",
+        ] {
+            fs::create_dir_all(home.join(dir)).unwrap();
+        }
+        let manifest = "name: illustration-studio\nversion: 0.7.21\nhash: same\n";
+        for dir in [
+            "share/modules/illustration-studio.aospkg",
+            "var/modules/illustration-studio",
+        ] {
+            fs::write(home.join(dir).join("manifest.yaml"), manifest).unwrap();
+            fs::write(home.join(dir).join("module.wasm"), b"same wasm").unwrap();
+        }
+        fs::write(
+            home.join("share/modules/illustration-studio.aospkg/ui/index.json"),
+            "new menu",
+        )
+        .unwrap();
+        fs::write(
+            home.join("var/modules/illustration-studio/ui/index.json"),
+            "old menu",
+        )
+        .unwrap();
+        home
+    }
+
+    #[test]
+    fn updates_an_installed_module_when_only_ui_changed() {
+        let home = fixture();
+        fs::write(
+            home.join("var/modules/registry.yaml"),
+            "installed:\n  - name: illustration-studio\n    granted_caps: []\nremoved: []\n",
+        )
+        .unwrap();
+        assert!(sync_installed_illustration_studio(&home));
+        assert_eq!(
+            fs::read_to_string(home.join("var/modules/illustration-studio/ui/index.json")).unwrap(),
+            "new menu"
+        );
+        assert!(!sync_installed_illustration_studio(&home));
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn does_not_install_a_module_the_user_removed() {
+        let home = fixture();
+        fs::write(
+            home.join("var/modules/registry.yaml"),
+            "installed: []\nremoved:\n  - name: illustration-studio\n    user_removed: true\n",
+        )
+        .unwrap();
+        assert!(!sync_installed_illustration_studio(&home));
+        assert_eq!(
+            fs::read_to_string(home.join("var/modules/illustration-studio/ui/index.json")).unwrap(),
+            "old menu"
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn does_not_replace_a_newer_installed_version() {
+        let home = fixture();
+        fs::write(
+            home.join("var/modules/registry.yaml"),
+            "installed:\n  - name: illustration-studio\n    granted_caps: []\nremoved: []\n",
+        )
+        .unwrap();
+        fs::write(
+            home.join("var/modules/illustration-studio/manifest.yaml"),
+            "name: illustration-studio\nversion: 0.7.22\nhash: same\n",
+        )
+        .unwrap();
+        assert!(!sync_installed_illustration_studio(&home));
+        assert_eq!(
+            fs::read_to_string(home.join("var/modules/illustration-studio/ui/index.json")).unwrap(),
+            "old menu"
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
 }
 
 /// Keep the signed local module index in lock-step with the bundled Preview
