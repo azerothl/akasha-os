@@ -322,6 +322,15 @@ fn neural_propose(
             neural_from_spawn(&pack_root, prompt, image_path, true)
         }
         NeuralMeshRunMode::Auto => {
+            // A requested image-to-3D conversion cannot use the fixture. Preserve
+            // the actual runner failure so the user can diagnose it.
+            if image_path.is_some_and(|path| !path.trim().is_empty()) {
+                return if status.ready_for_spawn {
+                    neural_from_spawn(&pack_root, prompt, image_path, true)
+                } else {
+                    Err(NeuralMeshError::BackendUnavailable)
+                };
+            }
             if status.ready_for_spawn {
                 match neural_from_spawn(&pack_root, prompt, image_path, false) {
                     Ok(p) => Ok(p),
@@ -888,6 +897,44 @@ mod tests {
             None => std::env::remove_var("AOS_NEURAL_MESH_WEIGHTS"),
         }
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn auto_image_conversion_reports_runner_error_instead_of_fixture() {
+        let _lock = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let previous_bin = std::env::var("AOS_NEURAL_MESH_BIN").ok();
+        let previous_weights = std::env::var("AOS_NEURAL_MESH_WEIGHTS").ok();
+        let _restore = EnvRestore::capture();
+        let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../share/illustration-neural-mesh-pack");
+        let weights = std::env::temp_dir().join(format!("aos-neural-auto-{}", std::process::id()));
+        std::fs::create_dir_all(&weights).unwrap();
+        std::fs::write(weights.join(".aos-weights-ready"), b"test").unwrap();
+        std::env::set_var("AOS_NEURAL_MESH_PACK", &pack);
+        std::env::set_var("AOS_NEURAL_MESH_BIN", std::env::current_exe().unwrap());
+        std::env::set_var("AOS_NEURAL_MESH_WEIGHTS", &weights);
+        std::env::set_var("AOS_NEURAL_MESH_MODE", "auto");
+
+        let error = propose_mesh_assist(&MeshAssistRequest {
+            prompt: "chair".into(),
+            backend: MeshAssistBackendId::Neural,
+            image_path: Some(weights.join("missing.png").to_string_lossy().into_owned()),
+            ..Default::default()
+        })
+        .unwrap_err();
+        assert!(matches!(error, NeuralMeshError::Validation(message) if message.contains("image_path not found")));
+
+        match previous_bin {
+            Some(value) => std::env::set_var("AOS_NEURAL_MESH_BIN", value),
+            None => std::env::remove_var("AOS_NEURAL_MESH_BIN"),
+        }
+        match previous_weights {
+            Some(value) => std::env::set_var("AOS_NEURAL_MESH_WEIGHTS", value),
+            None => std::env::remove_var("AOS_NEURAL_MESH_WEIGHTS"),
+        }
+        std::fs::remove_dir_all(weights).unwrap();
     }
 
     #[test]
