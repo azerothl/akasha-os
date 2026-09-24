@@ -45,6 +45,27 @@ fn default_work_area() -> String {
     "start".into()
 }
 
+fn is_scene_tool(tool: &str) -> bool {
+    matches!(
+        tool,
+        "scene.get"
+            | "scene.select"
+            | "scene.trs"
+            | "scene.camera"
+            | "scene.light"
+            | "scene.apply"
+            | "scene.lock"
+            | "scene.unlock"
+            | "scene.locks"
+            | "scene.compose"
+            | "scene.pose"
+            | "scene.instantiate"
+            | "scene.animation"
+            | "scene.history"
+            | "scene.diagnostics"
+    )
+}
+
 fn handle(tool: &str, args: &Value) -> Result<Value, String> {
     match tool {
         "illustration.project.list" => project_list(),
@@ -63,9 +84,7 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "illustration.asset.select" => asset_select(args),
         "illustration.document.load" => document_load(args),
         "illustration.document.save" => document_save(args),
-        "scene.get" | "scene.select" | "scene.trs" | "scene.camera" | "scene.light"
-        | "scene.apply" | "scene.lock" | "scene.unlock" | "scene.locks"
-        | "scene.compose" | "scene.pose" | "scene.instantiate" => scene_tool(tool, args),
+        tool if is_scene_tool(tool) => scene_tool(tool, args),
         _ => Err(format!("unknown tool: {tool}")),
     }
 }
@@ -401,7 +420,11 @@ fn scene_tool(service: &str, args: &Value) -> Result<Value, String> {
     }
     let result = aos_module_sdk::call(service, &payload)?;
     if let Some(yaml) = result.get("scene_yaml").and_then(Value::as_str) {
-        if !yaml.trim().is_empty() && service != "scene.get" && service != "scene.locks" {
+        if !yaml.trim().is_empty()
+            && service != "scene.get"
+            && service != "scene.locks"
+            && service != "scene.diagnostics"
+        {
             validate_project_yaml(yaml)?;
             aos_module_sdk::fs_write(&project_path(id)?, yaml)?;
         }
@@ -424,5 +447,31 @@ mod tests {
     fn project_ids_cannot_escape_managed_root() {
         assert!(super::project_path("../project-1").is_err());
         assert!(super::project_path("project-000001").is_ok());
+    }
+
+    #[test]
+    fn manifest_scene_tools_are_dispatched() {
+        let manifest = include_str!("../manifest.yaml");
+        let mut scene_tools = Vec::new();
+        let mut in_tools = false;
+        for line in manifest.lines() {
+            let trimmed = line.trim();
+            if trimmed == "tools:" {
+                in_tools = true;
+                continue;
+            }
+            if in_tools && trimmed.starts_with("- name:") {
+                let name = trimmed.strip_prefix("- name:").unwrap().trim();
+                if name.starts_with("scene.") {
+                    scene_tools.push(name);
+                }
+            }
+        }
+        for tool in scene_tools {
+            assert!(
+                super::is_scene_tool(tool),
+                "manifest advertises {tool} but handle() does not dispatch scene tools"
+            );
+        }
     }
 }
