@@ -1914,7 +1914,8 @@
       "input": {
         "project_id": "$local.project_id",
         "image_uri": "$local.library_image_uri",
-        "prompt": "$local.library_image_prompt"
+        "prompt": "$local.library_image_prompt",
+        "geometry_res": "$local.library_trellis_resolution"
       },
       "refresh_binds": []
     },

@@ -121,6 +121,8 @@ pub struct MeshAssistRequest {
     /// Optional conditioning image for `backend=neural` spawn (image→GLB).
     /// Required for `AOS_NEURAL_MESH_MODE=require`. Paths only — never URLs.
     pub image_path: Option<String>,
+    /// Optional per-request TRELLIS resolution. Omitted requests retain the host default.
+    pub geometry_res: Option<u32>,
 }
 
 impl Default for MeshAssistRequest {
@@ -131,6 +133,7 @@ impl Default for MeshAssistRequest {
             prefix: "mesh_".into(),
             backend: MeshAssistBackendId::Stub,
             image_path: None,
+            geometry_res: None,
         }
     }
 }
@@ -213,7 +216,10 @@ pub fn propose_mesh_assist(req: &MeshAssistRequest) -> Result<MeshAssistProposal
             Ok(proposal)
         }
         MeshAssistBackendId::Neural => {
-            let proposal = neural_propose(prompt, req.image_path.as_deref())?;
+            if req.geometry_res.is_some_and(|res| !matches!(res, 512 | 1024 | 1536)) {
+                return Err(NeuralMeshError::Validation("TRELLIS resolution must be 512, 1024 or 1536".into()));
+            }
+            let proposal = neural_propose(prompt, req.image_path.as_deref(), req.geometry_res)?;
             validate_proposal(&proposal)?;
             Ok(proposal)
         }
@@ -307,6 +313,7 @@ pub fn apply_proposal(
 fn neural_propose(
     prompt: &str,
     image_path: Option<&str>,
+    geometry_res: Option<u32>,
 ) -> Result<MeshAssistProposal, NeuralMeshError> {
     let status = probe_pack_status();
     let Some(pack_root) = status.pack_root.clone() else {
@@ -319,20 +326,20 @@ fn neural_propose(
             if !status.ready_for_spawn {
                 return Err(NeuralMeshError::BackendUnavailable);
             }
-            neural_from_spawn(&pack_root, prompt, image_path, true)
+            neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res)
         }
         NeuralMeshRunMode::Auto => {
             // A requested image-to-3D conversion cannot use the fixture. Preserve
             // the actual runner failure so the user can diagnose it.
             if image_path.is_some_and(|path| !path.trim().is_empty()) {
                 return if status.ready_for_spawn {
-                    neural_from_spawn(&pack_root, prompt, image_path, true)
+                    neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res)
                 } else {
                     Err(NeuralMeshError::BackendUnavailable)
                 };
             }
             if status.ready_for_spawn {
-                match neural_from_spawn(&pack_root, prompt, image_path, false) {
+                match neural_from_spawn(&pack_root, prompt, image_path, false, geometry_res) {
                     Ok(p) => Ok(p),
                     Err(_) if status.ready_for_mock => neural_from_fixture(&pack_root, prompt, true),
                     Err(_) => Err(NeuralMeshError::BackendUnavailable),
@@ -382,6 +389,7 @@ fn neural_from_spawn(
     prompt: &str,
     image_path: Option<&str>,
     require_image: bool,
+    requested_geometry_res: Option<u32>,
 ) -> Result<MeshAssistProposal, NeuralMeshError> {
     let Some(runner) = resolve_runner_bin(Some(pack_root)) else {
         return Err(NeuralMeshError::BackendUnavailable);
@@ -441,7 +449,7 @@ fn neural_from_spawn(
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_NEURAL_MESH_TIMEOUT_SECS);
     let runner_kind = NeuralMeshRunnerKind::detect(&runner);
-    let geometry_res = resolve_geometry_res();
+    let geometry_res = requested_geometry_res.unwrap_or_else(resolve_geometry_res);
     let plan = NeuralMeshSpawnPlan {
         runner_bin: runner,
         runner_kind,
@@ -762,6 +770,20 @@ mod tests {
     }
 
     #[test]
+    fn neural_resolution_rejects_unsupported_value_before_spawning() {
+        let req = MeshAssistRequest {
+            prompt: "person".into(),
+            backend: MeshAssistBackendId::Neural,
+            geometry_res: Some(2048),
+            ..Default::default()
+        };
+        assert!(matches!(
+            propose_mesh_assist(&req),
+            Err(NeuralMeshError::Validation(message)) if message.contains("resolution")
+        ));
+    }
+
+    #[test]
     fn neural_backend_fail_closed_without_pack() {
         let _lock = NEURAL_MESH_ENV_LOCK
             .lock()
@@ -797,6 +819,7 @@ mod tests {
             prefix: "neural_".into(),
             backend: MeshAssistBackendId::Neural,
             image_path: None,
+            geometry_res: None,
         };
         let res = mesh_assist(&mut scene, &req).expect("neural mock assist");
         assert!(!res.is_stub);
@@ -878,6 +901,7 @@ mod tests {
                 prefix: "gguf_".into(),
                 backend: MeshAssistBackendId::Neural,
                 image_path: Some(img.to_string_lossy().into_owned()),
+                geometry_res: None,
             },
         )
         .expect("gguf adapter spawn");
@@ -955,6 +979,7 @@ mod tests {
             prefix: "assist_".into(),
             backend: MeshAssistBackendId::Stub,
             image_path: None,
+            geometry_res: None,
         };
         let res = mesh_assist(&mut scene, &req).expect("assist");
         assert!(res.is_stub);

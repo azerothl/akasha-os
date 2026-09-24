@@ -764,6 +764,7 @@ pub(crate) async fn run_decl_service_action(
         "illustration.library.convert" => {
             let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
             let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
+            let geometry_res = input.get("geometry_res").and_then(Value::as_u64).unwrap_or(512);
             let prompt = library_convert_mesh_assist_prompt(
                 input.get("prompt").and_then(Value::as_str).unwrap_or(""),
                 &image_uri,
@@ -774,8 +775,9 @@ pub(crate) async fn run_decl_service_action(
                 || !image_uri.starts_with(&prefix)
                 || image_uri.contains("..")
                 || image_uri.contains('\\')
+                || !matches!(geometry_res, 512 | 1024)
             {
-                Err("Select a generated image from the active project library".into())
+                Err("Select an image in the active project and a TRELLIS resolution of 512 or 1024".into())
             } else {
                 let image_path = logical_downloads_path(&image_uri);
                 let project_for_conversion = project_id.clone();
@@ -802,6 +804,7 @@ pub(crate) async fn run_decl_service_action(
                         prefix: "converted_".into(),
                         backend: MeshAssistBackendId::Neural,
                         image_path: Some(image_path.to_string_lossy().into_owned()),
+                        geometry_res: Some(geometry_res as u32),
                     };
                     let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
                     if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
@@ -821,10 +824,10 @@ pub(crate) async fn run_decl_service_action(
                     let uri = format!(
                         "/documents/illustrations/projects/{project_for_conversion}/assets/{file_name}"
                     );
-                    Ok((uri, prompt))
+                    Ok((uri, prompt, geometry_res))
                 }).await;
                 match conversion {
-                    Ok(Ok((uri, prompt))) => invoke_module_tool_quiet(
+                    Ok(Ok((uri, prompt, geometry_res))) => invoke_module_tool_quiet(
                         bus,
                         module,
                         "illustration.asset.register",
@@ -834,7 +837,7 @@ pub(crate) async fn run_decl_service_action(
                             "kind": "mesh",
                             "uri": uri,
                             "prompt": prompt,
-                            "metadata": { "provenance": "TRELLIS conversion", "source_image": image_uri },
+                            "metadata": { "provenance": "TRELLIS conversion", "source_image": image_uri, "geometry_resolution": geometry_res },
                         }),
                     ).await,
                     Ok(Err(error)) => Err(error),
@@ -2447,6 +2450,7 @@ fn run_mesh_assist(
         prefix: prefix.to_string(),
         backend,
         image_path,
+        geometry_res: None,
     };
 
     let applied = match mesh_assist(&mut scene, &req) {
