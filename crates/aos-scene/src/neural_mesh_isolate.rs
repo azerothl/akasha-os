@@ -18,8 +18,11 @@
 //! sandbox-exec are not wired yet.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 /// Default wall-clock timeout for a neural mesh child (minutes-scale jobs).
@@ -410,6 +413,36 @@ pub fn bwrap_available() -> bool {
     which_on_path("bwrap").is_some()
 }
 
+/// trellis-cli `--gpu` index: `AOS_NEURAL_MESH_GPU`, or `0` on Windows when unset.
+pub fn resolve_neural_mesh_gpu_index() -> Option<u32> {
+    if let Ok(s) = std::env::var("AOS_NEURAL_MESH_GPU") {
+        let t = s.trim();
+        if !t.is_empty() {
+            return t.parse().ok();
+        }
+    }
+    #[cfg(windows)]
+    {
+        return Some(0);
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// When true, argv omits `--require-gpu` so trellis may fall back to CPU.
+pub fn neural_mesh_allow_cpu() -> bool {
+    std::env::var("AOS_NEURAL_MESH_ALLOW_CPU")
+        .ok()
+        .is_some_and(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+}
+
 /// Geometry resolution for `--res` (env `AOS_NEURAL_MESH_RES`, default 512).
 pub fn resolve_geometry_res() -> u32 {
     std::env::var("AOS_NEURAL_MESH_RES")
@@ -456,6 +489,13 @@ pub fn build_trellis_argv(plan: &NeuralMeshSpawnPlan) -> Vec<String> {
     argv.push(plan.weights_dir.to_string_lossy().into_owned());
     argv.push("--res".into());
     argv.push(plan.geometry_res.to_string());
+    if let Some(gpu) = resolve_neural_mesh_gpu_index() {
+        argv.push("--gpu".into());
+        argv.push(gpu.to_string());
+    }
+    if !neural_mesh_allow_cpu() {
+        argv.push("--require-gpu".into());
+    }
     argv
 }
 
@@ -559,30 +599,57 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
     }
 
     let mut child = cmd.spawn().map_err(|e| format!("spawn: {e}"))?;
+    let stdout_capture = Arc::new(Mutex::new(String::new()));
+    let stderr_capture = Arc::new(Mutex::new(String::new()));
+    let stdout_handle = child.stdout.take().map(|mut pipe| {
+        let cap = Arc::clone(&stdout_capture);
+        thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = pipe.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                if let Ok(mut s) = cap.lock() {
+                    s.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            }
+        })
+    });
+    let stderr_handle = child.stderr.take().map(|mut pipe| {
+        let cap = Arc::clone(&stderr_capture);
+        thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = pipe.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                if let Ok(mut s) = cap.lock() {
+                    s.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+            }
+        })
+    });
     let timeout = plan.timeout;
     let start = std::time::Instant::now();
+    let work_dir = plan.work_dir.clone();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let stderr = child
-                    .stderr
-                    .take()
-                    .map(|mut s| {
-                        let mut buf = String::new();
-                        let _ = std::io::Read::read_to_string(&mut s, &mut buf);
-                        buf
-                    })
-                    .unwrap_or_default();
-                let tail: String = stderr
-                    .chars()
-                    .rev()
-                    .take(2000)
-                    .collect::<String>()
-                    .chars()
-                    .rev()
-                    .collect();
+                if let Some(h) = stdout_handle {
+                    let _ = h.join();
+                }
+                if let Some(h) = stderr_handle {
+                    let _ = h.join();
+                }
+                let stdout_full = stdout_capture.lock().map(|s| s.clone()).unwrap_or_default();
+                let stderr_full = stderr_capture.lock().map(|s| s.clone()).unwrap_or_default();
+                let exit_code = status.code().unwrap_or(-1);
+                if exit_code != 0 {
+                    persist_spawn_io_tails(&work_dir, &stdout_full, &stderr_full);
+                }
+                let tail = trim_stderr_tail(&stderr_full, 2000);
                 return Ok(NeuralMeshSpawnResult {
-                    exit_code: status.code().unwrap_or(-1),
+                    exit_code,
                     stderr_tail: tail,
                     argv,
                     isolated_with_bwrap: isolated,
@@ -592,16 +659,34 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                 if start.elapsed() > timeout {
                     let _ = child.kill();
                     let _ = child.wait();
+                    if let Some(h) = stdout_handle {
+                        let _ = h.join();
+                    }
+                    if let Some(h) = stderr_handle {
+                        let _ = h.join();
+                    }
+                    let stdout_full = stdout_capture.lock().map(|s| s.clone()).unwrap_or_default();
+                    let stderr_full = stderr_capture.lock().map(|s| s.clone()).unwrap_or_default();
+                    persist_spawn_io_tails(&work_dir, &stdout_full, &stderr_full);
                     return Err(format!(
                         "neural mesh runner timed out after {}s",
                         timeout.as_secs()
                     ));
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                thread::sleep(Duration::from_millis(50));
             }
             Err(e) => return Err(format!("wait: {e}")),
         }
     }
+}
+
+const SPAWN_IO_TAIL_CHARS: usize = 32_768;
+
+fn persist_spawn_io_tails(work_dir: &Path, stdout: &str, stderr: &str) {
+    let out_tail = trim_stderr_tail(stdout, SPAWN_IO_TAIL_CHARS);
+    let err_tail = trim_stderr_tail(stderr, SPAWN_IO_TAIL_CHARS);
+    let _ = std::fs::write(work_dir.join("spawn.out"), out_tail);
+    let _ = std::fs::write(work_dir.join("spawn.err"), err_tail);
 }
 
 /// Trim stderr for DeclUI / error strings (matches Blender isolate tail budget).
@@ -724,6 +809,13 @@ fn apply_vk_device_pin(env: &mut HashMap<String, String>) {
         let pin = pin.trim();
         if !pin.is_empty() {
             env.insert("GGML_VK_VISIBLE_DEVICES".into(), pin.to_string());
+            return;
+        }
+    }
+    if !env.contains_key("GGML_VK_VISIBLE_DEVICES") {
+        #[cfg(windows)]
+        if let Some(gpu) = resolve_neural_mesh_gpu_index() {
+            env.insert("GGML_VK_VISIBLE_DEVICES".into(), gpu.to_string());
         }
     }
 }
@@ -828,9 +920,8 @@ mod tests {
         assert!(fixture.is_some());
     }
 
-    #[test]
-    fn argv_matches_trellis_cpp_cli() {
-        let plan = NeuralMeshSpawnPlan {
+    fn sample_spawn_plan() -> NeuralMeshSpawnPlan {
+        NeuralMeshSpawnPlan {
             runner_bin: PathBuf::from("/opt/trellis-cli"),
             runner_kind: NeuralMeshRunnerKind::TrellisCli,
             work_dir: PathBuf::from("/tmp/work"),
@@ -840,20 +931,34 @@ mod tests {
             geometry_res: 512,
             use_bwrap: false,
             timeout: Duration::from_secs(1),
-        };
+        }
+    }
+
+    #[test]
+    fn argv_matches_trellis_cpp_cli() {
+        let _guard = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("AOS_NEURAL_MESH_GPU");
+        std::env::remove_var("AOS_NEURAL_MESH_ALLOW_CPU");
+        let plan = sample_spawn_plan();
         let argv = build_trellis_argv(&plan);
-        assert_eq!(
-            argv,
-            vec![
-                "/opt/trellis-cli".to_string(),
-                "/tmp/work/in.png".to_string(),
-                "/tmp/work/out.glb".to_string(),
-                "--models".to_string(),
-                "/models/trellis2".to_string(),
-                "--res".to_string(),
-                "512".to_string(),
-            ]
-        );
+        let mut expected = vec![
+            "/opt/trellis-cli".to_string(),
+            "/tmp/work/in.png".to_string(),
+            "/tmp/work/out.glb".to_string(),
+            "--models".to_string(),
+            "/models/trellis2".to_string(),
+            "--res".to_string(),
+            "512".to_string(),
+        ];
+        #[cfg(windows)]
+        {
+            expected.push("--gpu".to_string());
+            expected.push("0".to_string());
+        }
+        expected.push("--require-gpu".to_string());
+        assert_eq!(argv, expected);
 
         let adapter_plan = NeuralMeshSpawnPlan {
             runner_bin: PathBuf::from("/pack/adapters/trellis_gguf.sh"),
@@ -916,6 +1021,12 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_child_env_uses_semicolon_path_and_systemroot() {
+        let _guard = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("AOS_NEURAL_MESH_VK_DEVICE");
+        std::env::remove_var("GGML_VK_VISIBLE_DEVICES");
+        std::env::remove_var("AOS_NEURAL_MESH_GPU");
         let env = minimal_neural_mesh_child_env(
             Path::new(r"C:\aos\trellis-cli.exe"),
             Path::new(r"C:\Temp\aos-neural-work"),
@@ -929,6 +1040,42 @@ mod tests {
             env.get("TEMP").map(String::as_str),
             Some(r"C:\Temp\aos-neural-work")
         );
+        assert_eq!(
+            env.get("GGML_VK_VISIBLE_DEVICES").map(String::as_str),
+            Some("0")
+        );
+    }
+
+    #[test]
+    fn argv_gpu_from_env_and_allow_cpu_drops_require_gpu() {
+        let _guard = NEURAL_MESH_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("AOS_NEURAL_MESH_GPU", "1");
+        std::env::set_var("AOS_NEURAL_MESH_ALLOW_CPU", "1");
+        let argv = build_trellis_argv(&sample_spawn_plan());
+        assert!(argv.contains(&"--gpu".to_string()));
+        assert!(argv.contains(&"1".to_string()));
+        assert!(!argv.contains(&"--require-gpu".to_string()));
+        std::env::remove_var("AOS_NEURAL_MESH_GPU");
+        std::env::remove_var("AOS_NEURAL_MESH_ALLOW_CPU");
+    }
+
+    #[test]
+    fn persist_spawn_io_tails_writes_workdir_files() {
+        let tmp = std::env::temp_dir().join(format!("aos-spawn-io-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        persist_spawn_io_tails(&tmp, "hello stdout", "hello stderr");
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("spawn.out")).unwrap(),
+            "hello stdout"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("spawn.err")).unwrap(),
+            "hello stderr"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
