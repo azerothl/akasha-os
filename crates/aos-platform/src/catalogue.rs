@@ -474,11 +474,12 @@ pub fn resolve_package(
     entry: &CatalogueEntry,
     extra: &ExtraCatalogueSource,
     home: &Path,
+    bundled_index: Option<&Path>,
     fetch: impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<ResolvedPackage, CatalogueError> {
     match entry.kind.as_str() {
         "skill" => {
-            let bytes = resolve_file_bytes(entry, extra, home, &fetch)?;
+            let bytes = resolve_file_bytes(entry, extra, home, bundled_index, &fetch)?;
             let hash = sha256_catalogue_content_hex(&bytes);
             if !hashes_equal(&entry.hash, &hash) {
                 return Err(CatalogueError::HashMismatch(entry.name.clone()));
@@ -486,7 +487,7 @@ pub fn resolve_package(
             Ok(ResolvedPackage::Skill { bytes })
         }
         "module" => {
-            let dir = resolve_module_dir(entry, extra, home, &fetch)?;
+            let dir = resolve_module_dir(entry, extra, home, bundled_index, &fetch)?;
             let wasm = std::fs::read(dir.join("module.wasm"))?;
             let hash = sha256_hex(&wasm);
             if !hashes_equal(&entry.hash, &hash) {
@@ -495,7 +496,7 @@ pub fn resolve_package(
             Ok(ResolvedPackage::ModuleDir { path: dir })
         }
         _ => {
-            let bytes = resolve_file_bytes(entry, extra, home, &fetch)?;
+            let bytes = resolve_file_bytes(entry, extra, home, bundled_index, &fetch)?;
             let hash = sha256_catalogue_content_hex(&bytes);
             if !hashes_equal(&entry.hash, &hash) {
                 return Err(CatalogueError::HashMismatch(entry.name.clone()));
@@ -514,12 +515,101 @@ pub fn resolve_package(
     }
 }
 
+/// Repo / Preview root when the bundled index lives at `share/modules/catalogue.yaml`.
+pub fn catalogue_repo_root(catalogue_yaml: &Path) -> Option<PathBuf> {
+    let modules = catalogue_yaml.parent()?;
+    let share = modules.parent()?;
+    share.parent().map(|p| p.to_path_buf())
+}
+
+/// Search roots for catalogue-relative paths (`share/modules/...`).
+/// Matches Preview layout: `AOS_HOME`, path of the signed bundled index, install dir, cwd.
+pub fn catalogue_package_roots(home: &Path, bundled_index: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots = vec![home.to_path_buf()];
+    if let Some(index) = bundled_index {
+        if let Some(root) = catalogue_repo_root(index) {
+            roots.push(root);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin) = exe.parent() {
+            roots.push(bin.join(".."));
+            if let Some(parent) = bin.parent() {
+                roots.push(parent.to_path_buf());
+            }
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
+fn normalize_catalogue_rel(path: &str) -> String {
+    path.replace('\\', "/").trim_start_matches('/').to_string()
+}
+
+fn resolve_local_catalogue_file(
+    home: &Path,
+    bundled_index: Option<&Path>,
+    rel_path: &str,
+) -> Option<PathBuf> {
+    let rel = normalize_catalogue_rel(rel_path);
+    for root in catalogue_package_roots(home, bundled_index) {
+        let candidate = root.join(&rel);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn resolve_local_module_package(
+    home: &Path,
+    bundled_index: Option<&Path>,
+    rel_path: &str,
+) -> Option<PathBuf> {
+    let rel = normalize_catalogue_rel(rel_path);
+    for root in catalogue_package_roots(home, bundled_index) {
+        let candidate = root.join(&rel);
+        if candidate.is_dir() && candidate.join("module.wasm").is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Signed bundled catalogue entries ship with attested caps — use them on first install.
+pub fn bundled_install_approved_caps(
+    bundled: Option<&SignedCatalogue>,
+    entry: &CatalogueEntry,
+    approved: Option<Vec<String>>,
+) -> Option<Vec<String>> {
+    if approved.is_some() {
+        return approved;
+    }
+    let cat = bundled?;
+    if !cat.inner.signature_ok || cat.entry(&entry.name).is_none() {
+        return None;
+    }
+    if entry.attested_caps.is_empty() {
+        return None;
+    }
+    Some(entry.attested_caps.clone())
+}
+
 fn resolve_file_bytes(
     entry: &CatalogueEntry,
     extra: &ExtraCatalogueSource,
     home: &Path,
+    bundled_index: Option<&Path>,
     fetch: &impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<Vec<u8>, CatalogueError> {
+    if let Some(local) = resolve_local_catalogue_file(home, bundled_index, &entry.path) {
+        return Ok(std::fs::read(local)?);
+    }
     let local = home.join(&entry.path);
     if local.is_file() {
         return Ok(std::fs::read(local)?);
@@ -545,8 +635,12 @@ fn resolve_module_dir(
     entry: &CatalogueEntry,
     extra: &ExtraCatalogueSource,
     home: &Path,
+    bundled_index: Option<&Path>,
     fetch: &impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<PathBuf, CatalogueError> {
+    if let Some(local) = resolve_local_module_package(home, bundled_index, &entry.path) {
+        return Ok(local);
+    }
     let local = home.join(&entry.path);
     if local.is_dir() && local.join("module.wasm").is_file() {
         return Ok(local);
@@ -1008,5 +1102,48 @@ mod tests {
         let md = std::fs::read(root.join("community/skills/morning-brief/SKILL.md")).unwrap();
         cat.check_entry_hash("morning-brief", Some("skill"), &sha256_hex(&md))
             .unwrap();
+    }
+
+    #[test]
+    fn resolve_module_dir_uses_preview_root_when_home_lacks_share() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let illust = repo.join("share/modules/illustration-studio.aospkg");
+        if !illust.join("module.wasm").is_file() {
+            eprintln!("skip: illustration-studio package missing");
+            return;
+        }
+        let home = temp_dir("catalogue-home-no-share");
+        let entry = CatalogueEntry {
+            name: "illustration-studio".into(),
+            version: "0.7.21".into(),
+            kind: "module".into(),
+            path: "share/modules/illustration-studio.aospkg".into(),
+            hash: String::new(),
+            attested_caps: vec![],
+            license: String::new(),
+            source: SOURCE_BUNDLED.into(),
+        };
+        let extra = ExtraCatalogueSource::open(&home, home.join("var/catalogue/community"));
+        fn no_fetch(_url: &str) -> Result<Vec<u8>, CatalogueError> {
+            Err(CatalogueError::Fetch("should not fetch".into()))
+        }
+        let index = repo.join("share/modules/catalogue.yaml");
+        let dir = resolve_module_dir(&entry, &extra, &home, Some(&index), &no_fetch)
+            .expect("bundled module dir beside preview root");
+        assert_eq!(dir, illust);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn bundled_install_approved_caps_from_signed_index() {
+        let dir = temp_dir("bundled-caps");
+        let yaml = b"version: 1\nentries:\n  - name: demo\n    version: \"1\"\n    kind: module\n    path: share/modules/demo.aospkg\n    hash: sha256:aa\n    attested_caps:\n      - tool.invoke:demo\n";
+        let cat = SignedCatalogue::load(write_signed(&dir, yaml)).unwrap();
+        let entry = cat.entry("demo").unwrap().clone();
+        let caps = bundled_install_approved_caps(Some(&cat), &entry, None)
+            .expect("attested caps");
+        assert_eq!(caps, vec!["tool.invoke:demo".to_string()]);
+        assert!(bundled_install_approved_caps(Some(&cat), &entry, Some(vec![])).is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

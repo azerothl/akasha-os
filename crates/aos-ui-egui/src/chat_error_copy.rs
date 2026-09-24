@@ -508,6 +508,31 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
     }
 }
 
+fn illustration_install_wire_detail(raw: &str) -> Option<String> {
+    let tagged = raw
+        .strip_prefix("__illustration_install_failed__:")
+        .unwrap_or(raw);
+    let (_, body) = ipc_status_body(tagged);
+    let body = body.trim();
+    if body.is_empty() {
+        None
+    } else {
+        Some(body.to_string())
+    }
+}
+
+fn user_visible_illustration_install_error(t: &UiStrings, raw: &str) -> String {
+    let classified = ChatErrorClassified {
+        code: "illustration.install_failed",
+        cause: t.chat_error_illustration_install.to_string(),
+    };
+    let base = format_chat_error(t, &classified);
+    match illustration_install_wire_detail(raw) {
+        Some(detail) if detail != classified.cause => format!("{}\n{}", base, detail),
+        _ => base,
+    }
+}
+
 /// Map a raw module UI/runtime error to localized chrome copy (no IPC status leaks).
 pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) -> String {
     let stripped = strip_ipc_status_prefix(raw);
@@ -541,22 +566,10 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
     if module == "illustration-studio"
         && is_illustration_install_error_for_module(stripped, true)
     {
-        return format_chat_error(
-            t,
-            &ChatErrorClassified {
-                code: "illustration.install_failed",
-                cause: t.chat_error_illustration_install.to_string(),
-            },
-        );
+        return user_visible_illustration_install_error(t, raw);
     }
     if is_illustration_install_error(stripped) {
-        return format_chat_error(
-            t,
-            &ChatErrorClassified {
-                code: "illustration.install_failed",
-                cause: t.chat_error_illustration_install.to_string(),
-            },
-        );
+        return user_visible_illustration_install_error(t, raw);
     }
     if module == "create" && is_create_install_error(stripped) {
         return format_chat_error(
@@ -655,6 +668,9 @@ fn has_absolute_path(msg: &str) -> bool {
 
 /// Map a raw runtime error to localized chat chrome copy (no path leaks).
 pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
+    if is_illustration_install_error(raw) {
+        return user_visible_illustration_install_error(t, raw);
+    }
     format_chat_error(t, &classify_chat_error(t, raw))
 }
 
@@ -820,6 +836,7 @@ mod tests {
         let out = user_visible_chat_error(&en, raw);
         assert!(out.contains(en.chat_error_illustration_install));
         assert!(!out.contains(en.chat_error_tasks_open));
+        assert!(out.contains("services mismatch"));
     }
 
     #[test]
