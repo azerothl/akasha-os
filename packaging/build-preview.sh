@@ -131,6 +131,7 @@ EOF
     echo "== create module =="
     "${ROOT}/modules/build-create.sh"
   fi
+  # Rebuild illustration-studio so catalogue hash/caps match packaged wasm (E10).
   if [ -f "${ROOT}/modules/build-illustration-studio.sh" ]; then
     echo "== illustration-studio module =="
     "${ROOT}/modules/build-illustration-studio.sh"
