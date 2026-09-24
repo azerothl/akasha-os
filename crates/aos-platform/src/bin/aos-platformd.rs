@@ -5502,8 +5502,8 @@ fn install_catalogue_entry(
     approved: Option<Vec<String>>,
 ) -> Result<CatalogueInstallResponse, String> {
     let extra = s.extra_catalogue.lock().unwrap().clone();
-    let bundled = s.modules.lock().unwrap().catalogue().cloned();
-    let entry = aos_platform::catalogue::find_entry(bundled.as_ref(), &extra, name)
+    let bundled_cat = s.modules.lock().unwrap().catalogue().cloned();
+    let entry = aos_platform::catalogue::find_entry(bundled_cat.as_ref(), &extra, name)
         .map_err(|e| e.to_string())?
         .clone();
     if entry.source == "community"
@@ -5517,10 +5517,17 @@ fn install_catalogue_entry(
         return Err("signature catalogue invalide".into());
     }
     let home = extra.home.clone();
+    let approved = aos_platform::catalogue::bundled_install_approved_caps(
+        bundled_cat.as_ref(),
+        &entry,
+        approved,
+    );
+    let bundled_index = bundled_cat.as_ref().map(|c| c.path());
     let resolved = aos_platform::catalogue::resolve_package(
         &entry,
         &extra,
         &home,
+        bundled_index,
         aos_platform::catalogue::fetch_bytes,
     )
     .map_err(|e| e.to_string())?;
