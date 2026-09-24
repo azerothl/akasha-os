@@ -1,5 +1,5 @@
 name: illustration-studio
-version: 0.7.21
+version: 0.7.22
 hash: BUILD_HASH
 permissions:
   required_caps:
