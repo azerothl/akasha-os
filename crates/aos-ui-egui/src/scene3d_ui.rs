@@ -246,7 +246,7 @@ fn selected_from_local(local: &HashMap<String, Value>, key: &str) -> Option<Stri
         .filter(|s| !s.is_empty())
 }
 
-fn scene_gpu() -> Option<&'static Mutex<ViewportRenderer>> {
+pub(crate) fn scene_gpu() -> Option<&'static Mutex<ViewportRenderer>> {
     static GPU: OnceLock<Option<Mutex<ViewportRenderer>>> = OnceLock::new();
     GPU.get_or_init(|| ViewportRenderer::new().ok().map(Mutex::new))
         .as_ref()

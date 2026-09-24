@@ -845,7 +845,7 @@ pub(crate) async fn run_decl_service_action(
                 module: module.to_string(),
                 action_id: action_id.to_string(),
                 ok: outcome.is_ok(),
-                result: outcome.clone().unwrap_or(Value::Null),
+                result: outcome.clone().unwrap_or_else(|_| serde_json::json!({"project_id": project_id})),
                 error: outcome.err(),
                 refresh_binds,
             });
@@ -904,7 +904,7 @@ pub(crate) async fn run_decl_service_action(
                 module: module.to_string(),
                 action_id: action_id.to_string(),
                 ok: outcome.is_ok(),
-                result: outcome.clone().unwrap_or(Value::Null),
+                result: outcome.clone().unwrap_or_else(|_| serde_json::json!({"project_id": project_id})),
                 error: outcome.err(),
                 refresh_binds,
             });
@@ -3767,6 +3767,9 @@ async fn run_media_image_generate(
         .get("project_id")
         .and_then(Value::as_str)
         .map(str::to_owned);
+    let library_error_result = library_project_id.as_ref()
+        .map(|id| serde_json::json!({"project_id": id}))
+        .unwrap_or(Value::Null);
     let request = match parse_media_generate_request(&input) {
         Ok(r) => r,
         Err(e) => {
@@ -3774,7 +3777,7 @@ async fn run_media_image_generate(
                 module: module.to_string(),
                 action_id: action_id.to_string(),
                 ok: false,
-                result: Value::Null,
+                result: library_error_result.clone(),
                 error: Some(e),
                 refresh_binds,
             });
@@ -3787,7 +3790,7 @@ async fn run_media_image_generate(
                 module: module.to_string(),
                 action_id: action_id.to_string(),
                 ok: false,
-                result: Value::Null,
+                result: library_error_result.clone(),
                 error: Some("Prompt vide : décrivez ce que vous voulez créer.".into()),
                 refresh_binds: refresh_binds.clone(),
             });
@@ -3804,7 +3807,7 @@ async fn run_media_image_generate(
                         module: module.to_string(),
                         action_id: action_id.to_string(),
                         ok: false,
-                        result: Value::Null,
+                        result: library_error_result.clone(),
                         error: Some(message),
                         refresh_binds: refresh_binds.clone(),
                     });
@@ -3820,7 +3823,7 @@ async fn run_media_image_generate(
                         module: module.to_string(),
                         action_id: action_id.to_string(),
                         ok: false,
-                        result: Value::Null,
+                        result: library_error_result.clone(),
                         error: Some(message),
                         refresh_binds: refresh_binds.clone(),
                     });
@@ -3845,7 +3848,7 @@ async fn run_media_image_generate(
         module: module.to_string(),
         action_id: action_id.to_string(),
         ok: true,
-        result: serde_json::json!({"job_id": job_id}),
+        result: serde_json::json!({"job_id": job_id, "project_id": library_project_id.clone()}),
         error: None,
         refresh_binds: Vec::new(),
     });
@@ -4183,7 +4186,7 @@ async fn run_media_image_generate(
                                 module: module_bg.clone(),
                                 action_id: action_id_bg.clone(),
                                 ok: false,
-                                result: Value::Null,
+                                result: library_error_result.clone(),
                                 error: Some(format!("Image created but could not be added to the project library: {error}")),
                                 refresh_binds: Vec::new(),
                             });
@@ -4219,7 +4222,7 @@ async fn run_media_image_generate(
                     module: module_bg.clone(),
                     action_id: action_id_bg.clone(),
                     ok: false,
-                    result: Value::Null,
+                    result: library_error_result,
                     error: Some(message),
                     refresh_binds: Vec::new(),
                 });

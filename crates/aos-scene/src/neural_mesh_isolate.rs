@@ -423,7 +423,7 @@ pub fn resolve_neural_mesh_gpu_index() -> Option<u32> {
     }
     #[cfg(windows)]
     {
-        return Some(0);
+        Some(0)
     }
     #[cfg(not(windows))]
     {

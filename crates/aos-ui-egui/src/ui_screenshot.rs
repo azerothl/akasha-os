@@ -367,6 +367,36 @@ pub fn seed_screenshot_illustration_layout(app: &mut UiApp, language: &str) {
     app.open_module_tab(ILLUSTRATION_MODULE.into());
 }
 
+fn seed_screenshot_illustration_library(app: &mut UiApp, language: &str, selected_id: &str) {
+    seed_screenshot_illustration_layout(app, language);
+    if let Some(panel) = app.decl_panels.get_mut(ILLUSTRATION_MODULE) {
+        panel.local_state.insert("work_area".into(), json!("library"));
+        panel.local_state.insert("library_section".into(), json!("assets"));
+        panel.local_state.insert("library_selected_project_id".into(), json!("project-1"));
+        panel.local_state.insert("library_selected_asset_id".into(), json!(selected_id));
+        panel.local_state.insert("project_assets".into(), json!([
+            {
+                "project_id": "project-1", "id": "asset-1", "kind": "image",
+                "name": "Bureau d’école pour la bibliothèque",
+                "uri": "/documents/illustrations/projects/project-1/assets/portrait.png",
+                "prompt": "A school desk reference",
+                "metadata": {"provenance": "Generated in Illustration Studio", "model_id": "Demo image model"}
+            },
+            {
+                "project_id": "project-1", "id": "asset-2", "kind": "image",
+                "name": "Chaise en bois", "uri": "/documents/illustrations/projects/project-1/assets/chair.png",
+                "metadata": {"provenance": "Poly Haven", "license": "CC0"}
+            },
+            {
+                "project_id": "project-1", "id": "asset-3", "kind": "mesh",
+                "name": "Cube GLB texturé",
+                "uri": "/documents/illustrations/assets/imported/library-preview.glb",
+                "metadata": {"provenance": "Local import", "license": "User supplied", "dimensions_m": [1.0, 1.0, 1.0]}
+            }
+        ]));
+    }
+}
+
 pub fn screenshot_dir_from_env() -> Option<PathBuf> {
     std::env::var("AOS_UI_SCREENSHOT_DIR")
         .ok()
@@ -385,6 +415,13 @@ fn screenshot_focus_illustration_layout() -> bool {
     matches!(
         std::env::var("AOS_UI_SCREENSHOT_FOCUS").ok().as_deref(),
         Some("illustration-layout") | Some("illustration_layout")
+    )
+}
+
+fn screenshot_focus_illustration_library() -> bool {
+    matches!(
+        std::env::var("AOS_UI_SCREENSHOT_FOCUS").ok().as_deref(),
+        Some("illustration-library") | Some("illustration_library")
     )
 }
 
@@ -626,6 +663,7 @@ pub struct UiScreenshotHarness {
     waiting: bool,
     focus_create_layout: bool,
     focus_illustration_layout: bool,
+    focus_illustration_library: bool,
     focus_marketing: bool,
 }
 
@@ -638,6 +676,7 @@ impl UiScreenshotHarness {
             waiting: false,
             focus_create_layout: screenshot_focus_create_layout(),
             focus_illustration_layout: screenshot_focus_illustration_layout(),
+            focus_illustration_library: screenshot_focus_illustration_library(),
             focus_marketing: screenshot_focus_marketing(),
         }
     }
@@ -695,6 +734,44 @@ impl UiScreenshotHarness {
                 }
                 _ => {
                     eprintln!("AOS_UI_SCREENSHOT_DIR: create-layout capture complete — exiting");
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+            return;
+        }
+
+        if self.focus_illustration_library {
+            match self.step {
+                0 => {
+                    seed_screenshot_illustration_library(app, "fr", "asset-1");
+                    self.request(ctx, "illustration-library-image-fr");
+                    self.step = 1;
+                    self.settle_left = 8;
+                }
+                1 => {
+                    seed_screenshot_illustration_library(app, "fr", "asset-3");
+                    self.request(ctx, "illustration-library-mesh-fr");
+                    self.step = 2;
+                    self.settle_left = 8;
+                }
+                2 => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(900.0, 650.0)));
+                    self.step = 3;
+                    self.settle_left = 8;
+                }
+                3 => {
+                    self.request(ctx, "illustration-library-mesh-compact-fr");
+                    self.step = 4;
+                    self.settle_left = 8;
+                }
+                4 => {
+                    seed_screenshot_illustration_library(app, "en", "asset-1");
+                    self.request(ctx, "illustration-library-image-compact-en");
+                    self.step = 5;
+                    self.settle_left = 8;
+                }
+                _ => {
+                    eprintln!("AOS_UI_SCREENSHOT_DIR: illustration-library capture complete — exiting");
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }

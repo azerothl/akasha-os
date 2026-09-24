@@ -232,6 +232,21 @@
       "workspace_library": "Library",
       "workspace_final": "Final output",
       "workspace_intro": "Choose a work area, or start from a scene prompt. All areas share this project.",
+      "library_nav": "Library sections",
+      "library_nav_assets": "Assets",
+      "library_nav_create": "Create",
+      "library_nav_import": "Import",
+      "library_nav_trellis": "TRELLIS",
+      "library_detail_empty": "Select an asset to see its preview and details.",
+      "library_details": "Asset details",
+      "library_missing": "Not specified",
+      "library_preview_unavailable": "Preview unavailable. Check the asset file.",
+      "library_preview_controls": "Drag to rotate · scroll to zoom",
+      "library_preview_reset": "Reset view",
+      "library_import_heading": "Import assets",
+      "library_trellis_heading": "TRELLIS setup",
+      "library_operation_wait": "Working…",
+      "library_generation_hint": "Generate an image first. Convert it to 3D from its details when you want a GLB.",
       "library_heading": "Project asset library",
       "library_intro": "Create an image, import a GLB, or download a CC0 asset. Add a 3D asset to the scene when you are ready.",
       "library_asset_prompt": "Asset image prompt",
@@ -482,6 +497,21 @@
       "workspace_library": "Bibliothèque",
       "workspace_final": "Sortie finale",
       "workspace_intro": "Choisissez un espace ou commencez depuis une invite. Tous les espaces partagent ce projet.",
+      "library_nav": "Sections de la bibliothèque",
+      "library_nav_assets": "Assets",
+      "library_nav_create": "Créer",
+      "library_nav_import": "Importer",
+      "library_nav_trellis": "TRELLIS",
+      "library_detail_empty": "Sélectionnez un asset pour voir son aperçu et ses informations.",
+      "library_details": "Détails de l’asset",
+      "library_missing": "Non renseigné",
+      "library_preview_unavailable": "Aperçu indisponible. Vérifiez le fichier de l’asset.",
+      "library_preview_controls": "Glisser pour tourner · molette pour zoomer",
+      "library_preview_reset": "Recentrer",
+      "library_import_heading": "Importer des assets",
+      "library_trellis_heading": "Configuration de TRELLIS",
+      "library_operation_wait": "Opération en cours…",
+      "library_generation_hint": "Générez d’abord une image. Vous pourrez la convertir en 3D depuis sa fiche.",
       "library_heading": "Bibliothèque du projet",
       "library_intro": "Créez une image, importez un GLB ou téléchargez un asset CC0. Ajoutez-le à la scène 3D au moment voulu.",
       "library_asset_prompt": "Invite pour l’image de l’asset",
@@ -789,6 +819,26 @@
       "last_work_area": {
         "type": "string",
         "default": "start"
+      },
+      "library_section": {
+        "type": "string",
+        "default": "assets"
+      },
+      "library_selected_asset_id": {
+        "type": "string",
+        "default": ""
+      },
+      "library_selected_project_id": {
+        "type": "string",
+        "default": ""
+      },
+      "library_error": {
+        "type": "string",
+        "default": ""
+      },
+      "library_busy": {
+        "type": "boolean",
+        "default": false
       },
       "project_assets": {
         "type": "array",
@@ -3096,23 +3146,68 @@
                 "label_key": "workspace_library",
                 "content": {
                   "kind": "split",
-                  "split_ratio": 0.42,
+                  "split_ratio": 0.16,
                   "children": [
                     {
-                      "kind": "scroll",
+                      "kind": "column",
                       "children": [
                         {
-                          "kind": "heading",
-                          "label_key": "library_heading"
+                          "kind": "radio",
+                          "state_key": "library_section",
+                          "label_key": "library_nav",
+                          "items": [
+                            "assets",
+                            "create",
+                            "import",
+                            "trellis"
+                          ],
+                          "item_label_keys": [
+                            "library_nav_assets",
+                            "library_nav_create",
+                            "library_nav_import",
+                            "library_nav_trellis"
+                          ]
                         },
                         {
-                          "kind": "text",
-                          "label_key": "library_intro"
+                          "kind": "illustration_library_feedback",
+                          "visible": {
+                            "eq": [
+                              "$local.library_section",
+                              "assets"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "column",
+                      "children": [
+                        {
+                          "kind": "illustration_asset_library",
+                          "visible": {
+                            "eq": [
+                              "$local.library_section",
+                              "assets"
+                            ]
+                          }
                         },
                         {
-                          "kind": "section",
-                          "label_key": "library_generate",
+                          "kind": "column",
+                          "visible": {
+                            "eq": [
+                              "$local.library_section",
+                              "create"
+                            ]
+                          },
                           "children": [
+                            {
+                              "kind": "heading",
+                              "label_key": "library_generate"
+                            },
+                            {
+                              "kind": "text",
+                              "label_key": "library_generation_hint"
+                            },
                             {
                               "kind": "text_input",
                               "state_key": "library_asset_prompt",
@@ -3139,193 +3234,204 @@
                               "kind": "job",
                               "subscription": "library_image_job",
                               "label_key": "library_job"
+                            },
+                            {
+                              "kind": "illustration_library_feedback"
                             }
                           ]
                         },
                         {
-                          "kind": "button",
-                          "action": "library_import_glb",
-                          "label_key": "library_import_glb"
-                        },
-                        {
-                          "kind": "section",
-                          "label_key": "catalogue_section",
-                          "children": [
-                            {
-                              "kind": "markdown",
-                              "label_key": "catalogue_intro"
-                            },
-                            {
-                              "kind": "row",
-                              "children": [
-                                {
-                                  "kind": "image",
-                                  "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"
-                                },
-                                {
-                                  "kind": "column",
-                                  "children": [
-                                    {
-                                      "kind": "text",
-                                      "label_key": "catalogue_chair"
-                                    },
-                                    {
-                                      "kind": "button",
-                                      "label_key": "catalogue_add_label",
-                                      "action": "library_import_chair"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "kind": "row",
-                              "children": [
-                                {
-                                  "kind": "image",
-                                  "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"
-                                },
-                                {
-                                  "kind": "column",
-                                  "children": [
-                                    {
-                                      "kind": "text",
-                                      "label_key": "catalogue_desk"
-                                    },
-                                    {
-                                      "kind": "button",
-                                      "label_key": "catalogue_add_label",
-                                      "action": "library_import_desk"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "kind": "row",
-                              "children": [
-                                {
-                                  "kind": "image",
-                                  "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"
-                                },
-                                {
-                                  "kind": "column",
-                                  "children": [
-                                    {
-                                      "kind": "text",
-                                      "label_key": "catalogue_notebook"
-                                    },
-                                    {
-                                      "kind": "button",
-                                      "label_key": "catalogue_add_label",
-                                      "action": "library_import_notebook"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ],
-                          "collapsible": true,
-                          "open_state_key": "catalogue_open"
-                        },
-                        {
-                          "kind": "section",
-                          "label_key": "mesh_section",
-                          "children": [
-                            {
-                              "kind": "text",
-                              "label_key": "mesh_tip"
-                            },
-                            {
-                              "kind": "text",
-                              "label_key": "mesh_pack_status_empty",
-                              "visible": {
-                                "eq": [
-                                  "$local.mesh_pack_status",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "text_input",
-                              "state_key": "mesh_pack_status",
-                              "label_key": "mesh_pack_status_value_label",
-                              "read_only": true,
-                              "visible": {
-                                "ne": [
-                                  "$local.mesh_pack_status",
-                                  ""
-                                ]
-                              }
-                            },
-                            {
-                              "kind": "button",
-                              "label_key": "mesh_pack_status_label",
-                              "action": "mesh_pack_status"
-                            },
-                            {
-                              "kind": "markdown",
-                              "label_key": "trellis_download_info"
-                            },
-                            {
-                              "kind": "radio",
-                              "state_key": "trellis_quant",
-                              "label_key": "trellis_quant_label",
-                              "inline": true,
-                              "items": [
-                                "q4",
-                                "q8"
-                              ],
-                              "item_label_keys": [
-                                "trellis_q4_label",
-                                "trellis_q8_label"
-                              ]
-                            },
-                            {
-                              "kind": "button",
-                              "label_key": "trellis_download_label",
-                              "action": "install_trellis"
-                            },
-                            {
-                              "kind": "button",
-                              "label_key": "dependency_download_cancel",
-                              "action": "cancel_dependency_download",
-                              "visible": {
-                                "eq": [
-                                  "$local.dependency_download_active",
-                                  true
-                                ]
-                              }
-                            }
-                          ],
-                          "collapsible": true,
-                          "open_state_key": "mesh_open"
-                        }
-                      ]
-                    },
-                    {
-                      "kind": "column",
-                      "children": [
-                        {
-                          "kind": "illustration_asset_library",
-                          "state_key": "library"
-                        },
-                        {
-                          "kind": "button",
-                          "action": "library_convert_trellis",
-                          "label_key": "library_convert",
-                          "enabled": {
-                            "ne": [
-                              "$local.library_image_uri",
-                              ""
+                          "kind": "scroll",
+                          "visible": {
+                            "eq": [
+                              "$local.library_section",
+                              "import"
                             ]
-                          }
+                          },
+                          "children": [
+                            {
+                              "kind": "heading",
+                              "label_key": "library_import_heading"
+                            },
+                            {
+                              "kind": "button",
+                              "action": "library_import_glb",
+                              "label_key": "library_import_glb"
+                            },
+                            {
+                              "kind": "illustration_library_feedback"
+                            },
+                            {
+                              "kind": "section",
+                              "label_key": "catalogue_section",
+                              "children": [
+                                {
+                                  "kind": "markdown",
+                                  "label_key": "catalogue_intro"
+                                },
+                                {
+                                  "kind": "row",
+                                  "children": [
+                                    {
+                                      "kind": "image",
+                                      "text": "/assets/illustration/catalogue/thumbs/WoodenChair_01.png"
+                                    },
+                                    {
+                                      "kind": "column",
+                                      "children": [
+                                        {
+                                          "kind": "text",
+                                          "label_key": "catalogue_chair"
+                                        },
+                                        {
+                                          "kind": "button",
+                                          "label_key": "catalogue_add_label",
+                                          "action": "library_import_chair"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "kind": "row",
+                                  "children": [
+                                    {
+                                      "kind": "image",
+                                      "text": "/assets/illustration/catalogue/thumbs/SchoolDesk_01.png"
+                                    },
+                                    {
+                                      "kind": "column",
+                                      "children": [
+                                        {
+                                          "kind": "text",
+                                          "label_key": "catalogue_desk"
+                                        },
+                                        {
+                                          "kind": "button",
+                                          "label_key": "catalogue_add_label",
+                                          "action": "library_import_desk"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "kind": "row",
+                                  "children": [
+                                    {
+                                      "kind": "image",
+                                      "text": "/assets/illustration/catalogue/thumbs/binder_notebook.png"
+                                    },
+                                    {
+                                      "kind": "column",
+                                      "children": [
+                                        {
+                                          "kind": "text",
+                                          "label_key": "catalogue_notebook"
+                                        },
+                                        {
+                                          "kind": "button",
+                                          "label_key": "catalogue_add_label",
+                                          "action": "library_import_notebook"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ],
+                              "collapsible": true,
+                              "open_state_key": "catalogue_open"
+                            }
+                          ]
                         },
                         {
-                          "kind": "image_view",
-                          "resource": "$local.library_image_uri",
-                          "label_key": "library_selected_image",
-                          "empty_label_key": "library_empty"
+                          "kind": "scroll",
+                          "visible": {
+                            "eq": [
+                              "$local.library_section",
+                              "trellis"
+                            ]
+                          },
+                          "children": [
+                            {
+                              "kind": "heading",
+                              "label_key": "library_trellis_heading"
+                            },
+                            {
+                              "kind": "illustration_library_feedback"
+                            },
+                            {
+                              "kind": "section",
+                              "label_key": "mesh_section",
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "label_key": "mesh_tip"
+                                },
+                                {
+                                  "kind": "text",
+                                  "label_key": "mesh_pack_status_empty",
+                                  "visible": {
+                                    "eq": [
+                                      "$local.mesh_pack_status",
+                                      ""
+                                    ]
+                                  }
+                                },
+                                {
+                                  "kind": "text_input",
+                                  "state_key": "mesh_pack_status",
+                                  "label_key": "mesh_pack_status_value_label",
+                                  "read_only": true,
+                                  "visible": {
+                                    "ne": [
+                                      "$local.mesh_pack_status",
+                                      ""
+                                    ]
+                                  }
+                                },
+                                {
+                                  "kind": "button",
+                                  "label_key": "mesh_pack_status_label",
+                                  "action": "mesh_pack_status"
+                                },
+                                {
+                                  "kind": "markdown",
+                                  "label_key": "trellis_download_info"
+                                },
+                                {
+                                  "kind": "radio",
+                                  "state_key": "trellis_quant",
+                                  "label_key": "trellis_quant_label",
+                                  "inline": true,
+                                  "items": [
+                                    "q4",
+                                    "q8"
+                                  ],
+                                  "item_label_keys": [
+                                    "trellis_q4_label",
+                                    "trellis_q8_label"
+                                  ]
+                                },
+                                {
+                                  "kind": "button",
+                                  "label_key": "trellis_download_label",
+                                  "action": "install_trellis"
+                                },
+                                {
+                                  "kind": "button",
+                                  "label_key": "dependency_download_cancel",
+                                  "action": "cancel_dependency_download",
+                                  "visible": {
+                                    "eq": [
+                                      "$local.dependency_download_active",
+                                      true
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
                         }
                       ]
                     }

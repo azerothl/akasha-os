@@ -210,9 +210,11 @@ impl DeclUiPanelState {
             }
         } else if tool == "illustration.project.close" && result.get("closed") == Some(&Value::Bool(true)) {
             self.scene3d_viewports.clear();
-            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt"] {
+            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_job_project_id", "library_job_id"] {
                 self.local_state.insert(key.into(), Value::String(String::new()));
             }
+            self.local_state.insert("library_section".into(), Value::String("assets".into()));
+            self.local_state.insert("library_busy".into(), Value::Bool(false));
         }
         self.bind_cache.insert(tool.to_string(), result);
     }
@@ -236,6 +238,13 @@ impl DeclUiPanelState {
             ("library_image_uri", Value::String(String::new())),
             ("library_image_name", Value::String(String::new())),
             ("library_image_prompt", Value::String(String::new())),
+            ("library_selected_asset_id", Value::String(String::new())),
+            ("library_selected_project_id", Value::String(String::new())),
+            ("library_error", Value::String(String::new())),
+            ("library_job_project_id", Value::String(String::new())),
+            ("library_job_id", Value::String(String::new())),
+            ("library_busy", Value::Bool(false)),
+            ("library_section", Value::String("assets".into())),
             ("work_area", Value::String("start".into())),
             ("last_work_area", result.get("work_area").cloned().unwrap_or_else(|| Value::String("start".into()))),
         ] {
@@ -1610,7 +1619,7 @@ impl DeclUiPanelState {
                                 .text(format!("{}/{}", p.completed, p.total)),
                         );
                     }
-                    if let Some(err) = job.error.as_deref().filter(|s| !s.trim().is_empty()) {
+                    if let Some(err) = job.error.as_deref().filter(|s| !s.trim().is_empty() && sub_id != "library_image_job") {
                         ui.colored_label(egui::Color32::from_rgb(220, 80, 80), err);
                     }
                     if matches!(state_key, "running" | "queued") {
@@ -1992,86 +2001,39 @@ impl DeclUiPanelState {
                 crate::scene3d_ui::ui_scene_asset_palette(ui, language);
             }
             "illustration_asset_library" => {
-                let assets = local_state
-                    .get("project_assets")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                if assets.is_empty() {
-                    if let Some(label) = widget_text_from_key(Some("library_empty"), doc, language) {
-                        ui.weak(label);
-                    }
-                }
-                for asset in assets {
-                    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
-                    let project_id = asset.get("project_id").and_then(Value::as_str).unwrap_or("");
-                    let kind = asset.get("kind").and_then(Value::as_str).unwrap_or("");
-                    let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
-                    let uri = asset.get("uri").and_then(Value::as_str).unwrap_or("");
-                    let meta = &asset["metadata"];
-                    let thumbnail = if kind == "image" {
-                        uri
-                    } else {
-                        meta.get("thumbnail").and_then(Value::as_str).unwrap_or("")
-                    };
-                    ui.group(|ui| {
-                        ui.horizontal(|ui| {
-                            if !thumbnail.contains("..")
-                                && (thumbnail.starts_with("/assets/illustration/")
-                                    || thumbnail.starts_with(&format!("/documents/illustrations/projects/{project_id}/assets/")))
-                            {
-                                let texture_id = ui.id().with(("illustration-asset-thumb", thumbnail));
-                                let texture = ui.ctx().data(|data| data.get_temp::<egui::TextureHandle>(texture_id))
-                                    .or_else(|| {
-                                        let loaded = try_load_asset_thumbnail(ui.ctx(), thumbnail)?;
-                                        ui.ctx().data_mut(|data| data.insert_temp(texture_id, loaded.clone()));
-                                        Some(loaded)
-                                    });
-                                if let Some(texture) = texture {
-                                    ui.add(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(72.0, 72.0)));
-                                }
-                            }
-                            ui.vertical(|ui| {
-                                ui.strong(name);
-                                ui.weak(if kind == "image" {
-                                    widget_text_from_key(Some("library_kind_image"), doc, language).unwrap_or_else(|| "Image".into())
-                                } else {
-                                    widget_text_from_key(Some("library_kind_mesh"), doc, language).unwrap_or_else(|| "3D".into())
-                                });
-                                if let Some(dimensions) = meta.get("dimensions_m").and_then(Value::as_array) {
-                                    let values: Vec<String> = dimensions.iter().filter_map(Value::as_f64).map(|v| format!("{v:.2}")).collect();
-                                    if values.len() == 3 {
-                                        ui.weak(format!("{} × {} × {} m", values[0], values[1], values[2]));
-                                    }
-                                }
-                                for field in ["license", "provenance"] {
-                                    if let Some(value) = meta.get(field).and_then(Value::as_str).filter(|value| !value.is_empty()) {
-                                        ui.weak(value);
-                                    }
-                                }
-                                let tool = if kind == "image" && w.state_key.as_deref() != Some("scene") {
-                                    Some(("illustration.asset.select", "library_select_image"))
-                                } else if kind == "mesh" && w.state_key.as_deref() == Some("scene") {
-                                    Some(("illustration.asset.add", "library_add_to_scene"))
-                                } else {
-                                    None
-                                };
-                                if let Some((tool, action_label)) = tool {
-                                    let label = widget_text_from_key(Some(action_label), doc, language).unwrap_or_else(|| "Select".into());
-                                    if ui.add_enabled(!pending_invoke, egui::Button::new(label)).clicked() {
-                                        queue_invoke(
-                                            actions,
-                                            tool,
-                                            serde_json::json!({ "project_id": project_id, "asset_id": id }),
-                                            Vec::new(),
-                                            Vec::new(),
-                                            tool_schemas,
-                                        );
-                                    }
+                if w.state_key.as_deref() == Some("scene") {
+                    if let Some(assets) = local_state.get("project_assets").and_then(Value::as_array) {
+                        for asset in assets.iter().filter(|asset| asset.get("kind").and_then(Value::as_str) == Some("mesh")) {
+                            let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+                            let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
+                            let project_id = asset.get("project_id").and_then(Value::as_str).unwrap_or("");
+                            ui.horizontal(|ui| {
+                                ui.label(name);
+                                if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_add_to_scene"))).clicked() {
+                                    queue_invoke(actions, "illustration.asset.add",
+                                        serde_json::json!({"project_id": project_id, "asset_id": id}),
+                                        Vec::new(), Vec::new(), tool_schemas);
                                 }
                             });
-                        });
+                        }
+                    }
+                } else {
+                    render_illustration_asset_library(
+                        ui, doc, language, local_state, pending_invoke, actions, tool_schemas,
+                    );
+                }
+            }
+            "illustration_library_feedback" => {
+                if local_state.get("library_busy").and_then(Value::as_bool) == Some(true) {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(widget_text_from_key(Some("library_operation_wait"), doc, language)
+                            .unwrap_or_else(|| "Working…".into()));
                     });
+                    ui.add(egui::ProgressBar::new(0.0).animate(true));
+                }
+                if let Some(message) = local_state.get("library_error").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+                    ui.colored_label(egui::Color32::from_rgb(240, 145, 130), message);
                 }
             }
             "scene_candidate" => {
@@ -2166,6 +2128,16 @@ fn queue_service_action(
     document_state: &HashMap<String, Value>,
     doc: &DeclUiDocument,
 ) {
+    if action.id.starts_with("library_") {
+        actions.local_patch.insert("library_error".into(), Value::String(String::new()));
+        if action.id != "library_generate_image" {
+            actions.local_patch.insert("library_busy".into(), Value::Bool(true));
+        } else {
+            actions.local_patch.insert("library_job_id".into(), Value::String(String::new()));
+            actions.local_patch.insert("library_job_project_id".into(),
+                local_state.get("project_id").cloned().unwrap_or(Value::String(String::new())));
+        }
+    }
     let input = action
         .input
         .as_ref()
@@ -3403,6 +3375,442 @@ pub(crate) fn try_load_png(ctx: &egui::Context, logical: &str) -> Option<egui::T
     Some(ctx.load_texture(logical, color, egui::TextureOptions::LINEAR))
 }
 
+#[derive(Clone)]
+struct LibraryOrbit {
+    yaw: f32,
+    pitch: f32,
+    zoom: f32,
+}
+
+impl Default for LibraryOrbit {
+    fn default() -> Self {
+        Self { yaw: 0.65, pitch: 0.35, zoom: 1.0 }
+    }
+}
+
+fn library_label(doc: &DeclUiDocument, language: &str, key: &str) -> String {
+    widget_text_from_key(Some(key), doc, language).unwrap_or_else(|| key.to_owned())
+}
+
+fn library_asset_texture(ctx: &egui::Context, asset: &Value, project_id: &str) -> Option<egui::TextureHandle> {
+    let uri = asset.get("uri")?.as_str()?;
+    let kind = asset.get("kind")?.as_str()?;
+    let thumbnail = if kind == "image" {
+        uri
+    } else {
+        asset.get("metadata")?.get("thumbnail")?.as_str()?
+    };
+    if thumbnail.contains("..")
+        || !(thumbnail.starts_with("/assets/illustration/")
+            || thumbnail.starts_with(&format!("/documents/illustrations/projects/{project_id}/assets/")))
+    {
+        return None;
+    }
+    let key = egui::Id::new(("illustration-library-thumb", project_id, thumbnail));
+    ctx.data(|data| data.get_temp::<egui::TextureHandle>(key)).or_else(|| {
+        let loaded = try_load_asset_thumbnail(ctx, thumbnail)?;
+        ctx.data_mut(|data| data.insert_temp(key, loaded.clone()));
+        Some(loaded)
+    })
+}
+
+fn library_mesh_texture(
+    ctx: &egui::Context,
+    asset: &Value,
+    yaw: f32,
+    pitch: f32,
+    zoom: f32,
+    size: [u32; 2],
+) -> Result<egui::TextureHandle, String> {
+    let uri = asset.get("uri").and_then(Value::as_str).ok_or("Missing GLB path")?;
+    if !uri.starts_with("/documents/illustrations/") || uri.contains("..") || uri.contains('\\') {
+        return Err("Invalid GLB path".into());
+    }
+    let path = host_file_from_logical(uri);
+    let mesh = aos_scene::load_gltf_mesh(&path).map_err(|error| error.to_string())?;
+    let target = mesh.aabb_center();
+    let extent = mesh.aabb_half_extents();
+    let radius = (extent.x * extent.x + extent.y * extent.y + extent.z * extent.z)
+        .sqrt().max(0.25);
+    let mut graph = aos_scene::SceneGraph {
+        effects: Vec::new(),
+        nodes: Default::default(),
+        roots: vec!["root".into()],
+        active_camera: None,
+    };
+    graph.nodes.insert("root".into(), aos_scene::SceneNode::empty("root", "Asset preview"));
+    aos_scene::insert_mesh_asset(
+        &mut graph,
+        "root",
+        "preview_mesh",
+        "Asset",
+        path.to_string_lossy().into_owned(),
+        aos_scene::Transform::default(),
+    ).map_err(|error| error.to_string())?;
+    let camera = aos_scene::ViewportCamera {
+        eye: aos_scene::eye_from_orbit(yaw, pitch, radius * 3.1 * zoom, target),
+        target,
+        up: aos_scene::Vec3::UNIT_Y,
+        fovy_rad: 0.72,
+        near: (radius * 0.01).max(0.001),
+        far: (radius * 12.0).max(20.0),
+    };
+    let gpu = crate::scene3d_ui::scene_gpu().ok_or("3D preview unavailable")?;
+    let rgba = gpu.lock().map_err(|error| error.to_string())?
+        .render_rgba(&graph, &camera, size[0], size[1], None)
+        .map_err(|error| error.to_string())?;
+    let image = egui::ColorImage::from_rgba_unmultiplied(
+        [size[0] as usize, size[1] as usize], &rgba,
+    );
+    Ok(ctx.load_texture(
+        format!("illustration-library-mesh-{}", asset.get("id").and_then(Value::as_str).unwrap_or("asset")),
+        image,
+        egui::TextureOptions::LINEAR,
+    ))
+}
+
+fn render_illustration_asset_library(
+    ui: &mut Ui,
+    doc: &DeclUiDocument,
+    language: &str,
+    local_state: &HashMap<String, Value>,
+    pending_invoke: bool,
+    actions: &mut DeclUiActions,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    let project_id = local_state.get("project_id").and_then(Value::as_str).unwrap_or("");
+    let assets = local_state.get("project_assets").and_then(Value::as_array);
+    let selected_id = if local_state.get("library_selected_project_id").and_then(Value::as_str) == Some(project_id) {
+        local_state.get("library_selected_asset_id").and_then(Value::as_str).unwrap_or("")
+    } else {
+        ""
+    };
+    let selected = assets.and_then(|items| library_selected_asset(
+        items,
+        project_id,
+        local_state.get("library_selected_project_id").and_then(Value::as_str).unwrap_or(""),
+        selected_id,
+    ));
+    let wide = ui.available_width() >= 760.0;
+    let height = ui.available_height().max(360.0);
+    if wide {
+        ui.horizontal(|ui| {
+            ui.set_min_height(height);
+            let grid_width = ui.available_width() * 0.58;
+            ui.allocate_ui_with_layout(
+                egui::vec2(grid_width, height),
+                egui::Layout::top_down(egui::Align::LEFT),
+                |ui| {
+                    ui.set_min_height(height);
+                    render_library_grid(ui, doc, language, assets, project_id, selected_id, actions);
+                },
+            );
+            ui.separator();
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), height),
+                egui::Layout::top_down(egui::Align::LEFT),
+                |ui| {
+                    ui.set_min_height(height);
+                    egui::ScrollArea::vertical().id_salt("library-inspector").show(ui, |ui| {
+                        render_library_details(ui, doc, language, selected, project_id, pending_invoke, actions, tool_schemas);
+                    });
+                },
+            );
+        });
+    } else {
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), height.min(340.0)),
+            egui::Layout::top_down(egui::Align::LEFT),
+            |ui| render_library_grid(ui, doc, language, assets, project_id, selected_id, actions),
+        );
+        ui.separator();
+        egui::ScrollArea::vertical().id_salt("library-inspector-compact").show(ui, |ui| {
+            render_library_details(ui, doc, language, selected, project_id, pending_invoke, actions, tool_schemas);
+        });
+    }
+}
+
+fn library_image_detail_texture(ctx: &egui::Context, logical: &str) -> Option<egui::TextureHandle> {
+    if !logical.starts_with("/documents/illustrations/") || logical.contains("..") || logical.contains('\\') {
+        return None;
+    }
+    let path = host_file_from_logical(logical);
+    if std::fs::metadata(&path).ok()?.len() > 100_000_000 {
+        return None;
+    }
+    let image = image::open(path).ok()?.thumbnail(2048, 2048).to_rgba8();
+    let color = egui::ColorImage::from_rgba_unmultiplied(
+        [image.width() as usize, image.height() as usize],
+        image.as_raw(),
+    );
+    Some(ctx.load_texture(logical, color, egui::TextureOptions::LINEAR))
+}
+
+fn library_selected_asset<'a>(
+    assets: &'a [Value],
+    project_id: &str,
+    selected_project_id: &str,
+    selected_id: &str,
+) -> Option<&'a Value> {
+    if project_id != selected_project_id || selected_id.is_empty() {
+        return None;
+    }
+    assets.iter().find(|asset| {
+        asset.get("project_id").and_then(Value::as_str) == Some(project_id)
+            && asset.get("id").and_then(Value::as_str) == Some(selected_id)
+    })
+}
+
+fn render_library_grid(
+    ui: &mut Ui,
+    doc: &DeclUiDocument,
+    language: &str,
+    assets: Option<&Vec<Value>>,
+    project_id: &str,
+    selected_id: &str,
+    actions: &mut DeclUiActions,
+) {
+    ui.heading(library_label(doc, language, "library_heading"));
+    let Some(assets) = assets.filter(|assets| !assets.is_empty()) else {
+        ui.weak(library_label(doc, language, "library_empty"));
+        return;
+    };
+    let columns = ((ui.available_width() / 166.0).floor() as usize).max(1);
+    egui::ScrollArea::vertical().id_salt("library-asset-grid").show(ui, |ui| {
+        egui::Grid::new("library-assets").spacing([10.0, 10.0]).show(ui, |ui| {
+            for (index, asset) in assets.iter().enumerate() {
+                let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+                let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
+                let is_image = asset.get("kind").and_then(Value::as_str) == Some("image");
+                let frame = egui::Frame::group(ui.style())
+                    .stroke(if id == selected_id {
+                        egui::Stroke::new(2.0, ui.visuals().selection.stroke.color)
+                    } else {
+                        ui.visuals().widgets.noninteractive.bg_stroke
+                    });
+                let response = frame.show(ui, |ui| {
+                    ui.set_min_width(145.0);
+                    ui.set_max_width(145.0);
+                    ui.set_min_height(178.0);
+                    ui.vertical(|ui| {
+                    let (preview, _) = ui.allocate_exact_size(egui::vec2(137.0, 112.0), egui::Sense::hover());
+                    if let Some(texture) = library_asset_texture(ui.ctx(), asset, project_id) {
+                        let size = texture.size_vec2();
+                        let scale = (preview.width() / size.x).min(preview.height() / size.y);
+                        let draw = egui::Rect::from_center_size(preview.center(), size * scale);
+                        ui.painter().image(texture.id(), draw, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+                    } else if !is_image {
+                        let key = ui.id().with(("library-mesh-thumb", project_id, id));
+                        let texture = ui.ctx().data(|data| data.get_temp::<egui::TextureHandle>(key))
+                            .or_else(|| {
+                                let rendered = library_mesh_texture(ui.ctx(), asset, 0.65, 0.35, 1.0, [160, 144]).ok()?;
+                                ui.ctx().data_mut(|data| data.insert_temp(key, rendered.clone()));
+                                Some(rendered)
+                            });
+                        if let Some(texture) = texture {
+                            ui.painter().image(texture.id(), preview, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+                        } else {
+                            ui.painter().text(preview.center(), egui::Align2::CENTER_CENTER, "3D", egui::FontId::proportional(22.0), ui.visuals().weak_text_color());
+                        }
+                    }
+                    let short_name = name.chars().take(18).collect::<String>();
+                    let short_name = if name.chars().count() > 18 { format!("{short_name}…") } else { short_name };
+                    ui.label(egui::RichText::new(short_name).strong()).on_hover_text(name);
+                    egui::Frame::default()
+                        .fill(ui.visuals().faint_bg_color)
+                        .corner_radius(3.0)
+                        .inner_margin(egui::Margin::symmetric(5, 2))
+                        .show(ui, |ui| {
+                            ui.weak(library_label(doc, language, if is_image { "library_kind_image" } else { "library_kind_mesh" }));
+                        });
+                    });
+                }).response;
+                let clicked = ui.interact(response.rect, ui.id().with(("library-card", project_id, id)), egui::Sense::click());
+                if clicked.clicked() || (clicked.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Space))) {
+                    actions.local_patch.insert("library_selected_asset_id".into(), Value::String(id.into()));
+                    actions.local_patch.insert("library_selected_project_id".into(), Value::String(project_id.into()));
+                    actions.local_patch.insert("library_image_uri".into(), Value::String(if is_image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
+                    actions.local_patch.insert("library_image_prompt".into(), Value::String(if is_image { asset.get("prompt").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
+                }
+                if (index + 1) % columns == 0 {
+                    ui.end_row();
+                }
+            }
+        });
+    });
+}
+
+
+fn render_library_details(
+    ui: &mut Ui,
+    doc: &DeclUiDocument,
+    language: &str,
+    selected: Option<&Value>,
+    project_id: &str,
+    pending_invoke: bool,
+    actions: &mut DeclUiActions,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    ui.heading(library_label(doc, language, "library_details"));
+    let Some(asset) = selected else {
+        ui.weak(library_label(doc, language, "library_detail_empty"));
+        return;
+    };
+    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+    let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
+    let kind = asset.get("kind").and_then(Value::as_str).unwrap_or("");
+    let uri = asset.get("uri").and_then(Value::as_str).unwrap_or("");
+    ui.strong(name);
+    ui.weak(library_label(doc, language, if kind == "image" { "library_kind_image" } else { "library_kind_mesh" }));
+    ui.add_space(8.0);
+    if kind == "image" {
+        let key = ui.id().with(("library-image-detail", project_id, id));
+        let texture = ui.ctx().data(|data| data.get_temp::<egui::TextureHandle>(key))
+            .or_else(|| {
+                let loaded = library_image_detail_texture(ui.ctx(), uri)?;
+                ui.ctx().data_mut(|data| data.insert_temp(key, loaded.clone()));
+                Some(loaded)
+            });
+        if let Some(texture) = texture {
+            let size = texture.size_vec2();
+            let scale = (ui.available_width() / size.x).min(420.0 / size.y);
+            ui.add(egui::Image::new(&texture).fit_to_exact_size(size * scale));
+            if let Ok((width, height)) = image::image_dimensions(host_file_from_logical(uri)) {
+                ui.weak(format!("{}: {width} × {height} px",
+                    if language.starts_with("fr") { "Résolution" } else { "Resolution" }));
+            }
+        } else {
+            ui.weak(library_label(doc, language, "library_preview_unavailable"));
+        }
+        ui.separator();
+        render_library_metadata(ui, asset, language);
+    } else if ui.available_width() >= 440.0 {
+        ui.horizontal(|ui| {
+            let preview_width = ui.available_width() * 0.53;
+            ui.allocate_ui_with_layout(
+                egui::vec2(preview_width, 385.0),
+                egui::Layout::top_down(egui::Align::LEFT),
+                |ui| render_library_mesh_preview(ui, doc, language, asset, project_id),
+            );
+            ui.separator();
+            ui.vertical(|ui| render_library_metadata(ui, asset, language));
+        });
+    } else {
+        render_library_mesh_preview(ui, doc, language, asset, project_id);
+        ui.separator();
+        render_library_metadata(ui, asset, language);
+    }
+    ui.add_space(8.0);
+    if kind == "image" {
+        if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
+            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_convert"))).clicked() {
+                let mut state = HashMap::new();
+                state.insert("project_id".into(), Value::String(project_id.into()));
+                state.insert("library_image_uri".into(), Value::String(uri.into()));
+                state.insert("library_image_prompt".into(), asset.get("prompt").cloned().unwrap_or(Value::String(String::new())));
+                queue_service_action(actions, action, &state, &HashMap::new(), doc);
+            }
+        }
+    } else if kind == "mesh"
+        && ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_add_to_scene"))).clicked()
+    {
+        queue_invoke(actions, "illustration.asset.add",
+            serde_json::json!({"project_id": project_id, "asset_id": id}),
+            Vec::new(), Vec::new(), tool_schemas);
+    }
+}
+
+fn render_library_mesh_preview(
+    ui: &mut Ui,
+    doc: &DeclUiDocument,
+    language: &str,
+    asset: &Value,
+    project_id: &str,
+) {
+    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+    let key = ui.id().with(("library-orbit", project_id, id));
+    let mut orbit = ui.ctx().data(|data| data.get_temp::<LibraryOrbit>(key)).unwrap_or_default();
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width().max(200.0), 320.0), egui::Sense::click_and_drag(),
+    );
+    let mut changed = false;
+    if response.dragged() {
+        let delta = ui.input(|input| input.pointer.delta());
+        orbit.yaw += delta.x * 0.01;
+        orbit.pitch = (orbit.pitch - delta.y * 0.01).clamp(-1.35, 1.35);
+        changed = true;
+    }
+    if response.hovered() {
+        let scroll = ui.input(|input| input.smooth_scroll_delta.y);
+        if scroll.abs() > 0.1 {
+            orbit.zoom = (orbit.zoom * (1.0 - scroll * 0.002)).clamp(0.35, 5.0);
+            changed = true;
+        }
+    }
+    let texture_key = ui.id().with(("library-mesh-detail", project_id, id));
+    let mut texture = ui.ctx().data(|data| data.get_temp::<egui::TextureHandle>(texture_key));
+    if changed || texture.is_none() {
+        texture = library_mesh_texture(ui.ctx(), asset, orbit.yaw, orbit.pitch, orbit.zoom, [512, 384]).ok();
+        if let Some(texture) = &texture {
+            ui.ctx().data_mut(|data| data.insert_temp(texture_key, texture.clone()));
+        }
+    }
+    if let Some(texture) = texture {
+        ui.painter().image(texture.id(), rect, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+    } else {
+        ui.painter().rect_filled(rect, 4.0, ui.visuals().faint_bg_color);
+        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER,
+            library_label(doc, language, "library_preview_unavailable"),
+            egui::FontId::proportional(13.0), ui.visuals().text_color());
+    }
+    ui.weak(library_label(doc, language, "library_preview_controls"));
+    if ui.button(library_label(doc, language, "library_preview_reset")).clicked() {
+        orbit = LibraryOrbit::default();
+        ui.ctx().data_mut(|data| data.remove::<egui::TextureHandle>(texture_key));
+    }
+    ui.ctx().data_mut(|data| data.insert_temp(key, orbit));
+}
+
+fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
+    let fr = language.starts_with("fr");
+    let metadata = &asset["metadata"];
+    let missing = if fr { "Non renseigné" } else { "Not specified" };
+    for (label, value) in [
+        (if fr { "Identifiant" } else { "ID" }, asset.get("id").and_then(Value::as_str)),
+        (if fr { "Catégorie" } else { "Category" }, metadata.get("category").and_then(Value::as_str)),
+        (if fr { "Origine" } else { "Origin" }, metadata.get("provenance").and_then(Value::as_str)),
+        (if fr { "Licence" } else { "License" }, metadata.get("license").and_then(Value::as_str)),
+        (if fr { "Auteur" } else { "Author" }, metadata.get("author").and_then(Value::as_str)),
+        (if fr { "Modèle" } else { "Model" }, metadata.get("model_id").and_then(Value::as_str)),
+        ("Orientation", metadata.get("orientation").and_then(Value::as_str)),
+        ("Source", metadata.get("source_url").and_then(Value::as_str)),
+        (if fr { "Invite" } else { "Prompt" }, asset.get("prompt").and_then(Value::as_str)),
+    ] {
+        ui.horizontal_wrapped(|ui| {
+            ui.weak(format!("{label}:"));
+            ui.label(value.filter(|value| !value.is_empty()).unwrap_or(missing));
+        });
+    }
+    if let Some(values) = metadata.get("dimensions_m").and_then(Value::as_array).filter(|items| items.len() == 3) {
+        let dimensions = values.iter().filter_map(Value::as_f64).map(|n| format!("{n:.2}")).collect::<Vec<_>>();
+        if dimensions.len() == 3 {
+            ui.label(format!("Dimensions: {} × {} × {} m", dimensions[0], dimensions[1], dimensions[2]));
+        }
+    }
+    if let Some(values) = metadata.get("pivot_m").and_then(Value::as_array).filter(|items| items.len() == 3) {
+        let pivot = values.iter().filter_map(Value::as_f64).map(|n| format!("{n:.2}")).collect::<Vec<_>>();
+        if pivot.len() == 3 {
+            ui.label(format!("Pivot: {} × {} × {} m", pivot[0], pivot[1], pivot[2]));
+        }
+    }
+    if let Some(tags) = metadata.get("tags").and_then(Value::as_array) {
+        let labels = tags.iter().filter_map(Value::as_str).collect::<Vec<_>>();
+        if !labels.is_empty() {
+            ui.label(format!("Tags: {}", labels.join(", ")));
+        }
+    }
+}
+
 fn render_node_at(local_state: &HashMap<String, Value>, x: f32, y: f32) -> Option<String> {
     let path = local_state.get("render_id_map_path")?.as_str()?;
     let nodes = local_state.get("render_id_map_nodes")?.as_array()?;
@@ -3497,6 +3905,25 @@ fn value_display(v: &Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Null => "—".into(),
         other => serde_json::to_string(other).unwrap_or_else(|_| "—".into()),
+    }
+}
+
+#[cfg(test)]
+mod illustration_library_tests {
+    use super::library_selected_asset;
+    use serde_json::json;
+
+    #[test]
+    fn selection_is_scoped_to_the_active_project() {
+        let assets = vec![
+            json!({"project_id": "project-1", "id": "asset-1"}),
+            json!({"project_id": "project-2", "id": "asset-1"}),
+        ];
+        assert_eq!(
+            library_selected_asset(&assets, "project-2", "project-2", "asset-1"),
+            Some(&assets[1])
+        );
+        assert!(library_selected_asset(&assets, "project-2", "project-1", "asset-1").is_none());
     }
 }
 
