@@ -1836,7 +1836,6 @@
       "input": {
         "project_id": "$local.project_id",
         "image_uri": "$local.library_image_uri",
-        "image_name": "$local.library_image_name",
         "prompt": "$local.library_image_prompt"
       },
       "refresh_binds": []

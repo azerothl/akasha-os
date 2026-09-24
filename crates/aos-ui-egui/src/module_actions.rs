@@ -764,15 +764,9 @@ pub(crate) async fn run_decl_service_action(
         "illustration.library.convert" => {
             let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
             let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
-            let image_name = input
-                .get("image_name")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
             let prompt = library_convert_mesh_assist_prompt(
                 input.get("prompt").and_then(Value::as_str).unwrap_or(""),
                 &image_uri,
-                &image_name,
             );
             let prefix = format!("/documents/illustrations/projects/{project_id}/assets/");
             let outcome = if !project_id.starts_with("project-")
@@ -809,14 +803,7 @@ pub(crate) async fn run_decl_service_action(
                         backend: MeshAssistBackendId::Neural,
                         image_path: Some(image_path.to_string_lossy().into_owned()),
                     };
-                    let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| match e {
-                        aos_scene::NeuralMeshError::EmptyPrompt => {
-                            "TRELLIS needs a short description (prompt was empty after fallback). / \
-                             TRELLIS nécessite une courte description (prompt vide après repli)."
-                                .into()
-                        }
-                        other => other.to_string(),
-                    })?;
+                    let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
                     if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
                         return Err("TRELLIS returned a mock asset; install the real runtime and model".into());
                     }
@@ -4309,7 +4296,7 @@ fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, Str
 }
 
 /// Mesh assist still requires a non-empty label; image→GLB uses the image as conditioner.
-fn library_convert_mesh_assist_prompt(prompt: &str, image_uri: &str, image_name: &str) -> String {
+fn library_convert_mesh_assist_prompt(prompt: &str, image_uri: &str) -> String {
     let trimmed = prompt.trim();
     if !trimmed.is_empty() {
         return trimmed.to_owned();
@@ -4324,10 +4311,6 @@ fn library_convert_mesh_assist_prompt(prompt: &str, image_uri: &str, image_name:
         {
             return stem.to_owned();
         }
-    }
-    let name = image_name.trim();
-    if !name.is_empty() {
-        return name.to_owned();
     }
     "image".to_owned()
 }
@@ -4602,21 +4585,17 @@ mod create_regression_tests {
             library_convert_mesh_assist_prompt(
                 "  ",
                 "/documents/illustrations/projects/project-1/assets/generated-42.png",
-                "",
             ),
             "generated-42"
         );
         assert_eq!(
-            library_convert_mesh_assist_prompt("", "/documents/x/assets/foo.png", "Sunset study"),
+            library_convert_mesh_assist_prompt("", "/documents/x/assets/foo.png"),
             "foo"
         );
+        assert_eq!(library_convert_mesh_assist_prompt("", "/documents/x/assets/"), "image");
+        assert_eq!(library_convert_mesh_assist_prompt("", ""), "image");
         assert_eq!(
-            library_convert_mesh_assist_prompt("", "/documents/x/assets/", "Sunset study"),
-            "Sunset study"
-        );
-        assert_eq!(library_convert_mesh_assist_prompt("", "", ""), "image");
-        assert_eq!(
-            library_convert_mesh_assist_prompt("  keep me  ", "/documents/x/a.png", ""),
+            library_convert_mesh_assist_prompt("  keep me  ", "/documents/x/a.png"),
             "keep me"
         );
     }
