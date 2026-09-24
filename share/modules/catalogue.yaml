@@ -49,7 +49,11 @@ entries:
     version: "0.7.21"
     kind: module
     path: share/modules/illustration-studio.aospkg
-    hash: sha256:a020724fc5ec76df99c7137f11a51ee787a1ffd4aeeebacf156f18c9ca2be8a8
+<<<<<<< HEAD
+    hash: sha256:ffe2ae4e0c61e56871f106a3a34070549940860b3615881c36a88af51083f9eb
+=======
+    hash: sha256:cd9ce14bbec4d1a74a008c98a67bf637b0e3aa8600b9781a39b9c16b82cbbc5d
+>>>>>>> deec92f (fix(illustration-studio): Beauty workspace tab and FR chrome copy)
     attested_caps:
       - fs.read:/documents/illustrations/**
       - fs.write:/documents/illustrations/**
