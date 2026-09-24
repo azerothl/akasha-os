@@ -178,6 +178,7 @@ jobs:
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libwayland-dev \
             libasound2-dev libudev-dev \
+            libxkbcommon-x11-0 \
             xz-utils lld
 
       - name: Install Rust

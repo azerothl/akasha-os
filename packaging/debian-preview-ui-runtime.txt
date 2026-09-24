@@ -1,0 +1,3 @@
+# Debian/Ubuntu packages required to *run* aos-ui-egui (Winit X11 keyboard).
+# Build -dev packages do not replace these on minimal images (Xvfb smoke, servers).
+libxkbcommon-x11-0

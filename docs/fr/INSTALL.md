@@ -39,6 +39,7 @@ Le script lit `latest.json` des GitHub Releases, affiche URL + sha256,
 | GPU | NVIDIA avec driver récent (`nvidia-smi -L` OK) **ou** artefact CPU-only |
 | Disque | ~8 Go libre (pack mid recommandé) ; ~4,5 Go de plus pour SD 1.5 + moteur (optionnel) |
 | CUDA | Runtime embarqué dans le paquet GPU (driver suffit) ; pas sur le paquet CPU |
+| UI Linux (X11) | `libxkbcommon-x11-0` sous Debian/Ubuntu (images minimales ; voir [Linux](#linux)) |
 
 Pas de macOS. L'inférence CPU est supportée mais dégradée.
 
@@ -94,6 +95,17 @@ Démarrage rapide sans `install.cmd` (préfixe de données stable quand même) :
    ```
    Préfixe : `~/.local/share/agentos-preview` (overlay non destructif).
 3. Lancer `agentos-preview`.
+
+**Bibliothèques bureau :** `aos-ui-egui` charge `libxkbcommon-x11.so` pour le
+clavier X11. Sur une Debian/Ubuntu minimale (serveurs, smoke Xvfb), installez
+le paquet runtime avant de lancer la Preview :
+
+```bash
+sudo apt install libxkbcommon-x11-0
+```
+
+Liste : `packaging/debian-preview-ui-runtime.txt` (script :
+`packaging/install-debian-preview-ui-runtime.sh`).
 
 ## Contenu du paquet
 
@@ -164,6 +176,7 @@ keys:
 | Échec modèles | Réseau pour HF, ou copier les GGUF dans `share/models/` |
 | healthcheck échoué | `var/run/*.stderr.log` (bouton **Dépannage**) |
 | Bus injoignable | Toujours via `aos-session` |
+| Panic UI : `libxkbcommon-x11.so` manquant | `sudo apt install libxkbcommon-x11-0` (voir bibliothèques bureau Linux) |
 
 ## Build depuis les sources
 

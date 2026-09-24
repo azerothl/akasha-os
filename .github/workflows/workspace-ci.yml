@@ -40,7 +40,10 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: Install Linux UI dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libv4l-dev libdbus-1-dev pkg-config
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libv4l-dev libdbus-1-dev pkg-config
+          bash packaging/install-debian-preview-ui-runtime.sh
       - name: Build Illustration Studio WASM
         run: cargo build --manifest-path modules/illustration-studio/Cargo.toml --target wasm32-unknown-unknown --release
       - name: Check scene, protocol and host UI

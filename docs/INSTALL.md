@@ -40,6 +40,7 @@ URL and sha256, **refuses** on mismatch, then overlays into
 | GPU | NVIDIA with a recent driver (`nvidia-smi -L` OK) **or** CPU path in the same artefact |
 | Disk | ~8 GB free (recommended mid-tier GGUF pack); extra ~4.5 GB for optional SD 1.5 + engine |
 | CUDA | Unified package ships CUDA runtime next to `aos-modeld`; CPU binary has no CUDA DLL |
+| Linux UI (X11) | `libxkbcommon-x11-0` on Debian/Ubuntu (minimal images often omit it; see [Linux](#linux)) |
 
 No macOS. CPU inference is supported but degraded.
 
@@ -93,6 +94,17 @@ Quick start without `install.cmd` (still uses the stable data prefix):
    ```
    Prefix: `~/.local/share/agentos-preview` (non-destructive overlay).
 3. Run `agentos-preview`.
+
+**Desktop libraries:** `aos-ui-egui` loads `libxkbcommon-x11.so` for X11 keyboard
+input. On a minimal Debian/Ubuntu host (common on servers and Xvfb smoke
+setups), install the runtime package before launching Preview:
+
+```bash
+sudo apt install libxkbcommon-x11-0
+```
+
+Same list as `packaging/debian-preview-ui-runtime.txt` (helper:
+`packaging/install-debian-preview-ui-runtime.sh`).
 
 ## Package contents
 
@@ -163,6 +175,7 @@ keys:
 | Model download failed | Network for HF, or copy GGUFs into `share/models/` |
 | Healthcheck failed | `var/run/*.stderr.log` (**Troubleshooting** button) |
 | Bus unreachable | Always launch via `aos-session` |
+| UI panic: `libxkbcommon-x11.so` missing | `sudo apt install libxkbcommon-x11-0` (see Linux desktop libraries) |
 
 ## Build from source
 

@@ -47,6 +47,9 @@ the steps below.
 - NVIDIA recommended on Windows/Linux; CPU-only path in the same Win/Linux
   archive is OK (slower). macOS uses Metal + CPU.
 - Install: see [INSTALL.md](INSTALL.md)
+- **Linux x64:** if the UI exits immediately or panics about
+  `libxkbcommon-x11.so`, install `libxkbcommon-x11-0` (minimal distros and
+  Xvfb smoke hosts often lack it). See INSTALL.md § Linux desktop libraries.
 - Launch **Akasha OS Preview** (`aos-session`)
 
 Expected banner: Preview on the host OS — this is not the bootable OS yet.

@@ -11,6 +11,7 @@ apt-get install -y -qq \
   libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
   libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
   libwayland-dev libasound2-dev \
+  libxkbcommon-x11-0 \
   >/dev/null
 
 # bindgen needs libclang (Ubuntu ships libclang-14.so as a symlink)
