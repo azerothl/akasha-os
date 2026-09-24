@@ -180,7 +180,7 @@ impl DeclUiPanelState {
                     self.local_state.insert("last_work_area".into(), area.clone());
                 }
             }
-        } else if tool == "illustration.asset.register" {
+        } else if tool == "illustration.asset.register" || tool == "illustration.asset.update" {
             if self.local_state.get("project_id") == result.get("project_id") {
                 let items = result.get("items").cloned().unwrap_or(Value::Array(Vec::new()));
                 self.local_state.insert("project_assets".into(), items.clone());
@@ -246,6 +246,7 @@ impl DeclUiPanelState {
             ("library_job_id", Value::String(String::new())),
             ("library_busy", Value::Bool(false)),
             ("library_section", Value::String("assets".into())),
+            ("library_image_framing", Value::String("standard".into())),
             ("work_area", Value::String("start".into())),
             ("last_work_area", result.get("work_area").cloned().unwrap_or_else(|| Value::String("start".into()))),
         ] {
@@ -3390,6 +3391,38 @@ impl Default for LibraryOrbit {
     }
 }
 
+#[derive(Clone)]
+struct LibraryAssetDraft {
+    name: String,
+    category: String,
+    tags: String,
+    orientation: String,
+    dimensions: [f64; 3],
+    pivot: [f64; 3],
+    has_dimensions: bool,
+    has_pivot: bool,
+}
+
+impl LibraryAssetDraft {
+    fn from_asset(asset: &Value) -> Self {
+        let metadata = &asset["metadata"];
+        let vector = |key: &str| -> Option<[f64; 3]> {
+            let values = metadata.get(key)?.as_array()?;
+            Some([values.first()?.as_f64()?, values.get(1)?.as_f64()?, values.get(2)?.as_f64()?])
+        };
+        Self {
+            name: asset.get("name").and_then(Value::as_str).unwrap_or("").into(),
+            category: metadata.get("category").and_then(Value::as_str).unwrap_or("").into(),
+            tags: metadata.get("tags").and_then(Value::as_array).map(|tags| tags.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default(),
+            orientation: metadata.get("orientation").and_then(Value::as_str).unwrap_or("").into(),
+            dimensions: vector("dimensions_m").unwrap_or([0.0; 3]),
+            pivot: vector("pivot_m").unwrap_or([0.0; 3]),
+            has_dimensions: vector("dimensions_m").is_some(),
+            has_pivot: vector("pivot_m").is_some(),
+        }
+    }
+}
+
 fn library_label(doc: &DeclUiDocument, language: &str, key: &str) -> String {
     widget_text_from_key(Some(key), doc, language).unwrap_or_else(|| key.to_owned())
 }
@@ -3429,7 +3462,7 @@ fn library_mesh_texture(
         return Err("Invalid GLB path".into());
     }
     let path = host_file_from_logical(uri);
-    let mesh = aos_scene::load_gltf_mesh(&path).map_err(|error| error.to_string())?;
+    let mesh = aos_scene::load_gltf_mesh_cached(&path).map_err(|error| error.to_string())?;
     let target = mesh.aabb_center();
     let extent = mesh.aabb_half_extents();
     let radius = (extent.x * extent.x + extent.y * extent.y + extent.z * extent.z)
@@ -3515,7 +3548,7 @@ fn render_illustration_asset_library(
                 |ui| {
                     ui.set_min_height(height);
                     egui::ScrollArea::vertical().id_salt("library-inspector").show(ui, |ui| {
-                        render_library_details(ui, doc, language, selected, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+                        render_library_details(ui, doc, language, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
                     });
                 },
             );
@@ -3528,7 +3561,7 @@ fn render_illustration_asset_library(
         );
         ui.separator();
         egui::ScrollArea::vertical().id_salt("library-inspector-compact").show(ui, |ui| {
-            render_library_details(ui, doc, language, selected, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+            render_library_details(ui, doc, language, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
         });
     }
 }
@@ -3576,6 +3609,38 @@ fn library_selected_asset<'a>(
     })
 }
 
+fn library_source_image<'a>(assets: &'a [Value], project_id: &str, mesh: &Value) -> Option<&'a Value> {
+    if mesh.get("kind").and_then(Value::as_str) != Some("mesh")
+        || mesh.get("project_id").and_then(Value::as_str) != Some(project_id) {
+        return None;
+    }
+    let source = mesh.get("metadata")?.get("source_image")?.as_str()?;
+    assets.iter().find(|asset| {
+        asset.get("project_id").and_then(Value::as_str) == Some(project_id)
+            && asset.get("kind").and_then(Value::as_str) == Some("image")
+            && asset.get("uri").and_then(Value::as_str) == Some(source)
+    })
+}
+
+fn library_linked_meshes<'a>(assets: &'a [Value], project_id: &str, image: &Value) -> Vec<&'a Value> {
+    let Some(uri) = image.get("uri").and_then(Value::as_str) else { return Vec::new() };
+    assets.iter().filter(|asset| {
+        asset.get("project_id").and_then(Value::as_str) == Some(project_id)
+            && asset.get("kind").and_then(Value::as_str) == Some("mesh")
+            && asset.get("metadata").and_then(|metadata| metadata.get("source_image")).and_then(Value::as_str) == Some(uri)
+    }).collect()
+}
+
+fn library_select_asset(actions: &mut DeclUiActions, asset: &Value, project_id: &str) {
+    let is_image = asset.get("kind").and_then(Value::as_str) == Some("image");
+    actions.local_patch.insert("library_selected_asset_id".into(), asset.get("id").cloned().unwrap_or(Value::Null));
+    actions.local_patch.insert("library_selected_project_id".into(), Value::String(project_id.into()));
+    actions.local_patch.insert("library_error".into(), Value::String(String::new()));
+    actions.local_patch.insert("library_error_action".into(), Value::String(String::new()));
+    actions.local_patch.insert("library_image_uri".into(), Value::String(if is_image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
+    actions.local_patch.insert("library_image_prompt".into(), Value::String(if is_image { asset.get("prompt").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
+}
+
 fn render_library_grid(
     ui: &mut Ui,
     doc: &DeclUiDocument,
@@ -3593,12 +3658,18 @@ fn render_library_grid(
     let columns = ((ui.available_width() / 166.0).floor() as usize).max(1);
     egui::ScrollArea::vertical().id_salt("library-asset-grid").show(ui, |ui| {
         egui::Grid::new("library-assets").spacing([10.0, 10.0]).show(ui, |ui| {
-            for (index, asset) in assets.iter().enumerate() {
+            for (index, asset) in assets.iter().filter(|asset| {
+                asset.get("project_id").and_then(Value::as_str) == Some(project_id)
+                    && (asset.get("kind").and_then(Value::as_str) != Some("mesh")
+                        || library_source_image(assets, project_id, asset).is_none())
+            }).enumerate() {
                 let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
                 let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
                 let is_image = asset.get("kind").and_then(Value::as_str) == Some("image");
+                let linked_meshes = if is_image { library_linked_meshes(assets, project_id, asset) } else { Vec::new() };
+                let selected_in_group = id == selected_id || linked_meshes.iter().any(|mesh| mesh.get("id").and_then(Value::as_str) == Some(selected_id));
                 let frame = egui::Frame::group(ui.style())
-                    .stroke(if id == selected_id {
+                    .stroke(if selected_in_group {
                         egui::Stroke::new(2.0_f32, ui.visuals().selection.stroke.color)
                     } else {
                         ui.visuals().widgets.noninteractive.bg_stroke
@@ -3636,18 +3707,15 @@ fn render_library_grid(
                         .corner_radius(3.0)
                         .inner_margin(egui::Margin::symmetric(5, 2))
                         .show(ui, |ui| {
-                            ui.weak(library_label(doc, language, if is_image { "library_kind_image" } else { "library_kind_mesh" }));
+                            ui.weak(if !linked_meshes.is_empty() {
+                                "Image + 3D".to_owned()
+                            } else { library_label(doc, language, if is_image { "library_kind_image" } else { "library_kind_mesh" }) });
                         });
                     });
                 }).response;
                 let clicked = ui.interact(response.rect, ui.id().with(("library-card", project_id, id)), egui::Sense::click());
                 if clicked.clicked() || (clicked.has_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Space))) {
-                    actions.local_patch.insert("library_selected_asset_id".into(), Value::String(id.into()));
-                    actions.local_patch.insert("library_selected_project_id".into(), Value::String(project_id.into()));
-                    actions.local_patch.insert("library_error".into(), Value::String(String::new()));
-                    actions.local_patch.insert("library_error_action".into(), Value::String(String::new()));
-                    actions.local_patch.insert("library_image_uri".into(), Value::String(if is_image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
-                    actions.local_patch.insert("library_image_prompt".into(), Value::String(if is_image { asset.get("prompt").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
+                    library_select_asset(actions, asset, project_id);
                 }
                 if (index + 1) % columns == 0 {
                     ui.end_row();
@@ -3663,6 +3731,7 @@ fn render_library_details(
     doc: &DeclUiDocument,
     language: &str,
     selected: Option<&Value>,
+    assets: Option<&Vec<Value>>,
     project_id: &str,
     conversion_error: Option<&str>,
     pending_invoke: bool,
@@ -3678,8 +3747,30 @@ fn render_library_details(
     let name = asset.get("name").and_then(Value::as_str).unwrap_or("");
     let kind = asset.get("kind").and_then(Value::as_str).unwrap_or("");
     let uri = asset.get("uri").and_then(Value::as_str).unwrap_or("");
-    ui.strong(name);
+    let source_image = assets.and_then(|items| library_source_image(items, project_id, asset));
+    let linked_meshes = assets.map(|items| library_linked_meshes(items, project_id, source_image.unwrap_or(asset))).unwrap_or_default();
+    ui.strong(source_image.and_then(|image| image.get("name").and_then(Value::as_str)).unwrap_or(name));
     ui.weak(library_label(doc, language, if kind == "image" { "library_kind_image" } else { "library_kind_mesh" }));
+    if source_image.is_some() || !linked_meshes.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            if let Some(image) = source_image {
+                if ui.button(if language.starts_with("fr") { "Voir l’image" } else { "View image" }).clicked() {
+                    library_select_asset(actions, image, project_id);
+                }
+            } else {
+                ui.strong("Image");
+            }
+            for (index, mesh) in linked_meshes.iter().enumerate() {
+                if mesh.get("id").and_then(Value::as_str) == Some(id) {
+                    ui.strong(format!("3D {}", index + 1));
+                } else if ui.button(format!("3D {}", index + 1)).clicked() {
+                    library_select_asset(actions, mesh, project_id);
+                }
+            }
+        });
+    }
+    ui.add_space(8.0);
+    render_library_asset_editor(ui, asset, project_id, language, pending_invoke, actions, tool_schemas);
     ui.add_space(8.0);
     if kind == "image" {
         let key = ui.id().with(("library-image-detail", project_id, id));
@@ -3720,12 +3811,88 @@ fn render_library_details(
     }
     ui.add_space(8.0);
     if kind == "image" {
+        let provider_key = ui.id().with(("mesh-provider", project_id, id));
+        let mut provider = ui.ctx().data(|data| data.get_temp::<String>(provider_key)).unwrap_or_else(|| "trellis".into());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(if language.starts_with("fr") { "Convertisseur 3D" } else { "3D converter" });
+            ui.selectable_value(&mut provider, "trellis".into(), "TRELLIS");
+            ui.selectable_value(&mut provider, "triposr".into(), "TripoSR · test");
+        });
+        ui.ctx().data_mut(|data| data.insert_temp(provider_key, provider.clone()));
+        if provider == "triposr" {
+            ui.weak(if language.starts_with("fr") {
+                "Expérimental : configurez AOS_TRIPOSR_RUNNER avec un runner local. La qualité peut être inférieure à TRELLIS."
+            } else {
+                "Experimental: set AOS_TRIPOSR_RUNNER to a local runner. Quality may be lower than TRELLIS."
+            });
+        }
+        let quality_key = ui.id().with(("trellis-resolution", project_id, id));
+        let mut geometry_res = ui.ctx().data(|data| data.get_temp::<u32>(quality_key)).unwrap_or(512);
+        if provider == "trellis" {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(if language.starts_with("fr") { "Détail TRELLIS" } else { "TRELLIS detail" });
+                ui.selectable_value(&mut geometry_res, 512, if language.starts_with("fr") { "Rapide · 512" } else { "Fast · 512" });
+                ui.selectable_value(&mut geometry_res, 1024, if language.starts_with("fr") { "Détaillé · 1024" } else { "Detailed · 1024" });
+            });
+        }
+        ui.ctx().data_mut(|data| data.insert_temp(quality_key, geometry_res));
+        if provider == "trellis" && geometry_res == 1024 {
+            ui.weak(if language.starts_with("fr") { "Plus lent et plus lourd ; utile si le GLB 512 manque de détail." } else { "Slower and larger; use when the 512 GLB lacks detail." });
+        }
+        let steps_key = ui.id().with(("trellis-steps", project_id, id));
+        let structure_key = ui.id().with(("trellis-structure-guidance", project_id, id));
+        let shape_key = ui.id().with(("trellis-shape-guidance", project_id, id));
+        let seed_key = ui.id().with(("trellis-seed", project_id, id));
+        let atlas_key = ui.id().with(("trellis-atlas", project_id, id));
+        let mut steps = ui.ctx().data(|data| data.get_temp::<u32>(steps_key)).unwrap_or(12);
+        let mut structure_guidance = ui.ctx().data(|data| data.get_temp::<f32>(structure_key)).unwrap_or(7.5);
+        let mut shape_guidance = ui.ctx().data(|data| data.get_temp::<f32>(shape_key)).unwrap_or(7.5);
+        let mut seed = ui.ctx().data(|data| data.get_temp::<u32>(seed_key)).unwrap_or(42);
+        let mut atlas_resolution = ui.ctx().data(|data| data.get_temp::<u32>(atlas_key)).unwrap_or(0);
+        if provider == "trellis" {
+            ui.collapsing(library_label(doc, language, "library_trellis_advanced"), |ui| {
+                ui.label(library_label(doc, language, "library_trellis_steps"));
+                ui.add(egui::Slider::new(&mut steps, 1..=50));
+                ui.label(library_label(doc, language, "library_trellis_structure_guidance"));
+                ui.add(egui::Slider::new(&mut structure_guidance, 1.0..=10.0).step_by(0.1));
+                ui.label(library_label(doc, language, "library_trellis_shape_guidance"));
+                ui.add(egui::Slider::new(&mut shape_guidance, 1.0..=10.0).step_by(0.1));
+                ui.label(library_label(doc, language, "library_trellis_atlas"));
+                ui.horizontal_wrapped(|ui| {
+                    ui.selectable_value(&mut atlas_resolution, 0, library_label(doc, language, "library_trellis_atlas_auto"));
+                    ui.selectable_value(&mut atlas_resolution, 1024, "1024");
+                    ui.selectable_value(&mut atlas_resolution, 2048, "2048");
+                    ui.selectable_value(&mut atlas_resolution, 4096, "4096");
+                });
+                ui.horizontal(|ui| {
+                    ui.label(library_label(doc, language, "library_trellis_seed"));
+                    ui.add(egui::DragValue::new(&mut seed).range(0..=u32::MAX));
+                });
+                ui.small(library_label(doc, language, "library_trellis_steps_hint"));
+                ui.small(library_label(doc, language, "library_trellis_seed_hint"));
+            });
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(steps_key, steps);
+                data.insert_temp(structure_key, structure_guidance);
+                data.insert_temp(shape_key, shape_guidance);
+                data.insert_temp(seed_key, seed);
+                data.insert_temp(atlas_key, atlas_resolution);
+            });
+        }
         if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
-            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_convert"))).clicked() {
+            let label = if provider == "triposr" { "library_convert_triposr" } else { "library_convert" };
+            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, label))).clicked() {
                 let mut state = HashMap::new();
                 state.insert("project_id".into(), Value::String(project_id.into()));
                 state.insert("library_image_uri".into(), Value::String(uri.into()));
                 state.insert("library_image_prompt".into(), asset.get("prompt").cloned().unwrap_or(Value::String(String::new())));
+                state.insert("library_trellis_resolution".into(), serde_json::json!(geometry_res));
+                state.insert("library_mesh_provider".into(), Value::String(provider));
+                state.insert("library_trellis_steps".into(), serde_json::json!(steps));
+                state.insert("library_trellis_structure_guidance".into(), serde_json::json!(structure_guidance));
+                state.insert("library_trellis_shape_guidance".into(), serde_json::json!(shape_guidance));
+                state.insert("library_trellis_seed".into(), serde_json::json!(seed));
+                state.insert("library_trellis_atlas_resolution".into(), serde_json::json!(atlas_resolution));
                 queue_service_action(actions, action, &state, &HashMap::new(), doc);
             }
         }
@@ -3739,6 +3906,80 @@ fn render_library_details(
             serde_json::json!({"project_id": project_id, "asset_id": id}),
             Vec::new(), Vec::new(), tool_schemas);
     }
+}
+
+fn render_library_asset_editor(
+    ui: &mut Ui,
+    asset: &Value,
+    project_id: &str,
+    language: &str,
+    pending_invoke: bool,
+    actions: &mut DeclUiActions,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    let fr = language.starts_with("fr");
+    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+    let edit_key = ui.id().with(("asset-edit-open", project_id, id));
+    let draft_key = ui.id().with(("asset-edit-draft", project_id, id));
+    let mut open = ui.ctx().data(|data| data.get_temp::<bool>(edit_key)).unwrap_or(false);
+    if ui.button(if fr { "Modifier les informations" } else { "Edit details" }).clicked() {
+        open = !open;
+        if open {
+            ui.ctx().data_mut(|data| data.insert_temp(draft_key, LibraryAssetDraft::from_asset(asset)));
+        }
+    }
+    if !open {
+        ui.ctx().data_mut(|data| data.insert_temp(edit_key, false));
+        return;
+    }
+    let mut draft = ui.ctx().data(|data| data.get_temp::<LibraryAssetDraft>(draft_key))
+        .unwrap_or_else(|| LibraryAssetDraft::from_asset(asset));
+    ui.separator();
+    ui.label(if fr { "Nom" } else { "Name" });
+    ui.text_edit_singleline(&mut draft.name);
+    ui.label(if fr { "Catégorie" } else { "Category" });
+    ui.text_edit_singleline(&mut draft.category);
+    ui.label("Tags");
+    ui.text_edit_singleline(&mut draft.tags);
+    ui.label("Orientation");
+    ui.text_edit_singleline(&mut draft.orientation);
+    ui.checkbox(&mut draft.has_dimensions, if fr { "Dimensions en mètres" } else { "Dimensions in metres" });
+    if draft.has_dimensions {
+        ui.horizontal(|ui| {
+            for component in &mut draft.dimensions {
+                ui.add(egui::DragValue::new(component).range(0.0..=1000.0).speed(0.01));
+            }
+        });
+    }
+    ui.checkbox(&mut draft.has_pivot, if fr { "Pivot en mètres" } else { "Pivot in metres" });
+    if draft.has_pivot {
+        ui.horizontal(|ui| {
+            for component in &mut draft.pivot {
+                ui.add(egui::DragValue::new(component).range(-1000.0..=1000.0).speed(0.01));
+            }
+        });
+    }
+    let tags = draft.tags.split(',').map(str::trim).filter(|tag| !tag.is_empty()).collect::<Vec<_>>();
+    let valid = !draft.name.trim().is_empty() && draft.name.chars().count() <= 120
+        && draft.category.chars().count() <= 80 && draft.orientation.chars().count() <= 80
+        && tags.len() <= 16 && tags.iter().all(|tag| tag.chars().count() <= 32);
+    if ui.add_enabled(valid && !pending_invoke, egui::Button::new(if fr { "Enregistrer" } else { "Save" })).clicked() {
+        let mut metadata = serde_json::json!({
+            "category": draft.category.trim(),
+            "tags": tags,
+            "orientation": draft.orientation.trim(),
+        });
+        metadata["dimensions_m"] = if draft.has_dimensions { serde_json::json!(draft.dimensions) } else { Value::Null };
+        metadata["pivot_m"] = if draft.has_pivot { serde_json::json!(draft.pivot) } else { Value::Null };
+        queue_invoke(actions, "illustration.asset.update", serde_json::json!({
+            "project_id": project_id, "asset_id": id, "name": draft.name.trim(), "metadata": metadata,
+        }), Vec::new(), Vec::new(), tool_schemas);
+        open = false;
+    }
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(edit_key, open);
+        data.insert_temp(draft_key, draft);
+    });
 }
 
 fn render_library_mesh_preview(
@@ -3796,6 +4037,24 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
     let fr = language.starts_with("fr");
     let metadata = &asset["metadata"];
     let missing = if fr { "Non renseigné" } else { "Not specified" };
+    if asset.get("kind").and_then(Value::as_str) == Some("mesh") {
+        if let Some(uri) = asset.get("uri").and_then(Value::as_str)
+            .filter(|uri| uri.starts_with("/documents/illustrations/") && !uri.contains("..") && !uri.contains('\\'))
+        {
+            let path = host_file_from_logical(uri);
+            if let Ok(mesh) = aos_scene::load_gltf_mesh_cached(&path) {
+                ui.label(format!("Triangles: {}", mesh.triangle_count));
+                ui.label(format!("{}: {}", if fr { "Sommets" } else { "Vertices" }, mesh.vertex_count()));
+                if let Some(texture) = &mesh.base_color_texture {
+                    ui.label(format!("Texture: {} × {} px", texture.width, texture.height));
+                }
+            }
+            if let Ok(file) = std::fs::metadata(path) {
+                ui.label(format!("{}: {:.2} Mio", if fr { "Fichier" } else { "File" }, file.len() as f64 / 1_048_576.0));
+            }
+            ui.separator();
+        }
+    }
     for (label, value) in [
         (if fr { "Identifiant" } else { "ID" }, asset.get("id").and_then(Value::as_str)),
         (if fr { "Catégorie" } else { "Category" }, metadata.get("category").and_then(Value::as_str)),
@@ -3803,6 +4062,8 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
         (if fr { "Licence" } else { "License" }, metadata.get("license").and_then(Value::as_str)),
         (if fr { "Auteur" } else { "Author" }, metadata.get("author").and_then(Value::as_str)),
         (if fr { "Modèle" } else { "Model" }, metadata.get("model_id").and_then(Value::as_str)),
+        (if fr { "Cadrage" } else { "Framing" }, metadata.get("asset_preset").and_then(Value::as_str)),
+        (if fr { "Prompt envoyé" } else { "Sent prompt" }, metadata.get("generation_prompt").and_then(Value::as_str)),
         ("Orientation", metadata.get("orientation").and_then(Value::as_str)),
         ("Source", metadata.get("source_url").and_then(Value::as_str)),
         (if fr { "Invite" } else { "Prompt" }, asset.get("prompt").and_then(Value::as_str)),
@@ -3828,6 +4089,27 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
         let labels = tags.iter().filter_map(Value::as_str).collect::<Vec<_>>();
         if !labels.is_empty() {
             ui.label(format!("Tags: {}", labels.join(", ")));
+        }
+    }
+    if let Some(seed) = metadata.get("seed").and_then(Value::as_i64) {
+        ui.label(format!("Seed: {seed}"));
+    }
+    if let Some(settings) = metadata.get("trellis_settings").and_then(Value::as_object) {
+        ui.separator();
+        ui.strong(if fr { "Réglages TRELLIS utilisés" } else { "TRELLIS settings used" });
+        if let Some(resolution) = metadata.get("geometry_resolution").and_then(Value::as_u64) {
+            ui.label(format!("{}: {resolution}", if fr { "Résolution de géométrie" } else { "Geometry resolution" }));
+        }
+        for (label, key) in [
+            (if fr { "Étapes" } else { "Steps" }, "steps"),
+            ("GSS", "structure_guidance"),
+            ("GSH", "shape_guidance"),
+            (if fr { "Graine" } else { "Seed" }, "seed"),
+            (if fr { "Atlas de texture" } else { "Texture atlas" }, "atlas_resolution"),
+        ] {
+            if let Some(value) = settings.get(key) {
+                ui.label(format!("{label}: {}", value_display(value)));
+            }
         }
     }
 }
@@ -3931,7 +4213,7 @@ fn value_display(v: &Value) -> String {
 
 #[cfg(test)]
 mod illustration_library_tests {
-    use super::{library_conversion_error, library_selected_asset};
+    use super::{library_conversion_error, library_linked_meshes, library_selected_asset, library_source_image};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -3956,6 +4238,20 @@ mod illustration_library_tests {
         assert_eq!(library_conversion_error(&state), None);
         state.insert("library_error_action".into(), json!("library_convert_trellis"));
         assert_eq!(library_conversion_error(&state), Some("Vulkan unavailable"));
+    }
+
+    #[test]
+    fn converted_meshes_share_their_source_image_card() {
+        let assets = vec![
+            json!({"project_id":"one","id":"image","kind":"image","uri":"/documents/illustrations/one.png"}),
+            json!({"project_id":"one","id":"mesh","kind":"mesh","metadata":{"source_image":"/documents/illustrations/one.png"}}),
+            json!({"project_id":"two","id":"other","kind":"mesh","metadata":{"source_image":"/documents/illustrations/one.png"}}),
+            json!({"project_id":"one","id":"imported","kind":"mesh"}),
+        ];
+        assert_eq!(library_source_image(&assets, "one", &assets[1]), Some(&assets[0]));
+        assert_eq!(library_linked_meshes(&assets, "one", &assets[0]), vec![&assets[1]]);
+        assert!(library_source_image(&assets, "one", &assets[2]).is_none());
+        assert!(library_source_image(&assets, "one", &assets[3]).is_none());
     }
 }
 

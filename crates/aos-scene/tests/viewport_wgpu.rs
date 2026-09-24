@@ -2,9 +2,30 @@
 //! Articulated humanoid meshes use `mesh_*` visual child ids.
 
 use aos_scene::{
-    eye_from_orbit, collect_mesh_instances, SceneGraph, ViewportCamera, ViewportRenderer, Vec3,
+    eye_from_orbit, collect_mesh_instances, insert_mesh_asset, SceneGraph, Transform, ViewportCamera, ViewportRenderer, Vec3,
     VIEWPORT_ROLE, BEAUTY_ROLE,
 };
+
+#[test]
+fn wgpu_samples_glb_base_color_texture() {
+    let Ok(gpu) = ViewportRenderer::new() else {
+        eprintln!("skip: no wgpu adapter");
+        return;
+    };
+    let mut scene = SceneGraph::demo_scene();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/hierarchy_textured.glb");
+    insert_mesh_asset(&mut scene, "root", "textured", "Textured", fixture.to_string_lossy(), Transform::default())
+        .expect("insert textured mesh");
+    let camera = ViewportCamera {
+        eye: Vec3::new(2.5, 1.5, 5.0),
+        target: Vec3::new(2.5, 1.5, 0.0),
+        ..ViewportCamera::default()
+    };
+    let rgba = gpu.render_rgba(&scene, &camera, 256, 256, None).expect("render textured mesh");
+    let red = rgba.as_chunks::<4>().0.iter().filter(|px| px[0] > 90 && (px[0] as u16) > (px[1] as u16) * 2 && (px[0] as u16) > (px[2] as u16) * 2).count();
+    assert!(red > 100, "texture red pixels missing: {red}");
+}
 
 #[test]
 fn viewport_role_is_not_beauty() {

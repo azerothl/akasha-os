@@ -109,13 +109,13 @@ pub use locks::{
 };
 pub use math::{Mat4, Quat, Vec3, EPSILON};
 pub use mesh_asset::{
-    default_mesh_search_roots, insert_mesh_asset, load_gltf_mesh, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
+    default_mesh_search_roots, insert_mesh_asset, load_gltf_mesh, load_gltf_mesh_cached, resolve_mesh_uri, CpuTriangleMesh, MeshAssetError,
     MAX_MESH_TRIANGLES, MAX_MESH_VERTICES,
 };
 pub use neural_mesh::{
     apply_proposal, mesh_assist, neural_mesh_pack_status, propose_mesh_assist, validate_proposal,
     MeshAssistBackendId, MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart,
-    NeuralMeshError, NeuralMeshPackStatus, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
+    NeuralMeshError, NeuralMeshPackStatus, TrellisQualitySettings, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
     MESH_ASSIST_SERVICE, MESH_NEURAL_CAP, MIN_ABS_SCALE,
 };
 pub use neural_mesh_isolate::{

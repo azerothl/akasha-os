@@ -1,7 +1,7 @@
 [package]
 name = "module-illustration-studio"
 description = "Illustration Studio — Blender beauty Auto fail-closed (no silent mock) / pack status"
-version = "0.7.21"
+version = "0.7.23"
 edition = "2021"
 license = "Apache-2.0"
 

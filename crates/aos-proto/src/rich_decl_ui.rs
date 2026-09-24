@@ -1322,6 +1322,7 @@ mod tests {
         let tools = [
             "illustration.asset.list",
             "illustration.asset.register",
+            "illustration.asset.update",
             "illustration.asset.select",
             "illustration.asset.add",
             "illustration.project.list",

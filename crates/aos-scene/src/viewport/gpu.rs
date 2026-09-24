@@ -5,6 +5,7 @@ use crate::png::encode_rgba8_png;
 use crate::scene::SceneGraph;
 use bytemuck::{Pod, Zeroable};
 use std::num::NonZeroU64;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use wgpu::util::DeviceExt;
 
@@ -30,6 +31,7 @@ pub enum ViewportError {
 struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
+    uv: [f32; 2],
 }
 
 #[repr(C)]
@@ -50,6 +52,14 @@ struct Uniforms {
     ambient: [f32; 4],
 }
 
+struct CachedGpuMesh {
+    source: Arc<crate::mesh_asset::CpuTriangleMesh>,
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    index_count: u32,
+    texture_group: Option<wgpu::BindGroup>,
+}
+
 /// Persistent wgpu device + pipeline for the DeclUI `scene3d` edit viewport.
 pub struct ViewportRenderer {
     device: wgpu::Device,
@@ -57,6 +67,9 @@ pub struct ViewportRenderer {
     pipeline: wgpu::RenderPipeline,
     wire_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
+    texture_layout: wgpu::BindGroupLayout,
+    white_texture_group: wgpu::BindGroup,
+    texture_sampler: wgpu::Sampler,
     uniform_buf: wgpu::Buffer,
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
@@ -64,6 +77,7 @@ pub struct ViewportRenderer {
     edge_index_buf: wgpu::Buffer,
     edge_index_count: u32,
     instance_buf: wgpu::Buffer,
+    mesh_cache: Mutex<Vec<Arc<CachedGpuMesh>>>,
 }
 
 impl ViewportRenderer {
@@ -81,12 +95,22 @@ impl ViewportRenderer {
         });
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
-                force_fallback_adapter: true,
+                force_fallback_adapter: false,
             })
-            .await
-            .map_err(|_| ViewportError::NoAdapter)?;
+            .await;
+        let adapter = match adapter {
+            Ok(adapter) => adapter,
+            Err(_) => instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::LowPower,
+                    compatible_surface: None,
+                    force_fallback_adapter: true,
+                })
+                .await
+                .map_err(|_| ViewportError::NoAdapter)?,
+        };
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -136,16 +160,55 @@ impl ViewportRenderer {
             }],
         });
 
+        let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("viewport-texture-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("viewport-texture-sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let white_texture_group = make_texture_group(
+            &device,
+            &queue,
+            &texture_layout,
+            &texture_sampler,
+            1,
+            1,
+            &[255, 255, 255, 255],
+        );
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("viewport-pl"),
-            bind_group_layouts: &[&bind_layout],
+            bind_group_layouts: &[&bind_layout, &texture_layout],
             push_constant_ranges: &[],
         });
 
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 7 => Float32x2],
         };
         let instance_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<InstanceRaw>() as u64,
@@ -283,6 +346,9 @@ impl ViewportRenderer {
             pipeline,
             wire_pipeline,
             bind_group,
+            texture_layout,
+            white_texture_group,
+            texture_sampler,
             uniform_buf,
             vertex_buf,
             index_buf,
@@ -290,6 +356,7 @@ impl ViewportRenderer {
             edge_index_buf,
             edge_index_count: edge_indices.len() as u32,
             instance_buf,
+            mesh_cache: Mutex::new(Vec::new()),
         })
     }
 
@@ -353,17 +420,26 @@ impl ViewportRenderer {
                 .write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&cube_raw));
         }
 
-        // Upload MeshAsset triangle meshes (per-frame; spike-sized).
-        let mut asset_gpu: Vec<(wgpu::Buffer, wgpu::Buffer, u32, InstanceRaw)> = Vec::new();
+        // Reuse geometry and textures while the camera moves around an asset.
+        let mut asset_gpu: Vec<(Arc<CachedGpuMesh>, InstanceRaw)> = Vec::new();
         for (inst, raw) in &asset_draws {
             let Some(mesh) = &inst.triangle_mesh else {
                 continue;
             };
+            if let Ok(mut cache) = self.mesh_cache.lock() {
+                if let Some(index) = cache.iter().position(|entry| Arc::ptr_eq(&entry.source, mesh)) {
+                    let entry = cache.remove(index);
+                    asset_gpu.push((Arc::clone(&entry), *raw));
+                    cache.push(entry);
+                    continue;
+                }
+            }
             let mut verts: Vec<Vertex> = Vec::with_capacity(mesh.vertex_count());
-            for chunk in mesh.interleaved.as_chunks::<6>().0 {
+            for (i, chunk) in mesh.interleaved.as_chunks::<6>().0.iter().enumerate() {
                 verts.push(Vertex {
                     position: [chunk[0], chunk[1], chunk[2]],
                     normal: [chunk[3], chunk[4], chunk[5]],
+                    uv: mesh.tex_coords.get(i).copied().unwrap_or([0.0, 0.0]),
                 });
             }
             let indices: Vec<u32> = mesh.indices.clone();
@@ -384,13 +460,37 @@ impl ViewportRenderer {
                     contents: bytemuck::cast_slice(&indices),
                     usage: wgpu::BufferUsages::INDEX,
                 });
-            asset_gpu.push((vbuf, ibuf, indices.len() as u32, *raw));
+            let texture_group = mesh.base_color_texture.as_ref().map(|texture| {
+                make_texture_group(
+                    &self.device,
+                    &self.queue,
+                    &self.texture_layout,
+                    &self.texture_sampler,
+                    texture.width,
+                    texture.height,
+                    &texture.rgba,
+                )
+            });
+            let entry = Arc::new(CachedGpuMesh {
+                source: Arc::clone(mesh),
+                vertices: vbuf,
+                indices: ibuf,
+                index_count: indices.len() as u32,
+                texture_group,
+            });
+            if let Ok(mut cache) = self.mesh_cache.lock() {
+                if cache.len() >= 8 {
+                    cache.remove(0);
+                }
+                cache.push(Arc::clone(&entry));
+            }
+            asset_gpu.push((entry, *raw));
         }
         // Pack asset instances into a small instance buffer slice after cubes.
         let asset_instance_offset =
             (cube_count as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
         if !asset_gpu.is_empty() {
-            let asset_raw: Vec<InstanceRaw> = asset_gpu.iter().map(|(_, _, _, r)| *r).collect();
+            let asset_raw: Vec<InstanceRaw> = asset_gpu.iter().map(|(_, raw)| *raw).collect();
             if (cube_count as usize + asset_raw.len()) <= MAX_INSTANCES as usize {
                 self.queue.write_buffer(
                     &self.instance_buf,
@@ -480,6 +580,7 @@ impl ViewportRenderer {
             if box_count > 0 {
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_bind_group(1, &self.white_texture_group, &[]);
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_vertex_buffer(1, self.instance_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
@@ -493,16 +594,21 @@ impl ViewportRenderer {
                 pass.draw_indexed(0..self.edge_index_count, 0, 0..box_count);
             }
 
-            for (i, (vbuf, ibuf, index_count, _)) in asset_gpu.iter().enumerate() {
+            for (i, (mesh, _)) in asset_gpu.iter().enumerate() {
                 let inst_start = asset_instance_offset
                     + (i as u64) * (std::mem::size_of::<InstanceRaw>() as u64);
                 let inst_end = inst_start + std::mem::size_of::<InstanceRaw>() as u64;
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
-                pass.set_vertex_buffer(0, vbuf.slice(..));
+                pass.set_bind_group(
+                    1,
+                    mesh.texture_group.as_ref().unwrap_or(&self.white_texture_group),
+                    &[],
+                );
+                pass.set_vertex_buffer(0, mesh.vertices.slice(..));
                 pass.set_vertex_buffer(1, self.instance_buf.slice(inst_start..inst_end));
-                pass.set_index_buffer(ibuf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..*index_count, 0, 0..1);
+                pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mesh.index_count, 0, 0..1);
             }
         }
 
@@ -573,6 +679,65 @@ fn aligned_bytes_per_row(width: u32) -> u32 {
     unpadded.div_ceil(align) * align
 }
 
+fn make_texture_group(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> wgpu::BindGroup {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("viewport-base-color"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("viewport-base-color-bg"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
+}
+
 fn mat4_cols(m: &crate::math::Mat4) -> [[f32; 4]; 4] {
     let mut out = [[0.0f32; 4]; 4];
     for (col, slot) in out.iter_mut().enumerate() {
@@ -619,6 +784,7 @@ fn unit_cube_geometry() -> (Vec<Vertex>, Vec<u16>, Vec<u16>) {
             verts.push(Vertex {
                 position: p,
                 normal,
+                uv: [0.0, 0.0],
             });
         }
         indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -642,6 +808,7 @@ fn unit_cube_geometry() -> (Vec<Vertex>, Vec<u16>, Vec<u16>) {
         verts.push(Vertex {
             position: p,
             normal: [0.0, 1.0, 0.0],
+            uv: [0.0, 0.0],
         });
     }
     let e = [
@@ -673,6 +840,8 @@ struct Uniforms {
     ambient: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
+@group(1) @binding(0) var base_color_texture: texture_2d<f32>;
+@group(1) @binding(1) var base_color_sampler: sampler;
 
 struct VsIn {
     @location(0) position: vec3<f32>,
@@ -682,12 +851,14 @@ struct VsIn {
     @location(4) m2: vec4<f32>,
     @location(5) m3: vec4<f32>,
     @location(6) color: vec4<f32>,
+    @location(7) uv: vec2<f32>,
 };
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
     @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
 };
 
 @vertex
@@ -703,6 +874,7 @@ fn vs_main(v: VsIn) -> VsOut {
         model[2].xyz,
     );
     o.normal = normalize(nmat * v.normal);
+    o.uv = v.uv;
     return o;
 }
 
@@ -713,7 +885,8 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
     let ndl = max(dot(n, l), 0.0);
     let ambient = u.ambient.x;
     let lit = ambient + (1.0 - ambient) * ndl;
-    return vec4<f32>(i.color.rgb * lit, i.color.a);
+    let texel = textureSample(base_color_texture, base_color_sampler, i.uv);
+    return vec4<f32>(i.color.rgb * texel.rgb * lit, i.color.a * texel.a);
 }
 
 @fragment

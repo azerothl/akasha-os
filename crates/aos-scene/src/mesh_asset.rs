@@ -1,12 +1,16 @@
 //! MeshAsset — load glTF/GLB into a CPU triangle mesh for SceneGraph.
 //!
 //! ADR 0011: Akasha is Y-up RH. glTF is also Y-up; we import positions as-is
-//! (no Blender Z-up conversion in the host). The CPU mesh keeps positions and
-//! normals for edit previews; Blender imports the original GLB with PBR data.
+//! (no Blender Z-up conversion in the host). The CPU mesh keeps positions,
+//! normals and base-color texture data for edit previews; Blender imports the
+//! original GLB with full PBR data.
 
 use crate::math::{Mat4, Vec3};
 use crate::scene::{NodeKind, SceneError, SceneGraph, SceneNode, Transform};
 use std::path::Path;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 use thiserror::Error;
 
 /// Soft caps for imported meshes (fail-closed).
@@ -42,6 +46,16 @@ pub struct CpuTriangleMesh {
     pub triangle_count: usize,
     /// First glTF material base color for lightweight previews. Full PBR stays in GLB.
     pub base_color: [f32; 4],
+    /// Texture coordinates and base-color image for the edit viewport.
+    pub tex_coords: Vec<[f32; 2]>,
+    pub base_color_texture: Option<CpuMeshTexture>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CpuMeshTexture {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
 }
 
 impl CpuTriangleMesh {
@@ -67,9 +81,49 @@ impl CpuTriangleMesh {
     }
 }
 
+struct CachedMesh {
+    path: PathBuf,
+    len: u64,
+    modified: Option<SystemTime>,
+    mesh: Arc<CpuTriangleMesh>,
+}
+
+/// Reuse decoded geometry and image data while an asset is being orbited.
+/// File length and modification time invalidate entries after replacement.
+pub fn load_gltf_mesh_cached(path: &Path) -> Result<Arc<CpuTriangleMesh>, MeshAssetError> {
+    static CACHE: OnceLock<Mutex<Vec<CachedMesh>>> = OnceLock::new();
+    let metadata = std::fs::metadata(path).map_err(|error| MeshAssetError::Io(error.to_string()))?;
+    let modified = metadata.modified().ok();
+    let cache = CACHE.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut entries) = cache.lock() {
+        if let Some(index) = entries.iter().position(|entry| {
+            entry.path == path && entry.len == metadata.len() && entry.modified == modified
+        }) {
+            let entry = entries.remove(index);
+            let mesh = Arc::clone(&entry.mesh);
+            entries.push(entry);
+            return Ok(mesh);
+        }
+    }
+    let mesh = Arc::new(load_gltf_mesh(path)?);
+    if let Ok(mut entries) = cache.lock() {
+        entries.retain(|entry| entry.path != path);
+        if entries.len() >= 8 {
+            entries.remove(0);
+        }
+        entries.push(CachedMesh {
+            path: path.to_path_buf(),
+            len: metadata.len(),
+            modified,
+            mesh: Arc::clone(&mesh),
+        });
+    }
+    Ok(mesh)
+}
+
 /// Load a `.glb` / `.gltf` file into a CPU mesh (first scene, all primitives).
 pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
-    let (doc, buffers, _images) =
+    let (doc, buffers, images) =
         gltf::import(path).map_err(|e| MeshAssetError::Gltf(e.to_string()))?;
     struct Acc {
         interleaved: Vec<f32>,
@@ -78,6 +132,9 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
         bmax: [f32; 3],
         base_color: [f32; 4],
         material_seen: bool,
+        tex_coords: Vec<[f32; 2]>,
+        texture_index: Option<usize>,
+        texture_compatible: bool,
     }
     let mut acc = Acc {
         interleaved: Vec::new(),
@@ -86,6 +143,9 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
         bmax: [f32::NEG_INFINITY; 3],
         base_color: [0.65, 0.67, 0.69, 1.0],
         material_seen: false,
+        tex_coords: Vec::new(),
+        texture_index: None,
+        texture_compatible: true,
     };
 
     let scene = doc
@@ -112,6 +172,19 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
                     acc.base_color = prim.material().pbr_metallic_roughness().base_color_factor();
                     acc.material_seen = true;
                 }
+                let texture = prim
+                    .material()
+                    .pbr_metallic_roughness()
+                    .base_color_texture();
+                let texture_index = texture
+                    .as_ref()
+                    .filter(|info| info.tex_coord() == 0)
+                    .map(|info| info.texture().source().index());
+                if acc.interleaved.is_empty() {
+                    acc.texture_index = texture_index;
+                } else if acc.texture_index != texture_index {
+                    acc.texture_compatible = false;
+                }
                 let reader = prim.reader(|buf| buffers.get(buf.index()).map(|b| &*b.0));
                 let positions: Vec<[f32; 3]> = reader
                     .read_positions()
@@ -125,6 +198,13 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
                 } else {
                     vec![[0.0, 1.0, 0.0]; positions.len()]
                 };
+                let tex_coords: Vec<[f32; 2]> = reader
+                    .read_tex_coords(0)
+                    .map(|coords| coords.into_f32().collect())
+                    .unwrap_or_default();
+                if texture_index.is_some() && tex_coords.len() != positions.len() {
+                    acc.texture_compatible = false;
+                }
                 let base = (acc.interleaved.len() / 6) as u32;
                 for (i, p) in positions.iter().enumerate() {
                     let n = normals.get(i).copied().unwrap_or([0.0, 1.0, 0.0]);
@@ -136,6 +216,8 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
                     acc.interleaved.extend_from_slice(&[
                         position.x, position.y, position.z, normal.x, normal.y, normal.z,
                     ]);
+                    acc.tex_coords
+                        .push(tex_coords.get(i).copied().unwrap_or([0.0, 0.0]));
                     for c in 0..3 {
                         let value = [position.x, position.y, position.z][c];
                         acc.bmin[c] = acc.bmin[c].min(value);
@@ -173,6 +255,9 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
         bmin,
         bmax,
         base_color,
+        tex_coords,
+        texture_index,
+        texture_compatible,
         ..
     } = acc;
     if interleaved.is_empty() || indices.len() < 3 || indices.len() % 3 != 0 {
@@ -193,6 +278,34 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
         return Err(MeshAssetError::Validation("non-finite bounds".into()));
     }
 
+    let base_color_texture = if texture_compatible {
+        texture_index
+            .and_then(|index| images.get(index))
+            .and_then(|image| {
+                // Stay within downlevel GPU texture limits in the edit viewport.
+                if image.width == 0 || image.height == 0 || image.width > 4096 || image.height > 4096 {
+                    return None;
+                }
+                let rgba = match image.format {
+                    gltf::image::Format::R8G8B8A8 => image.pixels.clone(),
+                    gltf::image::Format::R8G8B8 => image
+                        .pixels
+                        .as_chunks::<3>().0.iter()
+                        .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 255])
+                        .collect(),
+                    _ => return None,
+                };
+                (rgba.len() == image.width as usize * image.height as usize * 4).then_some(
+                    CpuMeshTexture {
+                        width: image.width,
+                        height: image.height,
+                        rgba,
+                    },
+                )
+            })
+    } else {
+        None
+    };
     Ok(CpuTriangleMesh {
         interleaved,
         indices,
@@ -200,6 +313,8 @@ pub fn load_gltf_mesh(path: &Path) -> Result<CpuTriangleMesh, MeshAssetError> {
         bounds_max: Vec3::new(bmax[0], bmax[1], bmax[2]),
         triangle_count: tri,
         base_color,
+        tex_coords,
+        base_color_texture,
     })
 }
 
@@ -280,7 +395,9 @@ pub fn default_mesh_search_roots() -> Vec<std::path::PathBuf> {
     }
     let home = std::env::var("AOS_HOME")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+        .unwrap_or_else(|_| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
     roots.push(home.join("var/storage/data/documents/illustrations"));
     roots.push(home.join("share/assets/illustration"));
     roots.push(home.join("share/illustration-neural-mesh-pack"));
@@ -316,6 +433,13 @@ mod tests {
     }
 
     #[test]
+    fn cached_mesh_reuses_decoded_geometry() {
+        let first = load_gltf_mesh_cached(&fixture_glb()).expect("first load");
+        let second = load_gltf_mesh_cached(&fixture_glb()).expect("cached load");
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
     fn load_textured_glb_preserves_node_hierarchy() {
         let path =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hierarchy_textured.glb");
@@ -325,6 +449,12 @@ mod tests {
         assert!((mesh.bounds_max.x - 3.0).abs() < 1e-4);
         assert!((mesh.bounds_min.y - 1.0).abs() < 1e-4);
         assert!((mesh.bounds_max.y - 2.0).abs() < 1e-4);
+        assert_eq!(mesh.tex_coords.len(), mesh.vertex_count());
+        let texture = mesh.base_color_texture.expect("base-color texture");
+        assert_eq!(
+            texture.rgba.len(),
+            (texture.width * texture.height * 4) as usize
+        );
     }
 
     #[test]

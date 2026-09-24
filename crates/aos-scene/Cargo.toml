@@ -16,7 +16,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde_yaml.workspace = true
 thiserror = { workspace = true, default-features = true }
-# glTF/GLB → CPU triangle mesh for MeshAsset (SceneGraph SoT). No textures yet.
+# glTF/GLB → CPU triangle mesh and base-color preview texture for MeshAsset.
 gltf = { version = "1.4", default-features = false, features = ["utils", "import"] }
 # Edit viewport only — not a RenderService backend (see `viewport` module).
 wgpu = { version = "27", default-features = true, optional = true }

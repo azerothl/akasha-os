@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 const BLENDER_VERSION: &str = "4.5.14";
-const TRELLIS_VERSION: &str = "v0.6.0";
+const TRELLIS_VERSION: &str = "v0.8.0";
 const HF_REVISION: &str = "a57397bd3d351599d9729fc144b3f87c3f87d65b";
 
 struct Artifact {
@@ -338,8 +338,8 @@ fn blender_artifact() -> Result<Artifact, String> {
 
 fn trellis_artifact() -> Result<Artifact, String> {
     let (name, bytes, sha) = match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("windows", "x86_64") => ("trellis-vulkan-windows-x64.zip", 22_782_550, "bfe437e4c222b37141b3bcb0600eabee6f39823a5fafa0b3913f50f575e424d0"),
-        ("linux", "x86_64") => ("trellis-vulkan-linux-x64.tar.gz", 25_341_680, "6bc453c1e3a94a4b7bda15cd7f93fdf05f240869c44bf2b102a5db4a5fde19b6"),
+        ("windows", "x86_64") => ("trellis-vulkan-windows-x64.zip", 14_111_865, "a764f74a58a3a5662fc799eeba27a1cd88461f86175b751e6b887c3ba4244f45"),
+        ("linux", "x86_64") => ("trellis-vulkan-linux-x64.tar.gz", 16_094_078, "bea26dc852a63d712fef6c51c056e2e93cccb6e3adb4809e72acd9d62c97e476"),
         ("macos", _) => return Err("TRELLIS.cpp ne publie pas de binaire macOS. Configurez un runner installé manuellement via AOS_NEURAL_MESH_BIN.".into()),
         _ => return Err("TRELLIS automatique indisponible sur cette architecture".into()),
     };

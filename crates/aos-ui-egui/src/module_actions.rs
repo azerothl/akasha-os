@@ -15,7 +15,9 @@ use aos_proto::{
     ModuleInvokeResponse,
 };
 use serde_json::Value;
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -764,21 +766,46 @@ pub(crate) async fn run_decl_service_action(
         "illustration.library.convert" => {
             let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
             let image_uri = input.get("image_uri").and_then(Value::as_str).unwrap_or("").to_string();
+            let geometry_res = input.get("geometry_res").and_then(Value::as_u64).unwrap_or(512);
+            let provider = input.get("provider").and_then(Value::as_str).unwrap_or("trellis").to_string();
+            let seed_value = input.get("seed").and_then(Value::as_u64).unwrap_or(42);
+            let steps_value = input.get("steps").and_then(Value::as_u64).unwrap_or(12);
+            let atlas_value = input.get("atlas_resolution").and_then(Value::as_u64).unwrap_or(0);
+            let trellis_settings = aos_scene::TrellisQualitySettings {
+                steps: u32::try_from(steps_value).unwrap_or(u32::MAX),
+                structure_guidance: input.get("structure_guidance").and_then(Value::as_f64).unwrap_or(7.5) as f32,
+                shape_guidance: input.get("shape_guidance").and_then(Value::as_f64).unwrap_or(7.5) as f32,
+                seed: u32::try_from(seed_value).unwrap_or(u32::MAX),
+                atlas_resolution: u32::try_from(atlas_value).unwrap_or(u32::MAX),
+            };
             let prompt = library_convert_mesh_assist_prompt(
                 input.get("prompt").and_then(Value::as_str).unwrap_or(""),
                 &image_uri,
             );
             let prefix = format!("/documents/illustrations/projects/{project_id}/assets/");
-            let outcome = if !project_id.starts_with("project-")
+            let quality_error = if provider == "trellis" {
+                trellis_settings.validate().err().map(|error| error.to_string()).or_else(|| {
+                    (u32::try_from(seed_value).is_err()).then(|| "TRELLIS seed must fit in 32 bits".to_string())
+                })
+            } else {
+                None
+            };
+            let outcome = if let Some(error) = quality_error {
+                Err(error)
+            } else if !project_id.starts_with("project-")
                 || !project_id["project-".len()..].chars().all(|c| c.is_ascii_digit())
                 || !image_uri.starts_with(&prefix)
                 || image_uri.contains("..")
                 || image_uri.contains('\\')
+                || !matches!(geometry_res, 512 | 1024)
+                || !matches!(provider.as_str(), "trellis" | "triposr")
             {
-                Err("Select a generated image from the active project library".into())
+                Err("Select an image in the active project and a valid 3D converter".into())
             } else {
                 let image_path = logical_downloads_path(&image_uri);
                 let project_for_conversion = project_id.clone();
+                let provider_for_conversion = provider.clone();
+                let settings_for_conversion = (provider == "trellis").then_some(trellis_settings);
                 let conversion = tokio::task::spawn_blocking(move || {
                     use aos_scene::{MeshAssistBackendId, MeshAssistRequest, SceneGraph, SceneNode};
                     let project_root = crate::os_open::aos_home()
@@ -789,42 +816,50 @@ pub(crate) async fn run_decl_service_action(
                     if !image_path.starts_with(&canonical_root) {
                         return Err("image path escapes the project library".into());
                     }
-                    let mut scene = SceneGraph {
-                        effects: Vec::new(),
-                        nodes: Default::default(),
-                        roots: vec!["root".into()],
-                        active_camera: None,
+                    let (file_name, provenance) = if provider_for_conversion == "triposr" {
+                        let file_name = run_triposr_experiment(&image_path, &canonical_root)?;
+                        (file_name, "TripoSR experimental conversion")
+                    } else {
+                        let mut scene = SceneGraph {
+                            effects: Vec::new(),
+                            nodes: Default::default(),
+                            roots: vec!["root".into()],
+                            active_camera: None,
+                        };
+                        scene.nodes.insert("root".into(), SceneNode::empty("root", "Asset conversion"));
+                        let request = MeshAssistRequest {
+                            prompt: prompt.clone(),
+                            parent_id: "root".into(),
+                            prefix: "converted_".into(),
+                            backend: MeshAssistBackendId::Neural,
+                            image_path: Some(image_path.to_string_lossy().into_owned()),
+                            geometry_res: Some(geometry_res as u32),
+                            trellis_settings: settings_for_conversion,
+                        };
+                        let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
+                        if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
+                            return Err(crate::chat_error_copy::TRELLIS_TEST_MODEL_WIRE.into());
+                        }
+                        let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
+                        let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
+                        if output_path.extension().and_then(|e| e.to_str()) != Some("glb") {
+                            return Err("TRELLIS output is not a GLB".into());
+                        }
+                        let stamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_err(|e| e.to_string())?
+                            .as_nanos();
+                        let file_name = format!("trellis-{stamp}.glb");
+                        std::fs::copy(output_path, canonical_root.join(&file_name)).map_err(|e| e.to_string())?;
+                        (file_name, "TRELLIS conversion")
                     };
-                    scene.nodes.insert("root".into(), SceneNode::empty("root", "Asset conversion"));
-                    let request = MeshAssistRequest {
-                        prompt: prompt.clone(),
-                        parent_id: "root".into(),
-                        prefix: "converted_".into(),
-                        backend: MeshAssistBackendId::Neural,
-                        image_path: Some(image_path.to_string_lossy().into_owned()),
-                    };
-                    let output = aos_scene::mesh_assist(&mut scene, &request).map_err(|e| e.to_string())?;
-                    if output.is_stub || output.notes.iter().any(|note| note.contains("mock") || note.contains("fixture")) {
-                        return Err(crate::chat_error_copy::TRELLIS_TEST_MODEL_WIRE.into());
-                    }
-                    let output_path = output.mesh_uri.ok_or_else(|| "TRELLIS did not produce a GLB".to_string())?;
-                    let output_path = std::fs::canonicalize(output_path).map_err(|e| e.to_string())?;
-                    if output_path.extension().and_then(|e| e.to_str()) != Some("glb") {
-                        return Err("TRELLIS output is not a GLB".into());
-                    }
-                    let stamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_err(|e| e.to_string())?
-                        .as_nanos();
-                    let file_name = format!("trellis-{stamp}.glb");
-                    std::fs::copy(output_path, canonical_root.join(&file_name)).map_err(|e| e.to_string())?;
                     let uri = format!(
                         "/documents/illustrations/projects/{project_for_conversion}/assets/{file_name}"
                     );
-                    Ok((uri, prompt))
+                    Ok((uri, prompt, geometry_res, provenance, settings_for_conversion))
                 }).await;
                 match conversion {
-                    Ok(Ok((uri, prompt))) => invoke_module_tool_quiet(
+                    Ok(Ok((uri, prompt, geometry_res, provenance, trellis_settings))) => invoke_module_tool_quiet(
                         bus,
                         module,
                         "illustration.asset.register",
@@ -834,7 +869,18 @@ pub(crate) async fn run_decl_service_action(
                             "kind": "mesh",
                             "uri": uri,
                             "prompt": prompt,
-                            "metadata": { "provenance": "TRELLIS conversion", "source_image": image_uri },
+                            "metadata": {
+                                "provenance": provenance,
+                                "source_image": image_uri,
+                                "geometry_resolution": if provider == "trellis" { Some(geometry_res) } else { None },
+                                "trellis_settings": trellis_settings.map(|settings| serde_json::json!({
+                                    "steps": settings.steps,
+                                    "structure_guidance": settings.structure_guidance,
+                                    "shape_guidance": settings.shape_guidance,
+                                    "seed": settings.seed,
+                                    "atlas_resolution": if settings.atlas_resolution == 0 { serde_json::json!("auto") } else { serde_json::json!(settings.atlas_resolution) }
+                                }))
+                            },
                         }),
                     ).await,
                     Ok(Err(error)) => Err(error),
@@ -2447,6 +2493,8 @@ fn run_mesh_assist(
         prefix: prefix.to_string(),
         backend,
         image_path,
+        geometry_res: None,
+        trellis_settings: None,
     };
 
     let applied = match mesh_assist(&mut scene, &req) {
@@ -3770,7 +3818,8 @@ async fn run_media_image_generate(
     let library_error_result = library_project_id.as_ref()
         .map(|id| serde_json::json!({"project_id": id}))
         .unwrap_or(Value::Null);
-    let request = match parse_media_generate_request(&input) {
+    let asset_preset = input.get("asset_preset").and_then(Value::as_str).map(str::to_owned);
+    let mut request = match parse_media_generate_request(&input) {
         Ok(r) => r,
         Err(e) => {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -3784,6 +3833,9 @@ async fn run_media_image_generate(
             return;
         }
     };
+    if module == "illustration-studio" && action_id == "library_generate_image" {
+        prepare_library_image_request(&mut request, asset_preset.as_deref());
+    }
     if module == "create" || module == "illustration-studio" {
         if request.prompt.trim().is_empty() {
             let _ = evt_tx.send(Evt::ModuleUiServiceDone {
@@ -4155,7 +4207,12 @@ async fn run_media_image_generate(
                                 "metadata": {
                                     "provenance": "Generated in Illustration Studio",
                                     "model_id": response.model_id,
-                                    "engine": response.engine
+                                    "engine": response.engine,
+                                    "seed": req.options.seed,
+                                    "width": req.options.width,
+                                    "height": req.options.height,
+                                    "generation_prompt": req.generation_prompt,
+                                    "asset_preset": asset_preset
                                 }
                             })
                         }),
@@ -4298,6 +4355,92 @@ fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, Str
     ))
 }
 
+/// Opt-in adapter contract: executable `<input image> <output GLB>`.
+/// The adapter owns its model environment. Only a validated GLB reaches the library.
+fn run_triposr_experiment(input: &Path, assets: &Path) -> Result<String, String> {
+    let configured = std::env::var("AOS_TRIPOSR_RUNNER").unwrap_or_default();
+    let runner = Path::new(configured.trim());
+    if configured.trim().is_empty() || !runner.is_absolute() || !runner.is_file() {
+        return Err("TripoSR test is not configured. Set AOS_TRIPOSR_RUNNER to a local executable that accepts an input image and an output GLB path, then retry.".into());
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let name = format!("triposr-{stamp}.glb");
+    let output = assets.join(&name);
+    let error_log = assets.join(format!(".triposr-{stamp}.err"));
+    let error_file = std::fs::File::create(&error_log).map_err(|e| e.to_string())?;
+    let mut child = Command::new(runner)
+        .arg(input)
+        .arg(&output)
+        .current_dir(assets)
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(error_file))
+        .spawn()
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&error_log);
+            format!("Could not start TripoSR runner: {e}")
+        })?;
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < std::time::Duration::from_secs(600) => {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&output);
+                let _ = std::fs::remove_file(&error_log);
+                return Err("TripoSR timed out after 10 minutes. Check the runner and GPU memory, then retry.".into());
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&output);
+                let _ = std::fs::remove_file(&error_log);
+                return Err(format!("TripoSR runner status failed: {e}"));
+            }
+        }
+    };
+    let details = std::fs::read_to_string(&error_log).unwrap_or_default();
+    let _ = std::fs::remove_file(&error_log);
+    if !status.success() {
+        let _ = std::fs::remove_file(&output);
+        let cause = details.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or("no error detail");
+        return Err(format!("TripoSR runner failed: {}", cause.chars().take(500).collect::<String>()));
+    }
+    let validation = validate_triposr_glb(&output);
+    if validation.is_err() {
+        let _ = std::fs::remove_file(&output);
+    }
+    validation.map(|()| name)
+}
+
+fn validate_triposr_glb(output: &Path) -> Result<(), String> {
+    let size = std::fs::metadata(output)
+        .map_err(|e| format!("TripoSR did not produce a readable GLB: {e}"))?
+        .len();
+    if size > 200 * 1024 * 1024 {
+        return Err("TripoSR GLB exceeds the 200 MB experimental limit".into());
+    }
+    let mut magic = [0u8; 4];
+    std::fs::File::open(output)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .map_err(|e| format!("TripoSR did not produce a readable GLB: {e}"))?;
+    if &magic != b"glTF" {
+        return Err("TripoSR output is not a GLB. Its textured export may be an OBJ with a .glb name; convert it to GLB first.".into());
+    }
+    let mesh = aos_scene::load_gltf_mesh(output)
+        .map_err(|e| format!("TripoSR GLB could not be loaded: {e}"))?;
+    if mesh.triangle_count == 0 {
+        return Err("TripoSR GLB contains no triangles".into());
+    }
+    Ok(())
+}
+
 /// Mesh assist still requires a non-empty label; image→GLB uses the image as conditioner.
 fn library_convert_mesh_assist_prompt(prompt: &str, image_uri: &str) -> String {
     let trimmed = prompt.trim();
@@ -4407,6 +4550,38 @@ async fn enhance_create_layer_prompts(
         }
     }
     changed
+}
+
+fn prepare_library_image_request(req: &mut aos_proto::MediaImageGenerateRequest, preset: Option<&str>) {
+    // Store an explicit seed so repeated prompts vary and assets remain reproducible.
+    if req.options.seed.is_none() {
+        static NEXT_SEED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| (value.as_nanos() % (i64::MAX as u128)) as i64)
+            .unwrap_or(1);
+        let previous = NEXT_SEED.fetch_max(now, std::sync::atomic::Ordering::Relaxed);
+        req.options.seed = Some(now.max(previous.saturating_add(1)));
+    }
+    if matches!(preset, Some("full_body" | "rig_ready")) {
+        req.options.width.get_or_insert(512);
+        req.options.height.get_or_insert(768);
+        let framing = if preset == Some("rig_ready") {
+            "Single full-length standing person in a symmetric A-pose, front view, arms slightly away from the torso, hands open and clearly separated from hips and clothing, legs slightly apart, both feet visible and separated, head and feet inside the frame with clear margins. Plain background, no props, no occlusion, no seated or lying pose."
+        } else {
+            "Full length standing person, entire body visible from the top of the head to the soles of both shoes, feet and head inside the frame with clear margins, centered, front view, neutral standing pose, plain background. No crop, no close-up."
+        };
+        req.generation_prompt = Some(format!("{framing} {}", req.prompt.trim()));
+        req.use_edited_enriched = true;
+        let negative = req.options.negative_prompt.get_or_insert_with(String::new);
+        if !negative.is_empty() {
+            negative.push_str(", ");
+        }
+        negative.push_str("cropped feet, cropped head, half body, close-up, bust portrait, cut off limbs");
+        if preset == Some("rig_ready") {
+            negative.push_str(", arms touching torso, hands hidden, hands touching hips, crossed legs, joined legs, seated, lying down, props, overlapping limbs");
+        }
+    }
 }
 
 fn apply_create_presets(req: &mut aos_proto::MediaImageGenerateRequest) {
@@ -4521,9 +4696,46 @@ pub(crate) async fn cancel_decl_job(
 mod create_regression_tests {
     use super::{
         apply_create_presets, library_convert_mesh_assist_prompt, normalize_create_options,
-        parse_composition_blocks,
+        parse_composition_blocks, prepare_library_image_request, validate_triposr_glb,
     };
     use aos_proto::MediaImageGenerateRequest;
+
+    #[test]
+    fn library_full_body_preset_keeps_user_prompt_and_sets_portrait_framing() {
+        let mut req: MediaImageGenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "a person in a blue jacket"
+        })).expect("request");
+        prepare_library_image_request(&mut req, Some("full_body"));
+        assert_eq!(req.prompt, "a person in a blue jacket");
+        assert_eq!((req.options.width, req.options.height), (Some(512), Some(768)));
+        assert!(req.generation_prompt.as_deref().unwrap().contains("soles of both shoes"));
+        assert!(req.use_edited_enriched);
+        assert!(req.options.seed.is_some());
+        assert!(req.options.negative_prompt.as_deref().unwrap().contains("cropped feet"));
+    }
+
+    #[test]
+    fn library_standard_image_keeps_explicit_seed() {
+        let mut req: MediaImageGenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "a chair", "options": { "seed": 42 }
+        })).expect("request");
+        prepare_library_image_request(&mut req, Some("standard"));
+        assert_eq!(req.options.seed, Some(42));
+        assert!(req.generation_prompt.is_none());
+        assert!(req.options.width.is_none());
+    }
+
+    #[test]
+    fn library_rig_ready_preset_separates_limbs_without_changing_user_prompt() {
+        let mut req: MediaImageGenerateRequest = serde_json::from_value(serde_json::json!({
+            "prompt": "a person in a blue jacket"
+        })).expect("request");
+        prepare_library_image_request(&mut req, Some("rig_ready"));
+        assert_eq!(req.prompt, "a person in a blue jacket");
+        assert_eq!((req.options.width, req.options.height), (Some(512), Some(768)));
+        assert!(req.generation_prompt.as_deref().unwrap().contains("hands open and clearly separated"));
+        assert!(req.options.negative_prompt.as_deref().unwrap().contains("overlapping limbs"));
+    }
 
     #[test]
     fn native_create_presets_keep_dimensions_and_steps() {
@@ -4601,6 +4813,22 @@ mod create_regression_tests {
             library_convert_mesh_assist_prompt("  keep me  ", "/documents/x/a.png"),
             "keep me"
         );
+    }
+
+    #[test]
+    fn triposr_rejects_an_obj_named_glb() {
+        let path = std::env::temp_dir().join(format!("triposr-fake-{}.glb", std::process::id()));
+        std::fs::write(&path, b"o mesh\nv 0 0 0\n").expect("write fake OBJ");
+        let error = validate_triposr_glb(&path).expect_err("OBJ must not enter library");
+        let _ = std::fs::remove_file(&path);
+        assert!(error.contains("not a GLB"));
+    }
+
+    #[test]
+    fn triposr_accepts_a_loadable_glb() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../aos-scene/tests/fixtures/unit_cube.glb");
+        validate_triposr_glb(&path).expect("valid GLB");
     }
 
     #[test]
