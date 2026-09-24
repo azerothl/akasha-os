@@ -75,6 +75,13 @@ if (-not $SkipBuild) {
     Write-Host "== package create module =="
     pwsh -NoProfile -File (Join-Path $root "modules\build-create.ps1")
     if ($LASTEXITCODE -ne 0) { throw "build-create.ps1 failed ($LASTEXITCODE)" }
+    Write-Host "== package illustration-studio module =="
+    $illustBuild = Join-Path $root "modules\build-illustration-studio.sh"
+    if (-not (Test-Path -LiteralPath $illustBuild)) {
+        throw "missing $illustBuild"
+    }
+    bash $illustBuild
+    if ($LASTEXITCODE -ne 0) { throw "build-illustration-studio.sh failed ($LASTEXITCODE)" }
     Write-Host "== refresh bundled catalogue signature =="
     Push-Location $root
     try {
