@@ -425,6 +425,7 @@ pub(crate) fn on_ui_service_done(
                         panel.local_state.insert("library_selected_project_id".into(), result.get("project_id").cloned().unwrap_or(Value::Null));
                         panel.local_state.insert("library_section".into(), Value::String("assets".into()));
                         panel.local_state.insert("library_error".into(), Value::String(String::new()));
+                        panel.local_state.insert("library_error_action".into(), Value::String(String::new()));
                         let image = asset.get("kind").and_then(Value::as_str) == Some("image");
                         panel.local_state.insert("library_image_uri".into(), Value::String(
                             if image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()
@@ -652,6 +653,7 @@ pub(crate) fn on_ui_service_done(
                     panel.local_state.insert("library_error".into(), Value::String(
                         illustration_library_error(&language, &action_id, raw)
                     ));
+                    panel.local_state.insert("library_error_action".into(), Value::String(action_id.clone()));
                 }
                 return;
             }
@@ -676,6 +678,10 @@ fn illustration_library_error(language: &str, action: &str, raw: &str) -> String
     let lower = raw.to_ascii_lowercase();
     if lower.contains("cancel") || lower.contains("annul") {
         return String::new();
+    }
+    if action == "library_convert_trellis" {
+        eprintln!("Illustration Studio library {action}: {raw}");
+        return illustration_trellis_conversion_error(fr, raw);
     }
     let message = if lower.contains("could not be added to the project library") {
         if fr { "L’image a été générée, mais son ajout à la bibliothèque du projet a échoué. Vérifiez l’espace disque et réessayez." }
@@ -707,6 +713,49 @@ fn illustration_library_error(language: &str, action: &str, raw: &str) -> String
     };
     eprintln!("Illustration Studio library {action}: {raw}");
     message.into()
+}
+
+fn illustration_trellis_conversion_error(fr: bool, raw: &str) -> String {
+    let lower = raw.to_ascii_lowercase();
+    if crate::chat_error_copy::is_trellis_test_model_error(raw) {
+        return if fr {
+            "TRELLIS a renvoyé un modèle de démonstration. Réessayez avec le moteur réel pour obtenir la cause de son échec."
+        } else {
+            "TRELLIS returned a demo model. Retry with the real runtime to see why it failed."
+        }
+        .into();
+    }
+    if lower.contains("timed out") {
+        return if fr { "TRELLIS a dépassé le délai de conversion. Réessayez avec une image plus simple ou vérifiez les diagnostics du moteur." }
+        else { "TRELLIS exceeded the conversion time limit. Try a simpler image or inspect the runtime diagnostics." }.into();
+    }
+    if lower.contains("out of memory") || lower.contains("allocation failed") || lower.contains("cuda error 2") {
+        return if fr { "TRELLIS a manqué de mémoire GPU pendant la conversion. Fermez les applications utilisant le GPU puis réessayez avec Q4." }
+        else { "TRELLIS ran out of GPU memory during conversion. Close other GPU workloads and retry with Q4." }.into();
+    }
+    if lower.contains("no vulkan device") || lower.contains("vulkan unavailable") {
+        return if fr { "TRELLIS ne détecte aucun GPU Vulkan compatible. Vérifiez le pilote graphique et le GPU sélectionné." }
+        else { "TRELLIS cannot detect a compatible Vulkan GPU. Check the graphics driver and selected GPU." }.into();
+    }
+    if lower.contains("backend unavailable") {
+        return if fr { "Le moteur TRELLIS ou ses poids Q4/Q8 ne sont pas accessibles au module. Actualisez l’état dans TRELLIS." }
+        else { "The module cannot access the TRELLIS runtime or Q4/Q8 weights. Refresh the status in TRELLIS." }.into();
+    }
+    let detail = raw
+        .split("stderr_tail:")
+        .last()
+        .unwrap_or(raw)
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or(raw);
+    let detail: String = detail.chars().filter(|c| !c.is_control()).take(240).collect();
+    if fr {
+        format!("La conversion TRELLIS a échoué. Détail du moteur : {detail}")
+    } else {
+        format!("TRELLIS conversion failed. Runtime detail: {detail}")
+    }
 }
 
 pub(crate) fn on_ui_job_update(
@@ -920,6 +969,15 @@ mod tests {
     fn library_errors_are_actionable_and_cancellation_is_quiet() {
         assert!(illustration_library_error("fr", "library_convert_trellis", "Vulkan unavailable")
             .contains("TRELLIS"));
+        let runtime_error = illustration_library_error(
+            "en",
+            "library_convert_trellis",
+            "validation failed: neural mesh runner exit=1; output.glb missing; stderr_tail: shape decode failed",
+        );
+        assert!(runtime_error.contains("shape decode failed"));
+        assert!(!runtime_error.contains("check the runtime, Q4/Q8 model and Vulkan GPU"));
+        assert!(illustration_library_error("en", "library_convert_trellis", "__trellis_test_model__")
+            .contains("demo model"));
         assert!(illustration_library_error("en", "library_import_glb", "Invalid GLB")
             .contains("valid GLB"));
         assert!(illustration_library_error("en", "library_generate_image", "Image created but could not be added to the project library")

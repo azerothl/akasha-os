@@ -489,6 +489,12 @@ pub fn build_trellis_argv(plan: &NeuralMeshSpawnPlan) -> Vec<String> {
     argv.push(plan.weights_dir.to_string_lossy().into_owned());
     argv.push("--res".into());
     argv.push(plan.geometry_res.to_string());
+    // The GLB reader used by Illustration Studio does not support
+    // EXT_texture_webp. TRELLIS defaults to WebP when it is available.
+    if matches!(plan.runner_kind, NeuralMeshRunnerKind::TrellisCli) {
+        argv.push("--webp".into());
+        argv.push("off".into());
+    }
     if let Some(gpu) = resolve_neural_mesh_gpu_index() {
         argv.push("--gpu".into());
         argv.push(gpu.to_string());
@@ -951,6 +957,8 @@ mod tests {
             "/models/trellis2".to_string(),
             "--res".to_string(),
             "512".to_string(),
+            "--webp".to_string(),
+            "off".to_string(),
         ];
         #[cfg(windows)]
         {
@@ -975,6 +983,7 @@ mod tests {
         assert_eq!(aargv[0], "bash");
         assert_eq!(aargv[1], "/pack/adapters/trellis_gguf.sh");
         assert!(aargv.contains(&"--models".to_string()));
+        assert!(!aargv.contains(&"--webp".to_string()));
     }
 
     #[test]
