@@ -23,6 +23,7 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 - **Chrome Create** : actions peintes, Advanced replié, barre résultat peaufinée ; starters de prompt localisés FR
 - **CLI de code externes** : `harness.run` opt-in plus **Runtime** Agents Avancé (Codex / Claude / Grok) avec Steer / Pause / Kill ([harness.md](harness.md))
 - **Façade serveur MCP** : `aos-mcpd` optionnel expose `akasha_models` / `akasha_infer` / `akasha_mem_*` en stdio pour les IDE externes ([mcp-server.md](mcp-server.md))
+- **Studio Illustration** (expérimental) : module catalogue local **0.7.23** — éditeur de scène DeclUI ; édition wgpu ≠ beauté ; beauté stub/CPU ; Blender mock sauf Renderer Pack GPL opt-in ([§4c](#4c-studio-illustration-module-expérimental))
 
 #### Correctifs
 
@@ -331,7 +332,7 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 ## 4c. Studio Illustration (module expérimental)
 
-Paquet catalogue local **`illustration-studio` 0.7.21** (versionné **indépendamment** de l’hôte Preview **0.18.0** ; `share/modules/catalogue.yaml` fait foi). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (aussi dans le paquet `share/modules/illustration-studio.aospkg/docs/`).
+Paquet catalogue local **`illustration-studio` 0.7.23** (versionné **indépendamment** de l’hôte Preview **0.18.0** ; `share/modules/catalogue.yaml` fait foi). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (aussi dans le paquet `share/modules/illustration-studio.aospkg/docs/`).
 
 **Ce qui est livré (honnête) :**
 
