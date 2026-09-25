@@ -1,0 +1,23 @@
+# Camera-aware black line art with stepped color shading for 3D comic scenes.
+id: comic_manga
+family: comic_manga
+renderer: npr
+line:
+  type: ink
+  width: 1.8
+  jitter: 0.0
+  opacity: 1.0
+  width_min: 0.5
+  width_max: 4.0
+shading:
+  type: toon
+  contrast: 0.7
+color:
+  saturation: 0.0
+paper:
+  texture: plain
+  tint: [255, 255, 255]
+aliases:
+  - comic
+  - manga
+  - bd

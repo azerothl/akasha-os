@@ -403,6 +403,7 @@ fn mock_beauty(
                 crate::style::StyleFamily::Sketch => b'S',
                 crate::style::StyleFamily::Pencil => b'P',
                 crate::style::StyleFamily::Ink => b'I',
+                crate::style::StyleFamily::ComicManga => b'C',
             })
             .unwrap_or(b'B');
         rgba[5] = 0;

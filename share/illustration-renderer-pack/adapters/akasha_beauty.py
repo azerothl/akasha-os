@@ -560,11 +560,12 @@ def main() -> int:
         scene.camera.data.dof.focus_distance = max(0.1, (scene.camera.location - __import__("mathutils").Vector(target_blender)).length)
         scene.camera.data.dof.aperture_fstop = max(0.7, 8.0 - dof * 7.0)
 
-    # Optional NPR style from Akasha export (Sketch / Pencil / Ink).
+    # Optional NPR style from Akasha export (Sketch / Pencil / Ink / Comic-Manga).
     # Freestyle line art is the pack-side approximation; host stays bpy-free.
     style = data.get("style") or {}
     family = str(style.get("family") or "").lower()
-    if family in ("sketch", "pencil", "ink"):
+    if family in ("sketch", "pencil", "ink", "comic_manga"):
+        comic_manga = family == "comic_manga"
         scene.render.use_freestyle = True
         if not style.get("antialias", True):
             scene.cycles.samples = min(scene.cycles.samples, 8)
@@ -585,8 +586,8 @@ def main() -> int:
             lineset.select_border = True
             lineset.select_external_contour = True
             lineset.select_crease = density >= 0.25
-            lineset.select_material_boundary = density >= 0.6
-            lineset.select_suggestive_contour = density >= 0.85
+            lineset.select_material_boundary = density >= 0.6 and not comic_manga
+            lineset.select_suggestive_contour = density >= 0.85 and not comic_manga
             variation = max(0.0, min(float(style.get("variation", 0.0)), 1.0))
             if variation > 0 and hasattr(linestyle, "geometry_modifiers"):
                 noise = linestyle.geometry_modifiers.get("AkashaStrokeVariation")
@@ -594,7 +595,11 @@ def main() -> int:
                     noise = linestyle.geometry_modifiers.new("AkashaStrokeVariation", "SPATIAL_NOISE")
                 noise.amplitude = variation * 2.0
                 noise.scale = 20.0
-            stroke = style.get("stroke_rgb") or [20, 18, 16]
+            stroke = (
+                [8, 8, 10]
+                if comic_manga
+                else (style.get("stroke_rgb") or [20, 18, 16])
+            )
             if hasattr(linestyle, "color"):
                 linestyle.color = (
                     float(stroke[0]) / 255.0,
@@ -629,7 +634,10 @@ def main() -> int:
     hatch = max(0.0, min(float(style.get("hatching", 0.0)), 1.0))
     glow = max(0.0, min(float(preset.get("glow", 0.0)), 1.0))
     warmth = max(0.0, min(float(preset.get("color_warmth", 0.0)), 1.0))
-    if (family in ("sketch", "pencil", "ink") and hatch > 0) or glow > 0 or warmth > 0:
+    comic_bands = 4 if family == "comic_manga" else 0
+    if (
+        family in ("sketch", "pencil", "ink", "comic_manga") and hatch > 0
+    ) or glow > 0 or warmth > 0 or comic_bands > 0:
         image = bpy.data.images.load(out_path, check_existing=False)
         pixels = list(image.pixels[:])
         stride = max(5, int(15 - hatch * 10))
@@ -642,7 +650,20 @@ def main() -> int:
                 differs_from_paper = max(
                     abs(pixels[index + channel] - background[channel])
                     for channel in range(3)
-                ) > 0.12
+                ) > 0.12 and pixels[index + 3] > 0.01
+                if comic_bands > 0 and differs_from_paper:
+                    luminance = (
+                        0.2126 * pixels[index]
+                        + 0.7152 * pixels[index + 1]
+                        + 0.0722 * pixels[index + 2]
+                    )
+                    if luminance > 0.01:
+                        band = round(luminance * (comic_bands - 1)) / (comic_bands - 1)
+                        scale = band / luminance
+                        for channel in range(3):
+                            pixels[index + channel] = max(
+                                0.0, min(1.0, pixels[index + channel] * scale)
+                            )
                 if hatch > 0 and differs_from_paper and 0.15 < luminance < 0.85 and (x + y) % stride == 0:
                     factor = 1.0 - 0.35 * hatch
                     for channel in range(3):

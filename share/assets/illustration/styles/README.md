@@ -1,7 +1,7 @@
 # Illustration style packs (NPR)
 
 Style packs are **data** under `/assets/illustration/styles/**`.
-They describe Non-Photorealistic Rendering appearance (Sketch / Pencil / Ink)
+They describe Non-Photorealistic Rendering appearance (Sketch / Pencil / Ink / Comic-Manga)
 separately from the SceneGraph (ADR 0011) and from Render presets (resolution /
 samples).
 

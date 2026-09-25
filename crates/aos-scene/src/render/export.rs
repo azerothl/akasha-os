@@ -22,7 +22,7 @@ pub struct AkashaSceneExport {
     pub width: u32,
     pub height: u32,
     pub pass: String,
-    /// Optional NPR style payload for Renderer Pack adapters (Sketch / Pencil / Ink).
+    /// Optional NPR style payload for Renderer Pack adapters (Sketch / Pencil / Ink / Comic-Manga).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<ExportStyle>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

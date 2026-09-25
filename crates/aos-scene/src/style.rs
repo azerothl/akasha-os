@@ -1,4 +1,4 @@
-//! NPR style packs — data-driven Sketch / Pencil / Ink (Illustration Studio).
+//! NPR style packs — data-driven Sketch / Pencil / Ink / Comic-Manga (Illustration Studio).
 //!
 //! Styles are YAML under `/assets/illustration/styles/**` and embedded for
 //! offline / CI. They describe appearance only; SceneGraph remains SoT.
@@ -22,6 +22,8 @@ pub const EMBEDDED_STYLE_PENCIL_YAML: &str =
     include_str!("../../../share/assets/illustration/styles/traditional-drawing/pencil.yaml");
 pub const EMBEDDED_STYLE_INK_YAML: &str =
     include_str!("../../../share/assets/illustration/styles/traditional-drawing/ink.yaml");
+pub const EMBEDDED_STYLE_COMIC_MANGA_YAML: &str =
+    include_str!("../../../share/assets/illustration/styles/traditional-drawing/comic_manga.yaml");
 
 /// Default DeclUI / beauty style when the user has not chosen one yet.
 pub const DEFAULT_STYLE_ID: &str = "pencil";
@@ -32,6 +34,7 @@ pub enum StyleFamily {
     Sketch,
     Pencil,
     Ink,
+    ComicManga,
 }
 
 impl StyleFamily {
@@ -40,6 +43,7 @@ impl StyleFamily {
             Self::Sketch => "sketch",
             Self::Pencil => "pencil",
             Self::Ink => "ink",
+            Self::ComicManga => "comic_manga",
         }
     }
 
@@ -48,6 +52,7 @@ impl StyleFamily {
             "sketch" | "sketch_loose" | "esquisse" => Some(Self::Sketch),
             "pencil" | "pencil_classic" | "crayon" => Some(Self::Pencil),
             "ink" | "ink_clean" | "encre" => Some(Self::Ink),
+            "comic_manga" | "comic" | "manga" | "bd" => Some(Self::ComicManga),
             _ => None,
         }
     }
@@ -224,7 +229,7 @@ impl ResolvedStyle {
             paper_texture: def.paper.texture.clone(),
             line_density: 1.0,
             variation: def.line.jitter.clamp(0.0, 1.0),
-            hatching: if def.shading.r#type == "none" {
+            hatching: if def.shading.r#type == "none" || def.family == StyleFamily::ComicManga {
                 0.0
             } else {
                 0.5
@@ -259,6 +264,7 @@ impl ResolvedStyle {
             StyleFamily::Sketch => [90, 82, 70],
             StyleFamily::Pencil => [48, 46, 44],
             StyleFamily::Ink => [12, 12, 14],
+            StyleFamily::ComicManga => [8, 8, 10],
         }
     }
 
@@ -268,6 +274,7 @@ impl ResolvedStyle {
             StyleFamily::Sketch => [230, 226, 214],
             StyleFamily::Pencil => [210, 206, 196],
             StyleFamily::Ink => [236, 236, 232],
+            StyleFamily::ComicManga => [242, 242, 238],
         }
     }
 }
@@ -313,12 +320,13 @@ pub fn load_style_pack_manifest_yaml(yaml: &str) -> Result<StylePackManifest, St
     Ok(m)
 }
 
-/// Embedded traditional-drawing styles (Sketch / Pencil / Ink).
+/// Embedded illustration styles (traditional drawing plus Comic / Manga).
 pub fn embedded_styles() -> Vec<StyleDef> {
     [
         EMBEDDED_STYLE_SKETCH_YAML,
         EMBEDDED_STYLE_PENCIL_YAML,
         EMBEDDED_STYLE_INK_YAML,
+        EMBEDDED_STYLE_COMIC_MANGA_YAML,
     ]
     .into_iter()
     .map(|y| load_style_yaml(y).expect("embedded style yaml"))
@@ -365,8 +373,8 @@ mod tests {
     fn embedded_pack_loads() {
         let m = load_style_pack_manifest_yaml(EMBEDDED_STYLE_PACK_MANIFEST_YAML).unwrap();
         assert_eq!(m.id, "traditional-drawing");
-        assert_eq!(m.styles, vec!["sketch", "pencil", "ink"]);
-        assert_eq!(embedded_styles().len(), 3);
+        assert_eq!(m.styles, vec!["sketch", "pencil", "ink", "comic_manga"]);
+        assert_eq!(embedded_styles().len(), 4);
     }
 
     #[test]

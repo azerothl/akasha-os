@@ -51,6 +51,7 @@
       "style_sketch": "Sketch",
       "style_pencil": "Pencil",
       "style_ink": "Ink",
+      "style_comic_manga": "Comic / Manga",
       "style_width": "Line width (0.3–4 px)",
       "style_density": "Contour density (0–1)",
       "style_variation": "Hand-drawn variation (0–1)",
@@ -58,7 +59,7 @@
       "style_antialias": "Smooth edges",
       "style_aa_on": "On",
       "style_aa_off": "Off",
-      "cpu_style_hint": "CPU: simplified line preview. Blender: full Freestyle render.",
+      "cpu_style_hint": "CPU: simplified style preview. Blender: Freestyle outlines; Comic / Manga adds four color-shadow bands.",
       "fx_section": "Static effects",
       "fx_kind": "Effect",
       "fx_fog": "Fog",
@@ -332,6 +333,7 @@
       "style_sketch": "Esquisse",
       "style_pencil": "Crayon",
       "style_ink": "Encre",
+      "style_comic_manga": "BD / Manga",
       "style_width": "Épaisseur du trait (0,3–4 px)",
       "style_density": "Densité des contours (0–1)",
       "style_variation": "Variation du trait (0–1)",
@@ -339,7 +341,7 @@
       "style_antialias": "Lisser les contours",
       "style_aa_on": "Oui",
       "style_aa_off": "Non",
-      "cpu_style_hint": "CPU : aperçu simplifié. Blender : rendu Freestyle complet.",
+      "cpu_style_hint": "CPU : aperçu simplifié du style. Blender : contours Freestyle ; Comic / Manga ajoute quatre tons d’ombre.",
       "fx_section": "Effets statiques",
       "fx_kind": "Effet",
       "fx_fog": "Brouillard",
@@ -2839,12 +2841,14 @@
                               "items": [
                                 "sketch",
                                 "pencil",
-                                "ink"
+                                "ink",
+                                "comic_manga"
                               ],
                               "item_label_keys": [
                                 "style_sketch",
                                 "style_pencil",
-                                "style_ink"
+                                "style_ink",
+                                "style_comic_manga"
                               ]
                             },
                             {
