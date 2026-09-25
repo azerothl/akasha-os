@@ -1,6 +1,6 @@
 name: illustration-studio
 version: 0.7.23
-hash: 43914169c656cd019ebfa2d125e25cc1271e4e85504019c74979e4653441c540
+hash: BUILD_HASH
 permissions:
   required_caps:
     - fs.read:/documents/illustrations/**
@@ -77,6 +77,16 @@ tools:
       required: [project_id, asset_id]
   - name: illustration.asset.add
     description: Add a library mesh to the active SceneGraph
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+        asset_id:
+          type: string
+      required: [project_id, asset_id]
+  - name: illustration.asset.delete
+    description: Delete a project library asset and its project-managed files
     input_schema:
       type: object
       properties:
