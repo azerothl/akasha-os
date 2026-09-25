@@ -865,7 +865,7 @@ fn skeleton_node_closure(nodes: &[Value], skin: &Value) -> Result<Vec<usize>, St
         }
     }
     let mut include = HashSet::new();
-    for joint in joints.iter().chain(skin.get("skeleton").into_iter()) {
+    for joint in joints.iter().chain(skin.get("skeleton")) {
         let mut current = joint
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
