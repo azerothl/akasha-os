@@ -277,6 +277,10 @@
       "library_convert": "Convert selected image to GLB with TRELLIS",
       "library_convert_triposr": "Test conversion with TripoSR",
       "library_convert_progress_label": "TRELLIS conversion",
+      "library_convert_status_idle": "Ready to convert.",
+      "library_convert_status_running": "Converting…",
+      "library_convert_status_done": "Conversion complete.",
+      "library_convert_status_fail": "Couldn't convert. Try again.",
       "library_selected_image": "Selected image",
       "library_import_glb": "Import GLB…",
       "output_kind_label": "Final format",
@@ -560,6 +564,10 @@
       "library_convert": "Convertir l’image sélectionnée en GLB avec TRELLIS",
       "library_convert_triposr": "Tester la conversion avec TripoSR",
       "library_convert_progress_label": "Conversion TRELLIS",
+      "library_convert_status_idle": "Prêt à convertir.",
+      "library_convert_status_running": "Conversion en cours…",
+      "library_convert_status_done": "Conversion terminée.",
+      "library_convert_status_fail": "Impossible de convertir. Réessayez.",
       "library_selected_image": "Image sélectionnée",
       "library_import_glb": "Importer un GLB…",
       "output_kind_label": "Format final",
@@ -734,7 +742,7 @@
       },
       "library_convert_status": {
         "type": "string",
-        "default": ""
+        "default": "idle"
       },
       "comic": {
         "type": "string",

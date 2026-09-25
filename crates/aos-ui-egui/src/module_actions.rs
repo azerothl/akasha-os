@@ -21,16 +21,22 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
+/// DeclUI phase token written to `library_convert_status` (resolved via i18n in the inspector).
+const CONVERT_STATUS_IDLE: &str = "idle";
+const CONVERT_STATUS_RUNNING: &str = "running";
+const CONVERT_STATUS_DONE: &str = "done";
+const CONVERT_STATUS_FAIL: &str = "fail";
+
 fn convert_progress(
     evt_tx: &Sender<Evt>,
     module: &str,
-    message: String,
+    status_phase: &str,
     active: bool,
     percent: Option<u32>,
 ) {
     let _ = evt_tx.send(Evt::ModuleUiServiceProgress {
         module: module.to_string(),
-        message,
+        message: status_phase.to_string(),
         active,
         active_key: Some("library_convert_active".into()),
         percent,
@@ -845,13 +851,7 @@ pub(crate) async fn run_decl_service_action(
                 error: None,
                 refresh_binds: vec![],
             });
-            convert_progress(
-                evt_tx,
-                module,
-                "Starting image → GLB conversion…".into(),
-                true,
-                Some(2),
-            );
+            convert_progress(evt_tx, module, CONVERT_STATUS_RUNNING, true, Some(2));
             let bus = Arc::clone(bus);
             let evt_tx = evt_tx.clone();
             let module = module.to_string();
@@ -883,7 +883,7 @@ pub(crate) async fn run_decl_service_action(
                         convert_progress(
                             &evt_progress,
                             &module_progress,
-                            "Running TripoSR experimental conversion…".into(),
+                            CONVERT_STATUS_RUNNING,
                             true,
                             Some(10),
                         );
@@ -910,7 +910,7 @@ pub(crate) async fn run_decl_service_action(
                             convert_progress(
                                 &evt_progress,
                                 &module_progress,
-                                p.message,
+                                CONVERT_STATUS_RUNNING,
                                 true,
                                 Some(p.percent.min(95)),
                             );
@@ -927,7 +927,7 @@ pub(crate) async fn run_decl_service_action(
                         convert_progress(
                             &evt_progress,
                             &module_progress,
-                            "Copying GLB into the project library…".into(),
+                            CONVERT_STATUS_RUNNING,
                             true,
                             Some(97),
                         );
@@ -963,7 +963,7 @@ pub(crate) async fn run_decl_service_action(
                         convert_progress(
                             &evt_tx,
                             &module,
-                            "Registering GLB asset…".into(),
+                            CONVERT_STATUS_RUNNING,
                             true,
                             Some(99),
                         );
@@ -997,22 +997,29 @@ pub(crate) async fn run_decl_service_action(
                     Err(error) => Err(error.to_string()),
                 };
                 let ok = outcome.is_ok();
+                let error = outcome.as_ref().err().cloned();
+                let test_model = error
+                    .as_deref()
+                    .is_some_and(crate::chat_error_copy::is_trellis_test_model_error);
                 let _ = evt_tx.send(Evt::ModuleUiServiceDone {
                     module: module.clone(),
                     action_id,
                     ok,
                     result: outcome.clone().unwrap_or(Value::Null),
-                    error: outcome.err(),
+                    error,
                     refresh_binds,
                 });
+                let status_phase = if ok {
+                    CONVERT_STATUS_DONE
+                } else if test_model {
+                    CONVERT_STATUS_IDLE
+                } else {
+                    CONVERT_STATUS_FAIL
+                };
                 convert_progress(
                     &evt_tx,
                     &module,
-                    if ok {
-                        "Image → GLB conversion complete.".into()
-                    } else {
-                        "Image → GLB conversion failed.".into()
-                    },
+                    status_phase,
                     false,
                     Some(if ok { 100 } else { 0 }),
                 );

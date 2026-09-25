@@ -3568,6 +3568,15 @@ fn render_illustration_asset_library(
     }
 }
 
+fn library_convert_status_label_key(phase: &str) -> &'static str {
+    match phase {
+        "running" => "library_convert_status_running",
+        "done" => "library_convert_status_done",
+        "fail" => "library_convert_status_fail",
+        _ => "library_convert_status_idle",
+    }
+}
+
 fn library_conversion_error(local_state: &HashMap<String, Value>) -> Option<&str> {
     if local_state.get("library_error_action").and_then(Value::as_str)
         != Some("library_convert_trellis")
@@ -3886,6 +3895,11 @@ fn render_library_details(
             .get("library_convert_active")
             .and_then(Value::as_bool)
             .unwrap_or(false);
+        let convert_phase = local_state
+            .get("library_convert_status")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("idle");
         if convert_active {
             let progress = local_state
                 .get("library_convert_progress")
@@ -3897,14 +3911,12 @@ fn render_library_details(
                 egui::ProgressBar::new(progress / 100.0)
                     .text(format!("{progress:.0}%")),
             );
-            if let Some(status) = local_state
-                .get("library_convert_status")
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty())
-            {
-                ui.weak(status);
-            }
         }
+        ui.weak(library_label(
+            doc,
+            language,
+            library_convert_status_label_key(if convert_active { "running" } else { convert_phase }),
+        ));
         if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
             let label = if provider == "triposr" { "library_convert_triposr" } else { "library_convert" };
             let convert_enabled = !pending_invoke && !convert_active;
