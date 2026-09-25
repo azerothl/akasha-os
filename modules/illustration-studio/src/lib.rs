@@ -82,6 +82,7 @@ fn handle(tool: &str, args: &Value) -> Result<Value, String> {
         "illustration.asset.register" => asset_register(args),
         "illustration.asset.update" => asset_update(args),
         "illustration.asset.add" => asset_add(args),
+        "illustration.asset.delete" => asset_delete(args),
         "illustration.asset.select" => asset_select(args),
         "illustration.document.load" => document_load(args),
         "illustration.document.save" => document_save(args),
@@ -406,6 +407,118 @@ fn asset_update(args: &Value) -> Result<Value, String> {
     Ok(json!({ "project_id": project_id, "asset": updated, "items": assets }))
 }
 
+fn project_asset_prefix(project_id: &str) -> String {
+    format!("{ROOT}/projects/{project_id}/assets/")
+}
+
+fn uri_is_project_managed_copy(project_id: &str, uri: &str) -> bool {
+    uri.starts_with(&project_asset_prefix(project_id))
+}
+
+fn collect_asset_delete_group<'a>(
+    assets: &'a [ProjectAsset],
+    project_id: &str,
+    anchor_id: &str,
+) -> Result<Vec<&'a ProjectAsset>, String> {
+    let anchor = assets
+        .iter()
+        .find(|asset| asset.project_id == project_id && asset.id == anchor_id)
+        .ok_or_else(|| "asset not found in this project".to_string())?;
+    if anchor.kind == "image" {
+        let image_uri = anchor.uri.as_str();
+        let mut group = vec![anchor];
+        for asset in assets.iter().filter(|asset| {
+            asset.project_id == project_id
+                && asset.kind == "mesh"
+                && asset.metadata.get("source_image").and_then(Value::as_str) == Some(image_uri)
+        }) {
+            group.push(asset);
+        }
+        return Ok(group);
+    }
+    if anchor.kind == "mesh" {
+        if let Some(source) = anchor.metadata.get("source_image").and_then(Value::as_str) {
+            if let Some(image) = assets.iter().find(|asset| {
+                asset.project_id == project_id
+                    && asset.kind == "image"
+                    && asset.uri == source
+            }) {
+                let mut group = vec![image];
+                for asset in assets.iter().filter(|asset| {
+                    asset.project_id == project_id
+                        && asset.kind == "mesh"
+                        && asset.metadata.get("source_image").and_then(Value::as_str)
+                            == Some(source)
+                }) {
+                    group.push(asset);
+                }
+                return Ok(group);
+            }
+        }
+    }
+    Ok(vec![anchor])
+}
+
+fn scene_references_for_uris(
+    scene: &aos_scene::SceneGraph,
+    uris: &[&str],
+) -> Vec<String> {
+    let mut hits = Vec::new();
+    for node in scene.nodes.values() {
+        let Some(mesh_uri) = node.mesh_uri.as_deref() else {
+            continue;
+        };
+        if uris.iter().any(|uri| *uri == mesh_uri) {
+            hits.push(format!("{} · {}", node.name, node.id));
+        }
+    }
+    hits.sort();
+    hits.dedup();
+    hits
+}
+
+fn asset_delete(args: &Value) -> Result<Value, String> {
+    let project_id = required_project_id(args)?;
+    let asset_id = args
+        .get("asset_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing asset_id".to_string())?;
+    let assets = read_assets(project_id)?;
+    let group = collect_asset_delete_group(&assets, project_id, asset_id)?;
+    let uris: Vec<&str> = group.iter().map(|asset| asset.uri.as_str()).collect();
+    let yaml = aos_module_sdk::fs_read(&project_path(project_id)?)?;
+    let project = aos_scene::load_project_yaml(&yaml).map_err(|e| e.to_string())?;
+    let scene_refs = scene_references_for_uris(&project.scene, &uris);
+    if !scene_refs.is_empty() {
+        return Err(format!(
+            "asset is used in the 3D scene: {}",
+            scene_refs.join(", ")
+        ));
+    }
+    let delete_ids: std::collections::HashSet<String> =
+        group.iter().map(|asset| asset.id.clone()).collect();
+    for asset in &group {
+        if uri_is_project_managed_copy(project_id, &asset.uri) {
+            match aos_module_sdk::fs_delete(&asset.uri) {
+                Ok(_) => {}
+                Err(error) if error.contains("NotFound") || error.contains("not found") => {}
+                Err(error) => return Err(format!("could not delete {}: {error}", asset.uri)),
+            }
+        }
+    }
+    let remaining: Vec<ProjectAsset> = assets
+        .into_iter()
+        .filter(|asset| !delete_ids.contains(&asset.id))
+        .collect();
+    write_assets(project_id, &remaining)?;
+    let deleted_asset_ids: Vec<String> = delete_ids.into_iter().collect();
+    Ok(json!({
+        "project_id": project_id,
+        "deleted_asset_ids": deleted_asset_ids,
+        "items": remaining,
+    }))
+}
+
 fn asset_select(args: &Value) -> Result<Value, String> {
     let id = required_project_id(args)?;
     let asset_id = args
@@ -490,6 +603,8 @@ aos_module_sdk::export_module!(handle);
 
 #[cfg(test)]
 mod tests {
+    use serde_json::{json, Value};
+
     #[test]
     fn empty_project_is_valid_and_contains_no_demo_assets() {
         let yaml = super::empty_project_yaml().unwrap();
@@ -501,6 +616,63 @@ mod tests {
     fn project_ids_cannot_escape_managed_root() {
         assert!(super::project_path("../project-1").is_err());
         assert!(super::project_path("project-000001").is_ok());
+    }
+
+    #[test]
+    fn collect_asset_delete_group_removes_linked_image_and_meshes() {
+        let assets = vec![
+            super::ProjectAsset {
+                project_id: "project-000001".into(),
+                id: "asset-000001".into(),
+                name: "Hero".into(),
+                kind: "image".into(),
+                uri: "/documents/illustrations/projects/project-000001/assets/hero.png".into(),
+                metadata: Value::Null,
+                prompt: None,
+            },
+            super::ProjectAsset {
+                project_id: "project-000001".into(),
+                id: "asset-000002".into(),
+                name: "Hero · 3D".into(),
+                kind: "mesh".into(),
+                uri: "/documents/illustrations/projects/project-000001/assets/hero.glb".into(),
+                metadata: json!({"source_image": "/documents/illustrations/projects/project-000001/assets/hero.png"}),
+                prompt: None,
+            },
+        ];
+        let group = super::collect_asset_delete_group(&assets, "project-000001", "asset-000002")
+            .unwrap();
+        assert_eq!(group.len(), 2);
+        assert_eq!(group[0].kind, "image");
+        assert_eq!(group[1].kind, "mesh");
+    }
+
+    #[test]
+    fn scene_references_for_uris_lists_mesh_nodes() {
+        let mut scene = aos_scene::SceneGraph {
+            effects: Vec::new(),
+            nodes: Default::default(),
+            roots: vec!["root".into()],
+            active_camera: None,
+        };
+        scene.nodes.insert(
+            "root".into(),
+            aos_scene::SceneNode::empty("root", "Scene"),
+        );
+        aos_scene::insert_mesh_asset(
+            &mut scene,
+            "root",
+            "library_asset_1",
+            "Chair",
+            "/documents/illustrations/projects/project-000001/assets/chair.glb",
+            aos_scene::Transform::default(),
+        )
+        .unwrap();
+        let refs = super::scene_references_for_uris(
+            &scene,
+            &["/documents/illustrations/projects/project-000001/assets/chair.glb"],
+        );
+        assert_eq!(refs, vec!["Chair · library_asset_1"]);
     }
 
     #[test]

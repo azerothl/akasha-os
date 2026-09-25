@@ -1325,6 +1325,7 @@ mod tests {
             "illustration.asset.update",
             "illustration.asset.select",
             "illustration.asset.add",
+            "illustration.asset.delete",
             "illustration.project.list",
             "illustration.project.create",
             "illustration.project.open",

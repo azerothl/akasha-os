@@ -353,6 +353,19 @@ pub(crate) fn on_ui_invoke_done(
             } else {
                 panel.status.clear();
             }
+        } else if module == "illustration-studio" && tool == "illustration.asset.delete" {
+            if let Some(raw) = error.as_deref().filter(|s| !s.trim().is_empty()) {
+                eprintln!("Illustration Studio library illustration.asset.delete: {raw}");
+            }
+            let language = app.prefs.language.clone();
+            let message = illustration_library_delete_fail(&language, panel.document.as_ref());
+            panel.local_state.insert("library_error".into(), Value::String(message));
+            panel.local_state.insert(
+                "library_error_action".into(),
+                Value::String("illustration.asset.delete".into()),
+            );
+            panel.local_state.insert("library_success".into(), Value::String(String::new()));
+            panel.status.clear();
         } else {
             let t = crate::i18n::strings(&app.prefs.language);
             panel.status = match error.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -671,6 +684,17 @@ pub(crate) fn on_ui_service_done(
     if ok {
         dispatch_refresh_binds(app, &module, refresh_binds);
     }
+}
+
+fn illustration_library_delete_fail(language: &str, doc: Option<&aos_proto::decl_ui::DeclUiDocument>) -> String {
+    doc.and_then(|doc| doc.labels.as_ref()?.resolve(language, "library_delete_fail"))
+        .unwrap_or_else(|| {
+            if language.starts_with("fr") {
+                "Impossible de supprimer. Réessayez.".into()
+            } else {
+                "Couldn't delete. Try again.".into()
+            }
+        })
 }
 
 fn illustration_library_error(language: &str, action: &str, raw: &str) -> String {
@@ -1025,6 +1049,14 @@ mod tests {
         assert!(illustration_library_error("en", "library_generate_image", "Image created but could not be added to the project library")
             .contains("was generated"));
         assert_eq!(illustration_library_error("fr", "library_import_glb", "Import cancelled"), "");
+        assert_eq!(
+            illustration_library_delete_fail("en", None),
+            "Couldn't delete. Try again."
+        );
+        assert_eq!(
+            illustration_library_delete_fail("fr", None),
+            "Impossible de supprimer. Réessayez."
+        );
     }
 
     #[test]
