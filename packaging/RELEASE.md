@@ -57,6 +57,7 @@ Akasha OS Preview 0.18.0 — Memory V2, instincts, health plane, harness + MCP s
 - Secrets vault key generator with LAN hex preset
 - Opt-in external coding CLIs (harness.run + Agents Advanced Runtime) — docs/harness.md
 - Optional aos-mcpd stdio MCP façade for IDEs — docs/mcp-server.md
+- Experimental Illustration Studio 0.7.23 in the local catalogue (edit ≠ beauty; not full MVP)
 - LAN / health / Deep Thinking / Create chrome polish
 - Same Win/Linux/Mac mill bands as 0.17.x
 

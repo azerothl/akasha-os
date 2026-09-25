@@ -59,7 +59,7 @@ Catalogue : `share/models/catalog-offerings.json`.
 | Settings | Langue, trust, routage, défauts agent, moteur de recherche, mémorisation auto, gpu/cpu/auto |
 | Retour | Issue GitHub sur azerothl/akasha-os |
 | Scénarios | Protocole cohorte ([TESTER.md](TESTER.md)) |
-| Modules → Studio Illustration | App DeclUI expérimentale du catalogue local (`illustration-studio` ~0.7.3). Vue d’édition wgpu ≠ beauté ; beauté = stub/CPU ; Blender mock sauf Renderer Pack GPL opt-in. Chemin optionnel : [TESTER.md §31](TESTER.md#31-studio-illustration-expérimental-optionnel). Honnêteté : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental) |
+| Modules → Studio Illustration | App DeclUI expérimentale du catalogue local (`illustration-studio` **0.7.23**). Vue d’édition wgpu ≠ beauté ; beauté = stub/CPU ; Blender mock sauf Renderer Pack GPL opt-in. Chemin optionnel : [TESTER.md §31](TESTER.md#31-studio-illustration-expérimental-optionnel). Honnêteté : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental) |
 
 ### Détail agent
 

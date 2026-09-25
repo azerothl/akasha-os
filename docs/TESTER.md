@@ -357,7 +357,7 @@ Tester-facing write-up (no cargo): [write-a-module.md](write-a-module.md).
 
 Not required for the cohort short path. Honesty catalogue: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module). Product intent SoT (**Draft v0.1**, not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md).
 
-- **Settings → Local module catalogue**: find **`illustration-studio`** (**0.7.21**, per bundled catalogue) → **Install** → accept cap review.
+- **Settings → Local module catalogue**: find **`illustration-studio`** (**0.7.23**, per bundled catalogue) → **Install** → accept cap review.
 - Open the DeclUI **Illustration Studio** tab. Confirm the tip: Compose → Edit → Beauty; host chrome on the 3D view says **edit view · not beauty** (FR: **édition · pas beauté**).
 - Compose a short EN or FR prompt (e.g. bookstore / library). Expect MeshBox proxies from **keyword heuristics** — not an LLM SceneIntent planner.
 - Orbit / select / Move·Rotate·Scale; confirm TRS strip + Undo/Redo. Run **CPU beauty** and/or **Stub beauty** → PNG under `/documents/illustrations/`.

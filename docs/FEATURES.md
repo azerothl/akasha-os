@@ -23,6 +23,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **Create chrome**: painted actions, folded Advanced, result toolbar polish; FR-localized prompt starters
 - **External coding CLIs**: opt-in `harness.run` plus Agents Advanced **Runtime** (Codex / Claude / Grok) with Steer / Pause / Kill ([harness.md](harness.md))
 - **MCP server façade**: optional `aos-mcpd` exposes `akasha_models` / `akasha_infer` / `akasha_mem_*` over stdio so external IDEs can use a running Preview ([mcp-server.md](mcp-server.md))
+- **Illustration Studio** (experimental): local catalogue module **0.7.23** — DeclUI scene editor; wgpu edit ≠ beauty; stub/CPU beauty; Blender mock unless opt-in GPL Renderer Pack ([§4c](#4c-illustration-studio-experimental-module))
 
 #### Fixes
 
@@ -330,7 +331,7 @@ Slash commands:
 
 ## 4c. Illustration Studio (experimental module)
 
-Local catalogue package **`illustration-studio` 0.7.21** (versioned independently of Preview host **0.18.0**; `share/modules/catalogue.yaml` is authoritative). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
+Local catalogue package **`illustration-studio` 0.7.23** (versioned independently of Preview host **0.18.0**; `share/modules/catalogue.yaml` is authoritative). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
 
 **What ships (honest):**
 
