@@ -81,6 +81,11 @@ if [ "$SKIP_BUILD" != "1" ]; then
     echo "== create module =="
     "${ROOT}/modules/build-create.sh"
   fi
+  # Rebuild illustration-studio so catalogue hash/caps match packaged wasm (E10).
+  if [ -f "${ROOT}/modules/build-illustration-studio.sh" ]; then
+    echo "== illustration-studio module =="
+    "${ROOT}/modules/build-illustration-studio.sh"
+  fi
   env -u RUSTFLAGS \
     cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
     --target wasm32-unknown-unknown --release
@@ -189,7 +194,7 @@ if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
   cp -f "${ROOT}/share/models/catalog-offerings.json" "${OUT}/share/models/catalog-offerings.json"
 fi
 
-for pkg in notes ext-rt canvas create; do
+for pkg in notes ext-rt canvas create illustration-studio; do
   for base in "${ROOT}/share/modules/${pkg}.aospkg" "${ROOT}/modules/${pkg}.aospkg"; do
     if [ -d "${base}" ]; then
       rm -rf "${OUT}/share/modules/${pkg}.aospkg"
@@ -197,6 +202,16 @@ for pkg in notes ext-rt canvas create; do
       break
     fi
   done
+done
+if [ ! -d "${OUT}/share/modules/illustration-studio.aospkg" ]; then
+  echo "ERROR: illustration-studio.aospkg absent — run modules/build-illustration-studio.sh" >&2
+  exit 1
+fi
+for rel in manifest.yaml module.wasm ui/index.json; do
+  if [ ! -s "${OUT}/share/modules/illustration-studio.aospkg/${rel}" ]; then
+    echo "ERROR: illustration-studio.aospkg incomplete — missing ${rel}" >&2
+    exit 1
+  fi
 done
 if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
   for base in "${ROOT}/share/modules/tasks.aospkg" "${ROOT}/modules/tasks.aospkg"; do
@@ -206,6 +221,22 @@ if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
       break
     fi
   done
+fi
+
+if [ -d "${ROOT}/share/assets/illustration" ]; then
+  rm -rf "${OUT}/share/assets/illustration"
+  mkdir -p "${OUT}/share/assets"
+  copy_tree "${ROOT}/share/assets/illustration" "${OUT}/share/assets/illustration"
+else
+  echo "WARN: share/assets/illustration absent" >&2
+fi
+
+if [ -d "${ROOT}/share/illustration-renderer-pack" ]; then
+  rm -rf "${OUT}/share/illustration-renderer-pack"
+  mkdir -p "${OUT}/share"
+  copy_tree "${ROOT}/share/illustration-renderer-pack" "${OUT}/share/illustration-renderer-pack"
+else
+  echo "WARN: share/illustration-renderer-pack absent (Blender beauty stays mock)" >&2
 fi
 
 for cat in catalogue.yaml catalogue.yaml.sig catalogue.pub; do

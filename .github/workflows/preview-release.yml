@@ -337,7 +337,7 @@ jobs:
         run: |
           sccache --show-stats
           export VERSION
-          chmod +x packaging/build-preview-macos.sh modules/build-canvas.sh modules/build-create.sh
+          chmod +x packaging/build-preview-macos.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
           ./packaging/build-preview-macos.sh
           OUT="dist/AgentOS-Preview-${VERSION}-macos-arm64"
           for bin in \
