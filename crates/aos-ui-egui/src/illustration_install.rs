@@ -275,6 +275,9 @@ fn progress(tx: &std::sync::mpsc::Sender<Evt>, module: &str, message: String, ac
         module: module.into(),
         message,
         active,
+        active_key: None,
+        percent: None,
+        progress_key: None,
     });
 }
 

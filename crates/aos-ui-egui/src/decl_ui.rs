@@ -180,11 +180,32 @@ impl DeclUiPanelState {
                     self.local_state.insert("last_work_area".into(), area.clone());
                 }
             }
-        } else if tool == "illustration.asset.register" || tool == "illustration.asset.update" {
+        } else if tool == "illustration.asset.register"
+            || tool == "illustration.asset.update"
+            || tool == "illustration.asset.delete"
+        {
             if self.local_state.get("project_id") == result.get("project_id") {
                 let items = result.get("items").cloned().unwrap_or(Value::Array(Vec::new()));
                 self.local_state.insert("project_assets".into(), items.clone());
                 self.bind_cache.insert("illustration.asset.list".into(), serde_json::json!({ "items": items }));
+                if tool == "illustration.asset.delete" {
+                    let deleted: std::collections::HashSet<String> = result
+                        .get("deleted_asset_ids")
+                        .and_then(Value::as_array)
+                        .map(|ids| ids.iter().filter_map(|id| id.as_str().map(str::to_string)).collect())
+                        .unwrap_or_default();
+                    if self
+                        .local_state
+                        .get("library_selected_asset_id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| deleted.contains(id))
+                    {
+                        self.local_state.insert("library_selected_asset_id".into(), Value::String(String::new()));
+                    }
+                    self.local_state.insert("library_error".into(), Value::String(String::new()));
+                    self.local_state.insert("library_error_action".into(), Value::String(String::new()));
+                    self.local_state.insert("library_success".into(), Value::String("library_delete_success".into()));
+                }
             }
         } else if tool == "illustration.asset.select" {
             if self.local_state.get("project_id") == result.get("project_id") {
@@ -210,7 +231,7 @@ impl DeclUiPanelState {
             }
         } else if tool == "illustration.project.close" && result.get("closed") == Some(&Value::Bool(true)) {
             self.scene3d_viewports.clear();
-            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_error_action", "library_job_project_id", "library_job_id"] {
+            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_error_action", "library_success", "library_job_project_id", "library_job_id"] {
                 self.local_state.insert(key.into(), Value::String(String::new()));
             }
             self.local_state.insert("library_section".into(), Value::String("assets".into()));
@@ -244,6 +265,7 @@ impl DeclUiPanelState {
             ("library_error_action", Value::String(String::new())),
             ("library_job_project_id", Value::String(String::new())),
             ("library_job_id", Value::String(String::new())),
+            ("library_success", Value::String(String::new())),
             ("library_busy", Value::Bool(false)),
             ("library_section", Value::String("assets".into())),
             ("library_image_framing", Value::String("standard".into())),
@@ -1596,10 +1618,12 @@ impl DeclUiPanelState {
                 let (done, total) = progress_values(&frac);
                 let label = widget_text(w, doc, language).unwrap_or_else(|| "Progress".into());
                 ui.label(label);
-                ui.add(
-                    egui::ProgressBar::new(done as f32 / total.max(1) as f32)
-                        .text(format!("{done}/{total}")),
-                );
+                let text = if total == 100 {
+                    format!("{done}%")
+                } else {
+                    format!("{done}/{total}")
+                };
+                ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).text(text));
             }
             "job" => {
                 let t = crate::i18n::strings(language);
@@ -2036,6 +2060,11 @@ impl DeclUiPanelState {
                 }
                 if let Some(message) = local_state.get("library_error").and_then(Value::as_str).filter(|s| !s.is_empty()) {
                     ui.colored_label(egui::Color32::from_rgb(240, 145, 130), message);
+                }
+                if let Some(key) = local_state.get("library_success").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+                    let message = widget_text_from_key(Some(key), doc, language)
+                        .unwrap_or_else(|| key.to_string());
+                    ui.colored_label(egui::Color32::from_rgb(120, 190, 140), message);
                 }
             }
             "scene_candidate" => {
@@ -3548,7 +3577,7 @@ fn render_illustration_asset_library(
                 |ui| {
                     ui.set_min_height(height);
                     egui::ScrollArea::vertical().id_salt("library-inspector").show(ui, |ui| {
-                        render_library_details(ui, doc, language, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+                        render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
                     });
                 },
             );
@@ -3561,8 +3590,17 @@ fn render_illustration_asset_library(
         );
         ui.separator();
         egui::ScrollArea::vertical().id_salt("library-inspector-compact").show(ui, |ui| {
-            render_library_details(ui, doc, language, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+            render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
         });
+    }
+}
+
+fn library_convert_status_label_key(phase: &str) -> &'static str {
+    match phase {
+        "running" => "library_convert_status_running",
+        "done" => "library_convert_status_done",
+        "fail" => "library_convert_status_fail",
+        _ => "library_convert_status_idle",
     }
 }
 
@@ -3631,12 +3669,170 @@ fn library_linked_meshes<'a>(assets: &'a [Value], project_id: &str, image: &Valu
     }).collect()
 }
 
+fn library_delete_targets<'a>(assets: &'a [Value], project_id: &str, asset: &'a Value) -> Vec<&'a Value> {
+    let kind = asset.get("kind").and_then(Value::as_str).unwrap_or("");
+    if kind == "image" {
+        let mut targets = vec![asset];
+        targets.extend(library_linked_meshes(assets, project_id, asset));
+        targets
+    } else if library_source_image(assets, project_id, asset).is_some() {
+        let image = library_source_image(assets, project_id, asset).unwrap();
+        let mut targets = vec![image];
+        targets.extend(library_linked_meshes(assets, project_id, image));
+        targets
+    } else {
+        vec![asset]
+    }
+}
+
+fn library_scene_refs(local_state: &HashMap<String, Value>, uris: &[&str]) -> Vec<String> {
+    let Some(yaml) = local_state.get("scene").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let Ok(project) = aos_scene::load_project_yaml(yaml) else {
+        return Vec::new();
+    };
+    let mut hits = Vec::new();
+    for node in project.scene.nodes.values() {
+        let Some(mesh_uri) = node.mesh_uri.as_deref() else {
+            continue;
+        };
+        if uris.contains(&mesh_uri) {
+            hits.push(format!("{} · {}", node.name, node.id));
+        }
+    }
+    hits.sort();
+    hits.dedup();
+    hits
+}
+
+fn library_label_with_placeholders(
+    doc: &DeclUiDocument,
+    language: &str,
+    key: &str,
+    replacements: &[(&str, &str)],
+) -> String {
+    let mut text = library_label(doc, language, key);
+    for (needle, value) in replacements {
+        text = text.replace(&format!("{{{needle}}}"), value);
+    }
+    text
+}
+
+fn library_uri_basename(uri: &str) -> String {
+    uri.rsplit('/').next().unwrap_or(uri).to_string()
+}
+
+fn render_library_asset_delete(
+    ui: &mut Ui,
+    doc: &DeclUiDocument,
+    language: &str,
+    asset: &Value,
+    assets: &[Value],
+    project_id: &str,
+    local_state: &HashMap<String, Value>,
+    pending_invoke: bool,
+    actions: &mut DeclUiActions,
+    tool_schemas: &HashMap<String, Value>,
+) {
+    let id = asset.get("id").and_then(Value::as_str).unwrap_or("");
+    let display_name = asset.get("name").and_then(Value::as_str).unwrap_or("");
+    let targets = library_delete_targets(assets, project_id, asset);
+    let uris: Vec<&str> = targets
+        .iter()
+        .filter_map(|target| target.get("uri").and_then(Value::as_str))
+        .collect();
+    let scene_refs = library_scene_refs(local_state, &uris);
+    let grouped = targets.len() > 1;
+    let has_shared_only = targets.iter().any(|target| {
+        target
+            .get("uri")
+            .and_then(Value::as_str)
+            .is_some_and(|uri| !uri.starts_with(&format!("/documents/illustrations/projects/{project_id}/assets/")))
+    });
+
+    ui.separator();
+    if !scene_refs.is_empty() {
+        ui.colored_label(
+            egui::Color32::from_rgb(240, 145, 130),
+            library_label_with_placeholders(
+                doc,
+                language,
+                "library_delete_blocked",
+                &[("refs", &scene_refs.join(", "))],
+            ),
+        );
+        return;
+    }
+
+    let confirm_key = ui.id().with(("library-delete-open", project_id, id));
+    let mut confirm_open = ui.ctx().data(|data| data.get_temp::<bool>(confirm_key)).unwrap_or(false);
+    if !confirm_open {
+        if ui
+            .add_enabled(
+                !pending_invoke,
+                egui::Button::new(library_label(doc, language, "library_delete")),
+            )
+            .clicked()
+        {
+            confirm_open = true;
+        }
+    } else {
+        ui.group(|ui| {
+            ui.strong(library_label(doc, language, "library_delete_confirm_title"));
+            ui.label(library_label_with_placeholders(
+                doc,
+                language,
+                "library_delete_confirm_body",
+                &[("name", display_name)],
+            ));
+            if grouped {
+                ui.weak(library_label(doc, language, "library_delete_confirm_group"));
+            }
+            if has_shared_only {
+                ui.weak(library_label(doc, language, "library_delete_shared_note"));
+            }
+            for uri in &uris {
+                ui.label(format!("• {}", library_uri_basename(uri)));
+            }
+            ui.horizontal(|ui| {
+                if ui
+                    .button(library_label(doc, language, "library_delete_cancel"))
+                    .clicked()
+                {
+                    confirm_open = false;
+                }
+                if ui
+                    .add_enabled(
+                        !pending_invoke,
+                        egui::Button::new(library_label(doc, language, "library_delete_confirm")),
+                    )
+                    .clicked()
+                {
+                    queue_invoke(
+                        actions,
+                        "illustration.asset.delete",
+                        serde_json::json!({ "project_id": project_id, "asset_id": id }),
+                        Vec::new(),
+                        Vec::new(),
+                        tool_schemas,
+                    );
+                    confirm_open = false;
+                }
+            });
+        });
+    }
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(confirm_key, confirm_open));
+}
+
 fn library_select_asset(actions: &mut DeclUiActions, asset: &Value, project_id: &str) {
     let is_image = asset.get("kind").and_then(Value::as_str) == Some("image");
     actions.local_patch.insert("library_selected_asset_id".into(), asset.get("id").cloned().unwrap_or(Value::Null));
     actions.local_patch.insert("library_selected_project_id".into(), Value::String(project_id.into()));
     actions.local_patch.insert("library_error".into(), Value::String(String::new()));
     actions.local_patch.insert("library_error_action".into(), Value::String(String::new()));
+    actions.local_patch.insert("library_success".into(), Value::String(String::new()));
     actions.local_patch.insert("library_image_uri".into(), Value::String(if is_image { asset.get("uri").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
     actions.local_patch.insert("library_image_prompt".into(), Value::String(if is_image { asset.get("prompt").and_then(Value::as_str).unwrap_or("") } else { "" }.into()));
 }
@@ -3730,6 +3926,7 @@ fn render_library_details(
     ui: &mut Ui,
     doc: &DeclUiDocument,
     language: &str,
+    local_state: &HashMap<String, Value>,
     selected: Option<&Value>,
     assets: Option<&Vec<Value>>,
     project_id: &str,
@@ -3879,9 +4076,36 @@ fn render_library_details(
                 data.insert_temp(atlas_key, atlas_resolution);
             });
         }
+        let convert_active = local_state
+            .get("library_convert_active")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let convert_phase = local_state
+            .get("library_convert_status")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("idle");
+        if convert_active {
+            let progress = local_state
+                .get("library_convert_progress")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                .min(100) as f32;
+            ui.label(library_label(doc, language, "library_convert_progress_label"));
+            ui.add(
+                egui::ProgressBar::new(progress / 100.0)
+                    .text(format!("{progress:.0}%")),
+            );
+        }
+        ui.weak(library_label(
+            doc,
+            language,
+            library_convert_status_label_key(if convert_active { "running" } else { convert_phase }),
+        ));
         if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
             let label = if provider == "triposr" { "library_convert_triposr" } else { "library_convert" };
-            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, label))).clicked() {
+            let convert_enabled = !pending_invoke && !convert_active;
+            if ui.add_enabled(convert_enabled, egui::Button::new(library_label(doc, language, label))).clicked() {
                 let mut state = HashMap::new();
                 state.insert("project_id".into(), Value::String(project_id.into()));
                 state.insert("library_image_uri".into(), Value::String(uri.into()));
@@ -3905,6 +4129,20 @@ fn render_library_details(
         queue_invoke(actions, "illustration.asset.add",
             serde_json::json!({"project_id": project_id, "asset_id": id}),
             Vec::new(), Vec::new(), tool_schemas);
+    }
+    if let Some(items) = assets {
+        render_library_asset_delete(
+            ui,
+            doc,
+            language,
+            asset,
+            items,
+            project_id,
+            local_state,
+            pending_invoke,
+            actions,
+            tool_schemas,
+        );
     }
 }
 
@@ -4213,7 +4451,10 @@ fn value_display(v: &Value) -> String {
 
 #[cfg(test)]
 mod illustration_library_tests {
-    use super::{library_conversion_error, library_linked_meshes, library_selected_asset, library_source_image};
+    use super::{
+        library_conversion_error, library_delete_targets, library_linked_meshes, library_scene_refs,
+        library_selected_asset, library_source_image,
+    };
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -4238,6 +4479,46 @@ mod illustration_library_tests {
         assert_eq!(library_conversion_error(&state), None);
         state.insert("library_error_action".into(), json!("library_convert_trellis"));
         assert_eq!(library_conversion_error(&state), Some("Vulkan unavailable"));
+    }
+
+    fn delete_targets_include_linked_image_and_mesh() {
+        let assets = vec![
+            json!({"project_id":"one","id":"image","kind":"image","uri":"/documents/illustrations/one.png","name":"Hero"}),
+            json!({"project_id":"one","id":"mesh","kind":"mesh","metadata":{"source_image":"/documents/illustrations/one.png"}}),
+        ];
+        let targets = library_delete_targets(&assets, "one", &assets[1]);
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0]["id"], "image");
+    }
+
+    #[test]
+    fn scene_refs_are_detected_from_local_scene_yaml() {
+        let mut scene = aos_scene::SceneGraph {
+            effects: Vec::new(),
+            nodes: Default::default(),
+            roots: vec!["root".into()],
+            active_camera: None,
+        };
+        scene.nodes.insert(
+            "root".into(),
+            aos_scene::SceneNode::empty("root", "Scene"),
+        );
+        aos_scene::insert_mesh_asset(
+            &mut scene,
+            "root",
+            "library_asset_1",
+            "Chair",
+            "/documents/illustrations/projects/project-1/assets/chair.glb",
+            aos_scene::Transform::default(),
+        )
+        .unwrap();
+        let yaml = aos_scene::save_project_yaml(&aos_scene::ProjectFile::new(scene)).unwrap();
+        let state = HashMap::from([("scene".into(), json!(yaml))]);
+        let refs = library_scene_refs(
+            &state,
+            &["/documents/illustrations/projects/project-1/assets/chair.glb"],
+        );
+        assert_eq!(refs, vec!["Chair · library_asset_1"]);
     }
 
     #[test]

@@ -276,8 +276,23 @@
       "library_add_to_scene": "Add to 3D scene",
       "library_convert": "Convert selected image to GLB with TRELLIS",
       "library_convert_triposr": "Test conversion with TripoSR",
+      "library_convert_progress_label": "TRELLIS conversion",
+      "library_convert_status_idle": "Ready to convert.",
+      "library_convert_status_running": "Converting…",
+      "library_convert_status_done": "Conversion complete.",
+      "library_convert_status_fail": "Couldn't convert. Try again.",
       "library_selected_image": "Selected image",
       "library_import_glb": "Import GLB…",
+      "library_delete": "Delete",
+      "library_delete_confirm_title": "Delete this asset?",
+      "library_delete_confirm_body": "Remove {name} from this project library and delete the project copy of:",
+      "library_delete_confirm_group": "The linked source image and derived 3D model will both be removed.",
+      "library_delete_shared_note": "Shared catalogue files are removed from this project only; the shared file is kept.",
+      "library_delete_cancel": "Cancel",
+      "library_delete_confirm": "Delete",
+      "library_delete_blocked": "This asset is used in the 3D scene. Remove these instances first: {refs}",
+      "library_delete_success": "Asset deleted.",
+      "library_delete_fail": "Couldn't delete. Try again.",
       "output_kind_label": "Final format",
       "output_kind_3d": "3D",
       "output_kind_illustration": "Illustration",
@@ -558,8 +573,23 @@
       "library_add_to_scene": "Ajouter à la scène 3D",
       "library_convert": "Convertir l’image sélectionnée en GLB avec TRELLIS",
       "library_convert_triposr": "Tester la conversion avec TripoSR",
+      "library_convert_progress_label": "Conversion TRELLIS",
+      "library_convert_status_idle": "Prêt à convertir.",
+      "library_convert_status_running": "Conversion en cours…",
+      "library_convert_status_done": "Conversion terminée.",
+      "library_convert_status_fail": "Impossible de convertir. Réessayez.",
       "library_selected_image": "Image sélectionnée",
       "library_import_glb": "Importer un GLB…",
+      "library_delete": "Supprimer",
+      "library_delete_confirm_title": "Supprimer cet asset ?",
+      "library_delete_confirm_body": "Retirer {name} de la bibliothèque du projet et supprimer la copie projet de :",
+      "library_delete_confirm_group": "L’image source et le modèle 3D dérivé liés seront supprimés ensemble.",
+      "library_delete_shared_note": "Les fichiers du catalogue partagé sont retirés de ce projet uniquement ; le fichier partagé est conservé.",
+      "library_delete_cancel": "Annuler",
+      "library_delete_confirm": "Supprimer",
+      "library_delete_blocked": "Cet asset est utilisé dans la scène 3D. Retirez d’abord ces instances : {refs}",
+      "library_delete_success": "Asset supprimé.",
+      "library_delete_fail": "Impossible de supprimer. Réessayez.",
       "output_kind_label": "Format final",
       "output_kind_3d": "3D",
       "output_kind_illustration": "Illustration",
@@ -722,6 +752,18 @@
         "type": "boolean",
         "default": false
       },
+      "library_convert_active": {
+        "type": "boolean",
+        "default": false
+      },
+      "library_convert_progress": {
+        "type": "number",
+        "default": 0
+      },
+      "library_convert_status": {
+        "type": "string",
+        "default": "idle"
+      },
       "comic": {
         "type": "string",
         "default": ""
@@ -867,6 +909,10 @@
         "default": ""
       },
       "library_error": {
+        "type": "string",
+        "default": ""
+      },
+      "library_success": {
         "type": "string",
         "default": ""
       },

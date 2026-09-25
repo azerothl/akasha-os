@@ -85,6 +85,16 @@ tools:
         asset_id:
           type: string
       required: [project_id, asset_id]
+  - name: illustration.asset.delete
+    description: Delete a project library asset and its project-managed files
+    input_schema:
+      type: object
+      properties:
+        project_id:
+          type: string
+        asset_id:
+          type: string
+      required: [project_id, asset_id]
   - name: illustration.project.list
     description: List managed projects and the legacy import opportunity
     input_schema:

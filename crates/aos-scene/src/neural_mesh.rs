@@ -16,10 +16,9 @@
 use crate::math::{Quat, Vec3};
 use crate::mesh_asset::{insert_mesh_asset, load_gltf_mesh};
 use crate::neural_mesh_isolate::{
-    probe_pack_status, resolve_fixture_glb, resolve_geometry_res, resolve_runner_bin,
-    format_spawn_failure, resolve_weights_dir, spawn_isolated, NeuralMeshRunMode,
-    NeuralMeshRunnerKind,
-    NeuralMeshSpawnPlan, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
+    format_spawn_failure, probe_pack_status, resolve_fixture_glb, resolve_geometry_res,
+    resolve_runner_bin, resolve_weights_dir, spawn_isolated_with_progress, NeuralMeshProgress,
+    NeuralMeshRunMode, NeuralMeshRunnerKind, NeuralMeshSpawnPlan, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
 };
 use crate::scene::{NodeKind, SceneError, SceneGraph, SceneNode, Transform};
 use std::path::{Path, PathBuf};
@@ -259,6 +258,14 @@ pub fn validate_proposal(proposal: &MeshAssistProposal) -> Result<(), NeuralMesh
 
 /// Propose a mesh assist result without mutating the scene.
 pub fn propose_mesh_assist(req: &MeshAssistRequest) -> Result<MeshAssistProposal, NeuralMeshError> {
+    propose_mesh_assist_with_progress(req, |_| {})
+}
+
+/// Like [`propose_mesh_assist`], with host progress callbacks for neural spawn.
+pub fn propose_mesh_assist_with_progress(
+    req: &MeshAssistRequest,
+    on_progress: impl FnMut(NeuralMeshProgress),
+) -> Result<MeshAssistProposal, NeuralMeshError> {
     let prompt = req.prompt.trim();
     if prompt.is_empty() {
         return Err(NeuralMeshError::EmptyPrompt);
@@ -280,6 +287,7 @@ pub fn propose_mesh_assist(req: &MeshAssistRequest) -> Result<MeshAssistProposal
                 req.image_path.as_deref(),
                 req.geometry_res,
                 settings,
+                on_progress,
             )?;
             validate_proposal(&proposal)?;
             Ok(proposal)
@@ -292,7 +300,16 @@ pub fn mesh_assist(
     scene: &mut SceneGraph,
     req: &MeshAssistRequest,
 ) -> Result<MeshAssistResult, NeuralMeshError> {
-    let proposal = propose_mesh_assist(req)?;
+    mesh_assist_with_progress(scene, req, |_| {})
+}
+
+/// Like [`mesh_assist`], reporting neural-runner progress to the host UI.
+pub fn mesh_assist_with_progress(
+    scene: &mut SceneGraph,
+    req: &MeshAssistRequest,
+    on_progress: impl FnMut(NeuralMeshProgress),
+) -> Result<MeshAssistResult, NeuralMeshError> {
+    let proposal = propose_mesh_assist_with_progress(req, on_progress)?;
     apply_proposal(scene, &proposal, &req.parent_id, &req.prefix)
 }
 
@@ -376,6 +393,7 @@ fn neural_propose(
     image_path: Option<&str>,
     geometry_res: Option<u32>,
     trellis_settings: TrellisQualitySettings,
+    mut on_progress: impl FnMut(NeuralMeshProgress),
 ) -> Result<MeshAssistProposal, NeuralMeshError> {
     let status = probe_pack_status();
     let Some(pack_root) = status.pack_root.clone() else {
@@ -383,30 +401,70 @@ fn neural_propose(
     };
 
     match status.mode {
-        NeuralMeshRunMode::Mock => neural_from_fixture(&pack_root, prompt, true),
+        NeuralMeshRunMode::Mock => {
+            on_progress(NeuralMeshProgress {
+                percent: 50,
+                message: "Using mock neural mesh fixture…".into(),
+            });
+            neural_from_fixture(&pack_root, prompt, true)
+        }
         NeuralMeshRunMode::Require => {
             if !status.ready_for_spawn {
                 return Err(NeuralMeshError::BackendUnavailable);
             }
-            neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res, trellis_settings)
+            neural_from_spawn(
+                &pack_root,
+                prompt,
+                image_path,
+                true,
+                geometry_res,
+                trellis_settings,
+                &mut on_progress,
+            )
         }
         NeuralMeshRunMode::Auto => {
             // A requested image-to-3D conversion cannot use the fixture. Preserve
             // the actual runner failure so the user can diagnose it.
             if image_path.is_some_and(|path| !path.trim().is_empty()) {
                 return if status.ready_for_spawn {
-                    neural_from_spawn(&pack_root, prompt, image_path, true, geometry_res, trellis_settings)
+                    neural_from_spawn(
+                        &pack_root,
+                        prompt,
+                        image_path,
+                        true,
+                        geometry_res,
+                        trellis_settings,
+                        &mut on_progress,
+                    )
                 } else {
                     Err(NeuralMeshError::BackendUnavailable)
                 };
             }
             if status.ready_for_spawn {
-                match neural_from_spawn(&pack_root, prompt, image_path, false, geometry_res, trellis_settings) {
+                match neural_from_spawn(
+                    &pack_root,
+                    prompt,
+                    image_path,
+                    false,
+                    geometry_res,
+                    trellis_settings,
+                    &mut on_progress,
+                ) {
                     Ok(p) => Ok(p),
-                    Err(_) if status.ready_for_mock => neural_from_fixture(&pack_root, prompt, true),
+                    Err(_) if status.ready_for_mock => {
+                        on_progress(NeuralMeshProgress {
+                            percent: 50,
+                            message: "Runner unavailable — using mock fixture…".into(),
+                        });
+                        neural_from_fixture(&pack_root, prompt, true)
+                    }
                     Err(_) => Err(NeuralMeshError::BackendUnavailable),
                 }
             } else if status.ready_for_mock {
+                on_progress(NeuralMeshProgress {
+                    percent: 50,
+                    message: "Using mock neural mesh fixture…".into(),
+                });
                 neural_from_fixture(&pack_root, prompt, true)
             } else {
                 Err(NeuralMeshError::BackendUnavailable)
@@ -453,6 +511,7 @@ fn neural_from_spawn(
     require_image: bool,
     requested_geometry_res: Option<u32>,
     trellis_settings: TrellisQualitySettings,
+    on_progress: &mut dyn FnMut(NeuralMeshProgress),
 ) -> Result<MeshAssistProposal, NeuralMeshError> {
     let Some(runner) = resolve_runner_bin(Some(pack_root)) else {
         return Err(NeuralMeshError::BackendUnavailable);
@@ -525,7 +584,11 @@ fn neural_from_spawn(
         use_bwrap: want_bwrap(),
         timeout: Duration::from_secs(timeout_secs),
     };
-    let spawn = spawn_isolated(&plan).map_err(|e| {
+    on_progress(NeuralMeshProgress {
+        percent: 5,
+        message: "Preparing TRELLIS work directory…".into(),
+    });
+    let spawn = spawn_isolated_with_progress(&plan, on_progress).map_err(|e| {
         NeuralMeshError::Validation(format!("neural mesh spawn failed: {e}"))
     })?;
     if spawn.exit_code != 0 || !output.is_file() {
