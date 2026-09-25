@@ -1,6 +1,6 @@
 //! CPU SceneGraph wireframe / flat beauty / NPR approximation backend.
 //!
-//! When `RenderRequest.style` is set (Sketch / Pencil / Ink), draws a paper
+//! When `RenderRequest.style` is set (Sketch / Pencil / Ink / Comic-Manga), draws a paper
 //! background with style-aware line art and optional hatching. Without a style,
 //! keeps the legacy dark wireframe / flat beauty look.
 
@@ -226,7 +226,15 @@ fn draw_mesh(
 ) {
     let mut fill = style
         .map(|s| {
-            let rgb = s.fill_rgb();
+            let rgb = if s.family == StyleFamily::ComicManga {
+                [
+                    (mesh.base_color[0] * 255.0).clamp(0.0, 255.0) as u8,
+                    (mesh.base_color[1] * 255.0).clamp(0.0, 255.0) as u8,
+                    (mesh.base_color[2] * 255.0).clamp(0.0, 255.0) as u8,
+                ]
+            } else {
+                s.fill_rgb()
+            };
             [rgb[0], rgb[1], rgb[2], 255]
         })
         .unwrap_or([
@@ -258,7 +266,21 @@ fn draw_mesh(
         let show_fill = matches!(pass, RenderPassKind::Beauty)
             && !style.is_some_and(|s| matches!(s.family, StyleFamily::Sketch));
         if show_fill {
-            raster.fill_tri(a, b, c, fill);
+            let face_fill = if style.is_some_and(|s| s.family == StyleFamily::ComicManga) {
+                let normal = (b - a).cross(c - a).normalized().unwrap_or(Vec3::UNIT_Y);
+                let key = Vec3::new(-0.4, 0.7, 0.6).normalized().unwrap_or(Vec3::UNIT_Y);
+                let illumination = 0.3 + normal.dot(key).max(0.0) * 0.7;
+                let mut lit = fill;
+                for channel in &mut lit[..3] {
+                    *channel = (f32::from(*channel) * illumination)
+                        .round()
+                        .clamp(0.0, 255.0) as u8;
+                }
+                posterize_luminance(lit, 4)
+            } else {
+                fill
+            };
+            raster.fill_tri(a, b, c, face_fill);
         }
         if style.is_some() {
             let normal = (b - a).cross(c - a).normalized().unwrap_or(Vec3::UNIT_Y);
@@ -345,6 +367,7 @@ fn apply_paper_grain(rgba: &mut [u8], w: u32, h: u32, style: &ResolvedStyle) {
         StyleFamily::Sketch => 18u8,
         StyleFamily::Pencil => 12u8,
         StyleFamily::Ink => 4u8,
+        StyleFamily::ComicManga => 0u8,
     };
     for y in 0..h {
         for x in 0..w {
@@ -406,7 +429,9 @@ fn draw_box(
 
     let do_fill = match st.family {
         StyleFamily::Sketch => false,
-        StyleFamily::Pencil | StyleFamily::Ink => matches!(pass, RenderPassKind::Beauty),
+        StyleFamily::Pencil | StyleFamily::Ink | StyleFamily::ComicManga => {
+            matches!(pass, RenderPassKind::Beauty)
+        }
     };
     if do_fill {
         let albedo = [
@@ -417,6 +442,11 @@ fn draw_box(
         let fill = lit_face_rgba(
             lights, corners[0], corners[1], corners[2], albedo, fill_base,
         );
+        let fill = if st.family == StyleFamily::ComicManga {
+            posterize_luminance(fill, 4)
+        } else {
+            fill
+        };
         raster.fill_quad(corners[0], corners[1], corners[2], corners[3], fill);
         if st.shading != "none" {
             hatch_face(raster, corners[0], corners[1], corners[2], corners[3], st);
@@ -427,6 +457,7 @@ fn draw_box(
         StyleFamily::Sketch => 2,
         StyleFamily::Pencil => 1,
         StyleFamily::Ink => 1,
+        StyleFamily::ComicManga => 1,
     };
     let thickness = (st.line_width * raster.pixel_scale as f32)
         .round()
@@ -464,6 +495,28 @@ fn lit_face_rgba(
     }
 }
 
+fn posterize_luminance(mut color: [u8; 4], levels: u8) -> [u8; 4] {
+    if levels < 2 {
+        return color;
+    }
+    let rgb = [
+        f32::from(color[0]) / 255.0,
+        f32::from(color[1]) / 255.0,
+        f32::from(color[2]) / 255.0,
+    ];
+    let luminance = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    if luminance <= f32::EPSILON {
+        return color;
+    }
+    let last_band = f32::from(levels - 1);
+    let stepped = (luminance * last_band).round() / last_band;
+    let scale = stepped / luminance;
+    for channel in 0..3 {
+        color[channel] = (rgb[channel] * scale * 255.0).round().clamp(0.0, 255.0) as u8;
+    }
+    color
+}
+
 fn hatch_face(raster: &mut Raster<'_>, a: Vec3, b: Vec3, c: Vec3, d: Vec3, style: &ResolvedStyle) {
     let rgb = style.stroke_rgb();
     let alpha = ((0.35 + style.contrast * 0.4) * 255.0) as u8;
@@ -472,6 +525,7 @@ fn hatch_face(raster: &mut Raster<'_>, a: Vec3, b: Vec3, c: Vec3, d: Vec3, style
         StyleFamily::Sketch => 0,
         StyleFamily::Pencil => 6,
         StyleFamily::Ink => 4,
+        StyleFamily::ComicManga => 4,
     };
     let steps = (base_steps as f32 * style.hatching * 2.0).round() as usize;
     if steps == 0 {
@@ -806,7 +860,7 @@ mod tests {
         let backend = CpuWireframeBackend;
         let scene = SceneGraph::demo_scene();
         let mut pngs = Vec::new();
-        for id in ["sketch", "pencil", "ink"] {
+        for id in ["sketch", "pencil", "ink", "comic_manga"] {
             let out = backend
                 .render(&RenderRequest {
                     scene: scene.clone(),
@@ -822,6 +876,7 @@ mod tests {
         }
         assert_ne!(pngs[0], pngs[1]);
         assert_ne!(pngs[1], pngs[2]);
+        assert_ne!(pngs[2], pngs[3]);
     }
 
     #[test]

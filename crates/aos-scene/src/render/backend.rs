@@ -67,7 +67,7 @@ pub struct RenderRequest {
     pub height: u32,
     /// Optional stub solid color (ignored by CPU backend).
     pub stub_rgb: (u8, u8, u8),
-    /// Optional NPR style (Sketch / Pencil / Ink). `None` = legacy wireframe look.
+    /// Optional NPR style (Sketch / Pencil / Ink / Comic-Manga). `None` = legacy wireframe look.
     pub style: Option<ResolvedStyle>,
     pub preset: Option<crate::fx::RenderPreset>,
 }

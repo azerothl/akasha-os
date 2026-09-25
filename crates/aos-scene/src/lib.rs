@@ -7,7 +7,7 @@
 //! Backends convert; this crate never speaks Blender Z-up.
 //!
 //! Product suite: backend-agnostic [`RenderService`] (stub + CPU + optional
-//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink), [`comic`] page/panel layouts, [`storyboard`] shot timeline, local [`pack_catalogue`] + marketplace hooks, and
+//! Blender-isolated beauty), NPR [`style`] packs (Sketch / Pencil / Ink / Comic-Manga), [`comic`] page/panel layouts, [`storyboard`] shot timeline, local [`pack_catalogue`] + marketplace hooks, and
 //! minimal [`assets`] pack format. Blender / `bpy` stay in the separate
 //! Renderer Pack — never linked here.
 //!

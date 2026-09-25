@@ -129,7 +129,7 @@ locks:
 | `humanoid.placeholder` / `humanoid.slim` | Articulated Empty joints + MeshBox visuals (HumanoidRig v1) |
 | `quadruped.cat` | Simple quadruped (body, neck/head, 4 two-bone legs, tail) |
 | props / `scene.starter` | Unchanged from functional v1 |
-| `/assets/illustration/styles/traditional-drawing/` | NPR style pack (Sketch / Pencil / Ink) |
+| `/assets/illustration/styles/traditional-drawing/` | NPR style pack (Sketch / Pencil / Ink / Comic-Manga) |
 
 | Path | Role |
 |------|------|
@@ -147,7 +147,7 @@ locks:
 | `scene3d` | **wgpu edit viewport** — lit MeshBox / MeshAsset solid + wire overlay from posed SceneGraph; orbit / select / Move·Rotate·Scale gizmos + full numeric TRS + Undo/Redo (pointer-local, no per-move WASM). Approximate realtime — **not** RenderService beauty / NPR / Blender |
 | `scene_tree` | Node list selection synced via local state; lock / unlock buttons operate on `$local.selected_id` |
 | `undo_redo` | When `scene_key` + `canvas_id` point at a `scene3d` viewport — global SceneGraph Undo/Redo chrome (same host stack). Layer-canvas mode unchanged when `layers_key` is set |
-| `radio` (style) | DeclUI Sketch / Pencil / Ink → `$local.style_id` into beauty actions |
+| `radio` (style) | DeclUI Sketch / Pencil / Ink / Comic-Manga → `$local.style_id` into beauty actions |
 | Beauty · Blender | Tip + **Refresh Blender pack status** (`render.pack.status`) — opt-in GPL Renderer Pack; beauty fail-closed when pack absent |
 
 SceneGraph (`aos-scene`, ADR 0011) remains the **only** source of truth. The viewport does not register a `render.*` backend and must not grow a second materials/lights scene system. Blender is beauty-only (isolated Renderer Pack), never an editor. Styles are data and do not mutate the SceneGraph. Viewport and beauty consume the same posed TRS.
