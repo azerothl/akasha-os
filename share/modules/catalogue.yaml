@@ -49,7 +49,7 @@ entries:
     version: "0.7.23"
     kind: module
     path: share/modules/illustration-studio.aospkg
-    hash: sha256:43914169c656cd019ebfa2d125e25cc1271e4e85504019c74979e4653441c540
+    hash: sha256:9f01d0cb28fd55a2e8524022441c493b2e477f23c88f468af567990137d30450
     attested_caps:
       - fs.read:/documents/illustrations/**
       - fs.write:/documents/illustrations/**
