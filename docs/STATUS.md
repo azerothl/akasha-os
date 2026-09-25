@@ -19,8 +19,26 @@ stub/CPU beauty; Blender mock unless GPL Renderer Pack —
 [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module)).
 Builds on 0.17.x Create workspace + painted UI chrome. Not a bootable OS.
 Cohort gate still open (**3 Windows + 1 Linux + 1 macOS Apple Silicon**,
-15-minute path). **Next:** PC cohort close; Horizon C / PV.4+ when scheduled;
-E9 hard-green after a documented 2-GPU run.
+15-minute path). **Next:** **P21 / Preview 0.19.0** after 0.18 ship closes —
+[`aos-serverd`](https://github.com/azerothl/akasha-os/issues/403) lifecycle +
+agent intake, and [#247](https://github.com/azerothl/akasha-os/issues/247)
+Dev-assistant **P0** (`workspace.bind` / search / patch); PC cohort close;
+Horizon C / PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
+
+## P21 — Preview 0.19.0 (planned) — server daemon + Dev-assistant P0
+
+Not started until Preview **0.18.0** release assets / honesty are closed. Do
+**not** invent a P6 number (PC still open). Detail lives in STATUS as the
+post-P11 schedule SoT; no new E* number for these host tracks.
+
+| # | Item | Status |
+|---|------|--------|
+| P21 / #403 | **`aos-serverd`** — headless process tree, watchdogs (incl. agentd), local agent job intake; ADR 0012 session vs serverd | planned |
+| P21 / #247 | **Dev-assistant P0** — `workspace.bind`, bounded `fs.search`, `fs.apply_patch`, documented module contract (P1–P2 deferred) | planned |
+
+Sequencing: serverd MVP (tag feature) first or in parallel with #247 P0 once
+host FS/caps work is free; #247 P1–P2 (git / `process.run` / LSP / DeclUI IDE)
+stay **0.20+**.
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + health + Notes/Chat) — done
 

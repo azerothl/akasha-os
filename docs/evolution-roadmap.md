@@ -191,7 +191,20 @@ Schedule against Preview **P19**. See [phase-preview-19.md](phases/phase-preview
 | **P0–P5 / PV / PC** | Executable phase gates ([development-plan.md](development-plan.md), [STATUS.md](STATUS.md)) |
 | **E1–E23** | Prioritization after competitive analysis; Preview increments P03–P11 ship E* without waiting for the PC cohort gate; **E22** ships as **P18**; **E23** as **P19** |
 
-Do **not** invent a P6 number until PC is closed and STATUS is updated. E1–E5 shipped in Preview **0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14** shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview **0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8 live + E9 path + Media polish** shipped in Preview **0.10.0** (P10). **E20 local decode** shipped in Preview **0.11.0** (P11). Then PC cohort close + Horizon C / PV.4+ when scheduled.
+Do **not** invent a P6 number until PC is closed and STATUS is updated. Do
+**not** invent an **E24** for near-term host work. E1–E5 shipped in Preview
+**0.3.0**; E6 / E7-lite / E10-lite shipped in Preview **0.4.0**; **E14**
+shipped in Preview **0.5.0**; E8 schemas + E7-keyring + E10 catalogue shipped
+in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview
+**0.7.0**. **E16 + E17 + E15 widget pack + F-MDL-04 Providers** shipped in
+Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8
+live + E9 path + Media polish** shipped in Preview **0.10.0** (P10). **E20
+local decode** shipped in Preview **0.11.0** (P11). **E22** / **E23** shipped
+as **P18** / **P19** (in Preview **0.18.0** with P20). Next Preview host
+increment scheduled in [STATUS.md](STATUS.md) as **P21 / 0.19.0**:
+[`aos-serverd`](https://github.com/azerothl/akasha-os/issues/403) +
+[#247](https://github.com/azerothl/akasha-os/issues/247) Dev-assistant **P0**
+(not a new E*). Then PC cohort close + Horizon C / PV.4+ when scheduled.
 
 Suggested sequencing once PC closes (historical; Preview increments already
 ran this on the host as P03–P07, then E16+E17 as P08):

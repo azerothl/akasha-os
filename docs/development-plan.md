@@ -754,6 +754,7 @@ duplicate those checklists — update STATUS when a new Preview ships.
 
 | Item | Notes |
 |------|--------|
+| **P21 / Preview 0.19.0** | Planned in [STATUS.md](STATUS.md): [#403](https://github.com/azerothl/akasha-os/issues/403) `aos-serverd` + [#247](https://github.com/azerothl/akasha-os/issues/247) Dev-assistant **P0** (`workspace.bind` / search / patch). After 0.18 ship; not a new E*. |
 | **E9 hard-green** | Documented 2-GPU run (code path ships in 0.10 with 1-GPU skip) |
 | **P5.3 / E11** | `AccelDevice` + bare metal (after PV.4) |
 | **P5.5** | Validated aarch64 host |

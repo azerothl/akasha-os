@@ -19,8 +19,27 @@ mock sauf Renderer Pack GPL —
 [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental)).
 S’appuie sur l’espace Create 0.17.x et le chrome UI peint. Pas un OS bootable. Gate cohorte
 encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de
-15 minutes). **Suite :** fermeture cohorte PC ; Horizon C / PV.4+ quand
-planifié ; E9 hard-green après un run 2 GPU documenté.
+15 minutes). **Suite :** **P21 / Preview 0.19.0** après clôture du ship 0.18 —
+[`aos-serverd`](https://github.com/azerothl/akasha-os/issues/403) (cycle de
+vie + intake agents) et [#247](https://github.com/azerothl/akasha-os/issues/247)
+Dev-assistant **P0** (`workspace.bind` / search / patch) ; fermeture cohorte
+PC ; Horizon C / PV.4+ quand planifié ; E9 hard-green après un run 2 GPU
+documenté.
+
+## P21 — Preview 0.19.0 (planifié) — daemon serveur + Dev-assistant P0
+
+Pas démarré tant que les artefacts / honesty **0.18.0** ne sont pas clos. Ne
+**pas** inventer un numéro P6 (PC encore ouverte). Pas de nouvel E* pour ces
+tracks hôte.
+
+| # | Élément | État |
+|---|---------|------|
+| P21 / #403 | **`aos-serverd`** — arbre headless, watchdogs (dont agentd), intake jobs agents local ; ADR 0012 session vs serverd | planifié |
+| P21 / #247 | **Dev-assistant P0** — `workspace.bind`, `fs.search` borné, `fs.apply_patch`, contrat module documenté (P1–P2 reportés) | planifié |
+
+Séquence : MVP serverd (feature du tag) d’abord ou en parallèle de #247 P0
+dès que le travail caps/FS hôte est libre ; #247 P1–P2 (git / `process.run` /
+LSP / DeclUI IDE) restent **0.20+**.
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait
 
