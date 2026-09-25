@@ -113,13 +113,15 @@ pub use mesh_asset::{
     MAX_MESH_TRIANGLES, MAX_MESH_VERTICES,
 };
 pub use neural_mesh::{
-    apply_proposal, mesh_assist, neural_mesh_pack_status, propose_mesh_assist, validate_proposal,
-    MeshAssistBackendId, MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart,
-    NeuralMeshError, NeuralMeshPackStatus, TrellisQualitySettings, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
+    apply_proposal, mesh_assist, mesh_assist_with_progress, neural_mesh_pack_status,
+    propose_mesh_assist, propose_mesh_assist_with_progress, validate_proposal, MeshAssistBackendId,
+    MeshAssistProposal, MeshAssistRequest, MeshAssistResult, MeshPart, NeuralMeshError,
+    NeuralMeshPackStatus, TrellisQualitySettings, MAX_ABS_SCALE, MAX_ABS_TRANSLATION, MAX_MESH_PARTS,
     MESH_ASSIST_SERVICE, MESH_NEURAL_CAP, MIN_ABS_SCALE,
 };
 pub use neural_mesh_isolate::{
-    probe_pack_status, NeuralMeshRunMode, NeuralMeshRunnerKind, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
+    parse_progress_percent, probe_pack_status, spawn_isolated, spawn_isolated_with_progress,
+    NeuralMeshProgress, NeuralMeshRunMode, NeuralMeshRunnerKind, DEFAULT_NEURAL_MESH_TIMEOUT_SECS,
 };
 pub use ops::{SceneOp, UndoStack};
 pub use pose::{

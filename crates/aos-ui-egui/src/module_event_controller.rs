@@ -753,20 +753,10 @@ fn illustration_trellis_conversion_error(fr: bool, raw: &str) -> String {
         return if fr { "Le moteur TRELLIS ou ses poids Q4/Q8 ne sont pas accessibles au module. Actualisez l’état dans TRELLIS." }
         else { "The module cannot access the TRELLIS runtime or Q4/Q8 weights. Refresh the status in TRELLIS." }.into();
     }
-    let detail = raw
-        .split("stderr_tail:")
-        .last()
-        .unwrap_or(raw)
-        .lines()
-        .rev()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .unwrap_or(raw);
-    let detail: String = detail.chars().filter(|c| !c.is_control()).take(240).collect();
     if fr {
-        format!("La conversion TRELLIS a échoué. Détail du moteur : {detail}")
+        "Impossible de convertir. Réessayez.".into()
     } else {
-        format!("TRELLIS conversion failed. Runtime detail: {detail}")
+        "Couldn't convert. Try again.".into()
     }
 }
 
@@ -825,13 +815,46 @@ pub(crate) fn on_ui_service_progress(
     module: String,
     message: String,
     active: bool,
+    active_key: Option<String>,
+    percent: Option<u32>,
+    progress_key: Option<String>,
 ) {
     if let Some(panel) = app.decl_panels.get_mut(&module) {
-        panel.status = message;
+        let library_convert = active_key.as_deref() == Some("library_convert_active");
+        if library_convert {
+            if active {
+                panel.local_state.insert("library_error".into(), Value::String(String::new()));
+                panel
+                    .local_state
+                    .insert("library_error_action".into(), Value::String(String::new()));
+            }
+        } else {
+            panel.status = message.clone();
+        }
         if module == "illustration-studio" {
+            let key = active_key
+                .as_deref()
+                .filter(|k| !k.is_empty())
+                .unwrap_or("dependency_download_active");
             panel
                 .local_state
-                .insert("dependency_download_active".into(), Value::Bool(active));
+                .insert(key.into(), Value::Bool(active));
+            if let (Some(pct), Some(pkey)) = (percent, progress_key.as_deref()) {
+                if !pkey.is_empty() {
+                    panel
+                        .local_state
+                        .insert(pkey.into(), Value::from(pct.min(100)));
+                }
+            }
+            if let Some(status_key) = active_key
+                .as_deref()
+                .filter(|k| *k == "library_convert_active")
+                .map(|_| "library_convert_status")
+            {
+                panel
+                    .local_state
+                    .insert(status_key.into(), Value::String(message));
+            }
         }
     }
 }
@@ -986,7 +1009,8 @@ mod tests {
             "library_convert_trellis",
             "validation failed: neural mesh runner exit=1; output.glb missing; stderr_tail: shape decode failed",
         );
-        assert!(runtime_error.contains("shape decode failed"));
+        assert!(runtime_error.contains("Couldn't convert"));
+        assert!(!runtime_error.contains("shape decode failed"));
         assert!(!runtime_error.contains("check the runtime, Q4/Q8 model and Vulkan GPU"));
         assert!(illustration_library_error(
             "en",

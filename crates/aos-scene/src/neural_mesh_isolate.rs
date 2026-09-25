@@ -19,10 +19,10 @@
 
 use crate::neural_mesh::TrellisQualitySettings;
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -541,8 +541,24 @@ pub struct NeuralMeshSpawnResult {
     pub isolated_with_bwrap: bool,
 }
 
+/// Host-facing progress while trellis-cli / the pack adapter runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NeuralMeshProgress {
+    /// Rough completion in `0..=100` (never claims 100 until the host finishes post-steps).
+    pub percent: u32,
+    pub message: String,
+}
+
 /// Spawn runner (optionally under bubblewrap). Stdin closed; stdout/stderr capped.
 pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResult, String> {
+    spawn_isolated_with_progress(plan, |_| {})
+}
+
+/// Like [`spawn_isolated`], but reports stderr/`%` lines and elapsed heartbeats.
+pub fn spawn_isolated_with_progress(
+    plan: &NeuralMeshSpawnPlan,
+    mut on_progress: impl FnMut(NeuralMeshProgress),
+) -> Result<NeuralMeshSpawnResult, String> {
     let argv = build_trellis_argv(plan);
     let pack_root_guess = plan
         .runner_bin
@@ -634,6 +650,7 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
     let mut child = cmd.spawn().map_err(|e| format!("spawn: {e}"))?;
     let stdout_capture = Arc::new(Mutex::new(String::new()));
     let stderr_capture = Arc::new(Mutex::new(String::new()));
+    let (line_tx, line_rx) = mpsc::channel::<String>();
     let stdout_handle = child.stdout.take().map(|mut pipe| {
         let cap = Arc::clone(&stdout_capture);
         thread::spawn(move || {
@@ -648,16 +665,17 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
             }
         })
     });
-    let stderr_handle = child.stderr.take().map(|mut pipe| {
+    let stderr_handle = child.stderr.take().map(|pipe| {
         let cap = Arc::clone(&stderr_capture);
         thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            while let Ok(n) = pipe.read(&mut buf) {
-                if n == 0 {
-                    break;
-                }
+            let reader = BufReader::new(pipe);
+            for line in reader.lines().map_while(Result::ok) {
                 if let Ok(mut s) = cap.lock() {
-                    s.push_str(&String::from_utf8_lossy(&buf[..n]));
+                    s.push_str(&line);
+                    s.push('\n');
+                }
+                if line_tx.send(line).is_err() {
+                    break;
                 }
             }
         })
@@ -665,9 +683,32 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
     let timeout = plan.timeout;
     let start = std::time::Instant::now();
     let work_dir = plan.work_dir.clone();
+    on_progress(NeuralMeshProgress {
+        percent: 3,
+        message: "Starting TRELLIS…".into(),
+    });
+    let mut best_pct: u32 = 3;
+    let mut last_heartbeat = start;
+    let mut saw_runner_pct = false;
     loop {
+        while let Ok(line) = line_rx.try_recv() {
+            if let Some(pct) = parse_progress_percent(&line) {
+                saw_runner_pct = true;
+                best_pct = best_pct.max(pct.min(95));
+                on_progress(NeuralMeshProgress {
+                    percent: best_pct,
+                    message: summarize_runner_line(&line),
+                });
+            }
+        }
+
         match child.try_wait() {
             Ok(Some(status)) => {
+                while let Ok(line) = line_rx.try_recv() {
+                    if let Some(pct) = parse_progress_percent(&line) {
+                        best_pct = best_pct.max(pct.min(95));
+                    }
+                }
                 if let Some(h) = stdout_handle {
                     let _ = h.join();
                 }
@@ -681,6 +722,14 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                     persist_spawn_io_tails(&work_dir, &stdout_full, &stderr_full);
                 }
                 let tail = trim_stderr_tail(&stderr_full, 2000);
+                on_progress(NeuralMeshProgress {
+                    percent: if status.success() { 95 } else { best_pct },
+                    message: if status.success() {
+                        "TRELLIS finished — validating GLB…".into()
+                    } else {
+                        "TRELLIS exited with an error".into()
+                    },
+                });
                 return Ok(NeuralMeshSpawnResult {
                     exit_code,
                     stderr_tail: tail,
@@ -705,6 +754,26 @@ pub fn spawn_isolated(plan: &NeuralMeshSpawnPlan) -> Result<NeuralMeshSpawnResul
                         "neural mesh runner timed out after {}s",
                         timeout.as_secs()
                     ));
+                }
+                if last_heartbeat.elapsed() >= Duration::from_millis(500) {
+                    let elapsed = start.elapsed().as_secs_f32();
+                    let timeout_s = timeout.as_secs_f32().max(1.0);
+                    if !saw_runner_pct {
+                        let heartbeat =
+                            (5.0 + (elapsed / timeout_s).min(1.0) * 85.0).min(90.0) as u32;
+                        best_pct = best_pct.max(heartbeat);
+                    }
+                    let secs = elapsed as u32;
+                    on_progress(NeuralMeshProgress {
+                        percent: best_pct,
+                        message: format!("Converting image → GLB… {secs}s"),
+                    });
+                    last_heartbeat = std::time::Instant::now();
+                }
+                if let Ok(meta) = std::fs::metadata(&plan.output_glb) {
+                    if meta.len() > 0 {
+                        best_pct = best_pct.max(88);
+                    }
                 }
                 thread::sleep(Duration::from_millis(50));
             }
@@ -925,6 +994,67 @@ fn discover_windows_nvidia_vk_icd(system_root: &str) -> Option<String> {
     None
 }
 
+/// Extract a `0..=100` percentage from a runner log line when present.
+pub fn parse_progress_percent(line: &str) -> Option<u32> {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+                i += 1;
+            }
+            let num = &line[start..i];
+            let mut j = i;
+            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b'%' {
+                if let Ok(v) = num.parse::<f32>() {
+                    if (0.0..=100.0).contains(&v) {
+                        return Some(v.round().clamp(0.0, 100.0) as u32);
+                    }
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    // "step 3/10" style fractions.
+    if let Some((left, right)) = line.split_once('/') {
+        let cur = left
+            .split_whitespace()
+            .next_back()
+            .and_then(|s| s.parse::<f32>().ok())?;
+        let total = right
+            .split_whitespace()
+            .next()
+            .and_then(|s| {
+                s.chars()
+                    .take_while(|c| c.is_ascii_digit() || *c == '.')
+                    .collect::<String>()
+                    .parse::<f32>()
+                    .ok()
+            })?;
+        if total > 0.0 && cur >= 0.0 && cur <= total {
+            return Some(((cur / total) * 100.0).round().clamp(0.0, 100.0) as u32);
+        }
+    }
+    None
+}
+
+fn summarize_runner_line(line: &str) -> String {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return "Converting image → GLB…".into();
+    }
+    let mut out: String = trimmed.chars().take(120).collect();
+    if trimmed.chars().count() > 120 {
+        out.push('…');
+    }
+    out
+}
+
 /// Shared with `neural_mesh` tests that mutate `AOS_NEURAL_MESH_*` env vars.
 #[cfg(test)]
 pub(crate) static NEURAL_MESH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1117,6 +1247,14 @@ mod tests {
         assert!(!argv.contains(&"--require-gpu".to_string()));
         std::env::remove_var("AOS_NEURAL_MESH_GPU");
         std::env::remove_var("AOS_NEURAL_MESH_ALLOW_CPU");
+    }
+
+    #[test]
+    fn parse_progress_percent_reads_pct_and_fractions() {
+        assert_eq!(parse_progress_percent("sampling 42%"), Some(42));
+        assert_eq!(parse_progress_percent("done 99.4 %"), Some(99));
+        assert_eq!(parse_progress_percent("step 3/10"), Some(30));
+        assert_eq!(parse_progress_percent("no progress here"), None);
     }
 
     #[test]

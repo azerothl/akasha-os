@@ -892,6 +892,13 @@ pub(crate) enum Evt {
         module: String,
         message: String,
         active: bool,
+        /// DeclUI `$local` bool key for an in-progress flag. Defaults to
+        /// `dependency_download_active` when unset (Blender/TRELLIS install).
+        active_key: Option<String>,
+        /// Optional `0..=100` value written to `progress_key`.
+        percent: Option<u32>,
+        /// DeclUI `$local` number key for a `progress` widget.
+        progress_key: Option<String>,
     },
     /// Prompt produced by the Create assistant, published before generation
     /// so the editable enriched-prompt field reflects the actual request.

@@ -1596,10 +1596,12 @@ impl DeclUiPanelState {
                 let (done, total) = progress_values(&frac);
                 let label = widget_text(w, doc, language).unwrap_or_else(|| "Progress".into());
                 ui.label(label);
-                ui.add(
-                    egui::ProgressBar::new(done as f32 / total.max(1) as f32)
-                        .text(format!("{done}/{total}")),
-                );
+                let text = if total == 100 {
+                    format!("{done}%")
+                } else {
+                    format!("{done}/{total}")
+                };
+                ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).text(text));
             }
             "job" => {
                 let t = crate::i18n::strings(language);
@@ -3548,7 +3550,7 @@ fn render_illustration_asset_library(
                 |ui| {
                     ui.set_min_height(height);
                     egui::ScrollArea::vertical().id_salt("library-inspector").show(ui, |ui| {
-                        render_library_details(ui, doc, language, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+                        render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
                     });
                 },
             );
@@ -3561,8 +3563,17 @@ fn render_illustration_asset_library(
         );
         ui.separator();
         egui::ScrollArea::vertical().id_salt("library-inspector-compact").show(ui, |ui| {
-            render_library_details(ui, doc, language, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+            render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
         });
+    }
+}
+
+fn library_convert_status_label_key(phase: &str) -> &'static str {
+    match phase {
+        "running" => "library_convert_status_running",
+        "done" => "library_convert_status_done",
+        "fail" => "library_convert_status_fail",
+        _ => "library_convert_status_idle",
     }
 }
 
@@ -3730,6 +3741,7 @@ fn render_library_details(
     ui: &mut Ui,
     doc: &DeclUiDocument,
     language: &str,
+    local_state: &HashMap<String, Value>,
     selected: Option<&Value>,
     assets: Option<&Vec<Value>>,
     project_id: &str,
@@ -3879,9 +3891,36 @@ fn render_library_details(
                 data.insert_temp(atlas_key, atlas_resolution);
             });
         }
+        let convert_active = local_state
+            .get("library_convert_active")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let convert_phase = local_state
+            .get("library_convert_status")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("idle");
+        if convert_active {
+            let progress = local_state
+                .get("library_convert_progress")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                .min(100) as f32;
+            ui.label(library_label(doc, language, "library_convert_progress_label"));
+            ui.add(
+                egui::ProgressBar::new(progress / 100.0)
+                    .text(format!("{progress:.0}%")),
+            );
+        }
+        ui.weak(library_label(
+            doc,
+            language,
+            library_convert_status_label_key(if convert_active { "running" } else { convert_phase }),
+        ));
         if let Some(action) = doc.actions.iter().find(|action| action.id == "library_convert_trellis") {
             let label = if provider == "triposr" { "library_convert_triposr" } else { "library_convert" };
-            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, label))).clicked() {
+            let convert_enabled = !pending_invoke && !convert_active;
+            if ui.add_enabled(convert_enabled, egui::Button::new(library_label(doc, language, label))).clicked() {
                 let mut state = HashMap::new();
                 state.insert("project_id".into(), Value::String(project_id.into()));
                 state.insert("library_image_uri".into(), Value::String(uri.into()));
