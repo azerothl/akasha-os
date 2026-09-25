@@ -14,7 +14,8 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 /// Soft caps for imported meshes (fail-closed).
-pub const MAX_MESH_TRIANGLES: usize = 200_000;
+/// TRELLIS.cpp's 1024-resolution path simplifies to a 300k-face budget.
+pub const MAX_MESH_TRIANGLES: usize = 300_000;
 pub const MAX_MESH_VERTICES: usize = 400_000;
 
 #[derive(Debug, Error, PartialEq)]
