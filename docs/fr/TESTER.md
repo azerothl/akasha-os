@@ -323,7 +323,7 @@ Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
 
 ### 31. Studio Illustration (expérimental, optionnel)
 
-Hors chemin court de cohorte. Catalogue honnête : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md).
+Hors chemin court de cohorte. Disponible via le catalogue local embarqué dans les zips Preview **Windows, Linux et macOS**. Catalogue honnête : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md).
 
 - **Paramètres → Catalogue local de modules** : trouver **`illustration-studio`** (**0.7.23**, selon le catalogue embarqué) → **Installer** → accepter la revue de caps.
 - Ouvrir l’onglet DeclUI **Studio Illustration**. Confirmer le tip Compose → Éditer → Beauté ; le chrome hôte sur la vue 3D affiche **édition · pas beauté** (EN : **edit view · not beauty**).

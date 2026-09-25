@@ -48,7 +48,7 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 | Tab / surface | Usage |
 |---------------|--------|
 | Chat / Sessions | Parallel sessions; **per-session model**; slash (`/help`, `/agent`, `/image`, `/speak`…) |
-| Memory | Long-term facts (remember / recall); injected as `mem.context`; optional auto-remember from chat (Settings) |
+| Memory | **Memory V2** default (decision journal, mind-palace views; legacy facts shadow-synced); remember / recall still available |
 | Notes | Human notes + via agent (WASM module) |
 | Agents | Goal loop, skills, tools, MCP (client + optional `aos-mcpd` server), External CLIs / Advanced **Runtime** (Codex / Claude / Grok); **model** at create; **Detail** timeline |
 | Models | List / load / download offerings; optional image/TTS packs (not in the zip; Download also installs `bin/sd` / `bin/piper`) |
@@ -58,7 +58,7 @@ Catalogue: `share/models/catalog-offerings.json`. Installed registry:
 | Settings | Language, trust, routing, agent defaults, search engine, auto-remember, gpu/cpu/auto |
 | Feedback | GitHub issue on azerothl/akasha-os |
 | Scenarios | Cohort protocol (see [TESTER.md](TESTER.md)) |
-| Modules → Illustration Studio | Experimental DeclUI app from the local catalogue (`illustration-studio` **0.7.23**). wgpu edit view ≠ beauty; beauty = stub/CPU; Blender mock unless opt-in GPL Renderer Pack. Optional tester path: [TESTER.md §31](TESTER.md#31-illustration-studio-experimental-optional). Honesty: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module) |
+| Modules → Illustration Studio | Experimental DeclUI app from the local catalogue (`illustration-studio` **0.7.23**), shipped in the Preview zip on **Windows, Linux, and macOS**. wgpu edit view ≠ beauty; beauty = stub/CPU; Blender mock unless opt-in GPL Renderer Pack. Optional tester path: [TESTER.md §31](TESTER.md#31-illustration-studio-experimental-optional). Honesty: [FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module) |
 
 ### Agent detail
 

@@ -49,7 +49,7 @@ Catalogue : `share/models/catalog-offerings.json`.
 | Onglet / surface | Usage |
 |------------------|--------|
 | Chat / Sessions | Modèle **par session** ; slash (`/help`, `/agent`, `/image`, `/speak`…) |
-| Mémoire | Faits long terme ; injection `mem.context` ; mémorisation auto opt-in depuis le chat (Settings) |
+| Mémoire | **Memory V2** par défaut (journal de décisions, vues mind-palace ; faits legacy en sync shadow) ; remember / recall toujours disponibles |
 | Notes | Humaines + via agent (module WASM) |
 | Agents | Goal, skills, outils, MCP (client + serveur `aos-mcpd` optionnel), CLI externes / **Runtime** Avancé (Codex / Claude / Grok) ; **modèle** à la création ; **Détail** |
 | Models | Liste / load / download ; packs image/TTS optionnels (pas dans le zip ; Download installe aussi `bin/sd` / `bin/piper`) |
@@ -59,7 +59,7 @@ Catalogue : `share/models/catalog-offerings.json`.
 | Settings | Langue, trust, routage, défauts agent, moteur de recherche, mémorisation auto, gpu/cpu/auto |
 | Retour | Issue GitHub sur azerothl/akasha-os |
 | Scénarios | Protocole cohorte ([TESTER.md](TESTER.md)) |
-| Modules → Studio Illustration | App DeclUI expérimentale du catalogue local (`illustration-studio` **0.7.23**). Vue d’édition wgpu ≠ beauté ; beauté = stub/CPU ; Blender mock sauf Renderer Pack GPL opt-in. Chemin optionnel : [TESTER.md §31](TESTER.md#31-studio-illustration-expérimental-optionnel). Honnêteté : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental) |
+| Modules → Studio Illustration | App DeclUI expérimentale du catalogue local (`illustration-studio` **0.7.23**), embarquée dans le zip Preview sous **Windows, Linux et macOS**. Vue d’édition wgpu ≠ beauté ; beauté = stub/CPU ; Blender mock sauf Renderer Pack GPL opt-in. Chemin optionnel : [TESTER.md §31](TESTER.md#31-studio-illustration-expérimental-optionnel). Honnêteté : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental) |
 
 ### Détail agent
 
