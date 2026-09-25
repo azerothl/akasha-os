@@ -420,6 +420,7 @@ pub(crate) fn on_ui_service_done(
             .is_none_or(|id| panel.local_state.get("project_id").and_then(Value::as_str) == Some(id));
         if library_action && library_result_matches {
             panel.local_state.insert("library_busy".into(), Value::Bool(false));
+            panel.local_state.insert("library_busy_action".into(), Value::String(String::new()));
         }
         if ok {
             panel.status.clear();
@@ -458,6 +459,7 @@ pub(crate) fn on_ui_service_done(
                         | "library_import_notebook"
                         | "library_generate_image"
                         | "library_convert_trellis"
+                        | "library_rig_skintokens"
                 )
                 && panel.local_state.get("project_id") == result.get("project_id")
             {
@@ -707,6 +709,14 @@ fn illustration_library_error(language: &str, action: &str, raw: &str) -> String
         eprintln!("Illustration Studio library {action}: {raw}");
         return illustration_trellis_conversion_error(fr, raw);
     }
+    if action == "library_rig_skintokens" {
+        eprintln!("Illustration Studio library {action}: {raw}");
+        return illustration_skintokens_error(fr, raw);
+    }
+    if action == "library_configure_skintokens" {
+        eprintln!("Illustration Studio library {action}: {raw}");
+        return illustration_skintokens_error(fr, raw);
+    }
     let message = if lower.contains("could not be added to the project library") {
         if fr { "L’image a été générée, mais son ajout à la bibliothèque du projet a échoué. Vérifiez l’espace disque et réessayez." }
         else { "The image was generated, but could not be added to the project library. Check disk space and try again." }
@@ -737,6 +747,41 @@ fn illustration_library_error(language: &str, action: &str, raw: &str) -> String
     };
     eprintln!("Illustration Studio library {action}: {raw}");
     message.into()
+}
+
+fn illustration_skintokens_error(fr: bool, raw: &str) -> String {
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("not configured") || lower.contains("model files are unavailable") {
+        return if fr {
+            "SkinTokens n’est pas prêt. Configurez le chemin du programme skintokens-cli et le dossier du modèle SkinTokens-GGUF/F16, puis réessayez."
+        } else {
+            "SkinTokens is not ready. Configure the absolute skintokens-cli path and the SkinTokens-GGUF/F16 model folder, then retry."
+        }.into();
+    }
+    if lower.contains("changed vertex positions") || lower.contains("changed triangle indices") || lower.contains("changed the mesh-node transform") {
+        return if fr {
+            "SkinTokens a modifié la géométrie. Pour protéger les UV et les textures, le rig n’a pas été enregistré ; le modèle original reste intact."
+        } else {
+            "SkinTokens changed the geometry. To protect UVs and textures, the rig was not saved; the original model remains untouched."
+        }.into();
+    }
+    if lower.contains("already has a skin") {
+        return if fr {
+            "Ce GLB possède déjà un squelette. Sélectionnez sa variante 3D non riggée pour créer un nouveau rig."
+        } else {
+            "This GLB already has a skeleton. Select its unrigged 3D variant to create a new rig."
+        }.into();
+    }
+    let detail = raw.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or("");
+    let detail = detail.chars().take(260).collect::<String>();
+    if fr {
+        if detail.is_empty() { "Le rigging SkinTokens a échoué. Vérifiez le diagnostic local et réessayez.".into() }
+        else { format!("Le rigging SkinTokens a échoué : {detail}") }
+    } else if detail.is_empty() {
+        "SkinTokens rigging failed. Check the local diagnostic and retry.".into()
+    } else {
+        format!("SkinTokens rigging failed: {detail}")
+    }
 }
 
 fn illustration_trellis_conversion_error(fr: bool, raw: &str) -> String {

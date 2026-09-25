@@ -800,7 +800,7 @@ fn validate_service_action(service: &str, granted_caps: &[String]) -> Result<(),
             }
             Ok(())
         }
-        "illustration.library.convert" => {
+        "illustration.library.convert" | "illustration.library.rig" | "illustration.library.rig.configure" => {
             if !granted_caps.iter().any(|c| c == crate::MESH_NEURAL_CAP) {
                 return Err(RichDeclUiError::MissingCapability(crate::MESH_NEURAL_CAP.into()));
             }

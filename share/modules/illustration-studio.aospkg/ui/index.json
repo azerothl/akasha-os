@@ -256,6 +256,9 @@
       "library_trellis_seed": "Generation seed",
       "library_trellis_seed_hint": "12 steps and seed 42 are TRELLIS defaults; seed 0 generates a new random seed. More steps take longer and do not guarantee a better mesh. Texture guidance and guidance rescale stay fixed by the runner.",
       "library_operation_wait": "Working…",
+      "library_rig_wait": "SkinTokens is generating the skeleton and skin weights…",
+      "library_configure_skintokens": "Configure SkinTokens…",
+      "library_configure_skintokens_update": "Change SkinTokens setup…",
       "library_generation_hint": "Generate an image first. Convert it to 3D from its details when you want a GLB.",
       "library_heading": "Project asset library",
       "library_intro": "Create an image, import a GLB, or download a CC0 asset. Add a 3D asset to the scene when you are ready.",
@@ -274,6 +277,7 @@
       "library_kind_mesh": "3D asset",
       "library_select_image": "Select image",
       "library_add_to_scene": "Add to 3D scene",
+      "library_rig_skintokens": "Auto-rig with SkinTokens",
       "library_convert": "Convert selected image to GLB with TRELLIS",
       "library_convert_triposr": "Test conversion with TripoSR",
       "library_convert_progress_label": "TRELLIS conversion",
@@ -553,6 +557,9 @@
       "library_trellis_seed": "Graine de génération",
       "library_trellis_seed_hint": "12 étapes et la graine 42 sont les valeurs par défaut de TRELLIS ; la graine 0 en choisit une au hasard. Plus d’étapes prennent davantage de temps sans garantir un meilleur maillage. Le guidage de texture et le rescale restent fixes dans le moteur.",
       "library_operation_wait": "Opération en cours…",
+      "library_rig_wait": "SkinTokens génère le squelette et les poids de peau…",
+      "library_configure_skintokens": "Configurer SkinTokens…",
+      "library_configure_skintokens_update": "Modifier la configuration SkinTokens…",
       "library_generation_hint": "Générez d’abord une image. Vous pourrez la convertir en 3D depuis sa fiche.",
       "library_heading": "Bibliothèque du projet",
       "library_intro": "Créez une image, importez un GLB ou téléchargez un asset CC0. Ajoutez-le à la scène 3D au moment voulu.",
@@ -571,6 +578,7 @@
       "library_kind_mesh": "Asset 3D",
       "library_select_image": "Sélectionner l’image",
       "library_add_to_scene": "Ajouter à la scène 3D",
+      "library_rig_skintokens": "Créer un rig avec SkinTokens",
       "library_convert": "Convertir l’image sélectionnée en GLB avec TRELLIS",
       "library_convert_triposr": "Tester la conversion avec TripoSR",
       "library_convert_progress_label": "Conversion TRELLIS",
@@ -1990,6 +1998,28 @@
         "shape_guidance": "$local.library_trellis_shape_guidance",
         "seed": "$local.library_trellis_seed",
         "atlas_resolution": "$local.library_trellis_atlas_resolution"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "library_rig_skintokens",
+      "service": "illustration.library.rig",
+      "input": {
+        "project_id": "$local.project_id",
+        "asset_id": "$local.library_mesh_asset_id",
+        "asset_kind": "$local.library_mesh_kind",
+        "asset_name": "$local.library_mesh_name",
+        "mesh_uri": "$local.library_mesh_uri",
+        "prompt": "$local.library_mesh_prompt",
+        "metadata": "$local.library_mesh_metadata"
+      },
+      "refresh_binds": []
+    },
+    {
+      "id": "library_configure_skintokens",
+      "service": "illustration.library.rig.configure",
+      "input": {
+        "project_id": "$local.project_id"
       },
       "refresh_binds": []
     },

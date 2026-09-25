@@ -1025,6 +1025,124 @@ pub(crate) async fn run_decl_service_action(
                 );
             });
         }
+        "illustration.library.rig" => {
+            let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
+            let asset_id = input.get("asset_id").and_then(Value::as_str).unwrap_or("").to_string();
+            let mesh_uri = input.get("mesh_uri").and_then(Value::as_str).unwrap_or("").to_string();
+            let asset_name = input.get("asset_name").and_then(Value::as_str).unwrap_or("3D asset").to_string();
+            let asset_kind = input.get("asset_kind").and_then(Value::as_str).unwrap_or("");
+            let prompt = input.get("prompt").and_then(Value::as_str).unwrap_or("").to_string();
+            let mut metadata = input.get("metadata").and_then(Value::as_object).cloned().unwrap_or_default();
+            let prefix = format!("/documents/illustrations/projects/{project_id}/assets/");
+            let valid_project = project_id.strip_prefix("project-")
+                .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()));
+            let outcome = if !valid_project
+                || asset_id.is_empty()
+                || asset_kind != "mesh"
+                || !mesh_uri.starts_with(&prefix)
+                || mesh_uri.contains("..")
+                || mesh_uri.contains('\\')
+                || !mesh_uri.to_ascii_lowercase().ends_with(".glb")
+            {
+                Err("Select a GLB mesh asset in the active project before rigging.".into())
+            } else {
+                let source_path = logical_downloads_path(&mesh_uri);
+                let project_for_rig = project_id.clone();
+                let rigged = tokio::task::spawn_blocking(move || {
+                    let project_root = crate::os_open::aos_home()
+                        .join("var/storage/data/documents/illustrations/projects")
+                        .join(&project_for_rig);
+                    let assets = std::fs::canonicalize(project_root.join("assets"))
+                        .map_err(|e| format!("Project asset folder is unavailable: {e}"))?;
+                    let source = std::fs::canonicalize(source_path)
+                        .map_err(|e| format!("Selected source GLB is unavailable: {e}"))?;
+                    if !source.starts_with(&assets) {
+                        return Err("Selected mesh path escapes the active project asset folder.".into());
+                    }
+                    run_skintokens_texture_safe(&source, &assets)
+                }).await;
+                match rigged {
+                    Ok(Ok((uri, rig_info))) => {
+                        metadata.insert("provenance".into(), Value::String("SkinTokens auto-rig; source GLB materials and UVs preserved".into()));
+                        metadata.insert("rig_provider".into(), Value::String("SkinTokens".into()));
+                        metadata.insert("source_mesh_asset_id".into(), Value::String(asset_id));
+                        metadata.insert("joint_count".into(), Value::from(rig_info.joint_count as u64));
+                        metadata.insert("vertex_count".into(), Value::from(rig_info.vertex_count as u64));
+                        metadata.insert("triangle_count".into(), Value::from(rig_info.triangle_count as u64));
+                        metadata.insert("source_render_data_preserved".into(), Value::Bool(true));
+                        let source_image = metadata.get("source_image").and_then(Value::as_str).map(str::to_owned);
+                        if let Some(image_uri) = source_image.as_deref() {
+                            if !image_uri.starts_with(&prefix) || image_uri.contains("..") || image_uri.contains('\\') {
+                                metadata.remove("source_image");
+                            }
+                        }
+                        let output_path = logical_downloads_path(&uri);
+                        let registered = invoke_module_tool_quiet(
+                            bus,
+                            module,
+                            "illustration.asset.register",
+                            serde_json::json!({
+                                "project_id": project_id,
+                                "name": format!("{} · SkinTokens", asset_name.chars().take(56).collect::<String>()),
+                                "kind": "mesh",
+                                "uri": uri,
+                                "prompt": prompt,
+                                "metadata": Value::Object(metadata),
+                            }),
+                        ).await;
+                        match registered {
+                            Ok(mut result) => {
+                                if !result.is_object() || result.get("asset").is_none() {
+                                    result = serde_json::json!({
+                                        "project_id": project_id,
+                                        "asset": result,
+                                    });
+                                }
+                                if let Some(object) = result.as_object_mut() {
+                                    object.entry("project_id").or_insert_with(|| Value::String(project_id.clone()));
+                                    object.insert("rig_info".into(), serde_json::json!({
+                                        "joint_count": rig_info.joint_count,
+                                        "vertex_count": rig_info.vertex_count,
+                                        "triangle_count": rig_info.triangle_count,
+                                        "textures_preserved": true,
+                                    }));
+                                }
+                                Ok(result)
+                            }
+                            Err(error) => {
+                                let _ = std::fs::remove_file(output_path);
+                                Err(error)
+                            }
+                        }
+                    }
+                    Ok(Err(error)) => Err(error),
+                    Err(error) => Err(error.to_string()),
+                }
+            };
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: outcome.is_ok(),
+                result: outcome.clone().unwrap_or_else(|_| serde_json::json!({"project_id": project_id})),
+                error: outcome.err(),
+                refresh_binds,
+            });
+        }
+        "illustration.library.rig.configure" => {
+            let project_id = input.get("project_id").and_then(Value::as_str).unwrap_or("").to_string();
+            let outcome = configure_skintokens_runtime().map(|()| serde_json::json!({
+                "project_id": project_id,
+                "configured": true,
+            }));
+            let _ = evt_tx.send(Evt::ModuleUiServiceDone {
+                module: module.to_string(),
+                action_id: action_id.to_string(),
+                ok: outcome.is_ok(),
+                result: outcome.clone().unwrap_or_else(|_| serde_json::json!({"project_id": project_id})),
+                error: outcome.err(),
+                refresh_binds,
+            });
+        }
         "illustration.library.import" => {
             let project_id = input
                 .get("project_id")
@@ -4482,6 +4600,149 @@ fn copy_image_into_project(project_id: &str, source: &str) -> Result<String, Str
     Ok(format!(
         "/documents/illustrations/projects/{project_id}/assets/{file_name}"
     ))
+}
+
+/// Run the local SkinTokens CLI and graft only its skin data onto the exact
+/// source geometry. The original GLB is never modified.
+fn run_skintokens_texture_safe(source: &Path, assets: &Path) -> Result<(String, crate::illustration_skin::GraftedRigInfo), String> {
+    let (runner, model_dir) = configured_skintokens_paths()?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let raw_output = assets.join(format!(".skintokens-{stamp}-raw.glb"));
+    let final_name = format!("skintokens-{stamp}.glb");
+    let final_output = assets.join(&final_name);
+    let error_log = assets.join(format!(".skintokens-{stamp}.err"));
+    let error_file = std::fs::File::create(&error_log).map_err(|e| format!("Could not create SkinTokens diagnostics: {e}"))?;
+    let mut child = Command::new(&runner)
+        .arg("rig")
+        .arg(&model_dir)
+        .arg(source)
+        .arg(&raw_output)
+        .arg("--device")
+        .arg("auto")
+        .arg("--beams")
+        .arg("1")
+        .current_dir(assets)
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(error_file))
+        .spawn()
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&error_log);
+            format!("Could not start SkinTokens CLI: {e}")
+        })?;
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < std::time::Duration::from_secs(900) => {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&raw_output);
+                let _ = std::fs::remove_file(&error_log);
+                return Err("SkinTokens exceeded the 15-minute limit. Check that the model fits in memory and the selected CPU/Vulkan backend is available.".into());
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&raw_output);
+                let _ = std::fs::remove_file(&error_log);
+                return Err(format!("SkinTokens process status failed: {error}"));
+            }
+        }
+    };
+    let details = std::fs::read_to_string(&error_log).unwrap_or_default();
+    let _ = std::fs::remove_file(&error_log);
+    if !status.success() {
+        let _ = std::fs::remove_file(&raw_output);
+        let cause = details.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or("no diagnostic was returned");
+        return Err(format!("SkinTokens runner failed ({}): {}", status, cause.chars().take(500).collect::<String>()));
+    }
+    let grafted = crate::illustration_skin::graft_skin(source, &raw_output, &final_output);
+    let _ = std::fs::remove_file(&raw_output);
+    let info = match grafted {
+        Ok(info) => info,
+        Err(error) => {
+            let _ = std::fs::remove_file(&final_output);
+            return Err(error);
+        }
+    };
+    let loaded = match aos_scene::load_gltf_mesh(&final_output) {
+        Ok(mesh) => mesh,
+        Err(error) => {
+            let _ = std::fs::remove_file(&final_output);
+            return Err(format!("Texture-preserved rigged GLB failed validation: {error}"));
+        }
+    };
+    if loaded.triangle_count != info.triangle_count || loaded.vertex_count() != info.vertex_count {
+        let _ = std::fs::remove_file(&final_output);
+        return Err("Texture-preserved rigged GLB no longer matches the original vertex and triangle counts.".into());
+    }
+    Ok((final_name, info))
+}
+
+fn skintokens_config_path() -> PathBuf {
+    crate::os_open::aos_home().join("var/config/illustration-studio/skintokens.json")
+}
+
+fn configured_skintokens_paths() -> Result<(PathBuf, PathBuf), String> {
+    let saved = std::fs::read_to_string(skintokens_config_path())
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .unwrap_or(Value::Null);
+    let runner = saved.get("runner").and_then(Value::as_str).map(str::to_owned)
+        .or_else(|| std::env::var("AOS_SKINTOKENS_RUNNER").ok())
+        .unwrap_or_default();
+    let model_dir = saved.get("model_dir").and_then(Value::as_str).map(str::to_owned)
+        .or_else(|| std::env::var("AOS_SKINTOKENS_MODEL_DIR").ok())
+        .unwrap_or_default();
+    let runner = PathBuf::from(runner.trim());
+    if !runner.is_absolute() || !runner.is_file() {
+        return Err("SkinTokens is not configured. Choose the local skintokens-cli executable and the SkinTokens-GGUF/F16 model folder.".into());
+    }
+    let model_dir = PathBuf::from(model_dir.trim());
+    if !model_dir.is_absolute() || !model_dir.is_dir() {
+        return Err("SkinTokens model files are unavailable. Choose the downloaded SkinTokens-GGUF/F16 folder.".into());
+    }
+    Ok((runner, model_dir))
+}
+
+pub(crate) fn skintokens_runtime_configured() -> bool {
+    configured_skintokens_paths().is_ok()
+}
+
+fn configure_skintokens_runtime() -> Result<(), String> {
+    let runner = rfd::FileDialog::new()
+        .set_title("Select the SkinTokens CLI executable")
+        .pick_file()
+        .ok_or_else(|| "SkinTokens setup cancelled".to_string())?;
+    if !runner.is_absolute() || !runner.is_file() {
+        return Err("Selected SkinTokens CLI is not a file.".into());
+    }
+    let model_dir = rfd::FileDialog::new()
+        .set_title("Select the SkinTokens-GGUF F16 model folder")
+        .pick_folder()
+        .ok_or_else(|| "SkinTokens setup cancelled".to_string())?;
+    if !model_dir.is_absolute() || !model_dir.is_dir() {
+        return Err("Selected SkinTokens model folder is unavailable.".into());
+    }
+    let mut entries = std::fs::read_dir(&model_dir).map_err(|e| format!("Could not read model folder: {e}"))?;
+    if entries.next().is_none() {
+        return Err("Selected SkinTokens model folder is empty. Choose SkinTokens-GGUF/F16.".into());
+    }
+    let path = skintokens_config_path();
+    let parent = path.parent().ok_or_else(|| "SkinTokens settings path is invalid.".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|e| format!("Could not create SkinTokens settings folder: {e}"))?;
+    let config = serde_json::json!({
+        "runner": runner.to_string_lossy(),
+        "model_dir": model_dir.to_string_lossy(),
+    });
+    let bytes = serde_json::to_vec_pretty(&config).map_err(|e| format!("Could not encode SkinTokens settings: {e}"))?;
+    std::fs::write(path, bytes).map_err(|e| format!("Could not save SkinTokens settings: {e}"))
 }
 
 /// Opt-in adapter contract: executable `<input image> <output GLB>`.
