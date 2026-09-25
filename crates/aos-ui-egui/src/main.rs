@@ -115,6 +115,7 @@ mod ui_chat_workspace;
 mod ui_decl_module;
 mod illustration_install;
 mod illustration_assets;
+mod illustration_skin;
 mod ui_feedback;
 mod ui_files;
 mod ui_format;

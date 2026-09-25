@@ -231,7 +231,7 @@ impl DeclUiPanelState {
             }
         } else if tool == "illustration.project.close" && result.get("closed") == Some(&Value::Bool(true)) {
             self.scene3d_viewports.clear();
-            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_error_action", "library_success", "library_job_project_id", "library_job_id"] {
+            for key in ["project_id", "project_title", "scene", "beauty_path", "library_image_uri", "library_image_name", "library_image_prompt", "library_selected_asset_id", "library_selected_project_id", "library_error", "library_error_action", "library_busy_action", "library_success", "library_job_project_id", "library_job_id"] {
                 self.local_state.insert(key.into(), Value::String(String::new()));
             }
             self.local_state.insert("library_section".into(), Value::String("assets".into()));
@@ -263,6 +263,7 @@ impl DeclUiPanelState {
             ("library_selected_project_id", Value::String(String::new())),
             ("library_error", Value::String(String::new())),
             ("library_error_action", Value::String(String::new())),
+            ("library_busy_action", Value::String(String::new())),
             ("library_job_project_id", Value::String(String::new())),
             ("library_job_id", Value::String(String::new())),
             ("library_success", Value::String(String::new())),
@@ -2053,7 +2054,12 @@ impl DeclUiPanelState {
                 if local_state.get("library_busy").and_then(Value::as_bool) == Some(true) {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(widget_text_from_key(Some("library_operation_wait"), doc, language)
+                        let wait_key = if local_state.get("library_busy_action").and_then(Value::as_str) == Some("library_rig_skintokens") {
+                            "library_rig_wait"
+                        } else {
+                            "library_operation_wait"
+                        };
+                        ui.label(widget_text_from_key(Some(wait_key), doc, language)
                             .unwrap_or_else(|| "Working…".into()));
                     });
                     ui.add(egui::ProgressBar::new(0.0).animate(true));
@@ -2164,6 +2170,7 @@ fn queue_service_action(
         actions.local_patch.insert("library_error_action".into(), Value::String(String::new()));
         if action.id != "library_generate_image" {
             actions.local_patch.insert("library_busy".into(), Value::Bool(true));
+            actions.local_patch.insert("library_busy_action".into(), Value::String(action.id.clone()));
         } else {
             actions.local_patch.insert("library_job_id".into(), Value::String(String::new()));
             actions.local_patch.insert("library_job_project_id".into(),
@@ -3556,6 +3563,8 @@ fn render_illustration_asset_library(
         selected_id,
     ));
     let conversion_error = library_conversion_error(local_state);
+    let rigging_error = library_action_error(local_state, "library_rig_skintokens")
+        .or_else(|| library_action_error(local_state, "library_configure_skintokens"));
     let wide = ui.available_width() >= 760.0;
     let height = ui.available_height().max(360.0);
     if wide {
@@ -3577,7 +3586,7 @@ fn render_illustration_asset_library(
                 |ui| {
                     ui.set_min_height(height);
                     egui::ScrollArea::vertical().id_salt("library-inspector").show(ui, |ui| {
-                        render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+                        render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, rigging_error, pending_invoke, actions, tool_schemas);
                     });
                 },
             );
@@ -3590,7 +3599,7 @@ fn render_illustration_asset_library(
         );
         ui.separator();
         egui::ScrollArea::vertical().id_salt("library-inspector-compact").show(ui, |ui| {
-            render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, pending_invoke, actions, tool_schemas);
+            render_library_details(ui, doc, language, local_state, selected, assets, project_id, conversion_error, rigging_error, pending_invoke, actions, tool_schemas);
         });
     }
 }
@@ -3605,11 +3614,11 @@ fn library_convert_status_label_key(phase: &str) -> &'static str {
 }
 
 fn library_conversion_error(local_state: &HashMap<String, Value>) -> Option<&str> {
-    if local_state.get("library_error_action").and_then(Value::as_str)
-        != Some("library_convert_trellis")
-    {
-        return None;
-    }
+    library_action_error(local_state, "library_convert_trellis")
+}
+
+fn library_action_error<'a>(local_state: &'a HashMap<String, Value>, action: &str) -> Option<&'a str> {
+    if local_state.get("library_error_action").and_then(Value::as_str) != Some(action) { return None; }
     local_state
         .get("library_error")
         .and_then(Value::as_str)
@@ -3931,6 +3940,7 @@ fn render_library_details(
     assets: Option<&Vec<Value>>,
     project_id: &str,
     conversion_error: Option<&str>,
+    rigging_error: Option<&str>,
     pending_invoke: bool,
     actions: &mut DeclUiActions,
     tool_schemas: &HashMap<String, Value>,
@@ -4123,12 +4133,49 @@ fn render_library_details(
         if let Some(message) = conversion_error {
             ui.colored_label(egui::Color32::from_rgb(240, 145, 130), message);
         }
-    } else if kind == "mesh"
-        && ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_add_to_scene"))).clicked()
-    {
-        queue_invoke(actions, "illustration.asset.add",
-            serde_json::json!({"project_id": project_id, "asset_id": id}),
-            Vec::new(), Vec::new(), tool_schemas);
+    } else if kind == "mesh" {
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_add_to_scene"))).clicked() {
+                queue_invoke(actions, "illustration.asset.add",
+                    serde_json::json!({"project_id": project_id, "asset_id": id}),
+                    Vec::new(), Vec::new(), tool_schemas);
+            }
+            let already_rigged = asset.get("metadata").and_then(|metadata| metadata.get("rig_provider"))
+                .and_then(Value::as_str).is_some_and(|provider| provider.eq_ignore_ascii_case("skintokens"));
+            if already_rigged {
+                ui.weak(if language.starts_with("fr") { "Un rig SkinTokens est déjà associé à ce modèle." } else { "This mesh already has a SkinTokens rig." });
+            } else if let Some(action) = doc.actions.iter().find(|action| action.id == "library_rig_skintokens") {
+                if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, "library_rig_skintokens"))).clicked() {
+                    let mut state = HashMap::new();
+                    state.insert("project_id".into(), Value::String(project_id.into()));
+                    state.insert("library_mesh_asset_id".into(), Value::String(id.into()));
+                    state.insert("library_mesh_uri".into(), Value::String(uri.into()));
+                    state.insert("library_mesh_kind".into(), Value::String(kind.into()));
+                    state.insert("library_mesh_name".into(), Value::String(name.into()));
+                    state.insert("library_mesh_prompt".into(), asset.get("prompt").cloned().unwrap_or(Value::String(String::new())));
+                    state.insert("library_mesh_metadata".into(), asset.get("metadata").cloned().unwrap_or_else(|| Value::Object(Default::default())));
+                    queue_service_action(actions, action, &state, &HashMap::new(), doc);
+                }
+            }
+        });
+        let configured = crate::module_actions::skintokens_runtime_configured();
+        ui.weak(if configured {
+            if language.starts_with("fr") { "Runtime SkinTokens prêt." } else { "SkinTokens runtime ready." }
+        } else if language.starts_with("fr") {
+            "Configurez le CLI local et son modèle F16 une seule fois."
+        } else {
+            "Choose the local CLI and its F16 model folder once."
+        });
+        if let Some(action) = doc.actions.iter().find(|action| action.id == "library_configure_skintokens") {
+            let label = if configured { "library_configure_skintokens_update" } else { "library_configure_skintokens" };
+            if ui.add_enabled(!pending_invoke, egui::Button::new(library_label(doc, language, label))).clicked() {
+                let state = HashMap::from([("project_id".into(), Value::String(project_id.into()))]);
+                queue_service_action(actions, action, &state, &HashMap::new(), doc);
+            }
+        }
+        if let Some(message) = rigging_error {
+            ui.colored_label(egui::Color32::from_rgb(240, 145, 130), message);
+        }
     }
     if let Some(items) = assets {
         render_library_asset_delete(
@@ -4291,6 +4338,15 @@ fn render_library_metadata(ui: &mut Ui, asset: &Value, language: &str) {
                 ui.label(format!("{}: {:.2} Mio", if fr { "Fichier" } else { "File" }, file.len() as f64 / 1_048_576.0));
             }
             ui.separator();
+        }
+        if let Some(provider) = metadata.get("rig_provider").and_then(Value::as_str) {
+            ui.label(format!("Rig: {provider}"));
+        }
+        if let Some(joints) = metadata.get("joint_count").and_then(Value::as_u64) {
+            ui.label(format!("{}: {joints}", if fr { "Articulations" } else { "Joints" }));
+        }
+        if metadata.get("source_render_data_preserved").and_then(Value::as_bool) == Some(true) {
+            ui.label(if fr { "Données visuelles du GLB source conservées" } else { "Source GLB visual data preserved" });
         }
     }
     for (label, value) in [
