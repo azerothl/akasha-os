@@ -3697,7 +3697,7 @@ fn library_scene_refs(local_state: &HashMap<String, Value>, uris: &[&str]) -> Ve
         let Some(mesh_uri) = node.mesh_uri.as_deref() else {
             continue;
         };
-        if uris.iter().any(|uri| *uri == mesh_uri) {
+        if uris.contains(&mesh_uri) {
             hits.push(format!("{} · {}", node.name, node.id));
         }
     }
