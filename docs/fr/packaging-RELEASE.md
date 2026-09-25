@@ -48,7 +48,7 @@ Akasha OS Preview 0.18.0 — Memory V2, instincts, plan de santé
 - Instincts E22 en session sous pression de contexte ; plan de santé runtime E23
 - Notes tags / recherche live / delete ; fork/continue chat ; scènes/guides Canvas
 - Générateur de clés du coffre avec preset hex LAN
-- Studio Illustration expérimental 0.7.23 dans le catalogue local (édition ≠ beauté ; pas le MVP complet)
+- Studio Illustration expérimental 0.7.23 dans le catalogue local sous Win/Linux/macOS (édition ≠ beauté ; pas le MVP complet)
 - Polish LAN / santé / Deep Thinking / chrome Create
 - Mêmes bandes mill Win/Linux/Mac qu'en 0.17.x
 

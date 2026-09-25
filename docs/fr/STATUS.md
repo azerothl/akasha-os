@@ -13,8 +13,9 @@ chat, scènes/guides Canvas, générateur de clés coffre, chrome Create peaufin
 correctifs LAN/santé/Deep Thinking ; CLI de code externes opt-in (`harness.run` +
 Runtime Agents) et façade MCP optionnelle **`aos-mcpd`**
 ([harness.md](harness.md), [mcp-server.md](mcp-server.md)). Catalogue local :
-module expérimental **Studio Illustration** **0.7.23** (édition wgpu ≠ beauté ;
-beauté stub/CPU ; Blender mock sauf Renderer Pack GPL —
+module expérimental **Studio Illustration** **0.7.23** dans le zip Preview sous
+**Windows, Linux et macOS** (édition wgpu ≠ beauté ; beauté stub/CPU ; Blender
+mock sauf Renderer Pack GPL —
 [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental)).
 S’appuie sur l’espace Create 0.17.x et le chrome UI peint. Pas un OS bootable. Gate cohorte
 encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de
