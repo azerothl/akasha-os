@@ -1,0 +1,691 @@
+{
+  "meta": {
+    "product": "Akasha OS",
+    "version": "0.18.0",
+    "kind": "preview-host-architecture",
+    "generatedFrom": [
+      "README.md",
+      "docs/technical-specs.md",
+      "docs/FEATURES.md",
+      "docs/functional-specs.md",
+      "adr/0001-microkernel.md",
+      "Cargo.toml workspace members",
+      "crates/aos-session/src/main.rs boot order"
+    ],
+    "notes": "Preview is an installable host app (Windows/Linux/macOS), not a bootable OS. Target bare-metal track is seL4 (ADR 0001). Semantic IPC bus binds daemons at 127.0.0.1:24701."
+  },
+  "nodes": [
+    {
+      "id": "aos-session",
+      "label": "aos-session",
+      "layer": "supervisor",
+      "kind": "binary",
+      "crate": "crates/aos-session",
+      "description": "Preview session supervisor. Resolves AOS_HOME, writes configs, starts daemons in order, launches egui UI, watchdogs auditd/platformd/modeld, handles updates and clean shutdown.",
+      "intents": [],
+      "artifacts": ["var/run/*.pid", "var/run/*.stderr.log", "var/run/onboarding.json"]
+    },
+    {
+      "id": "aos-ui-egui",
+      "label": "aos-ui-egui",
+      "layer": "surface",
+      "kind": "binary",
+      "crate": "crates/aos-ui-egui",
+      "description": "Primary Preview shell (egui). Chat, Agents, Models, Caps, Settings, DeclUI host for WASM modules (Create, Notes, Tasks, Canvas, Illustration Studio), transparency/activity panels.",
+      "intents": ["chat.*", "module.ui.*", "cap.*", "settings via platform"],
+      "artifacts": ["preferences.json", "var/sessions/"]
+    },
+    {
+      "id": "aos-ui",
+      "label": "aos-ui (TUI)",
+      "layer": "surface",
+      "kind": "binary",
+      "crate": "crates/aos-ui",
+      "description": "Minimal conversational TUI + resource dashboard (ratatui). Dev/debug surface alongside egui.",
+      "intents": ["infer.*", "mem.*"],
+      "artifacts": []
+    },
+    {
+      "id": "aos-mcpd",
+      "label": "aos-mcpd",
+      "layer": "surface",
+      "kind": "binary",
+      "crate": "crates/aos-mcp",
+      "description": "Optional stdio MCP façade so external IDEs can call akasha_models / akasha_infer / akasha_mem_* on a running Preview.",
+      "intents": ["infer.*", "mem.*", "model.*"],
+      "artifacts": []
+    },
+    {
+      "id": "website",
+      "label": "Public site",
+      "layer": "surface",
+      "kind": "static",
+      "crate": "website/",
+      "description": "Static EN/FR marketing + end-user docs on GitHub Pages (azerothl.github.io/akasha-os). Not on the runtime bus.",
+      "intents": [],
+      "artifacts": ["website/docs/", "website/media/"]
+    },
+    {
+      "id": "aos-busd",
+      "label": "aos-busd",
+      "layer": "bus",
+      "kind": "binary",
+      "crate": "crates/aos-ipc",
+      "description": "Semantic IPC Bus broker (TCP localhost:24701). Typed intents with capability envelopes; CBOR framing. Central nervous system of Preview.",
+      "intents": ["* (routes)"],
+      "artifacts": ["127.0.0.1:24701"]
+    },
+    {
+      "id": "aos-ipc",
+      "label": "aos-ipc (lib)",
+      "layer": "library",
+      "kind": "library",
+      "crate": "crates/aos-ipc",
+      "description": "Bus client, codec, broker, service registration helpers shared by all daemons and UIs.",
+      "intents": [],
+      "artifacts": []
+    },
+    {
+      "id": "aos-proto",
+      "label": "aos-proto",
+      "layer": "library",
+      "kind": "library",
+      "crate": "crates/aos-proto",
+      "description": "Shared intent schemas, DeclUI contract, rich module UI types, request/response envelopes.",
+      "intents": [],
+      "artifacts": ["docs/bridge/*.json schemas"]
+    },
+    {
+      "id": "aos-capkd",
+      "label": "aos-capkd",
+      "layer": "trust",
+      "kind": "binary",
+      "crate": "crates/aos-capkd",
+      "description": "Capability kernel (P4.2). Single trust application point: mint, derive, grant, revoke, check. Immediate global revoke across processes via the bus.",
+      "intents": ["cap.mint", "cap.derive", "cap.grant", "cap.revoke", "cap.check"],
+      "artifacts": ["cap://kernel/<id>"]
+    },
+    {
+      "id": "aos-caps",
+      "label": "aos-caps (lib)",
+      "layer": "library",
+      "kind": "library",
+      "crate": "crates/aos-caps",
+      "description": "Logical capability model (rights bits, derive/attenuate). Used by capkd and platform fallbacks for WASM/agents.",
+      "intents": [],
+      "artifacts": []
+    },
+    {
+      "id": "aos-auditd",
+      "label": "aos-auditd",
+      "layer": "trust",
+      "kind": "binary",
+      "crate": "crates/aos-auditd",
+      "description": "Autonomous append-only signed audit journal. Fire-and-forget; killing it does not stop Model or UI.",
+      "intents": ["audit.append", "audit.query", "health.* (consumes)"],
+      "artifacts": ["var/audit/"]
+    },
+    {
+      "id": "aos-modeld",
+      "label": "aos-modeld",
+      "layer": "model",
+      "kind": "binary",
+      "crate": "crates/aos-model",
+      "description": "Model subsystem daemon. Local GGUF inference (llama.cpp), media.image/video/TTS packs (sd.cpp / piper), providers (OpenAI-compat + loopback), placement, LAN cluster coordinator, live metrics.",
+      "intents": ["infer.*", "model.load", "model.list", "media.image.generate", "media.*", "lan.*"],
+      "artifacts": ["etc/modeld.yaml", "share/models/", "bin/sd*", "var/run/lan-pairing.json"]
+    },
+    {
+      "id": "aos-llama",
+      "label": "aos-llama",
+      "layer": "model",
+      "kind": "library",
+      "crate": "crates/aos-llama",
+      "description": "llama.cpp bindings (CUDA / Metal / CPU). Chat, vision (mtmd), embeddings, prefix cache, speculative decode.",
+      "intents": [],
+      "artifacts": []
+    },
+    {
+      "id": "aos-sd",
+      "label": "aos-sd",
+      "layer": "model",
+      "kind": "library",
+      "crate": "crates/aos-sd",
+      "description": "Stable Diffusion / LTX media engine wrapper used by modeld for image and short video generation.",
+      "intents": [],
+      "artifacts": []
+    },
+    {
+      "id": "aos-placement",
+      "label": "aos-placement",
+      "layer": "model",
+      "kind": "library",
+      "crate": "crates/aos-placement",
+      "description": "Hardware-aware model weight placement across RAM / GPU / disk; CPU/GPU hysteresis for unified artefacts.",
+      "intents": [],
+      "artifacts": []
+    },
+    {
+      "id": "aos-registry",
+      "label": "aos-registry",
+      "layer": "model",
+      "kind": "library",
+      "crate": "crates/aos-registry",
+      "description": "YAML model catalogue and backend descriptors (local packs + provider offerings).",
+      "intents": [],
+      "artifacts": ["data/models/catalog.yaml", "share/models/manifest.json"]
+    },
+    {
+      "id": "aos-platformd",
+      "label": "aos-platformd",
+      "layer": "platform",
+      "kind": "binary",
+      "crate": "crates/aos-platform",
+      "description": "Platform daemon: semantic FS, Memory V2, chat sessions, WASM module runtime (wasmtime), DeclUI, confirmations, devices, health plane, vault, network egress, feedback, catalogue.",
+      "intents": [
+        "fs.*",
+        "mem.*",
+        "chat.session.*",
+        "module.*",
+        "device.*",
+        "web.*",
+        "health.*",
+        "user.ask"
+      ],
+      "artifacts": ["etc/platformd.yaml", "var/sessions/", "var/memory/", "share/modules/"]
+    },
+    {
+      "id": "module-rt",
+      "label": "WASM Module Runtime",
+      "layer": "platform",
+      "kind": "runtime",
+      "crate": "crates/aos-platform/src/module_rt.rs",
+      "description": "Sandboxed wasmtime host. Modules call host_call only (no ambient WASI). Caps gate every tool; DeclUI frames rendered by egui host.",
+      "intents": ["module.invoke", "module.ui.*", "host_call"],
+      "artifacts": ["*.aospkg", "share/modules/catalogue.yaml"]
+    },
+    {
+      "id": "aos-scene",
+      "label": "aos-scene",
+      "layer": "platform",
+      "kind": "library",
+      "crate": "crates/aos-scene",
+      "description": "SceneGraph edit / locks / apply for Canvas and Illustration Studio. Viewport stays in egui; no wgpu in this crate.",
+      "intents": ["scene.* (via platform)"],
+      "artifacts": []
+    },
+    {
+      "id": "aos-agentd",
+      "label": "aos-agentd",
+      "layer": "agent",
+      "kind": "binary",
+      "crate": "crates/aos-agent",
+      "description": "Agent runtime daemon. Goal loop, skills, tools, MCP client, harness.run (external CLIs), scheduler, salon turns, deep-thinking, trace export. Spawns isolated aos-agent-worker processes.",
+      "intents": ["agent.*", "skill.*", "harness.run", "mcp.*"],
+      "artifacts": ["var/agents/", "var/skills/", "var/traces/"]
+    },
+    {
+      "id": "aos-agent-worker",
+      "label": "aos-agent-worker",
+      "layer": "agent",
+      "kind": "binary",
+      "crate": "crates/aos-agent",
+      "description": "Isolated per-agent worker process. Executes tool calls under granted caps; communicates with agentd over the bus.",
+      "intents": ["tool results → agentd"],
+      "artifacts": []
+    },
+    {
+      "id": "skills",
+      "label": "Skills",
+      "layer": "agent",
+      "kind": "content",
+      "crate": "skills/",
+      "description": "MIT-licensed skill packs (deep-thinking, planner, research, notes-writer, file-author, tasks). User skills under var/skills/. Shared frontmatter per ADR 0008.",
+      "intents": ["skill.pass.consider", "skill.load"],
+      "artifacts": ["skills/*", "var/skills/"]
+    },
+    {
+      "id": "mod-create",
+      "label": "Create",
+      "layer": "module",
+      "kind": "wasm-module",
+      "crate": "modules/create",
+      "description": "Rich DeclUI image/video workspace. UI state under /documents/create/**; generation via platform media.image.generate service.",
+      "intents": ["media.image.generate", "fs.*", "jobs.*"],
+      "artifacts": ["share/modules/create.aospkg", "/downloads/images|video/"]
+    },
+    {
+      "id": "mod-notes",
+      "label": "Notes",
+      "layer": "module",
+      "kind": "wasm-module",
+      "crate": "modules/notes",
+      "description": "Human + agent notes with tags, live search, delete. Dual-surface WASM package.",
+      "intents": ["notes.*", "fs.*"],
+      "artifacts": ["share/modules/notes.aospkg"]
+    },
+    {
+      "id": "mod-tasks",
+      "label": "Tasks",
+      "layer": "module",
+      "kind": "wasm-module",
+      "crate": "modules/tasks",
+      "description": "Dual-surface tasks module + Tasks tab. DeclUI package synced on boot.",
+      "intents": ["tasks.*"],
+      "artifacts": ["share/modules/tasks.aospkg"]
+    },
+    {
+      "id": "mod-canvas",
+      "label": "Canvas",
+      "layer": "module",
+      "kind": "wasm-module",
+      "crate": "modules/canvas",
+      "description": "Layered vector drawing: grid/snap, scenes, guides, PNG/SVG/JSON export, agent geometry validation.",
+      "intents": ["canvas.*", "scene.*"],
+      "artifacts": ["share/modules/canvas.aospkg", "/downloads/canvas/"]
+    },
+    {
+      "id": "mod-illustration",
+      "label": "Illustration Studio",
+      "layer": "module",
+      "kind": "wasm-module",
+      "crate": "modules/illustration-studio",
+      "description": "Experimental DeclUI scene editor. wgpu edit viewport ≠ beauty; stub/CPU beauty; optional GPL Blender Renderer Pack.",
+      "intents": ["scene.*", "illustration.*"],
+      "artifacts": ["share/modules/illustration-studio.aospkg"]
+    },
+    {
+      "id": "mod-ext-rt",
+      "label": "ext-rt",
+      "layer": "module",
+      "kind": "wasm-module",
+      "crate": "modules/ext-rt",
+      "description": "Precompiled script-module WASM runtime used by scaffolded guest packages without a full Rust SDK build.",
+      "intents": ["host_call"],
+      "artifacts": ["share/modules/ext-rt.aospkg"]
+    },
+    {
+      "id": "module-sdk",
+      "label": "Module SDK",
+      "layer": "module",
+      "kind": "library",
+      "crate": "modules/sdk",
+      "description": "Apache-2.0 guest SDK. Rust modules compile against host_call only — no ambient WASI. Separate workspace from host crates.",
+      "intents": [],
+      "artifacts": ["LICENSE-APACHE"]
+    },
+    {
+      "id": "aos-bridge",
+      "label": "aos-bridge",
+      "layer": "library",
+      "kind": "library",
+      "crate": "crates/aos-bridge",
+      "description": "Sibling HTTP↔bus contract helpers and schema export (E8). Documents live under docs/bridge/.",
+      "intents": [],
+      "artifacts": ["docs/bridge/", "docs/sibling-bridge.md"]
+    },
+    {
+      "id": "storage-var",
+      "label": "var/ (runtime state)",
+      "layer": "storage",
+      "kind": "filesystem",
+      "crate": null,
+      "description": "Mutable Preview home state: sessions, memory, agents, audit, skills, feedback, run pids/logs, LAN pairing.",
+      "intents": [],
+      "artifacts": ["var/sessions", "var/memory", "var/audit", "var/agents", "var/skills", "var/feedback", "var/run"]
+    },
+    {
+      "id": "storage-share",
+      "label": "share/ (read-mostly)",
+      "layer": "storage",
+      "kind": "filesystem",
+      "crate": null,
+      "description": "Shipped models catalogue, signed module catalogue, MCP examples, preview profile.",
+      "intents": [],
+      "artifacts": ["share/models", "share/modules", "share/mcp", "share/preview-profile.yaml"]
+    },
+    {
+      "id": "host-os",
+      "label": "Host OS",
+      "layer": "host",
+      "kind": "platform",
+      "crate": null,
+      "description": "Windows 10/11 x64, Linux x64, or macOS Apple Silicon. Preview scaffold per ADR 0001 — not the final bare-metal product.",
+      "intents": [],
+      "artifacts": ["AOS_HOME / AgentOS-Preview"]
+    },
+    {
+      "id": "gpu-cpu",
+      "label": "GPU / CPU",
+      "layer": "host",
+      "kind": "hardware",
+      "crate": null,
+      "description": "NVIDIA CUDA (Win/Linux) or Metal (macOS) preferred; unified zip also ships aos-modeld-cpu path.",
+      "intents": [],
+      "artifacts": ["aos-modeld", "aos-modeld-cpu"]
+    },
+    {
+      "id": "providers",
+      "label": "Cloud / loopback providers",
+      "layer": "external",
+      "kind": "external",
+      "crate": null,
+      "description": "OpenAI-compatible cloud APIs plus local loopback (Ollama / vLLM / LM Studio). API keys in the OS keyring vault.",
+      "intents": ["provider.* via modeld"],
+      "artifacts": ["vault secrets"]
+    },
+    {
+      "id": "network-egress",
+      "label": "Network egress",
+      "layer": "external",
+      "kind": "external",
+      "crate": null,
+      "description": "Deny-by-default. Opt-in web.search, web.browse (no JS), web.fetch. JS/SPA via optional browser MCP.",
+      "intents": ["web.search", "web.browse", "web.fetch"],
+      "artifacts": ["/downloads/fetched/"]
+    },
+    {
+      "id": "external-clis",
+      "label": "External coding CLIs",
+      "layer": "external",
+      "kind": "external",
+      "crate": null,
+      "description": "Opt-in harness.run / Agents Advanced Runtime for Codex, Claude, Grok with Steer / Pause / Kill.",
+      "intents": ["harness.run"],
+      "artifacts": []
+    },
+    {
+      "id": "sel4-track",
+      "label": "seL4 bare-metal track",
+      "layer": "future",
+      "kind": "target",
+      "crate": "crates/aos-sel4-abi, aos-sel4-capkd, vm/",
+      "description": "Future product form: machine boots seL4 + Agent OS without Windows/Linux. VM scaffold exists; GPU AccelDevice later (P5.3).",
+      "intents": [],
+      "artifacts": ["vm/", "adr/0001-microkernel.md"]
+    }
+  ],
+  "edges": [
+    {"id": "e-session-busd", "from": "aos-session", "to": "aos-busd", "label": "spawns first", "kind": "spawn"},
+    {"id": "e-session-capkd", "from": "aos-session", "to": "aos-capkd", "label": "spawns", "kind": "spawn"},
+    {"id": "e-session-auditd", "from": "aos-session", "to": "aos-auditd", "label": "spawns + watchdog", "kind": "spawn"},
+    {"id": "e-session-modeld", "from": "aos-session", "to": "aos-modeld", "label": "spawns + watchdog", "kind": "spawn"},
+    {"id": "e-session-platformd", "from": "aos-session", "to": "aos-platformd", "label": "spawns + watchdog", "kind": "spawn"},
+    {"id": "e-session-agentd", "from": "aos-session", "to": "aos-agentd", "label": "spawns", "kind": "spawn"},
+    {"id": "e-session-ui", "from": "aos-session", "to": "aos-ui-egui", "label": "launches after healthcheck", "kind": "spawn"},
+    {"id": "e-ui-bus", "from": "aos-ui-egui", "to": "aos-busd", "label": "intent client", "kind": "ipc"},
+    {"id": "e-tui-bus", "from": "aos-ui", "to": "aos-busd", "label": "intent client", "kind": "ipc"},
+    {"id": "e-mcpd-bus", "from": "aos-mcpd", "to": "aos-busd", "label": "stdio → bus", "kind": "ipc"},
+    {"id": "e-capkd-bus", "from": "aos-capkd", "to": "aos-busd", "label": "registers cap.*", "kind": "ipc"},
+    {"id": "e-auditd-bus", "from": "aos-auditd", "to": "aos-busd", "label": "registers audit.*", "kind": "ipc"},
+    {"id": "e-modeld-bus", "from": "aos-modeld", "to": "aos-busd", "label": "registers infer/media/model", "kind": "ipc"},
+    {"id": "e-platformd-bus", "from": "aos-platformd", "to": "aos-busd", "label": "registers fs/mem/chat/module/…", "kind": "ipc"},
+    {"id": "e-agentd-bus", "from": "aos-agentd", "to": "aos-busd", "label": "registers agent.*", "kind": "ipc"},
+    {"id": "e-agentd-worker", "from": "aos-agentd", "to": "aos-agent-worker", "label": "spawns isolated worker", "kind": "spawn"},
+    {"id": "e-worker-bus", "from": "aos-agent-worker", "to": "aos-busd", "label": "tool intents", "kind": "ipc"},
+    {"id": "e-bus-ipc-lib", "from": "aos-busd", "to": "aos-ipc", "label": "implements", "kind": "uses"},
+    {"id": "e-all-proto", "from": "aos-busd", "to": "aos-proto", "label": "typed envelopes", "kind": "uses"},
+    {"id": "e-capkd-caps", "from": "aos-capkd", "to": "aos-caps", "label": "rights model", "kind": "uses"},
+    {"id": "e-platform-caps-check", "from": "aos-platformd", "to": "aos-capkd", "label": "cap.check on fs/tools", "kind": "trust"},
+    {"id": "e-platform-audit", "from": "aos-platformd", "to": "aos-auditd", "label": "audit.append", "kind": "audit"},
+    {"id": "e-agent-audit", "from": "aos-agentd", "to": "aos-auditd", "label": "audit.append", "kind": "audit"},
+    {"id": "e-modeld-llama", "from": "aos-modeld", "to": "aos-llama", "label": "local LLM/VLM", "kind": "uses"},
+    {"id": "e-modeld-sd", "from": "aos-modeld", "to": "aos-sd", "label": "image/video engines", "kind": "uses"},
+    {"id": "e-modeld-placement", "from": "aos-modeld", "to": "aos-placement", "label": "weight placement", "kind": "uses"},
+    {"id": "e-modeld-registry", "from": "aos-modeld", "to": "aos-registry", "label": "catalogue", "kind": "uses"},
+    {"id": "e-llama-gpu", "from": "aos-llama", "to": "gpu-cpu", "label": "CUDA / Metal / CPU", "kind": "hardware"},
+    {"id": "e-sd-gpu", "from": "aos-sd", "to": "gpu-cpu", "label": "CUDA / CPU", "kind": "hardware"},
+    {"id": "e-modeld-providers", "from": "aos-modeld", "to": "providers", "label": "OpenAI-compat / loopback", "kind": "external"},
+    {"id": "e-platform-modules", "from": "aos-platformd", "to": "module-rt", "label": "hosts wasmtime", "kind": "contains"},
+    {"id": "e-platform-scene", "from": "aos-platformd", "to": "aos-scene", "label": "SceneGraph", "kind": "uses"},
+    {"id": "e-rt-create", "from": "module-rt", "to": "mod-create", "label": "loads", "kind": "loads"},
+    {"id": "e-rt-notes", "from": "module-rt", "to": "mod-notes", "label": "loads", "kind": "loads"},
+    {"id": "e-rt-tasks", "from": "module-rt", "to": "mod-tasks", "label": "loads", "kind": "loads"},
+    {"id": "e-rt-canvas", "from": "module-rt", "to": "mod-canvas", "label": "loads", "kind": "loads"},
+    {"id": "e-rt-illustration", "from": "module-rt", "to": "mod-illustration", "label": "loads", "kind": "loads"},
+    {"id": "e-rt-ext", "from": "module-rt", "to": "mod-ext-rt", "label": "loads", "kind": "loads"},
+    {"id": "e-sdk-modules", "from": "module-sdk", "to": "mod-create", "label": "compiles against", "kind": "build"},
+    {"id": "e-ui-declui", "from": "aos-ui-egui", "to": "module-rt", "label": "DeclUI host frames", "kind": "ui"},
+    {"id": "e-create-media", "from": "mod-create", "to": "aos-modeld", "label": "media.image.generate", "kind": "ipc"},
+    {"id": "e-agent-skills", "from": "aos-agentd", "to": "skills", "label": "loads / offers", "kind": "uses"},
+    {"id": "e-agent-infer", "from": "aos-agentd", "to": "aos-modeld", "label": "infer.* via bus", "kind": "ipc"},
+    {"id": "e-agent-platform", "from": "aos-agentd", "to": "aos-platformd", "label": "fs/mem/tools via bus", "kind": "ipc"},
+    {"id": "e-agent-harness", "from": "aos-agentd", "to": "external-clis", "label": "harness.run", "kind": "external"},
+    {"id": "e-platform-net", "from": "aos-platformd", "to": "network-egress", "label": "opt-in web.*", "kind": "external"},
+    {"id": "e-platform-var", "from": "aos-platformd", "to": "storage-var", "label": "persists", "kind": "storage"},
+    {"id": "e-platform-share", "from": "aos-platformd", "to": "storage-share", "label": "catalogue / packs", "kind": "storage"},
+    {"id": "e-modeld-share", "from": "aos-modeld", "to": "storage-share", "label": "GGUF / media weights", "kind": "storage"},
+    {"id": "e-audit-var", "from": "aos-auditd", "to": "storage-var", "label": "var/audit", "kind": "storage"},
+    {"id": "e-session-host", "from": "aos-session", "to": "host-os", "label": "runs on", "kind": "host"},
+    {"id": "e-bridge-docs", "from": "aos-bridge", "to": "aos-proto", "label": "schema export", "kind": "uses"},
+    {"id": "e-sel4-future", "from": "sel4-track", "to": "aos-capkd", "label": "replaces TCP caps later", "kind": "future"},
+    {"id": "e-website-docs", "from": "website", "to": "host-os", "label": "install docs only", "kind": "docs"}
+  ],
+  "flows": [
+    {
+      "id": "flow-boot",
+      "name": "Preview boot",
+      "summary": "aos-session brings up the bus and daemons, healthchecks, then launches the egui shell.",
+      "steps": [
+        "aos-session",
+        "aos-busd",
+        "aos-capkd",
+        "aos-auditd",
+        "aos-modeld",
+        "aos-platformd",
+        "aos-agentd",
+        "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-chat-infer",
+      "name": "Chat → local inference",
+      "summary": "User message in egui becomes an infer intent on the bus; modeld runs llama.cpp on GPU/CPU and streams tokens back.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-platformd",
+        "aos-busd",
+        "aos-modeld",
+        "aos-llama",
+        "gpu-cpu",
+        "aos-modeld",
+        "aos-busd",
+        "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-chat-provider",
+      "name": "Chat → cloud/loopback provider",
+      "summary": "When routing selects a provider, modeld forwards the completion to OpenAI-compat or Ollama/vLLM/LM Studio.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-modeld",
+        "providers",
+        "aos-modeld",
+        "aos-busd",
+        "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-agent-goal",
+      "name": "Agent goal loop",
+      "summary": "agentd plans with skills, spawns a worker, calls tools via bus under caps, audits actions, may infer via modeld.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-agentd",
+        "skills",
+        "aos-agent-worker",
+        "aos-busd",
+        "aos-capkd",
+        "aos-platformd",
+        "aos-modeld",
+        "aos-auditd",
+        "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-create-image",
+      "name": "Create image generation",
+      "summary": "Create DeclUI module requests media.image.generate; modeld drives sd.cpp and writes under /downloads/images.",
+      "steps": [
+        "aos-ui-egui",
+        "module-rt",
+        "mod-create",
+        "aos-busd",
+        "aos-modeld",
+        "aos-sd",
+        "gpu-cpu",
+        "storage-var",
+        "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-module-notes",
+      "name": "Notes module host_call",
+      "summary": "Notes WASM package issues host_call; platform runtime enforces caps and persists via semantic FS.",
+      "steps": [
+        "aos-ui-egui",
+        "module-rt",
+        "mod-notes",
+        "aos-platformd",
+        "aos-capkd",
+        "storage-var",
+        "aos-auditd"
+      ]
+    },
+    {
+      "id": "flow-canvas-scene",
+      "name": "Canvas scene edit",
+      "summary": "Canvas module edits SceneGraph through platform/aos-scene; agents can validate geometry over the bus.",
+      "steps": [
+        "aos-ui-egui",
+        "module-rt",
+        "mod-canvas",
+        "aos-platformd",
+        "aos-scene",
+        "storage-var"
+      ]
+    },
+    {
+      "id": "flow-illustration",
+      "name": "Illustration Studio edit",
+      "summary": "Experimental studio DeclUI edits scene graph; beauty path is stub/CPU or optional Blender pack — distinct from wgpu edit viewport.",
+      "steps": [
+        "aos-ui-egui",
+        "module-rt",
+        "mod-illustration",
+        "aos-platformd",
+        "aos-scene",
+        "storage-var"
+      ]
+    },
+    {
+      "id": "flow-cap-revoke",
+      "name": "Capability revoke",
+      "summary": "User revokes a cap in UI; capkd applies globally; subsequent platform/agent checks fail closed.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-capkd",
+        "aos-auditd",
+        "aos-platformd",
+        "aos-agentd"
+      ]
+    },
+    {
+      "id": "flow-memory",
+      "name": "Memory remember / recall",
+      "summary": "Chat or agent writes Memory V2 (decision journal / mind palace); recall feeds later agent bootstrap. Shadow projection keeps legacy facts in sync.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-platformd",
+        "storage-var",
+        "aos-agentd"
+      ]
+    },
+    {
+      "id": "flow-mcp-ide",
+      "name": "IDE via aos-mcpd",
+      "summary": "External IDE speaks MCP stdio to aos-mcpd, which translates to bus infer/mem intents on a running Preview.",
+      "steps": [
+        "aos-mcpd",
+        "aos-busd",
+        "aos-modeld",
+        "aos-platformd",
+        "aos-mcpd"
+      ]
+    },
+    {
+      "id": "flow-web-search",
+      "name": "Opt-in web search",
+      "summary": "With network enabled, platformd performs web.search/browse/fetch under egress policy and may audit the access.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-platformd",
+        "aos-capkd",
+        "network-egress",
+        "aos-auditd",
+        "storage-var"
+      ]
+    },
+    {
+      "id": "flow-harness",
+      "name": "External coding CLI harness",
+      "summary": "Agents Advanced Runtime starts Codex/Claude/Grok via harness.run with Steer/Pause/Kill controls.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-agentd",
+        "external-clis",
+        "aos-auditd",
+        "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-model-load",
+      "name": "Model load & placement",
+      "summary": "User selects a pack; modeld consults registry + placement, loads GGUF onto GPU/CPU, exposes metrics (TTFT, tok/s, VRAM).",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-modeld",
+        "aos-registry",
+        "aos-placement",
+        "storage-share",
+        "aos-llama",
+        "gpu-cpu"
+      ]
+    },
+    {
+      "id": "flow-device-capture",
+      "name": "Device capture",
+      "summary": "Camera/mic intents require confirmation (Allow once / Always / Deny); artefacts land under var/sessions/<id>/devices/.",
+      "steps": [
+        "aos-ui-egui",
+        "aos-busd",
+        "aos-platformd",
+        "aos-capkd",
+        "host-os",
+        "storage-var",
+        "aos-auditd"
+      ]
+    },
+    {
+      "id": "flow-update",
+      "name": "Non-destructive update",
+      "summary": "aos-session checks GitHub Releases, stages archive, applies overlay on next restart without wiping user var/.",
+      "steps": [
+        "aos-session",
+        "network-egress",
+        "storage-var",
+        "host-os",
+        "aos-session"
+      ]
+    }
+  ]
+}

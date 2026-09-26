@@ -46,6 +46,20 @@ Artefacts: QEMU `loader.img` + serial log — no `latest.json`.
 
 GGUFs are downloaded on **first run** via `share/models/manifest.json`.
 
+## Pre-release checklist
+
+Before tagging a Preview `v*` release:
+
+- [ ] Version bumps (`VERSION`, workspace, site) match the tag
+- [ ] `docs/FEATURES.md` / `docs/STATUS.md` (and FR mirrors) describe this release
+- [ ] **Architecture map updated** — refresh
+  [`docs/architecture-graph.json`](../docs/architecture-graph.json) and
+  [`docs/architecture-map.html`](../docs/architecture-map.html) so nodes,
+  edges, and flows match the shipping daemons/modules; set `meta.version` to
+  this release. Policy: [docs/architecture.md](../docs/architecture.md).
+  Skip only when the process layout is unchanged since the previous tag
+  (document that in the release notes).
+
 ## Release notes (draft)
 
 ```

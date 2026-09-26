@@ -86,6 +86,7 @@ cargo run -p aos-session --release
 | [mcp-server.md](mcp-server.md) | `aos-mcpd` optionnel — IDE → Akasha |
 | [INSTALL.md](INSTALL.md) | Installation, mises à jour, build depuis les sources |
 | [FIRST-RUN.md](FIRST-RUN.md) | Premier lancement |
+| [architecture.md](architecture.md) | Carte d’architecture hôte interactive (à jour à chaque release) |
 | [../functional-specs.md](../functional-specs.md) | Specs fonctionnelles (EN) |
 | [specs-fonctionnelles.md](specs-fonctionnelles.md) | Specs fonctionnelles (FR) |
 | [paysage-concurrentiel.md](paysage-concurrentiel.md) | Paysage OS agentiques vs Akasha OS |

@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Akasha OS — Architecture Map</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Fira+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+  :root {
+    --void: #070b14;
+    --void-2: #0c1220;
+    --panel: #0f1626;
+    --panel-2: #141c2e;
+    --ice: #5ee7ff;
+    --ice-dim: rgba(94, 231, 255, 0.18);
+    --ice-ink: #b6e7f2;
+    --signal: #2ef0c8;
+    --signal-dim: rgba(46, 240, 200, 0.16);
+    --hydrogen: #ff5a48;
+    --paper: #e8eef6;
+    --muted: #8a96a8;
+    --line: rgba(232, 238, 246, 0.12);
+    --line-strong: rgba(94, 231, 255, 0.55);
+    --flow: #ffb454;
+    --flow-dim: rgba(255, 180, 84, 0.22);
+    --display: "Archivo Narrow", "Arial Narrow", sans-serif;
+    --body: "Fira Sans", "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --rail: 340px;
+    --header: 56px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--void);
+    color: var(--paper);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  body {
+    background:
+      radial-gradient(1200px 600px at 12% -10%, rgba(94, 231, 255, 0.08), transparent 55%),
+      radial-gradient(900px 500px at 90% 0%, rgba(46, 240, 200, 0.06), transparent 50%),
+      linear-gradient(180deg, #0a101c 0%, var(--void) 40%, #060910 100%);
+  }
+
+  .app {
+    display: grid;
+    grid-template-rows: var(--header) 1fr;
+    height: 100%;
+    min-height: 100dvh;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0 1.25rem;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--void-2) 88%, transparent);
+    backdrop-filter: blur(10px);
+    z-index: 5;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.65rem;
+    min-width: 0;
+  }
+  .brand h1 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.35rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--paper);
+  }
+  .brand .ver {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--ice);
+    letter-spacing: 0.06em;
+  }
+  .brand .sub {
+    color: var(--muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toolbar {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .toolbar input[type="search"] {
+    width: min(220px, 36vw);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    border-radius: 2px;
+    padding: 0.45rem 0.65rem;
+    font: 500 0.8rem var(--mono);
+    outline: none;
+  }
+  .toolbar input[type="search"]:focus {
+    border-color: color-mix(in srgb, var(--ice) 55%, var(--line));
+    box-shadow: 0 0 0 2px var(--ice-dim);
+  }
+  button {
+    font: 600 0.78rem var(--display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ice-ink);
+    padding: 0.45rem 0.7rem;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--ice); color: var(--ice); }
+  button.active {
+    background: var(--ice-dim);
+    border-color: var(--ice);
+    color: var(--ice);
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr var(--rail);
+    min-height: 0;
+  }
+
+  .stage-wrap {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--line);
+  }
+
+  .stage {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+  }
+  .stage.dragging { cursor: grabbing; }
+
+  .hint {
+    position: absolute;
+    left: 1rem;
+    bottom: 1rem;
+    z-index: 2;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--void) 75%, transparent);
+    border: 1px solid var(--line);
+    padding: 0.4rem 0.55rem;
+    pointer-events: none;
+  }
+
+  .legend {
+    position: absolute;
+    left: 1rem;
+    top: 1rem;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    max-width: calc(100% - 2rem);
+  }
+  .legend span {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    color: var(--muted);
+  }
+  .legend span i {
+    display: inline-block;
+    width: 8px; height: 8px;
+    margin-right: 0.35rem;
+    border-radius: 1px;
+    vertical-align: middle;
+  }
+
+  aside {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+  }
+
+  .aside-head {
+    padding: 1rem 1rem 0.65rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .aside-head h2 {
+    margin: 0 0 0.25rem;
+    font-family: var(--display);
+    font-size: 1.05rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .aside-head p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .flows {
+    overflow: auto;
+    padding: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .flow {
+    text-align: left;
+    width: 100%;
+    padding: 0.7rem 0.75rem;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--paper);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .flow:hover { border-color: color-mix(in srgb, var(--flow) 50%, var(--line)); }
+  .flow.selected {
+    border-color: var(--flow);
+    background: linear-gradient(135deg, var(--flow-dim), transparent 70%);
+    box-shadow: inset 3px 0 0 var(--flow);
+  }
+  .flow .name {
+    display: block;
+    font-family: var(--display);
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+  }
+  .flow .sum {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    line-height: 1.4;
+  }
+  .flow .steps-count {
+    display: inline-block;
+    margin-top: 0.4rem;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--flow);
+  }
+
+  .detail {
+    border-top: 1px solid var(--line);
+    padding: 0.85rem 1rem 1rem;
+    min-height: 140px;
+    background: var(--void-2);
+  }
+  .detail .kicker {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 0.3rem;
+  }
+  .detail h3 {
+    margin: 0 0 0.35rem;
+    font-family: var(--display);
+    font-size: 1.1rem;
+    letter-spacing: 0.03em;
+  }
+  .detail .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.55rem;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    padding: 0.18rem 0.4rem;
+    border: 1px solid var(--line);
+    color: var(--ice-ink);
+    background: var(--ice-dim);
+  }
+  .detail p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .detail code {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--ice);
+  }
+  .detail .empty {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  /* SVG graph */
+  .edge {
+    fill: none;
+    stroke: rgba(232, 238, 246, 0.14);
+    stroke-width: 1.4;
+    transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
+  }
+  .edge.dim { opacity: 0.18; }
+  .edge.hl {
+    stroke: var(--flow);
+    stroke-width: 2.6;
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(255, 180, 84, 0.45));
+  }
+  .edge.flow-hop {
+    fill: none;
+    stroke: var(--flow);
+    stroke-width: 2.4;
+    stroke-dasharray: 6 4;
+    opacity: 0.95;
+    filter: drop-shadow(0 0 4px rgba(255, 180, 84, 0.45));
+    pointer-events: none;
+  }
+  .step-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    fill: #070b14;
+  }
+  .step-badge-bg {
+    fill: var(--flow);
+  }
+  .edge-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    fill: var(--muted);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .edge.hl + .edge-label, .edge:hover + .edge-label { opacity: 0.9; fill: var(--flow); }
+
+  .node {
+    cursor: pointer;
+    pointer-events: all;
+  }
+  .node rect {
+    pointer-events: all;
+  }
+  .node rect {
+    stroke-width: 1.25;
+    transition: stroke 0.15s, filter 0.15s, opacity 0.2s;
+  }
+  .node text {
+    font-family: var(--display);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    fill: var(--paper);
+    pointer-events: none;
+  }
+  .node .sub {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    font-weight: 400;
+    fill: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .node.dim { opacity: 0.22; }
+  .node.hl rect {
+    stroke: var(--flow) !important;
+    filter: drop-shadow(0 0 8px rgba(255, 180, 84, 0.35));
+  }
+  .node.hover rect {
+    stroke: var(--ice) !important;
+    filter: drop-shadow(0 0 6px rgba(94, 231, 255, 0.35));
+  }
+  .node.selected rect {
+    stroke: var(--signal) !important;
+    filter: drop-shadow(0 0 8px rgba(46, 240, 200, 0.4));
+  }
+
+  .layer-band text {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    fill: rgba(138, 150, 168, 0.55);
+  }
+
+  @media (max-width: 900px) {
+    :root { --rail: 100%; --header: auto; }
+    .main {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(48vh, 1fr) minmax(40vh, 1fr);
+    }
+    .stage-wrap { border-right: none; border-bottom: 1px solid var(--line); }
+    header { flex-wrap: wrap; padding: 0.65rem 1rem; gap: 0.5rem; }
+    .brand .sub { display: none; }
+    .toolbar { margin-left: 0; width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge, .node rect { transition: none; }
+  }
+
+  .tooltip {
+    position: absolute;
+    z-index: 6;
+    max-width: min(320px, 70vw);
+    padding: 0.55rem 0.7rem;
+    background: #0f1626;
+    border: 1px solid var(--ice);
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+  }
+  .tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .tooltip .tt-title {
+    font-family: var(--display);
+    font-size: 0.95rem;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.2rem;
+  }
+  .tooltip .tt-body {
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <h1>Akasha OS</h1>
+        <span class="ver" id="ver">0.18.0</span>
+        <span class="sub">Preview host architecture</span>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Filter nodes…" autocomplete="off" />
+        <button type="button" id="fit" title="Fit diagram">Fit</button>
+        <button type="button" id="clear-flow" title="Clear flow highlight">Clear flow</button>
+      </div>
+    </header>
+    <div class="main">
+      <div class="stage-wrap">
+        <div class="legend" id="legend"></div>
+        <svg class="stage" id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+        <div class="hint">Drag to pan · scroll/pinch to zoom · hover a node · pick a flow</div>
+      </div>
+      <aside>
+        <div class="aside-head">
+          <h2>Flows</h2>
+          <p>Select a path to highlight every hop on the bus.</p>
+        </div>
+        <div class="flows" id="flows" role="list"></div>
+        <div class="detail" id="detail">
+          <div class="empty">Hover or click a component for details.</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script id="arch-data" type="application/json">{"meta":{"product":"Akasha OS","version":"0.18.0","kind":"preview-host-architecture","generatedFrom":["README.md","docs/technical-specs.md","docs/FEATURES.md","docs/functional-specs.md","adr/0001-microkernel.md","Cargo.toml workspace members","crates/aos-session/src/main.rs boot order"],"notes":"Preview is an installable host app (Windows/Linux/macOS), not a bootable OS. Target bare-metal track is seL4 (ADR 0001). Semantic IPC bus binds daemons at 127.0.0.1:24701."},"nodes":[{"id":"aos-session","label":"aos-session","layer":"supervisor","kind":"binary","crate":"crates/aos-session","description":"Preview session supervisor. Resolves AOS_HOME, writes configs, starts daemons in order, launches egui UI, watchdogs auditd/platformd/modeld, handles updates and clean shutdown.","intents":[],"artifacts":["var/run/*.pid","var/run/*.stderr.log","var/run/onboarding.json"]},{"id":"aos-ui-egui","label":"aos-ui-egui","layer":"surface","kind":"binary","crate":"crates/aos-ui-egui","description":"Primary Preview shell (egui). Chat, Agents, Models, Caps, Settings, DeclUI host for WASM modules (Create, Notes, Tasks, Canvas, Illustration Studio), transparency/activity panels.","intents":["chat.*","module.ui.*","cap.*","settings via platform"],"artifacts":["preferences.json","var/sessions/"]},{"id":"aos-ui","label":"aos-ui (TUI)","layer":"surface","kind":"binary","crate":"crates/aos-ui","description":"Minimal conversational TUI + resource dashboard (ratatui). Dev/debug surface alongside egui.","intents":["infer.*","mem.*"],"artifacts":[]},{"id":"aos-mcpd","label":"aos-mcpd","layer":"surface","kind":"binary","crate":"crates/aos-mcp","description":"Optional stdio MCP façade so external IDEs can call akasha_models / akasha_infer / akasha_mem_* on a running Preview.","intents":["infer.*","mem.*","model.*"],"artifacts":[]},{"id":"website","label":"Public site","layer":"surface","kind":"static","crate":"website/","description":"Static EN/FR marketing + end-user docs on GitHub Pages (azerothl.github.io/akasha-os). Not on the runtime bus.","intents":[],"artifacts":["website/docs/","website/media/"]},{"id":"aos-busd","label":"aos-busd","layer":"bus","kind":"binary","crate":"crates/aos-ipc","description":"Semantic IPC Bus broker (TCP localhost:24701). Typed intents with capability envelopes; CBOR framing. Central nervous system of Preview.","intents":["* (routes)"],"artifacts":["127.0.0.1:24701"]},{"id":"aos-ipc","label":"aos-ipc (lib)","layer":"library","kind":"library","crate":"crates/aos-ipc","description":"Bus client, codec, broker, service registration helpers shared by all daemons and UIs.","intents":[],"artifacts":[]},{"id":"aos-proto","label":"aos-proto","layer":"library","kind":"library","crate":"crates/aos-proto","description":"Shared intent schemas, DeclUI contract, rich module UI types, request/response envelopes.","intents":[],"artifacts":["docs/bridge/*.json schemas"]},{"id":"aos-capkd","label":"aos-capkd","layer":"trust","kind":"binary","crate":"crates/aos-capkd","description":"Capability kernel (P4.2). Single trust application point: mint, derive, grant, revoke, check. Immediate global revoke across processes via the bus.","intents":["cap.mint","cap.derive","cap.grant","cap.revoke","cap.check"],"artifacts":["cap://kernel/<id>"]},{"id":"aos-caps","label":"aos-caps (lib)","layer":"library","kind":"library","crate":"crates/aos-caps","description":"Logical capability model (rights bits, derive/attenuate). Used by capkd and platform fallbacks for WASM/agents.","intents":[],"artifacts":[]},{"id":"aos-auditd","label":"aos-auditd","layer":"trust","kind":"binary","crate":"crates/aos-auditd","description":"Autonomous append-only signed audit journal. Fire-and-forget; killing it does not stop Model or UI.","intents":["audit.append","audit.query","health.* (consumes)"],"artifacts":["var/audit/"]},{"id":"aos-modeld","label":"aos-modeld","layer":"model","kind":"binary","crate":"crates/aos-model","description":"Model subsystem daemon. Local GGUF inference (llama.cpp), media.image/video/TTS packs (sd.cpp / piper), providers (OpenAI-compat + loopback), placement, LAN cluster coordinator, live metrics.","intents":["infer.*","model.load","model.list","media.image.generate","media.*","lan.*"],"artifacts":["etc/modeld.yaml","share/models/","bin/sd*","var/run/lan-pairing.json"]},{"id":"aos-llama","label":"aos-llama","layer":"model","kind":"library","crate":"crates/aos-llama","description":"llama.cpp bindings (CUDA / Metal / CPU). Chat, vision (mtmd), embeddings, prefix cache, speculative decode.","intents":[],"artifacts":[]},{"id":"aos-sd","label":"aos-sd","layer":"model","kind":"library","crate":"crates/aos-sd","description":"Stable Diffusion / LTX media engine wrapper used by modeld for image and short video generation.","intents":[],"artifacts":[]},{"id":"aos-placement","label":"aos-placement","layer":"model","kind":"library","crate":"crates/aos-placement","description":"Hardware-aware model weight placement across RAM / GPU / disk; CPU/GPU hysteresis for unified artefacts.","intents":[],"artifacts":[]},{"id":"aos-registry","label":"aos-registry","layer":"model","kind":"library","crate":"crates/aos-registry","description":"YAML model catalogue and backend descriptors (local packs + provider offerings).","intents":[],"artifacts":["data/models/catalog.yaml","share/models/manifest.json"]},{"id":"aos-platformd","label":"aos-platformd","layer":"platform","kind":"binary","crate":"crates/aos-platform","description":"Platform daemon: semantic FS, Memory V2, chat sessions, WASM module runtime (wasmtime), DeclUI, confirmations, devices, health plane, vault, network egress, feedback, catalogue.","intents":["fs.*","mem.*","chat.session.*","module.*","device.*","web.*","health.*","user.ask"],"artifacts":["etc/platformd.yaml","var/sessions/","var/memory/","share/modules/"]},{"id":"module-rt","label":"WASM Module Runtime","layer":"platform","kind":"runtime","crate":"crates/aos-platform/src/module_rt.rs","description":"Sandboxed wasmtime host. Modules call host_call only (no ambient WASI). Caps gate every tool; DeclUI frames rendered by egui host.","intents":["module.invoke","module.ui.*","host_call"],"artifacts":["*.aospkg","share/modules/catalogue.yaml"]},{"id":"aos-scene","label":"aos-scene","layer":"platform","kind":"library","crate":"crates/aos-scene","description":"SceneGraph edit / locks / apply for Canvas and Illustration Studio. Viewport stays in egui; no wgpu in this crate.","intents":["scene.* (via platform)"],"artifacts":[]},{"id":"aos-agentd","label":"aos-agentd","layer":"agent","kind":"binary","crate":"crates/aos-agent","description":"Agent runtime daemon. Goal loop, skills, tools, MCP client, harness.run (external CLIs), scheduler, salon turns, deep-thinking, trace export. Spawns isolated aos-agent-worker processes.","intents":["agent.*","skill.*","harness.run","mcp.*"],"artifacts":["var/agents/","var/skills/","var/traces/"]},{"id":"aos-agent-worker","label":"aos-agent-worker","layer":"agent","kind":"binary","crate":"crates/aos-agent","description":"Isolated per-agent worker process. Executes tool calls under granted caps; communicates with agentd over the bus.","intents":["tool results → agentd"],"artifacts":[]},{"id":"skills","label":"Skills","layer":"agent","kind":"content","crate":"skills/","description":"MIT-licensed skill packs (deep-thinking, planner, research, notes-writer, file-author, tasks). User skills under var/skills/. Shared frontmatter per ADR 0008.","intents":["skill.pass.consider","skill.load"],"artifacts":["skills/*","var/skills/"]},{"id":"mod-create","label":"Create","layer":"module","kind":"wasm-module","crate":"modules/create","description":"Rich DeclUI image/video workspace. UI state under /documents/create/**; generation via platform media.image.generate service.","intents":["media.image.generate","fs.*","jobs.*"],"artifacts":["share/modules/create.aospkg","/downloads/images|video/"]},{"id":"mod-notes","label":"Notes","layer":"module","kind":"wasm-module","crate":"modules/notes","description":"Human + agent notes with tags, live search, delete. Dual-surface WASM package.","intents":["notes.*","fs.*"],"artifacts":["share/modules/notes.aospkg"]},{"id":"mod-tasks","label":"Tasks","layer":"module","kind":"wasm-module","crate":"modules/tasks","description":"Dual-surface tasks module + Tasks tab. DeclUI package synced on boot.","intents":["tasks.*"],"artifacts":["share/modules/tasks.aospkg"]},{"id":"mod-canvas","label":"Canvas","layer":"module","kind":"wasm-module","crate":"modules/canvas","description":"Layered vector drawing: grid/snap, scenes, guides, PNG/SVG/JSON export, agent geometry validation.","intents":["canvas.*","scene.*"],"artifacts":["share/modules/canvas.aospkg","/downloads/canvas/"]},{"id":"mod-illustration","label":"Illustration Studio","layer":"module","kind":"wasm-module","crate":"modules/illustration-studio","description":"Experimental DeclUI scene editor. wgpu edit viewport ≠ beauty; stub/CPU beauty; optional GPL Blender Renderer Pack.","intents":["scene.*","illustration.*"],"artifacts":["share/modules/illustration-studio.aospkg"]},{"id":"mod-ext-rt","label":"ext-rt","layer":"module","kind":"wasm-module","crate":"modules/ext-rt","description":"Precompiled script-module WASM runtime used by scaffolded guest packages without a full Rust SDK build.","intents":["host_call"],"artifacts":["share/modules/ext-rt.aospkg"]},{"id":"module-sdk","label":"Module SDK","layer":"module","kind":"library","crate":"modules/sdk","description":"Apache-2.0 guest SDK. Rust modules compile against host_call only — no ambient WASI. Separate workspace from host crates.","intents":[],"artifacts":["LICENSE-APACHE"]},{"id":"aos-bridge","label":"aos-bridge","layer":"library","kind":"library","crate":"crates/aos-bridge","description":"Sibling HTTP↔bus contract helpers and schema export (E8). Documents live under docs/bridge/.","intents":[],"artifacts":["docs/bridge/","docs/sibling-bridge.md"]},{"id":"storage-var","label":"var/ (runtime state)","layer":"storage","kind":"filesystem","crate":null,"description":"Mutable Preview home state: sessions, memory, agents, audit, skills, feedback, run pids/logs, LAN pairing.","intents":[],"artifacts":["var/sessions","var/memory","var/audit","var/agents","var/skills","var/feedback","var/run"]},{"id":"storage-share","label":"share/ (read-mostly)","layer":"storage","kind":"filesystem","crate":null,"description":"Shipped models catalogue, signed module catalogue, MCP examples, preview profile.","intents":[],"artifacts":["share/models","share/modules","share/mcp","share/preview-profile.yaml"]},{"id":"host-os","label":"Host OS","layer":"host","kind":"platform","crate":null,"description":"Windows 10/11 x64, Linux x64, or macOS Apple Silicon. Preview scaffold per ADR 0001 — not the final bare-metal product.","intents":[],"artifacts":["AOS_HOME / AgentOS-Preview"]},{"id":"gpu-cpu","label":"GPU / CPU","layer":"host","kind":"hardware","crate":null,"description":"NVIDIA CUDA (Win/Linux) or Metal (macOS) preferred; unified zip also ships aos-modeld-cpu path.","intents":[],"artifacts":["aos-modeld","aos-modeld-cpu"]},{"id":"providers","label":"Cloud / loopback providers","layer":"external","kind":"external","crate":null,"description":"OpenAI-compatible cloud APIs plus local loopback (Ollama / vLLM / LM Studio). API keys in the OS keyring vault.","intents":["provider.* via modeld"],"artifacts":["vault secrets"]},{"id":"network-egress","label":"Network egress","layer":"external","kind":"external","crate":null,"description":"Deny-by-default. Opt-in web.search, web.browse (no JS), web.fetch. JS/SPA via optional browser MCP.","intents":["web.search","web.browse","web.fetch"],"artifacts":["/downloads/fetched/"]},{"id":"external-clis","label":"External coding CLIs","layer":"external","kind":"external","crate":null,"description":"Opt-in harness.run / Agents Advanced Runtime for Codex, Claude, Grok with Steer / Pause / Kill.","intents":["harness.run"],"artifacts":[]},{"id":"sel4-track","label":"seL4 bare-metal track","layer":"future","kind":"target","crate":"crates/aos-sel4-abi, aos-sel4-capkd, vm/","description":"Future product form: machine boots seL4 + Agent OS without Windows/Linux. VM scaffold exists; GPU AccelDevice later (P5.3).","intents":[],"artifacts":["vm/","adr/0001-microkernel.md"]}],"edges":[{"id":"e-session-busd","from":"aos-session","to":"aos-busd","label":"spawns first","kind":"spawn"},{"id":"e-session-capkd","from":"aos-session","to":"aos-capkd","label":"spawns","kind":"spawn"},{"id":"e-session-auditd","from":"aos-session","to":"aos-auditd","label":"spawns + watchdog","kind":"spawn"},{"id":"e-session-modeld","from":"aos-session","to":"aos-modeld","label":"spawns + watchdog","kind":"spawn"},{"id":"e-session-platformd","from":"aos-session","to":"aos-platformd","label":"spawns + watchdog","kind":"spawn"},{"id":"e-session-agentd","from":"aos-session","to":"aos-agentd","label":"spawns","kind":"spawn"},{"id":"e-session-ui","from":"aos-session","to":"aos-ui-egui","label":"launches after healthcheck","kind":"spawn"},{"id":"e-ui-bus","from":"aos-ui-egui","to":"aos-busd","label":"intent client","kind":"ipc"},{"id":"e-tui-bus","from":"aos-ui","to":"aos-busd","label":"intent client","kind":"ipc"},{"id":"e-mcpd-bus","from":"aos-mcpd","to":"aos-busd","label":"stdio → bus","kind":"ipc"},{"id":"e-capkd-bus","from":"aos-capkd","to":"aos-busd","label":"registers cap.*","kind":"ipc"},{"id":"e-auditd-bus","from":"aos-auditd","to":"aos-busd","label":"registers audit.*","kind":"ipc"},{"id":"e-modeld-bus","from":"aos-modeld","to":"aos-busd","label":"registers infer/media/model","kind":"ipc"},{"id":"e-platformd-bus","from":"aos-platformd","to":"aos-busd","label":"registers fs/mem/chat/module/…","kind":"ipc"},{"id":"e-agentd-bus","from":"aos-agentd","to":"aos-busd","label":"registers agent.*","kind":"ipc"},{"id":"e-agentd-worker","from":"aos-agentd","to":"aos-agent-worker","label":"spawns isolated worker","kind":"spawn"},{"id":"e-worker-bus","from":"aos-agent-worker","to":"aos-busd","label":"tool intents","kind":"ipc"},{"id":"e-bus-ipc-lib","from":"aos-busd","to":"aos-ipc","label":"implements","kind":"uses"},{"id":"e-all-proto","from":"aos-busd","to":"aos-proto","label":"typed envelopes","kind":"uses"},{"id":"e-capkd-caps","from":"aos-capkd","to":"aos-caps","label":"rights model","kind":"uses"},{"id":"e-platform-caps-check","from":"aos-platformd","to":"aos-capkd","label":"cap.check on fs/tools","kind":"trust"},{"id":"e-platform-audit","from":"aos-platformd","to":"aos-auditd","label":"audit.append","kind":"audit"},{"id":"e-agent-audit","from":"aos-agentd","to":"aos-auditd","label":"audit.append","kind":"audit"},{"id":"e-modeld-llama","from":"aos-modeld","to":"aos-llama","label":"local LLM/VLM","kind":"uses"},{"id":"e-modeld-sd","from":"aos-modeld","to":"aos-sd","label":"image/video engines","kind":"uses"},{"id":"e-modeld-placement","from":"aos-modeld","to":"aos-placement","label":"weight placement","kind":"uses"},{"id":"e-modeld-registry","from":"aos-modeld","to":"aos-registry","label":"catalogue","kind":"uses"},{"id":"e-llama-gpu","from":"aos-llama","to":"gpu-cpu","label":"CUDA / Metal / CPU","kind":"hardware"},{"id":"e-sd-gpu","from":"aos-sd","to":"gpu-cpu","label":"CUDA / CPU","kind":"hardware"},{"id":"e-modeld-providers","from":"aos-modeld","to":"providers","label":"OpenAI-compat / loopback","kind":"external"},{"id":"e-platform-modules","from":"aos-platformd","to":"module-rt","label":"hosts wasmtime","kind":"contains"},{"id":"e-platform-scene","from":"aos-platformd","to":"aos-scene","label":"SceneGraph","kind":"uses"},{"id":"e-rt-create","from":"module-rt","to":"mod-create","label":"loads","kind":"loads"},{"id":"e-rt-notes","from":"module-rt","to":"mod-notes","label":"loads","kind":"loads"},{"id":"e-rt-tasks","from":"module-rt","to":"mod-tasks","label":"loads","kind":"loads"},{"id":"e-rt-canvas","from":"module-rt","to":"mod-canvas","label":"loads","kind":"loads"},{"id":"e-rt-illustration","from":"module-rt","to":"mod-illustration","label":"loads","kind":"loads"},{"id":"e-rt-ext","from":"module-rt","to":"mod-ext-rt","label":"loads","kind":"loads"},{"id":"e-sdk-modules","from":"module-sdk","to":"mod-create","label":"compiles against","kind":"build"},{"id":"e-ui-declui","from":"aos-ui-egui","to":"module-rt","label":"DeclUI host frames","kind":"ui"},{"id":"e-create-media","from":"mod-create","to":"aos-modeld","label":"media.image.generate","kind":"ipc"},{"id":"e-agent-skills","from":"aos-agentd","to":"skills","label":"loads / offers","kind":"uses"},{"id":"e-agent-infer","from":"aos-agentd","to":"aos-modeld","label":"infer.* via bus","kind":"ipc"},{"id":"e-agent-platform","from":"aos-agentd","to":"aos-platformd","label":"fs/mem/tools via bus","kind":"ipc"},{"id":"e-agent-harness","from":"aos-agentd","to":"external-clis","label":"harness.run","kind":"external"},{"id":"e-platform-net","from":"aos-platformd","to":"network-egress","label":"opt-in web.*","kind":"external"},{"id":"e-platform-var","from":"aos-platformd","to":"storage-var","label":"persists","kind":"storage"},{"id":"e-platform-share","from":"aos-platformd","to":"storage-share","label":"catalogue / packs","kind":"storage"},{"id":"e-modeld-share","from":"aos-modeld","to":"storage-share","label":"GGUF / media weights","kind":"storage"},{"id":"e-audit-var","from":"aos-auditd","to":"storage-var","label":"var/audit","kind":"storage"},{"id":"e-session-host","from":"aos-session","to":"host-os","label":"runs on","kind":"host"},{"id":"e-bridge-docs","from":"aos-bridge","to":"aos-proto","label":"schema export","kind":"uses"},{"id":"e-sel4-future","from":"sel4-track","to":"aos-capkd","label":"replaces TCP caps later","kind":"future"},{"id":"e-website-docs","from":"website","to":"host-os","label":"install docs only","kind":"docs"}],"flows":[{"id":"flow-boot","name":"Preview boot","summary":"aos-session brings up the bus and daemons, healthchecks, then launches the egui shell.","steps":["aos-session","aos-busd","aos-capkd","aos-auditd","aos-modeld","aos-platformd","aos-agentd","aos-ui-egui"]},{"id":"flow-chat-infer","name":"Chat → local inference","summary":"User message in egui becomes an infer intent on the bus; modeld runs llama.cpp on GPU/CPU and streams tokens back.","steps":["aos-ui-egui","aos-busd","aos-platformd","aos-busd","aos-modeld","aos-llama","gpu-cpu","aos-modeld","aos-busd","aos-ui-egui"]},{"id":"flow-chat-provider","name":"Chat → cloud/loopback provider","summary":"When routing selects a provider, modeld forwards the completion to OpenAI-compat or Ollama/vLLM/LM Studio.","steps":["aos-ui-egui","aos-busd","aos-modeld","providers","aos-modeld","aos-busd","aos-ui-egui"]},{"id":"flow-agent-goal","name":"Agent goal loop","summary":"agentd plans with skills, spawns a worker, calls tools via bus under caps, audits actions, may infer via modeld.","steps":["aos-ui-egui","aos-busd","aos-agentd","skills","aos-agent-worker","aos-busd","aos-capkd","aos-platformd","aos-modeld","aos-auditd","aos-ui-egui"]},{"id":"flow-create-image","name":"Create image generation","summary":"Create DeclUI module requests media.image.generate; modeld drives sd.cpp and writes under /downloads/images.","steps":["aos-ui-egui","module-rt","mod-create","aos-busd","aos-modeld","aos-sd","gpu-cpu","storage-var","aos-ui-egui"]},{"id":"flow-module-notes","name":"Notes module host_call","summary":"Notes WASM package issues host_call; platform runtime enforces caps and persists via semantic FS.","steps":["aos-ui-egui","module-rt","mod-notes","aos-platformd","aos-capkd","storage-var","aos-auditd"]},{"id":"flow-canvas-scene","name":"Canvas scene edit","summary":"Canvas module edits SceneGraph through platform/aos-scene; agents can validate geometry over the bus.","steps":["aos-ui-egui","module-rt","mod-canvas","aos-platformd","aos-scene","storage-var"]},{"id":"flow-illustration","name":"Illustration Studio edit","summary":"Experimental studio DeclUI edits scene graph; beauty path is stub/CPU or optional Blender pack — distinct from wgpu edit viewport.","steps":["aos-ui-egui","module-rt","mod-illustration","aos-platformd","aos-scene","storage-var"]},{"id":"flow-cap-revoke","name":"Capability revoke","summary":"User revokes a cap in UI; capkd applies globally; subsequent platform/agent checks fail closed.","steps":["aos-ui-egui","aos-busd","aos-capkd","aos-auditd","aos-platformd","aos-agentd"]},{"id":"flow-memory","name":"Memory remember / recall","summary":"Chat or agent writes Memory V2 (decision journal / mind palace); recall feeds later agent bootstrap. Shadow projection keeps legacy facts in sync.","steps":["aos-ui-egui","aos-busd","aos-platformd","storage-var","aos-agentd"]},{"id":"flow-mcp-ide","name":"IDE via aos-mcpd","summary":"External IDE speaks MCP stdio to aos-mcpd, which translates to bus infer/mem intents on a running Preview.","steps":["aos-mcpd","aos-busd","aos-modeld","aos-platformd","aos-mcpd"]},{"id":"flow-web-search","name":"Opt-in web search","summary":"With network enabled, platformd performs web.search/browse/fetch under egress policy and may audit the access.","steps":["aos-ui-egui","aos-busd","aos-platformd","aos-capkd","network-egress","aos-auditd","storage-var"]},{"id":"flow-harness","name":"External coding CLI harness","summary":"Agents Advanced Runtime starts Codex/Claude/Grok via harness.run with Steer/Pause/Kill controls.","steps":["aos-ui-egui","aos-busd","aos-agentd","external-clis","aos-auditd","aos-ui-egui"]},{"id":"flow-model-load","name":"Model load & placement","summary":"User selects a pack; modeld consults registry + placement, loads GGUF onto GPU/CPU, exposes metrics (TTFT, tok/s, VRAM).","steps":["aos-ui-egui","aos-busd","aos-modeld","aos-registry","aos-placement","storage-share","aos-llama","gpu-cpu"]},{"id":"flow-device-capture","name":"Device capture","summary":"Camera/mic intents require confirmation (Allow once / Always / Deny); artefacts land under var/sessions/<id>/devices/.","steps":["aos-ui-egui","aos-busd","aos-platformd","aos-capkd","host-os","storage-var","aos-auditd"]},{"id":"flow-update","name":"Non-destructive update","summary":"aos-session checks GitHub Releases, stages archive, applies overlay on next restart without wiping user var/.","steps":["aos-session","network-egress","storage-var","host-os","aos-session"]}]}</script>
+<script>
+(() => {
+  const DATA = JSON.parse(document.getElementById("arch-data").textContent);
+  const stage = document.getElementById("stage");
+  const flowsEl = document.getElementById("flows");
+  const detailEl = document.getElementById("detail");
+  const legendEl = document.getElementById("legend");
+  const searchEl = document.getElementById("search");
+  document.getElementById("ver").textContent = DATA.meta.version;
+
+  const LAYER_ORDER = [
+    "surface", "supervisor", "agent", "module", "platform",
+    "bus", "trust", "model", "library", "storage", "host", "external", "future"
+  ];
+  const LAYER_COLOR = {
+    surface: "#5ee7ff",
+    supervisor: "#2ef0c8",
+    agent: "#7cb8ff",
+    module: "#c4a5ff",
+    platform: "#5ee7ff",
+    bus: "#ffb454",
+    trust: "#ff5a48",
+    model: "#2ef0c8",
+    library: "#8a96a8",
+    storage: "#b6e7f2",
+    host: "#8a96a8",
+    external: "#ffb454",
+    future: "#5a6478"
+  };
+
+  LAYER_ORDER.forEach((layer) => {
+    const span = document.createElement("span");
+    span.innerHTML = `<i style="background:${LAYER_COLOR[layer]}"></i>${layer}`;
+    legendEl.appendChild(span);
+  });
+
+  const byId = Object.fromEntries(DATA.nodes.map((n) => [n.id, n]));
+  const NODE_W = 148;
+  const NODE_H = 44;
+  const COL_GAP = 28;
+  const ROW_GAP = 22;
+  const LAYER_GAP = 56;
+  const PAD_X = 48;
+  const PAD_Y = 72;
+
+  // Layout: columns = layers, rows = nodes in layer
+  const layout = {};
+  let x = PAD_X;
+  const layerXs = {};
+  LAYER_ORDER.forEach((layer) => {
+    const nodes = DATA.nodes.filter((n) => n.layer === layer);
+    layerXs[layer] = x;
+    nodes.forEach((n, i) => {
+      layout[n.id] = {
+        x,
+        y: PAD_Y + i * (NODE_H + ROW_GAP),
+        w: NODE_W,
+        h: NODE_H,
+        cx: x + NODE_W / 2,
+        cy: PAD_Y + i * (NODE_H + ROW_GAP) + NODE_H / 2,
+        layer
+      };
+    });
+    if (nodes.length) x += NODE_W + LAYER_GAP;
+  });
+  // Place any node with unknown layer
+  DATA.nodes.forEach((n) => {
+    if (!layout[n.id]) {
+      layout[n.id] = { x, y: PAD_Y, w: NODE_W, h: NODE_H, cx: x + NODE_W / 2, cy: PAD_Y + NODE_H / 2, layer: n.layer };
+      x += NODE_W + LAYER_GAP;
+    }
+  });
+
+  const worldW = x + PAD_X;
+  const maxY = Math.max(...Object.values(layout).map((p) => p.y + p.h));
+  const worldH = maxY + PAD_Y;
+
+  const ns = "http://www.w3.org/2000/svg";
+  const gRoot = document.createElementNS(ns, "g");
+  gRoot.setAttribute("id", "viewport");
+  stage.appendChild(gRoot);
+
+  // Layer labels
+  const gBands = document.createElementNS(ns, "g");
+  gBands.setAttribute("class", "layer-band");
+  LAYER_ORDER.forEach((layer) => {
+    if (!(layer in layerXs)) return;
+    const t = document.createElementNS(ns, "text");
+    t.setAttribute("x", layerXs[layer]);
+    t.setAttribute("y", 36);
+    t.textContent = layer;
+    gBands.appendChild(t);
+  });
+  gRoot.appendChild(gBands);
+
+  function edgePath(a, b) {
+    const dx = Math.abs(b.cx - a.cx);
+    const curve = Math.min(80, dx * 0.35);
+    const midX = (a.cx + b.cx) / 2;
+    // Orthogonal-ish cubic
+    return `M ${a.cx} ${a.cy} C ${a.cx + curve} ${a.cy}, ${b.cx - curve} ${b.cy}, ${b.cx} ${b.cy}`;
+  }
+
+  const gEdges = document.createElementNS(ns, "g");
+  gRoot.appendChild(gEdges);
+  const edgeEls = {};
+
+  DATA.edges.forEach((e) => {
+    const a = layout[e.from];
+    const b = layout[e.to];
+    if (!a || !b) return;
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("class", "edge");
+    path.setAttribute("d", edgePath(a, b));
+    path.dataset.id = e.id;
+    path.dataset.from = e.from;
+    path.dataset.to = e.to;
+    gEdges.appendChild(path);
+    edgeEls[e.id] = path;
+
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("class", "edge-label");
+    label.setAttribute("x", (a.cx + b.cx) / 2);
+    label.setAttribute("y", (a.cy + b.cy) / 2 - 6);
+    label.setAttribute("text-anchor", "middle");
+    label.textContent = e.label || "";
+    gEdges.appendChild(label);
+  });
+
+  const gNodes = document.createElementNS(ns, "g");
+  gRoot.appendChild(gNodes);
+  const nodeEls = {};
+
+  DATA.nodes.forEach((n) => {
+    const p = layout[n.id];
+    const g = document.createElementNS(ns, "g");
+    g.setAttribute("class", "node");
+    g.dataset.id = n.id;
+    g.setAttribute("transform", `translate(${p.x},${p.y})`);
+
+    const color = LAYER_COLOR[n.layer] || "#8a96a8";
+    const rect = document.createElementNS(ns, "rect");
+    rect.setAttribute("width", NODE_W);
+    rect.setAttribute("height", NODE_H);
+    rect.setAttribute("rx", 2);
+    rect.setAttribute("ry", 2);
+    rect.setAttribute("fill", "#0f1626");
+    rect.setAttribute("stroke", color);
+    g.appendChild(rect);
+
+    const accent = document.createElementNS(ns, "rect");
+    accent.setAttribute("width", 3);
+    accent.setAttribute("height", NODE_H);
+    accent.setAttribute("fill", color);
+    g.appendChild(accent);
+
+    const title = document.createElementNS(ns, "text");
+    title.setAttribute("x", 12);
+    title.setAttribute("y", 18);
+    const short = n.label.length > 20 ? n.label.slice(0, 18) + "…" : n.label;
+    title.textContent = short;
+    g.appendChild(title);
+
+    const sub = document.createElementNS(ns, "text");
+    sub.setAttribute("class", "sub");
+    sub.setAttribute("x", 12);
+    sub.setAttribute("y", 34);
+    sub.textContent = n.kind;
+    g.appendChild(sub);
+
+    g.addEventListener("pointerenter", (ev) => onHover(n.id, true, ev));
+    g.addEventListener("pointermove", (ev) => { if (hoverNode === n.id) placeTooltip(ev.clientX, ev.clientY, byId[n.id]); });
+    g.addEventListener("pointerleave", () => onHover(n.id, false));
+    g.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      selectNode(n.id);
+    });
+
+    gNodes.appendChild(g);
+    nodeEls[n.id] = g;
+  });
+
+  let selectedFlow = null;
+  let selectedNode = null;
+  let hoverNode = null;
+  let filterQ = "";
+
+  function renderDetail(node) {
+    if (!node) {
+      detailEl.innerHTML = `<div class="empty">Hover or click a component for details.</div>`;
+      return;
+    }
+    const intents = (node.intents || []).slice(0, 6).map((i) => `<span class="chip">${escapeHtml(i)}</span>`).join("");
+    detailEl.innerHTML = `
+      <div class="kicker">${escapeHtml(node.layer)} · ${escapeHtml(node.kind)}</div>
+      <h3>${escapeHtml(node.label)}</h3>
+      <div class="meta-row">
+        ${node.crate ? `<span class="chip">${escapeHtml(node.crate)}</span>` : ""}
+        <span class="chip">${escapeHtml(node.id)}</span>
+      </div>
+      <p>${escapeHtml(node.description)}</p>
+      ${intents ? `<div class="meta-row" style="margin-top:0.55rem">${intents}</div>` : ""}
+    `;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function flowNodeSet(flow) {
+    return new Set(flow.steps);
+  }
+
+  const gHops = document.createElementNS(ns, "g");
+  gHops.setAttribute("id", "flow-hops");
+  gRoot.insertBefore(gHops, gNodes);
+
+  function flowEdgeIds(flow) {
+    const ids = new Set();
+    const missing = [];
+    const steps = flow.steps;
+    for (let i = 0; i < steps.length - 1; i++) {
+      const a = steps[i], b = steps[i + 1];
+      if (a === b) continue;
+      const direct = DATA.edges.filter((e) =>
+        (e.from === a && e.to === b) || (e.from === b && e.to === a)
+      );
+      if (direct.length) direct.forEach((e) => ids.add(e.id));
+      else missing.push([a, b]);
+    }
+    return { ids, missing };
+  }
+
+  function clearHops() {
+    while (gHops.firstChild) gHops.removeChild(gHops.firstChild);
+    Object.values(nodeEls).forEach((el) => {
+      el.querySelectorAll("[data-step-badge]").forEach((n) => n.remove());
+    });
+  }
+
+  function drawHops(missing) {
+    missing.forEach(([a, b]) => {
+      const pa = layout[a], pb = layout[b];
+      if (!pa || !pb) return;
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("class", "edge flow-hop");
+      path.setAttribute("d", edgePath(pa, pb));
+      gHops.appendChild(path);
+    });
+  }
+
+  function drawStepBadges(flow) {
+    const seen = new Map();
+    flow.steps.forEach((id, idx) => {
+      if (!nodeEls[id]) return;
+      if (!seen.has(id)) seen.set(id, []);
+      seen.get(id).push(idx + 1);
+    });
+    seen.forEach((nums, id) => {
+      const el = nodeEls[id];
+      const label = nums.join(",");
+      const bg = document.createElementNS(ns, "rect");
+      bg.setAttribute("data-step-badge", "1");
+      bg.setAttribute("class", "step-badge-bg");
+      bg.setAttribute("x", NODE_W - 22);
+      bg.setAttribute("y", -8);
+      bg.setAttribute("width", Math.max(18, 8 + label.length * 6));
+      bg.setAttribute("height", 14);
+      bg.setAttribute("rx", 2);
+      const t = document.createElementNS(ns, "text");
+      t.setAttribute("data-step-badge", "1");
+      t.setAttribute("class", "step-badge");
+      t.setAttribute("x", NODE_W - 13);
+      t.setAttribute("y", 2);
+      t.setAttribute("text-anchor", "middle");
+      t.textContent = label;
+      el.appendChild(bg);
+      el.appendChild(t);
+    });
+  }
+
+  function applyHighlight() {
+    const q = filterQ.trim().toLowerCase();
+    const flowNodes = selectedFlow ? flowNodeSet(selectedFlow) : null;
+    const edgeInfo = selectedFlow ? flowEdgeIds(selectedFlow) : null;
+    const flowEdges = edgeInfo ? edgeInfo.ids : null;
+
+    clearHops();
+    if (edgeInfo) {
+      drawHops(edgeInfo.missing);
+      drawStepBadges(selectedFlow);
+    }
+
+    Object.entries(nodeEls).forEach(([id, el]) => {
+      el.classList.remove("dim", "hl", "hover", "selected");
+      const n = byId[id];
+      const matchQ = !q || n.label.toLowerCase().includes(q) || n.id.includes(q) || (n.crate || "").toLowerCase().includes(q);
+      if (!matchQ) {
+        el.classList.add("dim");
+        return;
+      }
+      if (flowNodes) {
+        if (flowNodes.has(id)) el.classList.add("hl");
+        else el.classList.add("dim");
+      }
+      if (hoverNode === id) el.classList.add("hover");
+      if (selectedNode === id) el.classList.add("selected");
+    });
+
+    Object.entries(edgeEls).forEach(([id, el]) => {
+      el.classList.remove("dim", "hl");
+      if (flowEdges) {
+        if (flowEdges.has(id)) el.classList.add("hl");
+        else el.classList.add("dim");
+      }
+    });
+  }
+
+  const tooltipEl = document.getElementById("tooltip");
+  const stageWrap = document.querySelector(".stage-wrap");
+
+  function showFlowDetail(flow) {
+    if (!flow) return;
+    detailEl.innerHTML = `
+      <div class="kicker">Flow</div>
+      <h3>${escapeHtml(flow.name)}</h3>
+      <p>${escapeHtml(flow.summary)}</p>
+      <p style="margin-top:0.55rem"><code>${escapeHtml(flow.steps.join(" → "))}</code></p>
+    `;
+  }
+
+  function placeTooltip(clientX, clientY, node) {
+    if (!node) {
+      tooltipEl.classList.remove("visible");
+      tooltipEl.hidden = true;
+      return;
+    }
+    tooltipEl.hidden = false;
+    tooltipEl.innerHTML = `<div class="tt-title">${escapeHtml(node.label)}</div><div class="tt-body">${escapeHtml(node.description.slice(0, 180))}${node.description.length > 180 ? "…" : ""}</div>`;
+    const wrap = stageWrap.getBoundingClientRect();
+    let left = clientX - wrap.left + 14;
+    let top = clientY - wrap.top + 14;
+    tooltipEl.style.left = "0px";
+    tooltipEl.style.top = "0px";
+    tooltipEl.classList.add("visible");
+    const tw = tooltipEl.offsetWidth;
+    const th = tooltipEl.offsetHeight;
+    if (left + tw > wrap.width - 8) left = clientX - wrap.left - tw - 12;
+    if (top + th > wrap.height - 8) top = clientY - wrap.top - th - 12;
+    tooltipEl.style.left = Math.max(8, left) + "px";
+    tooltipEl.style.top = Math.max(8, top) + "px";
+  }
+
+  function onHover(id, on, evt) {
+    hoverNode = on ? id : null;
+    if (on) {
+      renderDetail(byId[id]);
+      if (evt) placeTooltip(evt.clientX, evt.clientY, byId[id]);
+    } else {
+      placeTooltip(0, 0, null);
+      if (selectedNode) renderDetail(byId[selectedNode]);
+      else if (selectedFlow) showFlowDetail(selectedFlow);
+      else renderDetail(null);
+    }
+    applyHighlight();
+  }
+
+  function selectNode(id) {
+    selectedNode = selectedNode === id ? null : id;
+    if (selectedNode) renderDetail(byId[selectedNode]);
+    else if (selectedFlow) showFlowDetail(selectedFlow);
+    else renderDetail(null);
+    applyHighlight();
+  }
+
+  // Flows panel
+  DATA.flows.forEach((f) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "flow";
+    btn.setAttribute("role", "listitem");
+    btn.innerHTML = `
+      <span class="name">${escapeHtml(f.name)}</span>
+      <span class="sum">${escapeHtml(f.summary)}</span>
+      <span class="steps-count">${f.steps.length} steps</span>
+    `;
+    btn.addEventListener("click", () => {
+      if (selectedFlow && selectedFlow.id === f.id) {
+        selectedFlow = null;
+        btn.classList.remove("selected");
+      } else {
+        selectedFlow = f;
+        [...flowsEl.querySelectorAll(".flow")].forEach((b) => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        // Show flow summary in detail if no node selected
+        if (!selectedNode) showFlowDetail(f);
+      }
+      applyHighlight();
+    });
+    flowsEl.appendChild(btn);
+  });
+
+  document.getElementById("clear-flow").addEventListener("click", () => {
+    selectedFlow = null;
+    [...flowsEl.querySelectorAll(".flow")].forEach((b) => b.classList.remove("selected"));
+    applyHighlight();
+    if (!selectedNode && !hoverNode) renderDetail(null);
+  });
+
+  searchEl.addEventListener("input", () => {
+    filterQ = searchEl.value;
+    applyHighlight();
+  });
+
+  // Pan / zoom
+  let scale = 1;
+  let tx = 20;
+  let ty = 10;
+  function applyView() {
+    gRoot.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+  }
+  function fit() {
+    const rect = stage.getBoundingClientRect();
+    const sx = (rect.width - 40) / worldW;
+    const sy = (rect.height - 40) / worldH;
+    scale = Math.min(1.15, Math.max(0.35, Math.min(sx, sy)));
+    tx = (rect.width - worldW * scale) / 2;
+    ty = Math.max(8, (rect.height - worldH * scale) / 2);
+    applyView();
+  }
+  document.getElementById("fit").addEventListener("click", fit);
+
+  let dragging = false;
+  let dragReady = false;
+  let lastX = 0, lastY = 0;
+  let downX = 0, downY = 0;
+  stage.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    // Do not steal pointer from nodes — only pan from empty canvas / edges.
+    if (e.target.closest && e.target.closest(".node")) return;
+    dragReady = true;
+    dragging = false;
+    downX = lastX = e.clientX;
+    downY = lastY = e.clientY;
+    stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (!dragReady && !dragging) return;
+    const dx = e.clientX - downX;
+    const dy = e.clientY - downY;
+    if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      dragging = true;
+      stage.classList.add("dragging");
+    }
+    if (!dragging) return;
+    tx += e.clientX - lastX;
+    ty += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    applyView();
+  });
+  const endDrag = () => {
+    dragReady = false;
+    dragging = false;
+    stage.classList.remove("dragging");
+  };
+  stage.addEventListener("pointerup", endDrag);
+  stage.addEventListener("pointercancel", endDrag);
+  stage.addEventListener("lostpointercapture", endDrag);
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const rect = stage.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const before = scale;
+    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+    scale = Math.min(2.4, Math.max(0.25, scale * delta));
+    tx = mx - (mx - tx) * (scale / before);
+    ty = my - (my - ty) * (scale / before);
+    applyView();
+  }, { passive: false });
+
+  window.addEventListener("resize", () => fit());
+  fit();
+  applyHighlight();
+})();
+</script>
+</body>
+</html>
