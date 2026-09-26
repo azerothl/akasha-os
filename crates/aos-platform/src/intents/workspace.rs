@@ -1,0 +1,280 @@
+//! Intents `workspace.*` + stubs `fs.search` / `code.search` / `fs.apply_patch` (#247 P0).
+
+use crate::subsystem::PlatformSubsystem;
+use crate::workspace::WorkspaceError;
+use aos_ipc::BusService;
+use aos_proto::host_folder::looks_like_host_path;
+use aos_proto::workspace::intents;
+use aos_proto::{
+    AuditAppendRequest, FsApplyPatchRequest, FsApplyPatchResponse, FsSearchRequest,
+    FsSearchResponse, WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceListRequest,
+    WorkspaceListResponse, WorkspaceUnbindRequest, WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES,
+    FS_SEARCH_MAX_LIMIT,
+};
+use std::sync::Arc;
+
+pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
+    {
+        let s = sub.clone();
+        svc.on(intents::BIND, move |ctx| {
+            let s = s.clone();
+            async move {
+                let mut req = match ctx.payload::<WorkspaceBindRequest>() {
+                    Ok(mut req) => {
+                        if ctx.intent.from.starts_with("agent:") {
+                            req.agent_id = ctx.intent.from.clone();
+                        }
+                        req
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if req.agent_id.is_empty() {
+                    req.agent_id = ctx.intent.from.clone();
+                }
+                if !looks_like_host_path(&req.host_path) {
+                    let _ = ctx
+                        .respond(
+                            aos_ipc::msg::Status::Ok,
+                            &WorkspaceBindResponse {
+                                ok: false,
+                                workspace_id: None,
+                                vfs_root: None,
+                                host_path: None,
+                                caps: vec![],
+                                message: Some(
+                                    "chemin hôte invalide — dossier disque absolu requis".into(),
+                                ),
+                            },
+                        )
+                        .await;
+                    return;
+                }
+
+                let result = {
+                    let mut mgr = s.workspaces.lock().unwrap();
+                    mgr.bind(
+                        &req.host_path,
+                        req.workspace_id.as_deref(),
+                        &req.agent_id,
+                    )
+                };
+
+                match result {
+                    Ok(info) => {
+                        if req.grant_persistent {
+                            let folder_key = aos_proto::normalize_folder_key(&info.host_path);
+                            let _ = s
+                                .host_folders
+                                .lock()
+                                .unwrap()
+                                .grant_persistent(&req.agent_id, &folder_key);
+                        }
+                        s.audit(AuditAppendRequest {
+                            trace_id: req.trace_id.clone(),
+                            actor: req.agent_id.clone(),
+                            action: "workspace.bind".into(),
+                            target: info.display_name.clone(),
+                            detail: serde_json::json!({
+                                "workspace_id": info.workspace_id,
+                                "vfs_root": info.vfs_root,
+                            }),
+                        });
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &WorkspaceBindResponse {
+                                    ok: true,
+                                    workspace_id: Some(info.workspace_id),
+                                    vfs_root: Some(info.vfs_root),
+                                    host_path: Some(info.host_path),
+                                    caps: info.caps,
+                                    message: None,
+                                },
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &WorkspaceBindResponse {
+                                    ok: false,
+                                    workspace_id: None,
+                                    vfs_root: None,
+                                    host_path: None,
+                                    caps: vec![],
+                                    message: Some(e.to_string()),
+                                },
+                            )
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let s = sub.clone();
+        svc.on(intents::UNBIND, move |ctx| {
+            let s = s.clone();
+            async move {
+                let mut req = match ctx.payload::<WorkspaceUnbindRequest>() {
+                    Ok(mut req) => {
+                        if ctx.intent.from.starts_with("agent:") {
+                            req.agent_id = ctx.intent.from.clone();
+                        }
+                        req
+                    }
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if req.agent_id.is_empty() {
+                    req.agent_id = ctx.intent.from.clone();
+                }
+                let result = {
+                    let mut mgr = s.workspaces.lock().unwrap();
+                    mgr.unbind(&req.workspace_id, &req.agent_id)
+                };
+                match result {
+                    Ok(()) => {
+                        s.audit(AuditAppendRequest {
+                            trace_id: req.trace_id.clone(),
+                            actor: req.agent_id,
+                            action: "workspace.unbind".into(),
+                            target: req.workspace_id,
+                            detail: serde_json::json!({}),
+                        });
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &WorkspaceUnbindResponse {
+                                    ok: true,
+                                    message: None,
+                                },
+                            )
+                            .await;
+                    }
+                    Err(WorkspaceError::NotFound(id)) => {
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &WorkspaceUnbindResponse {
+                                    ok: false,
+                                    message: Some(format!("workspace inconnu: {id}")),
+                                },
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = ctx
+                            .respond(
+                                aos_ipc::msg::Status::Ok,
+                                &WorkspaceUnbindResponse {
+                                    ok: false,
+                                    message: Some(e.to_string()),
+                                },
+                            )
+                            .await;
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let s = sub.clone();
+        svc.on(intents::LIST, move |ctx| {
+            let s = s.clone();
+            async move {
+                let req = match ctx.payload::<WorkspaceListRequest>() {
+                    Ok(mut req) => {
+                        if req.agent_id.is_empty() && ctx.intent.from.starts_with("agent:") {
+                            req.agent_id = ctx.intent.from.clone();
+                        }
+                        req
+                    }
+                    Err(_) => WorkspaceListRequest {
+                        agent_id: ctx.intent.from.clone(),
+                    },
+                };
+                let bindings = s.workspaces.lock().unwrap().list(&req.agent_id);
+                let _ = ctx
+                    .respond(aos_ipc::msg::Status::Ok, &WorkspaceListResponse { bindings })
+                    .await;
+            }
+        });
+    }
+
+    // DA.2 / DA.3 stubs — contracts exist; execution not enabled yet.
+    register_search_stub(svc, intents::FS_SEARCH);
+    register_search_stub(svc, intents::CODE_SEARCH);
+    {
+        svc.on(intents::APPLY_PATCH, move |ctx| async move {
+            let req = match ctx.payload::<FsApplyPatchRequest>() {
+                Ok(req) => req,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            let msg = if req.hunks.len() > APPLY_PATCH_MAX_FILES {
+                format!(
+                    "fs.apply_patch: trop de fichiers (max {APPLY_PATCH_MAX_FILES}); \
+exécution DA.3 pas encore activée"
+                )
+            } else {
+                "fs.apply_patch: pas encore activé (Preview 0.19 DA.3 — contrat figé)".into()
+            };
+            let _ = ctx
+                .respond(
+                    aos_ipc::msg::Status::Ok,
+                    &FsApplyPatchResponse {
+                        ok: false,
+                        applied: vec![],
+                        undo_group_id: req.undo_group_id,
+                        message: Some(msg),
+                    },
+                )
+                .await;
+        });
+    }
+}
+
+fn register_search_stub(svc: &mut BusService, intent: &'static str) {
+    svc.on(intent, move |ctx| async move {
+        let req = match ctx.payload::<FsSearchRequest>() {
+            Ok(req) => req,
+            Err(_) => {
+                let _ = ctx
+                    .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                    .await;
+                return;
+            }
+        };
+        let limit = req.limit.min(FS_SEARCH_MAX_LIMIT);
+        let _ = ctx
+            .respond(
+                aos_ipc::msg::Status::Ok,
+                &FsSearchResponse {
+                    ok: false,
+                    hits: vec![],
+                    truncated: false,
+                    message: Some(format!(
+                        "{intent}: pas encore activé (Preview 0.19 DA.2 — limit≤{limit}, contrat figé)"
+                    )),
+                },
+            )
+            .await;
+    });
+}

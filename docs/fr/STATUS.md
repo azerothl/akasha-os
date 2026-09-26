@@ -26,16 +26,16 @@ Dev-assistant **P0** (`workspace.bind` / search / patch) ; fermeture cohorte
 PC ; Horizon C / PV.4+ quand planifié ; E9 hard-green après un run 2 GPU
 documenté.
 
-## P21 — Preview 0.19.0 (planifié) — daemon serveur + Dev-assistant P0
+## P21 — Preview 0.19.0 (en cours) — daemon serveur + Dev-assistant P0
 
-Pas démarré tant que les artefacts / honesty **0.18.0** ne sont pas clos. Ne
-**pas** inventer un numéro P6 (PC encore ouverte). Pas de nouvel E* pour ces
-tracks hôte.
+**0.18.0** livré ; fondations Track B (#247) démarrées. Ne **pas** inventer un
+numéro P6 (PC encore ouverte). Pas de nouvel E* pour ces tracks hôte. L’API
+bind est agent/développeur ; ripgrep/patch pas encore complets côté UX.
 
 | # | Élément | État |
 |---|---------|------|
 | P21 / #403 | **`aos-serverd`** — arbre headless, watchdogs (dont agentd), intake jobs agents local ; ADR 0012 session vs serverd | planifié |
-| P21 / #247 | **Dev-assistant P0** — `workspace.bind`, `fs.search` borné, `fs.apply_patch`, contrat module documenté (P1–P2 reportés) | planifié |
+| P21 / #247 | **Dev-assistant P0** — `workspace.bind` / list / unbind + caps live ; contrats `fs.search` / `fs.apply_patch` stubbés ; [dev-assistant-p0.md](../dev-assistant-p0.md) | **en cours** |
 
 Séquence : MVP serverd (feature du tag) d’abord ou en parallèle de #247 P0
 dès que le travail caps/FS hôte est libre ; #247 P1–P2 (git / `process.run` /

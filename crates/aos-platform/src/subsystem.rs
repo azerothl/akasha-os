@@ -144,6 +144,8 @@ pub struct PlatformSubsystem {
     pub usb: Mutex<crate::device_usb::UsbIoManager>,
     /// Grants dossiers hôtes hors sandbox (issue #157).
     pub host_folders: Mutex<crate::host_folder::HostFolderGrantManager>,
+    /// Named host workspaces `/host/<id>/**` (#247 P0).
+    pub workspaces: Mutex<crate::workspace::WorkspaceBindManager>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -230,6 +232,8 @@ impl PlatformSubsystem {
             .map_err(|e| e.to_string())?;
         let host_folders = crate::host_folder::HostFolderGrantManager::open(&config.sessions_dir)
             .map_err(|e| e.to_string())?;
+        let workspaces = crate::workspace::WorkspaceBindManager::open(&config.sessions_dir)
+            .map_err(|e| e.to_string())?;
         let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
@@ -256,6 +260,7 @@ impl PlatformSubsystem {
             devices: Mutex::new(devices),
             usb: Mutex::new(usb),
             host_folders: Mutex::new(host_folders),
+            workspaces: Mutex::new(workspaces),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),
