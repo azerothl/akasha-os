@@ -1,4 +1,4 @@
-//! Intents `workspace.*` + stubs `fs.search` / `code.search` / `fs.apply_patch` (#247 P0).
+//! Intents `workspace.*` + `fs.search` / `fs.apply_patch` (#247 P0).
 
 use crate::subsystem::PlatformSubsystem;
 use crate::workspace::WorkspaceError;
@@ -6,9 +6,9 @@ use aos_ipc::BusService;
 use aos_proto::host_folder::looks_like_host_path;
 use aos_proto::workspace::intents;
 use aos_proto::{
-    AuditAppendRequest, FsApplyPatchRequest, FsApplyPatchResponse, FsSearchRequest,
+    AuditAppendRequest, FsApplyPatchRequest, FsSearchRequest, FsUndoPatchRequest,
     WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceListRequest, WorkspaceListResponse,
-    WorkspaceUnbindRequest, WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES,
+    WorkspaceUnbindRequest, WorkspaceUnbindResponse,
 };
 use std::sync::Arc;
 
@@ -213,39 +213,89 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
         });
     }
 
-    // DA.2 live search; DA.3 patch still stubbed.
+    // DA.2 search + DA.3 patch; 
     register_search(svc, sub.clone(), intents::FS_SEARCH);
     register_search(svc, sub.clone(), intents::CODE_SEARCH);
     {
-        svc.on(intents::APPLY_PATCH, move |ctx| async move {
-            let req = match ctx.payload::<FsApplyPatchRequest>() {
-                Ok(req) => req,
-                Err(_) => {
-                    let _ = ctx
-                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
-                        .await;
-                    return;
+        let s = sub.clone();
+        svc.on(intents::APPLY_PATCH, move |ctx| {
+            let s = s.clone();
+            async move {
+                let mut req = match ctx.payload::<FsApplyPatchRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if req.actor.is_empty() && ctx.intent.from.starts_with("agent:") {
+                    req.actor = ctx.intent.from.clone();
                 }
-            };
-            let msg = if req.hunks.len() > APPLY_PATCH_MAX_FILES {
-                format!(
-                    "fs.apply_patch: trop de fichiers (max {APPLY_PATCH_MAX_FILES}); \
-exécution DA.3 pas encore activée"
-                )
-            } else {
-                "fs.apply_patch: pas encore activé (Preview 0.19 DA.3 — contrat figé)".into()
-            };
-            let _ = ctx
-                .respond(
-                    aos_ipc::msg::Status::Ok,
-                    &FsApplyPatchResponse {
-                        ok: false,
-                        applied: vec![],
-                        undo_group_id: req.undo_group_id,
-                        message: Some(msg),
-                    },
-                )
-                .await;
+                if req.caps.is_empty() && !req.actor.is_empty() {
+                    if let Some(granted) = s.granted_caps.lock().unwrap().get(&req.actor) {
+                        req.caps = granted.clone();
+                    }
+                }
+                let resp = {
+                    let binds = s.workspaces.lock().unwrap();
+                    let mut patches = s.workspace_patches.lock().unwrap();
+                    patches.apply(&binds, &req)
+                };
+                if resp.ok {
+                    s.audit(AuditAppendRequest {
+                        trace_id: req.trace_id.clone(),
+                        actor: req.actor.clone(),
+                        action: "fs.apply_patch".into(),
+                        target: resp.undo_group_id.clone().unwrap_or_default(),
+                        detail: serde_json::json!({
+                            "applied": resp.applied.len(),
+                            "paths": resp.applied,
+                        }),
+                    });
+                }
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+            }
+        });
+    }
+    {
+        let s = sub.clone();
+        svc.on(intents::UNDO_PATCH, move |ctx| {
+            let s = s.clone();
+            async move {
+                let mut req = match ctx.payload::<FsUndoPatchRequest>() {
+                    Ok(req) => req,
+                    Err(_) => {
+                        let _ = ctx
+                            .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                            .await;
+                        return;
+                    }
+                };
+                if req.actor.is_empty() && ctx.intent.from.starts_with("agent:") {
+                    req.actor = ctx.intent.from.clone();
+                }
+                if req.caps.is_empty() && !req.actor.is_empty() {
+                    if let Some(granted) = s.granted_caps.lock().unwrap().get(&req.actor) {
+                        req.caps = granted.clone();
+                    }
+                }
+                let resp = {
+                    let mut patches = s.workspace_patches.lock().unwrap();
+                    patches.undo(&req)
+                };
+                if resp.ok {
+                    s.audit(AuditAppendRequest {
+                        trace_id: req.trace_id.clone(),
+                        actor: req.actor.clone(),
+                        action: "fs.undo_patch".into(),
+                        target: req.undo_group_id.clone(),
+                        detail: serde_json::json!({ "restored": resp.restored.len() }),
+                    });
+                }
+                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+            }
         });
     }
 }

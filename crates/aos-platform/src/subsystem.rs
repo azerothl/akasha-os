@@ -146,6 +146,8 @@ pub struct PlatformSubsystem {
     pub host_folders: Mutex<crate::host_folder::HostFolderGrantManager>,
     /// Named host workspaces `/host/<id>/**` (#247 P0).
     pub workspaces: Mutex<crate::workspace::WorkspaceBindManager>,
+    /// Multi-file patch undo groups (#247 DA.3).
+    pub workspace_patches: Mutex<crate::workspace_patch::WorkspacePatchManager>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -234,6 +236,9 @@ impl PlatformSubsystem {
             .map_err(|e| e.to_string())?;
         let workspaces = crate::workspace::WorkspaceBindManager::open(&config.sessions_dir)
             .map_err(|e| e.to_string())?;
+        let workspace_patches =
+            crate::workspace_patch::WorkspacePatchManager::open(&config.sessions_dir)
+                .map_err(|e| e.to_string())?;
         let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
@@ -261,6 +266,7 @@ impl PlatformSubsystem {
             usb: Mutex::new(usb),
             host_folders: Mutex::new(host_folders),
             workspaces: Mutex::new(workspaces),
+            workspace_patches: Mutex::new(workspace_patches),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),

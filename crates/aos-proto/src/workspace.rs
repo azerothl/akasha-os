@@ -16,6 +16,7 @@ pub mod intents {
     pub const FS_SEARCH: &str = "fs.search";
     pub const CODE_SEARCH: &str = "code.search";
     pub const APPLY_PATCH: &str = "fs.apply_patch";
+    pub const UNDO_PATCH: &str = "fs.undo_patch";
 }
 
 /// Logical VFS prefix for a bound host workspace: `/host/<id>`.
@@ -260,6 +261,26 @@ pub struct FsApplyPatchResponse {
     pub applied: Vec<String>,
     #[serde(default)]
     pub undo_group_id: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FsUndoPatchRequest {
+    pub undo_group_id: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FsUndoPatchResponse {
+    pub ok: bool,
+    #[serde(default)]
+    pub restored: Vec<String>,
     #[serde(default)]
     pub message: Option<String>,
 }

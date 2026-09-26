@@ -1,7 +1,7 @@
 # Dev Assistant P0 — module contract (Preview 0.19 / #247)
 
 **Language:** English | Français (follow-up)  
-**Status:** DA.1 bind + DA.2 search live; DA.3–DA.4 stubs  
+**Status:** DA.1–DA.3 live; DA.4 draft  
 **Tracking:** [issue #247](https://github.com/azerothl/akasha-os/issues/247)
 
 ## Goal
@@ -15,7 +15,7 @@ without turning Preview into a full IDE (P1–P2 stay 0.20+).
 |--------|-----|--------|
 | `workspace.bind` / `unbind` / `list` | DA.1 | **Live** — persists under `sessions/workspace-bindings.json`; returns caps `fs.read/write:/host/<id>/**` |
 | `fs.search` / `code.search` | DA.2 | **Live** — bounded ripgrep (`rg`) with walk fallback; requires `fs.read:/host/<id>/**`; limit ≤ 200 |
-| `fs.apply_patch` | DA.3 | Contract frozen (max 32 files / undo group); not executed yet |
+| `fs.apply_patch` / `fs.undo_patch` | DA.3 | **Live** — replace_all or unified diff; multi-file undo groups in `sessions/workspace-patch-undo.json` |
 
 Logical VFS root for a bind: `/host/<id>/…` mapped to the absolute host folder.
 

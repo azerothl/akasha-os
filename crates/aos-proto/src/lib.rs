@@ -103,9 +103,10 @@ pub use workspace::{
     fs_write_cap as workspace_fs_write_cap, host_vfs_prefix, looks_like_host_vfs_path,
     vfs_relative_path, workspace_id_for_host_path, workspace_id_from_vfs_path, CodeSearchRequest,
     CodeSearchResponse, FsApplyPatchRequest, FsApplyPatchResponse, FsPatchHunk, FsSearchHit,
-    FsSearchRequest, FsSearchResponse, WorkspaceBindRequest, WorkspaceBindResponse,
-    WorkspaceBindingInfo, WorkspaceListRequest, WorkspaceListResponse, WorkspaceUnbindRequest,
-    WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES, FS_SEARCH_DEFAULT_LIMIT, FS_SEARCH_MAX_LIMIT,
+    FsSearchRequest, FsSearchResponse, FsUndoPatchRequest, FsUndoPatchResponse,
+    WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceBindingInfo, WorkspaceListRequest,
+    WorkspaceListResponse, WorkspaceUnbindRequest, WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES,
+    FS_SEARCH_DEFAULT_LIMIT, FS_SEARCH_MAX_LIMIT,
 };
 pub use system_hardware::{SystemHardwareRequest, SystemHardwareResponse};
 
