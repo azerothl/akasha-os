@@ -7,9 +7,8 @@ use aos_proto::host_folder::looks_like_host_path;
 use aos_proto::workspace::intents;
 use aos_proto::{
     AuditAppendRequest, FsApplyPatchRequest, FsApplyPatchResponse, FsSearchRequest,
-    FsSearchResponse, WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceListRequest,
-    WorkspaceListResponse, WorkspaceUnbindRequest, WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES,
-    FS_SEARCH_MAX_LIMIT,
+    WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceListRequest, WorkspaceListResponse,
+    WorkspaceUnbindRequest, WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES,
 };
 use std::sync::Arc;
 
@@ -214,9 +213,9 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
         });
     }
 
-    // DA.2 / DA.3 stubs — contracts exist; execution not enabled yet.
-    register_search_stub(svc, intents::FS_SEARCH);
-    register_search_stub(svc, intents::CODE_SEARCH);
+    // DA.2 live search; DA.3 patch still stubbed.
+    register_search(svc, sub.clone(), intents::FS_SEARCH);
+    register_search(svc, sub.clone(), intents::CODE_SEARCH);
     {
         svc.on(intents::APPLY_PATCH, move |ctx| async move {
             let req = match ctx.payload::<FsApplyPatchRequest>() {
@@ -251,30 +250,46 @@ exécution DA.3 pas encore activée"
     }
 }
 
-fn register_search_stub(svc: &mut BusService, intent: &'static str) {
-    svc.on(intent, move |ctx| async move {
-        let req = match ctx.payload::<FsSearchRequest>() {
-            Ok(req) => req,
-            Err(_) => {
-                let _ = ctx
-                    .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
-                    .await;
-                return;
+fn register_search(svc: &mut BusService, sub: Arc<PlatformSubsystem>, intent: &'static str) {
+    svc.on(intent, move |ctx| {
+        let s = sub.clone();
+        async move {
+            let mut req = match ctx.payload::<FsSearchRequest>() {
+                Ok(req) => req,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            if req.actor.is_empty() && ctx.intent.from.starts_with("agent:") {
+                req.actor = ctx.intent.from.clone();
             }
-        };
-        let limit = req.limit.min(FS_SEARCH_MAX_LIMIT);
-        let _ = ctx
-            .respond(
-                aos_ipc::msg::Status::Ok,
-                &FsSearchResponse {
-                    ok: false,
-                    hits: vec![],
-                    truncated: false,
-                    message: Some(format!(
-                        "{intent}: pas encore activé (Preview 0.19 DA.2 — limit≤{limit}, contrat figé)"
-                    )),
-                },
-            )
-            .await;
+            // Merge session-granted string caps when payload caps empty.
+            if req.caps.is_empty() && !req.actor.is_empty() {
+                if let Some(granted) = s.granted_caps.lock().unwrap().get(&req.actor) {
+                    req.caps = granted.clone();
+                }
+            }
+            let resp = {
+                let mgr = s.workspaces.lock().unwrap();
+                crate::workspace_search::search_workspace(&mgr, &req)
+            };
+            if resp.ok {
+                s.audit(AuditAppendRequest {
+                    trace_id: req.trace_id.clone(),
+                    actor: req.actor.clone(),
+                    action: intent.into(),
+                    target: req.root.clone(),
+                    detail: serde_json::json!({
+                        "query": req.query,
+                        "hits": resp.hits.len(),
+                        "truncated": resp.truncated,
+                    }),
+                });
+            }
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+        }
     });
 }

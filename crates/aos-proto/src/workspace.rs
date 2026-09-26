@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn search_limit_defaults() {
         assert_eq!(FS_SEARCH_DEFAULT_LIMIT, 50);
-        assert!(FS_SEARCH_MAX_LIMIT >= FS_SEARCH_DEFAULT_LIMIT);
-        assert!(APPLY_PATCH_MAX_FILES >= 1);
+        const _: () = assert!(FS_SEARCH_MAX_LIMIT >= FS_SEARCH_DEFAULT_LIMIT);
+        const _: () = assert!(APPLY_PATCH_MAX_FILES >= 1);
     }
 }

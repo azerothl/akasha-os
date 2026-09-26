@@ -35,7 +35,7 @@ bind est agent/développeur ; ripgrep/patch pas encore complets côté UX.
 | # | Élément | État |
 |---|---------|------|
 | P21 / #403 | **`aos-serverd`** — arbre headless, watchdogs (dont agentd), intake jobs agents local ; ADR 0012 session vs serverd | planifié |
-| P21 / #247 | **Dev-assistant P0** — `workspace.bind` / list / unbind + caps live ; contrats `fs.search` / `fs.apply_patch` stubbés ; [dev-assistant-p0.md](../dev-assistant-p0.md) | **en cours** |
+| P21 / #247 | **Dev-assistant P0** — `workspace.bind` + `fs.search` borné live ; `fs.apply_patch` stubbé ; [dev-assistant-p0.md](../dev-assistant-p0.md) | **en cours** |
 
 Séquence : MVP serverd (feature du tag) d’abord ou en parallèle de #247 P0
 dès que le travail caps/FS hôte est libre ; #247 P1–P2 (git / `process.run` /

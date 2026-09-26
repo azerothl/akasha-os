@@ -34,7 +34,7 @@ developer/agent-facing; ripgrep/patch not user-complete yet.
 | # | Item | Status |
 |---|------|--------|
 | P21 / #403 | **`aos-serverd`** — headless process tree, watchdogs (incl. agentd), local agent job intake; ADR 0012 session vs serverd | planned |
-| P21 / #247 | **Dev-assistant P0** — `workspace.bind` / list / unbind + cap paths live; `fs.search` / `fs.apply_patch` contracts stubbed; [dev-assistant-p0.md](dev-assistant-p0.md) | **in progress** |
+| P21 / #247 | **Dev-assistant P0** — `workspace.bind` + bounded `fs.search` live; `fs.apply_patch` stubbed; [dev-assistant-p0.md](dev-assistant-p0.md) | **in progress** |
 
 Sequencing: serverd MVP (tag feature) first or in parallel with #247 P0 once
 host FS/caps work is free; #247 P1–P2 (git / `process.run` / LSP / DeclUI IDE)
