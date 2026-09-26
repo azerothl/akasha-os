@@ -14,8 +14,9 @@ mod update;
 
 use aos_ipc::BusClient;
 use aos_serverd::{
-    auditd_command, bin_path, default_bus_addr, healthcheck, modeld_command, platformd_command,
-    ProcessTree, SpawnOptions,
+    auditd_command, bin_path, default_bus_addr, ensure_serverd_running, healthcheck, modeld_command,
+    platformd_command, resolve_handoff, send_control, serverd_config_example, ControlRequest,
+    ProcessTree, SessionHandoff, SpawnOptions,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -45,6 +46,8 @@ struct OnboardingState {
 struct Session {
     tree: Mutex<ProcessTree>,
     stop: AtomicBool,
+    /// When true, UI exit must not stop the process tree (serverd owns it).
+    attach_ui_only: AtomicBool,
 }
 
 /// Language from onboarding prefs (`var/run/onboarding.json`), default French.
@@ -392,6 +395,7 @@ fn main() {
     let session = Arc::new(Session {
         tree: Mutex::new(ProcessTree::empty(home.clone(), "aos-session")),
         stop: AtomicBool::new(false),
+        attach_ui_only: AtomicBool::new(false),
     });
 
     {
@@ -437,15 +441,19 @@ fn main() {
         });
     }
 
-    {
+    let handoff = resolve_session_mode(&home);
+    eprintln!("[aos-session] handoff={}", handoff.as_str());
+    let attach = matches!(
+        handoff,
+        SessionHandoff::AttachUiOnly | SessionHandoff::BootstrapThenAttach
+    );
+    session.attach_ui_only.store(attach, Ordering::SeqCst);
+
+    if !attach {
         let s = session.clone();
         thread::spawn(move || auditd_watchdog(s));
-    }
-    {
         let s = session.clone();
         thread::spawn(move || platformd_watchdog(s));
-    }
-    {
         let s = session.clone();
         thread::spawn(move || modeld_watchdog(s));
     }
@@ -455,23 +463,39 @@ fn main() {
     loop {
         session.stop.store(false, Ordering::SeqCst);
 
-        if let Err(e) = start_daemons(&session) {
-            stop_all(&session);
-            if !offer_bootstrap_retry(&home, &format!("démarrage échoué : {e}")) {
-                std::process::exit(1);
+        if attach {
+            if let Err(e) = prepare_attach(&home, handoff) {
+                if !offer_bootstrap_retry(&home, &format!("attach serverd : {e}")) {
+                    std::process::exit(1);
+                }
+                continue;
             }
-            continue;
+            if let Err(e) = healthcheck() {
+                if !offer_bootstrap_retry(&home, &format!("healthcheck échoué : {e}")) {
+                    std::process::exit(1);
+                }
+                continue;
+            }
+            eprintln!("[aos-session] services OK (attach UI only — tree owned by aos-serverd)");
+        } else {
+            if let Err(e) = start_daemons(&session) {
+                stop_all(&session);
+                if !offer_bootstrap_retry(&home, &format!("démarrage échoué : {e}")) {
+                    std::process::exit(1);
+                }
+                continue;
+            }
+            if let Err(e) = healthcheck() {
+                stop_all(&session);
+                if !offer_bootstrap_retry(&home, &format!("healthcheck échoué : {e}")) {
+                    std::process::exit(1);
+                }
+                continue;
+            }
+            eprintln!("[aos-session] services OK");
         }
 
-        if let Err(e) = healthcheck() {
-            stop_all(&session);
-            if !offer_bootstrap_retry(&home, &format!("healthcheck échoué : {e}")) {
-                std::process::exit(1);
-            }
-            continue;
-        }
         reload_synced_packaged_modules(&synced_modules);
-        eprintln!("[aos-session] services OK");
         if first_ui {
             apply_trust_default(&home);
             first_ui = false;
@@ -505,7 +529,30 @@ fn main() {
         }
 
         session.stop.store(true, Ordering::SeqCst);
-        stop_all(&session);
+        if attach {
+            if restart {
+                // Ask serverd to restart the tree; do not kill it from session.
+                if let Err(e) = send_control(
+                    &home,
+                    &ControlRequest {
+                        cmd: "restart".into(),
+                        actor: "aos-session".into(),
+                        goal: None,
+                        agent_id: None,
+                        model_id: None,
+                        caps: Vec::new(),
+                        mode: None,
+                        job_id: None,
+                        interval_secs: None,
+                    },
+                ) {
+                    eprintln!("[aos-session] serverd restart: {e}");
+                }
+            }
+            // Closing egui must not stop the tree when serverd owns it.
+        } else {
+            stop_all(&session);
+        }
 
         if restart {
             eprintln!("[aos-session] redémarrage Preview demandé par l'UI…");
@@ -1275,6 +1322,12 @@ embed_model:
         let _ = fs::write(&platformd, yaml);
     }
 
+    // P21.6 — seed opt-in serverd config (all flags false) without overwriting.
+    let serverd_cfg = home.join("etc/serverd.yaml");
+    if !serverd_cfg.exists() {
+        let _ = fs::write(&serverd_cfg, serverd_config_example());
+    }
+
     // Refresh catalog.yaml entries for installed models (best-effort).
     let _ = default_embed;
     write_catalog_overlay(home, &entries);
@@ -1360,6 +1413,29 @@ fn session_spawn_opts() -> SpawnOptions {
     SpawnOptions {
         log_tag: "aos-session",
         gpu_accel: bootstrap::gpu_accel_ok(),
+        supervise_bridged: false,
+        supervise_mcpd: false,
+    }
+}
+
+/// P21.6 — decide attach vs legacy spawn (env / live serverd / config).
+fn resolve_session_mode(home: &Path) -> SessionHandoff {
+    resolve_handoff(home)
+}
+
+/// Ensure serverd owns the tree before launching egui only.
+fn prepare_attach(home: &Path, mode: SessionHandoff) -> Result<(), String> {
+    match mode {
+        SessionHandoff::AttachUiOnly => {
+            if !aos_serverd::control_endpoint_present(home) {
+                return Err(
+                    "attach-ui-only requested but aos-serverd control endpoint missing".into(),
+                );
+            }
+            Ok(())
+        }
+        SessionHandoff::BootstrapThenAttach => ensure_serverd_running(home),
+        SessionHandoff::LegacySpawn => Ok(()),
     }
 }
 
@@ -1369,6 +1445,9 @@ fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
 }
 
 fn stop_all(session: &Arc<Session>) {
+    if session.attach_ui_only.load(Ordering::SeqCst) {
+        return;
+    }
     session.tree.lock().unwrap().stop();
 }
 
@@ -1452,7 +1531,11 @@ fn ctrlc_guard(session: Arc<Session>) {
     let _ = ctrlc::set_handler(move || {
         eprintln!("[aos-session] signal — arrêt");
         session.stop.store(true, Ordering::SeqCst);
-        stop_all(&session);
+        if session.attach_ui_only.load(Ordering::SeqCst) {
+            eprintln!("[aos-session] attach mode — leaving aos-serverd tree running");
+        } else {
+            stop_all(&session);
+        }
         std::process::exit(130);
     });
 }

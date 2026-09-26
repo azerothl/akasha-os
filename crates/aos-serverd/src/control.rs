@@ -167,7 +167,7 @@ impl ControlState {
             .collect();
         TreeStatus {
             running: !daemons.is_empty() && daemons.iter().any(|d| d.alive),
-            lot: "P21.4".into(),
+            lot: "P21.6".into(),
             daemons,
             control_plane: true,
             aos_home: self.home.display().to_string(),
