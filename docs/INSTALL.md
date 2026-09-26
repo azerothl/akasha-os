@@ -174,7 +174,8 @@ keys:
 | NVIDIA recommended | Driver + `nvidia-smi -L`, or use CPU package / Settings → CPU |
 | Model download failed | Network for HF, or copy GGUFs into `share/models/` |
 | Healthcheck failed | `var/run/*.stderr.log` (**Troubleshooting** button) |
-| Bus unreachable | Always launch via `aos-session` |
+| Bus unreachable | Launch via `aos-session`, or headless `aos-serverd serve` then `aos-serverd status` |
+| Headless daemon crash-loop | `var/run/daemon_restarts.log`; soft watchdogs respawn agentd/auditd/…; busd/capkd death triggers ordered tree restart (`aos-serverd restart`) |
 | UI panic: `libxkbcommon-x11.so` missing | `sudo apt install libxkbcommon-x11-0` (see Linux desktop libraries) |
 
 ## Build from source

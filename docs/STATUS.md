@@ -29,12 +29,12 @@ Horizon C / PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
 
 **0.18.0** shipped; P21 implementation started. Do **not** invent a P6 number
 (PC still open). Detail lives in STATUS as the post-P11 schedule SoT; no new
-E* number for these host tracks. Shared lifecycle lib (P21.1) — headless
-daemon binary ownership still ahead (P21.2).
+E* number for these host tracks. Headless `serve` + local control plane
+(P21.2–P21.3); agent intake still ahead (P21.4).
 
 | # | Item | Status |
 |---|------|--------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle lib + headless `serve` (P21.0–P21.2); watchdogs/intake API still ahead | **in progress** |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + headless serve + watchdogs + local `status`/`restart`/`stop` (P21.0–P21.3); intake API still ahead | **in progress** |
 | P21 / #247 | **Dev-assistant P0** — `workspace.bind`, bounded `fs.search`, `fs.apply_patch`, documented module contract (P1–P2 deferred) | planned |
 
 Sequencing: serverd MVP (tag feature) first or in parallel with #247 P0 once

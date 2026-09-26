@@ -385,6 +385,43 @@ pub fn log_daemon_restart(home: &Path, name: &str, ok: bool) {
     }
 }
 
+/// Append audited control-plane actions (P21.3 status/restart/stop).
+pub fn log_control_audit(home: &Path, actor: &str, action: &str, ok: bool) {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let line = format!(
+        "{ms} control actor={actor} action={action} {}\n",
+        if ok { "ok" } else { "failed" }
+    );
+    let path = home.join("var/run/daemon_restarts.log");
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
+/// `aos-busd` argv (same as [`ProcessTree::start`]).
+pub fn busd_command(home: &Path) -> Command {
+    let mut cmd = Command::new(bin_path(home, "aos-busd"));
+    cmd.arg(DEFAULT_BUS_PORT.to_string());
+    cmd
+}
+
+/// `aos-capkd` argv (same as [`ProcessTree::start`]).
+pub fn capkd_command(home: &Path) -> Command {
+    let mut cmd = Command::new(bin_path(home, "aos-capkd"));
+    cmd.arg(default_bus_addr());
+    cmd
+}
+
+/// `aos-agentd` argv (same as [`ProcessTree::start`]).
+pub fn agentd_command(home: &Path) -> Command {
+    let mut cmd = Command::new(bin_path(home, "aos-agentd"));
+    cmd.arg(default_bus_addr());
+    cmd
+}
+
 /// Expected argv fragments for unit tests (no spawn).
 pub fn expected_boot_argv(name: &str) -> Option<&'static [&'static str]> {
     match name {

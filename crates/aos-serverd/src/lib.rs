@@ -1,14 +1,20 @@
 //! `aos-serverd` — Preview server lifecycle owner (P21 / ADR 0012).
 //!
-//! **P21.1:** shared spawn / stop / health live in [`lifecycle`] and are used by
-//! `aos-session` (desktop unchanged). The `aos-serverd` binary still does not
-//! own a live tree by itself (that is P21.2).
+//! **P21.1:** shared spawn / stop / health in [`lifecycle`].
+//! **P21.2:** headless `serve` owns the process tree.
+//! **P21.3:** extended watchdogs + local `status` / `restart` / `stop` API.
 
+mod control;
 mod lifecycle;
 
+pub use control::{
+    control_endpoint_present, send_control, serve_control, ControlRequest, ControlResponse,
+    ControlState, DaemonStatus, TreeStatus,
+};
 pub use lifecycle::{
-    apply_daemon_env, auditd_command, bin_path, default_bus_addr, expected_boot_argv, gpu_accel_ok,
-    healthcheck, healthcheck_bus, inference_mode, kill_by_name, log_daemon_restart, modeld_command,
+    agentd_command, apply_daemon_env, auditd_command, bin_path, busd_command, capkd_command,
+    default_bus_addr, expected_boot_argv, gpu_accel_ok, healthcheck, healthcheck_bus,
+    inference_mode, kill_by_name, log_control_audit, log_daemon_restart, modeld_command,
     pick_modeld_bin, platformd_command, serverd_spawn_opts, DaemonHandle, ProcessTree, SpawnOptions,
     HEALTH_PROBES,
 };
@@ -34,8 +40,19 @@ pub fn daemon_stop_order() -> impl Iterator<Item = &'static str> {
 /// Daemons that already have session watchdogs in 0.18 (baseline).
 pub const WATCHDOG_BASELINE: &[&str] = &["aos-auditd", "aos-platformd", "aos-modeld"];
 
+/// Soft watchdogs: individual respawn (agentd + baseline).
+pub const WATCHDOG_SOFT: &[&str] = &[
+    "aos-auditd",
+    "aos-platformd",
+    "aos-modeld",
+    "aos-agentd",
+];
+
+/// Hard watchdogs: death triggers ordered tree restart with backoff (P21.3).
+pub const WATCHDOG_HARD: &[&str] = &["aos-busd", "aos-capkd"];
+
 /// Additional watchdogs required for P21 MVP (at least agentd).
-pub const WATCHDOG_P21_EXTRA: &[&str] = &["aos-agentd"];
+pub const WATCHDOG_P21_EXTRA: &[&str] = &["aos-agentd", "aos-busd", "aos-capkd"];
 
 /// How `aos-session` relates to a live `aos-serverd`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,7 +71,7 @@ pub enum ControlCommand {
     Status,
     Restart,
     Stop,
-    /// Intake → existing `aos-agentd` paths (not implemented in scaffold).
+    /// Intake → existing `aos-agentd` paths (not implemented until P21.4).
     EnqueueAgent,
 }
 
@@ -98,10 +115,10 @@ pub struct ScaffoldStatus {
 
 pub fn scaffold_status() -> ScaffoldStatus {
     ScaffoldStatus {
-        lot: "P21.2",
+        lot: "P21.3",
         lib_spawns_daemons: true,
         binary_owns_tree: true,
-        control_plane_live: false,
+        control_plane_live: true,
     }
 }
 
@@ -143,12 +160,19 @@ mod tests {
     }
 
     #[test]
-    fn p21_2_binary_can_own_tree() {
+    fn p21_3_control_plane_ready() {
         let st = scaffold_status();
-        assert_eq!(st.lot, "P21.2");
+        assert_eq!(st.lot, "P21.3");
         assert!(st.lib_spawns_daemons);
         assert!(st.binary_owns_tree);
-        assert!(!st.control_plane_live);
+        assert!(st.control_plane_live);
+    }
+
+    #[test]
+    fn hard_watchdogs_cover_bus_and_cap() {
+        assert!(WATCHDOG_HARD.contains(&"aos-busd"));
+        assert!(WATCHDOG_HARD.contains(&"aos-capkd"));
+        assert!(WATCHDOG_SOFT.contains(&"aos-agentd"));
     }
 
     #[test]

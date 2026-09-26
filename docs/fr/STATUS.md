@@ -29,12 +29,13 @@ documenté.
 ## P21 — Preview 0.19.0 (en cours) — daemon serveur + Dev-assistant P0
 
 **0.18.0** livré ; implémentation P21 démarrée. Ne **pas** inventer un numéro
-P6 (PC encore ouverte). Pas de nouvel E* pour ces tracks hôte. Lib lifecycle
-partagée (P21.1) — ownership headless du binaire encore à venir (P21.2).
+P6 (PC encore ouverte). Pas de nouvel E* pour ces tracks hôte. `serve`
+headless + plan de contrôle local (P21.2–P21.3) ; intake agents encore à
+venir (P21.4).
 
 | # | Élément | État |
 |---|---------|------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lib lifecycle + `serve` headless (P21.0–P21.2) ; API watchdogs/intake encore à venir | **en cours** |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + serve headless + watchdogs + `status`/`restart`/`stop` local (P21.0–P21.3) ; API intake encore à venir | **en cours** |
 | P21 / #247 | **Dev-assistant P0** — `workspace.bind`, `fs.search` borné, `fs.apply_patch`, contrat module documenté (P1–P2 reportés) | planifié |
 
 Séquence : MVP serverd (feature du tag) d’abord ou en parallèle de #247 P0

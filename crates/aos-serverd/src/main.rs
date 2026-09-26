@@ -1,12 +1,14 @@
-//! `aos-serverd` binary — P21.2 headless process-tree owner.
+//! `aos-serverd` binary — P21.3 headless owner + local control plane.
 //!
 //! `serve` / `--headless` boots busd…agentd (no egui), healthchecks, runs
-//! baseline + agentd watchdogs, and stops cleanly on Ctrl+C. See ADR 0012.
+//! soft + hard watchdogs, and serves `status` / `restart` / `stop` on the
+//! local control socket. See ADR 0012.
 
 use aos_serverd::{
-    auditd_command, control_socket_path, healthcheck, modeld_command, platformd_command,
-    scaffold_status, serverd_pid_relpath, serverd_spawn_opts, SessionHandoff, ProcessTree,
-    SpawnOptions, DAEMON_BOOT_ORDER, WATCHDOG_BASELINE, WATCHDOG_P21_EXTRA,
+    agentd_command, auditd_command, control_endpoint_present, control_socket_path, healthcheck,
+    modeld_command, platformd_command, scaffold_status, send_control, serve_control,
+    serverd_pid_relpath, serverd_spawn_opts, ControlRequest, ControlState, ProcessTree,
+    SessionHandoff, SpawnOptions, DAEMON_BOOT_ORDER, WATCHDOG_HARD, WATCHDOG_SOFT,
 };
 use std::env;
 use std::fs;
@@ -31,7 +33,7 @@ fn main() {
                 home = args.next().map(PathBuf::from);
             }
             "--headless" | "serve" | "run" => cmd = "serve".into(),
-            "status" | "handoff" => cmd = arg,
+            "status" | "handoff" | "restart" | "stop" => cmd = arg,
             other if other.starts_with("--aos-home=") => {
                 home = Some(PathBuf::from(other.trim_start_matches("--aos-home=")));
             }
@@ -51,22 +53,49 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        _ => print_status(&home),
+        "restart" | "stop" => {
+            if let Err(e) = send_live_command(&home, &cmd) {
+                eprintln!("[aos-serverd] {e}");
+                std::process::exit(1);
+            }
+        }
+        _ => {
+            if let Err(e) = print_status(&home) {
+                eprintln!("[aos-serverd] {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
 fn print_help() {
     println!(
-        "aos-serverd — Akasha OS Preview server lifecycle daemon (P21.2)\n\n\
-Usage:\n  aos-serverd [--aos-home <path>] [status|handoff|serve]\n  aos-serverd --headless\n\n\
+        "aos-serverd — Akasha OS Preview server lifecycle daemon (P21.3)\n\n\
+Usage:\n  aos-serverd [--aos-home <path>] [status|handoff|serve|restart|stop]\n  aos-serverd --headless\n\n\
 serve / --headless: own the Preview process tree without egui (Ctrl+C stops).\n\
+status / restart / stop: query the local control socket when serve is up.\n\
 Requires AOS_HOME already laid out (etc/*.yaml, bin/*). See ADR 0012."
     );
 }
 
-fn print_status(home: &Path) {
+fn print_status(home: &Path) -> Result<(), String> {
+    if control_endpoint_present(home) {
+        let resp = send_control(
+            home,
+            &ControlRequest {
+                cmd: "status".into(),
+                actor: "cli".into(),
+            },
+        )?;
+        println!("{}", resp.to_line());
+        if !resp.ok {
+            return Err(resp.message.unwrap_or_else(|| "status failed".into()));
+        }
+        return Ok(());
+    }
+
     let st = scaffold_status();
-    println!("aos-serverd ({})", st.lot);
+    println!("aos-serverd ({}) — no live control endpoint", st.lot);
     println!("  lib_spawns_daemons: {}", st.lib_spawns_daemons);
     println!("  binary_owns_tree:   {}", st.binary_owns_tree);
     println!("  control_plane_live: {}", st.control_plane_live);
@@ -76,13 +105,36 @@ fn print_status(home: &Path) {
         control_socket_path(home).display()
     );
     println!("  boot_order:         {}", DAEMON_BOOT_ORDER.join(" → "));
+    println!("  soft watchdogs:     {}", WATCHDOG_SOFT.join(", "));
     println!(
-        "  watchdogs:          {} + {}",
-        WATCHDOG_BASELINE.join(", "),
-        WATCHDOG_P21_EXTRA.join(", ")
+        "  hard watchdogs:     {} (ordered tree restart + backoff)",
+        WATCHDOG_HARD.join(", ")
     );
     println!();
     println!("Run: aos-serverd serve   (or --headless)");
+    Ok(())
+}
+
+fn send_live_command(home: &Path, cmd: &str) -> Result<(), String> {
+    if !control_endpoint_present(home) {
+        return Err(format!(
+            "no live control endpoint at {} — is serve running?",
+            control_socket_path(home).display()
+        ));
+    }
+    let resp = send_control(
+        home,
+        &ControlRequest {
+            cmd: cmd.into(),
+            actor: "cli".into(),
+        },
+    )?;
+    println!("{}", resp.to_line());
+    if resp.ok {
+        Ok(())
+    } else {
+        Err(resp.message.unwrap_or_else(|| format!("{cmd} failed")))
+    }
 }
 
 fn print_handoff() {
@@ -138,6 +190,14 @@ fn run_headless(home: &Path) -> Result<(), String> {
     );
 
     let stop = Arc::new(AtomicBool::new(false));
+    let state = Arc::new(ControlState {
+        home: home.to_path_buf(),
+        tree: tree.clone(),
+        opts: opts.clone(),
+        stop: stop.clone(),
+        tree_restart_backoff_secs: Mutex::new(0),
+    });
+
     {
         let stop_c = stop.clone();
         let tree_c = tree.clone();
@@ -149,7 +209,13 @@ fn run_headless(home: &Path) -> Result<(), String> {
         });
     }
 
-    spawn_watchdogs(tree.clone(), stop.clone(), opts.clone());
+    {
+        let state_c = state.clone();
+        thread::spawn(move || serve_control(state_c));
+    }
+
+    spawn_soft_watchdogs(tree.clone(), stop.clone(), opts.clone());
+    spawn_hard_watchdogs(state.clone());
 
     while !stop.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
@@ -158,7 +224,7 @@ fn run_headless(home: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn spawn_watchdogs(tree: Arc<Mutex<ProcessTree>>, stop: Arc<AtomicBool>, opts: SpawnOptions) {
+fn spawn_soft_watchdogs(tree: Arc<Mutex<ProcessTree>>, stop: Arc<AtomicBool>, opts: SpawnOptions) {
     type Maker = Box<dyn Fn(&Path) -> std::process::Command + Send>;
     let modeld_opts = opts.clone();
     let watchers: Vec<(&'static str, Maker)> = vec![
@@ -168,14 +234,7 @@ fn spawn_watchdogs(tree: Arc<Mutex<ProcessTree>>, stop: Arc<AtomicBool>, opts: S
             "aos-modeld",
             Box::new(move |h| modeld_command(h, &modeld_opts)),
         ),
-        (
-            "aos-agentd",
-            Box::new(|h| {
-                let mut cmd = std::process::Command::new(aos_serverd::bin_path(h, "aos-agentd"));
-                cmd.arg(aos_serverd::default_bus_addr());
-                cmd
-            }),
-        ),
+        ("aos-agentd", Box::new(agentd_command)),
     ];
 
     for (name, make_cmd) in watchers {
@@ -192,8 +251,37 @@ fn spawn_watchdogs(tree: Arc<Mutex<ProcessTree>>, stop: Arc<AtomicBool>, opts: S
                     continue;
                 };
                 if let Ok(Some(_)) = t.daemons_mut()[pos].child.try_wait() {
-                    eprintln!("[aos-serverd] {name} mort — redémarrage");
+                    eprintln!("[aos-serverd] {name} mort — soft respawn");
                     let _ = t.respawn(name, &*make_cmd);
+                }
+            }
+        });
+    }
+}
+
+/// busd / capkd death → ordered tree restart with backoff (P21.3).
+fn spawn_hard_watchdogs(state: Arc<ControlState>) {
+    for name in WATCHDOG_HARD {
+        let state = state.clone();
+        let name = *name;
+        thread::spawn(move || {
+            while !state.stop.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_secs(2));
+                if state.stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                let dead = {
+                    let mut t = state.tree.lock().unwrap();
+                    let Some(pos) = t.daemons().iter().position(|d| d.name == name) else {
+                        continue;
+                    };
+                    matches!(t.daemons_mut()[pos].child.try_wait(), Ok(Some(_)))
+                };
+                if dead {
+                    eprintln!("[aos-serverd] {name} mort — ordered tree restart");
+                    if let Err(e) = state.ordered_restart() {
+                        eprintln!("[aos-serverd] ordered restart failed: {e}");
+                    }
                 }
             }
         });
