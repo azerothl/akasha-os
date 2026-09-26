@@ -122,7 +122,7 @@ mod tests {
                 "aos-agentd",
             ]
         );
-        assert!(!DAEMON_BOOT_ORDER.iter().any(|n| *n == "aos-ui-egui"));
+        assert!(!DAEMON_BOOT_ORDER.contains(&"aos-ui-egui"));
     }
 
     #[test]
