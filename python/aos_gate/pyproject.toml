@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aos-gate"
+version = "0.1.0"
+description = "Akasha OS host binding for the akasha-model tool gate (Path A)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+dependencies = [
+  # Prefer the gate-host branch until PR azerothl/akasha-model#7 lands on main.
+  "akasha-model @ git+https://github.com/azerothl/akasha-model.git@cursor/gate-host-476f",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+aos-gate = "aos_gate.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]

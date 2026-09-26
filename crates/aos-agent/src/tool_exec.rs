@@ -5,13 +5,14 @@ use crate::host_folder::try_host_folder_tool;
 use crate::mcp::McpSession;
 use crate::module_discovery::{module_fallback_allowed, tool_in_catalog, tool_unavailable_message};
 use crate::storage_path::{host_path_disallowed_token, is_disallowed_storage_path};
+use crate::tool_gate::{decide_gated_tool_async, GateDecision};
 use crate::tools::{
     canonicalize_tool_name, canvas_tool_denied_by_allowlist, normalize_tool_args,
     resolve_tool_backend, ToolBackend, ToolDesc,
 };
 use aos_ipc::BusClient;
 use aos_proto::{
-    FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
+    AgentPolicy, FilesGenerateRequest, FsListRequest, FsReadRequest, FsReadResponse, FsWriteRequest,
     ModuleInvokeRequest, ModuleInvokeResponse, WebBrowseRequest, WebBrowseResponse,
     WebSearchRequest, WebSearchResponse,
 };
@@ -319,6 +320,10 @@ pub async fn invoke_native_tool(
 }
 
 /// Execute one room-member tool action.
+///
+/// Side effects go through the akasha-model Path A gate when available
+/// (`AOS_MODEL_GATE`, default `auto`). Execute still uses this module's
+/// invoke_* paths only — never a second ungated executor.
 #[allow(clippy::too_many_arguments)] // Keeps capability and MCP context explicit at the tool boundary.
 pub async fn execute_room_tool(
     bus: &BusClient,
@@ -330,6 +335,35 @@ pub async fn execute_room_tool(
     trace_id: &str,
     session_id: Option<&str>,
     mcp_sessions: &mut HashMap<String, McpSession>,
+) -> String {
+    execute_room_tool_with_policy(
+        bus,
+        agent_id,
+        caps,
+        tools,
+        action,
+        args,
+        trace_id,
+        session_id,
+        mcp_sessions,
+        &AgentPolicy::default(),
+    )
+    .await
+}
+
+/// Same as [`execute_room_tool`] with an explicit [`AgentPolicy`] for host checks.
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_room_tool_with_policy(
+    bus: &BusClient,
+    agent_id: &str,
+    caps: &[String],
+    tools: &[ToolDesc],
+    action: &str,
+    args: &serde_json::Value,
+    trace_id: &str,
+    session_id: Option<&str>,
+    mcp_sessions: &mut HashMap<String, McpSession>,
+    policy: &AgentPolicy,
 ) -> String {
     let canonical = canonicalize_tool_name(action);
     let name = canonical.as_str();
@@ -356,6 +390,70 @@ pub async fn execute_room_tool(
         return tool_unavailable_message(name, "absent du catalogue modules actif");
     }
 
+    // Path A gate: evaluate via akasha-model, then OS permissions, then execute.
+    let legacy_gate_warning = match decide_gated_tool_async(
+        tools,
+        name,
+        args,
+        policy,
+        caps,
+        "aos-agent::tool_exec::execute_room_tool",
+        false,
+    )
+    .await
+    {
+        GateDecision::Proceed { outcome } => {
+            let gate_log = outcome.log_line();
+            let result = execute_room_tool_backends(
+                bus,
+                agent_id,
+                caps,
+                tools,
+                name,
+                args,
+                trace_id,
+                session_id,
+                mcp_sessions,
+            )
+            .await;
+            return format!("[{gate_log}]\n{result}");
+        }
+        GateDecision::Refuse { outcome, message } => {
+            return format!("[{}] {message}", outcome.log_line());
+        }
+        GateDecision::Legacy { warning } => Some(warning),
+    };
+
+    let mut result = execute_room_tool_backends(
+        bus,
+        agent_id,
+        caps,
+        tools,
+        name,
+        args,
+        trace_id,
+        session_id,
+        mcp_sessions,
+    )
+    .await;
+    if let Some(w) = legacy_gate_warning {
+        result = format!("[{w}]\n{result}");
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn execute_room_tool_backends(
+    bus: &BusClient,
+    agent_id: &str,
+    caps: &[String],
+    tools: &[ToolDesc],
+    name: &str,
+    args: &serde_json::Value,
+    trace_id: &str,
+    session_id: Option<&str>,
+    mcp_sessions: &mut HashMap<String, McpSession>,
+) -> String {
     let backend = resolve_tool_backend(name, tools);
     match backend {
         Some(ToolBackend::Module) => {

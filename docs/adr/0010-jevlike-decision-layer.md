@@ -181,6 +181,7 @@ class metrics for cutover gates.
 ## References
 
 - [azerothl/akasha-model](https://github.com/azerothl/akasha-model)
+- OS host binding (Path A): [tool-gate-host.md](../tool-gate-host.md) · `python/aos_gate/`
 - ADR 0002 Model Placement (`adr/0002-model-placement.md`)
 - Tip bus intents inventory (platformd / modeld / agentd) at `d12b12e`
 - TypeSafe: Introducing System One models and Jev (2026-09)

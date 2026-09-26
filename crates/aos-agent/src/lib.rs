@@ -35,6 +35,7 @@ pub mod sources;
 pub mod state;
 pub mod storage_path;
 pub mod tool_exec;
+pub mod tool_gate;
 pub mod tools;
 
 pub use assess::{parse_assess_response, AssessResult};
