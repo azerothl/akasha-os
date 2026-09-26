@@ -279,6 +279,32 @@ pub fn modeld_command(home: &Path, opts: &SpawnOptions) -> Command {
     cmd
 }
 
+/// NVIDIA (Win/Linux) or Apple Silicon Metal — same heuristic as `aos-session` bootstrap.
+pub fn gpu_accel_ok() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        std::env::consts::ARCH == "aarch64"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Command::new("nvidia-smi")
+            .arg("-L")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+}
+
+/// Default spawn options for the `aos-serverd` binary.
+pub fn serverd_spawn_opts() -> SpawnOptions {
+    SpawnOptions {
+        log_tag: "aos-serverd",
+        gpu_accel: gpu_accel_ok(),
+    }
+}
+
 /// Command builders used by session watchdogs (same argv as [`ProcessTree::start`]).
 pub fn auditd_command(home: &Path) -> Command {
     let mut cmd = Command::new(bin_path(home, "aos-auditd"));

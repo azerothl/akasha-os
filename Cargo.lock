@@ -494,6 +494,7 @@ name = "aos-serverd"
 version = "0.18.0"
 dependencies = [
  "aos-ipc",
+ "ctrlc",
  "serde_json",
  "tokio",
 ]

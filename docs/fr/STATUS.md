@@ -34,7 +34,7 @@ partagée (P21.1) — ownership headless du binaire encore à venir (P21.2).
 
 | # | Élément | État |
 |---|---------|------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lib lifecycle (P21.0–P21.1) ; ownership arbre headless encore à venir (P21.2+) | **en cours** |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lib lifecycle + `serve` headless (P21.0–P21.2) ; API watchdogs/intake encore à venir | **en cours** |
 | P21 / #247 | **Dev-assistant P0** — `workspace.bind`, `fs.search` borné, `fs.apply_patch`, contrat module documenté (P1–P2 reportés) | planifié |
 
 Séquence : MVP serverd (feature du tag) d’abord ou en parallèle de #247 P0

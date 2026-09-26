@@ -34,7 +34,7 @@ daemon binary ownership still ahead (P21.2).
 
 | # | Item | Status |
 |---|------|--------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle lib (P21.0–P21.1); headless binary ownership still ahead (P21.2+) | **in progress** |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle lib + headless `serve` (P21.0–P21.2); watchdogs/intake API still ahead | **in progress** |
 | P21 / #247 | **Dev-assistant P0** — `workspace.bind`, bounded `fs.search`, `fs.apply_patch`, documented module contract (P1–P2 deferred) | planned |
 
 Sequencing: serverd MVP (tag feature) first or in parallel with #247 P0 once

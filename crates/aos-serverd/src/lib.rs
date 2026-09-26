@@ -7,9 +7,10 @@
 mod lifecycle;
 
 pub use lifecycle::{
-    apply_daemon_env, auditd_command, bin_path, default_bus_addr, expected_boot_argv, healthcheck,
-    healthcheck_bus, inference_mode, kill_by_name, log_daemon_restart, modeld_command,
-    pick_modeld_bin, platformd_command, DaemonHandle, ProcessTree, SpawnOptions, HEALTH_PROBES,
+    apply_daemon_env, auditd_command, bin_path, default_bus_addr, expected_boot_argv, gpu_accel_ok,
+    healthcheck, healthcheck_bus, inference_mode, kill_by_name, log_daemon_restart, modeld_command,
+    pick_modeld_bin, platformd_command, serverd_spawn_opts, DaemonHandle, ProcessTree, SpawnOptions,
+    HEALTH_PROBES,
 };
 
 use std::path::{Path, PathBuf};
@@ -85,21 +86,21 @@ pub fn serverd_pid_relpath() -> &'static str {
     "var/run/aos-serverd.pid"
 }
 
-/// Readiness for the `aos-serverd` binary (not the shared lib).
+/// Readiness for the `aos-serverd` binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScaffoldStatus {
     pub lot: &'static str,
-    /// Shared lib can spawn (session uses it); binary still status-only until P21.2.
     pub lib_spawns_daemons: bool,
+    /// Binary can own the headless tree via `serve` / `--headless` (P21.2).
     pub binary_owns_tree: bool,
     pub control_plane_live: bool,
 }
 
 pub fn scaffold_status() -> ScaffoldStatus {
     ScaffoldStatus {
-        lot: "P21.1",
+        lot: "P21.2",
         lib_spawns_daemons: true,
-        binary_owns_tree: false,
+        binary_owns_tree: true,
         control_plane_live: false,
     }
 }
@@ -142,11 +143,11 @@ mod tests {
     }
 
     #[test]
-    fn p21_1_lib_spawns_binary_does_not() {
+    fn p21_2_binary_can_own_tree() {
         let st = scaffold_status();
-        assert_eq!(st.lot, "P21.1");
+        assert_eq!(st.lot, "P21.2");
         assert!(st.lib_spawns_daemons);
-        assert!(!st.binary_owns_tree);
+        assert!(st.binary_owns_tree);
         assert!(!st.control_plane_live);
     }
 
