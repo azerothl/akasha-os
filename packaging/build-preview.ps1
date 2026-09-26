@@ -34,7 +34,7 @@ if (-not $SkipBuild) {
     Write-Host "== cargo build --release (bins Preview) =="
     if ($CpuOnly) {
         Write-Host "  (CPU-only: aos-model/aos-llama without CUDA feature)"
-        cargo build --release -p aos-session -p aos-ipc -p aos-capkd -p aos-ui-egui `
+        cargo build --release -p aos-session -p aos-serverd -p aos-ipc -p aos-capkd -p aos-ui-egui `
             -p aos-agent -p aos-auditd -p aos-bridge -p aos-mcp
         if ($LASTEXITCODE -ne 0) { throw "build failed" }
         cargo build --release -p aos-model --no-default-features
@@ -45,7 +45,7 @@ if (-not $SkipBuild) {
         # Separate resolve so aos-ui-egui / aos-platformd do not feature-unify
         # CUDA/llama from aos-model (GitHub Release 2 GiB limit).
         Write-Host "  (chrome bins sans aos-model)"
-        cargo build --release -p aos-session -p aos-ipc -p aos-agent `
+        cargo build --release -p aos-session -p aos-serverd -p aos-ipc -p aos-agent `
             -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
         if ($LASTEXITCODE -ne 0) { throw "build chrome bins failed" }
         Write-Host "== cargo build --release (aos-modeld CUDA/llama) =="
@@ -102,7 +102,7 @@ New-Item -ItemType Directory -Force -Path `
     "$OutDir\data\models", "$OutDir\var", "$OutDir\docs" | Out-Null
 
 $bins = @(
-    "aos-session.exe", "aos-busd.exe", "aos-modeld.exe", "aos-agentd.exe",
+    "aos-session.exe", "aos-serverd.exe", "aos-busd.exe", "aos-modeld.exe", "aos-agentd.exe",
     "aos-agent-worker.exe", "aos-platformd.exe", "aos-capkd.exe",
     "aos-auditd.exe", "aos-ui-egui.exe", "aos-bridged.exe", "aos-mcpd.exe"
 )
@@ -380,6 +380,9 @@ Copy-Item (Join-Path $root "NOTICE") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE-COMMERCIAL.md") "$OutDir\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $PSScriptRoot "install-windows.ps1") "$OutDir\install.ps1" -Force
 Copy-Item (Join-Path $PSScriptRoot "install-windows.cmd") "$OutDir\install.cmd" -Force
+# P21.5 opt-in logon scheduled task (default install does not enable).
+New-Item -ItemType Directory -Force -Path "$OutDir\services" | Out-Null
+Copy-Item (Join-Path $PSScriptRoot "install-windows-service.ps1") "$OutDir\install-windows-service.ps1" -Force
 
 # Optional E16 engines (not in git). Drop sd.exe / sd-cli.exe / piper.exe + their DLLs
 # (ggml*.dll, stable-diffusion.dll, …) in share/engines before packaging.

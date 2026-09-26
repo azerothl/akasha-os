@@ -67,7 +67,7 @@ if [ "$SKIP_BUILD" != "1" ]; then
   cargo build --release -p aos-auditd
 
   echo "== cargo build --release (Metal) =="
-  cargo build --release -p aos-session -p aos-ipc -p aos-agent \
+  cargo build --release -p aos-session -p aos-serverd -p aos-ipc -p aos-agent \
     -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
   cargo build --release -p aos-model --no-default-features --features metal
   cargo build --release -p aos-platform --no-default-features --features embeddings,metal
@@ -158,7 +158,7 @@ mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/data/models" "${OUT}/var" "${OUT}/docs"
 
 PREVIEW_BINS=(
-  aos-session aos-busd aos-modeld aos-agentd aos-agent-worker
+  aos-session aos-serverd aos-busd aos-modeld aos-agentd aos-agent-worker
   aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged aos-mcpd
 )
 
@@ -301,8 +301,14 @@ cp -f "${ROOT}/LICENSE-MIT" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/LICENSE-COMMERCIAL.md" "${OUT}/" 2>/dev/null || true
 cp -f "$(dirname "$0")/install-macos.sh" "${OUT}/install.sh"
-echo "chmod +x ${OUT}/bin/* ${OUT}/install.sh"
-chmod +x "${OUT}/bin/"* "${OUT}/install.sh"
+# P21.5 opt-in LaunchAgent wrappers (default install does not enable).
+mkdir -p "${OUT}/services"
+cp -f "$(dirname "$0")/services/com.azerothl.aos-serverd.plist" "${OUT}/services/"
+cp -f "$(dirname "$0")/install-macos-service.sh" "${OUT}/install-macos-service.sh"
+cp -f "$(dirname "$0")/uninstall-macos-service.sh" "${OUT}/uninstall-macos-service.sh"
+echo "chmod +x ${OUT}/bin/* ${OUT}/install.sh (+ service scripts)"
+chmod +x "${OUT}/bin/"* "${OUT}/install.sh" \
+  "${OUT}/install-macos-service.sh" "${OUT}/uninstall-macos-service.sh"
 
 cat > "${OUT}/README.txt" <<EOF
 Akasha OS Preview ${VERSION} (macOS Apple Silicon + Metal)

@@ -1,0 +1,25 @@
+# Opt-in systemd --user unit for aos-serverd (P21.5 / ADR 0012).
+# Installed by packaging/install-linux-service.sh — default Preview install
+# does NOT enable this. Desktop remains shortcut → aos-session.
+#
+# Install script substitutes AOS_HOME and binary path markers below.
+
+[Unit]
+Description=Akasha OS Preview server daemon (aos-serverd)
+Documentation=file://@AOS_HOME@/docs/INSTALL.md
+After=default.target
+
+[Service]
+Type=simple
+Environment=AOS_HOME=@AOS_HOME@
+WorkingDirectory=@AOS_HOME@
+ExecStart=@AOS_BIN@ serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+KillMode=mixed
+
+# Local control socket lives under $AOS_HOME/var/run/ (no network bind).
+
+[Install]
+WantedBy=default.target
