@@ -47,7 +47,8 @@ de double supervision.
 
 Transport 0.19 : socket Unix `$AOS_HOME/var/run/aos-serverd.sock` (ou named
 pipe Windows). **Pas** de bind `0.0.0.0` non authentifié. Pas de mint de caps
-dans serverd. Commandes : `status` / `restart` / `stop` / intake agent.
+dans serverd. Commandes figées P21.3/P21.4 : `status` / `restart` / `stop` /
+`enqueue-agent` (`server.job.enqueue`) / `job-list` / `job-status`.
 
 ### 3. Attach UI vs start
 
