@@ -490,6 +490,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aos-serverd"
+version = "0.18.0"
+
+[[package]]
 name = "aos-session"
 version = "0.18.0"
 dependencies = [
