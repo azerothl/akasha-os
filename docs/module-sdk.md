@@ -141,7 +141,10 @@ names a tool.
 Allowed via `host_call` (representative): `fs.read`, `fs.write`, `fs.list`,
 `mem.episodic_write`, `mem.episodic_query`, `web.search`, `web.browse`,
 `net.fetch`, `files.generate`, `mem.context`, `mem.user.*`, `mem.shared_*`,
-`ext.load_handlers`.
+`ext.load_handlers`, and Preview **0.19** Dev Assistant P0 —
+`workspace.bind` / `workspace.unbind` / `workspace.list`, `fs.search` /
+`code.search`, `fs.apply_patch` / `fs.undo_patch` (caps fail-closed; see
+[dev-assistant-p0.md](dev-assistant-p0.md)).
 
 **Prohibited inside guests:** `module.install`, `module.compile`, `secrets.get`,
 `agent.*`, `trust.set`.
@@ -156,6 +159,7 @@ Allowed via `host_call` (representative): `fs.read`, `fs.write`, `fs.list`,
 | `create` | 2 | rich workspace; [create-contract.md](create-contract.md) |
 | `ext-rt` | — | script runtime, not a user-facing app |
 | `gallery-demo` | 2 | DeclUI v2 widget gallery (maintainer) |
+| `dev-assistant` (community) | 1 | Reference #247 P0 contract — [community/modules/dev-assistant](../community/modules/dev-assistant/), [dev-assistant-p0.md](dev-assistant-p0.md) |
 
 ## Next steps
 

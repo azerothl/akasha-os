@@ -1,0 +1,34 @@
+# Reference Dev Assistant handlers (DA.4 / #247).
+# Packaged via module.package → handlers.json for ext-rt.
+# Final step result is returned to the host (no stringifying return maps).
+tools:
+  dev-assistant.bind:
+    steps:
+      - service: workspace.bind
+        args:
+          host_path: "{{args.host_path}}"
+  dev-assistant.list:
+    steps:
+      - service: workspace.list
+        args: {}
+  dev-assistant.search:
+    steps:
+      - service: fs.search
+        args:
+          root: "{{args.root}}"
+          query: "{{args.query}}"
+          glob: "{{args.glob}}"
+          limit: "{{args.limit}}"
+  dev-assistant.apply_patch:
+    steps:
+      - service: fs.apply_patch
+        args:
+          hunks:
+            - path: "{{args.path}}"
+              diff: "{{args.content}}"
+              replace_all: true
+  dev-assistant.undo_patch:
+    steps:
+      - service: fs.undo_patch
+        args:
+          undo_group_id: "{{args.undo_group_id}}"

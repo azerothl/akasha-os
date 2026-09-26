@@ -27,14 +27,14 @@ Horizon C / PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
 
 ## P21 — Preview 0.19.0 (in progress) — server daemon + Dev-assistant P0
 
-**0.18.0** shipped; Track B (#247) foundations started. Do **not** invent a P6
-number (PC still open). No new E* number for these host tracks. Bind API is
-developer/agent-facing; ripgrep/patch not user-complete yet.
+**0.18.0** shipped; Track B (#247) P0 lots DA.1–DA.4 landed on this branch. Do
+**not** invent a P6 number (PC still open). No new E* number for these host
+tracks.
 
 | # | Item | Status |
 |---|------|--------|
 | P21 / #403 | **`aos-serverd`** — headless process tree, watchdogs (incl. agentd), local agent job intake; ADR 0012 session vs serverd | planned |
-| P21 / #247 | **Dev-assistant P0** — bind + `fs.search` + `fs.apply_patch`/`undo_patch` live; [dev-assistant-p0.md](dev-assistant-p0.md) | **in progress** |
+| P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [module contract](dev-assistant-p0.md) + community reference module | **in progress** |
 
 Sequencing: serverd MVP (tag feature) first or in parallel with #247 P0 once
 host FS/caps work is free; #247 P1–P2 (git / `process.run` / LSP / DeclUI IDE)

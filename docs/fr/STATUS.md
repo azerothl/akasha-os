@@ -28,14 +28,14 @@ documenté.
 
 ## P21 — Preview 0.19.0 (en cours) — daemon serveur + Dev-assistant P0
 
-**0.18.0** livré ; fondations Track B (#247) démarrées. Ne **pas** inventer un
-numéro P6 (PC encore ouverte). Pas de nouvel E* pour ces tracks hôte. L’API
-bind est agent/développeur ; ripgrep/patch pas encore complets côté UX.
+**0.18.0** livré ; lots Track B (#247) DA.1–DA.4 sur cette branche. Ne **pas**
+inventer un numéro P6 (PC encore ouverte). Pas de nouvel E* pour ces tracks
+hôte.
 
 | # | Élément | État |
 |---|---------|------|
 | P21 / #403 | **`aos-serverd`** — arbre headless, watchdogs (dont agentd), intake jobs agents local ; ADR 0012 session vs serverd | planifié |
-| P21 / #247 | **Dev-assistant P0** — bind + `fs.search` + `fs.apply_patch`/`undo_patch` live ; [dev-assistant-p0.md](../dev-assistant-p0.md) | **en cours** |
+| P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [contrat module](../dev-assistant-p0.md) + module référence community | **en cours** |
 
 Séquence : MVP serverd (feature du tag) d’abord ou en parallèle de #247 P0
 dès que le travail caps/FS hôte est libre ; #247 P1–P2 (git / `process.run` /

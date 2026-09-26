@@ -28,6 +28,10 @@ Ten-minute procedure (site):
 copy: [`docs/write-a-skill.md`](../docs/write-a-skill.md). Policy:
 [ADR 0007](../adr/0007-signed-git-catalogue.md).
 
+Module reference (Dev Assistant P0 / #247): [`modules/dev-assistant/`](modules/dev-assistant/)
+— script + DeclUI v1 contract; not in the signed catalogue by default. See
+[`docs/dev-assistant-p0.md`](../docs/dev-assistant-p0.md).
+
 ## How to add a skill
 
 1. Copy [`skills/morning-brief/SKILL.md`](skills/morning-brief/SKILL.md) or a
