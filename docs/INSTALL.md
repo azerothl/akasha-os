@@ -109,11 +109,12 @@ Same list as `packaging/debian-preview-ui-runtime.txt` (helper:
 ## Package contents
 
 ```
-bin/            daemons (+ CUDA runtime on GPU builds); optional aos-bridged + aos-mcpd
+bin/            daemons (+ CUDA runtime on GPU builds); optional aos-bridged + aos-mcpd + aos-serverd
 share/models/   manifest.json (GGUF downloaded on first run)
 share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
 share/skills/   Preview skills (notes-writer, research, file-author, planner, tasks)
 share/mcp/      servers.yaml.example + akasha-mcp.example.json (stdio MCP client/server)
+services/       opt-in unit/plist templates for aos-serverd (P21.5)
 data/models/    catalog.yaml
 VERSION         build semver
 FIRST-RUN.md    text tutorial
@@ -124,6 +125,33 @@ var/            local data (created at run; agents, mcp, skills overrides)
 `aos-session`. Point external IDEs at `aos-mcpd` ([mcp-server.md](mcp-server.md)).
 Pull local Codex / Claude / Grok into agents via `harness.run` or Agents
 Advanced **Runtime** ([harness.md](harness.md)).
+
+`aos-serverd` also ships in `bin/` (Preview **0.19** / P21). It owns the
+headless process tree; **not** started by the default desktop install.
+
+## Optional: headless OS service (`aos-serverd`, P21.5)
+
+Default install remains shortcut / `aos-session` — **no** OS service.
+To keep the daemon tree up after login without egui, opt in **after**
+installing Preview:
+
+| Host | Opt-in script (from the extract or `packaging/`) |
+|------|--------------------------------------------------|
+| Linux (systemd **user**) | `./install-linux-service.sh` → `systemctl --user status aos-serverd` |
+| macOS (LaunchAgent) | `./install-macos-service.sh` |
+| Windows (logon task) | `powershell -ExecutionPolicy Bypass -File .\install-windows-service.ps1` |
+
+Uninstall: `./uninstall-linux-service.sh`, `./uninstall-macos-service.sh`, or
+`.\install-windows-service.ps1 -Uninstall`.
+
+Notes:
+
+- Sets `AOS_HOME` to the stable prefix; control stays on the local socket /
+  named pipe under `var/run/` (no network bind).
+- Windows uses a **user logon** scheduled task (not Session 0) so GPU /
+  desktop limits stay sane (ADR 0012).
+- Manual equivalent: `aos-serverd serve` (or `--headless`), then
+  `aos-serverd status` / `enqueue` / `jobs`.
 
 ## First launch
 

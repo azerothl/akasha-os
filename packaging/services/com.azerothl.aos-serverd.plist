@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Opt-in LaunchAgent for aos-serverd (P21.5 / ADR 0012).
+  Installed by packaging/install-macos-service.sh — default install does NOT
+  load this. Desktop remains agentos-preview → aos-session.
+  Install script substitutes AOS_HOME, binary path, and label markers.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>@AOS_LABEL@</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@AOS_BIN@</string>
+		<string>serve</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>AOS_HOME</key>
+		<string>@AOS_HOME@</string>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>@AOS_HOME@</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>5</integer>
+	<key>StandardOutPath</key>
+	<string>@AOS_HOME@/var/run/aos-serverd.launchd.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>@AOS_HOME@/var/run/aos-serverd.launchd.err.log</string>
+</dict>
+</plist>

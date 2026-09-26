@@ -27,19 +27,19 @@ Horizon C / PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
 
 ## P21 — Preview 0.19.0 (in progress) — server daemon + Dev-assistant P0
 
-**0.18.0** shipped; Track A (`aos-serverd` P21.0–P21.4) on this branch; Track B
-(#247) DA.1–DA.4 landed on main. Do **not** invent a P6 number (PC still
-open). No new E* number for these host tracks. Headless `serve` + control
-plane + agent intake (P21.2–P21.4 MVP host).
+**0.18.0** shipped; Track A MVP (`aos-serverd` **P21.0–P21.4**) and Track B
+(#247 **DA.1–DA.4**) landed on `main` (#406 / #407). Next: **P21.5** opt-in OS
+services, then P21.6–P21.7. Do **not** invent a P6 number (PC still open). No
+new E* number for these host tracks.
 
 | # | Item | Status |
 |---|------|--------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + headless serve + watchdogs + local control + **agent intake** (P21.0–P21.4) | **in progress** |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + headless serve + watchdogs + local control + **agent intake** (P21.0–P21.4) | **done** (MVP) |
+| P21 / #403 | **P21.5** — opt-in OS services (systemd user / launchd / Windows logon task) + ship `aos-serverd` in Preview zips | **in progress** |
 | P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [module contract](dev-assistant-p0.md) + community reference module | **done** |
 
-Sequencing: serverd MVP (tag feature) first or in parallel with #247 P0 once
-host FS/caps work is free; #247 P1–P2 (git / `process.run` / LSP / DeclUI IDE)
-stay **0.20+**.
+Sequencing: serverd MVP host done; packaging hardening (P21.5–21.6) then ship
+docs (P21.7). #247 P1–P2 (git / `process.run` / LSP / DeclUI IDE) stay **0.20+**.
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + health + Notes/Chat) — done
 

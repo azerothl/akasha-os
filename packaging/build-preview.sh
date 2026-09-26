@@ -53,7 +53,7 @@ if [ "$SKIP_BUILD" != "1" ]; then
   cargo build --release -p aos-auditd
   if [ "$CPU_ONLY" = "1" ]; then
     echo "== cargo build --release (CPU-only) =="
-    cargo build --release -p aos-session -p aos-ipc -p aos-agent \
+    cargo build --release -p aos-session -p aos-serverd -p aos-ipc -p aos-agent \
       -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
     cargo build --release -p aos-model --no-default-features
     cargo build --release -p aos-platform --no-default-features --features embeddings
@@ -61,7 +61,7 @@ if [ "$SKIP_BUILD" != "1" ]; then
     # Separate resolve so aos-ui-egui does not feature-unify CUDA/llama from
     # aos-model (GitHub Release 2 GiB limit).
     echo "== cargo build --release (chrome bins sans aos-model) =="
-    cargo build --release -p aos-session -p aos-ipc -p aos-agent \
+    cargo build --release -p aos-session -p aos-serverd -p aos-ipc -p aos-agent \
       -p aos-capkd -p aos-ui-egui -p aos-bridge -p aos-mcp
     echo "== cargo build --release (aos-modeld CUDA/llama) =="
     cargo build --release -p aos-model
@@ -169,7 +169,7 @@ mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/share/modules" "${OUT}/share/skills" \
   "${OUT}/data/models" "${OUT}/var" "${OUT}/docs"
 
-for b in aos-session aos-busd aos-modeld aos-agentd aos-agent-worker \
+for b in aos-session aos-serverd aos-busd aos-modeld aos-agentd aos-agent-worker \
          aos-platformd aos-capkd aos-auditd aos-ui-egui aos-bridged aos-mcpd; do
   cp -f "${CARGO_TARGET_DIR}/release/${b}" "${OUT}/bin/"
 done
@@ -498,7 +498,13 @@ cp -f "${ROOT}/LICENSE-MIT" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/NOTICE" "${OUT}/" 2>/dev/null || true
 cp -f "${ROOT}/LICENSE-COMMERCIAL.md" "${OUT}/" 2>/dev/null || true
 cp -f "$(dirname "$0")/install-linux.sh" "${OUT}/install.sh"
-chmod +x "${OUT}/bin/"* "${OUT}/install.sh"
+# P21.5 opt-in systemd --user wrappers (default install does not enable).
+mkdir -p "${OUT}/services"
+cp -f "$(dirname "$0")/services/aos-serverd.service" "${OUT}/services/"
+cp -f "$(dirname "$0")/install-linux-service.sh" "${OUT}/install-linux-service.sh"
+cp -f "$(dirname "$0")/uninstall-linux-service.sh" "${OUT}/uninstall-linux-service.sh"
+chmod +x "${OUT}/bin/"* "${OUT}/install.sh" \
+  "${OUT}/install-linux-service.sh" "${OUT}/uninstall-linux-service.sh"
 
 cat > "${OUT}/README.txt" <<EOF
 Akasha OS Preview ${VERSION} (Linux x64 ; NVIDIA ou CPU)

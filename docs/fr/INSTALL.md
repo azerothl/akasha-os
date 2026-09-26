@@ -110,11 +110,12 @@ Liste : `packaging/debian-preview-ui-runtime.txt` (script :
 ## Contenu du paquet
 
 ```
-bin/            daemons (+ runtime CUDA sur builds GPU) ; aos-bridged + aos-mcpd optionnels
+bin/            daemons (+ runtime CUDA sur builds GPU) ; aos-bridged + aos-mcpd + aos-serverd optionnels
 share/models/   manifest.json (GGUF téléchargés au 1er run)
 share/modules/  notes.aospkg, tasks.aospkg, ext-rt.aospkg
 share/skills/   skills Preview (notes-writer, research, file-author, planner, tasks)
 share/mcp/      servers.yaml.example + akasha-mcp.example.json (MCP stdio client/serveur)
+services/       modèles unit/plist opt-in pour aos-serverd (P21.5)
 data/models/    catalog.yaml
 VERSION         semver du build
 FIRST-RUN.md    tutoriel texte
@@ -126,6 +127,33 @@ var/            données locales (créé au run ; agents, mcp, skills)
 ([mcp-server.md](mcp-server.md)). Tirer Codex / Claude / Grok locaux dans
 les agents via `harness.run` ou **Runtime** Agents Avancé
 ([harness.md](harness.md)).
+
+`aos-serverd` est aussi dans `bin/` (Preview **0.19** / P21). Il possède
+l’arbre headless ; **pas** démarré par l’install bureau par défaut.
+
+## Optionnel : service OS headless (`aos-serverd`, P21.5)
+
+L’install par défaut reste le raccourci / `aos-session` — **pas** de service
+OS. Pour garder l’arbre de daemons après login sans egui, opt-in **après**
+l’install Preview :
+
+| Hôte | Script opt-in (extrait ou `packaging/`) |
+|------|----------------------------------------|
+| Linux (systemd **user**) | `./install-linux-service.sh` → `systemctl --user status aos-serverd` |
+| macOS (LaunchAgent) | `./install-macos-service.sh` |
+| Windows (tâche logon) | `powershell -ExecutionPolicy Bypass -File .\install-windows-service.ps1` |
+
+Désinstall : `./uninstall-linux-service.sh`, `./uninstall-macos-service.sh`,
+ou `.\install-windows-service.ps1 -Uninstall`.
+
+Notes :
+
+- `AOS_HOME` = préfixe stable ; contrôle local sous `var/run/` (pas de bind
+  réseau).
+- Windows = tâche planifiée **à la connexion utilisateur** (pas Session 0 ;
+  ADR 0012).
+- Équivalent manuel : `aos-serverd serve` (ou `--headless`), puis
+  `aos-serverd status` / `enqueue` / `jobs`.
 
 ## Premier lancement
 
@@ -175,7 +203,9 @@ keys:
 | NVIDIA recommandé | Driver + `nvidia-smi -L`, ou paquet CPU / Settings → CPU |
 | Échec modèles | Réseau pour HF, ou copier les GGUF dans `share/models/` |
 | healthcheck échoué | `var/run/*.stderr.log` (bouton **Dépannage**) |
-| Bus injoignable | Toujours via `aos-session` |
+| Bus injoignable | Lancer via `aos-session`, ou headless `aos-serverd serve` puis `aos-serverd status` |
+| Crash-loop daemon headless | `var/run/daemon_restarts.log` ; watchdogs soft ; mort busd/capkd → restart ordonné (`aos-serverd restart`) |
+| Job agent headless | Avec `aos-serverd serve` : `aos-serverd enqueue --goal "…" --actor cli` puis `aos-serverd jobs` |
 | Panic UI : `libxkbcommon-x11.so` manquant | `sudo apt install libxkbcommon-x11-0` (voir bibliothèques bureau Linux) |
 
 ## Build depuis les sources
