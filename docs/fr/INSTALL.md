@@ -123,7 +123,7 @@ var/            données locales (créé au run ; agents, mcp, skills)
 ```
 
 `aos-bridged` et `aos-mcpd` sont dans `bin/` mais **pas** démarrés par
-`aos-session`. Pointer les IDE externes vers `aos-mcpd`
+`aos-session` par défaut. Pointer les IDE externes vers `aos-mcpd`
 ([mcp-server.md](mcp-server.md)). Tirer Codex / Claude / Grok locaux dans
 les agents via `harness.run` ou **Runtime** Agents Avancé
 ([harness.md](harness.md)).
@@ -155,14 +155,30 @@ Notes :
 - Équivalent manuel : `aos-serverd serve` (ou `--headless`), puis
   `aos-serverd status` / `enqueue` / `jobs`.
 
+## Optionnel : mcpd / bridged + attach session (P21.6)
+
+Extras opt-in dans `etc/serverd.yaml` (seed session, tout à **false**) :
+
+```yaml
+supervise_bridged: false
+supervise_mcpd: false
+session_bootstrap_serverd: false
+```
+
+Env : `AOS_SUPERVISE_BRIDGED=1`, `AOS_SUPERVISE_MCPD=1`,
+`AOS_SESSION_BOOTSTRAP_SERVERD=1`, `AOS_SESSION_HANDOFF=attach|bootstrap|legacy`.
+Si serverd possède déjà l’arbre, `aos-session` **attache l’UI seule** et
+fermer egui **n’arrête pas** les daemons.
+
 ## Premier lancement
 
 1. `aos-session` vérifie NVIDIA + disque et sonde la VRAM.
 2. **Choix des modèles** (1er run) : confirmer le pack auto-best, télécharger
    les GGUF (`catalog-offerings.json`).
-3. Démarre bus → capkd → auditd → modeld → platformd → agentd.
+3. Démarre bus → capkd → auditd → modeld → platformd → agentd
+   (ou s’attache à un arbre `aos-serverd` vivant — P21.6).
 4. Ouvre l'UI egui + **tutoriel**.
-5. Fermer l'UI arrête les daemons.
+5. Fermer l'UI arrête les daemons **sauf** en mode attach serverd.
 
 Voir [FIRST-RUN.md](FIRST-RUN.md) et [FEATURES.md](FEATURES.md).
 Onglet **Models** pour d'autres profils.

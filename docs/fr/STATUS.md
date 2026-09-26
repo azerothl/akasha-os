@@ -29,19 +29,20 @@ documenté.
 ## P21 — Preview 0.19.0 (en cours) — daemon serveur + Dev-assistant P0
 
 **0.18.0** livré ; MVP Track A (`aos-serverd` **P21.0–P21.4**) et Track B
-(#247 **DA.1–DA.4**) sur `main` (#406 / #407). Suite : **P21.5** services OS
-opt-in, puis P21.6–P21.7. Ne **pas** inventer un numéro P6 (PC encore
-ouverte). Pas de nouvel E* pour ces tracks hôte.
+(#247 **DA.1–DA.4**) sur `main` (#406 / #407). **P21.5** services OS landé
+(#409). **P21.6** (cette branche) : mcpd/bridged opt-in + session attach.
+Ne **pas** inventer un numéro P6 (PC encore ouverte). Pas de nouvel E* pour
+ces tracks hôte.
 
 | # | Élément | État |
 |---|---------|------|
 | P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + serve headless + watchdogs + contrôle local + **intake agents** (P21.0–P21.4) | **fait** (MVP) |
-| P21 / #403 | **P21.5** — services OS opt-in (systemd user / launchd / tâche Windows logon) + `aos-serverd` dans les zips Preview | **en cours** |
+| P21 / #403 | **P21.5** — services OS opt-in (systemd user / launchd / tâche Windows logon) + `aos-serverd` dans les zips Preview | **fait** (#409) |
+| P21 / #403 | **P21.6** — supervise opt-in `aos-mcpd` / `aos-bridged` ; session attach UI only | **en cours** |
 | P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [contrat module](../dev-assistant-p0.md) + module référence community | **fait** |
 
-Séquence : MVP hôte serverd livré ; durcissement packaging (P21.5–21.6) puis
-docs ship (P21.7). #247 P1–P2 (git / `process.run` / LSP / DeclUI IDE)
-restent **0.20+**.
+Séquence : MVP hôte + packaging P21.5 livrés ; P21.6 attach/supervise ensuite ;
+puis P21.7 docs ship. #247 P1–P2 restent **0.20+**.
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait
 

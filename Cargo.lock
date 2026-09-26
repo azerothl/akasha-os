@@ -498,6 +498,7 @@ dependencies = [
  "ctrlc",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tokio",
 ]
 

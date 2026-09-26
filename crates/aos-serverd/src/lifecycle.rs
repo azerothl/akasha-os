@@ -31,6 +31,10 @@ pub struct SpawnOptions {
     pub log_tag: &'static str,
     /// Host has GPU acceleration (NVIDIA / Apple Silicon Metal).
     pub gpu_accel: bool,
+    /// Opt-in: also spawn `aos-bridged` after the core tree (P21.6).
+    pub supervise_bridged: bool,
+    /// Opt-in: also spawn `aos-mcpd` after the core tree (P21.6).
+    pub supervise_mcpd: bool,
 }
 
 impl Default for SpawnOptions {
@@ -38,6 +42,8 @@ impl Default for SpawnOptions {
         Self {
             log_tag: "aos-serverd",
             gpu_accel: false,
+            supervise_bridged: false,
+            supervise_mcpd: false,
         }
     }
 }
@@ -114,6 +120,26 @@ impl ProcessTree {
             let mut cmd = Command::new(bin_path(&home, "aos-agentd"));
             cmd.arg(&bus);
             list.push(spawn_one(&home, log_tag, "aos-agentd", cmd)?);
+        }
+
+        // P21.6 — opt-in optional daemons (default off). Skip if binary missing.
+        if opts.supervise_bridged {
+            let bin = bin_path(&home, "aos-bridged");
+            if bin.exists() {
+                let cmd = bridged_command(&home);
+                list.push(spawn_one(&home, log_tag, "aos-bridged", cmd)?);
+            } else {
+                eprintln!("[{log_tag}] supervise_bridged set but {bin:?} missing — skip");
+            }
+        }
+        if opts.supervise_mcpd {
+            let bin = bin_path(&home, "aos-mcpd");
+            if bin.exists() {
+                let cmd = mcpd_command(&home);
+                list.push(spawn_one(&home, log_tag, "aos-mcpd", cmd)?);
+            } else {
+                eprintln!("[{log_tag}] supervise_mcpd set but {bin:?} missing — skip");
+            }
         }
 
         thread::sleep(Duration::from_secs(2));
@@ -297,12 +323,40 @@ pub fn gpu_accel_ok() -> bool {
     }
 }
 
-/// Default spawn options for the `aos-serverd` binary.
+/// Default spawn options for the `aos-serverd` binary (reads `etc/serverd.yaml`).
 pub fn serverd_spawn_opts() -> SpawnOptions {
+    serverd_spawn_opts_for(&std::env::var_os("AOS_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".")))
+}
+
+/// Spawn options for serverd with config loaded from `home`.
+pub fn serverd_spawn_opts_for(home: &Path) -> SpawnOptions {
+    let cfg = crate::load_serverd_config(home);
     SpawnOptions {
         log_tag: "aos-serverd",
         gpu_accel: gpu_accel_ok(),
+        supervise_bridged: cfg.supervise_bridged,
+        supervise_mcpd: cfg.supervise_mcpd,
     }
+}
+
+/// `aos-bridged` — loopback HTTP↔bus (P21.6 opt-in).
+pub fn bridged_command(home: &Path) -> Command {
+    let mut cmd = Command::new(bin_path(home, "aos-bridged"));
+    cmd.env("AOS_BUS_ADDR", default_bus_addr());
+    cmd
+}
+
+/// `aos-mcpd` — stdio MCP façade (P21.6 opt-in).
+///
+/// Stdin is piped and left open so the process stays alive under serverd.
+/// IDE MCP clients still spawn their **own** `aos-mcpd` over stdio.
+pub fn mcpd_command(home: &Path) -> Command {
+    let mut cmd = Command::new(bin_path(home, "aos-mcpd"));
+    cmd.env("AOS_BUS_ADDR", default_bus_addr());
+    cmd.stdin(Stdio::piped());
+    cmd
 }
 
 /// Command builders used by session watchdogs (same argv as [`ProcessTree::start`]).

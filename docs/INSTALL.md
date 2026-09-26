@@ -122,9 +122,9 @@ var/            local data (created at run; agents, mcp, skills overrides)
 ```
 
 `aos-bridged` and `aos-mcpd` ship in `bin/` but are **not** started by
-`aos-session`. Point external IDEs at `aos-mcpd` ([mcp-server.md](mcp-server.md)).
-Pull local Codex / Claude / Grok into agents via `harness.run` or Agents
-Advanced **Runtime** ([harness.md](harness.md)).
+`aos-session` by default. Point external IDEs at `aos-mcpd`
+([mcp-server.md](mcp-server.md)). Pull local Codex / Claude / Grok into
+agents via `harness.run` or Agents Advanced **Runtime** ([harness.md](harness.md)).
 
 `aos-serverd` also ships in `bin/` (Preview **0.19** / P21). It owns the
 headless process tree; **not** started by the default desktop install.
@@ -153,14 +153,30 @@ Notes:
 - Manual equivalent: `aos-serverd serve` (or `--headless`), then
   `aos-serverd status` / `enqueue` / `jobs`.
 
+## Optional: mcpd / bridged + session attach (P21.6)
+
+Opt-in extras in `etc/serverd.yaml` (seeded by session, all flags **false**):
+
+```yaml
+supervise_bridged: false          # loopback HTTP↔bus under serverd
+supervise_mcpd: false             # warm aos-mcpd (stdin held); IDEs still spawn their own
+session_bootstrap_serverd: false  # session starts serverd then attaches UI
+```
+
+Env overrides: `AOS_SUPERVISE_BRIDGED=1`, `AOS_SUPERVISE_MCPD=1`,
+`AOS_SESSION_BOOTSTRAP_SERVERD=1`, `AOS_SESSION_HANDOFF=attach|bootstrap|legacy`.
+When serverd already owns the tree, `aos-session` **attaches UI only** and
+closing egui does **not** stop the daemons.
+
 ## First launch
 
 1. `aos-session` checks NVIDIA + disk space and probes VRAM.
 2. **Model setup** (first run): confirm auto-best pack for your GPU tier,
    then download GGUFs into `share/models/` (`catalog-offerings.json`).
-3. Starts bus → capkd → auditd → modeld → platformd → agentd.
+3. Starts bus → capkd → auditd → modeld → platformd → agentd
+   (or attaches to a live `aos-serverd` tree — P21.6).
 4. Opens egui UI + multi-page **tutorial**.
-5. Closing the UI stops the daemons.
+5. Closing the UI stops the daemons **unless** session attached to serverd.
 
 See [FIRST-RUN.md](FIRST-RUN.md) and [FEATURES.md](FEATURES.md).
 Use the **Models** tab to download additional profiles or switch session/agent

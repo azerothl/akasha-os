@@ -1,15 +1,16 @@
-//! `aos-serverd` binary — P21.4 headless owner + control plane + agent intake.
+//! `aos-serverd` binary — P21.6 headless owner + control + intake + optional mcpd/bridged.
 //!
-//! `serve` / `--headless` boots busd…agentd (no egui), healthchecks, runs
-//! soft + hard watchdogs, serves `status` / `restart` / `stop`, and accepts
-//! `enqueue-agent` / `job-list` / `job-status` on the local control socket.
-//! See ADR 0012.
+//! `serve` / `--headless` boots busd…agentd (no egui), optional mcpd/bridged when
+//! `etc/serverd.yaml` opts in, healthchecks, soft + hard watchdogs, serves
+//! `status` / `restart` / `stop`, and accepts agent intake on the local control
+//! socket. See ADR 0012.
 
 use aos_serverd::{
-    agentd_command, auditd_command, control_endpoint_present, control_socket_path, healthcheck,
-    list_jobs, modeld_command, platformd_command, scaffold_status, send_control, serve_control,
-    serverd_pid_relpath, serverd_spawn_opts, ControlRequest, ControlState, ProcessTree,
-    SessionHandoff, SpawnOptions, DAEMON_BOOT_ORDER, WATCHDOG_HARD, WATCHDOG_SOFT,
+    agentd_command, auditd_command, bridged_command, control_endpoint_present, control_socket_path,
+    healthcheck, list_jobs, mcpd_command, modeld_command, platformd_command, scaffold_status,
+    send_control, serve_control, serverd_pid_relpath, serverd_spawn_opts_for, ControlRequest,
+    ControlState, ProcessTree, SessionHandoff, SpawnOptions, DAEMON_BOOT_ORDER, WATCHDOG_HARD,
+    WATCHDOG_SOFT,
 };
 use std::env;
 use std::fs;
@@ -107,10 +108,14 @@ fn main() {
 
 fn print_help() {
     println!(
-        "aos-serverd — Akasha OS Preview server lifecycle daemon (P21.4)\n\n\
+        "aos-serverd — Akasha OS Preview server lifecycle daemon (P21.6)\n\n\
 Usage:\n  aos-serverd [--aos-home <path>] status|handoff|serve|restart|stop\n  aos-serverd --headless\n  aos-serverd enqueue --goal <text> [--actor <id>] [--mode create|start|schedule]\n                      [--agent-id <id>] [--model-id <id>] [--interval <secs>]\n  aos-serverd jobs\n  aos-serverd job <job-id>\n\n\
 serve / --headless: own the Preview process tree without egui (Ctrl+C stops).\n\
 enqueue: intake façade → agent.create / agent.start / schedule.create (caps fail-closed).\n\
+Opt-in (etc/serverd.yaml): supervise_bridged / supervise_mcpd (default off).\n\
+Session attach: aos-session uses handoff modes (see `handoff`); closing egui does not\n\
+stop the tree when serverd owns it.\n\n\
+Local control only (Unix socket / Windows pipe under $AOS_HOME/var/run/).\n\
 Requires AOS_HOME already laid out (etc/*.yaml, bin/*). See ADR 0012."
     );
 }
@@ -144,6 +149,10 @@ fn print_status(home: &Path) -> Result<(), String> {
     println!("  binary_owns_tree:   {}", st.binary_owns_tree);
     println!("  control_plane_live: {}", st.control_plane_live);
     println!("  agent_intake_live:  {}", st.agent_intake_live);
+    println!(
+        "  optional+attach:   {}",
+        st.optional_daemons_and_attach
+    );
     println!("  aos_home:           {}", home.display());
     println!(
         "  control_path:       {}",
@@ -320,10 +329,12 @@ fn run_headless(home: &Path) -> Result<(), String> {
     let run_dir = home.join("var/run");
     fs::create_dir_all(&run_dir).map_err(|e| format!("var/run: {e}"))?;
 
-    let opts = serverd_spawn_opts();
+    let opts = serverd_spawn_opts_for(home);
     eprintln!(
-        "[aos-serverd] headless start (gpu_accel={}, home={})",
+        "[aos-serverd] headless start (gpu_accel={}, bridged={}, mcpd={}, home={})",
         opts.gpu_accel,
+        opts.supervise_bridged,
+        opts.supervise_mcpd,
         home.display()
     );
 
@@ -381,7 +392,7 @@ fn run_headless(home: &Path) -> Result<(), String> {
 fn spawn_soft_watchdogs(tree: Arc<Mutex<ProcessTree>>, stop: Arc<AtomicBool>, opts: SpawnOptions) {
     type Maker = Box<dyn Fn(&Path) -> std::process::Command + Send>;
     let modeld_opts = opts.clone();
-    let watchers: Vec<(&'static str, Maker)> = vec![
+    let mut watchers: Vec<(&'static str, Maker)> = vec![
         ("aos-auditd", Box::new(auditd_command)),
         ("aos-platformd", Box::new(platformd_command)),
         (
@@ -390,6 +401,12 @@ fn spawn_soft_watchdogs(tree: Arc<Mutex<ProcessTree>>, stop: Arc<AtomicBool>, op
         ),
         ("aos-agentd", Box::new(agentd_command)),
     ];
+    if opts.supervise_bridged {
+        watchers.push(("aos-bridged", Box::new(bridged_command)));
+    }
+    if opts.supervise_mcpd {
+        watchers.push(("aos-mcpd", Box::new(mcpd_command)));
+    }
 
     for (name, make_cmd) in watchers {
         let tree = tree.clone();
