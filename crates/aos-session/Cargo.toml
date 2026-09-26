@@ -16,6 +16,7 @@ path = "src/main.rs"
 aos-ipc = { path = "../aos-ipc" }
 aos-placement = { path = "../aos-placement" }
 aos-proto = { path = "../aos-proto" }
+aos-serverd = { path = "../aos-serverd" }
 ctrlc = "3"
 serde.workspace = true
 serde_json.workspace = true

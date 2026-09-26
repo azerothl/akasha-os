@@ -1,8 +1,16 @@
 //! `aos-serverd` — Preview server lifecycle owner (P21 / ADR 0012).
 //!
-//! This crate is the **scaffold** for Preview 0.19.0: process-tree contract,
-//! control-plane path layout, and session handoff modes. Spawning daemons,
-//! watchdogs, and agent intake land in later P21 lots — not here.
+//! **P21.1:** shared spawn / stop / health live in [`lifecycle`] and are used by
+//! `aos-session` (desktop unchanged). The `aos-serverd` binary still does not
+//! own a live tree by itself (that is P21.2).
+
+mod lifecycle;
+
+pub use lifecycle::{
+    apply_daemon_env, auditd_command, bin_path, default_bus_addr, expected_boot_argv, healthcheck,
+    healthcheck_bus, inference_mode, kill_by_name, log_daemon_restart, modeld_command,
+    pick_modeld_bin, platformd_command, DaemonHandle, ProcessTree, SpawnOptions, HEALTH_PROBES,
+};
 
 use std::path::{Path, PathBuf};
 
@@ -64,7 +72,6 @@ impl ControlCommand {
 pub fn control_socket_path(aos_home: &Path) -> PathBuf {
     #[cfg(windows)]
     {
-        // Named-pipe clients still key off this relative layout for docs/tests.
         aos_home.join("var/run/aos-serverd.pipe")
     }
     #[cfg(not(windows))]
@@ -78,18 +85,21 @@ pub fn serverd_pid_relpath() -> &'static str {
     "var/run/aos-serverd.pid"
 }
 
-/// Scaffold readiness: tree ownership contract only — no spawn yet.
+/// Readiness for the `aos-serverd` binary (not the shared lib).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScaffoldStatus {
     pub lot: &'static str,
-    pub spawns_daemons: bool,
+    /// Shared lib can spawn (session uses it); binary still status-only until P21.2.
+    pub lib_spawns_daemons: bool,
+    pub binary_owns_tree: bool,
     pub control_plane_live: bool,
 }
 
 pub fn scaffold_status() -> ScaffoldStatus {
     ScaffoldStatus {
-        lot: "P21.0",
-        spawns_daemons: false,
+        lot: "P21.1",
+        lib_spawns_daemons: true,
+        binary_owns_tree: false,
         control_plane_live: false,
     }
 }
@@ -132,10 +142,11 @@ mod tests {
     }
 
     #[test]
-    fn scaffold_does_not_claim_live_supervision() {
+    fn p21_1_lib_spawns_binary_does_not() {
         let st = scaffold_status();
-        assert_eq!(st.lot, "P21.0");
-        assert!(!st.spawns_daemons);
+        assert_eq!(st.lot, "P21.1");
+        assert!(st.lib_spawns_daemons);
+        assert!(!st.binary_owns_tree);
         assert!(!st.control_plane_live);
     }
 

@@ -492,6 +492,11 @@ dependencies = [
 [[package]]
 name = "aos-serverd"
 version = "0.18.0"
+dependencies = [
+ "aos-ipc",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "aos-session"
@@ -500,6 +505,7 @@ dependencies = [
  "aos-ipc",
  "aos-placement",
  "aos-proto",
+ "aos-serverd",
  "ctrlc",
  "reqwest",
  "serde",

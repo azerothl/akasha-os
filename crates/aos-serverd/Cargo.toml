@@ -12,3 +12,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "aos-serverd"
 path = "src/main.rs"
+
+[dependencies]
+aos-ipc = { path = "../aos-ipc" }
+serde_json.workspace = true
+tokio.workspace = true

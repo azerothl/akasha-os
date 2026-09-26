@@ -13,18 +13,24 @@ mod tasks_migration;
 mod update;
 
 use aos_ipc::BusClient;
+use aos_serverd::{
+    auditd_command, bin_path, default_bus_addr, healthcheck, modeld_command, platformd_command,
+    ProcessTree, SpawnOptions,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const BUS_ADDR: &str = "127.0.0.1:24701";
 const BOOTSTRAP_DIALOG_TITLE: &str = "Akasha OS Preview";
+
+fn bus_addr() -> String {
+    default_bus_addr()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct OnboardingState {
@@ -36,14 +42,8 @@ struct OnboardingState {
     tutorial_step: u32,
 }
 
-struct Daemon {
-    name: &'static str,
-    child: Child,
-}
-
 struct Session {
-    home: PathBuf,
-    daemons: Mutex<Vec<Daemon>>,
+    tree: Mutex<ProcessTree>,
     stop: AtomicBool,
 }
 
@@ -390,8 +390,7 @@ fn main() {
     std::env::remove_var("AOS_FORCE_CONFIG");
 
     let session = Arc::new(Session {
-        home: home.clone(),
-        daemons: Mutex::new(Vec::new()),
+        tree: Mutex::new(ProcessTree::empty(home.clone(), "aos-session")),
         stop: AtomicBool::new(false),
     });
 
@@ -804,25 +803,6 @@ fn resolve_home() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn bin_path(home: &Path, name: &str) -> PathBuf {
-    let exe = if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_string()
-    };
-    let packaged = home.join("bin").join(&exe);
-    if packaged.exists() {
-        return packaged;
-    }
-    // Dev : target/release
-    let dev = home.join("target").join("release").join(&exe);
-    if dev.exists() {
-        return dev;
-    }
-    // Fallback PATH / cwd
-    PathBuf::from(exe)
-}
-
 fn ensure_layout(home: &Path) -> Vec<String> {
     let mut synced = Vec::new();
     for d in [
@@ -1124,7 +1104,7 @@ fn reload_synced_packaged_modules(synced: &[String]) {
         Err(_) => return,
     };
     rt.block_on(async {
-        let Ok(bus) = BusClient::connect(BUS_ADDR, "session-module-reload").await else {
+        let Ok(bus) = BusClient::connect(&bus_addr(), "session-module-reload").await else {
             return;
         };
         for name in synced {
@@ -1226,9 +1206,10 @@ fn write_runtime_configs(home: &Path) {
 
     let modeld = home.join("etc/modeld.yaml");
     if !modeld.exists() || std::env::var_os("AOS_FORCE_CONFIG").is_some() {
+        let bus = bus_addr();
         let yaml = format!(
             r#"# Généré par aos-session (Preview {version})
-bus: "{BUS_ADDR}"
+bus: "{bus}"
 gpu: {gpu}
 vram_total_bytes: {vram_total}
 os_reserve_vram_bytes: {os_reserve_vram}
@@ -1267,9 +1248,10 @@ models:
 
     let platformd = home.join("etc/platformd.yaml");
     if !platformd.exists() || std::env::var_os("AOS_FORCE_CONFIG").is_some() {
+        let bus = bus_addr();
         let yaml = format!(
             r#"# Généré par aos-session (Preview {version})
-bus: "{BUS_ADDR}"
+bus: "{bus}"
 audit_dir: var/audit
 storage_dir: var/storage
 memory_dir: var/memory
@@ -1374,166 +1356,20 @@ fn path_yaml(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
-fn inference_mode(home: &Path) -> String {
-    std::fs::read_to_string(home.join("var/run/preferences.json"))
-        .ok()
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-        .and_then(|v| {
-            v.get("inference_mode")
-                .and_then(|m| m.as_str())
-                .map(|s| s.to_string())
-        })
-        .unwrap_or_else(|| "auto".into())
-}
-
-/// Metal/CUDA-linked `aos-modeld` vs `aos-modeld-cpu`. Unified zip ships both.
-/// On GPU hosts the accelerated binary stays up for in-process pin cpu/gpu (E18);
-/// `aos-modeld-cpu` is only for machines without GPU acceleration.
-fn pick_modeld_bin(home: &Path) -> (PathBuf, bool) {
-    let gpu_accel = bootstrap::gpu_accel_ok();
-    let mode = inference_mode(home);
-    let cpu_bin = bin_path(home, "aos-modeld-cpu");
-    let gpu_bin = bin_path(home, "aos-modeld");
-    if gpu_accel && gpu_bin.exists() {
-        return (gpu_bin, false);
-    }
-    let want_cpu =
-        mode.eq_ignore_ascii_case("cpu") || (!gpu_accel && !mode.eq_ignore_ascii_case("gpu"));
-    if want_cpu && cpu_bin.exists() {
-        (cpu_bin, true)
-    } else {
-        (gpu_bin, false)
-    }
-}
-
-fn modeld_command(home: &Path) -> Command {
-    let (bin, cpu) = pick_modeld_bin(home);
-    let mut cmd = Command::new(&bin);
-    cmd.arg("etc/modeld.yaml");
-    cmd.env("AOS_INFERENCE", inference_mode(home));
-    if cpu {
-        cmd.env("AOS_CPU_ONLY", "1");
-    } else {
-        cmd.env_remove("AOS_CPU_ONLY");
-    }
-    eprintln!(
-        "[aos-session] modeld {} (cpu={cpu})",
-        bin.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("aos-modeld")
-    );
-    cmd
-}
-
-fn daemon_env(cmd: &mut Command, home: &Path) {
-    cmd.current_dir(home).env("AOS_HOME", home);
-    #[cfg(target_os = "linux")]
-    {
-        let bin_dir = home.join("bin");
-        let mut ld = bin_dir.to_string_lossy().to_string();
-        if let Ok(prev) = std::env::var("LD_LIBRARY_PATH") {
-            if !prev.is_empty() {
-                ld = format!("{ld}:{prev}");
-            }
-        }
-        cmd.env("LD_LIBRARY_PATH", ld);
+fn session_spawn_opts() -> SpawnOptions {
+    SpawnOptions {
+        log_tag: "aos-session",
+        gpu_accel: bootstrap::gpu_accel_ok(),
     }
 }
 
 fn start_daemons(session: &Arc<Session>) -> Result<(), String> {
-    let home = &session.home;
-    let bin = |n: &str| bin_path(home, n);
-
-    let spawn = |name: &'static str, mut cmd: Command| -> Result<Daemon, String> {
-        let log_path = home.join("var/run").join(format!("{name}.stderr.log"));
-        let log_file = fs::File::create(&log_path)
-            .map_err(|e| format!("{name}: log {e} ({})", log_path.display()))?;
-        daemon_env(&mut cmd, home);
-        cmd.stdout(Stdio::null())
-            // Piped unread stderr deadlocks GPU daemons (ggml/CUDA logs).
-            .stderr(Stdio::from(log_file));
-        let child = cmd
-            .spawn()
-            .map_err(|e| format!("{name}: {e} ({})", bin(name).display()))?;
-        let pid = child.id();
-        let _ = fs::write(
-            home.join("var/run").join(format!("{name}.pid")),
-            pid.to_string(),
-        );
-        eprintln!("[aos-session] {name} up (pid {pid})");
-        Ok(Daemon { name, child })
-    };
-
-    let mut list = Vec::new();
-
-    {
-        let mut cmd = Command::new(bin("aos-busd"));
-        cmd.arg("24701");
-        list.push(spawn("aos-busd", cmd)?);
-    }
-    thread::sleep(Duration::from_millis(800));
-
-    {
-        let mut cmd = Command::new(bin("aos-capkd"));
-        cmd.arg(BUS_ADDR);
-        list.push(spawn("aos-capkd", cmd)?);
-    }
-    {
-        let mut cmd = Command::new(bin("aos-auditd"));
-        cmd.arg(BUS_ADDR).arg("var/audit");
-        list.push(spawn("aos-auditd", cmd)?);
-    }
-    {
-        let cmd = modeld_command(home);
-        list.push(spawn("aos-modeld", cmd)?);
-    }
-    {
-        let mut cmd = Command::new(bin("aos-platformd"));
-        cmd.arg("etc/platformd.yaml");
-        list.push(spawn("aos-platformd", cmd)?);
-    }
-    {
-        let mut cmd = Command::new(bin("aos-agentd"));
-        cmd.arg(BUS_ADDR);
-        list.push(spawn("aos-agentd", cmd)?);
-    }
-
-    thread::sleep(Duration::from_secs(2));
-    *session.daemons.lock().unwrap() = list;
-    Ok(())
+    let opts = session_spawn_opts();
+    session.tree.lock().unwrap().start(&opts)
 }
 
-fn healthcheck() -> Result<(), String> {
-    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
-    rt.block_on(async {
-        let mut last = String::new();
-        for _ in 0..30 {
-            match BusClient::connect(BUS_ADDR, "session-health").await {
-                Ok(bus) => {
-                    let probes = [
-                        ("modeld", "model.list"),
-                        ("agentd", "agent.list"),
-                        ("platformd", "module.list"),
-                        ("capkd", "cap.check"),
-                    ];
-                    let mut ok = true;
-                    for (name, intent) in probes {
-                        if !bus.lookup(intent).await.unwrap_or(false) {
-                            ok = false;
-                            last = format!("{name} ({intent}) absent");
-                            break;
-                        }
-                    }
-                    if ok {
-                        return Ok(());
-                    }
-                }
-                Err(e) => last = e.to_string(),
-            }
-            thread::sleep(Duration::from_millis(500));
-        }
-        Err(last)
-    })
+fn stop_all(session: &Arc<Session>) {
+    session.tree.lock().unwrap().stop();
 }
 
 /// Applique `trust_default` de l'onboarding au Trust Manager (`__default__`).
@@ -1555,7 +1391,7 @@ fn apply_trust_default(home: &Path) {
         Err(_) => return,
     };
     rt.block_on(async {
-        let Ok(bus) = BusClient::connect(BUS_ADDR, "session-trust").await else {
+        let Ok(bus) = BusClient::connect(&bus_addr(), "session-trust").await else {
             return;
         };
         let _ = bus
@@ -1575,57 +1411,19 @@ fn apply_trust_default(home: &Path) {
     });
 }
 
-fn stop_all(session: &Arc<Session>) {
-    let mut daemons = session.daemons.lock().unwrap();
-    // Arrêt inverse ; tuer aussi les workers agents.
-    kill_by_name("aos-agent-worker");
-    for d in daemons.iter_mut().rev() {
-        let _ = d.child.kill();
-        let _ = d.child.wait();
-        eprintln!("[aos-session] {} stopped", d.name);
-    }
-    daemons.clear();
-}
-
-fn kill_by_name(name: &str) {
-    #[cfg(windows)]
-    {
-        let _ = Command::new("taskkill")
-            .args(["/F", "/IM", &format!("{name}.exe")])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = Command::new("pkill")
-            .args(["-x", name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
 fn auditd_watchdog(session: Arc<Session>) {
-    daemon_watchdog(session, "aos-auditd", &|home| {
-        let mut cmd = Command::new(bin_path(home, "aos-auditd"));
-        cmd.arg(BUS_ADDR).arg("var/audit");
-        cmd
-    });
+    daemon_watchdog(session, "aos-auditd", &|home| auditd_command(home));
 }
 
 /// Redémarre platformd s'il meurt (ex. assert llama embed) pour que
 /// `mem.*` / notes / modules restent joignables.
 fn platformd_watchdog(session: Arc<Session>) {
-    daemon_watchdog(session, "aos-platformd", &|home| {
-        let mut cmd = Command::new(bin_path(home, "aos-platformd"));
-        cmd.arg("etc/platformd.yaml");
-        cmd
-    });
+    daemon_watchdog(session, "aos-platformd", &|home| platformd_command(home));
 }
 
 fn modeld_watchdog(session: Arc<Session>) {
-    daemon_watchdog(session, "aos-modeld", &|home| modeld_command(home));
+    let opts = session_spawn_opts();
+    daemon_watchdog(session, "aos-modeld", &move |home| modeld_command(home, &opts));
 }
 
 fn daemon_watchdog(session: Arc<Session>, name: &'static str, make_cmd: &dyn Fn(&Path) -> Command) {
@@ -1634,65 +1432,19 @@ fn daemon_watchdog(session: Arc<Session>, name: &'static str, make_cmd: &dyn Fn(
         if session.stop.load(Ordering::SeqCst) {
             break;
         }
-        let mut daemons = session.daemons.lock().unwrap();
-        let Some(pos) = daemons.iter().position(|d| d.name == name) else {
+        let mut tree = session.tree.lock().unwrap();
+        let Some(pos) = tree.daemons().iter().position(|d| d.name == name) else {
             continue;
         };
         // try_wait : None = encore vivant
-        match daemons[pos].child.try_wait() {
+        match tree.daemons_mut()[pos].child.try_wait() {
             Ok(Some(_)) => {
                 eprintln!("[aos-session] {name} mort — redémarrage");
-                let home = session.home.clone();
-                let mut cmd = make_cmd(&home);
-                daemon_env(&mut cmd, &home);
-                // Conserver les logs stderr (crash GGML, etc.)
-                let log_path = home.join("var/run").join(format!("{name}.stderr.log"));
-                let stderr = fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_path)
-                    .ok()
-                    .map(Stdio::from)
-                    .unwrap_or_else(Stdio::null);
-                cmd.stdout(Stdio::null()).stderr(stderr);
-                match cmd.spawn() {
-                    Ok(child) => {
-                        let pid = child.id();
-                        let _ = fs::write(
-                            home.join("var/run").join(format!("{name}.pid")),
-                            pid.to_string(),
-                        );
-                        daemons[pos] = Daemon { name, child };
-                        eprintln!("[aos-session] {name} up (pid {pid})");
-                        log_daemon_restart(&home, name, true);
-                    }
-                    Err(e) => {
-                        eprintln!("[aos-session] restart {name} échoué : {e}");
-                        log_daemon_restart(&home, name, false);
-                    }
-                }
+                let _ = tree.respawn(name, make_cmd);
             }
             Ok(None) => {}
             Err(_) => {}
         }
-    }
-}
-
-/// Trace les redémarrages watchdog dans `var/run/daemon_restarts.log`
-/// (`<ms> <daemon> restarted|restart-failed`), lus par l'onglet Audit.
-/// Écriture synchrone : le watchdog tourne déjà sur thread dédié.
-fn log_daemon_restart(home: &Path, name: &str, ok: bool) {
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let line = format!(
-        "{ms} {name} {}\n",
-        if ok { "restarted" } else { "restart-failed" }
-    );
-    let path = home.join("var/run/daemon_restarts.log");
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = f.write_all(line.as_bytes());
     }
 }
 
