@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 aos-ipc = { path = "../aos-ipc" }
+aos-proto = { path = "../aos-proto" }
 ctrlc = "3"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -176,6 +176,7 @@ keys:
 | Healthcheck failed | `var/run/*.stderr.log` (**Troubleshooting** button) |
 | Bus unreachable | Launch via `aos-session`, or headless `aos-serverd serve` then `aos-serverd status` |
 | Headless daemon crash-loop | `var/run/daemon_restarts.log`; soft watchdogs respawn agentd/auditd/…; busd/capkd death triggers ordered tree restart (`aos-serverd restart`) |
+| Headless agent job | With `aos-serverd serve` up: `aos-serverd enqueue --goal "…" --actor cli` then `aos-serverd jobs` (`var/run/serverd-jobs.json`) |
 | UI panic: `libxkbcommon-x11.so` missing | `sudo apt install libxkbcommon-x11-0` (see Linux desktop libraries) |
 
 ## Build from source

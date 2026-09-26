@@ -3,13 +3,19 @@
 //! **P21.1:** shared spawn / stop / health in [`lifecycle`].
 //! **P21.2:** headless `serve` owns the process tree.
 //! **P21.3:** extended watchdogs + local `status` / `restart` / `stop` API.
+//! **P21.4:** agent job intake → `aos-agentd` (`enqueue-agent` / `server.job.*`).
 
 mod control;
+mod intake;
 mod lifecycle;
 
 pub use control::{
     control_endpoint_present, send_control, serve_control, ControlRequest, ControlResponse,
     ControlState, DaemonStatus, TreeStatus,
+};
+pub use intake::{
+    enqueue, get_job, jobs_store_relpath, list_jobs, validate_enqueue, EnqueueParams, IntakeMode,
+    JobRecord,
 };
 pub use lifecycle::{
     agentd_command, apply_daemon_env, auditd_command, bin_path, busd_command, capkd_command,
@@ -65,14 +71,16 @@ pub enum SessionHandoff {
     AttachUiOnly,
 }
 
-/// Local control-plane commands (ADR 0012). Framing lands in P21.3/P21.4.
+/// Local control-plane commands (ADR 0012).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlCommand {
     Status,
     Restart,
     Stop,
-    /// Intake → existing `aos-agentd` paths (not implemented until P21.4).
+    /// Intake → existing `aos-agentd` paths (P21.4).
     EnqueueAgent,
+    JobList,
+    JobStatus,
 }
 
 impl ControlCommand {
@@ -82,6 +90,8 @@ impl ControlCommand {
             ControlCommand::Restart => "restart",
             ControlCommand::Stop => "stop",
             ControlCommand::EnqueueAgent => "enqueue-agent",
+            ControlCommand::JobList => "job-list",
+            ControlCommand::JobStatus => "job-status",
         }
     }
 }
@@ -111,14 +121,17 @@ pub struct ScaffoldStatus {
     /// Binary can own the headless tree via `serve` / `--headless` (P21.2).
     pub binary_owns_tree: bool,
     pub control_plane_live: bool,
+    /// Agent intake façade live (P21.4).
+    pub agent_intake_live: bool,
 }
 
 pub fn scaffold_status() -> ScaffoldStatus {
     ScaffoldStatus {
-        lot: "P21.3",
+        lot: "P21.4",
         lib_spawns_daemons: true,
         binary_owns_tree: true,
         control_plane_live: true,
+        agent_intake_live: true,
     }
 }
 
@@ -160,12 +173,13 @@ mod tests {
     }
 
     #[test]
-    fn p21_3_control_plane_ready() {
+    fn p21_4_intake_ready() {
         let st = scaffold_status();
-        assert_eq!(st.lot, "P21.3");
+        assert_eq!(st.lot, "P21.4");
         assert!(st.lib_spawns_daemons);
         assert!(st.binary_owns_tree);
         assert!(st.control_plane_live);
+        assert!(st.agent_intake_live);
     }
 
     #[test]
@@ -179,5 +193,7 @@ mod tests {
     fn control_command_names_are_stable() {
         assert_eq!(ControlCommand::Status.as_str(), "status");
         assert_eq!(ControlCommand::EnqueueAgent.as_str(), "enqueue-agent");
+        assert_eq!(ControlCommand::JobList.as_str(), "job-list");
+        assert_eq!(ControlCommand::JobStatus.as_str(), "job-status");
     }
 }

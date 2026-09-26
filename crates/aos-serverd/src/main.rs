@@ -1,12 +1,13 @@
-//! `aos-serverd` binary — P21.3 headless owner + local control plane.
+//! `aos-serverd` binary — P21.4 headless owner + control plane + agent intake.
 //!
 //! `serve` / `--headless` boots busd…agentd (no egui), healthchecks, runs
-//! soft + hard watchdogs, and serves `status` / `restart` / `stop` on the
-//! local control socket. See ADR 0012.
+//! soft + hard watchdogs, serves `status` / `restart` / `stop`, and accepts
+//! `enqueue-agent` / `job-list` / `job-status` on the local control socket.
+//! See ADR 0012.
 
 use aos_serverd::{
     agentd_command, auditd_command, control_endpoint_present, control_socket_path, healthcheck,
-    modeld_command, platformd_command, scaffold_status, send_control, serve_control,
+    list_jobs, modeld_command, platformd_command, scaffold_status, send_control, serve_control,
     serverd_pid_relpath, serverd_spawn_opts, ControlRequest, ControlState, ProcessTree,
     SessionHandoff, SpawnOptions, DAEMON_BOOT_ORDER, WATCHDOG_HARD, WATCHDOG_SOFT,
 };
@@ -19,61 +20,97 @@ use std::thread;
 use std::time::Duration;
 
 fn main() {
-    let mut args = env::args().skip(1);
+    let args: Vec<String> = env::args().skip(1).collect();
     let mut home: Option<PathBuf> = env::var_os("AOS_HOME").map(PathBuf::from);
-    let mut cmd = String::from("status");
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
+    let mut positional: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
             "--help" | "-h" => {
                 print_help();
                 return;
             }
             "--aos-home" => {
-                home = args.next().map(PathBuf::from);
+                i += 1;
+                home = args.get(i).map(PathBuf::from);
             }
-            "--headless" | "serve" | "run" => cmd = "serve".into(),
-            "status" | "handoff" | "restart" | "stop" => cmd = arg,
             other if other.starts_with("--aos-home=") => {
                 home = Some(PathBuf::from(other.trim_start_matches("--aos-home=")));
             }
-            other => {
-                eprintln!("aos-serverd: unknown argument `{other}` (try --help)");
-                std::process::exit(2);
-            }
+            "--headless" => positional.push("serve".into()),
+            other => positional.push(other.to_string()),
         }
+        i += 1;
     }
 
     let home = home.unwrap_or_else(|| PathBuf::from("."));
-    match cmd.as_str() {
+    let cmd = positional.first().map(|s| s.as_str()).unwrap_or("status");
+
+    match cmd {
         "handoff" => print_handoff(),
-        "serve" => {
+        "serve" | "run" => {
             if let Err(e) = run_headless(&home) {
                 eprintln!("[aos-serverd] {e}");
                 std::process::exit(1);
             }
         }
         "restart" | "stop" => {
-            if let Err(e) = send_live_command(&home, &cmd) {
+            if let Err(e) = send_live_command(
+                &home,
+                &ControlRequest {
+                    cmd: cmd.into(),
+                    actor: "cli".into(),
+                    goal: None,
+                    agent_id: None,
+                    model_id: None,
+                    caps: Vec::new(),
+                    mode: None,
+                    job_id: None,
+                    interval_secs: None,
+                },
+            ) {
                 eprintln!("[aos-serverd] {e}");
                 std::process::exit(1);
             }
         }
-        _ => {
+        "enqueue" | "enqueue-agent" => {
+            if let Err(e) = run_enqueue(&home, &positional[1..]) {
+                eprintln!("[aos-serverd] {e}");
+                std::process::exit(1);
+            }
+        }
+        "jobs" | "job-list" => {
+            if let Err(e) = run_job_list(&home) {
+                eprintln!("[aos-serverd] {e}");
+                std::process::exit(1);
+            }
+        }
+        "job" | "job-status" => {
+            let id = positional.get(1).map(|s| s.as_str()).unwrap_or("");
+            if let Err(e) = run_job_status(&home, id) {
+                eprintln!("[aos-serverd] {e}");
+                std::process::exit(1);
+            }
+        }
+        "status" => {
             if let Err(e) = print_status(&home) {
                 eprintln!("[aos-serverd] {e}");
                 std::process::exit(1);
             }
+        }
+        other => {
+            eprintln!("aos-serverd: unknown command `{other}` (try --help)");
+            std::process::exit(2);
         }
     }
 }
 
 fn print_help() {
     println!(
-        "aos-serverd — Akasha OS Preview server lifecycle daemon (P21.3)\n\n\
-Usage:\n  aos-serverd [--aos-home <path>] [status|handoff|serve|restart|stop]\n  aos-serverd --headless\n\n\
+        "aos-serverd — Akasha OS Preview server lifecycle daemon (P21.4)\n\n\
+Usage:\n  aos-serverd [--aos-home <path>] status|handoff|serve|restart|stop\n  aos-serverd --headless\n  aos-serverd enqueue --goal <text> [--actor <id>] [--mode create|start|schedule]\n                      [--agent-id <id>] [--model-id <id>] [--interval <secs>]\n  aos-serverd jobs\n  aos-serverd job <job-id>\n\n\
 serve / --headless: own the Preview process tree without egui (Ctrl+C stops).\n\
-status / restart / stop: query the local control socket when serve is up.\n\
+enqueue: intake façade → agent.create / agent.start / schedule.create (caps fail-closed).\n\
 Requires AOS_HOME already laid out (etc/*.yaml, bin/*). See ADR 0012."
     );
 }
@@ -85,6 +122,13 @@ fn print_status(home: &Path) -> Result<(), String> {
             &ControlRequest {
                 cmd: "status".into(),
                 actor: "cli".into(),
+                goal: None,
+                agent_id: None,
+                model_id: None,
+                caps: Vec::new(),
+                mode: None,
+                job_id: None,
+                interval_secs: None,
             },
         )?;
         println!("{}", resp.to_line());
@@ -99,6 +143,7 @@ fn print_status(home: &Path) -> Result<(), String> {
     println!("  lib_spawns_daemons: {}", st.lib_spawns_daemons);
     println!("  binary_owns_tree:   {}", st.binary_owns_tree);
     println!("  control_plane_live: {}", st.control_plane_live);
+    println!("  agent_intake_live:  {}", st.agent_intake_live);
     println!("  aos_home:           {}", home.display());
     println!(
         "  control_path:       {}",
@@ -110,30 +155,139 @@ fn print_status(home: &Path) -> Result<(), String> {
         "  hard watchdogs:     {} (ordered tree restart + backoff)",
         WATCHDOG_HARD.join(", ")
     );
+    println!("  recorded jobs:      {}", list_jobs(home).len());
     println!();
     println!("Run: aos-serverd serve   (or --headless)");
     Ok(())
 }
 
-fn send_live_command(home: &Path, cmd: &str) -> Result<(), String> {
+fn send_live_command(home: &Path, req: &ControlRequest) -> Result<(), String> {
     if !control_endpoint_present(home) {
         return Err(format!(
             "no live control endpoint at {} — is serve running?",
             control_socket_path(home).display()
         ));
     }
-    let resp = send_control(
-        home,
-        &ControlRequest {
-            cmd: cmd.into(),
-            actor: "cli".into(),
-        },
-    )?;
+    let resp = send_control(home, req)?;
     println!("{}", resp.to_line());
     if resp.ok {
         Ok(())
     } else {
-        Err(resp.message.unwrap_or_else(|| format!("{cmd} failed")))
+        Err(resp
+            .message
+            .unwrap_or_else(|| format!("{} failed", req.cmd)))
+    }
+}
+
+fn run_enqueue(home: &Path, args: &[String]) -> Result<(), String> {
+    let mut goal: Option<String> = None;
+    let mut actor = String::from("cli");
+    let mut mode: Option<String> = None;
+    let mut agent_id: Option<String> = None;
+    let mut model_id: Option<String> = None;
+    let mut interval_secs: Option<u64> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--goal" => {
+                i += 1;
+                goal = args.get(i).cloned();
+            }
+            "--actor" => {
+                i += 1;
+                actor = args.get(i).cloned().unwrap_or_default();
+            }
+            "--mode" => {
+                i += 1;
+                mode = args.get(i).cloned();
+            }
+            "--agent-id" => {
+                i += 1;
+                agent_id = args.get(i).cloned();
+            }
+            "--model-id" => {
+                i += 1;
+                model_id = args.get(i).cloned();
+            }
+            "--interval" => {
+                i += 1;
+                interval_secs = args
+                    .get(i)
+                    .and_then(|s| s.parse::<u64>().ok());
+            }
+            other if other.starts_with("--goal=") => {
+                goal = Some(other.trim_start_matches("--goal=").into());
+            }
+            other => {
+                return Err(format!("unknown enqueue flag `{other}`"));
+            }
+        }
+        i += 1;
+    }
+    send_live_command(
+        home,
+        &ControlRequest {
+            cmd: "enqueue-agent".into(),
+            actor,
+            goal,
+            agent_id,
+            model_id,
+            caps: Vec::new(),
+            mode,
+            job_id: None,
+            interval_secs,
+        },
+    )
+}
+
+fn run_job_list(home: &Path) -> Result<(), String> {
+    if control_endpoint_present(home) {
+        return send_live_command(
+            home,
+            &ControlRequest {
+                cmd: "job-list".into(),
+                actor: "cli".into(),
+                goal: None,
+                agent_id: None,
+                model_id: None,
+                caps: Vec::new(),
+                mode: None,
+                job_id: None,
+                interval_secs: None,
+            },
+        );
+    }
+    let jobs = list_jobs(home);
+    println!("{}", serde_json::to_string_pretty(&jobs).unwrap_or_default());
+    Ok(())
+}
+
+fn run_job_status(home: &Path, id: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("usage: aos-serverd job <job-id>".into());
+    }
+    if control_endpoint_present(home) {
+        return send_live_command(
+            home,
+            &ControlRequest {
+                cmd: "job-status".into(),
+                actor: "cli".into(),
+                goal: None,
+                agent_id: None,
+                model_id: None,
+                caps: Vec::new(),
+                mode: None,
+                job_id: Some(id.into()),
+                interval_secs: None,
+            },
+        );
+    }
+    match aos_serverd::get_job(home, id) {
+        Some(job) => {
+            println!("{}", serde_json::to_string_pretty(&job).unwrap_or_default());
+            Ok(())
+        }
+        None => Err(format!("job not found: {id}")),
     }
 }
 

@@ -1,9 +1,10 @@
-//! Local control plane for `aos-serverd` (P21.3).
+//! Local control plane for `aos-serverd` (P21.3–P21.4).
 //!
 //! Transport: Unix domain socket under `$AOS_HOME/var/run/aos-serverd.sock`
 //! (Unix), or loopback TCP whose address is written to
 //! `$AOS_HOME/var/run/aos-serverd.pipe` (Windows). Never binds `0.0.0.0`.
 
+use crate::intake::{self, EnqueueParams, IntakeMode, JobRecord};
 use crate::{control_socket_path, ControlCommand};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
@@ -19,6 +20,26 @@ pub struct ControlRequest {
     pub cmd: String,
     #[serde(default)]
     pub actor: String,
+    /// Goal text for create/schedule intake (P21.4).
+    #[serde(default)]
+    pub goal: Option<String>,
+    /// Existing agent id for `start` mode.
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// Caps presented with the bus call (serverd does not mint).
+    #[serde(default)]
+    pub caps: Vec<String>,
+    /// `create` | `start` | `schedule` (default create).
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Job id for `job-status`.
+    #[serde(default)]
+    pub job_id: Option<String>,
+    /// Schedule interval seconds (schedule mode).
+    #[serde(default)]
+    pub interval_secs: Option<u64>,
 }
 
 impl ControlRequest {
@@ -30,12 +51,23 @@ impl ControlRequest {
         if trimmed.starts_with('{') {
             return serde_json::from_str(trimmed).map_err(|e| e.to_string());
         }
-        // Plain command word (CLI ergonomics): status | restart | stop
+        // Plain command word (CLI ergonomics).
         let cmd = trimmed.to_ascii_lowercase();
         match cmd.as_str() {
-            "status" | "restart" | "stop" => Ok(Self {
-                cmd,
+            "status" | "restart" | "stop" | "job-list" | "jobs" => Ok(Self {
+                cmd: if cmd == "jobs" {
+                    "job-list".into()
+                } else {
+                    cmd
+                },
                 actor: "cli".into(),
+                goal: None,
+                agent_id: None,
+                model_id: None,
+                caps: Vec::new(),
+                mode: None,
+                job_id: None,
+                interval_secs: None,
             }),
             other => Err(format!("unknown control command `{other}`")),
         }
@@ -46,9 +78,24 @@ impl ControlRequest {
             "status" => Ok(ControlCommand::Status),
             "restart" => Ok(ControlCommand::Restart),
             "stop" => Ok(ControlCommand::Stop),
-            "enqueue-agent" => Ok(ControlCommand::EnqueueAgent),
+            "enqueue-agent" | "server.job.enqueue" | "enqueue" => Ok(ControlCommand::EnqueueAgent),
+            "job-list" | "server.job.list" | "jobs" => Ok(ControlCommand::JobList),
+            "job-status" | "server.job.status" => Ok(ControlCommand::JobStatus),
             other => Err(format!("unsupported control command `{other}`")),
         }
+    }
+
+    pub fn into_enqueue_params(&self) -> Result<EnqueueParams, String> {
+        let mode = IntakeMode::parse(self.mode.as_deref().unwrap_or("create"))?;
+        Ok(EnqueueParams {
+            actor: self.actor.clone(),
+            goal: self.goal.clone(),
+            agent_id: self.agent_id.clone(),
+            model_id: self.model_id.clone(),
+            caps: self.caps.clone(),
+            mode,
+            interval_secs: self.interval_secs,
+        })
     }
 }
 
@@ -60,6 +107,9 @@ pub struct TreeStatus {
     pub daemons: Vec<DaemonStatus>,
     pub control_plane: bool,
     pub aos_home: String,
+    /// Intake jobs currently recorded (P21.4).
+    #[serde(default)]
+    pub job_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,6 +126,10 @@ pub struct ControlResponse {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<TreeStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job: Option<JobRecord>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jobs: Option<Vec<JobRecord>>,
 }
 
 impl ControlResponse {
@@ -113,10 +167,11 @@ impl ControlState {
             .collect();
         TreeStatus {
             running: !daemons.is_empty() && daemons.iter().any(|d| d.alive),
-            lot: "P21.3".into(),
+            lot: "P21.4".into(),
             daemons,
             control_plane: true,
             aos_home: self.home.display().to_string(),
+            job_count: intake::list_jobs(&self.home).len(),
         }
     }
 
@@ -154,6 +209,8 @@ impl ControlState {
                 ok: true,
                 message: Some(format!("actor={actor}")),
                 status: Some(self.snapshot()),
+                job: None,
+                jobs: None,
             },
             Ok(ControlCommand::Restart) => match self.ordered_restart() {
                 Ok(()) => {
@@ -162,6 +219,8 @@ impl ControlState {
                         ok: true,
                         message: Some("restarted".into()),
                         status: Some(self.snapshot()),
+                        job: None,
+                        jobs: None,
                     }
                 }
                 Err(e) => {
@@ -170,6 +229,8 @@ impl ControlState {
                         ok: false,
                         message: Some(e),
                         status: Some(self.snapshot()),
+                        job: None,
+                        jobs: None,
                     }
                 }
             },
@@ -181,17 +242,82 @@ impl ControlState {
                     ok: true,
                     message: Some("stopping".into()),
                     status: None,
+                    job: None,
+                    jobs: None,
                 }
             }
-            Ok(ControlCommand::EnqueueAgent) => ControlResponse {
-                ok: false,
-                message: Some("enqueue-agent is P21.4".into()),
-                status: None,
+            Ok(ControlCommand::EnqueueAgent) => match req.into_enqueue_params() {
+                Ok(params) => match intake::enqueue(&self.home, params) {
+                    Ok(job) => {
+                        crate::log_control_audit(&self.home, actor, "enqueue-agent", true);
+                        ControlResponse {
+                            ok: true,
+                            message: Some("enqueued".into()),
+                            status: None,
+                            job: Some(job),
+                            jobs: None,
+                        }
+                    }
+                    Err(e) => {
+                        crate::log_control_audit(&self.home, actor, "enqueue-agent", false);
+                        ControlResponse {
+                            ok: false,
+                            message: Some(e),
+                            status: None,
+                            job: None,
+                            jobs: None,
+                        }
+                    }
+                },
+                Err(e) => ControlResponse {
+                    ok: false,
+                    message: Some(e),
+                    status: None,
+                    job: None,
+                    jobs: None,
+                },
             },
+            Ok(ControlCommand::JobList) => ControlResponse {
+                ok: true,
+                message: None,
+                status: None,
+                job: None,
+                jobs: Some(intake::list_jobs(&self.home)),
+            },
+            Ok(ControlCommand::JobStatus) => {
+                let id = req.job_id.as_deref().unwrap_or("").trim();
+                if id.is_empty() {
+                    ControlResponse {
+                        ok: false,
+                        message: Some("job_id required".into()),
+                        status: None,
+                        job: None,
+                        jobs: None,
+                    }
+                } else if let Some(job) = intake::get_job(&self.home, id) {
+                    ControlResponse {
+                        ok: true,
+                        message: None,
+                        status: None,
+                        job: Some(job),
+                        jobs: None,
+                    }
+                } else {
+                    ControlResponse {
+                        ok: false,
+                        message: Some(format!("job not found: {id}")),
+                        status: None,
+                        job: None,
+                        jobs: None,
+                    }
+                }
+            }
             Err(e) => ControlResponse {
                 ok: false,
                 message: Some(e),
                 status: None,
+                job: None,
+                jobs: None,
             },
         }
     }
@@ -305,7 +431,10 @@ pub fn serve_control(state: Arc<ControlState>) {
             return;
         }
         let _ = listener.set_nonblocking(true);
-        eprintln!("[aos-serverd] control listening on {addr} (marker {})", marker.display());
+        eprintln!(
+            "[aos-serverd] control listening on {addr} (marker {})",
+            marker.display()
+        );
         while !state.stop.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((stream, _)) => handle_stream(stream, &state),
@@ -334,6 +463,8 @@ fn handle_stream<S: std::io::Read + std::io::Write>(mut stream: S, state: &Contr
             ok: false,
             message: Some(e),
             status: None,
+            job: None,
+            jobs: None,
         },
     };
     let out = format!("{}\n", resp.to_line());
@@ -369,6 +500,12 @@ mod tests {
         assert_eq!(b.cmd, "restart");
         assert_eq!(b.actor, "ops");
         assert!(ControlRequest::parse_line("enqueue").is_err());
+        let e = ControlRequest::parse_line(
+            r#"{"cmd":"enqueue-agent","actor":"ops","goal":"hi"}"#,
+        )
+        .unwrap();
+        assert_eq!(e.command().unwrap(), ControlCommand::EnqueueAgent);
+        assert_eq!(e.goal.as_deref(), Some("hi"));
     }
 
     #[test]
@@ -377,6 +514,8 @@ mod tests {
             ok: true,
             message: Some("hi".into()),
             status: None,
+            job: None,
+            jobs: None,
         };
         let line = r.to_line();
         assert!(line.contains("\"ok\":true"));

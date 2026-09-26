@@ -59,15 +59,16 @@ Transport (Preview 0.19):
 Every control command carries an actor identity + caps; restarts and job
 enqueue are audited. `aos-serverd` **does not** mint capabilities.
 
-Proposed local commands (exact intent names may land as `server.*` on the bus
-or as socket framing — freeze in P21.3/P21.4):
+Proposed local commands (frozen P21.3/P21.4):
 
 | Command | Effect |
 |---------|--------|
 | `status` | Process tree + health summary |
 | `restart` | Ordered stop/start (audited) |
 | `stop` | Ordered shutdown |
-| `enqueue-agent` / `server.job.*` | Intake → existing `aos-agentd` paths |
+| `enqueue-agent` / `server.job.enqueue` | Intake → `agent.create` / `agent.start` / `schedule.create` (audited; actor required) |
+| `job-list` / `server.job.list` | List recorded intake jobs (`var/run/serverd-jobs.json`) |
+| `job-status` / `server.job.status` | One job by id |
 
 ### 3. UI attach vs start
 
