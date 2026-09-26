@@ -34,6 +34,7 @@ For shipped behaviour and tester steps, start at
 
 | Topic | Start here | Deep dive |
 |-------|------------|-----------|
+| Interactive Preview host map | [`architecture.md`](architecture.md) | [`architecture-map.html`](architecture-map.html), [`architecture-graph.json`](architecture-graph.json) |
 | Shipped Preview catalogue | [`FEATURES.md`](FEATURES.md) | [`STATUS.md`](STATUS.md) |
 | First module (no cargo) | [`write-a-module.md`](write-a-module.md) | [`module-sdk.md`](module-sdk.md) |
 | DeclUI / rich apps / Create | [`rich-app-contract.md`](rich-app-contract.md) | [`create-contract.md`](create-contract.md), [ADR 0009](adr/0009-rich-module-app-contract.md) |

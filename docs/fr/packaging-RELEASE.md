@@ -39,6 +39,21 @@ Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
 Les GGUF sont téléchargés au **premier run** via `share/models/manifest.json`.
 
+## Checklist pré-release
+
+Avant de taguer une release Preview `v*` :
+
+- [ ] Les bumps de version (`VERSION`, workspace, site) correspondent au tag
+- [ ] `docs/FEATURES.md` / `docs/STATUS.md` (et miroirs FR) décrivent cette release
+- [ ] **Carte d’architecture à jour** — rafraîchir
+  [`docs/architecture-graph.json`](../architecture-graph.json) et
+  [`docs/architecture-map.html`](../architecture-map.html) pour que nœuds,
+  arêtes et flux correspondent aux daemons/modules livrés ; mettre
+  `meta.version` à cette release. Politique :
+  [architecture.md](architecture.md).
+  Omettre uniquement si la disposition des processus est inchangée depuis le
+  tag précédent (le noter dans les notes de release).
+
 ## Notes de version (brouillon)
 
 ```

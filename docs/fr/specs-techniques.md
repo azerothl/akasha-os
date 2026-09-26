@@ -34,6 +34,7 @@ Pour le comportement livré et les étapes testeur, commencez par
 
 | Sujet | Point d’entrée | Approfondissement |
 |-------|----------------|-------------------|
+| Carte interactive hôte Preview | [`architecture.md`](architecture.md) | [`../architecture-map.html`](../architecture-map.html), [`../architecture-graph.json`](../architecture-graph.json) |
 | Catalogue Preview livré | [`FEATURES.md`](FEATURES.md) | [`STATUS.md`](STATUS.md) |
 | Premier module (sans cargo) | [`write-a-module.md`](write-a-module.md) | [`module-sdk.md`](module-sdk.md) |
 | DeclUI / apps riches / Create | [`../rich-app-contract.md`](../rich-app-contract.md) | [`../create-contract.md`](../create-contract.md), [ADR 0009](adr/0009-rich-module-app-contract.md) |

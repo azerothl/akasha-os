@@ -94,6 +94,7 @@ cargo run -p aos-session --release
 | [docs/FIRST-RUN.md](docs/FIRST-RUN.md) | First-run guide |
 | [docs/functional-specs.md](docs/functional-specs.md) | Functional requirements |
 | [docs/technical-specs.md](docs/technical-specs.md) | Architecture & APIs |
+| [docs/architecture.md](docs/architecture.md) | Interactive host architecture map (update each release) |
 | [docs/lan-cluster.md](docs/lan-cluster.md) | Configure and validate the experimental LAN cluster |
 | [docs/illustration-studio-caps.md](docs/illustration-studio-caps.md) | Illustration Studio caps + honesty (edit ≠ beauty, Blender GPL pack) |
 | [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](modules/illustration-studio/docs/akasha-illustration-studio-spec.md) | Illustration Studio product spec (**Draft v0.1**) |
