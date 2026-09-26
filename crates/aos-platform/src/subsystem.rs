@@ -144,6 +144,10 @@ pub struct PlatformSubsystem {
     pub usb: Mutex<crate::device_usb::UsbIoManager>,
     /// Grants dossiers hôtes hors sandbox (issue #157).
     pub host_folders: Mutex<crate::host_folder::HostFolderGrantManager>,
+    /// Named host workspaces `/host/<id>/**` (#247 P0).
+    pub workspaces: Mutex<crate::workspace::WorkspaceBindManager>,
+    /// Multi-file patch undo groups (#247 DA.3).
+    pub workspace_patches: Mutex<crate::workspace_patch::WorkspacePatchManager>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -230,6 +234,11 @@ impl PlatformSubsystem {
             .map_err(|e| e.to_string())?;
         let host_folders = crate::host_folder::HostFolderGrantManager::open(&config.sessions_dir)
             .map_err(|e| e.to_string())?;
+        let workspaces = crate::workspace::WorkspaceBindManager::open(&config.sessions_dir)
+            .map_err(|e| e.to_string())?;
+        let workspace_patches =
+            crate::workspace_patch::WorkspacePatchManager::open(&config.sessions_dir)
+                .map_err(|e| e.to_string())?;
         let secrets_backend = secrets.master_backend().as_str().to_string();
         let mut net = EgressControl::new();
         if config.net_mode == "offline_strict" {
@@ -256,6 +265,8 @@ impl PlatformSubsystem {
             devices: Mutex::new(devices),
             usb: Mutex::new(usb),
             host_folders: Mutex::new(host_folders),
+            workspaces: Mutex::new(workspaces),
+            workspace_patches: Mutex::new(workspace_patches),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),
@@ -1521,6 +1532,182 @@ impl HostServices for PlatformSubsystem {
                     "bytes": bytes.len(),
                     "version": version,
                 }))
+            }
+            // Preview 0.19 / #247 Dev Assistant P0 — workspace host APIs for script modules.
+            "workspace.bind" => {
+                let host_path = args["host_path"].as_str().unwrap_or("").to_string();
+                if !aos_proto::host_folder::looks_like_host_path(&host_path) {
+                    return Ok(serde_json::json!({
+                        "ok": false,
+                        "message": "chemin hôte invalide — dossier disque absolu requis",
+                    }));
+                }
+                let workspace_id = args["workspace_id"].as_str();
+                let agent_id = if ctx.actor.is_empty() {
+                    format!("module:{}", ctx.module)
+                } else {
+                    ctx.actor.clone()
+                };
+                let info = self
+                    .workspaces
+                    .lock()
+                    .unwrap()
+                    .bind(&host_path, workspace_id, &agent_id)
+                    .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "workspace.bind".into(),
+                    target: info.display_name.clone(),
+                    detail: serde_json::json!({
+                        "workspace_id": info.workspace_id,
+                        "vfs_root": info.vfs_root,
+                        "on_behalf_of": ctx.actor,
+                    }),
+                });
+                Ok(serde_json::json!({
+                    "ok": true,
+                    "workspace_id": info.workspace_id,
+                    "vfs_root": info.vfs_root,
+                    "host_path": info.host_path,
+                    "caps": info.caps,
+                    "display_name": info.display_name,
+                }))
+            }
+            "workspace.unbind" => {
+                let workspace_id = args["workspace_id"].as_str().unwrap_or("");
+                if workspace_id.is_empty() {
+                    return Err("workspace_id requis".into());
+                }
+                let agent_id = if ctx.actor.is_empty() {
+                    format!("module:{}", ctx.module)
+                } else {
+                    ctx.actor.clone()
+                };
+                self.workspaces
+                    .lock()
+                    .unwrap()
+                    .unbind(workspace_id, &agent_id)
+                    .map_err(|e| e.to_string())?;
+                self.audit(AuditAppendRequest {
+                    trace_id: ctx.trace_id.clone(),
+                    actor: format!("module:{}", ctx.module),
+                    action: "workspace.unbind".into(),
+                    target: workspace_id.into(),
+                    detail: serde_json::json!({"on_behalf_of": ctx.actor}),
+                });
+                Ok(serde_json::json!({"ok": true}))
+            }
+            "workspace.list" => {
+                let agent_id = if ctx.actor.is_empty() {
+                    String::new()
+                } else {
+                    ctx.actor.clone()
+                };
+                let bindings = self.workspaces.lock().unwrap().list(&agent_id);
+                Ok(serde_json::json!({"bindings": bindings}))
+            }
+            "fs.search" | "code.search" => {
+                let root = args["root"].as_str().unwrap_or("").to_string();
+                let query = args["query"].as_str().unwrap_or("").to_string();
+                let glob = args["glob"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+                let limit = args["limit"]
+                    .as_u64()
+                    .or_else(|| {
+                        args["limit"]
+                            .as_str()
+                            .and_then(|s| s.trim().parse::<u64>().ok())
+                    })
+                    .unwrap_or(u64::from(aos_proto::workspace::FS_SEARCH_DEFAULT_LIMIT))
+                    as u32;
+                let case_sensitive = args["case_sensitive"].as_bool().unwrap_or(false);
+                let req = aos_proto::workspace::FsSearchRequest {
+                    root,
+                    query,
+                    glob,
+                    limit,
+                    case_sensitive,
+                    actor: ctx.actor.clone(),
+                    caps: ctx.granted_caps.clone(),
+                    trace_id: ctx.trace_id.clone(),
+                };
+                let resp = {
+                    let mgr = self.workspaces.lock().unwrap();
+                    crate::workspace_search::search_workspace(&mgr, &req)
+                };
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: service.into(),
+                        target: req.root.clone(),
+                        detail: serde_json::json!({
+                            "query": req.query,
+                            "hits": resp.hits.len(),
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "fs.apply_patch" => {
+                let hunks: Vec<aos_proto::workspace::FsPatchHunk> =
+                    serde_json::from_value(args.get("hunks").cloned().unwrap_or_default())
+                        .map_err(|e| format!("hunks: {e}"))?;
+                let req = aos_proto::workspace::FsApplyPatchRequest {
+                    hunks,
+                    actor: ctx.actor.clone(),
+                    caps: ctx.granted_caps.clone(),
+                    trace_id: ctx.trace_id.clone(),
+                    undo_group_id: args["undo_group_id"].as_str().map(|s| s.to_string()),
+                };
+                let resp = {
+                    let binds = self.workspaces.lock().unwrap();
+                    let mut patches = self.workspace_patches.lock().unwrap();
+                    patches.apply(&binds, &req)
+                };
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "fs.apply_patch".into(),
+                        target: resp.undo_group_id.clone().unwrap_or_default(),
+                        detail: serde_json::json!({
+                            "applied": resp.applied.len(),
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "fs.undo_patch" => {
+                let undo_group_id = args["undo_group_id"].as_str().unwrap_or("").to_string();
+                if undo_group_id.is_empty() {
+                    return Err("undo_group_id requis".into());
+                }
+                let req = aos_proto::workspace::FsUndoPatchRequest {
+                    undo_group_id,
+                    actor: ctx.actor.clone(),
+                    caps: ctx.granted_caps.clone(),
+                    trace_id: ctx.trace_id.clone(),
+                };
+                let resp = {
+                    let mut patches = self.workspace_patches.lock().unwrap();
+                    patches.undo(&req)
+                };
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "fs.undo_patch".into(),
+                        target: req.undo_group_id.clone(),
+                        detail: serde_json::json!({
+                            "restored": resp.restored.len(),
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
             }
             // Escalade interdite depuis WASM
             "module.install" | "module.compile" | "module.scaffold" | "module.package"
