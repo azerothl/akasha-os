@@ -1,0 +1,48 @@
+name: dev-assistant
+version: 0.1.0
+hash: "ci"
+permissions:
+  # Host `/host/<id>/**` caps are granted after workspace.bind + cap review
+  # (fail-closed). Bind itself only needs a user-confirmed absolute path.
+  required_caps: []
+tools:
+  - name: dev-assistant.bind
+    description: Bind an absolute host folder as /host/<id> (returns caps to review)
+    input_schema:
+      type: object
+      properties:
+        host_path: { type: string, description: Absolute host directory }
+      required: [host_path]
+  - name: dev-assistant.list
+    description: List bound host workspaces for this actor
+    input_schema:
+      type: object
+  - name: dev-assistant.search
+    description: Bounded text search under a bound workspace (requires fs.read:/host/<id>/**)
+    input_schema:
+      type: object
+      properties:
+        root: { type: string, description: workspace_id or /host/<id> path }
+        query: { type: string }
+        glob: { type: string }
+        limit: { type: integer }
+      required: [root, query]
+  - name: dev-assistant.apply_patch
+    description: Replace file contents under /host/<id> (requires fs.write; prefer over fs.write)
+    input_schema:
+      type: object
+      properties:
+        path: { type: string, description: Logical /host/<id>/… path }
+        content: { type: string, description: Full replacement body (replace_all) }
+      required: [path, content]
+  - name: dev-assistant.undo_patch
+    description: Undo a previous apply_patch group
+    input_schema:
+      type: object
+      properties:
+        undo_group_id: { type: string }
+      required: [undo_group_id]
+ui:
+  entry: ui/index.html
+  mode: declarative_ui
+min_os_api: 1

@@ -17,6 +17,7 @@ pub mod decl_ui;
 pub mod device_capture;
 pub mod device_usb;
 pub mod host_folder;
+pub mod workspace;
 pub mod mem_extract;
 pub mod rich_app_contract;
 pub mod rich_composition;
@@ -96,6 +97,16 @@ pub use host_folder::{
     HostFolderAccessRequest, HostFolderAccessResponse, HostFolderEntry, HostFolderOperation,
     HostFolderPermission, HostFolderPermissionInfo, HostFolderPermissionRevokeRequest,
     HOST_FOLDER_ACCESS_ACTION,
+};
+pub use workspace::{
+    fs_caps as workspace_fs_caps, fs_read_cap as workspace_fs_read_cap,
+    fs_write_cap as workspace_fs_write_cap, host_vfs_prefix, looks_like_host_vfs_path,
+    vfs_relative_path, workspace_id_for_host_path, workspace_id_from_vfs_path, CodeSearchRequest,
+    CodeSearchResponse, FsApplyPatchRequest, FsApplyPatchResponse, FsPatchHunk, FsSearchHit,
+    FsSearchRequest, FsSearchResponse, FsUndoPatchRequest, FsUndoPatchResponse,
+    WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceBindingInfo, WorkspaceListRequest,
+    WorkspaceListResponse, WorkspaceUnbindRequest, WorkspaceUnbindResponse, APPLY_PATCH_MAX_FILES,
+    FS_SEARCH_DEFAULT_LIMIT, FS_SEARCH_MAX_LIMIT,
 };
 pub use system_hardware::{SystemHardwareRequest, SystemHardwareResponse};
 

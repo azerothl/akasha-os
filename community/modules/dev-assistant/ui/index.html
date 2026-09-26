@@ -1,0 +1,147 @@
+{
+  "type": "declarative_ui",
+  "title": "Dev Assistant",
+  "title_key": "tab_dev_assistant",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "tab_dev_assistant": "Dev Assistant",
+      "bind_heading": "Bind host project",
+      "bind_path_hint": "Absolute folder path",
+      "bind_submit": "Bind workspace",
+      "list_heading": "Bound workspaces",
+      "list_empty": "No workspace bound yet — bind a host folder first.",
+      "search_heading": "Search",
+      "search_root_hint": "workspace id or /host/<id>",
+      "search_query_hint": "text to find",
+      "search_submit": "Search",
+      "search_empty": "No hits (grant fs.read:/host/<id>/** after bind).",
+      "patch_heading": "Apply replace (cap-gated)",
+      "patch_path_hint": "/host/<id>/path/to/file",
+      "patch_content_hint": "full file replacement",
+      "patch_submit": "Apply patch",
+      "undo_hint": "undo_group_id from last apply",
+      "undo_submit": "Undo patch"
+    },
+    "fr": {
+      "tab_dev_assistant": "Assistant dev",
+      "bind_heading": "Lier un projet hôte",
+      "bind_path_hint": "Chemin absolu du dossier",
+      "bind_submit": "Lier le workspace",
+      "list_heading": "Workspaces liés",
+      "list_empty": "Aucun workspace — liez d’abord un dossier hôte.",
+      "search_heading": "Recherche",
+      "search_root_hint": "id workspace ou /host/<id>",
+      "search_query_hint": "texte à trouver",
+      "search_submit": "Rechercher",
+      "search_empty": "Aucun résultat (accordez fs.read:/host/<id>/** après le bind).",
+      "patch_heading": "Remplacement (sous caps)",
+      "patch_path_hint": "/host/<id>/chemin/fichier",
+      "patch_content_hint": "contenu complet de remplacement",
+      "patch_submit": "Appliquer le patch",
+      "undo_hint": "undo_group_id du dernier apply",
+      "undo_submit": "Annuler le patch"
+    }
+  },
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "heading",
+        "label_key": "bind_heading"
+      },
+      {
+        "kind": "text",
+        "label": "P0 contract: bind → cap review → search/patch. No IDE widgets."
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.bind",
+        "label_key": "bind_submit",
+        "refresh_binds": ["dev-assistant.list"],
+        "args": {
+          "type": "object",
+          "properties": {
+            "host_path": { "type": "string", "x-hint-key": "bind_path_hint" }
+          },
+          "required": ["host_path"]
+        }
+      },
+      {
+        "kind": "heading",
+        "label_key": "list_heading"
+      },
+      {
+        "kind": "empty_state",
+        "bind": "dev-assistant.list",
+        "source": "bindings",
+        "label_key": "list_empty"
+      },
+      {
+        "kind": "table",
+        "bind": "dev-assistant.list",
+        "source": "bindings",
+        "columns": ["workspace_id", "display_name", "host_path", "vfs_root"]
+      },
+      {
+        "kind": "heading",
+        "label_key": "search_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.search",
+        "label_key": "search_submit",
+        "refresh_binds": ["dev-assistant.search"],
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": { "type": "string", "x-hint-key": "search_root_hint" },
+            "query": { "type": "string", "x-hint-key": "search_query_hint" }
+          },
+          "required": ["root", "query"]
+        }
+      },
+      {
+        "kind": "empty_state",
+        "bind": "dev-assistant.search",
+        "source": "hits",
+        "label_key": "search_empty"
+      },
+      {
+        "kind": "table",
+        "bind": "dev-assistant.search",
+        "source": "hits",
+        "columns": ["path", "line", "preview"]
+      },
+      {
+        "kind": "heading",
+        "label_key": "patch_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.apply_patch",
+        "label_key": "patch_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "x-hint-key": "patch_path_hint" },
+            "content": { "type": "string", "x-hint-key": "patch_content_hint", "x-widget": "textarea" }
+          },
+          "required": ["path", "content"]
+        }
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.undo_patch",
+        "label_key": "undo_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "undo_group_id": { "type": "string", "x-hint-key": "undo_hint" }
+          },
+          "required": ["undo_group_id"]
+        }
+      }
+    ]
+  }
+}
