@@ -2547,7 +2547,55 @@ async fn execute_action(
             ActResult::Continue(agent_await_still_running_message(&child_id, await_secs))
         }
         other => {
+            // Path A: akasha-model gate → OS permissions → existing invoke_* only.
+            let policy_snapshot = shared.policy.lock().await.clone();
+            let mut legacy_gate_warning: Option<String> = None;
+            match aos_agent::tool_gate::decide_gated_tool_async(
+                tools,
+                other,
+                args,
+                &policy_snapshot,
+                &caps,
+                "aos-agent-worker::execute_action",
+                false,
+            )
+            .await
+            {
+                aos_agent::tool_gate::GateDecision::Proceed { outcome } => {
+                    report(
+                        bus,
+                        &agent_id,
+                        AgentOutputEvent::Log {
+                            line: outcome.log_line(),
+                        },
+                    )
+                    .await;
+                }
+                aos_agent::tool_gate::GateDecision::Refuse { outcome, message } => {
+                    report(
+                        bus,
+                        &agent_id,
+                        AgentOutputEvent::Log {
+                            line: outcome.log_line(),
+                        },
+                    )
+                    .await;
+                    return ActResult::Continue(message);
+                }
+                aos_agent::tool_gate::GateDecision::Legacy { warning } => {
+                    report(
+                        bus,
+                        &agent_id,
+                        AgentOutputEvent::Log {
+                            line: warning.clone(),
+                        },
+                    )
+                    .await;
+                    legacy_gate_warning = Some(warning);
+                }
+            }
             // S6 phase 2 : politique par agent (fail-closed, refus explicite).
+            // Kept after gate as defense-in-depth (and for legacy ungated path).
             {
                 let policy = shared.policy.lock().await;
                 if let Some(denial) = aos_agent::policy::policy_deny(&policy, other) {
@@ -2561,9 +2609,9 @@ async fn execute_action(
                     "absent du catalogue modules actif",
                 ));
             }
-            match backend {
+            let outcome = match backend {
                 Some(ToolBackend::Module) => {
-                    let outcome = invoke_module(
+                    invoke_module(
                         bus,
                         &agent_id,
                         &caps,
@@ -2572,17 +2620,16 @@ async fn execute_action(
                         &trace_id,
                         spec.session_id.as_deref(),
                     )
-                    .await;
-                    ActResult::Continue(outcome)
+                    .await
                 }
                 None if canvas_tool_denied_by_allowlist(other, tools) => {
-                    ActResult::Continue(format!(
+                    format!(
                         "outil canvas non autorisé: {other}. Utilise uniquement les outils fournis ; \
                          pour remplir une silhouette, passe `fill:true` à canvas.path/rect/ellipse."
-                    ))
+                    )
                 }
                 None if module_fallback_allowed(other, tools) => {
-                    let outcome = invoke_module(
+                    invoke_module(
                         bus,
                         &agent_id,
                         &caps,
@@ -2591,11 +2638,10 @@ async fn execute_action(
                         &trace_id,
                         spec.session_id.as_deref(),
                     )
-                    .await;
-                    ActResult::Continue(outcome)
+                    .await
                 }
                 Some(ToolBackend::Native) => {
-                    let outcome = invoke_native(
+                    invoke_native(
                         bus,
                         &agent_id,
                         &caps,
@@ -2603,42 +2649,47 @@ async fn execute_action(
                         args,
                         spec.session_id.as_deref(),
                     )
-                    .await;
-                    ActResult::Continue(outcome)
+                    .await
                 }
                 Some(ToolBackend::Mcp { server }) => {
                     if let Some(session) = mcp_sessions.get_mut(&server) {
                         match session.call_tool(other, args.clone()).await {
-                            Ok(r) => ActResult::Continue(r),
-                            Err(e) => ActResult::Continue(format!("mcp err: {e}")),
+                            Ok(r) => r,
+                            Err(e) => format!("mcp err: {e}"),
                         }
                     } else {
-                        ActResult::Continue(format!("session mcp {server} absente"))
+                        format!("session mcp {server} absente")
                     }
                 }
                 Some(ToolBackend::Runtime) => {
-                    ActResult::Continue(format!("action runtime inconnue: {other}"))
+                    format!("action runtime inconnue: {other}")
                 }
                 None if other.starts_with("mcp.") => {
                     if let Some((server, _)) = parse_mcp_name(other) {
                         if let Some(session) = mcp_sessions.get_mut(&server) {
                             match session.call_tool(other, args.clone()).await {
-                                Ok(r) => ActResult::Continue(r),
-                                Err(e) => ActResult::Continue(format!("mcp err: {e}")),
+                                Ok(r) => r,
+                                Err(e) => format!("mcp err: {e}"),
                             }
                         } else {
-                            ActResult::Continue(format!("mcp server {server} non ouvert"))
+                            format!("mcp server {server} non ouvert")
                         }
                     } else {
-                        ActResult::Continue("nom mcp invalide".into())
+                        "nom mcp invalide".into()
                     }
                 }
-                None => ActResult::Continue(format!(
+                None => format!(
                     "outil inconnu: {other} — ce n'est pas un module WASM. \
                      TTS : media.audio.generate {{\"text\":\"...\"}} ; \
                      image : media.image.generate {{\"prompt\":\"...\"}}."
-                )),
-            }
+                ),
+            };
+            let outcome = if let Some(w) = legacy_gate_warning {
+                format!("[{w}]\n{outcome}")
+            } else {
+                outcome
+            };
+            ActResult::Continue(outcome)
         }
     }
 }

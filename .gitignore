@@ -21,3 +21,8 @@ branding/logo/export/
 .impeccable/questions/
 .impeccable/review/
 __pycache__/
+
+# Local akasha-model / aos_gate venv (see docs/tool-gate-host.md)
+.venv-aos-gate/
+python/**/.venv/
+python/**/*.egg-info/
