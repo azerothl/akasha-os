@@ -8,6 +8,8 @@ from typing import Mapping
 from akasha_model import GateSignals, ScoreLevel, ScoreQuestion
 from akasha_model.primitives import score_result
 
+from .trust import SourceTrust, parse_source_trust, trust_signal_adjustments
+
 
 @dataclass(frozen=True)
 class GateContext:
@@ -20,6 +22,10 @@ class GateContext:
     #: 0 = low, 1 = medium, 2 = high (matches demo risk Score).
     risk_level: int = 0
     confirmation_needed: float | None = None
+    #: Provenance of evidence that influenced the proposal (AIRGuard-style).
+    source_trust: SourceTrust = SourceTrust.TRUSTED
+    #: Explicit HITL escalate request from the OS / Preview policy path.
+    needs_human_review: bool = False
 
 
 def _risk_score(level: int):
@@ -42,6 +48,18 @@ def signals_from_context(ctx: GateContext) -> GateSignals:
     confirm_needed = ctx.confirmation_needed
     if confirm_needed is None:
         confirm_needed = 0.05
+
+    adj = trust_signal_adjustments(ctx.source_trust)
+    if "authorized_scale" in adj:
+        authorized *= adj["authorized_scale"]
+    if "sufficient_context_scale" in adj:
+        sufficient *= adj["sufficient_context_scale"]
+    floor = adj.get("confirmation_needed_floor")
+    if floor is not None:
+        confirm_needed = max(float(confirm_needed), float(floor))
+    if ctx.needs_human_review:
+        confirm_needed = max(float(confirm_needed), 0.9)
+
     return GateSignals(
         authorized=authorized,
         sufficient_context=sufficient,
@@ -66,4 +84,6 @@ def context_from_mapping(data: Mapping[str, object] | None) -> GateContext:
             if data.get("confirmation_needed") is not None
             else None
         ),
+        source_trust=parse_source_trust(data.get("source_trust")),
+        needs_human_review=bool(data.get("needs_human_review", False)),
     )
