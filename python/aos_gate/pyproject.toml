@@ -10,9 +10,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-only"
 dependencies = [
-  # Host + outcomes are on main (PRs #7/#8). Pin a release tag when
-  # azerothl/akasha-model#10 lands.
-  "akasha-model @ git+https://github.com/azerothl/akasha-model.git@main",
+  # Host + outcomes shipped in v0.2.0 (akasha-model#10).
+  "akasha-model @ git+https://github.com/azerothl/akasha-model.git@v0.2.0",
 ]
 
 [project.optional-dependencies]
