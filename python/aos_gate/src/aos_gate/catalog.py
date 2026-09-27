@@ -51,13 +51,20 @@ def tool_spec_from_desc(desc: Mapping[str, Any]) -> ToolSpec:
     required_caps = desc.get("required_caps")
     if not isinstance(required_caps, list):
         required_caps = []
+    confirm = _requires_confirmation(name)
+    irreversible = _irreversible(name)
+    # MCP / OS metadata may force confirmation even when the name is mild.
+    if desc.get("requires_confirmation") is True:
+        confirm = True
+    if desc.get("irreversible") is True:
+        irreversible = True
     return ToolSpec(
         name,
         description=str(desc.get("description") or ""),
         parameters=parameters,
         required_capability=_required_capability(required_caps),
-        requires_confirmation=_requires_confirmation(name),
-        irreversible=_irreversible(name),
+        requires_confirmation=confirm,
+        irreversible=irreversible,
     )
 
 
