@@ -56,8 +56,8 @@ pytest python/aos_gate/tests -q
 cargo test -p aos-agent tool_gate -- --nocapture
 ```
 
-Dependency: `akasha-model` from git `main` (host + outcomes). Prefer a release
-tag once [akasha-model#10](https://github.com/azerothl/akasha-model/issues/10) lands.
+Dependency: `akasha-model` pinned to git tag `v0.2.0` (host + outcomes;
+[akasha-model#10](https://github.com/azerothl/akasha-model/issues/10)).
 
 ## Runtime flags
 
