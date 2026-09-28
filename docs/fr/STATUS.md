@@ -7,42 +7,31 @@ Résumé des phases livrées. Détail : [plan-developpement-phases.md](plan-deve
 
 **En-tête :** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview :** 0.18.0 — Memory V2 par défaut, **P18 / E22** instincts en session,
-**P19 / E23** plan de santé runtime, Notes tags/recherche/suppression, fork/continue
-chat, scènes/guides Canvas, générateur de clés coffre, chrome Create peaufiné,
-correctifs LAN/santé/Deep Thinking ; CLI de code externes opt-in (`harness.run` +
-Runtime Agents) et façade MCP optionnelle **`aos-mcpd`**
-([harness.md](harness.md), [mcp-server.md](mcp-server.md)). Catalogue local :
-module expérimental **Studio Illustration** **0.7.23** dans le zip Preview sous
-**Windows, Linux et macOS** (édition wgpu ≠ beauté ; beauté stub/CPU ; Blender
-mock sauf Renderer Pack GPL —
-[FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental)).
-S’appuie sur l’espace Create 0.17.x et le chrome UI peint. Pas un OS bootable. Gate cohorte
-encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple Silicon**, chemin de
-15 minutes). **Suite :** **P21 / Preview 0.19.0** après clôture du ship 0.18 —
-[`aos-serverd`](https://github.com/azerothl/akasha-os/issues/403) (cycle de
-vie + intake agents) et [#247](https://github.com/azerothl/akasha-os/issues/247)
-Dev-assistant **P0** (`workspace.bind` / search / patch) ; fermeture cohorte
-PC ; Horizon C / PV.4+ quand planifié ; E9 hard-green après un run 2 GPU
-documenté.
+**Preview :** 0.19.0 — **`aos-serverd`** cycle de vie headless + intake agents
+([#403](https://github.com/azerothl/akasha-os/issues/403)), services OS et
+supervise mcpd/bridged opt-in, session attach UI-only ; Dev-assistant **P0**
+`workspace.bind` / search / apply_patch
+([#247](https://github.com/azerothl/akasha-os/issues/247)). S’appuie sur 0.18.0
+(Memory V2, E22/E23, harness + `aos-mcpd`, Studio Illustration 0.7.23). Pas un
+OS bootable. Gate cohorte encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple
+Silicon**, chemin 15 minutes). **Suite :** fermeture cohorte PC ; #247 P1–P2 /
+**0.20+** quand planifié ; Horizon C / PV.4+ quand planifié ; E9 hard-green
+après un run 2 GPU documenté.
 
-## P21 — Preview 0.19.0 (en cours) — daemon serveur + Dev-assistant P0
+## P21 — Preview 0.19.0 (daemon serveur + Dev-assistant P0) — fait
 
-**0.18.0** livré ; MVP Track A (`aos-serverd` **P21.0–P21.4**) et Track B
-(#247 **DA.1–DA.4**) sur `main` (#406 / #407). **P21.5** services OS landé
-(#409). **P21.6** (cette branche) : mcpd/bridged opt-in + session attach.
-Ne **pas** inventer un numéro P6 (PC encore ouverte). Pas de nouvel E* pour
-ces tracks hôte.
+Track A (`aos-serverd` **P21.0–P21.6**) et Track B (#247 **DA.1–DA.4**)
+landés sur `main` (#406 / #407 / #409 / #410). **P21.7** = coupe docs /
+VERSION de cette release. Ne **pas** inventer un numéro P6 (PC encore ouverte).
+Pas de nouvel E* pour ces tracks hôte. #247 P1–P2 restent **0.20+**.
 
 | # | Élément | État |
 |---|---------|------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + serve headless + watchdogs + contrôle local + **intake agents** (P21.0–P21.4) | **fait** (MVP) |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + serve headless + watchdogs + contrôle local + **intake agents** (P21.0–P21.4) | **fait** (#406) |
 | P21 / #403 | **P21.5** — services OS opt-in (systemd user / launchd / tâche Windows logon) + `aos-serverd` dans les zips Preview | **fait** (#409) |
-| P21 / #403 | **P21.6** — supervise opt-in `aos-mcpd` / `aos-bridged` ; session attach UI only | **en cours** |
-| P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [contrat module](../dev-assistant-p0.md) + module référence community | **fait** |
-
-Séquence : MVP hôte + packaging P21.5 livrés ; P21.6 attach/supervise ensuite ;
-puis P21.7 docs ship. #247 P1–P2 restent **0.20+**.
+| P21 / #403 | **P21.6** — supervise opt-in `aos-mcpd` / `aos-bridged` ; session attach UI only | **fait** (#410) |
+| P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [contrat module](../dev-assistant-p0.md) + module référence community | **fait** (#407) |
+| P21 / #403 | **P21.7** — VERSION 0.19.0, FEATURES/STATUS/site/TESTER headless, honesty packaging | **fait** |
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait
 

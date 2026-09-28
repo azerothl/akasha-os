@@ -7,41 +7,30 @@ Summary of delivered phases. Detail: [development-plan.md](development-plan.md),
 
 **Headline:** P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / PV.1–PV.3 ✅ / P5.1 ✅ / PC 🚧
 
-**Preview:** 0.18.0 — Memory V2 default, **P18 / E22** instincts in-session,
-**P19 / E23** runtime health plane, Notes tags/search/delete, chat
-fork/continue, Canvas scenes/guides, secrets vault key generator, Create
-chrome polish, LAN/health/Deep Thinking fixes; opt-in **external coding CLIs**
-(`harness.run` + Agents Advanced Runtime) and optional **`aos-mcpd`** MCP
-server façade ([harness.md](harness.md), [mcp-server.md](mcp-server.md)).
-Local catalogue also ships experimental **Illustration Studio** module **0.7.23**
-in the Preview zip on **Windows, Linux, and macOS** (edit wgpu ≠ beauty;
-stub/CPU beauty; Blender mock unless GPL Renderer Pack —
-[FEATURES.md §4c](FEATURES.md#4c-illustration-studio-experimental-module)).
-Builds on 0.17.x Create workspace + painted UI chrome. Not a bootable OS.
-Cohort gate still open (**3 Windows + 1 Linux + 1 macOS Apple Silicon**,
-15-minute path). **Next:** **P21 / Preview 0.19.0** after 0.18 ship closes —
-[`aos-serverd`](https://github.com/azerothl/akasha-os/issues/403) lifecycle +
-agent intake, and [#247](https://github.com/azerothl/akasha-os/issues/247)
-Dev-assistant **P0** (`workspace.bind` / search / patch); PC cohort close;
-Horizon C / PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
+**Preview:** 0.19.0 — **`aos-serverd`** headless lifecycle + agent intake
+([#403](https://github.com/azerothl/akasha-os/issues/403)), opt-in OS
+services and mcpd/bridged supervise, session attach UI-only; Dev-assistant
+**P0** `workspace.bind` / search / apply_patch ([#247](https://github.com/azerothl/akasha-os/issues/247)).
+Builds on 0.18.0 (Memory V2, E22/E23, harness + `aos-mcpd`, Illustration
+Studio 0.7.23). Not a bootable OS. Cohort gate still open
+(**3 Windows + 1 Linux + 1 macOS Apple Silicon**, 15-minute path).
+**Next:** PC cohort close; #247 P1–P2 / **0.20+** when scheduled; Horizon C /
+PV.4+ when scheduled; E9 hard-green after a documented 2-GPU run.
 
-## P21 — Preview 0.19.0 (in progress) — server daemon + Dev-assistant P0
+## P21 — Preview 0.19.0 (server daemon + Dev-assistant P0) — done
 
-**0.18.0** shipped; Track A MVP (`aos-serverd` **P21.0–P21.4**) and Track B
-(#247 **DA.1–DA.4**) landed on `main` (#406 / #407). **P21.5** OS services
-landed (#409). **P21.6** (this branch): opt-in mcpd/bridged + session attach.
-Do **not** invent a P6 number (PC still open). No new E* number for these
-host tracks.
+Track A (`aos-serverd` **P21.0–P21.6**) and Track B (#247 **DA.1–DA.4**)
+landed on `main` (#406 / #407 / #409 / #410). **P21.7** is this release
+docs / VERSION cut. Do **not** invent a P6 number (PC still open). No new
+E* number for these host tracks. #247 P1–P2 stay **0.20+**.
 
 | # | Item | Status |
 |---|------|--------|
-| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + headless serve + watchdogs + local control + **agent intake** (P21.0–P21.4) | **done** (MVP) |
+| P21 / #403 | **`aos-serverd`** — ADR 0012 + lifecycle + headless serve + watchdogs + local control + **agent intake** (P21.0–P21.4) | **done** (#406) |
 | P21 / #403 | **P21.5** — opt-in OS services (systemd user / launchd / Windows logon task) + ship `aos-serverd` in Preview zips | **done** (#409) |
-| P21 / #403 | **P21.6** — opt-in supervise `aos-mcpd` / `aos-bridged` ; session attach UI only | **in progress** |
-| P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [module contract](dev-assistant-p0.md) + community reference module | **done** |
-
-Sequencing: MVP host + P21.5 packaging done; P21.6 attach/supervise next;
-then P21.7 ship docs. #247 P1–P2 stay **0.20+**.
+| P21 / #403 | **P21.6** — opt-in supervise `aos-mcpd` / `aos-bridged` ; session attach UI only | **done** (#410) |
+| P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [module contract](dev-assistant-p0.md) + community reference module | **done** (#407) |
+| P21 / #403 | **P21.7** — VERSION 0.19.0, FEATURES/STATUS/website/TESTER headless, packaging honesty | **done** |
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + health + Notes/Chat) — done
 

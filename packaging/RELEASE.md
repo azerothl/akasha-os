@@ -7,8 +7,8 @@
 Tag then push:
 
 ```bash
-git tag v0.18.0
-git push origin v0.18.0
+git tag v0.19.0
+git push origin v0.19.0
 ```
 
 The workflow [`.github/workflows/preview-release.yml`](../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ CPU-linked `aos-modeld-cpu` in the same zip; no GGUF) and publishes:
 
 Manual trigger: Actions → **preview-release** → Run workflow.
 
-- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.18.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
+- **macOS only on existing Release** (no retag): `macos_only` = true, `release_version` = `0.19.0`, `upload_release` = true — attaches the Apple Silicon zip and refreshes `latest.json` on that Release.
 - **Full rebuild**: `create_release` = true, `macos_only` = false.
 
 ### Internal seL4 gate (not a tester release)
@@ -63,17 +63,14 @@ Before tagging a Preview `v*` release:
 ## Release notes (draft)
 
 ```
-Akasha OS Preview 0.18.0 — Memory V2, instincts, health plane, harness + MCP server
+Akasha OS Preview 0.19.0 — aos-serverd + Dev-assistant P0
 
-- Memory V2 default (decision journal, mind palace; shadow sync from legacy facts)
-- E22 instincts in-session under context pressure; E23 runtime health plane
-- Notes tags / live search / delete; chat fork/continue; Canvas scenes/guides
-- Secrets vault key generator with LAN hex preset
-- Opt-in external coding CLIs (harness.run + Agents Advanced Runtime) — docs/harness.md
-- Optional aos-mcpd stdio MCP façade for IDEs — docs/mcp-server.md
-- Experimental Illustration Studio 0.7.23 in the local catalogue on Win/Linux/macOS (edit ≠ beauty; not full MVP)
-- LAN / health / Deep Thinking / Create chrome polish
-- Same Win/Linux/Mac mill bands as 0.17.x
+- aos-serverd: headless lifecycle (ADR 0012), watchdogs, local control, agent intake
+- Opt-in OS services (systemd user / launchd / Windows logon) + aos-serverd in Preview zips
+- Opt-in supervise aos-mcpd / aos-bridged; aos-session attach UI-only
+- Dev-assistant P0: workspace.bind / fs.search / fs.apply_patch + module contract
+- Builds on 0.18.0 (Memory V2, E22/E23, harness + aos-mcpd, Illustration Studio 0.7.23)
 
 Not a bootable OS. See FIRST-RUN.md / INSTALL.md / TESTER.md
+Tag follow-up: create `v0.19.0` after this docs/VERSION PR merges (do not tag from this PR alone).
 ```

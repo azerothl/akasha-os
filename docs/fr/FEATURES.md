@@ -1,4 +1,4 @@
-# Fonctionnalités Preview — Akasha OS 0.18.0
+# Fonctionnalités Preview — Akasha OS 0.19.0
 
 **Langue :** [English](../FEATURES.md) | Français
 
@@ -7,7 +7,14 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 [specs-fonctionnelles.md](specs-fonctionnelles.md) ; les gates dans
 [STATUS.md](STATUS.md).
 
-> Date : 15/09/2026 · Preview **0.18.0**
+> Date : 28/09/2026 · Preview **0.19.0**
+
+### Nouveautés 0.19.0
+
+#### Fonctionnalités
+
+- **Daemon serveur (`aos-serverd`)** : propriétaire du cycle de vie headless (ADR 0012) — busd…agentd restent up sans egui ; restart ordonné ; watchdogs étendus (dont agentd) ; socket de contrôle local (`status` / `restart` / `stop`) ; intake jobs agents (`enqueue` → `aos-agentd`, caps fail-closed). Services OS opt-in (systemd user / launchd / tâche Windows logon). Supervise opt-in `aos-mcpd` / `aos-bridged` ; `aos-session` peut attacher l’UI seule à un arbre vivant — voir [INSTALL.md](INSTALL.md) et [adr/0012-aos-serverd.md](../adr/0012-aos-serverd.md)
+- **Dev-assistant P0** : `workspace.bind` / `list` / `unbind` avec caps `/host/<id>/**` ; `fs.search` / `code.search` bornés ; `fs.apply_patch` + undo multi-fichier ; contrat module + paquet référence community — [dev-assistant-p0.md](../dev-assistant-p0.md)
 
 ### Nouveautés 0.18.0
 
@@ -332,7 +339,7 @@ courbe (points cliqués façon Bézier), silhouette (`path`), rectangle, ellipse
 
 ## 4c. Studio Illustration (module expérimental)
 
-Paquet catalogue local **`illustration-studio` 0.7.23** (versionné **indépendamment** de l’hôte Preview **0.18.0** ; `share/modules/catalogue.yaml` fait foi). Le zip Preview embarque le même module expérimental sous **Windows, Linux et macOS Apple Silicon** (`share/modules/`). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (aussi dans le paquet `share/modules/illustration-studio.aospkg/docs/`).
+Paquet catalogue local **`illustration-studio` 0.7.23** (versionné **indépendamment** de l’hôte Preview **0.19.0** ; `share/modules/catalogue.yaml` fait foi). Le zip Preview embarque le même module expérimental sous **Windows, Linux et macOS Apple Silicon** (`share/modules/`). Installer via **Paramètres → Catalogue local de modules** (revue de caps). Onglet DeclUI — **pas de WebView**. Docs de profondeur : [illustration-studio-caps.md](../illustration-studio-caps.md), [illustration-blender-backend.md](../illustration-blender-backend.md), [illustration-neural-mesh.md](../illustration-neural-mesh.md), [illustration-renderer-pack.md](../illustration-renderer-pack.md), [illustration-asset-packs.md](../illustration-asset-packs.md). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (aussi dans le paquet `share/modules/illustration-studio.aospkg/docs/`).
 
 **Ce qui est livré (honnête) :**
 
@@ -391,6 +398,26 @@ Skills livrées : **notes-writer**, **research**, **file-author**, **planner**, 
 - **Sources** (web / document / fetch) avec liens navigateur
 - Timeline (`agent.trace`) : action, args, résultat, type d'outil (native / module / mcp / runtime)
 - Contrôles : **Pause**, **Reprendre**, **Relancer**, **Kill**, **Steer**
+
+---
+
+## 5b. Daemon serveur (`aos-serverd`, P21)
+
+Propriétaire du cycle de vie headless Preview (ADR
+[0012](../adr/0012-aos-serverd.md)). Livré dans `bin/` des zips Preview ;
+modèles de service OS opt-in sous `services/`. `aos-session` reste le bootstrap
+desktop et peut **attacher l’UI seule** à un arbre serverd vivant.
+
+| Surface | Ce que vous obtenez |
+|---------|---------------------|
+| Serve headless | `aos-serverd serve` (ou `--headless`) garde busd…agentd up **sans** egui |
+| Watchdogs | Soft respawn agentd / auditd / platformd / modeld ; mort busd/capkd → restart ordonné |
+| Contrôle local | Socket Unix sous `$AOS_HOME/var/run/` — `status` / `restart` / `stop` (audité) |
+| Intake agents | `aos-serverd enqueue --goal "…" --actor cli` → chemins `aos-agentd` (caps fail-closed) ; `jobs` / `job <id>` |
+| Services OS | Scripts opt-in systemd **user** / launchd / tâche Windows logon dans le zip ([INSTALL.md](INSTALL.md)) |
+| Daemons optionnels | `etc/serverd.yaml` peut activer la supervise de `aos-mcpd` / `aos-bridged` |
+
+Non-objectifs : pas d’admin réseau sans caps, pas de K8s, pas de fusion sibling.
 
 ---
 
@@ -506,7 +533,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 
 ---
 
-## 11. Hors Preview 0.18.0
+## 11. Hors Preview 0.19.0
 
 - Image bootable / fer nu
 - STT / voix permanente
@@ -523,5 +550,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Second GGUF draft / vLLM dans le TCB / DFlash2 (E20 = prompt-lookup seulement)
 - Guest seL4 dans le zip Preview public (`sel4-pv-*` interne seulement)
 - Studio Illustration comme MVP §140–§145 complet (SceneIntent LLM, binaire Blender dans le zip, poids mesh neural, marketplace public) — le module expérimental §4c est plus étroit
+- Dev-assistant **P1–P2** (`process.run` cap-gated, git.*, LSP/DAP, widgets DeclUI IDE) — P0 bind/search/patch livré ; piste IDE profonde en **0.20+**
+- Plan d’admin `aos-serverd` exposé réseau (socket de contrôle local seulement)
 
 Protocole cohorte : [TESTER.md](TESTER.md).

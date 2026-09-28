@@ -6,7 +6,7 @@
     <title>What's new — Akasha OS Preview</title>
     <meta
       name="description"
-      content="What each Akasha OS Preview version added, from 0.18.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
+      content="What each Akasha OS Preview version added, from 0.19.0 back to 0.1.0. Host app on Windows/Linux/Mac, not a bootable OS."
     />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
@@ -19,7 +19,7 @@
     <!--
       THESIS: The version log is a cut-face journal of what shipped, not a feature card grid and not a marketing changelog.
       OWN-WORLD: Product chamber chrome shared with landing — void, diluted signal fills, paper ink.
-      STORY: A tester sees what 0.18.0 added, then walks earlier Previews without leaving the site.
+      STORY: A tester sees what 0.19.0 added, then walks earlier Previews without leaving the site.
       FIRST VIEWPORT: Honesty line, compact version rail, then newest ticks.
       FORM: Product chamber inner pages, seed product-chamber-p0.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
@@ -49,12 +49,12 @@
           <span data-lang="en">
             What each Preview added, newest first. This is the version log,
             not the full feature catalogue. Preview
-            <span data-aos-version="0.18.0">0.18.0</span> is a host app, not a bootable OS.
+            <span data-aos-version="0.19.0">0.19.0</span> is a host app, not a bootable OS.
           </span>
           <span data-lang="fr">
             Ce que chaque Preview a ajouté, plus récent en premier. C’est le
             journal des versions, pas le catalogue complet. La Preview
-            <span data-aos-version="0.18.0">0.18.0</span> est une appli hôte, pas un OS
+            <span data-aos-version="0.19.0">0.19.0</span> est une appli hôte, pas un OS
             bootable.
           </span>
         </h1>
@@ -68,6 +68,7 @@
         </p>
 
         <nav class="log-toc log-toc-sticky" aria-label="Versions">
+          <a href="#v0-19-0">0.19.0</a>
           <a href="#v0-18-0">0.18.0</a>
           <a href="#v0-17-2">0.17.2</a>
           <a href="#v0-17-0">0.17.0</a>
@@ -92,6 +93,37 @@
           <a href="#v0-1-1">0.1.1</a>
           <a href="#v0-1-0">0.1.0</a>
         </nav>
+
+
+        <article class="grant" id="v0-19-0">
+          <h2>0.19.0</h2>
+          <p class="rev-when">28/09/2026</p>
+          <p class="hist" data-lang="en">
+            Since 0.18.0, Preview gains a headless lifecycle owner
+            (<code>aos-serverd</code>) so the daemon tree can stay up without
+            egui, plus local agent job intake and opt-in OS services. Dev-assistant
+            P0 adds host workspace bind, bounded search, and apply_patch.
+            Still a host app, not a bootable OS. Tag <code>v0.19.0</code> is a
+            follow-up after this docs cut lands.
+          </p>
+          <p class="hist" data-lang="fr">
+            Depuis la 0.18.0, la Preview gagne un propriétaire de cycle de vie
+            headless (<code>aos-serverd</code>) pour garder l’arbre de daemons
+            sans egui, plus l’intake local de jobs agents et des services OS
+            opt-in. Le Dev-assistant P0 ajoute le bind workspace hôte, la
+            recherche bornée et apply_patch. Toujours une appli hôte, pas un OS
+            bootable. Le tag <code>v0.19.0</code> suit le merge de cette coupe
+            docs.
+          </p>
+          <p class="hist" data-lang="en"><strong>Features</strong></p>
+          <p class="hist" data-lang="fr"><strong>Fonctionnalités</strong></p>
+          <ul class="ticks">
+            <li data-lang="en"><strong>aos-serverd</strong>: headless serve, watchdogs (incl. agentd), local control, agent enqueue; opt-in systemd/launchd/Windows service; opt-in mcpd/bridged supervise; session attach UI-only.</li>
+            <li data-lang="fr"><strong>aos-serverd</strong> : serve headless, watchdogs (dont agentd), contrôle local, enqueue agents ; service systemd/launchd/Windows opt-in ; supervise mcpd/bridged opt-in ; session attach UI-only.</li>
+            <li data-lang="en"><strong>Dev-assistant P0</strong>: <code>workspace.bind</code> / search / <code>fs.apply_patch</code> + module contract (#247).</li>
+            <li data-lang="fr"><strong>Dev-assistant P0</strong> : <code>workspace.bind</code> / search / <code>fs.apply_patch</code> + contrat module (#247).</li>
+          </ul>
+        </article>
 
         <article class="grant" id="v0-18-0">
           <h2>0.18.0</h2>
