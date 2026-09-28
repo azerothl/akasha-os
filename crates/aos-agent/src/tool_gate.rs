@@ -135,6 +135,12 @@ pub struct GateContextJson {
     pub risk_level: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirmation_needed: Option<f64>,
+    /// Provenance of evidence that influenced the proposal (`trusted` /
+    /// `mixed` / `untrusted`). Untrusted-only must not authorize high-impact
+    /// tools (enforced in Python `AkashaOsToolHost` + mirrored below).
+    pub source_trust: String,
+    /// Explicit HITL escalate request (Preview / policy path).
+    pub needs_human_review: bool,
 }
 
 pub fn legacy_ungated_message(entrypoint: &str, tool_name: &str) -> String {
@@ -300,6 +306,30 @@ pub fn dispatch_plan_to_host(
     tools: &[ToolDesc],
     actor_caps: &[String],
 ) -> HostOutcomeView {
+    dispatch_plan_to_host_with_trust(
+        plan,
+        tool_name,
+        arguments,
+        policy,
+        tools,
+        actor_caps,
+        "trusted",
+        false,
+    )
+}
+
+/// Like [`dispatch_plan_to_host`] with source-trust enforcement.
+#[allow(clippy::too_many_arguments)]
+pub fn dispatch_plan_to_host_with_trust(
+    plan: &ToolCallPlanView,
+    tool_name: &str,
+    arguments: &Value,
+    policy: &AgentPolicy,
+    tools: &[ToolDesc],
+    actor_caps: &[String],
+    source_trust: &str,
+    confirmation_given: bool,
+) -> HostOutcomeView {
     if plan.status == "abstain" {
         return HostOutcomeView {
             action: HostAction::SkippedAbstain,
@@ -327,6 +357,19 @@ pub fn dispatch_plan_to_host(
         };
     }
     let gated_name = plan.tool_name.as_deref().unwrap_or(tool_name);
+    if let Err(denial) =
+        trust_allows_host_execution(source_trust, gated_name, tools, confirmation_given)
+    {
+        return HostOutcomeView {
+            action: HostAction::RejectedByHost,
+            host_reason: denial.clone(),
+            plan: plan.clone(),
+            describe: format!(
+                "REJECTED_BY_HOST: {gated_name} — {denial} (gate={})",
+                plan.status
+            ),
+        };
+    }
     if let Some(denial) = policy_deny(policy, gated_name) {
         return HostOutcomeView {
             action: HostAction::RejectedByHost,
@@ -373,6 +416,28 @@ pub fn gate_context_for_tool(
     actor_caps: &[String],
     confirmation_given: bool,
 ) -> GateContextJson {
+    gate_context_for_tool_with_trust(
+        tool_name,
+        policy,
+        tools,
+        actor_caps,
+        confirmation_given,
+        "trusted",
+        false,
+    )
+}
+
+/// Like [`gate_context_for_tool`] with explicit source-trust / HITL flags.
+#[allow(clippy::too_many_arguments)]
+pub fn gate_context_for_tool_with_trust(
+    tool_name: &str,
+    policy: &AgentPolicy,
+    tools: &[ToolDesc],
+    actor_caps: &[String],
+    confirmation_given: bool,
+    source_trust: &str,
+    needs_human_review: bool,
+) -> GateContextJson {
     let policy_allows = policy_deny(policy, tool_name).is_none();
     let has_required_capability = tools
         .iter()
@@ -391,6 +456,152 @@ pub fn gate_context_for_tool(
         confirmation_given,
         risk_level: 0,
         confirmation_needed: None,
+        source_trust: source_trust.to_string(),
+        needs_human_review,
+    }
+}
+
+fn tool_looks_high_impact(tool_name: &str, tools: &[ToolDesc]) -> bool {
+    let lower = tool_name.to_ascii_lowercase();
+    if lower.ends_with(".delete")
+        || lower.ends_with(".rm")
+        || lower.ends_with(".kill")
+        || lower.ends_with(".revoke")
+        || lower.contains("delete")
+        || tool_name == "harness.run"
+        || tool_name == "device.usb.write"
+        || tool_name == "fs.write"
+    {
+        return true;
+    }
+    // MCP write-ish short names after `mcp.<server>:`.
+    if let Some(short) = tool_name.rsplit(':').next() {
+        let s = short.to_ascii_lowercase();
+        if s.contains("delete")
+            || s.contains("write")
+            || s.contains("remove")
+            || s.contains("execute")
+            || s.contains("run")
+        {
+            return true;
+        }
+    }
+    let _ = tools;
+    false
+}
+
+/// OS-side authority check mirroring Python `trust_allows_execution`.
+pub fn trust_allows_host_execution(
+    source_trust: &str,
+    tool_name: &str,
+    tools: &[ToolDesc],
+    confirmation_given: bool,
+) -> Result<(), String> {
+    let trust = source_trust.trim().to_ascii_lowercase();
+    let high = tool_looks_high_impact(tool_name, tools);
+    match trust.as_str() {
+        "" | "trusted" | "user" | "session" | "operator" | "human" => Ok(()),
+        "mixed" | "partial" | "hybrid" => {
+            if high && !confirmation_given {
+                Err(format!(
+                    "authority confusion: mixed/untrusted evidence cannot authorize \
+                     high-impact tool {tool_name} without trusted confirmation"
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        _ => {
+            // untrusted / retrieved / web / mcp …
+            if high {
+                Err(format!(
+                    "authority confusion: untrusted-only context cannot authorize \
+                     high-impact tool {tool_name} (escalate for human review)"
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Append a Path D outcome row via `aos_gate.cli record` (best-effort).
+pub fn record_gate_outcome(
+    outcome: &HostOutcomeView,
+    success: Option<bool>,
+    user_forced: bool,
+    source_trust: &str,
+    notes: &str,
+) {
+    let mode = std::env::var("AOS_GATE_OUTCOMES")
+        .unwrap_or_else(|_| "auto".into())
+        .to_ascii_lowercase();
+    if matches!(mode.as_str(), "0" | "off" | "false" | "no") {
+        return;
+    }
+    let mut payload = json!({
+        "action": outcome.action.as_str(),
+        "host_action": outcome.action.as_str(),
+        "host_reason": outcome.host_reason,
+        "user_forced": user_forced,
+        "notes": notes,
+        "source_trust": source_trust,
+        "plan": {
+            "status": outcome.plan.status,
+            "tool_name": outcome.plan.tool_name,
+            "arguments": outcome.plan.arguments,
+            "reason": outcome.plan.reason,
+            "executable": outcome.plan.executable,
+            "choice_probability": outcome.plan.choice_probability,
+            "choice_confidence": outcome.plan.choice_confidence,
+            "risk_score": outcome.plan.risk_score,
+        },
+    });
+    if let Some(s) = success {
+        payload["success"] = json!(s);
+    }
+    let _ = run_cli("record", &payload);
+}
+
+/// Open a HITL review when the escalate stand-in applies (best-effort).
+pub fn maybe_open_hitl_review(
+    outcome: &HostOutcomeView,
+    context: &GateContextJson,
+    entrypoint: &str,
+) -> Option<String> {
+    let escalate = context.needs_human_review
+        || (outcome.plan.status == "abstain"
+            && (context.risk_level >= 1
+                || context
+                    .confirmation_needed
+                    .map(|v| v >= 0.5)
+                    .unwrap_or(false)))
+        || (matches!(outcome.action, HostAction::RejectedByHost)
+            && (outcome.host_reason.to_ascii_lowercase().contains("authority confusion")
+                || outcome.host_reason.to_ascii_lowercase().contains("untrusted")));
+    if !escalate {
+        return None;
+    }
+    let payload = json!({
+        "action": outcome.action.as_str(),
+        "host_reason": outcome.host_reason,
+        "entrypoint": entrypoint,
+        "force": true,
+        "context": context,
+        "plan": {
+            "status": outcome.plan.status,
+            "tool_name": outcome.plan.tool_name,
+            "arguments": outcome.plan.arguments,
+            "reason": outcome.plan.reason,
+            "executable": outcome.plan.executable,
+        },
+    });
+    match run_cli("review-create", &payload) {
+        Ok(resp) => resp
+            .pointer("/review/review_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        Err(_) => None,
     }
 }
 
@@ -453,13 +664,47 @@ pub fn decide_gated_tool(
     entrypoint: &str,
     confirmation_given: bool,
 ) -> GateDecision {
+    decide_gated_tool_with_trust(
+        tools,
+        tool_name,
+        arguments,
+        policy,
+        actor_caps,
+        entrypoint,
+        confirmation_given,
+        "trusted",
+        false,
+    )
+}
+
+/// Like [`decide_gated_tool`] with source-trust / HITL context.
+#[allow(clippy::too_many_arguments)]
+pub fn decide_gated_tool_with_trust(
+    tools: &[ToolDesc],
+    tool_name: &str,
+    arguments: &Value,
+    policy: &AgentPolicy,
+    actor_caps: &[String],
+    entrypoint: &str,
+    confirmation_given: bool,
+    source_trust: &str,
+    needs_human_review: bool,
+) -> GateDecision {
     let mode = GateMode::from_env();
     if mode == GateMode::Off {
         return GateDecision::Legacy {
             warning: legacy_ungated_message(entrypoint, tool_name),
         };
     }
-    let ctx = gate_context_for_tool(tool_name, policy, tools, actor_caps, confirmation_given);
+    let ctx = gate_context_for_tool_with_trust(
+        tool_name,
+        policy,
+        tools,
+        actor_caps,
+        confirmation_given,
+        source_trust,
+        needs_human_review,
+    );
     let plan = match evaluate_tool_plan(tools, tool_name, arguments, &ctx) {
         Ok(p) => p,
         Err(e) => {
@@ -484,6 +729,7 @@ pub fn decide_gated_tool(
                     },
                     describe: format!("SKIPPED_BLOCKED: {tool_name} — {e}"),
                 };
+                record_gate_outcome(&outcome, None, false, source_trust, "gate unavailable");
                 return GateDecision::Refuse {
                     message: format!("outil refusé (gate requis): {e}"),
                     outcome,
@@ -492,7 +738,21 @@ pub fn decide_gated_tool(
             return GateDecision::Legacy { warning };
         }
     };
-    let outcome = dispatch_plan_to_host(&plan, tool_name, arguments, policy, tools, actor_caps);
+    let outcome = dispatch_plan_to_host_with_trust(
+        &plan,
+        tool_name,
+        arguments,
+        policy,
+        tools,
+        actor_caps,
+        source_trust,
+        confirmation_given,
+    );
+    let mut notes = String::new();
+    if let Some(review_id) = maybe_open_hitl_review(&outcome, &ctx, entrypoint) {
+        notes = format!("hitl_opened; review_id={review_id}");
+    }
+    record_gate_outcome(&outcome, None, false, source_trust, &notes);
     match outcome.action {
         HostAction::Executed => GateDecision::Proceed { outcome },
         HostAction::SkippedAbstain | HostAction::SkippedBlocked | HostAction::RejectedByHost => {
@@ -607,5 +867,58 @@ mod tests {
             &["fs.read:**".into()],
         );
         assert_eq!(outcome.action, HostAction::SkippedAbstain);
+    }
+
+    #[test]
+    fn untrusted_high_impact_rejected_by_host() {
+        let tools = sample_tools();
+        let plan = ToolCallPlanView {
+            status: "ready".into(),
+            tool_name: Some("fs.write".into()),
+            arguments: Some(json!({"path": "/documents/a.md", "content": "x"})),
+            reason: "ok".into(),
+            executable: true,
+            choice_probability: 0.9,
+            choice_confidence: 0.9,
+            risk_score: Some(0.1),
+        };
+        let outcome = dispatch_plan_to_host_with_trust(
+            &plan,
+            "fs.write",
+            &json!({"path": "/documents/a.md", "content": "x"}),
+            &AgentPolicy::default(),
+            &tools,
+            &["fs.write:**".into()],
+            "untrusted",
+            false,
+        );
+        assert_eq!(outcome.action, HostAction::RejectedByHost);
+        assert!(outcome.host_reason.contains("authority confusion"));
+    }
+
+    #[test]
+    fn trusted_high_impact_proceeds() {
+        let tools = sample_tools();
+        let plan = ToolCallPlanView {
+            status: "ready".into(),
+            tool_name: Some("fs.write".into()),
+            arguments: Some(json!({"path": "/documents/a.md", "content": "x"})),
+            reason: "ok".into(),
+            executable: true,
+            choice_probability: 0.9,
+            choice_confidence: 0.9,
+            risk_score: Some(0.1),
+        };
+        let outcome = dispatch_plan_to_host_with_trust(
+            &plan,
+            "fs.write",
+            &json!({"path": "/documents/a.md", "content": "x"}),
+            &AgentPolicy::default(),
+            &tools,
+            &["fs.write:**".into()],
+            "trusted",
+            true,
+        );
+        assert_eq!(outcome.action, HostAction::Executed);
     }
 }

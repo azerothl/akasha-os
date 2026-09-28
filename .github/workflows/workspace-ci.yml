@@ -49,6 +49,22 @@ jobs:
       - name: Check scene, protocol and host UI
         run: cargo check -p aos-scene -p aos-proto -p aos-ui-egui
 
+  aos-gate:
+    name: aos-gate (Python Path A/D)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install aos_gate
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e 'python/aos_gate[dev]'
+      - name: Pytest aos_gate
+        run: pytest python/aos_gate/tests -q
+
   hygiene:
     name: Release consistency
     runs-on: ubuntu-latest

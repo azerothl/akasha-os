@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aos-gate"
-version = "0.1.0"
-description = "Akasha OS host binding for the akasha-model tool gate (Path A)."
+version = "0.2.0"
+description = "Akasha OS host binding for the akasha-model tool gate (Path A + D)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-only"
 dependencies = [
-  # Prefer the gate-host branch until PR azerothl/akasha-model#7 lands on main.
-  "akasha-model @ git+https://github.com/azerothl/akasha-model.git@cursor/gate-host-476f",
+  # Host + outcomes shipped in v0.2.0 (akasha-model#10).
+  "akasha-model @ git+https://github.com/azerothl/akasha-model.git@v0.2.0",
 ]
 
 [project.optional-dependencies]
