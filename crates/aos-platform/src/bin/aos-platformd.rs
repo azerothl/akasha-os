@@ -2394,6 +2394,7 @@ async fn main() {
                                 req.width,
                                 req.opacity,
                                 req.dash.as_deref(),
+                                req.brush,
                             )
                         };
                         match result {

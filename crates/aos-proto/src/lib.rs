@@ -4421,6 +4421,9 @@ pub struct CanvasPoint {
 pub enum CanvasOpBody {
     Stroke {
         points: Vec<CanvasPoint>,
+        /// Relative pressure per point. Empty means uniform pressure.
+        #[serde(default)]
+        pressure: Vec<f32>,
         /// `#RRGGBB` ou `#RRGGBBAA` — vide = crayon de session.
         #[serde(default)]
         color: String,
@@ -4577,6 +4580,25 @@ pub struct CanvasPenStyle {
     pub opacity: f32,
     #[serde(default)]
     pub dash: Vec<f32>,
+    /// Active brush for newly created ops. Missing values in old documents
+    /// deserialize as LegacySolid; new documents default to Pencil.
+    #[serde(default = "CanvasBrush::legacy")]
+    pub brush: CanvasBrush,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasBrush {
+    #[default]
+    Pencil,
+    Wash,
+    LegacySolid,
+}
+
+impl CanvasBrush {
+    fn legacy() -> Self {
+        Self::LegacySolid
+    }
 }
 
 fn default_canvas_pen_width() -> f32 {
@@ -4598,6 +4620,7 @@ impl Default for CanvasPenStyle {
             width: default_canvas_pen_width(),
             opacity: default_canvas_opacity(),
             dash: Vec::new(),
+            brush: CanvasBrush::Pencil,
         }
     }
 }
@@ -4670,6 +4693,79 @@ pub struct CanvasSceneSpec {
     pub relations: Vec<CanvasSceneRelation>,
     #[serde(default)]
     pub guides: Option<CanvasGuides>,
+    /// Optional typed composition contract. Absent/unknown contracts remain
+    /// drawable, but must be surfaced as needing visual review.
+    #[serde(default)]
+    pub layout: Option<CanvasSceneLayout>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasSceneSubjectKind {
+    #[default]
+    Unknown,
+    Quadruped,
+    Biped,
+    Vehicle,
+    Building,
+    Plant,
+    StillLife,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasSceneView {
+    Side,
+    Front,
+    ThreeQuarter,
+    Top,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasSceneSide {
+    Near,
+    Far,
+    Left,
+    Right,
+    #[default]
+    Center,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct CanvasSceneLayout {
+    #[serde(default)]
+    pub subject_kind: CanvasSceneSubjectKind,
+    #[serde(default)]
+    pub view: CanvasSceneView,
+    #[serde(default)]
+    pub parts: Vec<CanvasScenePart>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CanvasScenePart {
+    pub element_id: String,
+    pub role: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub side: Option<CanvasSceneSide>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasSceneCheckStatus {
+    Pass,
+    NeedsReview,
+    Invalid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CanvasSceneCheck {
+    pub status: CanvasSceneCheckStatus,
+    pub issues: Vec<String>,
 }
 
 fn default_canvas_scene_version() -> u32 {
@@ -4687,6 +4783,7 @@ impl Default for CanvasSceneSpec {
             elements: Vec::new(),
             relations: Vec::new(),
             guides: None,
+            layout: None,
         }
     }
 }
@@ -4901,6 +4998,10 @@ pub fn compile_canvas_scene(
             return Err("scene: relation vers des éléments inconnus ou vide".into());
         }
     }
+    let check = canvas_scene_check(scene);
+    if check.status == CanvasSceneCheckStatus::Invalid {
+        return Err(check.issues.join("; "));
+    }
     Ok(out)
 }
 
@@ -4964,6 +5065,250 @@ pub fn canvas_scene_diagnostics(scene: &CanvasSceneSpec) -> Vec<String> {
         }
     }
     warnings
+}
+
+/// Validate the semantic composition contract before geometry is rendered.
+/// Unknown subjects remain drawable, but are explicitly marked for review.
+pub fn canvas_scene_check(scene: &CanvasSceneSpec) -> CanvasSceneCheck {
+    if scene.profile != CanvasSceneProfile::Illustration {
+        return CanvasSceneCheck {
+            status: CanvasSceneCheckStatus::Pass,
+            issues: Vec::new(),
+        };
+    }
+    let Some(layout) = scene.layout.as_ref() else {
+        return CanvasSceneCheck {
+            status: CanvasSceneCheckStatus::NeedsReview,
+            issues: vec!["structure absente : aperçu à vérifier".into()],
+        };
+    };
+    if layout.subject_kind == CanvasSceneSubjectKind::Unknown {
+        return CanvasSceneCheck {
+            status: CanvasSceneCheckStatus::NeedsReview,
+            issues: vec!["catégorie non reconnue : aperçu à vérifier".into()],
+        };
+    }
+    let mut errors = canvas_scene_layout_errors(scene, layout);
+    if !errors.is_empty() {
+        errors.sort();
+        errors.dedup();
+        return CanvasSceneCheck {
+            status: CanvasSceneCheckStatus::Invalid,
+            issues: errors,
+        };
+    }
+    let warnings = canvas_scene_diagnostics(scene);
+    if warnings.is_empty() {
+        CanvasSceneCheck {
+            status: CanvasSceneCheckStatus::Pass,
+            issues: Vec::new(),
+        }
+    } else {
+        CanvasSceneCheck {
+            status: CanvasSceneCheckStatus::NeedsReview,
+            issues: warnings,
+        }
+    }
+}
+
+fn canvas_scene_layout_errors(
+    scene: &CanvasSceneSpec,
+    layout: &CanvasSceneLayout,
+) -> Vec<String> {
+    let elements: std::collections::HashMap<&str, &CanvasSceneElement> = scene
+        .elements
+        .iter()
+        .map(|element| (element.id.as_str(), element))
+        .collect();
+    let parts: std::collections::HashMap<&str, &CanvasScenePart> = layout
+        .parts
+        .iter()
+        .map(|part| (part.element_id.as_str(), part))
+        .collect();
+    let mut errors = Vec::new();
+    if layout.parts.is_empty() {
+        errors.push("structure sans parties sémantiques".into());
+    }
+    for part in &layout.parts {
+        if part.role.trim().is_empty() || !elements.contains_key(part.element_id.as_str()) {
+            errors.push(format!(
+                "partie `{}` sans rôle ou sans élément géométrique correspondant",
+                part.element_id
+            ));
+        }
+        if let Some(parent) = part.parent_id.as_deref() {
+            if parent == part.element_id || !parts.contains_key(parent) {
+                errors.push(format!(
+                    "partie `{}` référence un parent inconnu ou elle-même",
+                    part.element_id
+                ));
+            }
+        }
+    }
+    let role_parts = |role: &str| -> Vec<&CanvasScenePart> {
+        layout
+            .parts
+            .iter()
+            .filter(|part| part.role.eq_ignore_ascii_case(role))
+            .collect()
+    };
+    let bbox = |part: &CanvasScenePart| -> Option<CanvasBBox> {
+        elements
+            .get(part.element_id.as_str())
+            .and_then(|element| canvas_scene_element_bbox(element))
+    };
+    let require_one = |role: &str, errors: &mut Vec<String>| -> Option<&CanvasScenePart> {
+        let found = role_parts(role);
+        if found.len() != 1 {
+            errors.push(format!("structure `{role}` : attendu 1 partie, trouvé {}", found.len()));
+            None
+        } else {
+            Some(found[0])
+        }
+    };
+    let require_pair = |role: &str, errors: &mut Vec<String>| -> Vec<&CanvasScenePart> {
+        let found = role_parts(role);
+        if found.len() != 2 {
+            errors.push(format!("structure `{role}` : attendu 2 parties, trouvé {}", found.len()));
+        }
+        let sides: std::collections::HashSet<CanvasSceneSide> =
+            found.iter().filter_map(|part| part.side).collect();
+        if found.len() == 2 && sides.len() != 2 {
+            errors.push(format!("structure `{role}` : indique deux côtés distincts"));
+        }
+        found
+    };
+    let require_connected = |part: &CanvasScenePart,
+                             parent: &CanvasScenePart,
+                             errors: &mut Vec<String>| {
+        let connected = bbox(part)
+            .zip(bbox(parent))
+            .is_some_and(|(a, b)| canvas_scene_bboxes_connected(a, b, 0.035));
+        if !connected || part.parent_id.as_deref() != Some(parent.element_id.as_str()) {
+            errors.push(format!(
+                "partie `{}` : attache-la à `{}` et fais chevaucher leurs formes",
+                part.element_id, parent.element_id
+            ));
+        }
+    };
+    match layout.subject_kind {
+        CanvasSceneSubjectKind::Unknown => {}
+        CanvasSceneSubjectKind::Quadruped => {
+            let body = require_one("body", &mut errors);
+            let head = require_one("head", &mut errors);
+            let front = require_pair("front_leg", &mut errors);
+            let rear = require_pair("rear_leg", &mut errors);
+            if let Some(body) = body {
+                if let Some(head) = head {
+                    require_connected(head, body, &mut errors);
+                }
+                for part in front.iter().chain(rear.iter()) {
+                    require_connected(part, body, &mut errors);
+                }
+                if front.len() == 2 && rear.len() == 2 && layout.view == CanvasSceneView::Side {
+                    let centers = |group: &[&CanvasScenePart]| {
+                        group
+                            .iter()
+                            .filter_map(|part| bbox(part))
+                            .map(|b| (b.x0 + b.x1) * 0.5)
+                            .collect::<Vec<_>>()
+                    };
+                    let front_x = centers(&front);
+                    let rear_x = centers(&rear);
+                    let body_box = bbox(body);
+                    let head_x = head.and_then(|part| bbox(part)).map(|b| (b.x0 + b.x1) * 0.5);
+                    if front_x.len() == 2 && rear_x.len() == 2 {
+                        let front_mid = (front_x[0] + front_x[1]) * 0.5;
+                        let rear_mid = (rear_x[0] + rear_x[1]) * 0.5;
+                        let separated = (front_mid - rear_mid).abs() > 0.12;
+                        let faces_right = head_x.zip(body_box).is_some_and(|(x, b)| x >= (b.x0 + b.x1) * 0.5);
+                        let ordered = if faces_right { front_mid > rear_mid } else { front_mid < rear_mid };
+                        if !separated || !ordered {
+                            errors.push("quadrupède de profil : sépare les pattes avant et arrière et place les pattes avant sous la tête".into());
+                        }
+                    }
+                }
+            }
+        }
+        CanvasSceneSubjectKind::Biped => {
+            let body = require_one("body", &mut errors).or_else(|| require_one("torso", &mut errors));
+            let head = require_one("head", &mut errors);
+            let legs = require_pair("leg", &mut errors);
+            let arms = require_pair("arm", &mut errors);
+            if let Some(body) = body {
+                if let Some(head) = head {
+                    require_connected(head, body, &mut errors);
+                }
+                for part in legs.iter().chain(arms.iter()) {
+                    require_connected(part, body, &mut errors);
+                }
+            }
+        }
+        CanvasSceneSubjectKind::Vehicle => {
+            let body = require_one("body", &mut errors);
+            let wheels = role_parts("wheel");
+            if wheels.len() < 2 {
+                errors.push(format!("véhicule : attendu au moins 2 roues, trouvé {}", wheels.len()));
+            }
+            if let Some(body) = body {
+                if let Some(body_box) = bbox(body) {
+                    for wheel in &wheels {
+                        if let Some(wheel_box) = bbox(wheel) {
+                            if wheel.parent_id.as_deref() != Some(body.element_id.as_str())
+                                || !canvas_scene_bboxes_connected(wheel_box, body_box, 0.035)
+                                || (wheel_box.y0 + wheel_box.y1) * 0.5 <= body_box.y0 + (body_box.y1 - body_box.y0) * 0.45
+                            {
+                                errors.push(format!("roue `{}` : place-la sous et contre la carrosserie", wheel.element_id));
+                            }
+                        }
+                    }
+                    let centers: Vec<f32> = wheels.iter().filter_map(|part| bbox(part)).map(|b| (b.x0 + b.x1) * 0.5).collect();
+                    if centers.len() >= 2 && centers.iter().all(|x| (*x - centers[0]).abs() < 0.04) {
+                        errors.push("véhicule : répartis les roues sur plusieurs positions le long de la carrosserie".into());
+                    }
+                }
+            }
+        }
+        CanvasSceneSubjectKind::Building => {
+            let body = require_one("body", &mut errors);
+            let roof = require_one("roof", &mut errors);
+            if let (Some(body), Some(roof)) = (body, roof) {
+                require_connected(roof, body, &mut errors);
+                if bbox(roof).zip(bbox(body)).is_some_and(|(r, b)| r.y1 > b.y0 + 0.08) {
+                    errors.push("bâtiment : place le toit au-dessus du corps".into());
+                }
+            }
+        }
+        CanvasSceneSubjectKind::Plant => {
+            let stem = require_one("stem", &mut errors);
+            let foliage = role_parts("leaf");
+            let flowers = role_parts("flower");
+            if foliage.is_empty() && flowers.is_empty() {
+                errors.push("plante : ajoute au moins une feuille ou une fleur".into());
+            }
+            if let Some(stem) = stem {
+                for part in foliage.iter().chain(flowers.iter()) {
+                    require_connected(part, stem, &mut errors);
+                }
+            }
+        }
+        CanvasSceneSubjectKind::StillLife => {
+            let objects = role_parts("object");
+            if objects.len() < 2 {
+                errors.push("nature morte : indique au moins deux objets".into());
+            }
+            if objects.len() >= 2 {
+                let boxes: Vec<CanvasBBox> = objects.iter().filter_map(|part| bbox(part)).collect();
+                if boxes.len() < 2 || boxes.windows(2).all(|pair| {
+                    ((pair[0].x0 + pair[0].x1) - (pair[1].x0 + pair[1].x1)).abs() < 0.04
+                        && ((pair[0].y0 + pair[0].y1) - (pair[1].y0 + pair[1].y1)).abs() < 0.04
+                }) {
+                    errors.push("nature morte : les objets doivent avoir des positions distinctes".into());
+                }
+            }
+        }
+    }
+    errors
 }
 
 fn contains_scene_term(element: &CanvasSceneElement, terms: &[&str]) -> bool {
@@ -5447,8 +5792,15 @@ pub fn canvas_scene_digest(doc: &CanvasDoc, aspect: CanvasAspect) -> String {
         ));
     }
     if let Some(scene) = doc.scene.as_ref() {
-        for warning in canvas_scene_diagnostics(scene) {
-            lines.push(format!("scene_check=warning: {warning}"));
+        let check = canvas_scene_check(scene);
+        let label = match check.status {
+            CanvasSceneCheckStatus::Pass => "pass",
+            CanvasSceneCheckStatus::NeedsReview => "needs_review",
+            CanvasSceneCheckStatus::Invalid => "error",
+        };
+        lines.push(format!("scene_status={label}"));
+        for issue in check.issues {
+            lines.push(format!("scene_check={label}: {issue}"));
         }
     }
     if let Some(last) = doc.ops.last() {
@@ -5513,6 +5865,9 @@ pub struct CanvasOp {
     pub ts_ms: u64,
     #[serde(default = "default_canvas_layer_id")]
     pub layer_id: String,
+    /// Per-operation brush; None is retained for pre-brush documents.
+    #[serde(default)]
+    pub brush: Option<CanvasBrush>,
     #[serde(flatten)]
     pub body: CanvasOpBody,
 }
@@ -5592,6 +5947,8 @@ pub struct CanvasSetStyleRequest {
     pub opacity: Option<f32>,
     #[serde(default)]
     pub dash: Option<Vec<f32>>,
+    #[serde(default)]
+    pub brush: Option<CanvasBrush>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7072,14 +7429,31 @@ mod media_option_tests {
 #[cfg(test)]
 mod chat_session_room_tests {
     use super::{
-        canvas_scene_diagnostics, compile_canvas_scene, AgentCreateRequest, AgentGoal, AgentInfo,
+        canvas_scene_check, canvas_scene_diagnostics, compile_canvas_scene, AgentCreateRequest, AgentGoal, AgentInfo,
         AgentKind, AgentState,
-        CanvasAspect, CanvasGuides, CanvasOpBody, CanvasPoint, CanvasSceneElement,
-        CanvasSceneGeometry, CanvasSceneProfile, CanvasSceneRelation, CanvasSceneSpec,
+        CanvasAspect, CanvasBrush, CanvasGuides, CanvasOpBody, CanvasPoint, CanvasSceneElement,
+        CanvasSceneCheckStatus, CanvasSceneGeometry, CanvasSceneProfile, CanvasSceneRelation, CanvasSceneSpec,
         CanvasSnapMode,
         ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage, ChatSessionMeta,
         ChatSessionMode, CognitiveMode,
     };
+
+    #[test]
+    fn legacy_canvas_docs_keep_their_original_solid_brush() {
+        let doc: super::CanvasDoc = serde_json::from_str(r##"{
+            "session_id":"old-session","next_seq":2,
+            "ops":[{"seq":1,"author_id":"agent","ts_ms":1,"layer_id":"default",
+                "kind":"stroke","points":[{"x":0.1,"y":0.2},{"x":0.3,"y":0.4}],
+                "color":"#334455","width":0.02}],
+            "pen":{"color":"#334455","width":0.02,"opacity":1.0,"dash":[]}
+        }"##).unwrap();
+        assert_eq!(doc.ops[0].brush, None);
+        assert_eq!(doc.pen.brush, CanvasBrush::LegacySolid);
+        match &doc.ops[0].body {
+            CanvasOpBody::Stroke { pressure, .. } => assert!(pressure.is_empty()),
+            other => panic!("expected legacy stroke, got {other:?}"),
+        }
+    }
 
     #[test]
     fn legacy_meta_without_mode_or_members() {
@@ -7187,7 +7561,9 @@ mod chat_session_room_tests {
             author_id: "human".into(),
             ts_ms: 42,
             layer_id: String::new(),
+            brush: None,
             body: CanvasOpBody::Stroke {
+                pressure: Vec::new(),
                 points: vec![
                     CanvasPoint { x: 0.1, y: 0.2 },
                     CanvasPoint { x: 0.3, y: 0.4 },
@@ -7315,6 +7691,7 @@ mod chat_session_room_tests {
             width: 0.022,
             opacity: 1.0,
             dash: vec![],
+            brush: CanvasBrush::Pencil,
         };
         let mut sized = CanvasOpBody::Text {
             x: 0.0,
@@ -7343,8 +7720,10 @@ mod chat_session_room_tests {
             width: 0.022,
             opacity: 1.0,
             dash: vec![],
+            brush: CanvasBrush::Pencil,
         };
         let mut stroke = CanvasOpBody::Stroke {
+            pressure: Vec::new(),
             points: vec![
                 CanvasPoint { x: 0.0, y: 0.0 },
                 CanvasPoint { x: 1.0, y: 1.0 },
@@ -7380,6 +7759,7 @@ mod chat_session_room_tests {
                     author_id: "human".into(),
                     ts_ms: 1,
                     layer_id: String::new(),
+                    brush: None,
                     body: CanvasOpBody::Line {
                         p0: CanvasPoint { x: 0.1, y: 0.1 },
                         p1: CanvasPoint { x: 0.2, y: 0.2 },
@@ -7394,6 +7774,7 @@ mod chat_session_room_tests {
                     author_id: "agent-a".into(),
                     ts_ms: 2,
                     layer_id: String::new(),
+                    brush: None,
                     body: CanvasOpBody::Fill {
                         x: 0.5,
                         y: 0.5,
@@ -7536,6 +7917,136 @@ mod chat_session_room_tests {
         let warnings = canvas_scene_diagnostics(&scene).join("\n");
         assert!(warnings.contains("partie supérieure `head` ne touche pas"));
         assert!(warnings.contains("appendice `ear_l` est isolé"));
+    }
+
+    #[test]
+    fn quadruped_layout_rejects_four_legs_on_the_same_body_end() {
+        use super::{
+            canvas_scene_check, CanvasSceneCheckStatus, CanvasSceneElement,
+            CanvasSceneGeometry, CanvasSceneLayout, CanvasScenePart, CanvasSceneProfile,
+            CanvasSceneSide, CanvasSceneSpec, CanvasSceneSubjectKind, CanvasSceneView,
+        };
+        let ellipse = |id: &str, x: f32, y: f32, w: f32, h: f32| CanvasSceneElement {
+            id: id.into(), role: id.into(), layer: None, color: Some("#40382f".into()),
+            width: Some(0.01), fill: true, opacity: 1.0, dash: vec![],
+            geometry: CanvasSceneGeometry::Ellipse { x, y, w, h, rotation: 0.0 },
+        };
+        let make_scene = |front_x: f32, rear_x: f32| CanvasSceneSpec {
+            profile: CanvasSceneProfile::Illustration,
+            subject: "chat de profil".into(),
+            elements: vec![
+                ellipse("body", 0.25, 0.45, 0.5, 0.28),
+                ellipse("head", 0.65, 0.35, 0.18, 0.2),
+                ellipse("front_near", front_x, 0.64, 0.07, 0.22),
+                ellipse("front_far", front_x + 0.035, 0.64, 0.07, 0.22),
+                ellipse("rear_near", rear_x, 0.64, 0.07, 0.22),
+                ellipse("rear_far", rear_x + 0.035, 0.64, 0.07, 0.22),
+            ],
+            layout: Some(CanvasSceneLayout {
+                subject_kind: CanvasSceneSubjectKind::Quadruped,
+                view: CanvasSceneView::Side,
+                parts: vec![
+                    CanvasScenePart { element_id: "body".into(), role: "body".into(), parent_id: None, side: None },
+                    CanvasScenePart { element_id: "head".into(), role: "head".into(), parent_id: Some("body".into()), side: None },
+                    CanvasScenePart { element_id: "front_near".into(), role: "front_leg".into(), parent_id: Some("body".into()), side: Some(CanvasSceneSide::Near) },
+                    CanvasScenePart { element_id: "front_far".into(), role: "front_leg".into(), parent_id: Some("body".into()), side: Some(CanvasSceneSide::Far) },
+                    CanvasScenePart { element_id: "rear_near".into(), role: "rear_leg".into(), parent_id: Some("body".into()), side: Some(CanvasSceneSide::Near) },
+                    CanvasScenePart { element_id: "rear_far".into(), role: "rear_leg".into(), parent_id: Some("body".into()), side: Some(CanvasSceneSide::Far) },
+                ],
+            }),
+            ..Default::default()
+        };
+        let valid = canvas_scene_check(&make_scene(0.57, 0.29));
+        assert_eq!(valid.status, CanvasSceneCheckStatus::Pass, "{valid:?}");
+        let invalid = canvas_scene_check(&make_scene(0.57, 0.56));
+        assert_eq!(invalid.status, CanvasSceneCheckStatus::Invalid);
+        assert!(invalid.issues.iter().any(|issue| issue.contains("pattes avant et arrière")));
+        assert!(compile_canvas_scene(&make_scene(0.57, 0.56)).is_err());
+
+        // A frontal view can project near/far and front/rear limbs over one
+        // another; only the side-view ordering rule should separate them.
+        let mut frontal = make_scene(0.42, 0.42);
+        frontal.layout.as_mut().unwrap().view = CanvasSceneView::Front;
+        assert_eq!(canvas_scene_check(&frontal).status, CanvasSceneCheckStatus::Pass);
+
+        let mut missing = make_scene(0.57, 0.29);
+        missing.layout.as_mut().unwrap().parts.retain(|part| part.element_id != "front_far");
+        assert_eq!(canvas_scene_check(&missing).status, CanvasSceneCheckStatus::Invalid);
+
+        let mut isolated = make_scene(0.57, 0.29);
+        let isolated_leg = isolated.elements.iter_mut().find(|element| element.id == "front_near").unwrap();
+        if let CanvasSceneGeometry::Ellipse { x, y, .. } = &mut isolated_leg.geometry {
+            *x = 0.92;
+            *y = 0.08;
+        }
+        assert_eq!(canvas_scene_check(&isolated).status, CanvasSceneCheckStatus::Invalid);
+
+        let mut duplicated = make_scene(0.57, 0.29);
+        let duplicate = duplicated.layout.as_ref().unwrap().parts.iter()
+            .find(|part| part.element_id == "front_near").unwrap().clone();
+        duplicated.layout.as_mut().unwrap().parts.push(duplicate);
+        assert_eq!(canvas_scene_check(&duplicated).status, CanvasSceneCheckStatus::Invalid);
+    }
+
+    #[test]
+    fn unknown_illustration_layout_is_drawable_but_needs_review() {
+        let scene = CanvasSceneSpec {
+            profile: CanvasSceneProfile::Illustration,
+            subject: "créature inventée".into(),
+            elements: vec![CanvasSceneElement {
+                id: "shape".into(), role: "silhouette".into(), layer: None,
+                color: None, width: None, fill: true, opacity: 1.0, dash: vec![],
+                geometry: CanvasSceneGeometry::Ellipse {
+                    x: 0.2, y: 0.2, w: 0.4, h: 0.4, rotation: 0.0,
+                },
+            }],
+            ..Default::default()
+        };
+        let check = canvas_scene_check(&scene);
+        assert_eq!(check.status, CanvasSceneCheckStatus::NeedsReview);
+        assert!(compile_canvas_scene(&scene).is_ok());
+    }
+
+    #[test]
+    fn recognized_non_quadruped_scene_families_validate() {
+        use super::{canvas_scene_check, CanvasSceneCheckStatus, CanvasSceneElement,
+            CanvasSceneGeometry, CanvasSceneLayout, CanvasScenePart, CanvasSceneProfile,
+            CanvasSceneSide, CanvasSceneSpec, CanvasSceneSubjectKind, CanvasSceneView};
+        let element = |id: &str, x: f32, y: f32, w: f32, h: f32| CanvasSceneElement {
+            id:id.into(), role:id.into(), layer:None, color:None, width:Some(0.01), fill:true,
+            opacity:1.0, dash:vec![], geometry:CanvasSceneGeometry::Ellipse{x,y,w,h,rotation:0.0},
+        };
+        let part = |id: &str, role: &str, parent: Option<&str>, side: Option<CanvasSceneSide>| CanvasScenePart {
+            element_id:id.into(), role:role.into(), parent_id:parent.map(str::to_string), side,
+        };
+        let make = |kind, elements, parts| CanvasSceneSpec {
+            profile:CanvasSceneProfile::Illustration, subject:"test reconnu".into(), elements,
+            layout:Some(CanvasSceneLayout{subject_kind:kind,view:CanvasSceneView::Front,parts}),
+            ..Default::default()
+        };
+        let biped = make(CanvasSceneSubjectKind::Biped,
+            vec![element("body",0.4,0.3,0.2,0.35),element("head",0.4,0.15,0.2,0.15),
+                 element("arm_l",0.28,0.35,0.12,0.08),element("arm_r",0.6,0.35,0.12,0.08),
+                 element("leg_l",0.4,0.65,0.08,0.2),element("leg_r",0.52,0.65,0.08,0.2)],
+            vec![part("body","body",None,None),part("head","head",Some("body"),None),
+                 part("arm_l","arm",Some("body"),Some(CanvasSceneSide::Left)),part("arm_r","arm",Some("body"),Some(CanvasSceneSide::Right)),
+                 part("leg_l","leg",Some("body"),Some(CanvasSceneSide::Left)),part("leg_r","leg",Some("body"),Some(CanvasSceneSide::Right))]);
+        let vehicle = make(CanvasSceneSubjectKind::Vehicle,
+            vec![element("body",0.2,0.4,0.6,0.25),element("wheel_l",0.28,0.6,0.12,0.12),element("wheel_r",0.62,0.6,0.12,0.12)],
+            vec![part("body","body",None,None),part("wheel_l","wheel",Some("body"),Some(CanvasSceneSide::Left)),part("wheel_r","wheel",Some("body"),Some(CanvasSceneSide::Right))]);
+        let building = make(CanvasSceneSubjectKind::Building,
+            vec![element("body",0.35,0.35,0.3,0.4),element("roof",0.32,0.25,0.36,0.12)],
+            vec![part("body","body",None,None),part("roof","roof",Some("body"),None)]);
+        let plant = make(CanvasSceneSubjectKind::Plant,
+            vec![element("stem",0.48,0.35,0.04,0.4),element("leaf",0.35,0.4,0.14,0.1)],
+            vec![part("stem","stem",None,None),part("leaf","leaf",Some("stem"),Some(CanvasSceneSide::Left))]);
+        let still_life = make(CanvasSceneSubjectKind::StillLife,
+            vec![element("cup",0.25,0.4,0.2,0.3),element("vase",0.6,0.32,0.2,0.38)],
+            vec![part("cup","object",None,None),part("vase","object",None,None)]);
+        for (name, scene) in [("biped",biped),("vehicle",vehicle),("building",building),("plant",plant),("still life",still_life)] {
+            let check=canvas_scene_check(&scene);
+            assert_eq!(check.status,CanvasSceneCheckStatus::Pass,"{name}: {:?}",check.issues);
+        }
     }
 
     #[test]

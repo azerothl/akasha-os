@@ -126,6 +126,7 @@ impl UiApp {
                             author_id: "human".into(),
                             ts_ms: 0,
                             layer_id,
+                            brush: Some(self.chat_state.view.canvas.brush),
                             body: op.clone(),
                         });
                     }
@@ -376,6 +377,7 @@ impl UiApp {
                 width,
                 opacity,
                 dash,
+                brush,
             }) => {
                 let _ = self.cmd_tx.send(Cmd::CanvasSetStyle {
                     session_id: session_id.to_string(),
@@ -383,6 +385,7 @@ impl UiApp {
                     width,
                     opacity,
                     dash,
+                    brush,
                 });
             }
             Some(chat_canvas::CanvasUiAction::SetGuides {

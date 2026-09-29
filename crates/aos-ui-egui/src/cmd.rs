@@ -501,6 +501,7 @@ pub(crate) enum Cmd {
         width: Option<f32>,
         opacity: Option<f32>,
         dash: Option<Vec<f32>>,
+        brush: Option<aos_proto::CanvasBrush>,
     },
     CanvasSetGuides {
         session_id: String,

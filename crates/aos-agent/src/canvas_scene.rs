@@ -14,6 +14,7 @@ pub enum CanvasValidationStatus {
     Pass,
     Review,
     Modify,
+    NeedsReview,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -184,6 +185,19 @@ pub fn validate_canvas_global(
     }
 
     let normalized_goal = goal.to_lowercase();
+    let mut scene_needs_review = false;
+    if let Some(scene) = doc.scene.as_ref() {
+        let check = aos_proto::canvas_scene_check(scene);
+        scene_needs_review = check.status == aos_proto::CanvasSceneCheckStatus::NeedsReview;
+        for issue in check.issues {
+            let (kind, severity) = match check.status {
+                aos_proto::CanvasSceneCheckStatus::Invalid => ("scene_structure", "error"),
+                aos_proto::CanvasSceneCheckStatus::NeedsReview => ("scene_needs_review", "warning"),
+                aos_proto::CanvasSceneCheckStatus::Pass => continue,
+            };
+            issues.push(validation_issue(kind, vec![], severity, &issue));
+        }
+    }
     if normalized_goal.contains("cube") {
         validate_cube_structure(&visible, final_check, &mut issues);
     }
@@ -199,7 +213,11 @@ pub fn validate_canvas_global(
     let score = (1.0 - errors as f32 * 0.22 - warnings as f32 * 0.08).clamp(0.0, 1.0);
     let status = if errors > 0 && final_check {
         CanvasValidationStatus::Modify
-    } else if errors > 0 || warnings > 0 {
+    } else if errors > 0 {
+        CanvasValidationStatus::Review
+    } else if scene_needs_review {
+        CanvasValidationStatus::NeedsReview
+    } else if warnings > 0 {
         CanvasValidationStatus::Review
     } else {
         CanvasValidationStatus::Pass
@@ -241,6 +259,7 @@ pub async fn fetch_canvas_global_validation(
         pen: response.pen,
         layers: response.layers,
         active_layer_id: response.active_layer_id,
+        scene: response.scene,
         ..CanvasDoc::default()
     };
     Some(validate_canvas_global(&doc, goal, final_check))
@@ -675,7 +694,7 @@ pub fn canvas_scene_prompt_block(digest: &str) -> String {
          ```\n{digest}\n```\n\
          Poursuis le dessin existant : ajoute une seule pièce manquante — ne restack pas la même bbox, pas canvas.clear. \
          Chaque op canvas doit inclure `color` (#RRGGBB) pour la teinte voulue (`fill_color` est un alias normalisé). \
-         Pour une illustration, un animal, un personnage ou un objet : préfère `canvas.compose` une seule fois avec `profile:\"illustration\"` et toute la scène (masse principale, partie supérieure, appendices et détails), afin de préserver les proportions et les calques. Contrat géométrique strict : pour `rect`/`ellipse`, `x,y` est le coin haut-gauche et `w,h` la taille ; le centre est `(x+w/2,y+h/2)`. Exemple : une masse centrée en 0.50 de largeur 0.40 commence à `x:0.30`, jamais `x:0.50`. Les masses structurelles doivent se chevaucher ou se toucher ; une oreille commence sur la tête, une tête chevauche le corps et une queue rejoint le corps. Ajoute `relations` (`attached_to`/`overlaps`) pour rendre cette topologie explicite. Utilise exactement cette structure : `scene:{{version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{{id,role,layer,color,fill,geometry:{{kind:\"ellipse\",x,y,w,h}}}}],relations:[{{from,to,relation}}]}}` ; pour chaque géométrie, `kind` vaut `ellipse`, `rect`, `path`, `spline`, `line` ou `text`. N'invente pas `scene_spec`, `composition`, `shape`, `coords` ou `type` dans cette scène. Si le digest contient `scene_check=warning`, corrige les bbox/seq avec `canvas.move` ou refais la composition avant `canvas.export`. Pour un graphe, schéma ou dessin mathématique, reste en primitives (`canvas.line`, `canvas.rect`, `canvas.text`, etc.). \
+         Pour une illustration, un animal, un personnage ou un objet : préfère `canvas.compose` une seule fois avec `profile:\"illustration\"` et toute la scène. Contrat géométrique strict : pour `rect`/`ellipse`, `x,y` est le coin haut-gauche et `w,h` la taille ; le centre est `(x+w/2,y+h/2)`. Ajoute obligatoirement `layout:{{subject_kind,view,parts}}` ; `subject_kind` vaut `quadruped`, `biped`, `vehicle`, `building`, `plant`, `still_life` ou `unknown`. Chaque partie associe `element_id` à un rôle, un `parent_id` quand elle est attachée, et un `side` (`near`, `far`, `left`, `right`, `center`) si la famille exige des paires. Pour un quadrupède de profil, fournis un `body`, une `head`, deux `front_leg` et deux `rear_leg`, avec les deux côtés near/far dans chaque paire ; relie toutes les pattes au corps et place les pattes avant sous la tête, les arrière à l'autre extrémité. Pour un bipède : body/torso, head, deux `arm` et deux `leg`, côtés distincts et attaches au torse. Pour un véhicule : body et roues attachées en dessous ; bâtiment : body et roof au-dessus ; plante : stem et feuilles/fleurs attachées ; nature morte : au moins deux objets à des positions distinctes. Les côtés, attaches et ordre de profondeur doivent correspondre au point de vue demandé. Le validateur bloque les familles connues si leurs contraintes échouent. Un sujet atypique utilise `unknown` : dessine-le quand même mais annonce un aperçu à vérifier. Utilise exactement cette structure : `scene:{{version:1,profile:\"illustration\",subject:\"...\",view:\"...\",layout:{{subject_kind:\"quadruped\",view:\"side\",parts:[{{element_id,role,parent_id,side}}]}},elements:[{{id,role,layer,color,fill,geometry:{{kind:\"ellipse\",x,y,w,h}}}}],relations:[{{from,to,relation}}]}}` ; `kind` vaut `ellipse`, `rect`, `path`, `spline`, `line` ou `text`. Si le digest contient `scene_check=error`, corrige les erreurs de structure avant l'export ; `needs_review` veut dire que la scène reste dessinable mais non vérifiée. Pour un graphe, schéma ou dessin mathématique, reste en primitives (`canvas.line`, `canvas.rect`, `canvas.text`, etc.). \
          Silhouettes en primitives : un `canvas.path` rempli par partie lisible, pas des dizaines de splines/rects empilés. \
          Après chaque op canvas réussie : une capture PNG du canvas actuel est jointe \
          au tour suivant seulement si le modèle chargé est vision ; sinon le digest est la source de vérité. \
@@ -1265,6 +1284,7 @@ mod tests {
             author_id: "agent".into(),
             ts_ms: 0,
             layer_id: "default".into(),
+            brush: None,
             body: CanvasOpBody::Line {
                 p0: CanvasPoint { x: p0.0, y: p0.1 },
                 p1: CanvasPoint { x: p1.0, y: p1.1 },
@@ -1282,6 +1302,7 @@ mod tests {
             author_id: "agent".into(),
             ts_ms: 0,
             layer_id: "default".into(),
+            brush: None,
             body: CanvasOpBody::Rect {
                 x,
                 y,
@@ -1306,6 +1327,7 @@ mod tests {
                 author_id: "agent".into(),
                 ts_ms: 0,
                 layer_id: "default".into(),
+                brush: None,
                 body: CanvasOpBody::Text {
                     x: 0.2,
                     y: 0.3,

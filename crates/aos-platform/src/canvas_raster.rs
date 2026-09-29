@@ -3,38 +3,125 @@
 use aos_proto::{
     canvas_layer_effective_opacity, canvas_layer_effective_visible, canvas_op_body_dash,
     canvas_op_body_gradient, canvas_op_body_opacity, sample_linear_gradient, CanvasAspect,
-    CanvasDoc, CanvasOpBody, CanvasPoint, DEFAULT_CANVAS_LAYER_ID,
+    CanvasBrush, CanvasDoc, CanvasOpBody, CanvasPoint, DEFAULT_CANVAS_LAYER_ID,
 };
-use image::{ImageBuffer, Rgb, RgbImage};
+use image::{ImageBuffer, Rgba, RgbaImage};
 use std::cell::Cell;
 
 thread_local! {
     static PAINT_OPACITY: Cell<f32> = const { Cell::new(1.0) };
+    static PAINT_BRUSH: Cell<CanvasBrush> = const { Cell::new(CanvasBrush::LegacySolid) };
+    static PAINT_SEED: Cell<u64> = const { Cell::new(0) };
 }
 
-const BG: Rgb<u8> = Rgb([7, 11, 20]); // void
-const DEFAULT_FG: Rgb<u8> = Rgb([62, 224, 196]); // signal
+const BG: Rgba<u8> = Rgba([7, 11, 20, 255]); // legacy void page
+const DEFAULT_FG: Rgba<u8> = Rgba([62, 224, 196, 255]); // signal
+
+fn noise_hash(x: u32, y: u32, seed: u64) -> u64 {
+    let mut value = seed
+        ^ (x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (y as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    value ^= value >> 30;
+    value = value.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    value ^= value >> 27;
+    value = value.wrapping_mul(0x94D0_49BB_1331_11EB);
+    value ^ (value >> 31)
+}
+
+fn noise_unit(x: u32, y: u32, seed: u64) -> f32 {
+    (noise_hash(x, y, seed) as u32) as f32 / u32::MAX as f32
+}
+
+fn paper_pixel(brush: CanvasBrush, x: u32, y: u32) -> Rgba<u8> {
+    let (base, grain) = match brush {
+        CanvasBrush::LegacySolid => return BG,
+        CanvasBrush::Pencil => ([246.0, 240.0, 224.0], 5.0),
+        CanvasBrush::Wash => ([250.0, 247.0, 238.0], 3.0),
+    };
+    let fiber = noise_unit(x / 4, y / 4, 0x5041_5045_52);
+    let speck = noise_unit(x, y, 0x4752_4149_4E);
+    let shade = (fiber - 0.5) * grain + (speck - 0.5) * 2.0;
+    Rgba([
+        (base[0] + shade).clamp(0.0, 255.0) as u8,
+        (base[1] + shade).clamp(0.0, 255.0) as u8,
+        (base[2] + shade).clamp(0.0, 255.0) as u8,
+        255,
+    ])
+}
+
+fn blend_pixel(dst: &mut Rgba<u8>, src: Rgba<u8>) {
+    let sa = src[3] as f32 / 255.0;
+    if sa <= 0.0 {
+        return;
+    }
+    let da = dst[3] as f32 / 255.0;
+    let out_a = sa + da * (1.0 - sa);
+    if out_a <= 0.0 {
+        *dst = Rgba([0, 0, 0, 0]);
+        return;
+    }
+    for channel in 0..3 {
+        dst[channel] = ((src[channel] as f32 * sa
+            + dst[channel] as f32 * da * (1.0 - sa))
+            / out_a)
+            .round() as u8;
+    }
+    dst[3] = (out_a * 255.0).round() as u8;
+}
 
 pub fn export_png(doc: &CanvasDoc, width: u32, height: u32) -> Result<Vec<u8>, String> {
-    let w = width.max(64);
-    let h = height.max(64);
-    let mut img: RgbImage = ImageBuffer::from_pixel(w, h, BG);
-    for op in &doc.ops {
-        if !canvas_layer_effective_visible(doc, &op.layer_id) {
-            continue;
-        }
-        let opacity =
-            canvas_layer_effective_opacity(doc, &op.layer_id) * canvas_op_body_opacity(&op.body);
-        if opacity <= 0.001 {
-            continue;
-        }
-        paint_op(&mut img, &op.body, opacity);
-    }
+    let img = render_rgba(doc, width, height);
     let mut buf = Vec::new();
     let mut cursor = std::io::Cursor::new(&mut buf);
     img.write_to(&mut cursor, image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
     Ok(buf)
+}
+
+/// Shared paint renderer used by the chat preview and PNG export.
+pub fn render_rgba(doc: &CanvasDoc, width: u32, height: u32) -> RgbaImage {
+    let w = width.max(64);
+    let h = height.max(64);
+    // Paint lives on a transparent surface; the paper is composited afterward
+    // so erasing always reveals the page rather than a hard-coded dark color.
+    let mut paint: RgbaImage = ImageBuffer::from_pixel(w, h, Rgba([0, 0, 0, 0]));
+    let layers = if doc.layers.is_empty() {
+        vec![aos_proto::CanvasLayer::default()]
+    } else {
+        doc.layers.clone()
+    };
+    for layer in &layers {
+        if !canvas_layer_effective_visible(doc, &layer.id) && !doc.layers.is_empty() { continue; }
+        let layer_opacity = if doc.layers.is_empty() { 1.0 } else {
+            canvas_layer_effective_opacity(doc, &layer.id)
+        };
+        if layer_opacity <= 0.001 { continue; }
+        let mut layer_paint: RgbaImage = ImageBuffer::from_pixel(w, h, Rgba([0, 0, 0, 0]));
+        for (index, op) in doc.ops.iter().enumerate() {
+            let lid = if op.layer_id.is_empty() { DEFAULT_CANVAS_LAYER_ID } else { op.layer_id.as_str() };
+            if lid != layer.id { continue; }
+            let opacity = canvas_op_body_opacity(&op.body);
+            if opacity <= 0.001 { continue; }
+            paint_op(&mut layer_paint, &op.body, opacity,
+                op.brush.unwrap_or(CanvasBrush::LegacySolid),
+                op.seq ^ (index as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        }
+        for pixel in layer_paint.pixels_mut() {
+            pixel[3] = (pixel[3] as f32 * layer_opacity).round() as u8;
+        }
+        for (x, y, pixel) in layer_paint.enumerate_pixels() {
+            if pixel[3] > 0 { blend_pixel(paint.get_pixel_mut(x, y), *pixel); }
+        }
+    }
+    let mut page: RgbaImage = ImageBuffer::from_fn(w, h, |x, y| {
+        paper_pixel(doc.pen.brush, x, y)
+    });
+    for (x, y, pixel) in paint.enumerate_pixels() {
+        if pixel[3] > 0 {
+            blend_pixel(page.get_pixel_mut(x, y), *pixel);
+        }
+    }
+    page
 }
 
 /// JSON sidecar next to a PNG export — full vector doc + aspect for reuse.
@@ -48,6 +135,8 @@ pub fn export_sidecar_json(doc: &CanvasDoc, aspect: CanvasAspect) -> Result<Vec<
         "layers": doc.layers,
         "active_layer_id": doc.active_layer_id,
         "next_layer_id": doc.next_layer_id,
+        "scene": doc.scene,
+        "guides": doc.guides,
     });
     serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())
 }
@@ -381,19 +470,19 @@ fn svg_poly_d(points: &[CanvasPoint], w: u32, h: u32, closed: bool) -> String {
     d
 }
 
-fn png_rgb(body: &CanvasOpBody, color: &str, cx: f32, cy: f32) -> Rgb<u8> {
+fn png_rgb(body: &CanvasOpBody, color: &str, cx: f32, cy: f32) -> Rgba<u8> {
     if let Some(g) = canvas_op_body_gradient(body) {
         if let Some([r, g, b]) = sample_linear_gradient(g, cx, cy) {
-            return Rgb([r, g, b]);
+            return Rgba([r, g, b, 255]);
         }
     }
     parse_color(color).unwrap_or(DEFAULT_FG)
 }
 
 fn stroke_polyline_styled(
-    img: &mut RgbImage,
+    img: &mut RgbaImage,
     points: &[CanvasPoint],
-    c: Rgb<u8>,
+    c: Rgba<u8>,
     rad: i32,
     dash: &[f32],
 ) {
@@ -454,24 +543,35 @@ fn stroke_polyline_styled(
     }
 }
 
-fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
+fn paint_op(img: &mut RgbaImage, body: &CanvasOpBody, opacity: f32, brush: CanvasBrush, seed: u64) {
     PAINT_OPACITY.with(|c| c.set(opacity.clamp(0.0, 1.0)));
+    PAINT_BRUSH.with(|c| c.set(brush));
+    PAINT_SEED.with(|c| c.set(seed));
     let dash = canvas_op_body_dash(body);
     match body {
         CanvasOpBody::Stroke {
             points,
+            pressure,
             color,
             width,
             ..
         } => {
             let c = parse_color(color).unwrap_or(DEFAULT_FG);
             let rad = radius(img, *width);
-            stroke_polyline_styled(img, points, c, rad, dash);
+            if brush == CanvasBrush::Wash {
+                PAINT_OPACITY.with(|slot| slot.set(opacity.clamp(0.0, 1.0) * 0.48));
+                stroke_polyline_styled(img, points, c, rad.saturating_mul(2).max(1), dash);
+                PAINT_OPACITY.with(|slot| slot.set(opacity.clamp(0.0, 1.0) * 0.82));
+            }
+            if pressure.len() == points.len() && dash.is_empty() {
+                stroke_pressure(img, points, pressure, c, rad);
+            } else {
+                stroke_polyline_styled(img, points, c, rad, dash);
+            }
         }
         CanvasOpBody::Erase { points, width } => {
             let rad = radius(img, *width);
-            PAINT_OPACITY.with(|c| c.set(1.0));
-            stroke_polyline(img, points, BG, rad);
+            erase_polyline(img, points, rad);
         }
         CanvasOpBody::Rect {
             x,
@@ -634,46 +734,50 @@ fn paint_op(img: &mut RgbImage, body: &CanvasOpBody, opacity: f32) {
     }
 }
 
-fn radius(img: &RgbImage, width: f32) -> i32 {
+fn radius(img: &RgbaImage, width: f32) -> i32 {
     let side = img.width().min(img.height()) as f32;
     ((width.clamp(0.001, 0.25) * side) * 0.5).round().max(1.0) as i32
 }
 
-fn to_px(img: &RgbImage, x: f32, y: f32) -> (i32, i32) {
+fn to_px(img: &RgbaImage, x: f32, y: f32) -> (i32, i32) {
     let px = (x.clamp(0.0, 1.0) * (img.width().saturating_sub(1) as f32)).round() as i32;
     let py = (y.clamp(0.0, 1.0) * (img.height().saturating_sub(1) as f32)).round() as i32;
     (px, py)
 }
 
-fn parse_color(s: &str) -> Option<Rgb<u8>> {
+fn parse_color(s: &str) -> Option<Rgba<u8>> {
     let t = s.trim().trim_start_matches('#');
     if t.len() >= 6 {
         let r = u8::from_str_radix(&t[0..2], 16).ok()?;
         let g = u8::from_str_radix(&t[2..4], 16).ok()?;
         let b = u8::from_str_radix(&t[4..6], 16).ok()?;
-        Some(Rgb([r, g, b]))
+        Some(Rgba([r, g, b, 255]))
     } else {
         None
     }
 }
 
-fn put(img: &mut RgbImage, x: i32, y: i32, c: Rgb<u8>) {
+fn put(img: &mut RgbaImage, x: i32, y: i32, c: Rgba<u8>) {
     if x >= 0 && y >= 0 && (x as u32) < img.width() && (y as u32) < img.height() {
         let opacity = PAINT_OPACITY.with(|slot| slot.get());
-        if opacity >= 0.999 {
-            img.put_pixel(x as u32, y as u32, c);
-            return;
-        }
-        let dst = img.get_pixel_mut(x as u32, y as u32);
-        let a = opacity;
-        dst[0] = (c[0] as f32 * a + dst[0] as f32 * (1.0 - a)).round() as u8;
-        dst[1] = (c[1] as f32 * a + dst[1] as f32 * (1.0 - a)).round() as u8;
-        dst[2] = (c[2] as f32 * a + dst[2] as f32 * (1.0 - a)).round() as u8;
+        let brush = PAINT_BRUSH.with(Cell::get);
+        let seed = PAINT_SEED.with(Cell::get);
+        let texture = match brush {
+            CanvasBrush::LegacySolid => 1.0,
+            CanvasBrush::Pencil => {
+                let n = noise_unit(x as u32, y as u32, seed);
+                if n < 0.08 { 0.0 } else { 0.48 + n * 0.52 }
+            }
+            CanvasBrush::Wash => 0.70 + noise_unit((x / 3) as u32, (y / 3) as u32, seed) * 0.30,
+        };
+        let mut src = c;
+        src[3] = (src[3] as f32 * opacity * texture).clamp(0.0, 255.0) as u8;
+        blend_pixel(img.get_pixel_mut(x as u32, y as u32), src);
     }
 }
 
 /// Variante avec couverture (anti-crénelage des glyphes).
-fn put_alpha(img: &mut RgbImage, x: i32, y: i32, c: Rgb<u8>, coverage: f32) {
+fn put_alpha(img: &mut RgbaImage, x: i32, y: i32, c: Rgba<u8>, coverage: f32) {
     if coverage <= 0.0 {
         return;
     }
@@ -681,17 +785,54 @@ fn put_alpha(img: &mut RgbImage, x: i32, y: i32, c: Rgb<u8>, coverage: f32) {
         return;
     }
     let opacity = PAINT_OPACITY.with(|slot| slot.get());
-    let a = (coverage * opacity).clamp(0.0, 1.0);
-    if a >= 0.999 {
-        img.put_pixel(x as u32, y as u32, c);
-        return;
+    let mut src = c;
+    src[3] = (src[3] as f32 * coverage * opacity).clamp(0.0, 255.0) as u8;
+    blend_pixel(img.get_pixel_mut(x as u32, y as u32), src);
+}
+
+fn erase_polyline(img: &mut RgbaImage, points: &[CanvasPoint], rad: i32) {
+    if points.is_empty() { return; }
+    let pts: Vec<(i32, i32)> = points.iter().map(|p| to_px(img, p.x, p.y)).collect();
+    clear_disc(img, pts[0].0, pts[0].1, rad);
+    for pair in pts.windows(2) {
+        let (x0, y0) = pair[0];
+        let (x1, y1) = pair[1];
+        let steps = (x1 - x0).abs().max((y1 - y0).abs()).max(1);
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            clear_disc(img, (x0 as f32 + (x1-x0) as f32*t).round() as i32,
+                (y0 as f32 + (y1-y0) as f32*t).round() as i32, rad);
+        }
     }
-    if a <= 0.0 {
-        return;
-    }
-    let dst = img.get_pixel_mut(x as u32, y as u32);
-    for i in 0..3 {
-        dst[i] = (c[i] as f32 * a + dst[i] as f32 * (1.0 - a)).round() as u8;
+}
+
+fn clear_disc(img: &mut RgbaImage, cx: i32, cy: i32, rad: i32) {
+    for dy in -rad..=rad { for dx in -rad..=rad {
+        if dx*dx + dy*dy <= rad*rad {
+            let x=cx+dx; let y=cy+dy;
+            if x>=0 && y>=0 && (x as u32)<img.width() && (y as u32)<img.height() {
+                img.put_pixel(x as u32, y as u32, Rgba([0,0,0,0]));
+            }
+        }
+    }}
+}
+
+fn stroke_pressure(img: &mut RgbaImage, points: &[CanvasPoint], pressure: &[f32], c: Rgba<u8>, rad: i32) {
+    if points.is_empty() { return; }
+    let pts: Vec<(i32, i32)> = points.iter().map(|p| to_px(img, p.x, p.y)).collect();
+    for (i, &(x,y)) in pts.iter().enumerate() {
+        let p = pressure[i].clamp(0.05, 1.0);
+        let r = ((rad as f32 * (0.35 + p * 0.9)).round() as i32).max(1);
+        if i == 0 { disc(img,x,y,r,c); continue; }
+        let (x0,y0)=pts[i-1];
+        let steps=(x-x0).abs().max((y-y0).abs()).max(1);
+        for s in 0..=steps {
+            let t=s as f32/steps as f32;
+            let sx=(x0 as f32+(x-x0) as f32*t).round() as i32;
+            let sy=(y0 as f32+(y-y0) as f32*t).round() as i32;
+            let q=pressure[i-1].clamp(0.05,1.0)*(1.0-t)+p*t;
+            disc(img,sx,sy,((rad as f32*(0.35+q*0.9)).round() as i32).max(1),c);
+        }
     }
 }
 
@@ -708,12 +849,12 @@ fn board_font() -> &'static ab_glyph::FontRef<'static> {
 /// Étiquette raster (export PNG / vision agent) : mise en page manuelle
 /// (avances + crénage), rotation autour de l'ancre, alpha combinée.
 fn draw_text_op(
-    img: &mut RgbImage,
+    img: &mut RgbaImage,
     x: f32,
     y: f32,
     text: &str,
     size: f32,
-    color: Rgb<u8>,
+    color: Rgba<u8>,
     rotation_deg: f32,
 ) {
     use ab_glyph::{Font, PxScale, ScaleFont};
@@ -764,7 +905,7 @@ fn draw_text_op(
     }
 }
 
-fn disc(img: &mut RgbImage, cx: i32, cy: i32, r: i32, c: Rgb<u8>) {
+fn disc(img: &mut RgbaImage, cx: i32, cy: i32, r: i32, c: Rgba<u8>) {
     let r2 = r * r;
     for dy in -r..=r {
         for dx in -r..=r {
@@ -775,7 +916,7 @@ fn disc(img: &mut RgbImage, cx: i32, cy: i32, r: i32, c: Rgb<u8>) {
     }
 }
 
-fn stroke_closed_i32(img: &mut RgbImage, pts: &[(i32, i32)], c: Rgb<u8>, rad: i32) {
+fn stroke_closed_i32(img: &mut RgbaImage, pts: &[(i32, i32)], c: Rgba<u8>, rad: i32) {
     if pts.len() < 2 {
         return;
     }
@@ -786,7 +927,7 @@ fn stroke_closed_i32(img: &mut RgbImage, pts: &[(i32, i32)], c: Rgb<u8>, rad: i3
     }
 }
 
-fn stroke_polyline(img: &mut RgbImage, points: &[CanvasPoint], c: Rgb<u8>, rad: i32) {
+fn stroke_polyline(img: &mut RgbaImage, points: &[CanvasPoint], c: Rgba<u8>, rad: i32) {
     if points.is_empty() {
         return;
     }
@@ -797,7 +938,7 @@ fn stroke_polyline(img: &mut RgbImage, points: &[CanvasPoint], c: Rgb<u8>, rad: 
     }
 }
 
-fn line(img: &mut RgbImage, x0: i32, y0: i32, x1: i32, y1: i32, rad: i32, c: Rgb<u8>) {
+fn line(img: &mut RgbaImage, x0: i32, y0: i32, x1: i32, y1: i32, rad: i32, c: Rgba<u8>) {
     let dx = (x1 - x0).abs();
     let dy = (y1 - y0).abs();
     let steps = dx.max(dy).max(1);
@@ -809,7 +950,7 @@ fn line(img: &mut RgbImage, x0: i32, y0: i32, x1: i32, y1: i32, rad: i32, c: Rgb
     }
 }
 
-fn fill_rect(img: &mut RgbImage, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgb<u8>) {
+fn fill_rect(img: &mut RgbaImage, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgba<u8>) {
     let (xa, xb) = (x0.min(x1), x0.max(x1));
     let (ya, yb) = (y0.min(y1), y0.max(y1));
     for y in ya..=yb {
@@ -819,14 +960,14 @@ fn fill_rect(img: &mut RgbImage, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgb<u8>)
     }
 }
 
-fn stroke_rect(img: &mut RgbImage, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgb<u8>, rad: i32) {
+fn stroke_rect(img: &mut RgbaImage, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgba<u8>, rad: i32) {
     line(img, x0, y0, x1, y0, rad, c);
     line(img, x1, y0, x1, y1, rad, c);
     line(img, x1, y1, x0, y1, rad, c);
     line(img, x0, y1, x0, y0, rad, c);
 }
 
-fn fill_ellipse(img: &mut RgbImage, cx: i32, cy: i32, rx: i32, ry: i32, c: Rgb<u8>) {
+fn fill_ellipse(img: &mut RgbaImage, cx: i32, cy: i32, rx: i32, ry: i32, c: Rgba<u8>) {
     let rx = rx.max(1);
     let ry = ry.max(1);
     for dy in -ry..=ry {
@@ -840,7 +981,7 @@ fn fill_ellipse(img: &mut RgbImage, cx: i32, cy: i32, rx: i32, ry: i32, c: Rgb<u
     }
 }
 
-fn stroke_ellipse(img: &mut RgbImage, cx: i32, cy: i32, rx: i32, ry: i32, c: Rgb<u8>, rad: i32) {
+fn stroke_ellipse(img: &mut RgbaImage, cx: i32, cy: i32, rx: i32, ry: i32, c: Rgba<u8>, rad: i32) {
     let steps = ((rx + ry) * 4).max(32);
     let mut prev: Option<(i32, i32)> = None;
     for i in 0..=steps {
@@ -904,7 +1045,7 @@ fn catmull_rom(
 }
 
 /// Scanline fill for a closed polygon (pixel coords).
-fn fill_polygon(img: &mut RgbImage, pts: &[(i32, i32)], c: Rgb<u8>) {
+fn fill_polygon(img: &mut RgbaImage, pts: &[(i32, i32)], c: Rgba<u8>) {
     if pts.len() < 3 {
         return;
     }
@@ -949,7 +1090,7 @@ fn fill_polygon(img: &mut RgbImage, pts: &[(i32, i32)], c: Rgb<u8>) {
     }
 }
 
-fn flood_fill(img: &mut RgbImage, sx: i32, sy: i32, c: Rgb<u8>) {
+fn flood_fill(img: &mut RgbaImage, sx: i32, sy: i32, c: Rgba<u8>) {
     let w = img.width() as i32;
     let h = img.height() as i32;
     if sx < 0 || sy < 0 || sx >= w || sy >= h {
@@ -1002,6 +1143,70 @@ mod tests {
     }
 
     #[test]
+    fn pencil_and_wash_are_reproducible_and_visually_distinct() {
+        let doc = CanvasDoc {
+            pen: CanvasPenStyle { brush: CanvasBrush::Pencil, ..Default::default() },
+            ops: vec![CanvasOp {
+                seq: 7, author_id: "agent".into(), ts_ms: 0, layer_id: String::new(),
+                brush: Some(CanvasBrush::Pencil),
+                body: CanvasOpBody::Stroke {
+                    points: vec![CanvasPoint {x:0.2,y:0.5}, CanvasPoint {x:0.8,y:0.5}],
+                    pressure: vec![0.35, 0.9], color: "#263040".into(), width: 0.04,
+                    opacity: 1.0, dash: vec![],
+                },
+            }],
+            ..Default::default()
+        };
+        let pencil = render_rgba(&doc, 160, 160);
+        assert_eq!(pencil, render_rgba(&doc, 160, 160));
+        let mut wash_doc = doc.clone();
+        wash_doc.ops[0].brush = Some(CanvasBrush::Wash);
+        wash_doc.pen.brush = CanvasBrush::Wash;
+        let wash = render_rgba(&wash_doc, 160, 160);
+        assert_ne!(pencil, wash);
+    }
+
+    #[test]
+    fn eraser_clears_ink_to_paper_inside_its_layer() {
+        let doc = CanvasDoc {
+            ops: vec![
+                CanvasOp { seq:1, author_id:"agent".into(), ts_ms:0, layer_id:String::new(), brush:Some(CanvasBrush::LegacySolid),
+                    body:CanvasOpBody::Stroke { points:vec![CanvasPoint{x:0.2,y:0.5},CanvasPoint{x:0.8,y:0.5}], pressure:vec![], color:"#000000".into(), width:0.05, opacity:1.0, dash:vec![] } },
+                CanvasOp { seq:2, author_id:"human".into(), ts_ms:1, layer_id:String::new(), brush:None,
+                    body:CanvasOpBody::Erase { points:vec![CanvasPoint{x:0.45,y:0.5},CanvasPoint{x:0.55,y:0.5}], width:0.08 } },
+            ],
+            ..Default::default()
+        };
+        let image = render_rgba(&doc, 128, 128);
+        let cleared = image.get_pixel(64, 64);
+        let paper = paper_pixel(CanvasBrush::Pencil, 64, 64);
+        assert_eq!(*cleared, paper);
+        assert_eq!(image.get_pixel(30, 64)[3], 255);
+    }
+
+    #[test]
+    fn eraser_reveals_the_layer_below() {
+        let mut doc = CanvasDoc {
+            layers: vec![aos_proto::CanvasLayer::default(), aos_proto::CanvasLayer {
+                id:"lyr-2".into(), name:"Ink".into(), ..Default::default()
+            }],
+            ops: vec![
+                CanvasOp { seq:1, author_id:"agent".into(), ts_ms:0, layer_id:"lyr-1".into(), brush:Some(CanvasBrush::LegacySolid),
+                    body:CanvasOpBody::Rect { x:0.2, y:0.2, w:0.6, h:0.6, color:"#d02030".into(), fill:true, width:0.01, rotation:0.0, opacity:1.0, dash:vec![], gradient:None } },
+                CanvasOp { seq:2, author_id:"agent".into(), ts_ms:1, layer_id:"lyr-2".into(), brush:Some(CanvasBrush::Wash),
+                    body:CanvasOpBody::Stroke { points:vec![CanvasPoint{x:0.2,y:0.5},CanvasPoint{x:0.8,y:0.5}], pressure:vec![], color:"#2040e0".into(), width:0.08, opacity:1.0, dash:vec![] } },
+                CanvasOp { seq:3, author_id:"human".into(), ts_ms:2, layer_id:"lyr-2".into(), brush:None,
+                    body:CanvasOpBody::Erase { points:vec![CanvasPoint{x:0.45,y:0.5},CanvasPoint{x:0.55,y:0.5}], width:0.1 } },
+            ],
+            ..Default::default()
+        };
+        aos_proto::ensure_canvas_layers(&mut doc);
+        let image = render_rgba(&doc, 128, 128);
+        let revealed = image.get_pixel(64, 64);
+        assert!(revealed[0] > 180 && revealed[1] < 70 && revealed[2] < 80, "expected lower red layer, got {revealed:?}");
+    }
+
+    #[test]
     fn path_fill_color_brown_not_pen_default() {
         let body = CanvasOpBody::Path {
             points: vec![
@@ -1027,6 +1232,7 @@ mod tests {
                 author_id: "agent".into(),
                 ts_ms: 1,
                 layer_id: String::new(),
+                brush: None,
                 body,
             }],
             ..Default::default()
@@ -1052,7 +1258,9 @@ mod tests {
                 author_id: "human".into(),
                 ts_ms: 1,
                 layer_id: String::new(),
+                brush: None,
                 body: CanvasOpBody::Stroke {
+                    pressure: vec![],
                     points: vec![
                         CanvasPoint { x: 0.1, y: 0.1 },
                         CanvasPoint { x: 0.9, y: 0.9 },
@@ -1104,6 +1312,7 @@ mod tests {
                 author_id: "human".into(),
                 ts_ms: 1,
                 layer_id: "lyr-1".into(),
+                brush: None,
                 body: CanvasOpBody::Rect {
                     x: 0.1,
                     y: 0.1,
@@ -1147,6 +1356,7 @@ mod tests {
                 author_id: "human".into(),
                 ts_ms: 1,
                 layer_id: String::new(),
+                brush: None,
                 body,
             }],
             ..Default::default()
@@ -1180,18 +1390,11 @@ mod tests {
             *text = "   ".into();
         }
         let png2 = export_png(&doc2, 200, 200).unwrap();
-        let img2 = image::load_from_memory(&png2).unwrap().to_rgb8();
-        assert!(
-            img2.pixels()
-                .filter(|p| {
-                    let d = (p[0] as i32 - fg[0] as i32).abs()
-                        + (p[1] as i32 - fg[1] as i32).abs()
-                        + (p[2] as i32 - fg[2] as i32).abs();
-                    d < 120
-                })
-                .count()
-                == 0
+        let img2 = image::load_from_memory(&png2).unwrap().to_rgba8();
+        let blank = render_rgba(
+            &CanvasDoc { pen: doc2.pen.clone(), ..Default::default() }, 200, 200,
         );
+        assert_eq!(img2, blank, "un texte vide ne doit pas ajouter de pixels");
     }
 
     #[test]
@@ -1205,6 +1408,7 @@ mod tests {
                 author_id: "human".into(),
                 ts_ms: 1,
                 layer_id: String::new(),
+                brush: None,
                 body: CanvasOpBody::Line {
                     p0: CanvasPoint { x: 0.1, y: 0.1 },
                     p1: CanvasPoint { x: 0.9, y: 0.9 },
@@ -1295,6 +1499,7 @@ mod tests {
                     author_id: "agent".into(),
                     ts_ms: 1,
                     layer_id: String::new(),
+                brush: None,
                     body: hill,
                 },
                 CanvasOp {
@@ -1302,6 +1507,7 @@ mod tests {
                     author_id: "agent".into(),
                     ts_ms: 2,
                     layer_id: String::new(),
+                    brush: None,
                     body,
                 },
                 CanvasOp {
@@ -1309,6 +1515,7 @@ mod tests {
                     author_id: "agent".into(),
                     ts_ms: 3,
                     layer_id: String::new(),
+                    brush: None,
                     body: roof,
                 },
                 CanvasOp {
@@ -1316,6 +1523,7 @@ mod tests {
                     author_id: "agent".into(),
                     ts_ms: 4,
                     layer_id: String::new(),
+                    brush: None,
                     body: sail_a,
                 },
             ],

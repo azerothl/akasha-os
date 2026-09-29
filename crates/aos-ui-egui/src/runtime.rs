@@ -4832,6 +4832,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
             width,
             opacity,
             dash,
+            brush,
         } => {
             match bus
                 .call::<aos_proto::CanvasSetStyleRequest, aos_proto::CanvasSetStyleResponse>(
@@ -4842,6 +4843,7 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                         width,
                         opacity,
                         dash,
+                        brush,
                     },
                     vec![],
                 )
