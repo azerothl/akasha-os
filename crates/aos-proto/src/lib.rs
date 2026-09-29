@@ -5216,7 +5216,7 @@ fn canvas_scene_layout_errors(
                     let front_x = centers(&front);
                     let rear_x = centers(&rear);
                     let body_box = bbox(body);
-                    let head_x = head.and_then(|part| bbox(part)).map(|b| (b.x0 + b.x1) * 0.5);
+                    let head_x = head.and_then(&bbox).map(|b| (b.x0 + b.x1) * 0.5);
                     if front_x.len() == 2 && rear_x.len() == 2 {
                         let front_mid = (front_x[0] + front_x[1]) * 0.5;
                         let rear_mid = (rear_x[0] + rear_x[1]) * 0.5;
