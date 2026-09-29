@@ -38,8 +38,8 @@ fn paper_pixel(brush: CanvasBrush, x: u32, y: u32) -> Rgba<u8> {
         CanvasBrush::Pencil => ([246.0, 240.0, 224.0], 5.0),
         CanvasBrush::Wash => ([250.0, 247.0, 238.0], 3.0),
     };
-    let fiber = noise_unit(x / 4, y / 4, 0x5041_5045_52);
-    let speck = noise_unit(x, y, 0x4752_4149_4E);
+    let fiber = noise_unit(x / 4, y / 4, 0x0050_4150_4552);
+    let speck = noise_unit(x, y, 0x0047_5241_494E);
     let shade = (fiber - 0.5) * grain + (speck - 0.5) * 2.0;
     Rgba([
         (base[0] + shade).clamp(0.0, 255.0) as u8,
