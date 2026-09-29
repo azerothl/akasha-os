@@ -1111,10 +1111,10 @@ pub fn ui_canvas_toolbar(
                 });
             }
             ui.horizontal(|ui| {
-                ui.label("Pinceau");
+                ui.label(t.canvas_brush);
                 for (brush, label) in [
-                    (CanvasBrush::Pencil, "Crayon"),
-                    (CanvasBrush::Wash, "Lavis"),
+                    (CanvasBrush::Pencil, t.canvas_brush_pencil),
+                    (CanvasBrush::Wash, t.canvas_brush_wash),
                 ] {
                     if ui.selectable_value(&mut state.brush, brush, label).changed() {
                         action = Some(CanvasUiAction::SetStyle {
