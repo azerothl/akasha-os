@@ -3,13 +3,16 @@
 use crate::canvas_paint::parse_hex_color;
 use crate::cmd::Cmd;
 use crate::{chat_room, i18n, UiApp};
-use aos_proto::{
-    IllustrationDoc, IllustrationLook, IllustrationPaletteId, IllustrationPose,
-};
+use aos_proto::{IllustrationDoc, IllustrationLook, IllustrationPaletteId, IllustrationPose};
 use eframe::egui;
 
 #[derive(Debug, PartialEq)]
-enum PreviewChoice { Retained, Rejected, Pending, Historical }
+enum PreviewChoice {
+    Retained,
+    Rejected,
+    Pending,
+    Historical,
+}
 
 fn preview_choice(doc: &IllustrationDoc, path: &str) -> PreviewChoice {
     if let Some(run) = &doc.image_run {
@@ -17,23 +20,35 @@ fn preview_choice(doc: &IllustrationDoc, path: &str) -> PreviewChoice {
             match run.candidate_selected {
                 Some(false) => return PreviewChoice::Rejected,
                 None => return PreviewChoice::Pending,
-                Some(true) => {},
+                Some(true) => {}
             }
         }
     }
-    if doc.last_png.as_deref() == Some(path) { PreviewChoice::Retained }
-    else { PreviewChoice::Historical }
+    if doc.last_png.as_deref() == Some(path) {
+        PreviewChoice::Retained
+    } else {
+        PreviewChoice::Historical
+    }
 }
 
-fn history_label(doc: &IllustrationDoc, path: &str, label: &str, revision: u64, t: &i18n::UiStrings) -> String {
+fn history_label(
+    doc: &IllustrationDoc,
+    path: &str,
+    label: &str,
+    revision: u64,
+    t: &i18n::UiStrings,
+) -> String {
     let status = match preview_choice(doc, path) {
         PreviewChoice::Retained => t.illust_history_retained,
         PreviewChoice::Rejected => t.illust_history_rejected,
         PreviewChoice::Pending => t.illust_history_pending,
         PreviewChoice::Historical => "",
     };
-    if status.is_empty() { format!("{label} · {revision}") }
-    else { format!("{label} · {revision} · {status}") }
+    if status.is_empty() {
+        format!("{label} · {revision}")
+    } else {
+        format!("{label} · {revision} · {status}")
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -95,16 +110,32 @@ impl UiApp {
             .map(|l| l.holder.clone())
             .unwrap_or_default();
         let agent_locked = !locked_by.is_empty() && !locked_by.starts_with("human");
-        let pending_candidate = self.illust_ui.doc.image_run.as_ref()
+        let pending_candidate = self
+            .illust_ui
+            .doc
+            .image_run
+            .as_ref()
             .is_some_and(|r| r.candidate_png.is_some() && r.candidate_selected.is_none());
-        let export_ready = !pending_candidate && self.illust_ui.doc.image_run.as_ref()
-            .is_none_or(|r| r.status == aos_proto::IllustrationImageStatus::NeedsReview);
+        let export_ready = !pending_candidate
+            && self
+                .illust_ui
+                .doc
+                .image_run
+                .as_ref()
+                .is_none_or(|r| r.status == aos_proto::IllustrationImageStatus::NeedsReview);
 
         ui.horizontal(|ui| {
             ui.heading(t.illust_title);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .add_enabled(export_ready, egui::Button::new(if self.illust_ui.doc.image_run.is_some() { t.illust_export_selected } else { t.illust_export }))
+                    .add_enabled(
+                        export_ready,
+                        egui::Button::new(if self.illust_ui.doc.image_run.is_some() {
+                            t.illust_export_selected
+                        } else {
+                            t.illust_export
+                        }),
+                    )
                     .on_hover_text(t.illust_export_tip)
                     .clicked()
                 {
@@ -140,7 +171,10 @@ impl UiApp {
         });
 
         if !self.illust_ui.last_error.is_empty() {
-            ui.colored_label(egui::Color32::from_rgb(220, 80, 80), &self.illust_ui.last_error);
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 80, 80),
+                &self.illust_ui.last_error,
+            );
         }
 
         ui.add_enabled_ui(!agent_locked, |ui| {
@@ -155,7 +189,10 @@ impl UiApp {
                     IllustrationLook::Doodle,
                 ] {
                     let selected = self.illust_ui.doc.brief.look == look;
-                    if ui.selectable_label(selected, look.as_str()).clicked() {
+                    if ui
+                        .selectable_label(selected, i18n::illust_look_label(t, look))
+                        .clicked()
+                    {
                         self.illust_ui.doc.brief.look = look;
                         self.illust_ui.doc.brief.palette = look.default_palette();
                         self.push_illust_brief(session_id);
@@ -173,7 +210,10 @@ impl UiApp {
                     IllustrationPaletteId::BlueprintNight,
                 ] {
                     let selected = self.illust_ui.doc.brief.palette == pal;
-                    if ui.selectable_label(selected, pal.as_str()).clicked() {
+                    if ui
+                        .selectable_label(selected, i18n::illust_palette_label(t, pal))
+                        .clicked()
+                    {
                         self.illust_ui.doc.brief.palette = pal;
                         self.push_illust_brief(session_id);
                     }
@@ -198,61 +238,93 @@ impl UiApp {
         if let Some(run) = &self.illust_ui.doc.image_run {
             match run.status {
                 aos_proto::IllustrationImageStatus::Running => {
-                    ui.horizontal(|ui| { ui.spinner(); ui.label(format!("Génération en cours · {:?}", run.phase)); });
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(i18n::illust_gen_running_line(t, run.phase));
+                    });
                 }
-                aos_proto::IllustrationImageStatus::NeedsReview => { ui.label("Rendu généré · qualité visuelle à vérifier"); }
+                aos_proto::IllustrationImageStatus::NeedsReview => {
+                    ui.label(t.illust_gen_needs_review);
+                }
                 aos_proto::IllustrationImageStatus::Failed => {
-                    ui.colored_label(egui::Color32::RED, run.error.as_deref().unwrap_or("Échec de génération"));
+                    ui.colored_label(
+                        egui::Color32::RED,
+                        run.error.as_deref().unwrap_or(t.illust_gen_failed_default),
+                    );
                 }
             }
         } else if let Some(spec) = self.illust_ui.doc.spec.as_ref() {
-            use aos_proto::IllustrationConstructionPhase as Phase;
-            let label = match spec.construction_phase {
-                Phase::Skeleton => "1/5 · Pose et construction",
-                Phase::Volumes => "2/5 · Volumes",
-                Phase::Contours => "3/5 · Contours",
-                Phase::Details => "4/5 · Détails et habillage",
-                Phase::Final => "5/5 · Rendu final",
-            };
-            ui.label(label);
+            ui.label(i18n::illust_construction_phase_progress(
+                t,
+                spec.construction_phase,
+            ));
         }
 
         let previous_selection = self.illust_ui.selected_pass_path.clone();
         if pending_candidate {
             let run = self.illust_ui.doc.image_run.as_ref().unwrap().clone();
-            ui.label("Comparez les deux versions avant de poursuivre. L’original reste conservé.");
+            ui.label(t.illust_compare_hint);
             ui.horizontal_wrapped(|ui| {
-                ui.selectable_value(&mut self.illust_ui.selected_pass_path, run.source_png.clone(), "Voir l’original");
-                ui.selectable_value(&mut self.illust_ui.selected_pass_path, run.candidate_png.clone(), "Voir la retouche");
+                ui.selectable_value(
+                    &mut self.illust_ui.selected_pass_path,
+                    run.source_png.clone(),
+                    t.illust_view_original,
+                );
+                ui.selectable_value(
+                    &mut self.illust_ui.selected_pass_path,
+                    run.candidate_png.clone(),
+                    t.illust_view_retouch,
+                );
             });
             ui.add_enabled_ui(!agent_locked, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    for (label, keep_candidate) in [("Conserver l’original", false), ("Utiliser la retouche", true)] {
+                    for (label, keep_candidate) in [
+                        (t.illust_keep_original, false),
+                        (t.illust_use_retouch, true),
+                    ] {
                         if ui.button(label).clicked() {
                             let _ = self.cmd_tx.send(Cmd::IllustResolveImage {
-                                session_id: session_id.to_string(), run_id: run.id.clone(), keep_candidate,
+                                session_id: session_id.to_string(),
+                                run_id: run.id.clone(),
+                                keep_candidate,
                             });
                         }
                     }
                 });
             });
         }
+        let follow_gen = self
+            .illust_ui
+            .doc
+            .image_run
+            .as_ref()
+            .is_some_and(|r| r.status == aos_proto::IllustrationImageStatus::Running);
+        let pass_combo_label = if previous_selection.is_some() {
+            t.illust_pass_history
+        } else if follow_gen {
+            t.illust_follow_generation
+        } else {
+            t.illust_show_selected
+        };
         egui::ComboBox::from_id_salt("illustration_pass_history")
-            .selected_text(if previous_selection.is_some() { "Historique des passes" }
-                else if self.illust_ui.doc.image_run.as_ref().is_some_and(|r| r.status == aos_proto::IllustrationImageStatus::Running) { "Suivre la génération" }
-                else { t.illust_show_selected })
+            .selected_text(pass_combo_label)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.illust_ui.selected_pass_path, None,
-                    if self.illust_ui.doc.image_run.as_ref().is_some_and(|r| r.status == aos_proto::IllustrationImageStatus::Running) { "Suivre la génération" } else { t.illust_show_selected });
+                ui.selectable_value(
+                    &mut self.illust_ui.selected_pass_path,
+                    None,
+                    if follow_gen {
+                        t.illust_follow_generation
+                    } else {
+                        t.illust_show_selected
+                    },
+                );
                 for (phase, revision, path) in &self.illust_ui.doc.pass_previews {
-                    use aos_proto::IllustrationConstructionPhase as Phase;
-                    let label = match phase {
-                        Phase::Skeleton => "Pose", Phase::Volumes => "Volumes",
-                        Phase::Contours => "Contours", Phase::Details => "Détails",
-                        Phase::Final => "Final",
-                    };
-                    ui.selectable_value(&mut self.illust_ui.selected_pass_path, Some(path.clone()),
-                        history_label(&self.illust_ui.doc, path, label, *revision, t));
+                    let label = i18n::illust_construction_phase_short(t, *phase);
+                    ui.selectable_value(
+                        &mut self.illust_ui.selected_pass_path,
+                        Some(path.clone()),
+                        history_label(&self.illust_ui.doc, path, label, *revision, t),
+                    );
                 }
             });
         if let Some(path) = self.illust_ui.selected_pass_path.as_deref() {
@@ -294,8 +366,11 @@ impl UiApp {
         if !playing {
             self.refresh_illust_texture(ui.ctx());
             if let Some(img) = self.illust_ui.pending_preview.take() {
-                self.illust_ui.texture =
-                    Some(ui.ctx().load_texture("illust_preview", img, Default::default()));
+                self.illust_ui.texture = Some(ui.ctx().load_texture(
+                    "illust_preview",
+                    img,
+                    Default::default(),
+                ));
             }
         }
         if let Some(tex) = &self.illust_ui.texture {
@@ -322,10 +397,10 @@ impl UiApp {
             ui.colored_label(egui::Color32::from_rgb(40, 90, 140), t.illust_animate_busy);
         }
         if let Some(png) = &self.illust_ui.doc.last_png {
-            ui.small(format!("{}: {png}", t.illust_last_export));
+            ui.small(i18n::illust_last_export_line(t, png));
         }
         if let Some(mp4) = &self.illust_ui.doc.last_mp4 {
-            ui.small(format!("mp4: {mp4}"));
+            ui.small(format!("mp4: {}", i18n::illust_download_basename(mp4)));
         }
 
         ui.separator();
@@ -435,7 +510,8 @@ impl UiApp {
 
     fn paint_illust_progress(&mut self, ctx: &egui::Context, progress: f32) {
         let doc = self.illust_ui.doc.clone();
-        let Ok(bytes) = aos_platform::illustration_raster::export_png_progress(&doc, 480, 480, progress)
+        let Ok(bytes) =
+            aos_platform::illustration_raster::export_png_progress(&doc, 480, 480, progress)
         else {
             return;
         };
@@ -447,10 +523,18 @@ impl UiApp {
     }
 
     fn refresh_illust_texture(&mut self, ctx: &egui::Context) {
-        let logical = self.illust_ui.selected_pass_path.as_deref()
-            .or_else(|| self.illust_ui.doc.image_run.as_ref()
-                .filter(|r| r.candidate_selected.is_none())
-                .and_then(|r| r.candidate_png.as_deref()))
+        let logical = self
+            .illust_ui
+            .selected_pass_path
+            .as_deref()
+            .or_else(|| {
+                self.illust_ui
+                    .doc
+                    .image_run
+                    .as_ref()
+                    .filter(|r| r.candidate_selected.is_none())
+                    .and_then(|r| r.candidate_png.as_deref())
+            })
             .or(self.illust_ui.doc.last_png.as_deref())
             .or(self.illust_ui.doc.last_sheet_png.as_deref());
         let Some(logical) = logical else {
@@ -536,10 +620,7 @@ impl UiApp {
                             .suffix(" s"),
                     );
                     let frames = (self.illust_ui.animate_seconds * 24.0).round() as i32;
-                    ui.small(
-                        t.illust_animate_frames
-                            .replace("{n}", &frames.to_string()),
-                    );
+                    ui.small(t.illust_animate_frames.replace("{n}", &frames.to_string()));
                     ui.horizontal(|ui| {
                         if ui.button(t.memory_btn_cancel).clicked() {
                             close = true;
@@ -600,7 +681,10 @@ fn png_bytes_to_color_image(bytes: &[u8]) -> Option<egui::ColorImage> {
     let img = image::load_from_memory(bytes).ok()?;
     let rgba = img.to_rgba8();
     let size = [rgba.width() as usize, rgba.height() as usize];
-    Some(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        size,
+        rgba.as_raw(),
+    ))
 }
 
 /// Ensure session bar knows illustration_open from meta.
@@ -630,14 +714,26 @@ mod image_choice_tests {
             ),
             ..Default::default()
         };
-        assert_eq!(preview_choice(&doc, "candidate.png"), PreviewChoice::Pending);
+        assert_eq!(
+            preview_choice(&doc, "candidate.png"),
+            PreviewChoice::Pending
+        );
         assert_eq!(preview_choice(&doc, "source.png"), PreviewChoice::Retained);
         assert_eq!(preview_choice(&doc, "old.png"), PreviewChoice::Historical);
         doc.image_run.as_mut().unwrap().candidate_selected = Some(false);
-        assert_eq!(preview_choice(&doc, "candidate.png"), PreviewChoice::Rejected);
+        assert_eq!(
+            preview_choice(&doc, "candidate.png"),
+            PreviewChoice::Rejected
+        );
         doc.image_run.as_mut().unwrap().candidate_selected = Some(true);
         doc.last_png = Some("candidate.png".into());
-        assert_eq!(preview_choice(&doc, "candidate.png"), PreviewChoice::Retained);
-        assert_eq!(preview_choice(&doc, "source.png"), PreviewChoice::Historical);
+        assert_eq!(
+            preview_choice(&doc, "candidate.png"),
+            PreviewChoice::Retained
+        );
+        assert_eq!(
+            preview_choice(&doc, "source.png"),
+            PreviewChoice::Historical
+        );
     }
 }
