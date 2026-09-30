@@ -62,6 +62,9 @@ pub fn requires_act_gate(action: &str) -> bool {
     if name.starts_with("canvas.") {
         return !matches!(name, "canvas.get" | "canvas.export");
     }
+    if name.starts_with("illust.") {
+        return !matches!(name, "illust.get" | "illust.review" | "illust.lock.status");
+    }
     if name.starts_with("fs.") {
         return matches!(name, "fs.write" | "fs.delete" | "fs.mkdir");
     }
