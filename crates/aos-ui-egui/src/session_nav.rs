@@ -242,6 +242,7 @@ mod tests {
                 conductor_policy: Default::default(),
                 canvas_open: false,
                 canvas_aspect: Default::default(),
+                illustration_open: false,
             },
             ChatSessionMeta {
                 id: "b".into(),
@@ -257,6 +258,7 @@ mod tests {
                 conductor_policy: Default::default(),
                 canvas_open: false,
                 canvas_aspect: Default::default(),
+                illustration_open: false,
             },
         ];
         let result = filter_and_sort(&sessions, "alpha");
@@ -280,6 +282,7 @@ mod tests {
                 conductor_policy: Default::default(),
                 canvas_open: false,
                 canvas_aspect: Default::default(),
+                illustration_open: false,
             },
             ChatSessionMeta {
                 id: "new".into(),
@@ -295,6 +298,7 @@ mod tests {
                 conductor_policy: Default::default(),
                 canvas_open: false,
                 canvas_aspect: Default::default(),
+                illustration_open: false,
             },
             ChatSessionMeta {
                 id: "pin".into(),
@@ -310,6 +314,7 @@ mod tests {
                 conductor_policy: Default::default(),
                 canvas_open: false,
                 canvas_aspect: Default::default(),
+                illustration_open: false,
             },
         ];
         let mut group = filter_and_sort(&sessions, "");
