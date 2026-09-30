@@ -630,6 +630,7 @@ impl DeclUiPanelState {
             }
             "text" => {
                 if let Some(t) = widget_text(w, doc, language) {
+                    ui.set_max_width(ui.available_width());
                     ui.add(egui::Label::new(t).wrap());
                 }
             }
