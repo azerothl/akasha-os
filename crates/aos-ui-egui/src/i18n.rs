@@ -666,6 +666,37 @@ pub struct UiStrings {
     pub illust_empty: &'static str,
     pub illust_last_export: &'static str,
     pub illust_hint: &'static str,
+    pub illust_look_ink: &'static str,
+    pub illust_look_riso: &'static str,
+    pub illust_look_screen: &'static str,
+    pub illust_look_pencil: &'static str,
+    pub illust_look_blueprint: &'static str,
+    pub illust_look_doodle: &'static str,
+    pub illust_palette_paper_ink: &'static str,
+    pub illust_palette_riso_pop: &'static str,
+    pub illust_palette_screen_sea: &'static str,
+    pub illust_palette_pencil_minimal: &'static str,
+    pub illust_palette_blueprint_night: &'static str,
+    pub illust_gen_running: &'static str,
+    pub illust_gen_needs_review: &'static str,
+    pub illust_gen_failed_default: &'static str,
+    pub illust_progress_skeleton: &'static str,
+    pub illust_progress_volumes: &'static str,
+    pub illust_progress_contours: &'static str,
+    pub illust_progress_details: &'static str,
+    pub illust_progress_final: &'static str,
+    pub illust_phase_skeleton: &'static str,
+    pub illust_phase_volumes: &'static str,
+    pub illust_phase_contours: &'static str,
+    pub illust_phase_details: &'static str,
+    pub illust_phase_final: &'static str,
+    pub illust_compare_hint: &'static str,
+    pub illust_view_original: &'static str,
+    pub illust_view_retouch: &'static str,
+    pub illust_keep_original: &'static str,
+    pub illust_use_retouch: &'static str,
+    pub illust_pass_history: &'static str,
+    pub illust_follow_generation: &'static str,
     pub session_toggle_deep: &'static str,
     pub tip_session_deep_thinking: &'static str,
     pub session_export: &'static str,
@@ -2000,7 +2031,38 @@ const EN: UiStrings = UiStrings {
     illust_locked: "Agent drawing…",
     illust_empty: "Compose a scene (agent or brief + export)",
     illust_last_export: "Last export",
-    illust_hint: "Paper + finish (ink/riso/screen/pencil). Agents use illust.* tools while this panel is open.",
+    illust_hint: "Paper style and drawing finish. Agents can work on your illustration while this panel is open.",
+    illust_look_ink: "Ink",
+    illust_look_riso: "Risograph",
+    illust_look_screen: "Screen print",
+    illust_look_pencil: "Pencil",
+    illust_look_blueprint: "Blueprint",
+    illust_look_doodle: "Doodle",
+    illust_palette_paper_ink: "Paper & ink",
+    illust_palette_riso_pop: "Riso pop",
+    illust_palette_screen_sea: "Sea tones",
+    illust_palette_pencil_minimal: "Minimal pencil",
+    illust_palette_blueprint_night: "Blueprint night",
+    illust_gen_running: "Generating · {phase}",
+    illust_gen_needs_review: "Rendered image · check visual quality",
+    illust_gen_failed_default: "Generation failed",
+    illust_progress_skeleton: "1/5 · Pose and construction",
+    illust_progress_volumes: "2/5 · Volumes",
+    illust_progress_contours: "3/5 · Contours",
+    illust_progress_details: "4/5 · Details and finishing",
+    illust_progress_final: "5/5 · Final render",
+    illust_phase_skeleton: "Pose",
+    illust_phase_volumes: "Volumes",
+    illust_phase_contours: "Contours",
+    illust_phase_details: "Details",
+    illust_phase_final: "Final",
+    illust_compare_hint: "Compare both versions before continuing. The original is kept.",
+    illust_view_original: "View original",
+    illust_view_retouch: "View retouch",
+    illust_keep_original: "Keep original",
+    illust_use_retouch: "Use retouch",
+    illust_pass_history: "Pass history",
+    illust_follow_generation: "Follow generation",
     session_toggle_deep: "Deep",
     tip_session_deep_thinking: "Deep Thinking — hierarchical plan, revision, and sub-agents",
     session_export: "Export",
@@ -3330,7 +3392,38 @@ const FR: UiStrings = UiStrings {
     illust_locked: "Agent en train de dessiner…",
     illust_empty: "Composer une scène (agent ou brief + export)",
     illust_last_export: "Dernier export",
-    illust_hint: "Papier + finish (ink/riso/screen/pencil). Les agents utilisent illust.* quand ce panneau est ouvert.",
+    illust_hint: "Style de papier et finition de trait. Les agents peuvent travailler sur votre illustration tant que ce panneau est ouvert.",
+    illust_look_ink: "Encre",
+    illust_look_riso: "Risographie",
+    illust_look_screen: "Sérigraphie",
+    illust_look_pencil: "Crayon",
+    illust_look_blueprint: "Plan technique",
+    illust_look_doodle: "Gribouillage",
+    illust_palette_paper_ink: "Papier encre",
+    illust_palette_riso_pop: "Riso pop",
+    illust_palette_screen_sea: "Tons marins",
+    illust_palette_pencil_minimal: "Crayon minimal",
+    illust_palette_blueprint_night: "Plan nuit",
+    illust_gen_running: "Génération en cours · {phase}",
+    illust_gen_needs_review: "Rendu généré · qualité visuelle à vérifier",
+    illust_gen_failed_default: "Échec de génération",
+    illust_progress_skeleton: "1/5 · Pose et construction",
+    illust_progress_volumes: "2/5 · Volumes",
+    illust_progress_contours: "3/5 · Contours",
+    illust_progress_details: "4/5 · Détails et habillage",
+    illust_progress_final: "5/5 · Rendu final",
+    illust_phase_skeleton: "Pose",
+    illust_phase_volumes: "Volumes",
+    illust_phase_contours: "Contours",
+    illust_phase_details: "Détails",
+    illust_phase_final: "Final",
+    illust_compare_hint: "Comparez les deux versions avant de poursuivre. L’original reste conservé.",
+    illust_view_original: "Voir l’original",
+    illust_view_retouch: "Voir la retouche",
+    illust_keep_original: "Conserver l’original",
+    illust_use_retouch: "Utiliser la retouche",
+    illust_pass_history: "Historique des passes",
+    illust_follow_generation: "Suivre la génération",
     session_toggle_deep: "Deep",
     tip_session_deep_thinking: "Deep Thinking — plan hiérarchique, révision et sous-agents",
     session_export: "Exporter",
@@ -4013,6 +4106,83 @@ pub fn strings(lang: &str) -> UiStrings {
     } else {
         FR
     }
+}
+
+pub fn illust_look_label(t: &UiStrings, look: aos_proto::IllustrationLook) -> &'static str {
+    use aos_proto::IllustrationLook;
+    match look {
+        IllustrationLook::Ink => t.illust_look_ink,
+        IllustrationLook::Riso => t.illust_look_riso,
+        IllustrationLook::Screen => t.illust_look_screen,
+        IllustrationLook::Pencil => t.illust_look_pencil,
+        IllustrationLook::Blueprint => t.illust_look_blueprint,
+        IllustrationLook::Doodle => t.illust_look_doodle,
+    }
+}
+
+pub fn illust_palette_label(
+    t: &UiStrings,
+    palette: aos_proto::IllustrationPaletteId,
+) -> &'static str {
+    use aos_proto::IllustrationPaletteId;
+    match palette {
+        IllustrationPaletteId::PaperInk => t.illust_palette_paper_ink,
+        IllustrationPaletteId::RisoPop => t.illust_palette_riso_pop,
+        IllustrationPaletteId::ScreenSea => t.illust_palette_screen_sea,
+        IllustrationPaletteId::PencilMinimal => t.illust_palette_pencil_minimal,
+        IllustrationPaletteId::BlueprintNight => t.illust_palette_blueprint_night,
+    }
+}
+
+pub fn illust_construction_phase_short(
+    t: &UiStrings,
+    phase: aos_proto::IllustrationConstructionPhase,
+) -> &'static str {
+    use aos_proto::IllustrationConstructionPhase as Phase;
+    match phase {
+        Phase::Skeleton => t.illust_phase_skeleton,
+        Phase::Volumes => t.illust_phase_volumes,
+        Phase::Contours => t.illust_phase_contours,
+        Phase::Details => t.illust_phase_details,
+        Phase::Final => t.illust_phase_final,
+    }
+}
+
+pub fn illust_construction_phase_progress(
+    t: &UiStrings,
+    phase: aos_proto::IllustrationConstructionPhase,
+) -> &'static str {
+    use aos_proto::IllustrationConstructionPhase as Phase;
+    match phase {
+        Phase::Skeleton => t.illust_progress_skeleton,
+        Phase::Volumes => t.illust_progress_volumes,
+        Phase::Contours => t.illust_progress_contours,
+        Phase::Details => t.illust_progress_details,
+        Phase::Final => t.illust_progress_final,
+    }
+}
+
+pub fn illust_gen_running_line(
+    t: &UiStrings,
+    phase: aos_proto::IllustrationConstructionPhase,
+) -> String {
+    t.illust_gen_running
+        .replace("{phase}", illust_construction_phase_short(t, phase))
+}
+
+pub fn illust_download_basename(path: &str) -> &str {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path)
+}
+
+pub fn illust_last_export_line(t: &UiStrings, path: &str) -> String {
+    format!(
+        "{}: {}",
+        t.illust_last_export,
+        illust_download_basename(path)
+    )
 }
 
 /// Human label for one health-check step (never the internal step id).
@@ -5112,5 +5282,49 @@ mod tests {
             health_contributing_label(&en, "bus_rtt_residual"),
             "internal bus latency drift"
         );
+    }
+
+    #[test]
+    fn locked_illustration_panel_copy_fr_en() {
+        use aos_proto::{
+            IllustrationConstructionPhase as Phase, IllustrationLook, IllustrationPaletteId,
+        };
+        let en = strings("en");
+        let fr = strings("fr");
+        for t in [&en, &fr] {
+            assert!(!t.illust_hint.contains("illust."));
+            assert!(!t.illust_hint.contains("illust.*"));
+        }
+        assert_eq!(illust_look_label(&en, IllustrationLook::Ink), "Ink");
+        assert_eq!(illust_look_label(&fr, IllustrationLook::Ink), "Encre");
+        assert_ne!(
+            illust_look_label(&en, IllustrationLook::Ink),
+            IllustrationLook::Ink.as_str()
+        );
+        assert_eq!(
+            illust_palette_label(&en, IllustrationPaletteId::PaperInk),
+            "Paper & ink"
+        );
+        assert_eq!(
+            illust_palette_label(&fr, IllustrationPaletteId::PaperInk),
+            "Papier encre"
+        );
+        assert_eq!(
+            illust_construction_phase_short(&en, Phase::Contours),
+            "Contours"
+        );
+        assert_eq!(
+            illust_construction_phase_progress(&fr, Phase::Final),
+            "5/5 · Rendu final"
+        );
+        let running = illust_gen_running_line(&en, Phase::Details);
+        assert!(running.contains("Details"));
+        assert!(!running.contains("ConstructionPhase"));
+        assert_eq!(
+            illust_last_export_line(&en, "/downloads/illustration/session-abc/still-42.png",),
+            "Last export: still-42.png"
+        );
+        assert_eq!(en.illust_view_original, "View original");
+        assert_eq!(fr.illust_view_original, "Voir l’original");
     }
 }
