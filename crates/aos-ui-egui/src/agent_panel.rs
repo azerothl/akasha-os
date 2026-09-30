@@ -723,24 +723,16 @@ pub fn format_streaming_preview(raw: &str) -> String {
     if aos_agent::actions::looks_like_tool_markup(raw) {
         return "…".into();
     }
-    if !looks_like_action_json(raw) {
+    let trimmed = raw.trim();
+    if !trimmed.starts_with('{') {
         return raw.to_string();
     }
-    // Truncated streams can be repaired into a full AgentAction for execution,
-    // but the raw buffer still contains unfinished JSON that would leak into
-    // the chat preview via prose_without_json. Prefer thought-only until the
-    // envelope parses as complete JSON.
-    let trimmed = raw.trim();
-    if serde_json::from_str::<serde_json::Value>(trimmed).is_err() {
-        if let Some(thought) = extract_partial_json_string(raw, "thought") {
-            return format!("_{thought}_");
+    // Tout flux commençant par `{` est une action potentielle : jamais de JSON brut.
+    if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+        if let Some(action) = aos_agent::actions::parse_action(raw) {
+            return format_action_as_markdown(&action, &prose_without_json(raw));
         }
-        return "…".into();
     }
-    if let Some(action) = aos_agent::actions::parse_action(raw) {
-        return format_action_as_markdown(&action, &prose_without_json(raw));
-    }
-    // JSON encore incomplet : extraire thought partiel si possible
     if let Some(thought) = extract_partial_json_string(raw, "thought") {
         return format!("_{thought}_");
     }
@@ -1774,6 +1766,29 @@ mod tests {
 
     #[test]
     fn streaming_hides_partial_json() {
+        let full = r#"{"thought":"En cours","action":"illust.compose","args":{"brief":"x"}}"#;
+        for end in 1..=full.len() {
+            let prefix = &full[..end];
+            let prev = format_streaming_preview(prefix);
+            assert!(
+                !prev.contains('{'),
+                "prefix {end:?} leaked brace: {prev:?} from {prefix:?}"
+            );
+            assert!(
+                !prev.contains("\"thought\""),
+                "prefix {end:?} leaked thought key: {prev:?} from {prefix:?}"
+            );
+            assert!(
+                !prev.contains("\"action\""),
+                "prefix {end:?} leaked action key: {prev:?} from {prefix:?}"
+            );
+            if prefix.contains("\"thought\":\"En cours") && !prefix.ends_with('"') {
+                assert!(
+                    prev.contains("En cours") || prev == "…",
+                    "prefix {end:?}: {prev:?}"
+                );
+            }
+        }
         let partial =
             "{\"thought\":\"En cours\",\"action\":\"notes.create\",\"args\":{\"content\":\"# Hi\"";
         let prev = format_streaming_preview(partial);
