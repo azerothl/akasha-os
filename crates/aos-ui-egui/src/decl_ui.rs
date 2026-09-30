@@ -630,7 +630,7 @@ impl DeclUiPanelState {
             }
             "text" => {
                 if let Some(t) = widget_text(w, doc, language) {
-                    ui.label(t);
+                    ui.add(egui::Label::new(t).wrap());
                 }
             }
             "markdown" => {
@@ -1375,11 +1375,13 @@ impl DeclUiPanelState {
             }
             "illustration_work_split" => {
                 if let Some(children) = w.children.as_ref().filter(|children| children.len() == 2) {
-                    let ratio = w.split_ratio.unwrap_or(0.34).clamp(0.1, 0.9);
+                    let ratio = w.split_ratio.unwrap_or(0.34);
                     let available = ui.available_size();
                     let (frame, _) = ui.allocate_exact_size(available, egui::Sense::hover());
                     let gap = crate::theme::SPACE_UNIT;
-                    let left_width = ((frame.width() - gap) * ratio).max(1.0);
+                    let inner = frame.width() - gap;
+                    let left_width =
+                        crate::ui_illustration::illustration_work_split_left_width(inner, ratio);
                     let left = egui::Rect::from_min_size(frame.min, egui::vec2(left_width, frame.height()));
                     let right = egui::Rect::from_min_max(
                         egui::pos2(left.right() + gap, frame.top()), frame.max,
@@ -3099,7 +3101,7 @@ fn render_choice(
                 }
             };
             if w.inline.unwrap_or(false) {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if has_explicit_label {
                         ui.label(&label);
                     }
@@ -3171,7 +3173,7 @@ fn render_choice(
             });
         };
         if w.inline.unwrap_or(false) {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if has_explicit_label {
                     let response = ui.label(&label);
                     if let Some(tip) = tooltip.as_deref() {

@@ -603,6 +603,19 @@ fn png_bytes_to_color_image(bytes: &[u8]) -> Option<egui::ColorImage> {
     Some(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
 }
 
+/// Minimum width (px) for the left rail in Illustration Designer `illustration_work_split` panes (BD/Comic controls).
+pub(crate) const ILLUSTRATION_WORK_SPLIT_LEFT_MIN_W: f32 = 460.0;
+
+/// Left pane width for `illustration_work_split`, honoring `split_ratio` but never below [`ILLUSTRATION_WORK_SPLIT_LEFT_MIN_W`].
+pub(crate) fn illustration_work_split_left_width(inner_width: f32, ratio: f32) -> f32 {
+    let inner = inner_width.max(1.0);
+    let ratio = ratio.clamp(0.1, 0.9);
+    (inner * ratio)
+        .max(ILLUSTRATION_WORK_SPLIT_LEFT_MIN_W)
+        .min(inner - 1.0)
+        .max(1.0)
+}
+
 /// Ensure session bar knows illustration_open from meta.
 pub fn illustration_open_for(app: &UiApp) -> bool {
     chat_room::active_session_meta(
@@ -611,6 +624,29 @@ pub fn illustration_open_for(app: &UiApp) -> bool {
     )
     .map(|m| m.illustration_open)
     .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn work_split_left_rail_respects_min_width_at_1280() {
+        let inner = 1280.0 - 8.0;
+        let w = illustration_work_split_left_width(inner, 0.34);
+        assert!(
+            w >= ILLUSTRATION_WORK_SPLIT_LEFT_MIN_W,
+            "expected min rail width at 1280, got {w}"
+        );
+        assert!(w < inner, "left pane must leave room for the preview");
+    }
+
+    #[test]
+    fn work_split_left_rail_uses_ratio_when_above_min() {
+        let inner = 2000.0;
+        let w = illustration_work_split_left_width(inner, 0.34);
+        assert!((w - inner * 0.34).abs() < 0.5);
+    }
 }
 
 #[cfg(test)]
