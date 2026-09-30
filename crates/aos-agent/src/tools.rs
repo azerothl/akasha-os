@@ -812,20 +812,37 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             "relations":{"type":"array","items":{"type":"object","properties":{
                 "from":{"type":"string"},"relation":{"type":"string","description":"ex. attached_to, overlaps, aligns_with"},"to":{"type":"string"}
             },"required":["from","relation","to"]}},
+            "layout":{"type":"object","description":"Contrat spatial obligatoire pour une illustration reconnaissable. Associe chaque partie sémantique à l'élément géométrique utilisé.","properties":{
+                "subject_kind":{"enum":["quadruped","biped","vehicle","building","plant","still_life","unknown"]},
+                "view":{"enum":["side","front","three_quarter","top","unknown"]},
+                "parts":{"type":"array","items":{"type":"object","properties":{
+                    "element_id":{"type":"string"},"role":{"type":"string"},"parent_id":{"type":"string"},
+                    "side":{"enum":["near","far","left","right","center"]}
+                },"required":["element_id","role"]}}
+            },"required":["subject_kind","view","parts"]},
             "guides":{"type":"object"}
         },
         "required":["elements"]
     });
+    let scene_schema = {
+        let mut schema = scene_schema;
+        schema["allOf"] = serde_json::json!([{
+            "if":{"properties":{"profile":{"const":"illustration"}},"required":["profile"]},
+            "then":{"required":["layout"]}
+        }]);
+        schema
+    };
     let canvas_tools = [
         (
             "canvas.set_style",
-            "Définir le crayon de session (couleur #RRGGBB, épaisseur optionnelle) — les ops sans color/width héritent de ce style",
+            "Définir le crayon de session (couleur, épaisseur et pinceau crayon/lavis) — les ops sans style hériteront de ces réglages",
             serde_json::json!({
                 "type":"object",
                 "properties":{
                     "session_id": sid_schema(),
                     "color":{"type":"string","description":"#RRGGBB"},
-                    "width":{"type":"number","description":"épaisseur relative 0..1"}
+                    "width":{"type":"number","description":"épaisseur relative 0..1"},
+                    "brush":{"enum":["pencil","wash","legacy_solid"]}
                 }
             }),
         ),
@@ -836,7 +853,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
                 "type":"object",
                 "properties":{
                     "session_id": sid_schema(),
-                    "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"]}},
+                    "points":{"type":"array","items":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"},"pressure":{"type":"number","minimum":0,"maximum":1}},"required":["x","y"]}},
                     "color":{"type":"string","description":"#RRGGBB (alias fill_color)"},
                     "fill_color":{"type":"string","description":"alias de color"},
                     "width":{"type":"number","description":"épaisseur relative 0..1"}

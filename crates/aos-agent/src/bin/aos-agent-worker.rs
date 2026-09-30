@@ -637,6 +637,7 @@ async fn main() {
     let mut device_no_vision_hinted = false;
     let mut last_canvas_visual = None;
     let mut final_canvas_visual_review_pending = false;
+    let mut canvas_final_correction_attempts = 0u8;
     let mut n_ctx_hint = DEFAULT_N_CTX_HINT;
     let mut skill_consider_done = false;
     let mut steer_count = 0u32;
@@ -1275,7 +1276,7 @@ async fn main() {
                 });
                 if !has_existing_traits && !has_agent_traits {
                     Some(
-                        "illustration canvas : la première forme doit être une scène complète via canvas.compose. Utilise args.scene (pas scene_spec) avec {version:1,profile:\"illustration\",subject:\"...\",view:\"...\",elements:[{id,role,layer,color,fill,geometry:{kind:\"ellipse\",x,y,w,h}}],relations:[{from,to,relation}]}; pour rect/ellipse x,y est le coin haut-gauche et w,h la taille (centre=(x+w/2,y+h/2), donc une forme centrée en .5 de largeur .4 commence à .3). Fais chevaucher/toucher les masses structurelles et les appendices. Si scene_check=warning apparaît, corrige avant export. Les graphes/maths utilisent les primitives.",
+                        "illustration canvas : commence par canvas.compose avec args.scene (pas scene_spec), incluant subject_kind, view et layout {subject_kind,view,parts:[{element_id,role,parent_id,side}]}. Déclare chaque membre séparément, son parent, son côté proche/éloigné et répartis les attaches sur le corps (pour un quadrupède de profil, deux pattes aux épaules et deux aux hanches). N'envoie pas une scène de famille inconnue comme validée : elle restera à vérifier. Le validateur renvoie les éléments et contraintes en défaut ; corrige ces éléments avant export. Pour les formes, x,y est le coin haut-gauche et w,h la taille.",
                     )
                 } else {
                     None
@@ -1821,48 +1822,23 @@ async fn main() {
                     } else {
                         None
                     };
-                if let Some(validation) =
-                    final_validation.filter(|report| report.requires_modification())
-                {
-                    let feedback = format!(
-                        "{}\nLe plan est terminé mais la cohérence globale exige une correction ciblée.",
-                        validation.prompt_block()
-                    );
-                    shared
-                        .state
-                        .lock()
-                        .await
-                        .working_memory
-                        .push(("system".into(), feedback.clone()));
-                    report(
-                        &bus,
-                        &agent_id,
-                        AgentOutputEvent::Reflection { text: feedback },
-                    )
-                    .await;
-                } else {
-                    // Geometry validation cannot tell whether a pile of
-                    // valid paths actually resembles the requested subject.
-                    // With a resident vision model, require the compact
-                    // critic to explicitly approve the final PNG.
-                    let has_visual_critic =
-                        session_model_has_vision(&bus, spec.model_id.as_deref()).await;
-                    let visual_review = if has_visual_critic {
-                        reflect(&bus, &shared, &spec).await
-                    } else {
-                        None
-                    };
-                    if has_visual_critic
-                        && !visual_review.as_deref().is_some_and(canvas_critic_approved)
-                    {
-                        final_canvas_visual_review_pending = true;
-                        let feedback = visual_review.unwrap_or_else(|| {
-                            "[canvas visual critic] réponse invalide ou absente : regarde le PNG final et corrige une seule pièce distinctive.".into()
-                        });
+                let structural_failure = final_validation
+                    .as_ref()
+                    .is_some_and(|report| report.requires_modification());
+                if structural_failure {
+                    let validation = final_validation.as_ref().expect("checked above");
+                    if canvas_final_correction_attempts < 3 {
+                        canvas_final_correction_attempts += 1;
                         let feedback = format!(
-                            "{feedback}\nLe contrôle visuel final n'est pas approuvé : corrige une seule pièce distinctive puis exporte à nouveau."
+                            "{}\nLa scène n'est pas validée. Correction ciblée {}/3 : modifie les parties et attaches nommées dans ces défauts, puis relance la validation finale.",
+                            validation.prompt_block(), canvas_final_correction_attempts
                         );
-                        shared.state.lock().await.push_user(&feedback);
+                        shared
+                            .state
+                            .lock()
+                            .await
+                            .working_memory
+                            .push(("system".into(), feedback.clone()));
                         report(
                             &bus,
                             &agent_id,
@@ -1870,21 +1846,46 @@ async fn main() {
                         )
                         .await;
                     } else {
+                        let message = "aperçu canvas à vérifier : la scène conserve des défauts structurels après trois corrections";
+                        shared.state.lock().await.artifacts.push(message.into());
+                        report(&bus, &agent_id, AgentOutputEvent::Log { line: message.into() }).await;
+                        terminal = Some(AgentState::Done);
+                    }
+                } else {
+                    let needs_review = final_validation.as_ref().is_none_or(|validation| {
+                        validation.status == aos_agent::canvas_scene::CanvasValidationStatus::NeedsReview
+                    });
+                    let has_visual_critic =
+                        session_model_has_vision(&bus, spec.model_id.as_deref()).await;
+                    let visual_review = if has_visual_critic {
+                        reflect(&bus, &shared, &spec).await
+                    } else {
+                        None
+                    };
+                    let critic_rejected = has_visual_critic
+                        && !visual_review.as_deref().is_some_and(canvas_critic_approved);
+                    if critic_rejected && canvas_final_correction_attempts < 3 {
+                        canvas_final_correction_attempts += 1;
+                        final_canvas_visual_review_pending = true;
+                        let critique = visual_review.unwrap_or_else(|| {
+                            "Le critique visuel n'a pas fourni de verdict exploitable.".into()
+                        });
+                        let feedback = format!(
+                            "{critique}\nCorrection visuelle ciblée {}/3 : corrige les éléments nommés par le critique et exporte à nouveau.",
+                            canvas_final_correction_attempts
+                        );
+                        shared.state.lock().await.push_user(&feedback);
+                        report(&bus, &agent_id, AgentOutputEvent::Reflection { text: feedback }).await;
+                    } else {
                         final_canvas_visual_review_pending = false;
-                        report(
-                            &bus,
-                            &agent_id,
-                            AgentOutputEvent::Log {
-                                line: "plan canvas terminé et validation globale acceptée".into(),
-                            },
-                        )
-                        .await;
-                        shared
-                            .state
-                            .lock()
-                            .await
-                            .artifacts
-                            .push("plan canvas terminé et validation globale acceptée".into());
+                        let unverified = needs_review || !has_visual_critic || critic_rejected;
+                        let message = if unverified {
+                            "aperçu canvas à vérifier : composition dessinée, validation visuelle ou structurelle incomplète"
+                        } else {
+                            "plan canvas terminé et validation structurelle et visuelle acceptée"
+                        };
+                        shared.state.lock().await.artifacts.push(message.into());
+                        report(&bus, &agent_id, AgentOutputEvent::Log { line: message.into() }).await;
                         terminal = Some(AgentState::Done);
                     }
                 }

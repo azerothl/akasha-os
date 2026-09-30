@@ -854,7 +854,9 @@ mod tests {
             author_id: "agent-99".into(),
             ts_ms: 0,
             layer_id: String::new(),
+            brush: None,
             body: aos_proto::CanvasOpBody::Stroke {
+                pressure: vec![],
                 points: vec![aos_proto::CanvasPoint { x: 0.1, y: 0.2 }],
                 color: "#3ee0c4".into(),
                 width: 0.01,

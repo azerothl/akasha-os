@@ -88,6 +88,8 @@ struct StyleArgs {
     color: Option<String>,
     #[serde(default)]
     width: Option<f32>,
+    #[serde(default)]
+    brush: Option<String>,
 }
 
 fn set_style(args: &Value) -> Result<Value, String> {
@@ -98,6 +100,9 @@ fn set_style(args: &Value) -> Result<Value, String> {
     }
     if let Some(w) = a.width {
         payload["width"] = json!(w);
+    }
+    if let Some(brush) = a.brush {
+        payload["brush"] = json!(brush);
     }
     aos_module_sdk::call("canvas.set_style", &payload)
 }
@@ -118,10 +123,20 @@ struct StrokeArgs {
 struct Point {
     x: f32,
     y: f32,
+    #[serde(default)]
+    pressure: Option<f32>,
 }
 
-fn stroke_op(points: Vec<Value>, color: Option<String>, width: Option<f32>) -> Value {
+fn stroke_op(
+    points: Vec<Value>,
+    pressure: Option<Vec<f32>>,
+    color: Option<String>,
+    width: Option<f32>,
+) -> Value {
     let mut op = json!({ "kind": "stroke", "points": points });
+    if let Some(pressure) = pressure {
+        op["pressure"] = json!(pressure);
+    }
     if let Some(c) = color {
         op["color"] = json!(c);
     }
@@ -141,10 +156,15 @@ fn stroke(args: &Value) -> Result<Value, String> {
         .iter()
         .map(|p| json!({"x": p.x, "y": p.y}))
         .collect();
+    let pressure = a
+        .points
+        .iter()
+        .any(|point| point.pressure.is_some())
+        .then(|| a.points.iter().map(|point| point.pressure.unwrap_or(1.0)).collect());
     apply(
         &a.session_id,
         a.author_id.as_deref().unwrap_or("agent"),
-        stroke_op(points, a.color, a.width),
+        stroke_op(points, pressure, a.color, a.width),
     )
 }
 

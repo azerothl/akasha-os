@@ -101,8 +101,23 @@ pub fn set_canvas_op_body_gradient(
 pub fn resolve_canvas_op_style_ex(body: &mut CanvasOpBody, pen: &CanvasPenStyle) {
     crate::resolve_canvas_op_style(body, pen);
     match body {
-        CanvasOpBody::Stroke { dash, .. }
-        | CanvasOpBody::Line { dash, .. }
+        CanvasOpBody::Stroke { pressure, points, dash, .. } => {
+            if !pressure.is_empty() {
+                if pressure.len() != points.len()
+                    || pressure.iter().any(|value| !value.is_finite())
+                {
+                    pressure.clear();
+                } else {
+                    for value in pressure {
+                        *value = value.clamp(0.05, 1.0);
+                    }
+                }
+            }
+            if dash.is_empty() && !pen.dash.is_empty() {
+                *dash = pen.dash.clone();
+            }
+        }
+        CanvasOpBody::Line { dash, .. }
         | CanvasOpBody::Spline { dash, .. }
         | CanvasOpBody::Path { dash, .. }
         | CanvasOpBody::Rect { dash, .. }
@@ -200,6 +215,7 @@ mod tests {
             ..CanvasPenStyle::default()
         };
         let mut stroke = CanvasOpBody::Stroke {
+            pressure: Vec::new(),
             points: vec![CanvasPoint { x: 0.0, y: 0.0 }],
             color: String::new(),
             width: 0.0,

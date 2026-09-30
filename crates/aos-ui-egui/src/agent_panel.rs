@@ -1966,6 +1966,7 @@ Je vais répondre de manière naturelle"#;
             author_id: "agent-102".into(),
             ts_ms: 0,
             layer_id: String::new(),
+            brush: None,
             body: aos_proto::CanvasOpBody::Rect {
                 x: 0.1,
                 y: 0.2,
@@ -2077,6 +2078,7 @@ Je vais répondre de manière naturelle"#;
             author_id: "agent-99".into(),
             ts_ms: 0,
             layer_id: String::new(),
+            brush: None,
             body: aos_proto::CanvasOpBody::Rect {
                 x: 0.1,
                 y: 0.2,

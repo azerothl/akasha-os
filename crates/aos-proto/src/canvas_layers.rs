@@ -418,6 +418,7 @@ mod tests {
                 author_id: "human".into(),
                 ts_ms: 1,
                 layer_id: String::new(),
+                brush: None,
                 body: CanvasOpBody::Clear,
             }],
             pen: CanvasPenStyle::default(),

@@ -209,6 +209,7 @@ impl ChatSessionStore {
                     author_id: author_id.into(),
                     ts_ms: Self::now_ms(),
                     layer_id: doc.active_layer_id.clone(),
+                    brush: Some(doc.pen.brush),
                     body,
                 };
                 doc.next_seq = doc.next_seq.saturating_add(1);
@@ -503,6 +504,7 @@ impl ChatSessionStore {
         width: Option<f32>,
         opacity: Option<f32>,
         dash: Option<&[f32]>,
+        brush: Option<aos_proto::CanvasBrush>,
     ) -> Result<(ChatSessionMeta, CanvasDoc), SessionError> {
         let _ = self.load_meta(id)?;
         let mut doc = self.load_canvas(id)?;
@@ -523,6 +525,9 @@ impl ChatSessionStore {
         }
         if let Some(d) = dash {
             doc.pen.dash = d.to_vec();
+        }
+        if let Some(brush) = brush {
+            doc.pen.brush = brush;
         }
         self.save_canvas(&doc)?;
         let mut meta = self.load_meta(id)?;
@@ -621,6 +626,7 @@ impl ChatSessionStore {
                 author_id: author_id.into(),
                 ts_ms: Self::now_ms(),
                 layer_id,
+                brush: Some(doc.pen.brush),
                 body,
             };
             doc.next_seq = doc.next_seq.saturating_add(1);
@@ -1553,6 +1559,7 @@ archived: false
                 &m.id,
                 "human",
                 CanvasOpBody::Stroke {
+                    pressure: vec![],
                     points: vec![
                         aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
                         aos_proto::CanvasPoint { x: 0.5, y: 0.5 },
@@ -1587,6 +1594,7 @@ archived: false
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Undo".into()), None).unwrap();
         let stroke = CanvasOpBody::Stroke {
+            pressure: vec![],
             points: vec![
                 aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
                 aos_proto::CanvasPoint { x: 0.2, y: 0.2 },
@@ -1611,6 +1619,7 @@ archived: false
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("UndoAgent".into()), None).unwrap();
         let stroke = CanvasOpBody::Stroke {
+            pressure: vec![],
             points: vec![
                 aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
                 aos_proto::CanvasPoint { x: 0.2, y: 0.2 },
@@ -1778,13 +1787,14 @@ archived: false
         let s = ChatSessionStore::open(&dir).unwrap();
         let m = s.create(Some("Pen".into()), None).unwrap();
         let (_, doc) = s
-            .canvas_set_style(&m.id, Some("#ff4400"), Some(0.025), None, None)
+            .canvas_set_style(&m.id, Some("#ff4400"), Some(0.025), None, None, Some(aos_proto::CanvasBrush::Wash))
             .unwrap();
         assert_eq!(doc.pen.color, "#ff4400");
         assert!((doc.pen.width - 0.025).abs() < 0.0001);
+        assert_eq!(doc.pen.brush, aos_proto::CanvasBrush::Wash);
 
         let (_, doc2) = s
-            .canvas_set_style(&m.id, None, None, Some(0.4), Some(&[0.02, 0.02]))
+            .canvas_set_style(&m.id, None, None, Some(0.4), Some(&[0.02, 0.02]), None)
             .unwrap();
         assert!((doc2.pen.opacity - 0.4).abs() < 0.0001);
         assert_eq!(doc2.pen.dash, vec![0.02, 0.02]);
@@ -1794,6 +1804,7 @@ archived: false
                 &m.id,
                 "agent-a",
                 CanvasOpBody::Stroke {
+                    pressure: vec![],
                     points: vec![
                         aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
                         aos_proto::CanvasPoint { x: 0.3, y: 0.3 },
@@ -1806,6 +1817,7 @@ archived: false
             )
             .unwrap();
         let applied = applied.expect("stroke applied");
+        assert_eq!(applied.brush, Some(aos_proto::CanvasBrush::Wash));
         match applied.body {
             CanvasOpBody::Stroke { color, width, .. } => {
                 assert_eq!(color, "#ff4400");
@@ -1813,6 +1825,10 @@ archived: false
             }
             other => panic!("expected stroke, got {other:?}"),
         }
+        let reopened = ChatSessionStore::open(&dir).unwrap();
+        let (_, restored, _) = reopened.canvas_get(&m.id, None).unwrap();
+        assert_eq!(restored.pen.brush, aos_proto::CanvasBrush::Wash);
+        assert_eq!(restored.ops[0].brush, Some(aos_proto::CanvasBrush::Wash));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1869,6 +1885,7 @@ archived: false
                 author_id: "human".into(),
                 ts_ms: 1,
                 layer_id: String::new(),
+                brush: None,
                 body: CanvasOpBody::Line {
                     p0: aos_proto::CanvasPoint { x: 0.1, y: 0.1 },
                     p1: aos_proto::CanvasPoint { x: 0.9, y: 0.9 },

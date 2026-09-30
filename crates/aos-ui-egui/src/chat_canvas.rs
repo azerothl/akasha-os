@@ -4,7 +4,8 @@ use aos_proto::{
     canvas_hit_test, canvas_layer_effective_locked, canvas_op_bbox, canvas_rect_corners,
     canvas_rotate_point, default_canvas_opacity, translate_canvas_op_body, CanvasAspect,
     CanvasEdit, CanvasGuides, CanvasLayer, CanvasLinearGradient, CanvasOp, CanvasOpBody,
-    CanvasPenStyle, CanvasPoint, CanvasSceneSpec,
+    CanvasBrush, CanvasPenStyle, CanvasPoint, CanvasSceneSpec,
+    CanvasDoc,
 };
 use eframe::egui::epaint::{CircleShape, PathShape, PathStroke, Shape, StrokeKind};
 use eframe::egui::{Align2, Color32, FontId, Pos2, Sense, Stroke, Ui, Vec2};
@@ -40,6 +41,7 @@ pub enum CanvasUiAction {
         width: Option<f32>,
         opacity: Option<f32>,
         dash: Option<Vec<f32>>,
+        brush: Option<CanvasBrush>,
     },
     SetGuides {
         show_grid: Option<bool>,
@@ -62,6 +64,7 @@ pub struct CanvasPanelState {
     pub tool: CanvasTool,
     pub color: Color32,
     pub width: f32,
+    pub brush: CanvasBrush,
     /// Fill closed shapes (rect / ellipse) instead of stroke outline.
     pub shape_fill: bool,
     /// In-progress human stroke (optimistic).
@@ -102,6 +105,23 @@ pub struct CanvasPanelState {
     pub text_edit: Option<CanvasTextEdit>,
     /// Last structured scene compiled into this canvas, if any.
     pub scene: Option<CanvasSceneSpec>,
+    pub raster_cache: Option<CanvasRasterCache>,
+}
+
+#[derive(Clone)]
+pub struct CanvasRasterCache {
+    pub fingerprint: u64,
+    pub size: [usize; 2],
+    pub texture: eframe::egui::TextureHandle,
+}
+
+impl std::fmt::Debug for CanvasRasterCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CanvasRasterCache")
+            .field("fingerprint", &self.fingerprint)
+            .field("size", &self.size)
+            .finish_non_exhaustive()
+    }
 }
 
 /// S4 : état de la saisie inline d'une étiquette.
@@ -129,6 +149,7 @@ impl Default for CanvasPanelState {
             tool: CanvasTool::Pen,
             color: Color32::from_rgb(0x3e, 0xe0, 0xc4),
             width: 0.015,
+            brush: CanvasBrush::Pencil,
             shape_fill: false,
             draft_points: Vec::new(),
             drag_origin: None,
@@ -153,6 +174,7 @@ impl Default for CanvasPanelState {
             layer_rename_text: String::new(),
             text_edit: None,
             scene: None,
+            raster_cache: None,
         }
     }
 }
@@ -228,6 +250,7 @@ impl CanvasPanelState {
         self.width = pen.width;
         self.pen_opacity = pen.opacity;
         self.pen_dashed = !pen.dash.is_empty();
+        self.brush = pen.brush;
     }
 
     pub fn sync_layers(&mut self, layers: Vec<CanvasLayer>, active_layer_id: String) {
@@ -370,6 +393,7 @@ fn commit_freehand_draft(state: &mut CanvasPanelState) -> Option<CanvasUiAction>
                 let (opacity, dash, _) = pen_style_fields(state);
                 Some(CanvasUiAction::Apply(CanvasOpBody::Stroke {
                     points: std::mem::take(&mut state.draft_points),
+                    pressure: Vec::new(),
                     color: color_to_hex(state.color),
                     width: state.width,
                     opacity,
@@ -1083,8 +1107,26 @@ pub fn ui_canvas_toolbar(
                     width: None,
                     opacity: None,
                     dash: None,
+                    brush: None,
                 });
             }
+            ui.horizontal(|ui| {
+                ui.label(t.canvas_brush);
+                for (brush, label) in [
+                    (CanvasBrush::Pencil, t.canvas_brush_pencil),
+                    (CanvasBrush::Wash, t.canvas_brush_wash),
+                ] {
+                    if ui.selectable_value(&mut state.brush, brush, label).changed() {
+                        action = Some(CanvasUiAction::SetStyle {
+                            color: None,
+                            width: None,
+                            opacity: None,
+                            dash: None,
+                            brush: Some(brush),
+                        });
+                    }
+                }
+            });
             if toolbar_slider(ui, &mut state.width, 0.005..=0.06, slider_w)
                 .on_hover_text(t.canvas_width)
                 .changed()
@@ -1094,6 +1136,7 @@ pub fn ui_canvas_toolbar(
                     width: Some(state.width),
                     opacity: None,
                     dash: None,
+                    brush: None,
                 });
             }
             if matches!(
@@ -1119,6 +1162,7 @@ pub fn ui_canvas_toolbar(
                     width: None,
                     opacity: Some(state.pen_opacity),
                     dash: None,
+                    brush: None,
                 });
             }
             let dashed_on = state.pen_dashed;
@@ -1134,6 +1178,7 @@ pub fn ui_canvas_toolbar(
                     width: None,
                     opacity: None,
                     dash: Some(pen_dash_vec(state.pen_dashed)),
+                    brush: None,
                 });
             }
             if matches!(
@@ -1552,10 +1597,6 @@ pub fn ui_canvas_surface(
     let rect = view_board_rect(outer, aspect, state.view_pan, state.view_zoom);
     let bg = canvas_bg(dark);
     painter.rect_filled(rect, 0.0, bg);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.5_f32, SIGNAL), StrokeKind::Inside);
-    if state.show_grid {
-        paint_board_grid(&painter, rect);
-    }
 
     let now = ui.ctx().input(|i| i.time);
     if state.seeing {
@@ -1571,13 +1612,51 @@ pub fn ui_canvas_surface(
         );
     }
 
-    for op in &state.ops {
-        if !layer_is_visible(&state.layers, &op.layer_id) {
-            continue;
-        }
-        let p = anim_progress(state, op.seq, now);
-        paint_op(&painter, rect, op, &state.layers, dark, p);
+    // Committed operations use the same raster engine as PNG export. This
+    // keeps pencil/wash texture, layer opacity, and transparent erasing aligned.
+    let size = [
+        (rect.width() * ui.ctx().pixels_per_point()).ceil().max(64.0) as usize,
+        (rect.height() * ui.ctx().pixels_per_point()).ceil().max(64.0) as usize,
+    ];
+    let doc = CanvasDoc {
+        ops: state.ops.clone(),
+        next_seq: state.next_seq,
+        pen: CanvasPenStyle {
+            color: color_to_hex(state.color),
+            width: state.width,
+            opacity: state.pen_opacity,
+            dash: if state.pen_dashed { vec![0.03, 0.03] } else { vec![] },
+            brush: state.brush,
+        },
+        layers: state.layers.clone(),
+        active_layer_id: state.active_layer_id.clone(),
+        scene: state.scene.clone(),
+        ..Default::default()
+    };
+    let bytes = serde_json::to_vec(&doc).unwrap_or_default();
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    size.hash(&mut hasher);
+    let fingerprint = hasher.finish();
+    let stale = state.raster_cache.as_ref().map(|cache| {
+        cache.fingerprint != fingerprint || cache.size != size
+    }).unwrap_or(true);
+    if stale {
+        let image = aos_platform::canvas_raster::render_rgba(&doc, size[0] as u32, size[1] as u32);
+        let color_image = eframe::egui::ColorImage::from_rgba_unmultiplied(
+            [image.width() as usize, image.height() as usize], image.as_raw());
+        let texture = ui.ctx().load_texture("chat-canvas-raster", color_image, eframe::egui::TextureOptions::LINEAR);
+        state.raster_cache = Some(CanvasRasterCache { fingerprint, size, texture });
     }
+    if let Some(cache) = &state.raster_cache {
+        painter.image(cache.texture.id(), rect,
+            eframe::egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+    }
+    if state.show_grid {
+        paint_board_grid(&painter, rect);
+    }
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.5_f32, SIGNAL), StrokeKind::Inside);
 
     if let Some(seq) = state.selected_seq {
         if let Some(op) = state.ops.iter().find(|o| o.seq == seq) {
@@ -2562,6 +2641,7 @@ mod routing_tests {
             author_id: "agent-81".into(),
             ts_ms: 0,
             layer_id: String::new(),
+            brush: None,
             body: CanvasOpBody::Line {
                 p0: CanvasPoint { x: 0.2, y: 0.2 },
                 p1: CanvasPoint { x: 0.8, y: 0.2 },
@@ -2581,7 +2661,9 @@ mod routing_tests {
             author_id: "human".into(),
             ts_ms: 0,
             layer_id: String::new(),
+            brush: None,
             body: CanvasOpBody::Stroke {
+                pressure: vec![],
                 points: vec![
                     CanvasPoint { x: 0.1, y: 0.1 },
                     CanvasPoint { x: 0.2, y: 0.2 },

@@ -1257,13 +1257,20 @@ impl HostServices for PlatformSubsystem {
                 }
                 let color = args.get("color").and_then(|v| v.as_str());
                 let width = args.get("width").and_then(|v| v.as_f64()).map(|w| w as f32);
+                let brush = match args.get("brush") {
+                    Some(value) => Some(
+                        serde_json::from_value::<aos_proto::CanvasBrush>(value.clone())
+                            .map_err(|_| "brush doit être pencil, wash ou legacy_solid".to_string())?,
+                    ),
+                    None => None,
+                };
                 let apply_lock = self.canvas_apply_lock(&session_id);
                 let _guard = apply_lock.lock().unwrap();
                 let (meta, doc) = self
                     .sessions
                     .lock()
                     .unwrap()
-                    .canvas_set_style(&session_id, color, width, None, None)
+                    .canvas_set_style(&session_id, color, width, None, None, brush)
                     .map_err(|e| e.to_string())?;
                 Ok(serde_json::json!({
                     "canvas_open": meta.canvas_open,
