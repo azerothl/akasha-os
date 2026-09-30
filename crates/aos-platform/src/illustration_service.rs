@@ -270,33 +270,21 @@ pub fn review(s: &PlatformSubsystem, session_id: &str) -> Result<serde_json::Val
     if let Some(run) = &doc.image_run {
         return Ok(serde_json::json!({"image_run":run,"path":doc.last_png,
             "visual_review":"required","accepted":false,
-            "note":"le score structurel ne s'applique qu'au rendu vectoriel; inspecte le PNG"}));
+            "note":"les scores structurels vectoriels ne valident pas une image générée"}));
     }
-    Ok(serde_json::to_value(review_illustration(&doc)).unwrap_or_default())
+    let report = review_illustration(&doc);
+    serde_json::to_value(report).map_err(|e| e.to_string())
 }
 
 fn find_ffmpeg() -> Option<String> {
     if let Ok(p) = std::env::var("FFMPEG") {
-        if !p.trim().is_empty() {
+        if std::path::Path::new(&p).exists() || Command::new(&p).arg("-version").output().is_ok() {
             return Some(p);
         }
     }
-    which_in_path("ffmpeg")
-}
-
-fn which_in_path(bin: &str) -> Option<String> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(bin);
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().into_owned());
-        }
-        #[cfg(windows)]
-        {
-            let candidate = dir.join(format!("{bin}.exe"));
-            if candidate.is_file() {
-                return Some(candidate.to_string_lossy().into_owned());
-            }
+    for name in ["ffmpeg", "ffmpeg.exe"] {
+        if Command::new(name).arg("-version").output().is_ok() {
+            return Some(name.to_string());
         }
     }
     None
@@ -305,7 +293,10 @@ fn which_in_path(bin: &str) -> Option<String> {
 pub fn animate(
     s: &PlatformSubsystem,
     session_id: &str,
+    holder: &str,
+    timeline: Option<IllustrationTimeline>,
     duration_s: Option<f32>,
+    width: Option<u32>,
     path: Option<String>,
 ) -> Result<IllustAnimateResponse, String> {
     let (_, mut doc) = s
@@ -314,39 +305,51 @@ pub fn animate(
         .unwrap()
         .illustration_get(session_id)
         .map_err(|e| e.to_string())?;
-    if doc.image_run.is_some() {
-        return Err("le moteur image produit un still; pas d'animation".into());
+    if doc.spec.is_none() {
+        return Err("compose une scène avant illust.animate".into());
     }
-    if !doc.brief.subject.trim().is_empty() {
+    if let Some(msg) = video_trace_error(&doc.brief) {
+        return Err(msg.into());
+    }
+    aos_proto::apply_prompt_defaults(&mut doc.brief);
+    if let Some(tl) = timeline {
         doc = s
             .sessions
             .lock()
             .unwrap()
-            .illustration_ensure_composed(session_id)
+            .illustration_set_timeline(session_id, holder, tl)
             .map_err(|e| e.to_string())?;
     }
-    resolve_photo_host(s, &mut doc);
-    let target = duration_s.unwrap_or(doc.timeline.duration_s).max(0.5);
-    let beats = resolve_timeline(&doc.timeline.beats, target, &doc.brief);
-    if beats.is_empty() {
-        return Err("timeline vide".into());
+    if let Some(secs) = duration_s {
+        doc.timeline.beats = resolve_timeline(&doc.timeline.beats, secs, &doc.brief);
+        doc = s
+            .sessions
+            .lock()
+            .unwrap()
+            .illustration_set_timeline(session_id, holder, doc.timeline.clone())
+            .map_err(|e| e.to_string())?;
+    } else if doc.timeline.beats.is_empty() {
+        doc.timeline.beats = action_timeline(&doc.brief, 4.0);
+        doc = s
+            .sessions
+            .lock()
+            .unwrap()
+            .illustration_set_timeline(session_id, holder, doc.timeline.clone())
+            .map_err(|e| e.to_string())?;
     }
-    doc.timeline = IllustrationTimeline {
-        duration_s: target,
-        beats: beats.clone(),
-    };
-    let _ = s
-        .sessions
-        .lock()
-        .unwrap()
-        .illustration_set_timeline(session_id, doc.timeline.clone());
 
+    let w = width.unwrap_or(720);
+    let h = w;
+    // Use a real 24 fps drawing timebase. The previous 12 fps sequence was
+    // only duplicated by ffmpeg, which could not improve motion quality.
+    let fps_draw = 24.0f32;
     let stamp = stamp_ms();
     let frames_logical = default_download_path(
         DownloadKind::Illustration,
         &format!("illust-frames-{}-{}", session_id, stamp),
     );
     let frames_logical = illustration_download_path(&frames_logical);
+
     let host_frames = s
         .fs
         .lock()
@@ -355,32 +358,45 @@ pub fn animate(
         .map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&host_frames).map_err(|e| e.to_string())?;
 
-    let (w, h) = (720u32, 720u32);
-    let engine = doc.brief.engine;
     let mut frame_i = 0u32;
+    let base_cam = doc
+        .spec
+        .as_ref()
+        .map(|sp| sp.camera.clone())
+        .unwrap_or_default();
+    let base_mode = doc
+        .spec
+        .as_ref()
+        .map(|sp| sp.mode)
+        .unwrap_or(IllustrationRenderMode::Normal);
+
+    let frames_total: u32 = doc
+        .timeline
+        .beats
+        .iter()
+        .map(|b| (b.dur_s * fps_draw).round().max(1.0) as u32)
+        .sum::<u32>()
+        .max(1);
+    resolve_photo_host(s, &mut doc);
+    let engine = doc.brief.engine;
+    let sign_word = sign_off_word(&doc.brief);
+    let beats = doc.timeline.beats.clone();
     let mut prev_pose = IllustrationPose::default();
-    let frames_total = (target * 24.0).round().max(1.0) as u32;
+
     for (bi, beat) in beats.iter().enumerate() {
-        let n = ((beat.dur_s * 24.0).round() as u32).max(1);
-        let sign = beat.name == "signoff";
-        let sign_word = if sign {
-            sign_off_word(&doc.brief.locale)
-        } else {
-            String::new()
-        };
-        let look_changed = (prev_pose.look_x - beat.pose.look_x).abs() > 0.08
-            || (prev_pose.look_y - beat.pose.look_y).abs() > 0.08;
-        let cam = beat
-            .camera
-            .clone()
-            .or_else(|| doc.camera.clone())
-            .unwrap_or_default();
-        let mode = beat.mode.unwrap_or(IllustrationRenderMode::Full);
+        let n = (beat.dur_s * fps_draw).round().max(1.0) as u32;
         let key_drawing = doc
-            .key_drawings
-            .iter()
-            .find(|d| d.beat == beat.name)
+            .spec
+            .as_ref()
+            .and_then(|spec| spec.key_drawings.iter().find(|drawing| drawing.id == beat.name))
             .cloned();
+        let mut cam = beat.camera.clone().unwrap_or_else(|| base_cam.clone());
+        if bi == 0 {
+            cam.zoom = (cam.zoom * 1.08).clamp(0.3, 2.5);
+        }
+        let mode = beat.mode.unwrap_or(base_mode);
+        let look_changed = bi > 0 && beat.mode.is_some() && beats[bi - 1].mode != beat.mode;
+        let sign = beat.name == "signoff";
         for k in 0..n {
             let local = (k as f32 + 1.0) / n as f32;
             let pose = lerp_pose(&prev_pose, &beat.pose, ease_io(local));
