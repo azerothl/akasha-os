@@ -199,6 +199,56 @@ impl CognitiveState {
         .collect()
     }
 
+    /// Fixed sequential plan for Illustration surface (no sub-agent fan-out).
+    pub fn canonical_illust_image_plan() -> Vec<TaskNode> {
+        ["Brief image (illust.set_brief)",
+         "Construction et génération (illust.generate_image)",
+         "Suivre les passes (illust.get jusqu'à needs_review)",
+         "Inspection visuelle réelle, corrections si nécessaires, export (illust.export)"]
+        .iter().enumerate().map(|(i, title)| TaskNode {
+            id: (i + 1).to_string(), title: (*title).into(),
+            status: TaskNodeStatus::Pending, notes: String::new(),
+        }).collect()
+    }
+
+    pub fn advance_illust_image_plan(&mut self, tool: &str, outcome: &str) -> bool {
+        let Some(start) = outcome.find('{') else { return false; };
+        let Some(Ok(value)) = serde_json::Deserializer::from_str(&outcome[start..])
+            .into_iter::<serde_json::Value>().next() else { return false; };
+        let doc = value.get("doc").unwrap_or(&value);
+        let Some(node) = self.task_graph.iter().find(|n| matches!(n.status, TaskNodeStatus::Pending | TaskNodeStatus::Running)) else { return false; };
+        let ready = if node.title.starts_with("Brief image") {
+            tool == "illust.set_brief" && doc.get("brief").is_some()
+        } else if node.title.starts_with("Construction et génération") {
+            tool == "illust.generate_image" && doc.pointer("/image_run/id").and_then(|v| v.as_str()).is_some()
+        } else if node.title.starts_with("Suivre les passes") {
+            tool == "illust.get" && doc.pointer("/image_run/status").and_then(|v| v.as_str()) == Some("needs_review")
+                && doc.get("last_png").and_then(|v| v.as_str()).is_some()
+        } else if node.title.starts_with("Inspection visuelle réelle") {
+            // Export is a technical milestone, not proof of artistic quality.
+            tool == "illust.export" && value.get("path").and_then(|v| v.as_str()).is_some()
+        } else { false };
+        ready && self.complete_current_plan_node()
+    }
+
+    pub fn canonical_illust_composition_plan() -> Vec<TaskNode> {
+        [
+            "Brief (illust.set_brief sujet+look)",
+            "Compose (illust.compose / puppet)",
+            "Review (illust.render_sheet + illust.review)",
+            "Export (illust.export)",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, title)| TaskNode {
+            id: (index + 1).to_string(),
+            title: (*title).to_string(),
+            status: TaskNodeStatus::Pending,
+            notes: String::new(),
+        })
+        .collect()
+    }
+
     /// Mark the first Pending/Running plan node Done.
     pub fn complete_current_plan_node(&mut self) -> bool {
         let Some(idx) = self.task_graph.iter().position(|n| {
@@ -403,6 +453,20 @@ fn clip_working_memory_outcome(outcome: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn illustration_image_plan_follows_real_generation_not_poll_count() {
+        let mut state = super::CognitiveState::new("image-test", vec![]);
+        state.set_plan(super::CognitiveState::canonical_illust_image_plan());
+        assert!(!state.task_graph.iter().any(|n| n.title.contains("puppet") || n.title.contains("compose")));
+        assert!(!state.advance_illust_image_plan("illust.get", "{}"));
+        assert!(state.advance_illust_image_plan("illust.set_brief", r#"{"brief":{}}"#));
+        assert!(!state.advance_illust_image_plan("illust.set_brief", r#"{"brief":{}}"#));
+        assert!(!state.advance_illust_image_plan("illust.generate_image", "ERREUR: unavailable"));
+        assert!(state.advance_illust_image_plan("illust.generate_image", r#"{"image_run":{"id":"r","status":"running"}}"#));
+        assert!(!state.advance_illust_image_plan("illust.get", r#"{"doc":{"image_run":{"status":"running"},"last_png":"skeleton.png"}}"#));
+        assert!(!state.advance_illust_image_plan("illust.get", r#"{"doc":{"image_run":{"status":"failed"},"last_png":"skeleton.png"}}"#));
+        assert!(state.advance_illust_image_plan("illust.get", r#"{"doc":{"image_run":{"status":"needs_review"},"last_png":"final.png"}}"#));
+    }
     use super::*;
 
     #[test]
