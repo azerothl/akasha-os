@@ -623,6 +623,7 @@ pub fn activity_toggle_button(ui: &mut Ui, open: bool) -> Response {
 pub enum SessionChromeIcon {
     Salon,
     Canvas,
+    Illustration,
     Deep,
 }
 
@@ -704,6 +705,19 @@ fn paint_session_chrome(ui: &mut Ui, rect: Rect, icon: SessionChromeIcon, color:
                 stroke,
             ));
             painter.circle_filled(c + Vec2::new(w * 0.16, -w * 0.16), w * 0.06, color);
+        }
+        SessionChromeIcon::Illustration => {
+            let frame = Rect::from_center_size(c, Vec2::new(w * 0.62, w * 0.78));
+            painter.rect_stroke(frame, 1.5, stroke, StrokeKind::Middle);
+            painter.add(Shape::line(
+                vec![
+                    Pos2::new(frame.left() + w * 0.12, frame.center().y + w * 0.08),
+                    Pos2::new(frame.center().x - w * 0.05, frame.top() + w * 0.22),
+                    Pos2::new(frame.center().x + w * 0.08, frame.center().y - w * 0.05),
+                    Pos2::new(frame.right() - w * 0.12, frame.bottom() - w * 0.18),
+                ],
+                stroke,
+            ));
         }
         SessionChromeIcon::Deep => {
             // Branching plan (root + two children), not another list of lines.
