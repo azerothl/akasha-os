@@ -21,12 +21,25 @@ jobs:
           TARBALL_SHA256: "94a93e26bc9c3487ef89031fea75df5472d852a4c7a8e6065cf61037735a18ef"
         run: |
           set -euo pipefail
-          PAGE=$(curl -sSL "$TARBALL_PAGE")
-          DL=$(printf '%s' "$PAGE" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'href=\"(https://tmpfiles.org/dl/[^\"]+)\"', html); assert m, 'no dl link in tmpfiles page'); print(m.group(1))")
-          echo "Downloading $DL"
-          curl -sSL "$DL" -o /tmp/pr280-rest.tar.gz
-          echo "$TARBALL_SHA256  /tmp/pr280-rest.tar.gz" | sha256sum -c -
-          tar xzf /tmp/pr280-rest.tar.gz
+          python3 <<'PY'
+          import hashlib, os, re, subprocess, sys, tarfile, urllib.request
+          page_url = os.environ["TARBALL_PAGE"]
+          expect = os.environ["TARBALL_SHA256"]
+          html = urllib.request.urlopen(page_url, timeout=60).read().decode("utf-8", "replace")
+          m = re.search(r'href="(https://tmpfiles.org/dl/[^"]+)"', html)
+          if not m:
+              raise SystemExit("no dl link in tmpfiles page")
+          dl = m.group(1)
+          print("Downloading", dl)
+          data = urllib.request.urlopen(dl, timeout=120).read()
+          got = hashlib.sha256(data).hexdigest()
+          if got != expect:
+              raise SystemExit(f"sha mismatch {got} != {expect}")
+          open("/tmp/pr280-rest.tar.gz", "wb").write(data)
+          with tarfile.open("/tmp/pr280-rest.tar.gz", "r:gz") as tf:
+              tf.extractall(".")
+          print("extracted ok")
+          PY
           rm -f benchmarks/illustration/.pr280-canary benchmarks/illustration/.pr280-push-progress || true
           rm -f .github/workflows/pr280-assemble.yml
           git config user.name "azerothl"
