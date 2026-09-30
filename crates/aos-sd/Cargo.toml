@@ -8,3 +8,14 @@ license.workspace = true
 [dependencies]
 thiserror.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+base64 = "0.22"
+serde.workspace = true
+serde_json.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+
+# Reuse the same planner benchmark without pulling platform/llama CUDA builds.
+[[example]]
+name = "illustration_guided_benchmark"
+path = "../aos-platform/examples/illustration_guided_benchmark.rs"

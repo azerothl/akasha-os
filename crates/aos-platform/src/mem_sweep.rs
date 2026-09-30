@@ -370,6 +370,7 @@ mod tests {
             conductor_policy: aos_proto::ChatRoomConductorPolicy::default(),
             canvas_open: false,
             canvas_aspect: aos_proto::CanvasAspect::default(),
+            illustration_open: false,
         };
         let msgs = vec![ChatSessionMessage {
             role: "user".into(),

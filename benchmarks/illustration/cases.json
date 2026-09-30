@@ -1,0 +1,50 @@
+[
+  {
+    "id": "cat-cushion",
+    "prompt": "un chat endormi sur un coussin, vue trois-quarts, silhouette claire",
+    "look": "pencil",
+    "must_read": ["cat", "cushion", "sleeping"]
+  },
+  {
+    "id": "dog-run",
+    "prompt": "un chien qui court, pattes étendues, oreilles qui flottent",
+    "look": "ink",
+    "must_read": ["dog", "running", "legs"]
+  },
+  {
+    "id": "pipe-garden",
+    "prompt": "un homme âgé assis sur un banc, fumant une pipe dans un jardin fleuri",
+    "look": "pencil",
+    "must_read": ["person", "pipe", "bench", "garden"]
+  },
+  {
+    "id": "elephant-reading",
+    "prompt": "un éléphant qui lit un journal, oreilles et trompe visibles",
+    "look": "riso",
+    "must_read": ["elephant", "trunk", "paper"]
+  },
+  {
+    "id": "bike-rider",
+    "prompt": "une personne à vélo, roues et guidon visibles, mouvement vers la droite",
+    "look": "ink",
+    "must_read": ["person", "bike", "wheels", "direction"]
+  },
+  {
+    "id": "two-subjects",
+    "prompt": "un chat sur la gauche observe un chien sur la droite devant une maison",
+    "look": "screen",
+    "must_read": ["cat", "dog", "house", "left-right relation"]
+  },
+  {
+    "id": "gardener-armchair",
+    "prompt": "un vieux jardinier fumant la pipe dans un fauteuil regardant son jardin",
+    "look": "pencil",
+    "must_read": ["old gardener", "pipe", "armchair", "garden", "looking relation"]
+  },
+  {
+    "id": "cat-jump-lie",
+    "prompt": "un chat saute sur un canapé et se couche",
+    "look": "ink",
+    "must_read": ["cat", "jump", "sofa", "lying final pose"]
+  }
+]

@@ -2326,6 +2326,7 @@ mod tests {
             conductor_policy: Default::default(),
             canvas_open: false,
             canvas_aspect: aos_proto::CanvasAspect::Square,
+            illustration_open: false,
         };
         assert!(session_is_room(Some(&meta)));
     }

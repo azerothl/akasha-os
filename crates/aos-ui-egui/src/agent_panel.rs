@@ -726,6 +726,17 @@ pub fn format_streaming_preview(raw: &str) -> String {
     if !looks_like_action_json(raw) {
         return raw.to_string();
     }
+    // Truncated streams can be repaired into a full AgentAction for execution,
+    // but the raw buffer still contains unfinished JSON that would leak into
+    // the chat preview via prose_without_json. Prefer thought-only until the
+    // envelope parses as complete JSON.
+    let trimmed = raw.trim();
+    if serde_json::from_str::<serde_json::Value>(trimmed).is_err() {
+        if let Some(thought) = extract_partial_json_string(raw, "thought") {
+            return format!("_{thought}_");
+        }
+        return "…".into();
+    }
     if let Some(action) = aos_agent::actions::parse_action(raw) {
         return format_action_as_markdown(&action, &prose_without_json(raw));
     }

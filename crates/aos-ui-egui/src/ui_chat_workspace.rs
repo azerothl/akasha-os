@@ -43,6 +43,12 @@ impl UiApp {
                 )
                 .map(|m| m.canvas_open)
                 .unwrap_or(false);
+                let illustration_open = chat_room::active_session_meta(
+                    &self.chat_state.sessions,
+                    self.chat_state.active_session.as_deref(),
+                )
+                .map(|m| m.illustration_open)
+                .unwrap_or(false);
                 let canvas_aspect = chat_room::active_session_meta(
                     &self.chat_state.sessions,
                     self.chat_state.active_session.as_deref(),
@@ -68,15 +74,32 @@ impl UiApp {
                     show_vision_banner,
                 ) + (chat_composer_input_height(&self.chat_state.composer.input)
                     - 44.0);
-                let pane_h = ui.available_height();
-                let body_h = (pane_h - composer_h).max(120.0);
 
-                ui.allocate_ui_with_layout(
-                    egui::vec2(ui.available_width(), body_h),
-                    egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
-                    |ui| {
-                        self.ui_session_bar(ui, t);
-                        let content_h = ui.available_height().max(80.0);
+                // Composer first (bottom-up) so Illustration/Canvas overflow cannot push it under the status bar.
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+                    ui.set_min_width(chat_w);
+                    ui.set_max_width(chat_w);
+                    self.ui_chat_composer(
+                        ui,
+                        ChatComposerContext {
+                            strings: t,
+                            room_mode,
+                            room_members: &room_members,
+                            ask_queue: &ask_queue,
+                            height: composer_h,
+                            show_vision_banner,
+                            chat_width: chat_w,
+                        },
+                    );
+                    let body_h = ui.available_height().max(120.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width(), body_h),
+                        egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                        |ui| {
+                            ui.set_max_height(body_h);
+                            ui.set_clip_rect(ui.max_rect());
+                            self.ui_session_bar(ui, t);
+                            let content_h = ui.available_height().max(80.0);
 
                         if canvas_open {
                             let split_gap = 8.0_f32;
@@ -88,11 +111,14 @@ impl UiApp {
                                 } => {
                                     ui.horizontal(|ui| {
                                         ui.set_min_height(content_h);
+                                        ui.set_max_height(content_h);
+                                        ui.set_clip_rect(ui.max_rect());
                                         ui.allocate_ui_with_layout(
                                             egui::vec2(transcript_w, content_h),
                                             egui::Layout::top_down(egui::Align::Min)
                                                 .with_cross_justify(true),
                                             |ui| {
+                                                ui.set_max_height(content_h);
                                                 self.ui_chat_transcript(
                                                     ui,
                                                     t,
@@ -108,6 +134,7 @@ impl UiApp {
                                             egui::Layout::top_down(egui::Align::Min)
                                                 .with_cross_justify(true),
                                             |ui| {
+                                                ui.set_max_height(content_h);
                                                 if let Some(ref sid) = active_sid {
                                                     self.ui_canvas_tools_above_surface(ui, t, sid);
                                                     let aspect_action =
@@ -195,6 +222,80 @@ impl UiApp {
                                     );
                                 }
                             }
+                        } else if illustration_open {
+                            let split_gap = 8.0_f32;
+                            let total_w = ui.available_width();
+                            match chat_canvas_layout(total_w, content_h, split_gap) {
+                                ChatCanvasLayout::SideBySide {
+                                    transcript_w,
+                                    canvas_w,
+                                } => {
+                                    ui.horizontal(|ui| {
+                                        ui.set_min_height(content_h);
+                                        ui.set_max_height(content_h);
+                                        ui.set_clip_rect(ui.max_rect());
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(transcript_w, content_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                ui.set_max_height(content_h);
+                                                self.ui_chat_transcript(
+                                                    ui,
+                                                    t,
+                                                    room_mode,
+                                                    &room_members,
+                                                    room_conductor_policy.as_ref(),
+                                                );
+                                            },
+                                        );
+                                        ui.add_space(split_gap);
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(canvas_w, content_h),
+                                            egui::Layout::top_down(egui::Align::Min)
+                                                .with_cross_justify(true),
+                                            |ui| {
+                                                ui.set_max_height(content_h);
+                                                if let Some(ref sid) = active_sid {
+                                                    self.illust_poll_if_due(ui, sid);
+                                                    self.ui_illustration_panel(ui, t, sid);
+                                                }
+                                            },
+                                        );
+                                    });
+                                }
+                                ChatCanvasLayout::Stacked {
+                                    transcript_h,
+                                    canvas_h,
+                                } => {
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(total_w, transcript_h),
+                                        egui::Layout::top_down(egui::Align::Min)
+                                            .with_cross_justify(true),
+                                        |ui| {
+                                            self.ui_chat_transcript(
+                                                ui,
+                                                t,
+                                                room_mode,
+                                                &room_members,
+                                                room_conductor_policy.as_ref(),
+                                            );
+                                        },
+                                    );
+                                    ui.add_space(split_gap);
+                                    ui.allocate_ui_with_layout(
+                                        egui::vec2(total_w, canvas_h),
+                                        egui::Layout::top_down(egui::Align::Min)
+                                            .with_cross_justify(true),
+                                        |ui| {
+                                            if let Some(ref sid) = active_sid {
+                                                self.illust_poll_if_due(ui, sid);
+                                                self.ui_illustration_panel(ui, t, sid);
+                                            }
+                                        },
+                                    );
+                                }
+                            }
                         } else {
                             self.ui_chat_transcript(
                                 ui,
@@ -204,21 +305,9 @@ impl UiApp {
                                 room_conductor_policy.as_ref(),
                             );
                         }
-                    },
-                );
-
-                self.ui_chat_composer(
-                    ui,
-                    ChatComposerContext {
-                        strings: t,
-                        room_mode,
-                        room_members: &room_members,
-                        ask_queue: &ask_queue,
-                        height: composer_h,
-                        show_vision_banner,
-                        chat_width: chat_w,
-                    },
-                );
+                        },
+                    );
+                });
             },
         );
     }
