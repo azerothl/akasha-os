@@ -1,1 +1,1 @@
-$file:/tmp/akasha-os/crates/aos-ui-egui/src/agent_panel.rs
+PLACEHOLDER_LOAD_FROM_DISK
