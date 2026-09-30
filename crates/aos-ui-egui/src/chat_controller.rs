@@ -1,1 +1,1 @@
-FILE:/tmp/akasha-os/crates/aos-ui-egui/src/chat_controller.rs
+$file:/tmp/akasha-os/crates/aos-ui-egui/src/chat_controller.rs
