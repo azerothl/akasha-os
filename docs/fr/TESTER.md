@@ -1,0 +1,435 @@
+# Protocole testeur — Akasha OS Preview 0.18.0
+
+**Langue :** [English](../TESTER.md) | Français
+
+> Date : 15/09/2026 · Preview **0.18.0**
+
+Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
+repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
+Catalogue : [FEATURES.md](FEATURES.md). Lieu de rencontre :
+[community.md](community.md) (Discussions GitHub — pas de Discord pour
+l’instant).
+
+**Canonique** — chapitre chemin court sur le site :
+[azerothl.github.io/akasha-os/docs/feedback.html](https://azerothl.github.io/akasha-os/docs/feedback.html?lang=fr).
+Ce fichier garde le même chemin court plus la checklist équipe longue pour
+les archives Release. Carte : [SITE-MANUAL.md](SITE-MANUAL.md).
+
+**Gate cohorte :** 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon
+suivent le [chemin court](#chemin-court-15-minutes) sans toolchain Rust ;
+chacun laisse un `var/feedback/fb-*.json` exploitable (et de préférence une
+issue GitHub). Le protocole long ci-dessous reste la checklist équipe pour
+PC.6–PC.9 et PC.11–PC.13.
+
+## Chemin court (15 minutes)
+
+Cela suffit pour compter dans la gate cohorte. Sautez ce que votre matériel
+ne permet pas, et dites-le dans le rapport.
+
+1. Installer depuis les
+   [GitHub Releases](https://github.com/azerothl/akasha-os/releases) —
+   `install.ps1` (Windows) ou `./install.sh` (Linux / macOS Apple Silicon).
+   Les builds macOS ne sont pas signés ; Gatekeeper avertira. Pas d’Intel Mac.
+2. Lancer **Akasha OS Preview**. Terminer le **choix des modèles** et le
+   **tutoriel** (4 étapes).
+3. Onglet **Chat**, réseau encore off : demander « Qu’est-ce qu’Akasha OS ? »
+   et attendre une réponse streamée.
+4. Onglet **Notes** : titre + corps → **Créer**, puis **Rafraîchir**.
+5. Onglet **Feedback** : titre, catégorie, corps → **Send feedback**. Laisser
+   **Create a GitHub issue** coché (sauf security). Confirmer Submit sur
+   GitHub si vous avez un compte.
+
+Optionnel : un
+[check-in en Discussion](https://github.com/azerothl/akasha-os/discussions)
+(OS, GPU ou CPU, chat et notes OK ou non). Puis arrêtez-vous, ou continuez
+avec les étapes ci-dessous.
+
+## Avant de commencer
+
+- Windows 10/11 x64, Linux x64, ou macOS Apple Silicon (pas Intel Mac)
+- NVIDIA recommandé sous Windows/Linux ; le chemin CPU-only dans la même
+  archive Win/Linux est OK (plus lent). macOS utilise Metal + CPU.
+- Installation : voir [INSTALL.md](INSTALL.md)
+- **Linux x64 :** si l’UI quitte tout de suite ou panic sur
+  `libxkbcommon-x11.so`, installer `libxkbcommon-x11-0` (distros minimales et
+  hôtes smoke Xvfb). Voir INSTALL.md § bibliothèques bureau Linux.
+- Lancer **Akasha OS Preview** (`aos-session`)
+
+Bannière attendue : Preview sur l’OS hôte — ce n’est pas encore l’OS bootable.
+
+## Étapes (également dans l'onglet Scénarios)
+
+### 1. Chat offline
+
+- Terminer le **choix des modèles** (1er run) et le **tutoriel** (4 étapes).
+- Onglet **Chat** : poser une question (ex. « Qu'est-ce qu'Akasha OS ? »).
+- Combo **modèle de session** optionnel (onglet Models liste les offerings).
+- Vérifier une réponse streamée **sans réseau**.
+- Après une réponse, la barre latérale / **Models** doit afficher **TTFT** et **tok/s** (et VRAM sur GPU).
+- Après un **deuxième** tour qui réutilise le même long contexte, le TTFT doit
+  baisser vs un prefill à froid (prefix cache E20). Des métriques **draft** /
+  **préfixe** optionnelles peuvent apparaître (prompts type RAG / citation /
+  patch).
+
+### 1b. Onglet Models
+
+- Ouvrir **Models** : voir les entrées installées, **Download** une alternative si proposée.
+- Bandeau « Models: … » si de nouveaux offerings correspondent au tier VRAM.
+- Confirmer les métriques live pour le modèle chargé.
+
+### 1c. CPU-only (optionnel)
+
+- Sur une machine sans NVIDIA, ou avec Settings → Inférence → **CPU only** :
+  migrate **in-process** (la réponse live continue ; pas de tour cancelled).
+  `aos-modeld-cpu` seulement sans NVIDIA. Le pin GPU exige NVIDIA.
+
+### 2. Note humaine
+
+- Onglet **Notes** → titre + contenu → **Créer**, puis **Rafraîchir**.
+
+### 2b. Tasks (dual-surface)
+
+- Onglet **Tasks** → créer une tâche.
+- Lancer un agent avec les outils incluant `tasks.list` — il doit voir la même tâche.
+- Optionnel : demander à l'agent un `tasks.create` ; rafraîchir l'onglet Tasks.
+
+### 3. Note via agent
+
+- Onglet **Agents** → créer un agent avec une tâche du type
+  « crée une note intitulée cohorte avec le contenu hello ».
+- L'agent utilise la convention `TOOL:` côté modèle.
+
+### 4. Confirmation sensible
+
+- Lorsqu'une confirmation apparaît en bandeau (action sensible) :
+  **Refuser** une fois, puis **Accepter** une autre (ou la même rejouée).
+- Fail-closed : timeout = refus.
+
+### 5. Audit + caps + kill auditd
+
+- Onglet **Audit** → **Rafraîchir** (événements signés).
+- Onglet **Caps** : charger le détenteur `agent:<id>` pour un agent actif → voir les caps → **Révoquer** une cap non critique → confirmer une ligne d'audit.
+- **Tuer aos-auditd** : le chat doit continuer ; le superviseur
+  redémarre auditd en arrière-plan.
+
+### 5b. Scheduler
+
+- **Settings** → Schedules : créer un schedule avec intervalle **60s** et un goal court.
+- Attendre un fire : un nouvel agent doit apparaître ; annuler le schedule pour qu'il ne fire plus.
+
+### 6. Sessions parallèles (PC.6)
+
+- Panneau **Sessions** (Chat) : créer 3 sessions, chatter dans chacune.
+- Redémarrer Preview : les historiques doivent réapparaître.
+
+### 7. Mémoire (PC.7 / P04)
+
+- Onglet **Mémoire** : mémoriser « je préfère le français », **Lister**, puis
+  « je préfère l'anglais ».
+- Attendre un auto-lien (`supersedes` / `updates`) ; **Recall** doit préférer l'anglais.
+- Éditer / supprimer / superséder ; cocher « Afficher supersédés ».
+- Retour Chat : le prochain message doit utiliser ce contexte (`mem.context`).
+
+### 7b. Coffre secrets (P04.3)
+
+- **Settings → Secrets** : saisir une clé Brave (ou GitHub) → **Enregistrer**.
+- Le magasin live est `vault.enc` (pas de YAML clair) ; **Lister** ne montre que les noms.
+- Après first-run, `var/secrets/master.backend` vaut `keyring` ou `file`. Si
+  `keyring`, `master.key` doit être absent.
+
+### 7c. Revue de caps module (P04.4)
+
+- Install sans `approved_caps` → confirmation listant les caps.
+- **Accepter** → caps accordées ; **Refuser** → quarantaine / caps vides.
+
+### 7d. Mémorisation auto depuis le chat (P05 / E14)
+
+- **Settings** : **Mémorisation auto depuis le chat** est **activée** par défaut (décocher pour désactiver).
+- Dans Chat, dire un fait durable ex. « Je préfère le français pour l’UI ».
+- Après la réponse, le statut mentionne des fait(s) mémorisé(s) ; **Mémoire → Lister**
+  affiche le fait avec un badge **`[chat]`**.
+- Dire le contraire (« Je préfère l’anglais ») ; attendre auto-lien / `supersedes`.
+- Coller une fausse clé (`sk-abcdefghijklmnopqrstuvwxyz1234` ou `ghp_…`) :
+  elle ne doit **pas** apparaître comme fait (audit peut montrer `filtered`).
+- Remettre l’option **off** : les tours suivants ne doivent plus écrire de faits.
+
+### 7e. L’agent interroge l’utilisateur (`user.ask`)
+
+- Lancer `/agent` avec une tâche qui demande une préférence (format, nom, choix).
+- Quand l’agent pose une question, le placeholder devient « répondez à la
+  question de l’agent » ; répondre dans le même fil (ou **Répondre** sur la
+  carte s’il y en a plusieurs).
+- L’agent reprend avec la réponse. Sans réponse ~10 min, la tâche continue
+  (pas de blocage infini).
+
+### 7f. Keyring OS (P06.3)
+
+- Après Settings → Secrets **Enregistrer**, redémarrer : la clé fonctionne encore.
+- `var/secrets/master.backend` vaut `keyring` ou `file`. Sous Windows, attendre
+  `keyring` et pas de `master.key` lisible.
+
+### 7g. Catalogue local signé (P06.4)
+
+- **Settings → Catalogue local de modules** : notes / tasks / ext-rt listés.
+- **Installer** un module listé → confirmation de revue de caps (comme 7c).
+- Altérer un WASM packagé tout en gardant l'entrée catalogue doit refuser.
+
+Source extra optionnelle (index Git E10, désactivée par défaut) :
+
+- Activer **Catalogue communautaire**, puis **Récupérer l’index communautaire**.
+- `morning-brief` est étiqueté communauté. Installer → même revue de caps
+  (caps vides = pas de dialogue). Une mauvaise signature doit refuser,
+  pas installer en silence.
+- Après un fetch réussi, couper le réseau : l’index en cache liste encore.
+  Politique : [ADR 0007](../../adr/0007-signed-git-catalogue.md).
+
+### 7h. Stop chat + Copier (P06.5)
+
+- Pendant un stream, **Stop** interrompt la génération.
+- **Copier** sur un message (ou le corps Dépannage / Retour) met le texte dans le presse-papiers.
+
+### 8. Recherche web (PC.8 / PC.13)
+
+- Case **Autoriser le réseau** (barre latérale) **désactivée** → **Rechercher**
+  doit échouer (`offline_strict`).
+- Activer le réseau → recherche (ex. « Akasha OS seL4 ») → résultats titre/URL.
+- Settings → moteur : essayer `auto`, puis forcer `duckduckgo` ou `bing`.
+- (Optionnel) clé Brave via **Settings → Secrets** (vault chiffré), pas un fichier clair.
+  L'ancien `var/secrets/keys.yaml` est migré au boot.
+
+### 8b. Parcourir une page (PC.13)
+
+- Réseau ON : coller une URL → **Parcourir** (`web.browse`).
+- Attendre titre + texte extrait (sans JavaScript). SPA / apps hydratées /
+  murs anti-bot restent vides — MCP navigateur headless optionnel dans
+  `var/mcp/servers.yaml` ([FEATURES.md](FEATURES.md) §7). Comparer avec
+  **Télécharger URL** (`net.fetch`), qui enregistre le fichier brut sous
+  `/downloads`.
+
+### 9. Téléchargement + génération fichiers (PC.9)
+
+- Avec réseau ON : coller une URL image → **Télécharger URL** → fichier sous
+  `/downloads` (`var/storage/data/downloads/`).
+- **Générer fichier** : format `pdf` ou `png`, chemin `/downloads/test.pdf`,
+  contenu texte → **Ouvrir downloads**.
+
+### 10. Retour depuis l'UI
+
+- Onglet **Retour** (ou bouton **Signaler**) :
+  - titre, catégorie (bug / ux / perf / security), sévérité, texte
+  - case **Créer une issue GitHub** (cochée par défaut, sauf security)
+  - **Envoyer le retour**
+- Une copie locale est écrite dans `var/feedback/`.
+- Une issue (ou le formulaire GitHub prérempli) s'ouvre sur
+  [azerothl/akasha-os](https://github.com/azerothl/akasha-os/issues).
+  Avec un compte GitHub, validez **Submit new issue**.
+
+Les rapports **security** ne sont **pas** publiés.
+
+**Aucun envoi réseau automatique** (hors actions explicites : PC.8–9, browse,
+et envoi de retour GitHub).
+
+### 11. Settings (PC.12)
+
+- **Settings** : basculer en ↔ fr ; changer le modèle agent / max steps.
+- Redémarrer Preview : les préférences dans `var/run/preferences.json` doivent
+  persister.
+
+### 12. Transparence agent (PC.11)
+
+- Lancer un agent (onglet Agents ou `/agent` dans le Chat) avec une tâche courte.
+- Ouvrir **Détail** : timeline, sources si recherche/browse, Pause puis Reprendre
+  (ou Steer une nouvelle directive).
+- Une tâche complexe affiche le badge **complex** (`task.assess`) et peut
+  spawner un sous-agent (planner).
+
+### 15. Créer un module par agent (0.7.0 / E15)
+
+Guide testeur (sans cargo) : [write-a-module.md](write-a-module.md).
+
+- Onglet **Scénarios** → **Lancer un agent : créer le module cohortmod**
+  (ou Chat : « crée un module ping » — Preview lance un agent même si le
+  modèle dump du JSON d’UI ; ou Agents / `/agent` : scaffold + package + install).
+- Accepter la **revue de caps** pour `module.install` si demandée (comme 7c).
+- Après l'agent, un nouvel onglet **Modules → cohortmod** apparaît
+  (pas `notes` / `tasks` / `ext-rt`).
+- L'ouvrir : heading, formulaire ou bouton, table liée à l'outil principal.
+- Soumettre une fois ; le résultat doit se rafraîchir. Cocher le scénario.
+
+### 14. UI de module déclarative (0.7.0 / E15)
+
+- Via **Scénarios** ou Chat (pas Settings) : faire exécuter par l’agent
+  `module.scaffold` (script), puis `module.package` et `module.install` avec
+  revue de caps. Settings → **Catalogue local de modules** n’installe que les
+  paquets listés — il ne scaffold pas.
+- Après install, un nouvel onglet sous **Modules** doit apparaître (pas pour
+  `notes`, `tasks` ou `ext-rt`).
+- Ouvrir l’onglet : heading, formulaire ou bouton, et table liée au résultat
+  de l’outil principal.
+- Soumettre le formulaire ou cliquer le bouton : revue de caps si demandée ;
+  le résultat doit se rafraîchir dans l’UI.
+- **Refresh** recharge les outils bind ; un `ui/index.html` invalide affiche
+  une bannière d’erreur (pas de widgets partiels).
+
+### 13. Notes après update + Dépannage (0.2.0)
+
+- Après une install par-dessus une Preview précédente, ouvrir **Notes**, créer
+  une note, puis la relire depuis la liste. Le WASM empaqueté doit correspondre
+  à cette release.
+- **Dépannage** (Aide / barre latérale) : collecte un diagnostic (NVIDIA, home,
+  logs). S'il y a des anomalies, un rapport GitHub peut s'ouvrir.
+
+### 16. Désinstaller un module (0.8.0)
+
+- Scaffold + install d’un module non bundlé.
+- **Settings → Catalogue local de modules → Modules installés** : désinstaller
+  les apps préinstallées (`tasks`, `notes`, …) ou un module installé via agent ;
+  confirmer. Onglet et caps `tool.invoke:<name>` disparus ; ligne d’audit.
+  Réinstaller marche encore.
+
+### 17–20. Widgets E15, Providers, image/TTS, one-liner
+
+- Widgets `select` / `checkbox` / `bar_chart` ; kind inconnu = bannière d’erreur.
+- Onglet **Providers** : loopback OK en `local_only` ; cloud = réseau + balanced.
+- **Models** → Download `Stable Diffusion 1.5` / une voix Piper : le même
+  téléchargement installe le **moteur** (`bin/sd.exe` / `bin/piper.exe`) s’il
+  manque. Redémarrer Preview. Chat `/image` → PNG ; bouton **Ouvrir dans le studio**.
+  `/speak` ouvre une **carte TTS** (voix + knobs) puis Generate → WAV. Stub si pack
+  ou moteur absent.
+- One-liner : `irm …/install.ps1 | iex` ou `curl …/install.sh | sh` (sha256 fail-closed).
+
+### 21–22. Migrate mid-token + packs extra (0.9.0)
+
+- Longue complétion ; bascule Settings gpu↔cpu : la réponse continue (pas de Stop).
+- Catalogue `local:flux2` / `local:ideogram4` / `local:piper-en-gb` ; Settings pack/voix par défaut.
+- Studio Image : steps/taille/sampler ; clé d’option inconnue refusée.
+
+### 24–26. Profondeur studio + TPM / bridge + polish 0.10.1
+
+- Studio Image : blocs **composition** qui se chevauchent → injection dans le prompt ; option **Upscale** RealESRGAN après Download du pack.
+- Wan/LTX = expérimental (pas requis pour la cohorte).
+- `var/secrets/master.backend` peut être `tpm` seulement si la clé a été scellée via Platform Crypto (blob `TPM2`) ; la seule présence d’un TPM ne suffit pas. Sinon `keyring` / `file`.
+- Optionnel : `aos-bridged` depuis `bin/` en loopback ; health + `mem.context` / `mem.stats` / `mem.list` OK ; `secrets.get` avec from agent → 403. Smoke : `.\demo\smoke-bridge.ps1`.
+- Optionnel (0.18.0) : CLI `codex` / `claude` / `grok` dans le PATH → agent avec **Runtime** ≠ Native ou outil `harness.run` ; act-gate au 1er spawn ; Steer / Pause / Kill ([harness.md](harness.md)).
+- Optionnel (0.18.0) : Preview lancé → client MCP vers `bin/aos-mcpd` ; `akasha_models` / `akasha_mem_stats` OK ([mcp-server.md](mcp-server.md), `share/mcp/akasha-mcp.example.json`).
+- Settings : **Télécharger les mises à jour automatiquement** (off par défaut) → `pending.json` + bandeau « relancer ».
+- Studio : **Partir d'une image** + force → Generate (img2img). Inpaint/mask non requis.
+
+### 27. Decode local (0.11.0 / E20)
+
+- Après un **deuxième** tour de chat qui réutilise le même long contexte, le TTFT (Models / barre) doit baisser vs le premier tour à froid.
+- Des métriques **draft** / **préfixe** optionnelles peuvent apparaître quand le prompt-lookup se déclenche.
+- Les tokens streamés restent exacts (même sampler). Batch / multi-agents N>1 stream encore.
+
+### 31. Studio Illustration (expérimental, optionnel)
+
+Hors chemin court de cohorte. Disponible via le catalogue local embarqué dans les zips Preview **Windows, Linux et macOS**. Catalogue honnête : [FEATURES.md §4c](FEATURES.md#4c-studio-illustration-module-expérimental). Spec produit (**Draft v0.1**, SoT d’intention — pas une promesse de livraison) : [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../../modules/illustration-studio/docs/akasha-illustration-studio-spec.md).
+
+- **Paramètres → Catalogue local de modules** : trouver **`illustration-studio`** (**0.7.23**, selon le catalogue embarqué) → **Installer** → accepter la revue de caps.
+- Ouvrir l’onglet DeclUI **Studio Illustration**. Confirmer le tip Compose → Éditer → Beauté ; le chrome hôte sur la vue 3D affiche le titre **Fenêtre d’édition** et le suffixe **pas beauté** (EN : **edit view · not beauty**).
+- Composer une courte invite EN ou FR (ex. librairie / bibliothèque). Attendre des proxys MeshBox via **heuristiques mots-clés** — pas un planner SceneIntent LLM.
+- Orbite / sélection / Déplacer·Rotation·Échelle ; confirmer bandeau TRS + Annuler/Rétablir. Lancer **Beauté CPU** et/ou **Beauté stub** → PNG sous `/documents/illustrations/`.
+- **Beauté Blender** : sans Renderer Pack + binaire Blender, attendre le **mock déterministe** (chemin `render.blender` réel). Ne pas supposer que Blender GPL est dans le zip Preview.
+- **Assist mesh** : le stub procédural fonctionne ; le neural sans Model Pack reste fail-closed / mock fixture.
+- **Packs locaux** : lister les packs — hors-ligne seulement ; le fetch marketplace distant doit refuser.
+
+### 30. USB I/O (0.16.2 / issue #137)
+
+- Sous **Windows 10/11**, brancher un adaptateur USB-série et vérifier que
+  `device.usb.enumerate` liste des entrées `win:Serial:*`.
+- Confirmer la bannière Akasha (USB · une fois / toujours / refuser) avant
+  `device.usb.open`. Ouvrir, lire, écrire, fermer ; l’Audit ne doit pas contenir
+  d’octets bruts. Révoquer `device.usb.io` dans Caps et vérifier la fermeture
+  des handles.
+- Sous Linux/macOS, brancher un adaptateur USB-série et vérifier que
+  `device.usb.enumerate` liste des entrées `linux:Serial:*` ou `macos:Serial:*`
+  (liste vide acceptable sans matériel ; ne doit pas renvoyer
+  `UnsupportedPlatform`).
+
+### 29. Shell calme et navigation des sessions (0.16.1)
+
+- Dans Paramètres → Moi, basculer Confortable / Compact : les contrôles restent
+  au moins 36 px / 32 px et la largeur du rail change. Revenir à Confortable.
+- Dans Chat, rechercher une session par titre (casse mixte). Vérifier les groupes
+  Aujourd’hui / Hier / 7 derniers jours / Plus ancien, épingler une session,
+  l’archiver, la restaurer depuis Archives, et confirmer que la suppression
+  définitive n’est proposée que là.
+- Saisir un prompt sur deux lignes avec Maj+Entrée puis Entrée pour envoyer.
+  Basculer le focus Canvas ; ouvrir Activité et le centre de notifications
+  depuis la cloche.
+
+### 28. Canvas et contrôles d’inférence (0.16.0)
+
+- Ouvrir Canvas depuis Chat. Basculer la grille et l’aimantation ; créer deux
+  calques, en renommer un, le masquer/afficher, le verrouiller et changer son opacité.
+- Dessiner puis sélectionner des formes ; en déplacer, aligner, tourner,
+  restyler et supprimer une. Exporter en PNG, SVG et JSON, puis importer le
+  sidecar JSON et vérifier que la scène revient.
+- Avec un modèle de session texte seul, demander « dessine un cube sur le
+  canvas ». L’agent doit lire la scène d’abord, respecter son plan borné et
+  produire un retour géométrique global si la topologie du cube est incomplète.
+- Dans `etc/modeld.yaml`, tester `auto`/`on`/`off` pour le cache de préfixe et
+  la spéculation, ainsi que le batching adaptatif, en redémarrant la Preview
+  entre les configurations. Les métriques Modèles/barre doivent montrer le mode
+  réellement sélectionné ; rétablir `auto` après la comparaison.
+
+## Parcours utilisateur automatisés (équipe)
+
+Sur une machine de release avec poids SD/LTX réels, lancer la suite bus
+(sessions + image/vidéo + redémarrage + captures site optionnelles) :
+
+```powershell
+.\demo\run-user-journeys.ps1 -Screenshots
+```
+
+Détails, fixtures et checklist UI manuelle courte :
+[USER-JOURNEYS.md](../USER-JOURNEYS.md). Cela **ne remplace pas** le chemin
+court cohorte ci-dessus.
+
+## Critères de succès (équipe)
+
+- **Gate :** 3 testeurs Windows + 1 Linux + 1 macOS Apple Silicon suivent le
+  **chemin court** sans toolchain Rust
+- Au moins un fichier `var/feedback/fb-*.json` exploitable par retour
+- Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine (protocole
+  long ; pas exigé de chaque testeur)
+
+## Hors scope Preview 0.18.0
+
+- Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
+- Intel Mac
+- Modèle 32B dans l'installeur
+- UI vidéo produit / STT / voix permanente
+- Marketplace public / canaux messagerie / hard-green multi-GPU sans 2e GPU
+- kind `webview`
+### Capture caméra / micro (issue #137)
+
+- Sous **Windows 10/11**, vérifier que `device.enumerate` détecte une caméra et
+  un micro.
+- Sous **Linux**, vérifier que les caméras V4L2 et les entrées cpal apparaissent
+  quand le matériel est présent.
+- Sous **macOS**, vérifier AVFoundation et CoreAudio après accord Camera/Micro
+  dans Réglages système.
+- Confirmer dans Akasha avant d’accepter la permission OS ; tester
+  `Autoriser une fois`, `Toujours`, `Refuser` et la révocation du périphérique
+  exact dans Caps.
+- Démarrer un flux, utiliser le contrôle visible **Arrêter**, puis vérifier
+  l’arrêt et les événements Audit sans octets média.
+- Vérifier que l’artefact reste sous
+  `var/sessions/<session>/devices/` et que les erreurs absent/occupé/refus/quota
+  sont lisibles.
+- Sous Linux/macOS CI, vérifier le backend factice et que le backend hôte
+  énumère sans `UnsupportedPlatform` (la capture matérielle reste manuelle).
+
+### USB I/O (issue #137, tranche 3)
+
+- Sous **Windows 10/11**, brancher un adaptateur USB-série et vérifier que
+  `device.usb.enumerate` liste des entrées `win:Serial:*`.
+- Confirmer la bannière Akasha (USB · une fois / toujours /
+  refuser) avant `device.usb.open`.
+- Ouvrir, lire, écrire, fermer ; vérifier l’Audit (requête/ouverture/lecture/
+  écriture/fermeture) sans octets bruts.
+- Révoquer `device.usb.io` dans Caps et vérifier la fermeture des handles.
+- Sous Linux/macOS, vérifier que `device.usb.enumerate` ne renvoie pas
+  `UnsupportedPlatform` (liste les ports série si matériel présent ; les tests CI
+  du backend factice passent toujours).

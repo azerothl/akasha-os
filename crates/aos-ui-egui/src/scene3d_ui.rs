@@ -510,7 +510,7 @@ pub fn ui_scene3d(
         ui.label(egui::RichText::new(title).strong());
         ui.label(
             egui::RichText::new(if language.starts_with("fr") {
-                "édition · pas beauté"
+                "pas beauté"
             } else {
                 "edit view · not beauty"
             })

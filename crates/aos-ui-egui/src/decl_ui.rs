@@ -630,7 +630,7 @@ impl DeclUiPanelState {
             }
             "text" => {
                 if let Some(t) = widget_text(w, doc, language) {
-                    ui.label(t);
+                    ui.add(egui::Label::new(t).wrap());
                 }
             }
             "markdown" => {
@@ -1375,11 +1375,11 @@ impl DeclUiPanelState {
             }
             "illustration_work_split" => {
                 if let Some(children) = w.children.as_ref().filter(|children| children.len() == 2) {
-                    let ratio = w.split_ratio.unwrap_or(0.34).clamp(0.1, 0.9);
+                    let ratio = w.split_ratio.unwrap_or(0.34);
                     let available = ui.available_size();
                     let (frame, _) = ui.allocate_exact_size(available, egui::Sense::hover());
                     let gap = crate::theme::SPACE_UNIT;
-                    let left_width = ((frame.width() - gap) * ratio).max(1.0);
+                    let left_width = illustration_work_split_left_width(frame.width(), gap, ratio);
                     let left = egui::Rect::from_min_size(frame.min, egui::vec2(left_width, frame.height()));
                     let right = egui::Rect::from_min_max(
                         egui::pos2(left.right() + gap, frame.top()), frame.max,
@@ -3099,7 +3099,7 @@ fn render_choice(
                 }
             };
             if w.inline.unwrap_or(false) {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if has_explicit_label {
                         ui.label(&label);
                     }
@@ -3171,7 +3171,7 @@ fn render_choice(
             });
         };
         if w.inline.unwrap_or(false) {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if has_explicit_label {
                     let response = ui.label(&label);
                     if let Some(tip) = tooltip.as_deref() {
@@ -4425,6 +4425,19 @@ fn render_node_at(local_state: &HashMap<String, Value>, x: f32, y: f32) -> Optio
     index.checked_sub(1).and_then(|index| nodes.get(index))?.as_str().map(str::to_string)
 }
 
+/// Minimum left-rail width for Illustration Studio `illustration_work_split` (#427).
+const ILLUSTRATION_WORK_SPLIT_LEFT_MIN: f32 = 460.0;
+/// Minimum width reserved for the stage viewport in the same split.
+const ILLUSTRATION_WORK_SPLIT_RIGHT_MIN: f32 = 280.0;
+
+fn illustration_work_split_left_width(frame_width: f32, gap: f32, ratio: f32) -> f32 {
+    let ratio = ratio.clamp(0.1, 0.9);
+    let usable = (frame_width - gap).max(1.0);
+    let by_ratio = usable * ratio;
+    let max_left = (usable - ILLUSTRATION_WORK_SPLIT_RIGHT_MIN).max(1.0);
+    by_ratio.max(ILLUSTRATION_WORK_SPLIT_LEFT_MIN).min(max_left)
+}
+
 fn comic_panel_at(yaml: &str, page_id: &str, x: f32, y: f32) -> Option<(String, String)> {
     let comic = aos_scene::load_comic_yaml(yaml).ok()?;
     let page = comic.pages.iter().find(|page| page.id == page_id)?;
@@ -4594,7 +4607,10 @@ mod illustration_library_tests {
 
 #[cfg(test)]
 mod illustration_stage_tests {
-    use super::{comic_panel_at, render_node_at};
+    use super::{
+        comic_panel_at, illustration_work_split_left_width, render_node_at,
+        ILLUSTRATION_WORK_SPLIT_LEFT_MIN,
+    };
 
     #[test]
     fn render_click_selects_only_pixels_present_in_id_map() {
@@ -4614,6 +4630,23 @@ mod illustration_stage_tests {
         assert_eq!(render_node_at(&state, 0.75, 0.5).as_deref(), Some("box"));
         assert!(render_node_at(&state, 0.25, 0.5).is_none());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn illustration_work_split_left_rail_meets_preview_minimums() {
+        let gap = 8.0;
+        let ratio = 0.34;
+        assert!(
+            illustration_work_split_left_width(1280.0, gap, ratio)
+                >= ILLUSTRATION_WORK_SPLIT_LEFT_MIN
+        );
+        assert!(
+            illustration_work_split_left_width(1440.0, gap, ratio)
+                >= ILLUSTRATION_WORK_SPLIT_LEFT_MIN
+        );
+        let wide = illustration_work_split_left_width(1900.0, gap, ratio);
+        assert!(wide > ILLUSTRATION_WORK_SPLIT_LEFT_MIN);
+        assert!(wide < 1900.0 - gap - 280.0);
     }
 
     #[test]
