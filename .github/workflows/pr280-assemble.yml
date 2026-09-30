@@ -17,29 +17,24 @@ jobs:
           fetch-depth: 0
       - name: Download and apply remaining files
         env:
-          TARBALL_PAGE: "https://tmpfiles.org/wUAyA1lwbwMq/pr280-rest.tar.gz"
+          TARBALL_URL: "https://litter.catbox.moe/k89ikq.gz"
           TARBALL_SHA256: "94a93e26bc9c3487ef89031fea75df5472d852a4c7a8e6065cf61037735a18ef"
         run: |
           set -euo pipefail
           python3 <<'PY'
-          import hashlib, os, re, subprocess, sys, tarfile, urllib.request
-          page_url = os.environ["TARBALL_PAGE"]
+          import hashlib, os, tarfile, io, urllib.request
+          url = os.environ["TARBALL_URL"]
           expect = os.environ["TARBALL_SHA256"]
-          html = urllib.request.urlopen(page_url, timeout=60).read().decode("utf-8", "replace")
-          m = re.search(r'href="(https://tmpfiles.org/dl/[^"]+)"', html)
-          if not m:
-              raise SystemExit("no dl link in tmpfiles page")
-          dl = m.group(1)
-          print("Downloading", dl)
-          data = urllib.request.urlopen(dl, timeout=120).read()
+          req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+          data = urllib.request.urlopen(req, timeout=180).read()
           got = hashlib.sha256(data).hexdigest()
           if got != expect:
-              raise SystemExit(f"sha mismatch {got} != {expect}")
-          open("/tmp/pr280-rest.tar.gz", "wb").write(data)
-          with tarfile.open("/tmp/pr280-rest.tar.gz", "r:gz") as tf:
+              raise SystemExit(f"sha mismatch {got} != {expect} size={len(data)} head={data[:40]!r}")
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
               tf.extractall(".")
-          print("extracted ok")
+          print("extracted", len(data), "bytes")
           PY
+          rm -rf .pr280-staging || true
           rm -f benchmarks/illustration/.pr280-canary benchmarks/illustration/.pr280-push-progress || true
           rm -f .github/workflows/pr280-assemble.yml
           git config user.name "azerothl"
