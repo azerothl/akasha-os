@@ -1,0 +1,1 @@
+$file:/tmp/akasha-os/crates/aos-proto/src/illustration_action.rs
