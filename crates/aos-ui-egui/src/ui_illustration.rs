@@ -31,6 +31,27 @@ fn preview_choice(doc: &IllustrationDoc, path: &str) -> PreviewChoice {
     }
 }
 
+/// Below this width, export uses the short `illust_export` label (hover keeps full copy).
+const ILLUST_TOOLBAR_NARROW_W: f32 = 340.0;
+
+fn illust_export_chrome(
+    panel_w: f32,
+    has_image_run: bool,
+    t: &i18n::UiStrings,
+) -> (&'static str, &'static str) {
+    let (long, hover) = if has_image_run {
+        (t.illust_export_selected, t.illust_export_selected)
+    } else {
+        (t.illust_export, t.illust_export_tip)
+    };
+    let label = if panel_w < ILLUST_TOOLBAR_NARROW_W {
+        t.illust_export
+    } else {
+        long
+    };
+    (label, hover)
+}
+
 fn history_label(
     doc: &IllustrationDoc,
     path: &str,
@@ -124,25 +145,16 @@ impl UiApp {
                 .as_ref()
                 .is_none_or(|r| r.status == aos_proto::IllustrationImageStatus::NeedsReview);
 
-        ui.horizontal(|ui| {
-            ui.heading(t.illust_title);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add_enabled(
-                        export_ready,
-                        egui::Button::new(if self.illust_ui.doc.image_run.is_some() {
-                            t.illust_export_selected
-                        } else {
-                            t.illust_export
-                        }),
-                    )
-                    .on_hover_text(t.illust_export_tip)
-                    .clicked()
-                {
-                    let _ = self.cmd_tx.send(Cmd::IllustExport {
-                        session_id: session_id.to_string(),
-                    });
-                }
+        let panel_w = ui.available_width();
+        let has_image_run = self.illust_ui.doc.image_run.is_some();
+        let (export_label, export_hover) = illust_export_chrome(panel_w, has_image_run, t);
+        ui.vertical(|ui| {
+            ui.set_max_width(panel_w);
+            ui.horizontal(|ui| {
+                ui.add(egui::Label::new(egui::RichText::new(t.illust_title).heading()).truncate())
+                    .on_hover_text(t.illust_title);
+            });
+            ui.horizontal_wrapped(|ui| {
                 let anim = ui.add_enabled(
                     self.illust_ui.doc.spec.is_some() && !self.illust_ui.animate_busy,
                     egui::Button::new(t.illust_animate),
@@ -154,6 +166,15 @@ impl UiApp {
                     self.illust_ui.animate_session = session_id.to_string();
                     self.illust_ui.animate_prompt = true;
                     self.illust_ui.animate_notice.clear();
+                }
+                if ui
+                    .add_enabled(export_ready, egui::Button::new(export_label))
+                    .on_hover_text(export_hover)
+                    .clicked()
+                {
+                    let _ = self.cmd_tx.send(Cmd::IllustExport {
+                        session_id: session_id.to_string(),
+                    });
                 }
                 if agent_locked {
                     if ui
@@ -178,7 +199,7 @@ impl UiApp {
         }
 
         ui.add_enabled_ui(!agent_locked, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(t.illust_look);
                 for look in [
                     IllustrationLook::Ink,
@@ -200,7 +221,7 @@ impl UiApp {
                 }
             });
 
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(t.illust_palette);
                 for pal in [
                     IllustrationPaletteId::PaperInk,
@@ -700,6 +721,16 @@ pub fn illustration_open_for(app: &UiApp) -> bool {
 #[cfg(test)]
 mod image_choice_tests {
     use super::*;
+
+    #[test]
+    fn illust_export_chrome_uses_short_label_on_narrow_panel() {
+        let t = i18n::strings("fr");
+        let (label, hover) = illust_export_chrome(280.0, true, &t);
+        assert_eq!(label, t.illust_export);
+        assert_eq!(hover, t.illust_export_selected);
+        let (wide_label, _) = illust_export_chrome(400.0, true, &t);
+        assert_eq!(wide_label, t.illust_export_selected);
+    }
 
     #[test]
     fn image_history_distinguishes_rejected_pending_and_selected() {
