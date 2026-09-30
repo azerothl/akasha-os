@@ -297,7 +297,7 @@ fn link_similar_cluster(mem: &mut MemoryStore, hits: &[aos_proto::MemHit]) -> Ve
     out
 }
 
-/// Filtre + persiste un candidat texte (sans LLM) — used par le sweep et les tests.
+/// Filtre + persiste un candidat texte (sans LLM) — utilisé par le sweep et les tests.
 pub fn persist_candidate_text(
     mem: &mut MemoryStore,
     text: &str,
