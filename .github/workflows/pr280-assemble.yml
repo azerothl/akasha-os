@@ -1,0 +1,41 @@
+name: pr280-assemble
+on:
+  workflow_dispatch:
+  push:
+    branches: [cursor/illustration-rebase-d3ea]
+    paths:
+      - ".github/workflows/pr280-assemble.yml"
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/illustration-rebase-d3ea
+          fetch-depth: 0
+      - name: Download and apply remaining files
+        env:
+          TARBALL_PAGE: "https://tmpfiles.org/wUAyA1lwbwMq/pr280-rest.tar.gz"
+          TARBALL_SHA256: "94a93e26bc9c3487ef89031fea75df5472d852a4c7a8e6065cf61037735a18ef"
+        run: |
+          set -euo pipefail
+          PAGE=$(curl -sSL "$TARBALL_PAGE")
+          DL=$(printf '%s' "$PAGE" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'href=\"(https://tmpfiles.org/dl/[^\"]+)\"', html); assert m, 'no dl link in tmpfiles page'); print(m.group(1))")
+          echo "Downloading $DL"
+          curl -sSL "$DL" -o /tmp/pr280-rest.tar.gz
+          echo "$TARBALL_SHA256  /tmp/pr280-rest.tar.gz" | sha256sum -c -
+          tar xzf /tmp/pr280-rest.tar.gz
+          rm -f benchmarks/illustration/.pr280-canary benchmarks/illustration/.pr280-push-progress || true
+          rm -f .github/workflows/pr280-assemble.yml
+          git config user.name "azerothl"
+          git config user.email "loic.peaudecerf@gmail.com"
+          git add -A
+          git status --short | head -100
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 1
+          fi
+          git commit -m "feat(illust): rebase surface assemble remaining files from staging tarball"
+          git push origin HEAD:cursor/illustration-rebase-d3ea
