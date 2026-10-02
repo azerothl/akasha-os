@@ -550,7 +550,7 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Second GGUF draft / vLLM dans le TCB / DFlash2 (E20 = prompt-lookup seulement)
 - Guest seL4 dans le zip Preview public (`sel4-pv-*` interne seulement)
 - Studio Illustration comme MVP §140–§145 complet (SceneIntent LLM, binaire Blender dans le zip, poids mesh neural, marketplace public) — le module expérimental §4c est plus étroit
-- Dev-assistant **P1–P2** (`process.run` cap-gated, git.*, LSP/DAP, widgets DeclUI IDE) — P0 bind/search/patch livré ; piste IDE profonde en **0.20+**
+- Dev-assistant **P1–P2 restants** (`process.run`, `git.commit`, LSP/DAP, widgets IDE) — P0 livré ; DA.5 `git.status`/`git.diff` lecture seule = premier slice **0.20**
 - Plan d’admin `aos-serverd` exposé réseau (socket de contrôle local seulement)
 
 Protocole cohorte : [TESTER.md](TESTER.md).

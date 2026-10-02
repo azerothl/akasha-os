@@ -1716,6 +1716,65 @@ impl HostServices for PlatformSubsystem {
                 }
                 serde_json::to_value(resp).map_err(|e| e.to_string())
             }
+            "git.status" => {
+                let root = args["root"].as_str().unwrap_or("").to_string();
+                let req = aos_proto::workspace::GitStatusRequest {
+                    root,
+                    actor: ctx.actor.clone(),
+                    caps: ctx.granted_caps.clone(),
+                    trace_id: ctx.trace_id.clone(),
+                };
+                let resp = {
+                    let mgr = self.workspaces.lock().unwrap();
+                    crate::workspace_git::git_status(&mgr, &req)
+                };
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "git.status".into(),
+                        target: req.root.clone(),
+                        detail: serde_json::json!({
+                            "entries": resp.entries.len(),
+                            "truncated": resp.truncated,
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "git.diff" => {
+                let root = args["root"].as_str().unwrap_or("").to_string();
+                let path = args["path"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+                let staged = args["staged"].as_bool().unwrap_or(false);
+                let req = aos_proto::workspace::GitDiffRequest {
+                    root,
+                    path,
+                    staged,
+                    actor: ctx.actor.clone(),
+                    caps: ctx.granted_caps.clone(),
+                    trace_id: ctx.trace_id.clone(),
+                };
+                let resp = {
+                    let mgr = self.workspaces.lock().unwrap();
+                    crate::workspace_git::git_diff(&mgr, &req)
+                };
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "git.diff".into(),
+                        target: req.root.clone(),
+                        detail: serde_json::json!({
+                            "staged": req.staged,
+                            "bytes": resp.diff.len(),
+                            "truncated": resp.truncated,
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
             // Escalade interdite depuis WASM
             "module.install" | "module.compile" | "module.scaffold" | "module.package"
             | "secrets.get" | "trust.set" | "agent.create" | "agent.grant" => {
