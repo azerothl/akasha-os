@@ -83,8 +83,8 @@ pub fn git_status(mgr: &WorkspaceBindManager, req: &GitStatusRequest) -> GitStat
     let mut branch = None;
     let mut entries = Vec::new();
     for line in stdout.lines() {
-        if line.starts_with("## ") {
-            branch = Some(line[3..].to_string());
+        if let Some(rest) = line.strip_prefix("## ") {
+            branch = Some(rest.to_string());
             continue;
         }
         if line.len() < 4 {
