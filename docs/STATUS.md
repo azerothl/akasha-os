@@ -38,7 +38,7 @@ E* number for these host tracks. #247 P1 starts with **DA.5** (read-only git); `
 
 | # | Item | Status |
 |---|------|--------|
-| P22 / #247 | **DA.5** — read-only `git.status` / `git.diff` on bound workspaces (`fs.read` gated) | **done** (this PR) |
+| P22 / #247 | **DA.5** — read-only `git.status` / `git.diff` on bound workspaces (`fs.read` gated) | **done** |
 | P22 / #247 | `git.commit`, cap-gated `process.run`, Problems list, LSP/DAP, DeclUI IDE | backlog |
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + health + Notes/Chat) — done
