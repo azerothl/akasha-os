@@ -1,7 +1,7 @@
 {
   "meta": {
     "product": "Akasha OS",
-    "version": "0.18.0",
+    "version": "0.19.0",
     "kind": "preview-host-architecture",
     "generatedFrom": [
       "README.md",
@@ -10,7 +10,9 @@
       "docs/functional-specs.md",
       "adr/0001-microkernel.md",
       "Cargo.toml workspace members",
-      "crates/aos-session/src/main.rs boot order"
+      "crates/aos-session/src/main.rs boot order",
+      "docs/adr/0012-aos-serverd.md",
+      "crates/aos-serverd"
     ],
     "notes": "Preview is an installable host app (Windows/Linux/macOS), not a bootable OS. Target bare-metal track is seL4 (ADR 0001). Semantic IPC bus binds daemons at 127.0.0.1:24701."
   },
@@ -21,9 +23,30 @@
       "layer": "supervisor",
       "kind": "binary",
       "crate": "crates/aos-session",
-      "description": "Preview session supervisor. Resolves AOS_HOME, writes configs, starts daemons in order, launches egui UI, watchdogs auditd/platformd/modeld, handles updates and clean shutdown.",
+      "description": "Preview session supervisor / interactive bootstrap. Resolves AOS_HOME, writes configs, starts daemons in order (or attaches UI-only to a live aos-serverd tree), launches egui UI, watchdogs auditd/platformd/modeld, handles updates and clean shutdown.",
       "intents": [],
-      "artifacts": ["var/run/*.pid", "var/run/*.stderr.log", "var/run/onboarding.json"]
+      "artifacts": [
+        "var/run/*.pid",
+        "var/run/*.stderr.log",
+        "var/run/onboarding.json"
+      ]
+    },
+    {
+      "id": "aos-serverd",
+      "label": "aos-serverd",
+      "layer": "supervisor",
+      "kind": "binary",
+      "crate": "crates/aos-serverd",
+      "description": "Headless lifecycle owner (P21 / ADR 0012). Keeps busd…agentd up without egui; ordered restart; extended watchdogs incl. agentd; local control socket (status/restart/stop); agent job intake (enqueue→agentd). Opt-in OS service templates; optional supervise mcpd/bridged.",
+      "intents": [
+        "server.job.* (local control)",
+        "agent.create/start via intake"
+      ],
+      "artifacts": [
+        "var/run/aos-serverd.sock",
+        "var/run/serverd-jobs.json",
+        "var/run/daemon_restarts.log"
+      ]
     },
     {
       "id": "aos-ui-egui",
@@ -32,8 +55,16 @@
       "kind": "binary",
       "crate": "crates/aos-ui-egui",
       "description": "Primary Preview shell (egui). Chat, Agents, Models, Caps, Settings, DeclUI host for WASM modules (Create, Notes, Tasks, Canvas, Illustration Studio), transparency/activity panels.",
-      "intents": ["chat.*", "module.ui.*", "cap.*", "settings via platform"],
-      "artifacts": ["preferences.json", "var/sessions/"]
+      "intents": [
+        "chat.*",
+        "module.ui.*",
+        "cap.*",
+        "settings via platform"
+      ],
+      "artifacts": [
+        "preferences.json",
+        "var/sessions/"
+      ]
     },
     {
       "id": "aos-ui",
@@ -42,7 +73,10 @@
       "kind": "binary",
       "crate": "crates/aos-ui",
       "description": "Minimal conversational TUI + resource dashboard (ratatui). Dev/debug surface alongside egui.",
-      "intents": ["infer.*", "mem.*"],
+      "intents": [
+        "infer.*",
+        "mem.*"
+      ],
       "artifacts": []
     },
     {
@@ -52,7 +86,11 @@
       "kind": "binary",
       "crate": "crates/aos-mcp",
       "description": "Optional stdio MCP façade so external IDEs can call akasha_models / akasha_infer / akasha_mem_* on a running Preview.",
-      "intents": ["infer.*", "mem.*", "model.*"],
+      "intents": [
+        "infer.*",
+        "mem.*",
+        "model.*"
+      ],
       "artifacts": []
     },
     {
@@ -63,7 +101,10 @@
       "crate": "website/",
       "description": "Static EN/FR marketing + end-user docs on GitHub Pages (azerothl.github.io/akasha-os). Not on the runtime bus.",
       "intents": [],
-      "artifacts": ["website/docs/", "website/media/"]
+      "artifacts": [
+        "website/docs/",
+        "website/media/"
+      ]
     },
     {
       "id": "aos-busd",
@@ -72,8 +113,12 @@
       "kind": "binary",
       "crate": "crates/aos-ipc",
       "description": "Semantic IPC Bus broker (TCP localhost:24701). Typed intents with capability envelopes; CBOR framing. Central nervous system of Preview.",
-      "intents": ["* (routes)"],
-      "artifacts": ["127.0.0.1:24701"]
+      "intents": [
+        "* (routes)"
+      ],
+      "artifacts": [
+        "127.0.0.1:24701"
+      ]
     },
     {
       "id": "aos-ipc",
@@ -93,7 +138,9 @@
       "crate": "crates/aos-proto",
       "description": "Shared intent schemas, DeclUI contract, rich module UI types, request/response envelopes.",
       "intents": [],
-      "artifacts": ["docs/bridge/*.json schemas"]
+      "artifacts": [
+        "docs/bridge/*.json schemas"
+      ]
     },
     {
       "id": "aos-capkd",
@@ -102,8 +149,16 @@
       "kind": "binary",
       "crate": "crates/aos-capkd",
       "description": "Capability kernel (P4.2). Single trust application point: mint, derive, grant, revoke, check. Immediate global revoke across processes via the bus.",
-      "intents": ["cap.mint", "cap.derive", "cap.grant", "cap.revoke", "cap.check"],
-      "artifacts": ["cap://kernel/<id>"]
+      "intents": [
+        "cap.mint",
+        "cap.derive",
+        "cap.grant",
+        "cap.revoke",
+        "cap.check"
+      ],
+      "artifacts": [
+        "cap://kernel/<id>"
+      ]
     },
     {
       "id": "aos-caps",
@@ -122,8 +177,14 @@
       "kind": "binary",
       "crate": "crates/aos-auditd",
       "description": "Autonomous append-only signed audit journal. Fire-and-forget; killing it does not stop Model or UI.",
-      "intents": ["audit.append", "audit.query", "health.* (consumes)"],
-      "artifacts": ["var/audit/"]
+      "intents": [
+        "audit.append",
+        "audit.query",
+        "health.* (consumes)"
+      ],
+      "artifacts": [
+        "var/audit/"
+      ]
     },
     {
       "id": "aos-modeld",
@@ -132,8 +193,20 @@
       "kind": "binary",
       "crate": "crates/aos-model",
       "description": "Model subsystem daemon. Local GGUF inference (llama.cpp), media.image/video/TTS packs (sd.cpp / piper), providers (OpenAI-compat + loopback), placement, LAN cluster coordinator, live metrics.",
-      "intents": ["infer.*", "model.load", "model.list", "media.image.generate", "media.*", "lan.*"],
-      "artifacts": ["etc/modeld.yaml", "share/models/", "bin/sd*", "var/run/lan-pairing.json"]
+      "intents": [
+        "infer.*",
+        "model.load",
+        "model.list",
+        "media.image.generate",
+        "media.*",
+        "lan.*"
+      ],
+      "artifacts": [
+        "etc/modeld.yaml",
+        "share/models/",
+        "bin/sd*",
+        "var/run/lan-pairing.json"
+      ]
     },
     {
       "id": "aos-llama",
@@ -173,7 +246,10 @@
       "crate": "crates/aos-registry",
       "description": "YAML model catalogue and backend descriptors (local packs + provider offerings).",
       "intents": [],
-      "artifacts": ["data/models/catalog.yaml", "share/models/manifest.json"]
+      "artifacts": [
+        "data/models/catalog.yaml",
+        "share/models/manifest.json"
+      ]
     },
     {
       "id": "aos-platformd",
@@ -192,7 +268,12 @@
         "health.*",
         "user.ask"
       ],
-      "artifacts": ["etc/platformd.yaml", "var/sessions/", "var/memory/", "share/modules/"]
+      "artifacts": [
+        "etc/platformd.yaml",
+        "var/sessions/",
+        "var/memory/",
+        "share/modules/"
+      ]
     },
     {
       "id": "module-rt",
@@ -201,8 +282,15 @@
       "kind": "runtime",
       "crate": "crates/aos-platform/src/module_rt.rs",
       "description": "Sandboxed wasmtime host. Modules call host_call only (no ambient WASI). Caps gate every tool; DeclUI frames rendered by egui host.",
-      "intents": ["module.invoke", "module.ui.*", "host_call"],
-      "artifacts": ["*.aospkg", "share/modules/catalogue.yaml"]
+      "intents": [
+        "module.invoke",
+        "module.ui.*",
+        "host_call"
+      ],
+      "artifacts": [
+        "*.aospkg",
+        "share/modules/catalogue.yaml"
+      ]
     },
     {
       "id": "aos-scene",
@@ -211,7 +299,9 @@
       "kind": "library",
       "crate": "crates/aos-scene",
       "description": "SceneGraph edit / locks / apply for Canvas and Illustration Studio. Viewport stays in egui; no wgpu in this crate.",
-      "intents": ["scene.* (via platform)"],
+      "intents": [
+        "scene.* (via platform)"
+      ],
       "artifacts": []
     },
     {
@@ -221,8 +311,17 @@
       "kind": "binary",
       "crate": "crates/aos-agent",
       "description": "Agent runtime daemon. Goal loop, skills, tools, MCP client, harness.run (external CLIs), scheduler, salon turns, deep-thinking, trace export. Spawns isolated aos-agent-worker processes.",
-      "intents": ["agent.*", "skill.*", "harness.run", "mcp.*"],
-      "artifacts": ["var/agents/", "var/skills/", "var/traces/"]
+      "intents": [
+        "agent.*",
+        "skill.*",
+        "harness.run",
+        "mcp.*"
+      ],
+      "artifacts": [
+        "var/agents/",
+        "var/skills/",
+        "var/traces/"
+      ]
     },
     {
       "id": "aos-agent-worker",
@@ -231,7 +330,9 @@
       "kind": "binary",
       "crate": "crates/aos-agent",
       "description": "Isolated per-agent worker process. Executes tool calls under granted caps; communicates with agentd over the bus.",
-      "intents": ["tool results → agentd"],
+      "intents": [
+        "tool results → agentd"
+      ],
       "artifacts": []
     },
     {
@@ -241,8 +342,14 @@
       "kind": "content",
       "crate": "skills/",
       "description": "MIT-licensed skill packs (deep-thinking, planner, research, notes-writer, file-author, tasks). User skills under var/skills/. Shared frontmatter per ADR 0008.",
-      "intents": ["skill.pass.consider", "skill.load"],
-      "artifacts": ["skills/*", "var/skills/"]
+      "intents": [
+        "skill.pass.consider",
+        "skill.load"
+      ],
+      "artifacts": [
+        "skills/*",
+        "var/skills/"
+      ]
     },
     {
       "id": "mod-create",
@@ -251,8 +358,15 @@
       "kind": "wasm-module",
       "crate": "modules/create",
       "description": "Rich DeclUI image/video workspace. UI state under /documents/create/**; generation via platform media.image.generate service.",
-      "intents": ["media.image.generate", "fs.*", "jobs.*"],
-      "artifacts": ["share/modules/create.aospkg", "/downloads/images|video/"]
+      "intents": [
+        "media.image.generate",
+        "fs.*",
+        "jobs.*"
+      ],
+      "artifacts": [
+        "share/modules/create.aospkg",
+        "/downloads/images|video/"
+      ]
     },
     {
       "id": "mod-notes",
@@ -261,8 +375,13 @@
       "kind": "wasm-module",
       "crate": "modules/notes",
       "description": "Human + agent notes with tags, live search, delete. Dual-surface WASM package.",
-      "intents": ["notes.*", "fs.*"],
-      "artifacts": ["share/modules/notes.aospkg"]
+      "intents": [
+        "notes.*",
+        "fs.*"
+      ],
+      "artifacts": [
+        "share/modules/notes.aospkg"
+      ]
     },
     {
       "id": "mod-tasks",
@@ -271,8 +390,12 @@
       "kind": "wasm-module",
       "crate": "modules/tasks",
       "description": "Dual-surface tasks module + Tasks tab. DeclUI package synced on boot.",
-      "intents": ["tasks.*"],
-      "artifacts": ["share/modules/tasks.aospkg"]
+      "intents": [
+        "tasks.*"
+      ],
+      "artifacts": [
+        "share/modules/tasks.aospkg"
+      ]
     },
     {
       "id": "mod-canvas",
@@ -281,8 +404,14 @@
       "kind": "wasm-module",
       "crate": "modules/canvas",
       "description": "Layered vector drawing: grid/snap, scenes, guides, PNG/SVG/JSON export, agent geometry validation.",
-      "intents": ["canvas.*", "scene.*"],
-      "artifacts": ["share/modules/canvas.aospkg", "/downloads/canvas/"]
+      "intents": [
+        "canvas.*",
+        "scene.*"
+      ],
+      "artifacts": [
+        "share/modules/canvas.aospkg",
+        "/downloads/canvas/"
+      ]
     },
     {
       "id": "mod-illustration",
@@ -291,8 +420,13 @@
       "kind": "wasm-module",
       "crate": "modules/illustration-studio",
       "description": "Experimental DeclUI scene editor. wgpu edit viewport ≠ beauty; stub/CPU beauty; optional GPL Blender Renderer Pack.",
-      "intents": ["scene.*", "illustration.*"],
-      "artifacts": ["share/modules/illustration-studio.aospkg"]
+      "intents": [
+        "scene.*",
+        "illustration.*"
+      ],
+      "artifacts": [
+        "share/modules/illustration-studio.aospkg"
+      ]
     },
     {
       "id": "mod-ext-rt",
@@ -301,8 +435,12 @@
       "kind": "wasm-module",
       "crate": "modules/ext-rt",
       "description": "Precompiled script-module WASM runtime used by scaffolded guest packages without a full Rust SDK build.",
-      "intents": ["host_call"],
-      "artifacts": ["share/modules/ext-rt.aospkg"]
+      "intents": [
+        "host_call"
+      ],
+      "artifacts": [
+        "share/modules/ext-rt.aospkg"
+      ]
     },
     {
       "id": "module-sdk",
@@ -312,7 +450,9 @@
       "crate": "modules/sdk",
       "description": "Apache-2.0 guest SDK. Rust modules compile against host_call only — no ambient WASI. Separate workspace from host crates.",
       "intents": [],
-      "artifacts": ["LICENSE-APACHE"]
+      "artifacts": [
+        "LICENSE-APACHE"
+      ]
     },
     {
       "id": "aos-bridge",
@@ -322,7 +462,10 @@
       "crate": "crates/aos-bridge",
       "description": "Sibling HTTP↔bus contract helpers and schema export (E8). Documents live under docs/bridge/.",
       "intents": [],
-      "artifacts": ["docs/bridge/", "docs/sibling-bridge.md"]
+      "artifacts": [
+        "docs/bridge/",
+        "docs/sibling-bridge.md"
+      ]
     },
     {
       "id": "storage-var",
@@ -332,7 +475,15 @@
       "crate": null,
       "description": "Mutable Preview home state: sessions, memory, agents, audit, skills, feedback, run pids/logs, LAN pairing.",
       "intents": [],
-      "artifacts": ["var/sessions", "var/memory", "var/audit", "var/agents", "var/skills", "var/feedback", "var/run"]
+      "artifacts": [
+        "var/sessions",
+        "var/memory",
+        "var/audit",
+        "var/agents",
+        "var/skills",
+        "var/feedback",
+        "var/run"
+      ]
     },
     {
       "id": "storage-share",
@@ -342,7 +493,12 @@
       "crate": null,
       "description": "Shipped models catalogue, signed module catalogue, MCP examples, preview profile.",
       "intents": [],
-      "artifacts": ["share/models", "share/modules", "share/mcp", "share/preview-profile.yaml"]
+      "artifacts": [
+        "share/models",
+        "share/modules",
+        "share/mcp",
+        "share/preview-profile.yaml"
+      ]
     },
     {
       "id": "host-os",
@@ -352,7 +508,9 @@
       "crate": null,
       "description": "Windows 10/11 x64, Linux x64, or macOS Apple Silicon. Preview scaffold per ADR 0001 — not the final bare-metal product.",
       "intents": [],
-      "artifacts": ["AOS_HOME / AgentOS-Preview"]
+      "artifacts": [
+        "AOS_HOME / AgentOS-Preview"
+      ]
     },
     {
       "id": "gpu-cpu",
@@ -362,7 +520,10 @@
       "crate": null,
       "description": "NVIDIA CUDA (Win/Linux) or Metal (macOS) preferred; unified zip also ships aos-modeld-cpu path.",
       "intents": [],
-      "artifacts": ["aos-modeld", "aos-modeld-cpu"]
+      "artifacts": [
+        "aos-modeld",
+        "aos-modeld-cpu"
+      ]
     },
     {
       "id": "providers",
@@ -371,8 +532,12 @@
       "kind": "external",
       "crate": null,
       "description": "OpenAI-compatible cloud APIs plus local loopback (Ollama / vLLM / LM Studio). API keys in the OS keyring vault.",
-      "intents": ["provider.* via modeld"],
-      "artifacts": ["vault secrets"]
+      "intents": [
+        "provider.* via modeld"
+      ],
+      "artifacts": [
+        "vault secrets"
+      ]
     },
     {
       "id": "network-egress",
@@ -381,8 +546,14 @@
       "kind": "external",
       "crate": null,
       "description": "Deny-by-default. Opt-in web.search, web.browse (no JS), web.fetch. JS/SPA via optional browser MCP.",
-      "intents": ["web.search", "web.browse", "web.fetch"],
-      "artifacts": ["/downloads/fetched/"]
+      "intents": [
+        "web.search",
+        "web.browse",
+        "web.fetch"
+      ],
+      "artifacts": [
+        "/downloads/fetched/"
+      ]
     },
     {
       "id": "external-clis",
@@ -391,7 +562,9 @@
       "kind": "external",
       "crate": null,
       "description": "Opt-in harness.run / Agents Advanced Runtime for Codex, Claude, Grok with Steer / Pause / Kill.",
-      "intents": ["harness.run"],
+      "intents": [
+        "harness.run"
+      ],
       "artifacts": []
     },
     {
@@ -402,70 +575,460 @@
       "crate": "crates/aos-sel4-abi, aos-sel4-capkd, vm/",
       "description": "Future product form: machine boots seL4 + Agent OS without Windows/Linux. VM scaffold exists; GPU AccelDevice later (P5.3).",
       "intents": [],
-      "artifacts": ["vm/", "adr/0001-microkernel.md"]
+      "artifacts": [
+        "vm/",
+        "adr/0001-microkernel.md"
+      ]
     }
   ],
   "edges": [
-    {"id": "e-session-busd", "from": "aos-session", "to": "aos-busd", "label": "spawns first", "kind": "spawn"},
-    {"id": "e-session-capkd", "from": "aos-session", "to": "aos-capkd", "label": "spawns", "kind": "spawn"},
-    {"id": "e-session-auditd", "from": "aos-session", "to": "aos-auditd", "label": "spawns + watchdog", "kind": "spawn"},
-    {"id": "e-session-modeld", "from": "aos-session", "to": "aos-modeld", "label": "spawns + watchdog", "kind": "spawn"},
-    {"id": "e-session-platformd", "from": "aos-session", "to": "aos-platformd", "label": "spawns + watchdog", "kind": "spawn"},
-    {"id": "e-session-agentd", "from": "aos-session", "to": "aos-agentd", "label": "spawns", "kind": "spawn"},
-    {"id": "e-session-ui", "from": "aos-session", "to": "aos-ui-egui", "label": "launches after healthcheck", "kind": "spawn"},
-    {"id": "e-ui-bus", "from": "aos-ui-egui", "to": "aos-busd", "label": "intent client", "kind": "ipc"},
-    {"id": "e-tui-bus", "from": "aos-ui", "to": "aos-busd", "label": "intent client", "kind": "ipc"},
-    {"id": "e-mcpd-bus", "from": "aos-mcpd", "to": "aos-busd", "label": "stdio → bus", "kind": "ipc"},
-    {"id": "e-capkd-bus", "from": "aos-capkd", "to": "aos-busd", "label": "registers cap.*", "kind": "ipc"},
-    {"id": "e-auditd-bus", "from": "aos-auditd", "to": "aos-busd", "label": "registers audit.*", "kind": "ipc"},
-    {"id": "e-modeld-bus", "from": "aos-modeld", "to": "aos-busd", "label": "registers infer/media/model", "kind": "ipc"},
-    {"id": "e-platformd-bus", "from": "aos-platformd", "to": "aos-busd", "label": "registers fs/mem/chat/module/…", "kind": "ipc"},
-    {"id": "e-agentd-bus", "from": "aos-agentd", "to": "aos-busd", "label": "registers agent.*", "kind": "ipc"},
-    {"id": "e-agentd-worker", "from": "aos-agentd", "to": "aos-agent-worker", "label": "spawns isolated worker", "kind": "spawn"},
-    {"id": "e-worker-bus", "from": "aos-agent-worker", "to": "aos-busd", "label": "tool intents", "kind": "ipc"},
-    {"id": "e-bus-ipc-lib", "from": "aos-busd", "to": "aos-ipc", "label": "implements", "kind": "uses"},
-    {"id": "e-all-proto", "from": "aos-busd", "to": "aos-proto", "label": "typed envelopes", "kind": "uses"},
-    {"id": "e-capkd-caps", "from": "aos-capkd", "to": "aos-caps", "label": "rights model", "kind": "uses"},
-    {"id": "e-platform-caps-check", "from": "aos-platformd", "to": "aos-capkd", "label": "cap.check on fs/tools", "kind": "trust"},
-    {"id": "e-platform-audit", "from": "aos-platformd", "to": "aos-auditd", "label": "audit.append", "kind": "audit"},
-    {"id": "e-agent-audit", "from": "aos-agentd", "to": "aos-auditd", "label": "audit.append", "kind": "audit"},
-    {"id": "e-modeld-llama", "from": "aos-modeld", "to": "aos-llama", "label": "local LLM/VLM", "kind": "uses"},
-    {"id": "e-modeld-sd", "from": "aos-modeld", "to": "aos-sd", "label": "image/video engines", "kind": "uses"},
-    {"id": "e-modeld-placement", "from": "aos-modeld", "to": "aos-placement", "label": "weight placement", "kind": "uses"},
-    {"id": "e-modeld-registry", "from": "aos-modeld", "to": "aos-registry", "label": "catalogue", "kind": "uses"},
-    {"id": "e-llama-gpu", "from": "aos-llama", "to": "gpu-cpu", "label": "CUDA / Metal / CPU", "kind": "hardware"},
-    {"id": "e-sd-gpu", "from": "aos-sd", "to": "gpu-cpu", "label": "CUDA / CPU", "kind": "hardware"},
-    {"id": "e-modeld-providers", "from": "aos-modeld", "to": "providers", "label": "OpenAI-compat / loopback", "kind": "external"},
-    {"id": "e-platform-modules", "from": "aos-platformd", "to": "module-rt", "label": "hosts wasmtime", "kind": "contains"},
-    {"id": "e-platform-scene", "from": "aos-platformd", "to": "aos-scene", "label": "SceneGraph", "kind": "uses"},
-    {"id": "e-rt-create", "from": "module-rt", "to": "mod-create", "label": "loads", "kind": "loads"},
-    {"id": "e-rt-notes", "from": "module-rt", "to": "mod-notes", "label": "loads", "kind": "loads"},
-    {"id": "e-rt-tasks", "from": "module-rt", "to": "mod-tasks", "label": "loads", "kind": "loads"},
-    {"id": "e-rt-canvas", "from": "module-rt", "to": "mod-canvas", "label": "loads", "kind": "loads"},
-    {"id": "e-rt-illustration", "from": "module-rt", "to": "mod-illustration", "label": "loads", "kind": "loads"},
-    {"id": "e-rt-ext", "from": "module-rt", "to": "mod-ext-rt", "label": "loads", "kind": "loads"},
-    {"id": "e-sdk-modules", "from": "module-sdk", "to": "mod-create", "label": "compiles against", "kind": "build"},
-    {"id": "e-ui-declui", "from": "aos-ui-egui", "to": "module-rt", "label": "DeclUI host frames", "kind": "ui"},
-    {"id": "e-create-media", "from": "mod-create", "to": "aos-modeld", "label": "media.image.generate", "kind": "ipc"},
-    {"id": "e-agent-skills", "from": "aos-agentd", "to": "skills", "label": "loads / offers", "kind": "uses"},
-    {"id": "e-agent-infer", "from": "aos-agentd", "to": "aos-modeld", "label": "infer.* via bus", "kind": "ipc"},
-    {"id": "e-agent-platform", "from": "aos-agentd", "to": "aos-platformd", "label": "fs/mem/tools via bus", "kind": "ipc"},
-    {"id": "e-agent-harness", "from": "aos-agentd", "to": "external-clis", "label": "harness.run", "kind": "external"},
-    {"id": "e-platform-net", "from": "aos-platformd", "to": "network-egress", "label": "opt-in web.*", "kind": "external"},
-    {"id": "e-platform-var", "from": "aos-platformd", "to": "storage-var", "label": "persists", "kind": "storage"},
-    {"id": "e-platform-share", "from": "aos-platformd", "to": "storage-share", "label": "catalogue / packs", "kind": "storage"},
-    {"id": "e-modeld-share", "from": "aos-modeld", "to": "storage-share", "label": "GGUF / media weights", "kind": "storage"},
-    {"id": "e-audit-var", "from": "aos-auditd", "to": "storage-var", "label": "var/audit", "kind": "storage"},
-    {"id": "e-session-host", "from": "aos-session", "to": "host-os", "label": "runs on", "kind": "host"},
-    {"id": "e-bridge-docs", "from": "aos-bridge", "to": "aos-proto", "label": "schema export", "kind": "uses"},
-    {"id": "e-sel4-future", "from": "sel4-track", "to": "aos-capkd", "label": "replaces TCP caps later", "kind": "future"},
-    {"id": "e-website-docs", "from": "website", "to": "host-os", "label": "install docs only", "kind": "docs"}
+    {
+      "id": "e-session-busd",
+      "from": "aos-session",
+      "to": "aos-busd",
+      "label": "spawns first (or attaches)",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-capkd",
+      "from": "aos-session",
+      "to": "aos-capkd",
+      "label": "spawns",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-auditd",
+      "from": "aos-session",
+      "to": "aos-auditd",
+      "label": "spawns + watchdog",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-modeld",
+      "from": "aos-session",
+      "to": "aos-modeld",
+      "label": "spawns + watchdog",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-platformd",
+      "from": "aos-session",
+      "to": "aos-platformd",
+      "label": "spawns + watchdog",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-agentd",
+      "from": "aos-session",
+      "to": "aos-agentd",
+      "label": "spawns",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-ui",
+      "from": "aos-session",
+      "to": "aos-ui-egui",
+      "label": "launches after healthcheck",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-busd",
+      "from": "aos-serverd",
+      "to": "aos-busd",
+      "label": "spawns first (headless)",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-capkd",
+      "from": "aos-serverd",
+      "to": "aos-capkd",
+      "label": "spawns",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-auditd",
+      "from": "aos-serverd",
+      "to": "aos-auditd",
+      "label": "spawns + watchdog",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-modeld",
+      "from": "aos-serverd",
+      "to": "aos-modeld",
+      "label": "spawns + watchdog",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-platformd",
+      "from": "aos-serverd",
+      "to": "aos-platformd",
+      "label": "spawns + watchdog",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-agentd",
+      "from": "aos-serverd",
+      "to": "aos-agentd",
+      "label": "spawns + watchdog + intake",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-serverd-mcpd",
+      "from": "aos-serverd",
+      "to": "aos-mcpd",
+      "label": "opt-in supervise",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-session-serverd",
+      "from": "aos-session",
+      "to": "aos-serverd",
+      "label": "attach UI-only / handoff",
+      "kind": "control"
+    },
+    {
+      "id": "e-serverd-host",
+      "from": "aos-serverd",
+      "to": "host-os",
+      "label": "runs on (opt-in service)",
+      "kind": "host"
+    },
+    {
+      "id": "e-ui-bus",
+      "from": "aos-ui-egui",
+      "to": "aos-busd",
+      "label": "intent client",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-tui-bus",
+      "from": "aos-ui",
+      "to": "aos-busd",
+      "label": "intent client",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-mcpd-bus",
+      "from": "aos-mcpd",
+      "to": "aos-busd",
+      "label": "stdio → bus",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-capkd-bus",
+      "from": "aos-capkd",
+      "to": "aos-busd",
+      "label": "registers cap.*",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-auditd-bus",
+      "from": "aos-auditd",
+      "to": "aos-busd",
+      "label": "registers audit.*",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-modeld-bus",
+      "from": "aos-modeld",
+      "to": "aos-busd",
+      "label": "registers infer/media/model",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-platformd-bus",
+      "from": "aos-platformd",
+      "to": "aos-busd",
+      "label": "registers fs/mem/chat/module/…",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-agentd-bus",
+      "from": "aos-agentd",
+      "to": "aos-busd",
+      "label": "registers agent.*",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-agentd-worker",
+      "from": "aos-agentd",
+      "to": "aos-agent-worker",
+      "label": "spawns isolated worker",
+      "kind": "spawn"
+    },
+    {
+      "id": "e-worker-bus",
+      "from": "aos-agent-worker",
+      "to": "aos-busd",
+      "label": "tool intents",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-bus-ipc-lib",
+      "from": "aos-busd",
+      "to": "aos-ipc",
+      "label": "implements",
+      "kind": "uses"
+    },
+    {
+      "id": "e-all-proto",
+      "from": "aos-busd",
+      "to": "aos-proto",
+      "label": "typed envelopes",
+      "kind": "uses"
+    },
+    {
+      "id": "e-capkd-caps",
+      "from": "aos-capkd",
+      "to": "aos-caps",
+      "label": "rights model",
+      "kind": "uses"
+    },
+    {
+      "id": "e-platform-caps-check",
+      "from": "aos-platformd",
+      "to": "aos-capkd",
+      "label": "cap.check on fs/tools",
+      "kind": "trust"
+    },
+    {
+      "id": "e-platform-audit",
+      "from": "aos-platformd",
+      "to": "aos-auditd",
+      "label": "audit.append",
+      "kind": "audit"
+    },
+    {
+      "id": "e-agent-audit",
+      "from": "aos-agentd",
+      "to": "aos-auditd",
+      "label": "audit.append",
+      "kind": "audit"
+    },
+    {
+      "id": "e-modeld-llama",
+      "from": "aos-modeld",
+      "to": "aos-llama",
+      "label": "local LLM/VLM",
+      "kind": "uses"
+    },
+    {
+      "id": "e-modeld-sd",
+      "from": "aos-modeld",
+      "to": "aos-sd",
+      "label": "image/video engines",
+      "kind": "uses"
+    },
+    {
+      "id": "e-modeld-placement",
+      "from": "aos-modeld",
+      "to": "aos-placement",
+      "label": "weight placement",
+      "kind": "uses"
+    },
+    {
+      "id": "e-modeld-registry",
+      "from": "aos-modeld",
+      "to": "aos-registry",
+      "label": "catalogue",
+      "kind": "uses"
+    },
+    {
+      "id": "e-llama-gpu",
+      "from": "aos-llama",
+      "to": "gpu-cpu",
+      "label": "CUDA / Metal / CPU",
+      "kind": "hardware"
+    },
+    {
+      "id": "e-sd-gpu",
+      "from": "aos-sd",
+      "to": "gpu-cpu",
+      "label": "CUDA / CPU",
+      "kind": "hardware"
+    },
+    {
+      "id": "e-modeld-providers",
+      "from": "aos-modeld",
+      "to": "providers",
+      "label": "OpenAI-compat / loopback",
+      "kind": "external"
+    },
+    {
+      "id": "e-platform-modules",
+      "from": "aos-platformd",
+      "to": "module-rt",
+      "label": "hosts wasmtime",
+      "kind": "contains"
+    },
+    {
+      "id": "e-platform-scene",
+      "from": "aos-platformd",
+      "to": "aos-scene",
+      "label": "SceneGraph",
+      "kind": "uses"
+    },
+    {
+      "id": "e-rt-create",
+      "from": "module-rt",
+      "to": "mod-create",
+      "label": "loads",
+      "kind": "loads"
+    },
+    {
+      "id": "e-rt-notes",
+      "from": "module-rt",
+      "to": "mod-notes",
+      "label": "loads",
+      "kind": "loads"
+    },
+    {
+      "id": "e-rt-tasks",
+      "from": "module-rt",
+      "to": "mod-tasks",
+      "label": "loads",
+      "kind": "loads"
+    },
+    {
+      "id": "e-rt-canvas",
+      "from": "module-rt",
+      "to": "mod-canvas",
+      "label": "loads",
+      "kind": "loads"
+    },
+    {
+      "id": "e-rt-illustration",
+      "from": "module-rt",
+      "to": "mod-illustration",
+      "label": "loads",
+      "kind": "loads"
+    },
+    {
+      "id": "e-rt-ext",
+      "from": "module-rt",
+      "to": "mod-ext-rt",
+      "label": "loads",
+      "kind": "loads"
+    },
+    {
+      "id": "e-sdk-modules",
+      "from": "module-sdk",
+      "to": "mod-create",
+      "label": "compiles against",
+      "kind": "build"
+    },
+    {
+      "id": "e-ui-declui",
+      "from": "aos-ui-egui",
+      "to": "module-rt",
+      "label": "DeclUI host frames",
+      "kind": "ui"
+    },
+    {
+      "id": "e-create-media",
+      "from": "mod-create",
+      "to": "aos-modeld",
+      "label": "media.image.generate",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-agent-skills",
+      "from": "aos-agentd",
+      "to": "skills",
+      "label": "loads / offers",
+      "kind": "uses"
+    },
+    {
+      "id": "e-agent-infer",
+      "from": "aos-agentd",
+      "to": "aos-modeld",
+      "label": "infer.* via bus",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-agent-platform",
+      "from": "aos-agentd",
+      "to": "aos-platformd",
+      "label": "fs/mem/tools via bus",
+      "kind": "ipc"
+    },
+    {
+      "id": "e-agent-harness",
+      "from": "aos-agentd",
+      "to": "external-clis",
+      "label": "harness.run",
+      "kind": "external"
+    },
+    {
+      "id": "e-platform-net",
+      "from": "aos-platformd",
+      "to": "network-egress",
+      "label": "opt-in web.*",
+      "kind": "external"
+    },
+    {
+      "id": "e-platform-var",
+      "from": "aos-platformd",
+      "to": "storage-var",
+      "label": "persists",
+      "kind": "storage"
+    },
+    {
+      "id": "e-platform-share",
+      "from": "aos-platformd",
+      "to": "storage-share",
+      "label": "catalogue / packs",
+      "kind": "storage"
+    },
+    {
+      "id": "e-modeld-share",
+      "from": "aos-modeld",
+      "to": "storage-share",
+      "label": "GGUF / media weights",
+      "kind": "storage"
+    },
+    {
+      "id": "e-audit-var",
+      "from": "aos-auditd",
+      "to": "storage-var",
+      "label": "var/audit",
+      "kind": "storage"
+    },
+    {
+      "id": "e-session-host",
+      "from": "aos-session",
+      "to": "host-os",
+      "label": "runs on",
+      "kind": "host"
+    },
+    {
+      "id": "e-bridge-docs",
+      "from": "aos-bridge",
+      "to": "aos-proto",
+      "label": "schema export",
+      "kind": "uses"
+    },
+    {
+      "id": "e-sel4-future",
+      "from": "sel4-track",
+      "to": "aos-capkd",
+      "label": "replaces TCP caps later",
+      "kind": "future"
+    },
+    {
+      "id": "e-website-docs",
+      "from": "website",
+      "to": "host-os",
+      "label": "install docs only",
+      "kind": "docs"
+    }
   ],
   "flows": [
     {
       "id": "flow-boot",
       "name": "Preview boot",
-      "summary": "aos-session brings up the bus and daemons, healthchecks, then launches the egui shell.",
+      "summary": "aos-session brings up the bus and daemons, healthchecks, then launches the egui shell (or attaches UI-only to a live aos-serverd tree).",
       "steps": [
         "aos-session",
         "aos-busd",
@@ -475,6 +1038,21 @@
         "aos-platformd",
         "aos-agentd",
         "aos-ui-egui"
+      ]
+    },
+    {
+      "id": "flow-serverd-headless",
+      "name": "Headless aos-serverd",
+      "summary": "aos-serverd owns the process tree without egui; local control status/restart/stop; enqueue agent jobs into aos-agentd.",
+      "steps": [
+        "aos-serverd",
+        "aos-busd",
+        "aos-capkd",
+        "aos-auditd",
+        "aos-modeld",
+        "aos-platformd",
+        "aos-agentd",
+        "aos-serverd"
       ]
     },
     {

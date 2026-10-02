@@ -200,11 +200,12 @@ in Preview **0.6.0**; **E15** declarative module UI host shipped in Preview
 Preview **0.8.0**. **E18 + E19** shipped in Preview **0.9.0**. **E7 TPM + E8
 live + E9 path + Media polish** shipped in Preview **0.10.0** (P10). **E20
 local decode** shipped in Preview **0.11.0** (P11). **E22** / **E23** shipped
-as **P18** / **P19** (in Preview **0.18.0** with P20). Next Preview host
-increment scheduled in [STATUS.md](STATUS.md) as **P21 / 0.19.0**:
+as **P18** / **P19** (in Preview **0.18.0** with P20). Preview host
+**P21 / 0.19.0** shipped ([STATUS.md](STATUS.md)):
 [`aos-serverd`](https://github.com/azerothl/akasha-os/issues/403) +
 [#247](https://github.com/azerothl/akasha-os/issues/247) Dev-assistant **P0**
-(not a new E*). Then PC cohort close + Horizon C / PV.4+ when scheduled.
+(not a new E*). Next: PC cohort close; #247 P1–P2 / **0.20+**; Horizon C /
+PV.4+ when scheduled.
 
 Suggested sequencing once PC closes (historical; Preview increments already
 ran this on the host as P03–P07, then E16+E17 as P08):

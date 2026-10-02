@@ -1,8 +1,8 @@
-# Protocole testeur — Akasha OS Preview 0.18.0
+# Protocole testeur — Akasha OS Preview 0.19.0
 
 **Langue :** [English](../TESTER.md) | Français
 
-> Date : 15/09/2026 · Preview **0.18.0**
+> Date : 28/09/2026 · Preview **0.19.0**
 
 Merci de tester la Preview. Objectif : installer **sans** `cargo` ni clone du
 repo, exercer les parcours principaux, et envoyer un retour **depuis l'UI**.
@@ -56,6 +56,24 @@ avec les étapes ci-dessous.
 - Lancer **Akasha OS Preview** (`aos-session`)
 
 Bannière attendue : Preview sur l’OS hôte — ce n’est pas encore l’OS bootable.
+
+### Optionnel : `aos-serverd` headless (P21)
+
+Pour un run always-on / sans UI (même zip ; binaire dans `bin/`) :
+
+1. Depuis le préfixe d’install : `aos-serverd serve` (ou `--headless`). Le
+   laisser tourner ; egui **n’est pas** requis.
+2. Dans un autre shell (même `AOS_HOME`) : `aos-serverd status` — daemons
+   sains attendus.
+3. Enqueue un job agent local :  
+   `aos-serverd enqueue --goal "Dis bonjour depuis l’intake headless" --actor cli`  
+   puis `aos-serverd jobs` (enregistrements sous `var/run/serverd-jobs.json`).
+4. Service OS optionnel : `./install-linux-service.sh` (ou jumeau macOS/Windows)
+   — voir [INSTALL.md](INSTALL.md). Scripts de désinstall à côté.
+5. Attach UI optionnel : lancer `aos-session` contre un arbre serverd vivant
+   (attach UI-only / bootstrap-then-attach — P21.6).
+
+Ignorer ce bloc si vous ne faites que le chemin interactif de 15 minutes.
 
 ## Étapes (également dans l'onglet Scénarios)
 
@@ -394,7 +412,7 @@ court cohorte ci-dessus.
 - Gates PC.6–PC.9 et PC.11–PC.13 cochés sur au moins une machine (protocole
   long ; pas exigé de chaque testeur)
 
-## Hors scope Preview 0.18.0
+## Hors scope Preview 0.19.0
 
 - Boot seL4 / fer nu (tag interne `sel4-pv-*` seulement)
 - Intel Mac

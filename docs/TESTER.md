@@ -1,8 +1,8 @@
-# Tester protocol — Akasha OS Preview 0.18.0
+# Tester protocol — Akasha OS Preview 0.19.0
 
 **Language:** English | [Français](fr/TESTER.md)
 
-> Date: 15/09/2026 · Preview **0.18.0**
+> Date: 28/09/2026 · Preview **0.19.0**
 
 Thank you for testing Preview. Goal: install **without** `cargo` or cloning
 the repo, exercise the main paths, and send feedback **from the UI**.
@@ -53,6 +53,24 @@ the steps below.
 - Launch **Akasha OS Preview** (`aos-session`)
 
 Expected banner: Preview on the host OS — this is not the bootable OS yet.
+
+### Optional: headless `aos-serverd` (P21)
+
+For always-on / no-UI runs (same zip; binary in `bin/`):
+
+1. From the install prefix: `aos-serverd serve` (or `--headless`). Leave it
+   running; egui is **not** required.
+2. In another shell (same `AOS_HOME`): `aos-serverd status` — expect daemons
+   healthy.
+3. Enqueue a local agent job:  
+   `aos-serverd enqueue --goal "Say hello from headless intake" --actor cli`  
+   then `aos-serverd jobs` (records under `var/run/serverd-jobs.json`).
+4. Optional OS service: `./install-linux-service.sh` (or macOS/Windows twin) —
+   see [INSTALL.md](INSTALL.md). Uninstall scripts ship beside them.
+5. Optional UI attach: start `aos-session` against a live serverd tree (attach
+   UI-only / bootstrap-then-attach — P21.6).
+
+Skip this block if you only exercise the interactive 15-minute path.
 
 ## Steps (also in the Scenarios tab)
 
@@ -428,7 +446,7 @@ short path above.
 - Gates PC.6–PC.9 and PC.11–PC.13 checked on at least one machine (long
   protocol; not required of every tester)
 
-## Out of scope Preview 0.18.0
+## Out of scope Preview 0.19.0
 
 - seL4 / bare-metal boot
 - Intel Mac

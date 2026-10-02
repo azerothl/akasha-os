@@ -7,8 +7,8 @@
 Tag puis push :
 
 ```bash
-git tag v0.18.0
-git push origin v0.18.0
+git tag v0.19.0
+git push origin v0.19.0
 ```
 
 Le workflow [`.github/workflows/preview-release.yml`](../../.github/workflows/preview-release.yml)
@@ -24,7 +24,7 @@ dans le même zip ; sans GGUF), publie :
 
 Déclenchement manuel : Actions → **preview-release** → Run workflow.
 
-- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.18.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
+- **macOS seul sur une Release existante** (sans retag) : `macos_only` = true, `release_version` = `0.19.0`, `upload_release` = true — attache le zip Apple Silicon et met à jour `latest.json` sur cette Release.
 - **Rebuild complet** : `create_release` = true, `macos_only` = false.
 
 ## Manuel
@@ -57,15 +57,14 @@ Avant de taguer une release Preview `v*` :
 ## Notes de version (brouillon)
 
 ```
-Akasha OS Preview 0.18.0 — Memory V2, instincts, plan de santé
+Akasha OS Preview 0.19.0 — aos-serverd + Dev-assistant P0
 
-- Memory V2 par défaut (journal de décisions, mind palace ; sync shadow des faits legacy)
-- Instincts E22 en session sous pression de contexte ; plan de santé runtime E23
-- Notes tags / recherche live / delete ; fork/continue chat ; scènes/guides Canvas
-- Générateur de clés du coffre avec preset hex LAN
-- Studio Illustration expérimental 0.7.23 dans le catalogue local sous Win/Linux/macOS (édition ≠ beauté ; pas le MVP complet)
-- Polish LAN / santé / Deep Thinking / chrome Create
-- Mêmes bandes mill Win/Linux/Mac qu'en 0.17.x
+- aos-serverd : cycle de vie headless (ADR 0012), watchdogs, contrôle local, intake agents
+- Services OS opt-in (systemd user / launchd / logon Windows) + aos-serverd dans les zips Preview
+- Supervise opt-in aos-mcpd / aos-bridged ; aos-session attach UI-only
+- Dev-assistant P0 : workspace.bind / fs.search / fs.apply_patch + contrat module
+- S’appuie sur 0.18.0 (Memory V2, E22/E23, harness + aos-mcpd, Studio Illustration 0.7.23)
 
 Pas un OS bootable. Voir FIRST-RUN.md / INSTALL.md / TESTER.md
+Suivi tag : créer `v0.19.0` après merge de ce PR docs/VERSION (ne pas taguer depuis ce PR seul).
 ```

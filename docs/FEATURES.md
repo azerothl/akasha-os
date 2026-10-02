@@ -1,4 +1,4 @@
-# Preview features — Akasha OS 0.18.0
+# Preview features — Akasha OS 0.19.0
 
 **Language:** English | [Français](fr/FEATURES.md)
 
@@ -7,7 +7,14 @@ This is **not** the bootable OS. Target v1 requirements live in
 [functional-specs.md](functional-specs.md); phase gates in
 [STATUS.md](STATUS.md).
 
-> Date: 15/09/2026 · Preview **0.18.0**
+> Date: 28/09/2026 · Preview **0.19.0**
+
+### What's new in 0.19.0
+
+#### Features
+
+- **Server daemon (`aos-serverd`)**: headless process-tree owner (ADR 0012) — busd…agentd stay up without egui; ordered restart; extended watchdogs (incl. agentd); local control socket (`status` / `restart` / `stop`); agent job intake (`enqueue` → `aos-agentd`, caps fail-closed). Opt-in OS services (systemd user / launchd / Windows logon task). Opt-in supervise `aos-mcpd` / `aos-bridged`; `aos-session` can attach UI-only to a live tree — see [INSTALL.md](INSTALL.md) and [adr/0012-aos-serverd.md](adr/0012-aos-serverd.md)
+- **Dev-assistant P0**: `workspace.bind` / `list` / `unbind` with caps `/host/<id>/**`; bounded `fs.search` / `code.search`; `fs.apply_patch` + multi-file undo; module contract + community reference package — [dev-assistant-p0.md](dev-assistant-p0.md)
 
 ### What's new in 0.18.0
 
@@ -332,7 +339,7 @@ Slash commands:
 
 ## 4c. Illustration Studio (experimental module)
 
-Local catalogue package **`illustration-studio` 0.7.23** (versioned independently of Preview host **0.18.0**; `share/modules/catalogue.yaml` is authoritative). The Preview zip ships the same experimental module on **Windows, Linux, and macOS Apple Silicon** (bundled under `share/modules/`). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
+Local catalogue package **`illustration-studio` 0.7.23** (versioned independently of Preview host **0.19.0**; `share/modules/catalogue.yaml` is authoritative). The Preview zip ships the same experimental module on **Windows, Linux, and macOS Apple Silicon** (bundled under `share/modules/`). Install from **Settings → Local module catalogue** (cap review). DeclUI sidebar tab — **no WebView**. Depth docs: [illustration-studio-caps.md](illustration-studio-caps.md), [illustration-blender-backend.md](illustration-blender-backend.md), [illustration-neural-mesh.md](illustration-neural-mesh.md), [illustration-renderer-pack.md](illustration-renderer-pack.md), [illustration-asset-packs.md](illustration-asset-packs.md). Product spec (**Draft v0.1**, intent SoT — not a shipping claim): [modules/illustration-studio/docs/akasha-illustration-studio-spec.md](../modules/illustration-studio/docs/akasha-illustration-studio-spec.md) (also packaged under `share/modules/illustration-studio.aospkg/docs/`).
 
 **What ships (honest):**
 
@@ -391,6 +398,26 @@ Agent **Detail** (from the Agents tab or a chat card):
 - **Sources** (web / document / fetch) with open-in-browser links
 - Step timeline (`agent.trace`): action, args, tool result, tool kind (native / module / mcp / runtime)
 - Controls: **Pause**, **Resume**, **Retry**, **Kill**, **Steer**
+
+---
+
+## 5b. Server daemon (`aos-serverd`, P21)
+
+Headless lifecycle owner for Preview (ADR
+[0012](adr/0012-aos-serverd.md)). Ships in `bin/` of Preview zips; opt-in OS
+service templates under `services/`. Interactive `aos-session` remains the
+desktop bootstrap and can **attach UI-only** to a live serverd tree.
+
+| Surface | What you get |
+|---------|----------------|
+| Headless serve | `aos-serverd serve` (or `--headless`) keeps busd…agentd up **without** egui |
+| Watchdogs | Soft respawn for agentd / auditd / platformd / modeld; busd/capkd death → ordered tree restart |
+| Local control | Unix socket under `$AOS_HOME/var/run/` — `status` / `restart` / `stop` (audited) |
+| Agent intake | `aos-serverd enqueue --goal "…" --actor cli` → existing `aos-agentd` paths (caps fail-closed); `jobs` / `job <id>` |
+| OS services | Opt-in systemd **user** / launchd / Windows logon task scripts in the zip ([INSTALL.md](INSTALL.md)) |
+| Optional daemons | `etc/serverd.yaml` can opt in supervise for `aos-mcpd` / `aos-bridged` |
+
+Non-goals stay: no network-exposed admin without caps, no K8s, no sibling-binary merge.
 
 ---
 
@@ -506,7 +533,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 
 ---
 
-## 11. Not in Preview 0.18.0
+## 11. Not in Preview 0.19.0
 
 - Bootable / bare-metal image
 - STT / always-on voice
@@ -523,5 +550,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - Second draft GGUF / vLLM-in-TCB / DFlash2 (E20 uses prompt-lookup only)
 - seL4 guest in the public Preview zip (internal `sel4-pv-*` only)
 - Illustration Studio as full MVP §140–§145 (LLM SceneIntent, Blender binary in zip, neural mesh weights, public marketplace) — the experimental module in §4c is narrower
+- Dev-assistant **P1–P2** (cap-gated `process.run`, git.*, LSP/DAP, DeclUI IDE widgets) — P0 bind/search/patch ships; deeper IDE track is **0.20+**
+- Network-exposed `aos-serverd` admin plane (local control socket only)
 
 Cohort protocol: [TESTER.md](TESTER.md).
