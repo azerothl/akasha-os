@@ -32,3 +32,16 @@ tools:
       - service: fs.undo_patch
         args:
           undo_group_id: "{{args.undo_group_id}}"
+  dev-assistant.git_status:
+    steps:
+      - service: git.status
+        args:
+          root: "{{args.root}}"
+  dev-assistant.git_diff:
+    steps:
+      - service: git.diff
+        args:
+          root: "{{args.root}}"
+          path: "{{args.path}}"
+          staged: "{{args.staged}}"
+
