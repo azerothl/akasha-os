@@ -42,6 +42,22 @@ tools:
       properties:
         undo_group_id: { type: string }
       required: [undo_group_id]
+  - name: dev-assistant.git_status
+    description: Read-only git status for a bound workspace (requires fs.read:/host/<id>/**)
+    input_schema:
+      type: object
+      properties:
+        root: { type: string, description: workspace_id or /host/<id> path }
+      required: [root]
+  - name: dev-assistant.git_diff
+    description: Read-only unified git diff (worktree or staged) under a bound workspace
+    input_schema:
+      type: object
+      properties:
+        root: { type: string, description: workspace_id or /host/<id> path }
+        path: { type: string, description: optional /host/<id>/… or repo-relative path }
+        staged: { type: boolean, description: when true, show staged (--cached) diff }
+      required: [root]
 ui:
   entry: ui/index.html
   mode: declarative_ui

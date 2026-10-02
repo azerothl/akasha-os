@@ -77,9 +77,20 @@ once the id is known to testers.
 - Search form (`root`, `query`) → table of hits (`path`, `line`, `preview`)
 - Patch form (`path`, `diff` / replace) → show `undo_group_id`; undo button
 
-## Non-goals (P1–P2)
+## Non-goals (remaining P1–P2)
 
-`process.run`, `git.*`, LSP, DAP, DeclUI IDE widgets — see issue #247.
+`process.run`, `git.commit`, LSP, DAP, DeclUI IDE widgets — see issue #247.
+
+## DA.5 — read-only git (0.20 start / #247 P1 slice)
+
+Live on the host bus (and `host_call`):
+
+| Intent | Cap | Notes |
+|--------|-----|--------|
+| `git.status` | `fs.read:/host/<id>/**` | Porcelain `-b` + entries; max 500 lines |
+| `git.diff` | `fs.read:/host/<id>/**` | Unified worktree or `--cached`; max 256 KiB |
+
+No `git.commit` / push / fetch. Requires a `.git` work tree under the bound host folder.
 
 ## Related
 
