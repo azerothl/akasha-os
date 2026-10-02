@@ -15,6 +15,7 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 - **Server daemon (`aos-serverd`)**: headless process-tree owner (ADR 0012) — busd…agentd stay up without egui; ordered restart; extended watchdogs (incl. agentd); local control socket (`status` / `restart` / `stop`); agent job intake (`enqueue` → `aos-agentd`, caps fail-closed). Opt-in OS services (systemd user / launchd / Windows logon task). Opt-in supervise `aos-mcpd` / `aos-bridged`; `aos-session` can attach UI-only to a live tree — see [INSTALL.md](INSTALL.md) and [adr/0012-aos-serverd.md](adr/0012-aos-serverd.md)
 - **Dev-assistant P0**: `workspace.bind` / `list` / `unbind` with caps `/host/<id>/**`; bounded `fs.search` / `code.search`; `fs.apply_patch` + multi-file undo; module contract + community reference package — [dev-assistant-p0.md](dev-assistant-p0.md)
+- **Dev-assistant DA.5 (0.20 start)**: read-only `git.status` / `git.diff` on bound `/host/<id>` trees (requires `fs.read`; no commit/push/fetch)
 
 ### What's new in 0.18.0
 
@@ -550,7 +551,7 @@ seL4 VM track (PV.1–PV.3) is separate: see [phases/phase-vm-sel4.md](phases/ph
 - Second draft GGUF / vLLM-in-TCB / DFlash2 (E20 uses prompt-lookup only)
 - seL4 guest in the public Preview zip (internal `sel4-pv-*` only)
 - Illustration Studio as full MVP §140–§145 (LLM SceneIntent, Blender binary in zip, neural mesh weights, public marketplace) — the experimental module in §4c is narrower
-- Dev-assistant **P1–P2** (cap-gated `process.run`, git.*, LSP/DAP, DeclUI IDE widgets) — P0 bind/search/patch ships; deeper IDE track is **0.20+**
+- Dev-assistant **remaining P1–P2** (cap-gated `process.run`, `git.commit`, LSP/DAP, DeclUI IDE widgets) — P0 bind/search/patch ships; read-only `git.status`/`git.diff` (DA.5) is the first **0.20** slice; deeper IDE track stays **0.20+**
 - Network-exposed `aos-serverd` admin plane (local control socket only)
 
 Cohort protocol: [TESTER.md](TESTER.md).

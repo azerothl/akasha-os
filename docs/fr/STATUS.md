@@ -14,16 +14,17 @@ supervise mcpd/bridged opt-in, session attach UI-only ; Dev-assistant **P0**
 ([#247](https://github.com/azerothl/akasha-os/issues/247)). S’appuie sur 0.18.0
 (Memory V2, E22/E23, harness + `aos-mcpd`, Studio Illustration 0.7.23). Pas un
 OS bootable. Gate cohorte encore ouverte (**3 Windows + 1 Linux + 1 macOS Apple
-Silicon**, chemin 15 minutes). **Suite :** fermeture cohorte PC ; #247 P1–P2 /
-**0.20+** quand planifié ; Horizon C / PV.4+ quand planifié ; E9 hard-green
-après un run 2 GPU documenté.
+Silicon**, chemin 15 minutes). **Suite :** fermeture cohorte PC ; #247 **DA.5**
+`git.status`/`git.diff` lecture seule livré (début 0.20) ; reste P1–P2
+(`git.commit`, `process.run`, LSP/DAP, IDE DeclUI) **0.20+** ; Horizon C /
+PV.4+ quand planifié ; E9 hard-green après un run 2 GPU documenté.
 
 ## P21 — Preview 0.19.0 (daemon serveur + Dev-assistant P0) — fait
 
 Track A (`aos-serverd` **P21.0–P21.6**) et Track B (#247 **DA.1–DA.4**)
 landés sur `main` (#406 / #407 / #409 / #410). **P21.7** = coupe docs /
 VERSION de cette release. Ne **pas** inventer un numéro P6 (PC encore ouverte).
-Pas de nouvel E* pour ces tracks hôte. #247 P1–P2 restent **0.20+**.
+Pas de nouvel E* pour ces tracks hôte. #247 P1 démarre avec **DA.5** (git lecture seule) ; `git.commit` / `process.run` / IDE restent **0.20+**.
 
 | # | Élément | État |
 |---|---------|------|
@@ -32,6 +33,13 @@ Pas de nouvel E* pour ces tracks hôte. #247 P1–P2 restent **0.20+**.
 | P21 / #403 | **P21.6** — supervise opt-in `aos-mcpd` / `aos-bridged` ; session attach UI only | **fait** (#410) |
 | P21 / #247 | **Dev-assistant P0** — bind + search + apply_patch/undo + [contrat module](../dev-assistant-p0.md) + module référence community | **fait** (#407) |
 | P21 / #403 | **P21.7** — VERSION 0.19.0, FEATURES/STATUS/site/TESTER headless, honesty packaging | **fait** |
+
+## P22 — Preview 0.20 (Dev-assistant P1 début) — en cours
+
+| # | Élément | État |
+|---|---------|------|
+| P22 / #247 | **DA.5** — `git.status` / `git.diff` lecture seule sur workspaces liés (cap `fs.read`) | **fait** (ce PR) |
+| P22 / #247 | `git.commit`, `process.run` sous caps, Problems, LSP/DAP, IDE DeclUI | backlog |
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait
 

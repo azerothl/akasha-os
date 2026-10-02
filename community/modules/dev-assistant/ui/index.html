@@ -21,7 +21,13 @@
       "patch_content_hint": "full file replacement",
       "patch_submit": "Apply patch",
       "undo_hint": "undo_group_id from last apply",
-      "undo_submit": "Undo patch"
+      "undo_submit": "Undo patch",
+      "git_heading": "Git (read-only)",
+      "git_status_submit": "Git status",
+      "git_diff_submit": "Git diff",
+      "git_root_hint": "workspace id or /host/<id>",
+      "git_path_hint": "optional path filter",
+      "git_empty": "No git output (needs fs.read + a .git work tree)."
     },
     "fr": {
       "tab_dev_assistant": "Assistant dev",
@@ -40,7 +46,13 @@
       "patch_content_hint": "contenu complet de remplacement",
       "patch_submit": "Appliquer le patch",
       "undo_hint": "undo_group_id du dernier apply",
-      "undo_submit": "Annuler le patch"
+      "undo_submit": "Annuler le patch",
+      "git_heading": "Git (lecture seule)",
+      "git_status_submit": "Statut git",
+      "git_diff_submit": "Diff git",
+      "git_root_hint": "id workspace ou /host/<id>",
+      "git_path_hint": "filtre de chemin optionnel",
+      "git_empty": "Pas de sortie git (fs.read + dépôt .git requis)."
     }
   },
   "root": {
@@ -140,6 +152,48 @@
             "undo_group_id": { "type": "string", "x-hint-key": "undo_hint" }
           },
           "required": ["undo_group_id"]
+        }
+      },
+      {
+        "kind": "heading",
+        "label_key": "git_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.git_status",
+        "label_key": "git_status_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": { "type": "string", "x-hint-key": "git_root_hint" }
+          },
+          "required": ["root"]
+        }
+      },
+      {
+        "kind": "empty_state",
+        "bind": "dev-assistant.git_status",
+        "source": "entries",
+        "label_key": "git_empty"
+      },
+      {
+        "kind": "table",
+        "bind": "dev-assistant.git_status",
+        "source": "entries",
+        "columns": ["status", "path"]
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.git_diff",
+        "label_key": "git_diff_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": { "type": "string", "x-hint-key": "git_root_hint" },
+            "path": { "type": "string", "x-hint-key": "git_path_hint" },
+            "staged": { "type": "boolean" }
+          },
+          "required": ["root"]
         }
       }
     ]

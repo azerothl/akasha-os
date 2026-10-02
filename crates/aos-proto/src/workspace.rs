@@ -1,4 +1,4 @@
-//! Contrats Preview 0.19 / #247 P0 — workspace host bind, search, patch.
+//! Contrats Preview 0.19+ / #247 — workspace host bind, search, patch, read-only git.
 //!
 //! Foundations only: types + cap path helpers. Search/patch execution and
 //! full host I/O land in later DA.* lots; `workspace.bind` persists bindings
@@ -17,6 +17,10 @@ pub mod intents {
     pub const CODE_SEARCH: &str = "code.search";
     pub const APPLY_PATCH: &str = "fs.apply_patch";
     pub const UNDO_PATCH: &str = "fs.undo_patch";
+    /// Read-only porcelain status (#247 P1 / DA.5).
+    pub const GIT_STATUS: &str = "git.status";
+    /// Read-only unified diff (#247 P1 / DA.5). No commit/push.
+    pub const GIT_DIFF: &str = "git.diff";
 }
 
 /// Logical VFS prefix for a bound host workspace: `/host/<id>`.
@@ -285,6 +289,78 @@ pub struct FsUndoPatchResponse {
     pub message: Option<String>,
 }
 
+/// Hard ceiling for porcelain status lines returned by `git.status`.
+pub const GIT_STATUS_MAX_ENTRIES: usize = 500;
+/// Hard ceiling for unified-diff bytes returned by `git.diff`.
+pub const GIT_DIFF_MAX_BYTES: usize = 256 * 1024;
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitStatusRequest {
+    /// Bound workspace id or `/host/<id>` root.
+    pub root: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitStatusEntry {
+    /// Two-letter porcelain XY status (e.g. ` M`, `??`).
+    pub status: String,
+    /// Logical `/host/<id>/…` path.
+    pub path: String,
+    /// Rename/copy source when present (logical VFS path).
+    #[serde(default)]
+    pub orig_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitStatusResponse {
+    pub ok: bool,
+    /// Branch header from `git status -b --porcelain` (e.g. `## main...origin/main`).
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub entries: Vec<GitStatusEntry>,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitDiffRequest {
+    /// Bound workspace id or `/host/<id>` root.
+    pub root: String,
+    /// Optional path filter (logical `/host/<id>/…` or repo-relative).
+    #[serde(default)]
+    pub path: Option<String>,
+    /// When true, show staged (`--cached`) diff instead of worktree.
+    #[serde(default)]
+    pub staged: bool,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitDiffResponse {
+    pub ok: bool,
+    /// Unified diff text (may be truncated).
+    #[serde(default)]
+    pub diff: String,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +400,13 @@ mod tests {
         assert_eq!(FS_SEARCH_DEFAULT_LIMIT, 50);
         const _: () = assert!(FS_SEARCH_MAX_LIMIT >= FS_SEARCH_DEFAULT_LIMIT);
         const _: () = assert!(APPLY_PATCH_MAX_FILES >= 1);
+        const _: () = assert!(GIT_STATUS_MAX_ENTRIES >= 1);
+        const _: () = assert!(GIT_DIFF_MAX_BYTES >= 1024);
+    }
+
+    #[test]
+    fn git_intent_names() {
+        assert_eq!(intents::GIT_STATUS, "git.status");
+        assert_eq!(intents::GIT_DIFF, "git.diff");
     }
 }

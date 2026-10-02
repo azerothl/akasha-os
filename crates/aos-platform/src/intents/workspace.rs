@@ -1,10 +1,13 @@
-//! Intents `workspace.*` + `fs.search` / `fs.apply_patch` (#247 P0).
+//! Intents `workspace.*` + `fs.search` / `fs.apply_patch` + read-only `git.*` (#247).
 
 use crate::subsystem::PlatformSubsystem;
 use crate::workspace::WorkspaceError;
 use aos_ipc::BusService;
 use aos_proto::host_folder::looks_like_host_path;
 use aos_proto::workspace::intents;
+use aos_proto::workspace::{
+    GitDiffRequest, GitStatusRequest,
+};
 use aos_proto::{
     AuditAppendRequest, FsApplyPatchRequest, FsSearchRequest, FsUndoPatchRequest,
     WorkspaceBindRequest, WorkspaceBindResponse, WorkspaceListRequest, WorkspaceListResponse,
@@ -298,6 +301,96 @@ pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
             }
         });
     }
+
+    register_git_status(svc, sub.clone());
+    register_git_diff(svc, sub);
+}
+
+fn register_git_status(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
+    svc.on(intents::GIT_STATUS, move |ctx| {
+        let s = sub.clone();
+        async move {
+            let mut req = match ctx.payload::<GitStatusRequest>() {
+                Ok(req) => req,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            if req.actor.is_empty() && ctx.intent.from.starts_with("agent:") {
+                req.actor = ctx.intent.from.clone();
+            }
+            if req.caps.is_empty() && !req.actor.is_empty() {
+                if let Some(granted) = s.granted_caps.lock().unwrap().get(&req.actor) {
+                    req.caps = granted.clone();
+                }
+            }
+            let resp = {
+                let mgr = s.workspaces.lock().unwrap();
+                crate::workspace_git::git_status(&mgr, &req)
+            };
+            if resp.ok {
+                s.audit(AuditAppendRequest {
+                    trace_id: req.trace_id.clone(),
+                    actor: req.actor.clone(),
+                    action: intents::GIT_STATUS.into(),
+                    target: req.root.clone(),
+                    detail: serde_json::json!({
+                        "entries": resp.entries.len(),
+                        "truncated": resp.truncated,
+                        "branch": resp.branch,
+                    }),
+                });
+            }
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+        }
+    });
+}
+
+fn register_git_diff(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
+    svc.on(intents::GIT_DIFF, move |ctx| {
+        let s = sub.clone();
+        async move {
+            let mut req = match ctx.payload::<GitDiffRequest>() {
+                Ok(req) => req,
+                Err(_) => {
+                    let _ = ctx
+                        .respond_error(aos_ipc::msg::Status::BadRequest, "payload invalide")
+                        .await;
+                    return;
+                }
+            };
+            if req.actor.is_empty() && ctx.intent.from.starts_with("agent:") {
+                req.actor = ctx.intent.from.clone();
+            }
+            if req.caps.is_empty() && !req.actor.is_empty() {
+                if let Some(granted) = s.granted_caps.lock().unwrap().get(&req.actor) {
+                    req.caps = granted.clone();
+                }
+            }
+            let resp = {
+                let mgr = s.workspaces.lock().unwrap();
+                crate::workspace_git::git_diff(&mgr, &req)
+            };
+            if resp.ok {
+                s.audit(AuditAppendRequest {
+                    trace_id: req.trace_id.clone(),
+                    actor: req.actor.clone(),
+                    action: intents::GIT_DIFF.into(),
+                    target: req.root.clone(),
+                    detail: serde_json::json!({
+                        "staged": req.staged,
+                        "path": req.path,
+                        "bytes": resp.diff.len(),
+                        "truncated": resp.truncated,
+                    }),
+                });
+            }
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+        }
+    });
 }
 
 fn register_search(svc: &mut BusService, sub: Arc<PlatformSubsystem>, intent: &'static str) {
