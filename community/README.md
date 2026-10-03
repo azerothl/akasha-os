@@ -32,6 +32,10 @@ Module reference (Dev Assistant P0 / #247): [`modules/dev-assistant/`](modules/d
 — script + DeclUI v1 contract; not in the signed catalogue by default. See
 [`docs/dev-assistant-p0.md`](../docs/dev-assistant-p0.md).
 
+Mix Path A (#432): [`modules/song-maker/`](modules/song-maker/) — [mix-assistant.md](../docs/mix-assistant.md).
+
+Host ASR → gate (#433): [`modules/voice-to-gate/`](modules/voice-to-gate/) — [speech-to-gate.md](../docs/speech-to-gate.md).
+
 ## How to add a skill
 
 1. Copy [`skills/morning-brief/SKILL.md`](skills/morning-brief/SKILL.md) or a
