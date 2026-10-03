@@ -15,6 +15,8 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 - **Daemon serveur (`aos-serverd`)** : propriétaire du cycle de vie headless (ADR 0012) — busd…agentd restent up sans egui ; restart ordonné ; watchdogs étendus (dont agentd) ; socket de contrôle local (`status` / `restart` / `stop`) ; intake jobs agents (`enqueue` → `aos-agentd`, caps fail-closed). Services OS opt-in (systemd user / launchd / tâche Windows logon). Supervise opt-in `aos-mcpd` / `aos-bridged` ; `aos-session` peut attacher l’UI seule à un arbre vivant — voir [INSTALL.md](INSTALL.md) et [adr/0012-aos-serverd.md](../adr/0012-aos-serverd.md)
 - **Dev-assistant P0** : `workspace.bind` / `list` / `unbind` avec caps `/host/<id>/**` ; `fs.search` / `code.search` bornés ; `fs.apply_patch` + undo multi-fichier ; contrat module + paquet référence community — [dev-assistant-p0.md](../dev-assistant-p0.md)
+- **Mix song-maker Path A (#432)** : descripteurs hôte + catalogue presets + lots confirm/undo (`mix.*`) ; DAW hors sandbox — [mix-assistant.md](mix-assistant.md)
+- **ASR hôte → gate (#433)** : `speech.ingest_transcript` / `AOS_ASR_COMMAND` opt-in ; pas de STT vendu — [speech-to-gate.md](speech-to-gate.md)
 
 ### Nouveautés 0.18.0
 
