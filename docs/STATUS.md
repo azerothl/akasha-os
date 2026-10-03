@@ -1,1 +1,1 @@
-PLACEHOLDER_LOAD
+@file:///tmp/mcp_batch_3_content_only.txt
