@@ -1,0 +1,8 @@
+# Opt-in ASR → text for evaluate_gate. No bundled STT weights.
+tools:
+  voice-to-gate.ingest:
+    steps:
+      - service: speech.ingest_transcript
+        args:
+          transcript: "{{args.transcript}}"
+          typed_text: "{{args.typed_text}}"
