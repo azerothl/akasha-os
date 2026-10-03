@@ -1,0 +1,46 @@
+name: song-maker
+version: 0.1.0
+hash: "ci"
+permissions:
+  required_caps:
+    - mix.read:*
+    - mix.apply:*
+tools:
+  - name: song-maker.catalog
+    description: List mix Path A presets (akasha-model catalogue v1)
+    input_schema:
+      type: object
+  - name: song-maker.load_demo
+    description: Load synthetic host descriptors (no WAV)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+  - name: song-maker.propose
+    description: Build a confirmable mix_proposal batch (ready/abstain)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        preset: { type: string }
+        confidence: { type: number }
+        min_confidence: { type: number }
+      required: [preset, confidence, min_confidence]
+  - name: song-maker.apply
+    description: Apply pending batch after explicit confirmation (no DAW)
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+        confirmation_given: { type: boolean }
+      required: [confirmation_given]
+  - name: song-maker.undo
+    description: One-action inverse of the last applied batch
+    input_schema:
+      type: object
+      properties:
+        session_id: { type: string }
+ui:
+  entry: ui/index.html
+  mode: declarative_ui
+min_os_api: 1
