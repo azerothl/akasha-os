@@ -1,0 +1,19 @@
+name: voice-to-gate
+version: 0.1.0
+hash: "ci"
+permissions:
+  required_caps:
+    - speech.ingest:*
+tools:
+  - name: voice-to-gate.ingest
+    description: Ingest an OS/host STT transcript as untrusted gate context
+    input_schema:
+      type: object
+      properties:
+        transcript: { type: string }
+        typed_text: { type: string }
+      required: [transcript]
+ui:
+  entry: ui/index.html
+  mode: declarative_ui
+min_os_api: 1

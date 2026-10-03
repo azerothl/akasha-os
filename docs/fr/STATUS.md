@@ -38,7 +38,9 @@ Pas de nouvel E* pour ces tracks hôte. #247 P1 démarre avec **DA.5** (git lect
 
 | # | Élément | État |
 |---|---------|------|
-| P22 / #247 | **DA.5** — `git.status` / `git.diff` lecture seule sur workspaces liés (cap `fs.read`) | **fait** (ce PR) |
+| P22 / #247 | **DA.5** — `git.status` / `git.diff` lecture seule sur workspaces liés (cap `fs.read`) | **fait** |
+| P22 / #432 | Mix Path A hôte + module song-maker | **fait** (ce PR) |
+| P22 / #433 | ASR hôte → texte gate non fiable (pas de STT vendu) | **fait** (ce PR) |
 | P22 / #247 | `git.commit`, `process.run` sous caps, Problems, LSP/DAP, IDE DeclUI | backlog |
 
 ## P20 — Preview 0.18.0 (Memory V2 + instincts + santé + Notes/Chat) — fait

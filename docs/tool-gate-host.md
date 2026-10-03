@@ -117,6 +117,12 @@ on the live executor path.
 
 Pass `context.source_trust` from the bridge (`trusted` \| `mixed` \| `untrusted`).
 
+ASR / OS STT transcripts are **untrusted** (or **mixed** if the operator also
+typed). Overlay: `aos_gate.asr.overlay_asr_transcript` when the evaluate
+request includes `asr_transcript`. Host intents: `speech.ingest_transcript`
+/ `speech.transcribe` (opt-in `AOS_ASR_COMMAND`, **no** bundled weights).
+See [speech-to-gate.md](speech-to-gate.md).
+
 ---
 
 ## HITL escalate (approve / deny)

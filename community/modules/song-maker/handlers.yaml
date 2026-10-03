@@ -1,0 +1,31 @@
+# Song-maker mix assistant (Path A stub).
+# Caps fail-closed on mix.read:* / mix.apply:*. DAW stays outside the sandbox.
+tools:
+  song-maker.catalog:
+    steps:
+      - service: mix.catalog
+        args: {}
+  song-maker.load_demo:
+    steps:
+      - service: mix.load_demo
+        args:
+          session_id: "{{args.session_id}}"
+  song-maker.propose:
+    steps:
+      - service: mix.propose
+        args:
+          session_id: "{{args.session_id}}"
+          preset: "{{args.preset}}"
+          confidence: "{{args.confidence}}"
+          min_confidence: "{{args.min_confidence}}"
+  song-maker.apply:
+    steps:
+      - service: mix.apply
+        args:
+          session_id: "{{args.session_id}}"
+          confirmation_given: "{{args.confirmation_given}}"
+  song-maker.undo:
+    steps:
+      - service: mix.undo
+        args:
+          session_id: "{{args.session_id}}"

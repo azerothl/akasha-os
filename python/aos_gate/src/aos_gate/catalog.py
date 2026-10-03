@@ -34,7 +34,11 @@ def _required_capability(required_caps: Iterable[str] | None) -> str | None:
 
 def _requires_confirmation(name: str) -> bool:
     lower = name.lower()
-    return lower.endswith(_CONFIRM_SUFFIXES) or "delete" in lower
+    return (
+        lower.endswith(_CONFIRM_SUFFIXES)
+        or "delete" in lower
+        or name in {"mix.apply", "mix.apply_batch"}
+    )
 
 
 def _irreversible(name: str) -> bool:

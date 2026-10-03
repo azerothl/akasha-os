@@ -34,6 +34,7 @@ from akasha_model import ToolProposal, ToolSpec, describe_plan, evaluate_gate
 from akasha_model.host import HostOutcome
 from akasha_model.tool_calling import ToolCallPlan
 
+from .asr import overlay_asr_transcript
 from .catalog import tools_from_os_catalog
 from .credentials import CredentialVault
 from .hitl import (
@@ -103,7 +104,7 @@ def _host_from_request(
                 for k, v in (vault_cfg.get("global_secrets") or {}).items()
             },
         )
-    ctx = context_from_mapping(data.get("context"))
+    ctx = overlay_asr_transcript(context_from_mapping(data.get("context")), data)
     return AkashaOsToolHost(
         executor=RecordingExecutor(),
         actor_caps=set(host_cfg.get("actor_caps") or []),
@@ -124,7 +125,7 @@ def _host_from_request(
 def cmd_evaluate(data: dict[str, Any]) -> dict[str, Any]:
     tools = _tools_from_request(data)
     proposal = _proposal(data)
-    ctx = context_from_mapping(data.get("context"))
+    ctx = overlay_asr_transcript(context_from_mapping(data.get("context")), data)
     signals = signals_from_context(ctx)
     plan = evaluate_gate(tools, proposal, signals)
     return {
@@ -151,7 +152,7 @@ def cmd_dispatch(data: dict[str, Any]) -> dict[str, Any]:
     tools = _tools_from_request(data)
     proposal = _proposal(data)
     host = _host_from_request(data, tools)
-    ctx = context_from_mapping(data.get("context"))
+    ctx = overlay_asr_transcript(context_from_mapping(data.get("context")), data)
     outcome = run_os_gated_call(
         tools,
         proposal,

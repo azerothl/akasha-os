@@ -148,6 +148,10 @@ pub struct PlatformSubsystem {
     pub workspaces: Mutex<crate::workspace::WorkspaceBindManager>,
     /// Multi-file patch undo groups (#247 DA.3).
     pub workspace_patches: Mutex<crate::workspace_patch::WorkspacePatchManager>,
+    /// Mix Path A sessions (presets + confirm/undo; no DAW).
+    pub mix: Mutex<crate::mix::MixSessionStore>,
+    /// Opt-in ASR transcripts for the tool gate (no bundled STT).
+    pub speech: Mutex<crate::speech::SpeechTranscriptStore>,
     pub net: Mutex<EgressControl>,
     pub secrets: Mutex<SecretStore>,
     /// Caps accordées par `cap.request` (registre logique par agent).
@@ -171,10 +175,10 @@ impl PlatformSubsystem {
         let audit = AuditJournal::open(&config.audit_dir).map_err(|e| e.to_string())?;
         let fs = StorageFs::open(&config.storage_dir).map_err(|e| e.to_string())?;
         let v2_enabled = crate::memory::memory_v2_env_override().unwrap_or(config.memory_v2);
-        let shadow_enabled = crate::memory::memory_v2_shadow_env_override()
-            .unwrap_or(config.memory_v2_shadow);
+        let shadow_enabled =
+            crate::memory::memory_v2_shadow_env_override().unwrap_or(config.memory_v2_shadow);
         let mem = MemoryStore::open_with_modes(&config.memory_dir, v2_enabled, shadow_enabled)
-        .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?;
         let sessions = ChatSessionStore::open(&config.sessions_dir).map_err(|e| e.to_string())?;
         #[cfg(feature = "embeddings")]
         let embed = {
@@ -267,6 +271,8 @@ impl PlatformSubsystem {
             host_folders: Mutex::new(host_folders),
             workspaces: Mutex::new(workspaces),
             workspace_patches: Mutex::new(workspace_patches),
+            mix: Mutex::new(crate::mix::MixSessionStore::default()),
+            speech: Mutex::new(crate::speech::SpeechTranscriptStore::default()),
             net: Mutex::new(net),
             secrets: Mutex::new(secrets),
             granted_caps: Mutex::new(std::collections::HashMap::new()),
@@ -708,7 +714,11 @@ impl HostServices for PlatformSubsystem {
                 Self::require_cap(ctx, "mem.query", ns)?;
                 let vector = self.embed_text(query).unwrap_or_default();
                 let namespace = if ns.is_empty() { None } else { Some(ns) };
-                let mut hits = self.mem.lock().unwrap().episodic_query(&vector, k, namespace);
+                let mut hits = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .episodic_query(&vector, k, namespace);
                 if hits.is_empty() && vector.is_empty() {
                     let terms: Vec<String> = query
                         .split_whitespace()
@@ -815,7 +825,9 @@ impl HostServices for PlatformSubsystem {
                 let product_k = args["product_k"].as_u64().unwrap_or(4) as usize;
                 let user_doc_k = args["user_doc_k"].as_u64().unwrap_or(3) as usize;
                 let namespace = args["namespace"].as_str();
-                if let Some(ns) = namespace { Self::require_cap(ctx, "mem.query", ns)?; }
+                if let Some(ns) = namespace {
+                    Self::require_cap(ctx, "mem.query", ns)?;
+                }
                 let emb = self.embed_text(query).unwrap_or_default();
                 let (hits, product_hits, user_doc_hits, objects, object_relations, shadow) = {
                     let mut mem = self.mem.lock().unwrap();
@@ -827,10 +839,24 @@ impl HostServices for PlatformSubsystem {
                     } else {
                         None
                     };
-                    let objects = if mem.memory_v2_enabled() { mem.object_query(&emb, k, namespace) } else { Vec::new() };
-                    let ids = objects.iter().map(|object| object.id).collect::<std::collections::HashSet<_>>();
+                    let objects = if mem.memory_v2_enabled() {
+                        mem.object_query(&emb, k, namespace)
+                    } else {
+                        Vec::new()
+                    };
+                    let ids = objects
+                        .iter()
+                        .map(|object| object.id)
+                        .collect::<std::collections::HashSet<_>>();
                     let object_relations = mem.object_relations_for(&ids);
-                    (hits, product_hits, user_doc_hits, objects, object_relations, shadow)
+                    (
+                        hits,
+                        product_hits,
+                        user_doc_hits,
+                        objects,
+                        object_relations,
+                        shadow,
+                    )
                 };
                 let mut prompt_block = crate::product_rag::format_prompt_block(&product_hits);
                 let user_doc_block = crate::user_docs::format_prompt_block(&user_doc_hits);
@@ -858,8 +884,8 @@ impl HostServices for PlatformSubsystem {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemObjectCreateRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.object.create: {e}"))?;
+                let req: aos_proto::MemObjectCreateRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.object.create: {e}"))?;
                 Self::require_cap(ctx, "mem.write", &req.namespace)?;
                 let vector = self.embed_text(&req.content).unwrap_or_default();
                 let object = self.mem.lock().unwrap().object_create(req, vector)?;
@@ -876,11 +902,17 @@ impl HostServices for PlatformSubsystem {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemObjectGetRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("{service}: {e}"))?;
-                let object = self.mem.lock().unwrap().object_get(req.id)
+                let req: aos_proto::MemObjectGetRequest =
+                    serde_json::from_value(args).map_err(|e| format!("{service}: {e}"))?;
+                let object = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .object_get(req.id)
                     .ok_or_else(|| "objet mémoire inconnu".to_string())?;
-                if service == "mem.decision.get" && object.kind != aos_proto::MemoryObjectKind::Decision {
+                if service == "mem.decision.get"
+                    && object.kind != aos_proto::MemoryObjectKind::Decision
+                {
                     return Err("l'objet n'est pas une décision".into());
                 }
                 Self::require_cap(ctx, "mem.query", &object.namespace)?;
@@ -890,9 +922,11 @@ impl HostServices for PlatformSubsystem {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemObjectListRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.object.list: {e}"))?;
-                if let Some(ns) = req.namespace.as_deref() { Self::require_cap(ctx, "mem.query", ns)?; }
+                let req: aos_proto::MemObjectListRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.object.list: {e}"))?;
+                if let Some(ns) = req.namespace.as_deref() {
+                    Self::require_cap(ctx, "mem.query", ns)?;
+                }
                 let objects = self.mem.lock().unwrap().object_list(&req);
                 Ok(serde_json::to_value(objects).unwrap_or_default())
             }
@@ -900,9 +934,13 @@ impl HostServices for PlatformSubsystem {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemObjectUpdateRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.object.update: {e}"))?;
-                let old = self.mem.lock().unwrap().object_get(req.id)
+                let req: aos_proto::MemObjectUpdateRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.object.update: {e}"))?;
+                let old = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .object_get(req.id)
                     .ok_or_else(|| "objet mémoire inconnu".to_string())?;
                 Self::require_cap(ctx, "mem.write", &old.namespace)?;
                 let new_embedding = req
@@ -914,7 +952,8 @@ impl HostServices for PlatformSubsystem {
                     let result = mem.object_update(req)?;
                     if let Some(embedding) = new_embedding {
                         mem.object_set_embedding(result.id, embedding)?;
-                        mem.object_get(result.id).ok_or_else(|| "objet mémoire inconnu".to_string())?
+                        mem.object_get(result.id)
+                            .ok_or_else(|| "objet mémoire inconnu".to_string())?
                     } else {
                         result
                     }
@@ -932,17 +971,30 @@ impl HostServices for PlatformSubsystem {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemObjectRelateRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.object.relate: {e}"))?;
+                let req: aos_proto::MemObjectRelateRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.object.relate: {e}"))?;
                 let namespaces = {
                     let mem = self.mem.lock().unwrap();
-                    (mem.object_get(req.from).map(|o| o.namespace), mem.object_get(req.to).map(|o| o.namespace))
+                    (
+                        mem.object_get(req.from).map(|o| o.namespace),
+                        mem.object_get(req.to).map(|o| o.namespace),
+                    )
                 };
-                let from_ns = namespaces.0.ok_or_else(|| "objet mémoire source inconnu".to_string())?;
-                let to_ns = namespaces.1.ok_or_else(|| "objet mémoire cible inconnu".to_string())?;
+                let from_ns = namespaces
+                    .0
+                    .ok_or_else(|| "objet mémoire source inconnu".to_string())?;
+                let to_ns = namespaces
+                    .1
+                    .ok_or_else(|| "objet mémoire cible inconnu".to_string())?;
                 Self::require_cap(ctx, "mem.write", &from_ns)?;
                 Self::require_cap(ctx, "mem.write", &to_ns)?;
-                let relation = self.mem.lock().unwrap().relate_v2(req.from, req.kind, req.to, req.confidence, req.source_refs)?;
+                let relation = self.mem.lock().unwrap().relate_v2(
+                    req.from,
+                    req.kind,
+                    req.to,
+                    req.confidence,
+                    req.source_refs,
+                )?;
                 self.audit(AuditAppendRequest {
                     trace_id: ctx.trace_id.clone(),
                     actor: format!("module:{}", ctx.module),
@@ -956,40 +1008,65 @@ impl HostServices for PlatformSubsystem {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemGraphQueryRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.graph.query: {e}"))?;
-                let namespace = self.mem.lock().unwrap().object_get(req.root_id)
+                let req: aos_proto::MemGraphQueryRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.graph.query: {e}"))?;
+                let namespace = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .object_get(req.root_id)
                     .map(|object| object.namespace);
-                if let Some(ns) = namespace.as_deref() { Self::require_cap(ctx, "mem.query", ns)?; }
-                Ok(serde_json::to_value(self.mem.lock().unwrap().graph_query(&req)).unwrap_or_default())
+                if let Some(ns) = namespace.as_deref() {
+                    Self::require_cap(ctx, "mem.query", ns)?;
+                }
+                Ok(
+                    serde_json::to_value(self.mem.lock().unwrap().graph_query(&req))
+                        .unwrap_or_default(),
+                )
             }
             "mem.timeline" => {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemTimelineRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.timeline: {e}"))?;
-                if let Some(ns) = req.namespace.as_deref() { Self::require_cap(ctx, "mem.query", ns)?; }
-                Ok(serde_json::to_value(self.mem.lock().unwrap().timeline(&req)).unwrap_or_default())
+                let req: aos_proto::MemTimelineRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.timeline: {e}"))?;
+                if let Some(ns) = req.namespace.as_deref() {
+                    Self::require_cap(ctx, "mem.query", ns)?;
+                }
+                Ok(
+                    serde_json::to_value(self.mem.lock().unwrap().timeline(&req))
+                        .unwrap_or_default(),
+                )
             }
             "mem.explain" => {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemExplainRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.explain: {e}"))?;
-                let object = self.mem.lock().unwrap().object_get(req.id)
+                let req: aos_proto::MemExplainRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.explain: {e}"))?;
+                let object = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .object_get(req.id)
                     .ok_or_else(|| "objet mémoire inconnu".to_string())?;
                 Self::require_cap(ctx, "mem.query", &object.namespace)?;
-                Ok(serde_json::to_value(self.mem.lock().unwrap().explain(&req)).unwrap_or_default())
+                Ok(
+                    serde_json::to_value(self.mem.lock().unwrap().explain(&req))
+                        .unwrap_or_default(),
+                )
             }
             "mem.revalidate" => {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {
                     return Err("Memory V2 désactivée (AOS_MEMORY_V2=1)".into());
                 }
-                let req: aos_proto::MemRevalidateRequest = serde_json::from_value(args)
-                    .map_err(|e| format!("mem.revalidate: {e}"))?;
-                let old = self.mem.lock().unwrap().object_get(req.id)
+                let req: aos_proto::MemRevalidateRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mem.revalidate: {e}"))?;
+                let old = self
+                    .mem
+                    .lock()
+                    .unwrap()
+                    .object_get(req.id)
                     .ok_or_else(|| "objet mémoire inconnu".to_string())?;
                 Self::require_cap(ctx, "mem.write", &old.namespace)?;
                 let object = self.mem.lock().unwrap().object_revalidate(req)?;
@@ -1009,7 +1086,15 @@ impl HostServices for PlatformSubsystem {
                 let req: aos_proto::MemNarrativeRequest = serde_json::from_value(args)
                     .map_err(|e| format!("mem.narrative.generate: {e}"))?;
                 let namespace = req.namespace.as_deref().unwrap_or("user:default");
-                Self::require_cap(ctx, if req.persist { "mem.write" } else { "mem.query" }, namespace)?;
+                Self::require_cap(
+                    ctx,
+                    if req.persist {
+                        "mem.write"
+                    } else {
+                        "mem.query"
+                    },
+                    namespace,
+                )?;
                 let object = self.mem.lock().unwrap().narrative_generate(&req)?;
                 if req.persist {
                     self.audit(AuditAppendRequest {
@@ -1036,7 +1121,10 @@ impl HostServices for PlatformSubsystem {
                 let report = {
                     let mem = self.mem.lock().unwrap();
                     if !mem.memory_v2_enabled() && !mem.memory_v2_shadow_enabled() {
-                        return Err("Memory V2 désactivée (AOS_MEMORY_V2=1 ou AOS_MEMORY_V2_SHADOW=1)".into());
+                        return Err(
+                            "Memory V2 désactivée (AOS_MEMORY_V2=1 ou AOS_MEMORY_V2_SHADOW=1)"
+                                .into(),
+                        );
                     }
                     mem.migration_report()
                 };
@@ -1051,7 +1139,10 @@ impl HostServices for PlatformSubsystem {
                 if let Some(namespace) = req.namespace.as_deref() {
                     Self::require_cap(ctx, "mem.query", namespace)?;
                 }
-                Ok(serde_json::to_value(self.mem.lock().unwrap().mind_palace_query(&req)).unwrap_or_default())
+                Ok(
+                    serde_json::to_value(self.mem.lock().unwrap().mind_palace_query(&req))
+                        .unwrap_or_default(),
+                )
             }
             "web.search" => {
                 // Cap réseau requise
@@ -1259,8 +1350,9 @@ impl HostServices for PlatformSubsystem {
                 let width = args.get("width").and_then(|v| v.as_f64()).map(|w| w as f32);
                 let brush = match args.get("brush") {
                     Some(value) => Some(
-                        serde_json::from_value::<aos_proto::CanvasBrush>(value.clone())
-                            .map_err(|_| "brush doit être pencil, wash ou legacy_solid".to_string())?,
+                        serde_json::from_value::<aos_proto::CanvasBrush>(value.clone()).map_err(
+                            |_| "brush doit être pencil, wash ou legacy_solid".to_string(),
+                        )?,
                     ),
                     None => None,
                 };
@@ -1617,7 +1709,10 @@ impl HostServices for PlatformSubsystem {
             "fs.search" | "code.search" => {
                 let root = args["root"].as_str().unwrap_or("").to_string();
                 let query = args["query"].as_str().unwrap_or("").to_string();
-                let glob = args["glob"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+                let glob = args["glob"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string());
                 let limit = args["limit"]
                     .as_u64()
                     .or_else(|| {
@@ -1745,7 +1840,10 @@ impl HostServices for PlatformSubsystem {
             }
             "git.diff" => {
                 let root = args["root"].as_str().unwrap_or("").to_string();
-                let path = args["path"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string());
+                let path = args["path"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string());
                 let staged = args["staged"].as_bool().unwrap_or(false);
                 let req = aos_proto::workspace::GitDiffRequest {
                     root,
@@ -1773,6 +1871,144 @@ impl HostServices for PlatformSubsystem {
                         }),
                     });
                 }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "mix.catalog" => {
+                Self::require_cap(ctx, "mix.read", "session")?;
+                let resp = self
+                    .mix
+                    .lock()
+                    .unwrap()
+                    .catalog()
+                    .map_err(|e| e.to_string())?;
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "mix.demo_state" | "mix.load_demo" => {
+                Self::require_cap(ctx, "mix.read", "session")?;
+                let session_id = args["session_id"].as_str().unwrap_or("default").to_string();
+                if service == "mix.load_demo" {
+                    let req = aos_proto::mix::MixIngestRequest {
+                        session_id,
+                        state: crate::mix::MixSessionStore::demo_state(),
+                        actor: ctx.actor.clone(),
+                        caps: ctx.granted_caps.clone(),
+                        trace_id: ctx.trace_id.clone(),
+                    };
+                    let resp = self.mix.lock().unwrap().ingest(&req);
+                    return serde_json::to_value(resp).map_err(|e| e.to_string());
+                }
+                Ok(serde_json::json!({
+                    "ok": true,
+                    "state": crate::mix::MixSessionStore::demo_state(),
+                    "note": "synthetic descriptors; no WAV in guest",
+                }))
+            }
+            "mix.ingest_state" => {
+                Self::require_cap(ctx, "mix.read", "session")?;
+                let mut req: aos_proto::mix::MixIngestRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mix.ingest_state: {e}"))?;
+                req.actor = ctx.actor.clone();
+                req.caps = ctx.granted_caps.clone();
+                req.trace_id = ctx.trace_id.clone();
+                let resp = self.mix.lock().unwrap().ingest(&req);
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "mix.ingest_state".into(),
+                        target: resp.session_id.clone(),
+                        detail: serde_json::json!({"on_behalf_of": ctx.actor}),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "mix.propose" => {
+                Self::require_cap(ctx, "mix.read", "session")?;
+                let mut req: aos_proto::mix::MixProposeRequest =
+                    serde_json::from_value(args).map_err(|e| format!("mix.propose: {e}"))?;
+                req.actor = ctx.actor.clone();
+                req.caps = ctx.granted_caps.clone();
+                req.trace_id = ctx.trace_id.clone();
+                let resp = self.mix.lock().unwrap().propose(&req);
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "mix.apply" => {
+                Self::require_cap(ctx, "mix.apply", "session")?;
+                let mut req: aos_proto::mix::MixApplyRequest =
+                    serde_json::from_value(args).unwrap_or_default();
+                req.actor = ctx.actor.clone();
+                req.caps = ctx.granted_caps.clone();
+                req.trace_id = ctx.trace_id.clone();
+                let resp = self.mix.lock().unwrap().apply(&req, true);
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "mix.apply".into(),
+                        target: resp.session_id.clone(),
+                        detail: serde_json::json!({
+                            "applied": resp.applied.len(),
+                            "daw": "outside_sandbox",
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "mix.undo" => {
+                Self::require_cap(ctx, "mix.apply", "session")?;
+                let mut req: aos_proto::mix::MixApplyRequest =
+                    serde_json::from_value(args).unwrap_or_default();
+                req.actor = ctx.actor.clone();
+                req.caps = ctx.granted_caps.clone();
+                req.trace_id = ctx.trace_id.clone();
+                let resp = self.mix.lock().unwrap().undo(&req, true);
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "mix.undo".into(),
+                        target: resp.session_id.clone(),
+                        detail: serde_json::json!({
+                            "undone": resp.applied.len(),
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "speech.ingest_transcript" => {
+                Self::require_cap(ctx, "speech.ingest", "session")?;
+                let mut req: aos_proto::speech::SpeechIngestRequest = serde_json::from_value(args)
+                    .map_err(|e| format!("speech.ingest_transcript: {e}"))?;
+                req.actor = ctx.actor.clone();
+                req.caps = ctx.granted_caps.clone();
+                req.trace_id = ctx.trace_id.clone();
+                let resp = self.speech.lock().unwrap().ingest(&req);
+                if resp.ok {
+                    self.audit(AuditAppendRequest {
+                        trace_id: ctx.trace_id.clone(),
+                        actor: format!("module:{}", ctx.module),
+                        action: "speech.ingest_transcript".into(),
+                        target: "transcript".into(),
+                        detail: serde_json::json!({
+                            "source_trust": resp.source_trust,
+                            "chars": resp.transcript.len(),
+                            "on_behalf_of": ctx.actor,
+                        }),
+                    });
+                }
+                serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "speech.transcribe" => {
+                Self::require_cap(ctx, "speech.transcribe", "session")?;
+                let mut req: aos_proto::speech::SpeechTranscribeRequest =
+                    serde_json::from_value(args).map_err(|e| format!("speech.transcribe: {e}"))?;
+                req.actor = ctx.actor.clone();
+                req.caps = ctx.granted_caps.clone();
+                req.trace_id = ctx.trace_id.clone();
+                let cmd = std::env::var(aos_proto::speech::ASR_COMMAND_ENV).ok();
+                let resp = crate::speech::SpeechTranscriptStore::transcribe(&req, cmd.as_deref());
                 serde_json::to_value(resp).map_err(|e| e.to_string())
             }
             // Escalade interdite depuis WASM
@@ -1863,7 +2099,10 @@ mod canvas_seeing_tests {
                 "k": 1,
             }),
         );
-        assert!(denied.is_err(), "un namespace hors capability ne doit pas fuiter");
+        assert!(
+            denied.is_err(),
+            "un namespace hors capability ne doit pas fuiter"
+        );
 
         let allowed = sub.call(
             &ctx,
@@ -1874,6 +2113,9 @@ mod canvas_seeing_tests {
                 "k": 1,
             }),
         );
-        assert!(allowed.is_ok(), "le namespace explicitement accordé doit rester lisible");
+        assert!(
+            allowed.is_ok(),
+            "le namespace explicitement accordé doit rester lisible"
+        );
     }
 }

@@ -31,7 +31,8 @@ def parse_source_trust(value: object | None) -> SourceTrust:
             return tier
     if text in {"user", "session", "operator", "human"}:
         return SourceTrust.TRUSTED
-    if text in {"retrieved", "rag", "web", "mcp", "tool_output", "untrusted_only"}:
+    if text in {"retrieved", "rag", "web", "mcp", "tool_output", "untrusted_only",
+                "asr", "stt", "speech", "transcript", "whisper", "os_stt"}:
         return SourceTrust.UNTRUSTED
     if text in {"partial", "hybrid"}:
         return SourceTrust.MIXED
@@ -54,7 +55,7 @@ def tool_is_high_impact(
     return (
         lower.endswith((".delete", ".rm", ".kill", ".revoke"))
         or "delete" in lower
-        or tool_name in {"harness.run", "device.usb.write", "fs.write"}
+        or tool_name in {"harness.run", "device.usb.write", "fs.write", "mix.apply", "mix.apply_batch"}
     )
 
 

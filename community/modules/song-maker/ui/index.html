@@ -1,0 +1,152 @@
+{
+  "type": "declarative_ui",
+  "title": "Song-maker mix",
+  "title_key": "tab_song_maker",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "tab_song_maker": "Song-maker mix",
+      "catalog_heading": "Presets (Path A catalogue)",
+      "catalog_empty": "Grant mix.read:* then load the catalogue.",
+      "catalog_submit": "List presets",
+      "demo_heading": "Host descriptors (no WAV)",
+      "demo_submit": "Load demo descriptors",
+      "session_hint": "session id (optional)",
+      "propose_heading": "Propose batch (not applied)",
+      "preset_hint": "vocal_forward | balanced | bass_heavy",
+      "confidence_hint": "choice confidence 0–1",
+      "min_hint": "min_confidence (host-set, required)",
+      "propose_submit": "Propose",
+      "propose_empty": "No batch yet — propose a preset.",
+      "apply_heading": "Confirm then apply / undo",
+      "confirm_hint": "set true only after you reviewed the batch",
+      "apply_submit": "Apply confirmed batch",
+      "undo_submit": "Undo last batch"
+    },
+    "fr": {
+      "tab_song_maker": "Mix song-maker",
+      "catalog_heading": "Presets (catalogue Path A)",
+      "catalog_empty": "Accordez mix.read:* puis chargez le catalogue.",
+      "catalog_submit": "Lister les presets",
+      "demo_heading": "Descripteurs hôte (pas de WAV)",
+      "demo_submit": "Charger les descripteurs démo",
+      "session_hint": "id de session (optionnel)",
+      "propose_heading": "Proposer un lot (pas d’application)",
+      "preset_hint": "vocal_forward | balanced | bass_heavy",
+      "confidence_hint": "confiance 0–1",
+      "min_hint": "min_confidence (hôte, obligatoire)",
+      "propose_submit": "Proposer",
+      "propose_empty": "Pas de lot — proposez un preset.",
+      "apply_heading": "Confirmer puis appliquer / annuler",
+      "confirm_hint": "true seulement après relecture du lot",
+      "apply_submit": "Appliquer le lot confirmé",
+      "undo_submit": "Annuler le dernier lot"
+    }
+  },
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "heading",
+        "label_key": "catalog_heading"
+      },
+      {
+        "kind": "text",
+        "label": "Path A: presets + confirm/undo. Descriptors are host JSON. DAW stays outside the sandbox."
+      },
+      {
+        "kind": "form",
+        "tool": "song-maker.catalog",
+        "label_key": "catalog_submit",
+        "refresh_binds": ["song-maker.catalog"]
+      },
+      {
+        "kind": "empty_state",
+        "bind": "song-maker.catalog",
+        "source": "presets",
+        "label_key": "catalog_empty"
+      },
+      {
+        "kind": "table",
+        "bind": "song-maker.catalog",
+        "source": "presets",
+        "columns": ["name", "description"]
+      },
+      {
+        "kind": "heading",
+        "label_key": "demo_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "song-maker.load_demo",
+        "label_key": "demo_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session_id": { "type": "string", "x-hint-key": "session_hint" }
+          }
+        }
+      },
+      {
+        "kind": "heading",
+        "label_key": "propose_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "song-maker.propose",
+        "label_key": "propose_submit",
+        "refresh_binds": ["song-maker.propose"],
+        "args": {
+          "type": "object",
+          "properties": {
+            "session_id": { "type": "string", "x-hint-key": "session_hint" },
+            "preset": { "type": "string", "x-hint-key": "preset_hint" },
+            "confidence": { "type": "number", "x-hint-key": "confidence_hint" },
+            "min_confidence": { "type": "number", "x-hint-key": "min_hint" }
+          },
+          "required": ["preset", "confidence", "min_confidence"]
+        }
+      },
+      {
+        "kind": "empty_state",
+        "bind": "song-maker.propose",
+        "source": "batch.changes",
+        "label_key": "propose_empty"
+      },
+      {
+        "kind": "table",
+        "bind": "song-maker.propose",
+        "source": "batch.changes",
+        "columns": ["target", "before", "after"]
+      },
+      {
+        "kind": "heading",
+        "label_key": "apply_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "song-maker.apply",
+        "label_key": "apply_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session_id": { "type": "string", "x-hint-key": "session_hint" },
+            "confirmation_given": { "type": "boolean", "x-hint-key": "confirm_hint" }
+          },
+          "required": ["confirmation_given"]
+        }
+      },
+      {
+        "kind": "form",
+        "tool": "song-maker.undo",
+        "label_key": "undo_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session_id": { "type": "string", "x-hint-key": "session_hint" }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "catalog_version": 1,
+  "description": "Versioned discrete mix presets and ordered score ladders. Values are explicit; the model only picks names/indices.",
+  "discretization": {
+    "gain_db_step": 1.5,
+    "pan_step": 0.25,
+    "eq_db_step": 1.0,
+    "notes": "Steps bound how fine a Score level can move a control. Finer grids need a larger level count (max 10 per ScoreQuestion). The model does not invent continuous values outside this table."
+  },
+  "presets": {
+    "vocal_forward": {
+      "description": "Lift lead vocal relative to the bed.",
+      "values": {
+        "vocal.gain_db": 3.0,
+        "vocal.pan": 0.0,
+        "vocal.eq_db": [0.0, 1.0, 2.0, 1.0],
+        "vocal.compressor_ratio": 3.0,
+        "vocal.compressor_threshold_db": -18.0,
+        "bass.gain_db": -1.5,
+        "bass.pan": 0.0,
+        "bass.eq_db": [0.0, 0.0, -1.0, -2.0],
+        "bass.compressor_ratio": 2.0,
+        "bass.compressor_threshold_db": -14.0
+      }
+    },
+    "balanced": {
+      "description": "Keep balances close to unity relative to descriptors.",
+      "values": {
+        "vocal.gain_db": 0.0,
+        "vocal.pan": 0.0,
+        "vocal.eq_db": [0.0, 0.0, 0.0, 0.0],
+        "vocal.compressor_ratio": 2.0,
+        "vocal.compressor_threshold_db": -20.0,
+        "bass.gain_db": 0.0,
+        "bass.pan": 0.0,
+        "bass.eq_db": [0.0, 0.0, 0.0, 0.0],
+        "bass.compressor_ratio": 2.0,
+        "bass.compressor_threshold_db": -16.0
+      }
+    },
+    "bass_heavy": {
+      "description": "Emphasise low-end energy.",
+      "values": {
+        "vocal.gain_db": -1.5,
+        "vocal.pan": 0.0,
+        "vocal.eq_db": [0.0, 0.0, 0.0, 0.0],
+        "vocal.compressor_ratio": 2.0,
+        "vocal.compressor_threshold_db": -20.0,
+        "bass.gain_db": 3.0,
+        "bass.pan": 0.0,
+        "bass.eq_db": [2.0, 1.0, 0.0, -1.0],
+        "bass.compressor_ratio": 3.0,
+        "bass.compressor_threshold_db": -12.0
+      }
+    }
+  },
+  "score_ladders": {
+    "vocal.gain": {
+      "target": "vocal.gain_db",
+      "unit": "dB",
+      "levels": [
+        {"description": "much quieter", "value": -6.0},
+        {"description": "quieter", "value": -3.0},
+        {"description": "unchanged", "value": 0.0},
+        {"description": "louder", "value": 3.0},
+        {"description": "much louder", "value": 6.0}
+      ]
+    },
+    "vocal.pan": {
+      "target": "vocal.pan",
+      "unit": "pan",
+      "levels": [
+        {"description": "hard left", "value": -1.0},
+        {"description": "left", "value": -0.5},
+        {"description": "center", "value": 0.0},
+        {"description": "right", "value": 0.5},
+        {"description": "hard right", "value": 1.0}
+      ]
+    },
+    "bass.gain": {
+      "target": "bass.gain_db",
+      "unit": "dB",
+      "levels": [
+        {"description": "much quieter", "value": -6.0},
+        {"description": "quieter", "value": -3.0},
+        {"description": "unchanged", "value": 0.0},
+        {"description": "louder", "value": 3.0},
+        {"description": "much louder", "value": 6.0}
+      ]
+    }
+  },
+  "bounds": {
+    "gain_db": [-24.0, 24.0],
+    "pan": [-1.0, 1.0],
+    "eq_db": [-12.0, 12.0],
+    "compressor_ratio": [1.0, 20.0],
+    "compressor_threshold_db": [-60.0, 0.0]
+  }
+}

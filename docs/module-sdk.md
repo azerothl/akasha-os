@@ -141,10 +141,13 @@ names a tool.
 Allowed via `host_call` (representative): `fs.read`, `fs.write`, `fs.list`,
 `mem.episodic_write`, `mem.episodic_query`, `web.search`, `web.browse`,
 `net.fetch`, `files.generate`, `mem.context`, `mem.user.*`, `mem.shared_*`,
-`ext.load_handlers`, and Preview **0.19** Dev Assistant P0 —
+`ext.load_handlers`, Preview **0.19** Dev Assistant P0 —
 `workspace.bind` / `workspace.unbind` / `workspace.list`, `fs.search` /
-`code.search`, `fs.apply_patch` / `fs.undo_patch` (caps fail-closed; see
-[dev-assistant-p0.md](dev-assistant-p0.md)).
+`code.search`, `fs.apply_patch` / `fs.undo_patch`, read-only `git.status` /
+`git.diff`, mix Path A `mix.catalog` / `ingest_state` / `propose` / `apply` /
+`undo`, and opt-in `speech.ingest_transcript` / `speech.transcribe` (caps
+fail-closed; see [dev-assistant-p0.md](dev-assistant-p0.md),
+[mix-assistant.md](mix-assistant.md), [speech-to-gate.md](speech-to-gate.md)).
 
 **Prohibited inside guests:** `module.install`, `module.compile`, `secrets.get`,
 `agent.*`, `trust.set`.
@@ -160,6 +163,8 @@ Allowed via `host_call` (representative): `fs.read`, `fs.write`, `fs.list`,
 | `ext-rt` | — | script runtime, not a user-facing app |
 | `gallery-demo` | 2 | DeclUI v2 widget gallery (maintainer) |
 | `dev-assistant` (community) | 1 | Reference #247 P0 contract — [community/modules/dev-assistant](../community/modules/dev-assistant/), [dev-assistant-p0.md](dev-assistant-p0.md) |
+| `song-maker` (community) | 1 | Mix Path A stub — [community/modules/song-maker](../community/modules/song-maker/), [mix-assistant.md](mix-assistant.md) |
+| `voice-to-gate` (community) | 1 | ASR transcript ingest — [community/modules/voice-to-gate](../community/modules/voice-to-gate/), [speech-to-gate.md](speech-to-gate.md) |
 
 ## Next steps
 

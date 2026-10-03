@@ -201,9 +201,8 @@ fn which(bin: &str) -> Option<PathBuf> {
 }
 
 fn run_cli(command: &str, request: &Value) -> Result<Value, GateBridgeError> {
-    let python = resolve_python().ok_or_else(|| {
-        GateBridgeError::Unavailable("no python interpreter for aos_gate".into())
-    })?;
+    let python = resolve_python()
+        .ok_or_else(|| GateBridgeError::Unavailable("no python interpreter for aos_gate".into()))?;
     let body = serde_json::to_string(request)
         .map_err(|e| GateBridgeError::Protocol(format!("serialize request: {e}")))?;
     let started = Instant::now();
@@ -271,8 +270,7 @@ pub fn evaluate_tool_plan(
         .get("plan")
         .cloned()
         .ok_or_else(|| GateBridgeError::Protocol("missing plan".into()))?;
-    serde_json::from_value(plan)
-        .map_err(|e| GateBridgeError::Protocol(format!("plan shape: {e}")))
+    serde_json::from_value(plan).map_err(|e| GateBridgeError::Protocol(format!("plan shape: {e}")))
 }
 
 fn host_caps_allow(required: &str, actor_caps: &[String]) -> bool {
@@ -307,14 +305,7 @@ pub fn dispatch_plan_to_host(
     actor_caps: &[String],
 ) -> HostOutcomeView {
     dispatch_plan_to_host_with_trust(
-        plan,
-        tool_name,
-        arguments,
-        policy,
-        tools,
-        actor_caps,
-        "trusted",
-        false,
+        plan, tool_name, arguments, policy, tools, actor_caps, "trusted", false,
     )
 }
 
@@ -471,6 +462,8 @@ fn tool_looks_high_impact(tool_name: &str, tools: &[ToolDesc]) -> bool {
         || tool_name == "harness.run"
         || tool_name == "device.usb.write"
         || tool_name == "fs.write"
+        || tool_name == "mix.apply"
+        || tool_name == "mix.apply_batch"
     {
         return true;
     }
@@ -577,8 +570,14 @@ pub fn maybe_open_hitl_review(
                     .map(|v| v >= 0.5)
                     .unwrap_or(false)))
         || (matches!(outcome.action, HostAction::RejectedByHost)
-            && (outcome.host_reason.to_ascii_lowercase().contains("authority confusion")
-                || outcome.host_reason.to_ascii_lowercase().contains("untrusted")));
+            && (outcome
+                .host_reason
+                .to_ascii_lowercase()
+                .contains("authority confusion")
+                || outcome
+                    .host_reason
+                    .to_ascii_lowercase()
+                    .contains("untrusted")));
     if !escalate {
         return None;
     }
@@ -648,9 +647,7 @@ pub async fn decide_gated_tool_async(
     })
     .await
     .unwrap_or_else(|e| GateDecision::Legacy {
-        warning: format!(
-            "{LEGACY_UNGATED_MARKER}: gate task join failed: {e}"
-        ),
+        warning: format!("{LEGACY_UNGATED_MARKER}: gate task join failed: {e}"),
     })
 }
 
@@ -708,11 +705,7 @@ pub fn decide_gated_tool_with_trust(
     let plan = match evaluate_tool_plan(tools, tool_name, arguments, &ctx) {
         Ok(p) => p,
         Err(e) => {
-            let warning = format!(
-                "{}; {}",
-                legacy_ungated_message(entrypoint, tool_name),
-                e
-            );
+            let warning = format!("{}; {}", legacy_ungated_message(entrypoint, tool_name), e);
             if mode == GateMode::Require {
                 let outcome = HostOutcomeView {
                     action: HostAction::SkippedBlocked,
@@ -769,8 +762,8 @@ pub fn decide_gated_tool_with_trust(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aos_proto::{AgentNetPolicy, AgentPolicy};
     use crate::tools::{ToolBackend, ToolDesc};
+    use aos_proto::{AgentNetPolicy, AgentPolicy};
 
     fn sample_tools() -> Vec<ToolDesc> {
         vec![
