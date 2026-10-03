@@ -24,7 +24,7 @@ after a documented 2-GPU run.
 Track A (`aos-serverd` **P21.0–P21.6**) and Track B (#247 **DA.1–DA.4**)
 landed on `main` (#406 / #407 / #409 / #410). **P21.7** is this release
 docs / VERSION cut. Do **not** invent a P6 number (PC still open). No new
-E* number for these host tracks. #247 P1 starts with **DA.5** (read-only git); `git.commit` / `process.run` / IDE stay **0.20+`.
+E* number for these host tracks. #247 P1 starts with **DA.5** (read-only git); `git.commit` / `process.run` / IDE stay **0.20+**.
 
 | # | Item | Status |
 |---|------|--------|
