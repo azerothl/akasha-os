@@ -1,0 +1,48 @@
+{
+  "type": "declarative_ui",
+  "title": "Voice to gate",
+  "title_key": "tab_voice",
+  "labels": {
+    "fallback": "en",
+    "en": {
+      "tab_voice": "Voice to gate",
+      "ingest_heading": "Paste STT transcript (opt-in)",
+      "transcript_hint": "text from OS STT or host command — not a model in Akasha",
+      "typed_hint": "optional typed operator text (makes trust mixed)",
+      "ingest_submit": "Ingest as untrusted context"
+    },
+    "fr": {
+      "tab_voice": "Voix vers gate",
+      "ingest_heading": "Coller un transcript STT (opt-in)",
+      "transcript_hint": "texte STT OS ou commande hôte — pas de modèle dans Akasha",
+      "typed_hint": "texte opérateur optionnel (confiance mixed)",
+      "ingest_submit": "Ingérer comme contexte non fiable"
+    }
+  },
+  "root": {
+    "kind": "column",
+    "children": [
+      {
+        "kind": "heading",
+        "label_key": "ingest_heading"
+      },
+      {
+        "kind": "text",
+        "label": "ASR is host-side. Transcripts use the same injection policy as chat. No always-on STT."
+      },
+      {
+        "kind": "form",
+        "tool": "voice-to-gate.ingest",
+        "label_key": "ingest_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "transcript": { "type": "string", "x-hint-key": "transcript_hint", "x-widget": "textarea" },
+            "typed_text": { "type": "string", "x-hint-key": "typed_hint" }
+          },
+          "required": ["transcript"]
+        }
+      }
+    ]
+  }
+}
