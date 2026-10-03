@@ -16,6 +16,8 @@ This is **not** the bootable OS. Target v1 requirements live in
 - **Server daemon (`aos-serverd`)**: headless process-tree owner (ADR 0012) — busd…agentd stay up without egui; ordered restart; extended watchdogs (incl. agentd); local control socket (`status` / `restart` / `stop`); agent job intake (`enqueue` → `aos-agentd`, caps fail-closed). Opt-in OS services (systemd user / launchd / Windows logon task). Opt-in supervise `aos-mcpd` / `aos-bridged`; `aos-session` can attach UI-only to a live tree — see [INSTALL.md](INSTALL.md) and [adr/0012-aos-serverd.md](adr/0012-aos-serverd.md)
 - **Dev-assistant P0**: `workspace.bind` / `list` / `unbind` with caps `/host/<id>/**`; bounded `fs.search` / `code.search`; `fs.apply_patch` + multi-file undo; module contract + community reference package — [dev-assistant-p0.md](dev-assistant-p0.md)
 - **Dev-assistant DA.5 (0.20 start)**: read-only `git.status` / `git.diff` on bound `/host/<id>` trees (requires `fs.read`; no commit/push/fetch)
+- **Song-maker mix Path A (#432)**: host mix descriptors + preset catalogue + confirm/undo batches (`mix.*`); DAW stays outside the sandbox — [mix-assistant.md](mix-assistant.md)
+- **Host ASR → gate text (#433)**: opt-in `speech.ingest_transcript` / `AOS_ASR_COMMAND`; no bundled STT — [speech-to-gate.md](speech-to-gate.md)
 
 ### What's new in 0.18.0
 
