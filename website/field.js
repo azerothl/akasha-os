@@ -1,6 +1,7 @@
 /**
- * Cloud-chamber point field — Abyssal force-field grammar, Akasha palette.
- * One seed cloud; scroll blends neighbouring presets (forces + ramp).
+ * Spiral-galaxy point field — Abyssal force-field grammar, Akasha palette.
+ * Seeds are a disk with arms + bulge + halo (not a uniform noise box).
+ * Scroll blends neighbouring presets (forces + ramp).
  */
 import * as THREE from "./vendor/three.module.min.js";
 
@@ -11,45 +12,49 @@ function rgb(hex) {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
+/**
+ * Presets reshape the same galaxy without dissolving it into static.
+ * Keep amp/freq moderate so arms and core stay readable.
+ */
 export const PRESETS = [
   {
     id: "thesis",
     label: "Thesis",
     spread: 1,
-    freq: 0.15,
-    amp: 1.5,
-    drift: 0.05,
-    fall: 0.62,
-    pull: 0,
-    cluster: 0,
-    cell: 3.2,
-    swirl: 0.02,
-    shear: 0,
-    grain: 1,
-    gain: 1,
-    camZ: 10.2,
-    mouseForce: 0.5,
-    deep: rgb("#05141a"),
-    mid: rgb("#126b62"),
+    freq: 0.09,
+    amp: 0.55,
+    drift: 0.03,
+    fall: 0.02,
+    pull: 0.08,
+    cluster: 0.12,
+    cell: 2.4,
+    swirl: 0.085,
+    shear: 0.04,
+    grain: 1.45,
+    gain: 1.15,
+    camZ: 11.4,
+    mouseForce: 0.35,
+    deep: rgb("#040a14"),
+    mid: rgb("#0d4a58"),
     hot: rgb("#5ee7ff"),
   },
   {
     id: "caps",
     label: "Caps",
-    spread: 0.94,
-    freq: 0.26,
-    amp: 0.95,
-    drift: 0.09,
-    fall: 0.12,
-    pull: 0.58,
-    cluster: 0,
-    cell: 3.2,
-    swirl: 0.1,
+    spread: 0.92,
+    freq: 0.12,
+    amp: 0.4,
+    drift: 0.04,
+    fall: 0.01,
+    pull: 0.42,
+    cluster: 0.2,
+    cell: 2.2,
+    swirl: 0.12,
     shear: 0,
-    grain: 0.86,
-    gain: 1.05,
-    camZ: 9.1,
-    mouseForce: 0.34,
+    grain: 1.25,
+    gain: 1.2,
+    camZ: 10.2,
+    mouseForce: 0.28,
     deep: rgb("#05081c"),
     mid: rgb("#2b3d96"),
     hot: rgb("#9db9ff"),
@@ -57,20 +62,20 @@ export const PRESETS = [
   {
     id: "surfaces",
     label: "Surfaces",
-    spread: 1.08,
-    freq: 0.52,
+    spread: 1.05,
+    freq: 0.11,
     amp: 0.42,
-    drift: 0.14,
-    fall: 0.06,
-    pull: 0,
-    cluster: 0.88,
-    cell: 3.05,
-    swirl: 0.26,
-    shear: 0,
-    grain: 1.12,
-    gain: 1.15,
-    camZ: 10.6,
-    mouseForce: 0.72,
+    drift: 0.04,
+    fall: 0.015,
+    pull: 0.05,
+    cluster: 0.18,
+    cell: 2.8,
+    swirl: 0.14,
+    shear: 0.02,
+    grain: 1.5,
+    gain: 1.22,
+    camZ: 11.8,
+    mouseForce: 0.45,
     deep: rgb("#02120f"),
     mid: rgb("#128a6a"),
     hot: rgb("#2ef0c8"),
@@ -78,20 +83,20 @@ export const PRESETS = [
   {
     id: "local",
     label: "Local",
-    spread: 1,
-    freq: 0.34,
-    amp: 0.66,
-    drift: 0.1,
-    fall: 0.05,
-    pull: 0.92,
-    cluster: 0,
-    cell: 3.2,
-    swirl: 0.34,
+    spread: 0.88,
+    freq: 0.11,
+    amp: 0.38,
+    drift: 0.035,
+    fall: 0.01,
+    pull: 0.72,
+    cluster: 0.15,
+    cell: 2.4,
+    swirl: 0.22,
     shear: 0,
-    grain: 1,
-    gain: 1.2,
-    camZ: 9.4,
-    mouseForce: 0.5,
+    grain: 1.35,
+    gain: 1.3,
+    camZ: 10.4,
+    mouseForce: 0.32,
     deep: rgb("#0d0904"),
     mid: rgb("#9a6220"),
     hot: rgb("#ffdca8"),
@@ -99,20 +104,20 @@ export const PRESETS = [
   {
     id: "bound",
     label: "Bound",
-    spread: 1.05,
-    freq: 0.31,
-    amp: 1.85,
-    drift: 0.26,
-    fall: 0.18,
-    pull: 0.12,
-    cluster: 0,
-    cell: 3.2,
-    swirl: 0.06,
-    shear: 0.92,
-    grain: 0.9,
-    gain: 1.1,
-    camZ: 9.8,
-    mouseForce: 0.85,
+    spread: 1.02,
+    freq: 0.14,
+    amp: 0.85,
+    drift: 0.08,
+    fall: 0.03,
+    pull: 0.1,
+    cluster: 0.08,
+    cell: 2.6,
+    swirl: 0.05,
+    shear: 0.55,
+    grain: 1.2,
+    gain: 1.18,
+    camZ: 10.8,
+    mouseForce: 0.55,
     deep: rgb("#160409"),
     mid: rgb("#9c2333"),
     hot: rgb("#ff5a48"),
@@ -120,20 +125,20 @@ export const PRESETS = [
   {
     id: "path",
     label: "Path",
-    spread: 1.02,
-    freq: 0.1,
-    amp: 1.15,
-    drift: 0.045,
-    fall: 0.2,
-    pull: 0.16,
-    cluster: 0,
-    cell: 3.2,
-    swirl: 0.05,
-    shear: 0.26,
-    grain: 1.05,
-    gain: 1,
-    camZ: 10,
-    mouseForce: 0.45,
+    spread: 1.06,
+    freq: 0.08,
+    amp: 0.62,
+    drift: 0.03,
+    fall: 0.02,
+    pull: 0.12,
+    cluster: 0.1,
+    cell: 2.5,
+    swirl: 0.06,
+    shear: 0.12,
+    grain: 1.4,
+    gain: 1.1,
+    camZ: 11.2,
+    mouseForce: 0.3,
     deep: rgb("#020b10"),
     mid: rgb("#166a7c"),
     hot: rgb("#9ce6ff"),
@@ -141,20 +146,20 @@ export const PRESETS = [
   {
     id: "install",
     label: "Install",
-    spread: 1.15,
-    freq: 0.08,
-    amp: 1.4,
-    drift: 0.05,
-    fall: 0.1,
-    pull: 0.1,
-    cluster: 0,
-    cell: 3.2,
-    swirl: 0.03,
-    shear: 0.4,
-    grain: 0.8,
-    gain: 0.85,
-    camZ: 9.6,
-    mouseForce: 0.3,
+    spread: 1.12,
+    freq: 0.07,
+    amp: 0.7,
+    drift: 0.025,
+    fall: 0.015,
+    pull: 0.06,
+    cluster: 0.05,
+    cell: 2.8,
+    swirl: 0.04,
+    shear: 0.18,
+    grain: 1.15,
+    gain: 0.95,
+    camZ: 10.6,
+    mouseForce: 0.22,
     deep: rgb("#070b14"),
     mid: rgb("#114b46"),
     hot: rgb("#2ef0c8"),
@@ -305,50 +310,69 @@ const fieldVertexShader = /* glsl */ `
     float c = cos(a), s = sin(a);
     return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
   }
-  const float BAND = 8.0;
   void main() {
     vec3 p = aSeed;
-    p.y = mod(p.y - uTime * uFall + BAND, BAND * 2.0) - BAND;
+
+    /* Slow vertical breathing — not marine-snow recycle. */
+    p.y += sin(uTime * 0.07 + aRand.z * 6.283) * uFall * 0.55;
+
     p *= uSpread;
+
     if (uCluster > 0.001) {
       vec3 cellIdx = floor(p / uCell);
-      vec3 centre = (cellIdx + 0.5) * uCell + (hash3(cellIdx) - 0.5) * uCell * 0.62;
-      p = mix(p, centre + (p - centre) * 0.26, uCluster);
+      vec3 centre = (cellIdx + 0.5) * uCell + (hash3(cellIdx) - 0.5) * uCell * 0.45;
+      p = mix(p, centre + (p - centre) * 0.35, uCluster);
     }
+
     if (uPull > 0.001) {
       vec3 dir = normalize(p + vec3(0.0001));
-      float r = 0.45 + pow(aRand.x, 1.9) * 3.05;
+      float r = 0.35 + pow(aRand.x, 1.6) * 2.4;
       p = mix(p, dir * r, uPull);
     }
+
+    /* Low-frequency warp only — keeps arms readable. */
     vec3 q = p * uFreq + vec3(0.0, 0.0, uTime * uDrift);
     vec3 warp = vec3(snoise(q), snoise(q + 19.7), snoise(q + 43.3));
-    vec3 q2 = q * 2.35 + 7.3;
-    warp += vec3(snoise(q2), snoise(q2 + 19.7), snoise(q2 + 43.3)) * 0.42;
     p += warp * uAmp;
+
+    /* Differential rotation: core turns faster → spiral feels alive. */
     if (abs(uSwirl) > 0.001) {
       float rr = length(p.xy);
-      p.xy = rot(p.xy, uSwirl * uTime / (0.55 + rr * 0.4));
+      p.xy = rot(p.xy, uSwirl * uTime / (0.35 + rr * 0.55));
     }
+
     if (abs(uShear) > 0.001) {
-      p.x += sin(p.y * 0.52 + uTime * 0.34) * uShear * 1.7;
-      p.z += cos(p.y * 0.41 - uTime * 0.22) * uShear * 0.6;
+      p.x += sin(p.y * 0.35 + uTime * 0.22) * uShear * 0.9;
+      p.z += cos(p.y * 0.28 - uTime * 0.16) * uShear * 0.35;
     }
+
     vec2 toMouse = p.xy - uMouse.xy;
     float md = length(toMouse);
-    float influence = smoothstep(3.0, 0.0, md);
-    p.xy += normalize(toMouse + vec2(0.0001)) * influence * uMouseForce * 1.3;
-    p *= 1.0 + (1.0 - uIntro) * 1.8;
+    float influence = smoothstep(2.6, 0.0, md);
+    p.xy += normalize(toMouse + vec2(0.0001)) * influence * uMouseForce * 0.9;
+
+    p *= 1.0 + (1.0 - uIntro) * 1.35;
+
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
-    float energy = clamp(length(warp) * 0.42, 0.0, 1.0);
-    float tone = clamp(aTone * 0.72 + energy * 0.5, 0.0, 1.0);
+
+    float radial = length(aSeed.xy);
+    float coreBoost = smoothstep(6.5, 0.4, radial);
+    float energy = clamp(length(warp) * 0.35 + coreBoost * 0.45, 0.0, 1.0);
+    float tone = clamp(aTone * 0.55 + energy * 0.55, 0.0, 1.0);
     vColor = ramp(uDeep, uMid, uHot, tone) * uGain;
-    float sizePx = uSize * uGrain * aScale * uPixelRatio * (44.0 / max(0.001, -mv.z));
-    gl_PointSize = max(sizePx, uPixelRatio * 0.9);
-    float shrink = clamp(sizePx / (uPixelRatio * 0.9), 0.35, 1.0);
-    float flicker = 0.68 + 0.32 * sin(uTime * (0.9 + aRand.y * 2.2) + aRand.z * 12.566);
-    float depthFade = smoothstep(-30.0, -2.0, mv.z);
-    vAlpha = flicker * depthFade * shrink * uIntro * (1.0 + uVelocity * 0.35);
+
+    float sizePx = uSize * uGrain * aScale * uPixelRatio * (52.0 / max(0.001, -mv.z));
+    sizePx *= 0.75 + coreBoost * 0.9;
+    gl_PointSize = max(sizePx, uPixelRatio * 1.15);
+
+    float shrink = clamp(sizePx / (uPixelRatio * 1.15), 0.4, 1.0);
+    /* Gentle shimmer — not TV-static flicker. */
+    float shimmer = 0.88 + 0.12 * sin(uTime * (0.35 + aRand.y * 0.55) + aRand.z * 6.283);
+    float depthFade = smoothstep(-28.0, -1.5, mv.z);
+    float armWeight = mix(0.55, 1.0, aTone);
+
+    vAlpha = shimmer * depthFade * shrink * uIntro * armWeight * (1.0 + uVelocity * 0.2);
   }
 `;
 
@@ -360,9 +384,12 @@ const fieldFragmentShader = /* glsl */ `
     float d = length(uv);
     if (d > 0.5) discard;
     float f = 1.0 - d * 2.0;
-    float halo = pow(f, 1.8) * 0.45;
-    float core = pow(f, 6.5);
-    gl_FragColor = vec4(vColor * (halo + core * 1.85), (halo + core) * vAlpha);
+    /* Soft star + faint nebula halo — not hard grain pixels. */
+    float halo = pow(f, 1.15) * 0.72;
+    float core = pow(f, 3.6);
+    float spark = pow(f, 9.0) * 0.65;
+    float shape = halo + core + spark;
+    gl_FragColor = vec4(vColor * (halo * 0.85 + core * 1.25 + spark * 1.5), shape * vAlpha);
   }
 `;
 
@@ -379,12 +406,105 @@ function damp(current, target, lambda, dt) {
   return current + (target - current) * (1 - Math.exp(-lambda * dt));
 }
 
+function gauss(rnd) {
+  /* Box-Muller */
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = rnd();
+  while (v === 0) v = rnd();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/**
+ * Build a face-on spiral galaxy: bulge + logarithmic arms + thin disk + sparse halo.
+ * Returns { seed, rand, tone, scale } typed arrays.
+ */
+function buildGalaxySeeds(count, rnd) {
+  const seed = new Float32Array(count * 3);
+  const rand = new Float32Array(count * 3);
+  const tone = new Float32Array(count);
+  const scale = new Float32Array(count);
+
+  const ARMS = 3;
+  const ARM_TIGHT = 0.38;
+  const DISK_R = 7.8;
+
+  for (let i = 0; i < count; i++) {
+    const i3 = i * 3;
+    const roll = rnd();
+    let x;
+    let y;
+    let z;
+    let t;
+    let s;
+
+    if (roll < 0.18) {
+      /* Central bulge — dense, bright. */
+      const r = Math.abs(gauss(rnd)) * 1.15;
+      const a = rnd() * Math.PI * 2;
+      x = Math.cos(a) * r;
+      y = Math.sin(a) * r * 0.92;
+      z = gauss(rnd) * 0.55;
+      t = 0.72 + rnd() * 0.28;
+      s = 1.1 + Math.pow(rnd(), 2.2) * 2.8;
+    } else if (roll < 0.82) {
+      /* Spiral arms. */
+      const arm = Math.floor(rnd() * ARMS);
+      const u = Math.pow(rnd(), 0.65);
+      const radius = 0.55 + u * DISK_R;
+      const theta =
+        arm * ((Math.PI * 2) / ARMS) +
+        radius * ARM_TIGHT +
+        (rnd() - 0.5) * 0.55;
+      const jitter = (rnd() - 0.5) * (0.35 + radius * 0.08);
+      const jr = (rnd() - 0.5) * 0.55;
+      x = Math.cos(theta) * (radius + jr) + Math.cos(theta + 1.2) * jitter;
+      y = Math.sin(theta) * (radius + jr) + Math.sin(theta + 1.2) * jitter;
+      z = gauss(rnd) * (0.18 + radius * 0.04);
+      t = 0.35 + (1 - u) * 0.45 + rnd() * 0.2;
+      s = 0.55 + Math.pow(rnd(), 2.6) * 2.4 + (1 - u) * 0.5;
+    } else if (roll < 0.94) {
+      /* Inter-arm disk dust — sparse so voids read. */
+      const u = Math.pow(rnd(), 0.85);
+      const radius = 1.2 + u * DISK_R * 0.95;
+      const a = rnd() * Math.PI * 2;
+      x = Math.cos(a) * radius;
+      y = Math.sin(a) * radius;
+      z = gauss(rnd) * 0.22;
+      t = 0.12 + rnd() * 0.25;
+      s = 0.35 + Math.pow(rnd(), 3.4) * 1.1;
+    } else {
+      /* Distant halo stars. */
+      const r = 4.5 + Math.pow(rnd(), 0.5) * 7.5;
+      const a = rnd() * Math.PI * 2;
+      const elev = (rnd() - 0.5) * Math.PI * 0.55;
+      x = Math.cos(a) * Math.cos(elev) * r;
+      y = Math.sin(a) * Math.cos(elev) * r;
+      z = Math.sin(elev) * r * 0.65;
+      t = 0.55 + rnd() * 0.45;
+      s = 0.7 + Math.pow(rnd(), 4) * 3.2;
+    }
+
+    seed[i3] = x;
+    seed[i3 + 1] = y;
+    seed[i3 + 2] = z;
+    rand[i3] = rnd();
+    rand[i3 + 1] = rnd();
+    rand[i3 + 2] = rnd();
+    tone[i] = t;
+    scale[i] = s;
+  }
+
+  return { seed, rand, tone, scale };
+}
+
 function pickCount(width, reduced) {
-  if (reduced) return 18000;
-  if (width < 700) return 28000;
-  if (width < 1100) return 48000;
-  if (width < 1700) return 72000;
-  return 90000;
+  /* Fewer, larger stars read as a galaxy; dense dust reads as noise. */
+  if (reduced) return 12000;
+  if (width < 700) return 22000;
+  if (width < 1100) return 36000;
+  if (width < 1700) return 48000;
+  return 58000;
 }
 
 /**
@@ -402,31 +522,17 @@ export function mountField(canvas, view) {
     depth: false,
   });
   renderer.setClearColor(BACKGROUND, 1);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, reduced ? 1 : 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, reduced ? 1 : 1.6));
   renderer.toneMapping = THREE.NoToneMapping;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
-  camera.position.set(0, 0, PRESETS[0].camZ);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+  /* Slight tilt so the disk reads in depth, not as flat static. */
+  camera.position.set(0, -1.8, PRESETS[0].camZ);
+  camera.lookAt(0, 0, 0);
 
-  const BOX = [11, 8, 5];
-  const rnd = mulberry32(0x428a2f98);
-  const seed = new Float32Array(count * 3);
-  const rand = new Float32Array(count * 3);
-  const tone = new Float32Array(count);
-  const scale = new Float32Array(count);
-
-  for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
-    seed[i3] = (rnd() - 0.5) * 2 * BOX[0];
-    seed[i3 + 1] = (rnd() - 0.5) * 2 * BOX[1];
-    seed[i3 + 2] = (rnd() - 0.5) * 2 * BOX[2];
-    rand[i3] = rnd();
-    rand[i3 + 1] = rnd();
-    rand[i3 + 2] = rnd();
-    tone[i] = rnd();
-    scale[i] = 0.42 + Math.pow(rnd(), 3.1) * 2.2;
-  }
+  const rnd = mulberry32(0x51a2c7e3);
+  const { seed, rand, tone, scale } = buildGalaxySeeds(count, rnd);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
@@ -445,24 +551,24 @@ export function mountField(canvas, view) {
     blending: THREE.AdditiveBlending,
     uniforms: {
       uTime: { value: 0 },
-      uSize: { value: 1 },
+      uSize: { value: 1.15 },
       uPixelRatio: { value: renderer.getPixelRatio() },
       uIntro: { value: 0 },
       uVelocity: { value: 0 },
       uMouse: { value: new THREE.Vector3(999, 999, 0) },
       uMouseForce: { value: 0 },
       uSpread: { value: 1 },
-      uFreq: { value: 0.15 },
-      uAmp: { value: 1.5 },
-      uDrift: { value: 0.05 },
-      uFall: { value: 0.6 },
-      uPull: { value: 0 },
-      uCluster: { value: 0 },
-      uCell: { value: 3.2 },
-      uSwirl: { value: 0 },
-      uShear: { value: 0 },
-      uGrain: { value: 1 },
-      uGain: { value: 1 },
+      uFreq: { value: 0.09 },
+      uAmp: { value: 0.55 },
+      uDrift: { value: 0.03 },
+      uFall: { value: 0.02 },
+      uPull: { value: 0.08 },
+      uCluster: { value: 0.12 },
+      uCell: { value: 2.4 },
+      uSwirl: { value: 0.085 },
+      uShear: { value: 0.04 },
+      uGrain: { value: 1.45 },
+      uGain: { value: 1.15 },
       uDeep: { value: new THREE.Color() },
       uMid: { value: new THREE.Color() },
       uHot: { value: new THREE.Color() },
@@ -470,6 +576,9 @@ export function mountField(canvas, view) {
   });
 
   const points = new THREE.Points(geometry, material);
+  /* Tip the galaxy disk toward the camera. */
+  points.rotation.x = -0.55;
+  points.rotation.z = 0.35;
   scene.add(points);
 
   const clock = new THREE.Clock();
@@ -514,8 +623,15 @@ export function mountField(canvas, view) {
     u.uDeep.value.setRGB(f.deep[0], f.deep[1], f.deep[2]);
     u.uMid.value.setRGB(f.mid[0], f.mid[1], f.mid[2]);
     u.uHot.value.setRGB(f.hot[0], f.hot[1], f.hot[2]);
-    u.uMouse.value.set(view.smoothX * 4.2, view.smoothY * 2.6, 0);
-    camera.position.z = damp(camera.position.z, f.camZ, 2.2, dt);
+    u.uMouse.value.set(view.smoothX * 3.6, view.smoothY * 2.2, 0);
+
+    const targetZ = f.camZ;
+    camera.position.z = damp(camera.position.z, targetZ, 2.2, dt);
+    camera.position.y = damp(camera.position.y, -1.8 + view.smoothY * 0.25, 2.0, dt);
+    camera.lookAt(0, 0, 0);
+
+    /* Slow whole-galaxy turn so arms stay legible. */
+    points.rotation.z = 0.35 + clock.elapsedTime * 0.012;
 
     renderer.render(scene, camera);
   }
@@ -545,6 +661,7 @@ export function mountField(canvas, view) {
     u.uMid.value.setRGB(f.mid[0], f.mid[1], f.mid[2]);
     u.uHot.value.setRGB(f.hot[0], f.hot[1], f.hot[2]);
     camera.position.z = f.camZ;
+    camera.lookAt(0, 0, 0);
     renderer.render(scene, camera);
   }
 
