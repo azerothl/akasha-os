@@ -4,8 +4,8 @@
 //! host. At present that is `list_projects`; generation and export stay in
 //! Song Maker itself.
 
-use reqwest::{blocking::Client, Url};
-use serde_json::{json, Value};
+use reqwest::{Url, blocking::Client};
+use serde_json::{Value, json};
 use std::net::IpAddr;
 use std::time::Duration;
 
@@ -262,6 +262,68 @@ mod tests {
             }
         });
         assert!(parse_discovery(&response).is_err());
+    }
+
+    #[test]
+    fn configured_endpoint_wins_when_another_loopback_host_is_available() {
+        let selected = TcpListener::bind("127.0.0.1:0").expect("bind selected host");
+        let selected_address = selected.local_addr().expect("selected address");
+        let other = TcpListener::bind("127.0.0.1:0").expect("bind other host");
+        other.set_nonblocking(true).expect("nonblocking other host");
+
+        let server = thread::spawn(move || {
+            for (expected_path, response_body) in [
+                (
+                    "/v1/host/discover",
+                    r#"{"apiVersion":"song-maker.host.v1","hostId":"selected-song-maker","musicApi":{"id":"song-maker-music","kind":"music","version":1,"capabilities":["list_projects"]}}"#,
+                ),
+                (
+                    "/v1/host/invoke",
+                    r#"{"ok":true,"result":[{"id":"selected-project","title":"Configured endpoint project"}]}"#,
+                ),
+            ] {
+                let (mut stream, _) = selected.accept().expect("selected endpoint request");
+                let mut reader = BufReader::new(stream.try_clone().expect("clone socket"));
+                let mut first_line = String::new();
+                reader.read_line(&mut first_line).expect("request line");
+                assert!(first_line.contains(expected_path));
+
+                let mut content_length = 0usize;
+                loop {
+                    let mut line = String::new();
+                    reader.read_line(&mut line).expect("header line");
+                    if line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        content_length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut request_body = vec![0; content_length];
+                reader.read_exact(&mut request_body).expect("request body");
+
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    response_body.len(),
+                    response_body
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write response");
+            }
+        });
+
+        let connection = connect_and_list(&format!("http://{selected_address}"))
+            .expect("use the configured host");
+        server.join().expect("selected host server");
+        assert_eq!(connection.endpoint, format!("http://{selected_address}"));
+        assert_eq!(connection.projects.len(), 1);
+        assert_eq!(connection.projects[0].id, "selected-project");
+        assert_eq!(connection.projects[0].title, "Configured endpoint project");
+        assert!(matches!(
+            other.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
     }
 
     #[test]
