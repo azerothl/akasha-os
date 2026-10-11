@@ -249,6 +249,8 @@ function initScroll() {
       el.style.opacity = vis.toFixed(3);
       el.style.transform = `translate3d(0, ${((1 - vis) * 22).toFixed(2)}px, 0)`;
       el.style.visibility = vis < 0.004 ? "hidden" : "visible";
+      el.classList.toggle("is-live", inPlay && vis > 0.05);
+      el.style.pointerEvents = inPlay && vis > 0.05 ? "auto" : "none";
     }
 
     if (railFill) {
@@ -351,35 +353,13 @@ function initScroll() {
 }
 
 function initCursor() {
-  if (view.reduced || window.matchMedia("(pointer: coarse)").matches) return;
+  /* Custom cursor stays off: fixed overlays fought hit-testing for chrome
+     controls and CTAs in real pointer paths. Native cursor keeps links usable. */
   const dot = document.querySelector("[data-cursor]");
   const ring = document.querySelector("[data-cursor-ring]");
-  if (!dot || !ring) return;
-  document.body.dataset.cursor = "on";
-  let x = 0;
-  let y = 0;
-  let rx = 0;
-  let ry = 0;
-  window.addEventListener(
-    "pointermove",
-    (e) => {
-      x = e.clientX;
-      y = e.clientY;
-      dot.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-    },
-    { passive: true },
-  );
-  const hotSel = "a, button, [data-interactive]";
-  document.addEventListener("pointerover", (e) => {
-    ring.dataset.hot = e.target.closest(hotSel) ? "true" : "false";
-  });
-  const loop = () => {
-    rx += (x - rx) * 0.18;
-    ry += (y - ry) * 0.18;
-    ring.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
-    requestAnimationFrame(loop);
-  };
-  loop();
+  dot?.remove();
+  ring?.remove();
+  delete document.body.dataset.cursor;
 }
 
 async function main() {
