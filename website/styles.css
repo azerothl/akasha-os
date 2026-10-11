@@ -305,8 +305,8 @@ body.plate .ether {
 }
 
 .lanes a[aria-current="page"],
-html[lang="en"] .lang [data-set-lang="en"],
-html[lang="fr"] .lang [data-set-lang="fr"] {
+html[lang="en"] body:not(.experience) .lang [data-set-lang="en"],
+html[lang="fr"] body:not(.experience) .lang [data-set-lang="fr"] {
   /* Void ink on diluted signal — same rule as Preview Envoyer CTAs. */
   color: var(--void);
   background: var(--signal-fill-strong);
@@ -1815,7 +1815,11 @@ body.experience .lang button {
   gap: 0.45rem;
   pointer-events: none;
 }
-.chrome > * {
+.chrome > *,
+.chrome a,
+.chrome button,
+.chrome .lang,
+.chrome .lang button {
   pointer-events: auto;
 }
 .chrome-tl {
@@ -1846,15 +1850,21 @@ body.experience .lang button {
 
 body.experience .lang {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.55rem;
   margin-top: 0.35rem;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 }
 body.experience .lang button {
+  position: relative;
+  z-index: 2;
   color: var(--faint);
   background: none;
   border: 0;
-  padding: 0.2rem 0;
+  padding: 0.35rem 0.15rem;
   cursor: pointer;
+  pointer-events: auto;
   transition: color 0.35s var(--ease-out);
 }
 body.experience .lang button[aria-pressed="true"] {
@@ -1953,10 +1963,16 @@ body.experience .lang button[aria-pressed="true"] {
   height: 100%;
   display: grid;
   will-change: opacity, transform;
+  pointer-events: none;
+}
+.panel.is-live {
+  pointer-events: auto;
 }
 .panel a,
 .panel button,
-.panel [data-interactive] {
+.panel [data-interactive],
+.panel .note,
+.panel .head {
   pointer-events: auto;
 }
 
