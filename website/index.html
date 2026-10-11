@@ -21,294 +21,396 @@
     <meta property="og:image" content="https://azerothl.github.io/akasha-os/og.png" />
     <meta name="theme-color" content="#070b14" />
   </head>
-  <body class="product">
+  <body class="experience">
     <!--
-      THESIS: Product chamber — Preview is shown as the working host UI (Chat / Create / Memory / Caps), not as an abstract orrery; refuse keyword-orbit marketing.
-      OWN-WORLD: Cloud chamber void #070b14, ice #5ee7ff, signal #2ef0c8, hydrogen #ff5a48, paper #e8eef6; Archivo Narrow + Fira Sans; square bezels; honesty inline.
-      STORY: Tester sees the real Preview surfaces, grasps agent-native OS vs chat wrapper, then installs and walks the 15-minute path.
-      FIRST VIEWPORT: Brand-led hero with one headline, one support line, Install CTA group, and a full-bleed Create/Chat Preview UI plane; no metric strip, no floating chips on media.
-      FORM: Product chamber (approved brief), seed product-chamber-p0.
+      THESIS: Cloud chamber descent — Preview’s thesis is told as a scroll-driven particle field that reforms each beat; refuse app-store hero + feature cards.
+      OWN-WORLD: Void #070b14 field, live --accent from ice/signal/hydrogen ramps; Archivo Narrow display + Fira notes + mono chrome; sticky pin sections; no cards.
+      STORY: Tester descends through thesis → caps → surfaces → local → bound network → fifteen-minute path → Install CTA.
+      FIRST VIEWPORT: Full-bleed particle field; brand wordmark + motto; huge set title “AGENTS ARE SYSTEM SERVICES”; Install link; honesty note; no product screenshot in hero.
+      FORM: Abyssal scroll-field grammar fused to Akasha product truth (user-pinned inspiration), seed 125c784c raise.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
-    <canvas class="ether" data-ether aria-hidden="true"></canvas>
-    <a class="skip" href="#content">Skip to content</a>
-    <div class="shell">
-      <header class="axis">
-        <a class="mark" href="./" aria-label="Akasha OS home">
-          <img src="logo.svg" alt="" width="40" height="40" />
-          <span class="mark-id">Akasha OS</span>
-        </a>
-        <nav class="lanes" aria-label="Primary">
-          <a href="install.html">install</a>
-          <a href="docs/">docs</a>
-          <a href="docs/whats-new.html">news</a>
-          <a href="community.html">community</a>
-          <a href="about.html">about</a>
-        </nav>
-        <div class="lang" role="group" aria-label="Language">
-          <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
-          <button type="button" data-set-lang="fr" aria-pressed="false">FR</button>
-        </div>
-      </header>
+    <a class="skip-link" href="#stage">Skip to content</a>
 
-      <main id="content">
-        <section class="hero" aria-labelledby="hero-brand">
-          <div class="hero-copy">
-            <p class="hero-brand" id="hero-brand">Akasha OS</p>
-            <h1 class="hero-line" data-lang="en">
-              Agents, models, and tools as system services — not another chat wrapper.
-            </h1>
-            <h1 class="hero-line" data-lang="fr">
-              Agents, modèles et outils comme services système — pas un chat de plus.
-            </h1>
-            <p class="hero-support" data-lang="en">
-              Preview is a local host app for Windows, Linux, and Mac (Apple Silicon).
-              Capabilities, audit, and offline-by-default are the product — not fine print.
-            </p>
-            <p class="hero-support" data-lang="fr">
-              La Preview est une appli hôte locale pour Windows, Linux et Mac (Apple Silicon).
-              Capacités, audit et hors-ligne par défaut sont le produit — pas des notes de bas de page.
-            </p>
-            <div class="hero-cta">
-              <a class="key" href="install.html">
-                <svg class="key-glyph" viewBox="0 0 32 32" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M13.5 6.5a5.5 5.5 0 1 0 1.2 8.1L19 19l1.8-1.8 1.4 1.4 1.8-1.8-1.4-1.4 2.2-2.2-1.8-1.8-2.2 2.2-1.2-1.2 2-2-1.8-1.8-6.3 6.3A5.5 5.5 0 0 0 13.5 6.5Zm-3.2 2.3a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4Z"
-                  />
-                </svg>
-                <span class="key-label" data-lang="en">Get Preview</span>
-                <span class="key-label" data-lang="fr">Obtenir la Preview</span>
-                <span class="key-rule" aria-hidden="true"></span>
-                <span class="key-copy">
-                  <span class="key-hint" data-lang="en">Install on your machine</span>
-                  <span class="key-hint" data-lang="fr">Installer chez vous</span>
-                  <span class="key-sub"
-                    >Preview <span data-aos-version="0.19.0">0.19.0</span></span
-                  >
-                </span>
-                <svg class="key-arrow" viewBox="0 0 32 32" aria-hidden="true">
-                  <path
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.2"
-                    stroke-linecap="square"
-                    d="M6 16h18M18 8l8 8-8 8"
-                  />
-                </svg>
-              </a>
-              <a class="ghost" href="why.html">
-                <span data-lang="en">Why an OS for agents</span>
-                <span data-lang="fr">Pourquoi un OS pour agents</span>
+    <div class="preloader" data-preloader aria-hidden="true">
+      <div class="pre-row">
+        <span class="wordmark">(AKASHA OS)</span>
+        <span class="mono" data-pre-label>THESIS</span>
+      </div>
+      <div class="pre-mid">
+        <span class="pre-depth num" data-pre-depth>0</span>
+        <span class="pre-unit">TRACE</span>
+      </div>
+      <div class="pre-bar"><i data-pre-bar></i></div>
+      <div class="pre-row">
+        <span class="mono" data-lang="en">[ CLOUD CHAMBER ]</span>
+        <span class="mono" data-lang="fr">[ CHAMBRE À NUAGES ]</span>
+        <span class="mono">PREVIEW 0.19.0</span>
+      </div>
+    </div>
+
+    <div class="cursor" data-cursor aria-hidden="true"></div>
+    <div class="cursor-ring" data-cursor-ring aria-hidden="true"></div>
+
+    <div class="canvas-layer" aria-hidden="true">
+      <canvas class="webgl" data-field></canvas>
+    </div>
+
+    <header class="chrome chrome-tl">
+      <a class="wordmark" href="./" data-interactive>(AKASHA OS)</a>
+      <span class="motto" data-lang="en">[ LEAVE IT LOCAL ]</span>
+      <span class="motto" data-lang="fr">[ GARDEZ-LE LOCAL ]</span>
+      <span class="depth" aria-hidden="true">
+        <b class="num" data-depth>0</b>
+        <i>T</i>
+      </span>
+      <span class="depth-label" aria-hidden="true">Trace</span>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set-lang="en" aria-pressed="true" data-interactive>EN</button>
+        <button type="button" data-set-lang="fr" aria-pressed="false" data-interactive>FR</button>
+      </div>
+    </header>
+
+    <nav class="chrome chrome-tr" aria-label="Sections">
+      <button type="button" class="nav-item" data-nav-section="0" data-goto="0" data-interactive data-active="true">
+        <span data-lang="en">Thesis</span><span data-lang="fr">Thèse</span>
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="nav-item" data-nav-section="1" data-goto="1" data-interactive>
+        Caps
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="nav-item" data-nav-section="2" data-goto="2" data-interactive>
+        <span data-lang="en">Surfaces</span><span data-lang="fr">Surfaces</span>
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="nav-item" data-nav-section="3" data-goto="3" data-interactive>
+        <span data-lang="en">Local</span><span data-lang="fr">Local</span>
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="nav-item" data-nav-section="4" data-goto="4" data-interactive>
+        <span data-lang="en">Bound</span><span data-lang="fr">Borné</span>
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="nav-item" data-nav-section="5" data-goto="5" data-interactive>
+        <span data-lang="en">Path</span><span data-lang="fr">Parcours</span>
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="nav-item" data-nav-section="6" data-goto="6" data-interactive>
+        Install
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <a class="nav-item" href="docs/" data-interactive>
+        Docs
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </a>
+    </nav>
+
+    <div class="rail" aria-hidden="true">
+      <span class="rail-track"><i class="rail-fill" data-rail-fill></i></span>
+    </div>
+
+    <main id="top">
+      <div id="stage">
+        <!-- I Thesis -->
+        <section class="stage-section" id="thesis" aria-labelledby="sec-thesis">
+          <div class="stage-pin">
+            <div class="panel layout-corner" data-panel data-layout="corner">
+              <div class="head">
+                <span class="sec-label" data-fade><b>I</b><i></i><span>SEC.001</span></span>
+                <h1 class="display" id="sec-thesis">
+                  <span data-lang="en">
+                    <span class="line"><span class="line-in">AGENTS ARE</span></span>
+                    <span class="line"><span class="line-in">SYSTEM</span></span>
+                    <span class="line"><span class="line-in">SERVICES.</span></span>
+                  </span>
+                  <span data-lang="fr">
+                    <span class="line"><span class="line-in">LES AGENTS</span></span>
+                    <span class="line"><span class="line-in">SONT DES</span></span>
+                    <span class="line"><span class="line-in">SERVICES</span></span>
+                    <span class="line"><span class="line-in">SYSTÈME.</span></span>
+                  </span>
+                </h1>
+                <span class="stat" data-fade data-lang="en">[ NOT A CHAT WRAPPER ]</span>
+                <span class="stat" data-fade data-lang="fr">[ PAS UN CHAT DE PLUS ]</span>
+              </div>
+              <div class="note">
+                <p data-fade data-lang="en">
+                  Preview puts agents, models, tools, and memory on the bus with capabilities and audit —
+                  a local host app, not another assistant bolted onto a general-purpose OS.
+                </p>
+                <p data-fade data-lang="fr">
+                  La Preview place agents, modèles, outils et mémoire sur le bus avec capacités et audit —
+                  une appli hôte locale, pas un assistant collé sur un OS généraliste.
+                </p>
+                <a class="link" href="install.html" data-fade data-interactive>
+                  <span data-lang="en">Get Preview</span>
+                  <span data-lang="fr">Obtenir la Preview</span>
+                  <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3.5 9.5 6l-3 2.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                </a>
+                <p class="honesty" data-fade data-lang="en">Host app — not bootable. NVIDIA recommended; CPU path in the same package.</p>
+                <p class="honesty" data-fade data-lang="fr">Appli hôte — pas bootable. NVIDIA recommandé ; chemin CPU dans le même paquet.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- II Caps -->
+        <section class="stage-section" id="caps" aria-labelledby="sec-caps">
+          <div class="stage-pin">
+            <div class="panel layout-corner" data-panel data-layout="corner">
+              <div class="head">
+                <span class="sec-label" data-fade><b>II</b><i></i><span>SEC.002</span></span>
+                <h2 class="display" id="sec-caps">
+                  <span data-lang="en">
+                    <span class="line"><span class="line-in">REVOKE IT.</span></span>
+                    <span class="line"><span class="line-in">THE AGENT</span></span>
+                    <span class="line"><span class="line-in">STOPS.</span></span>
+                  </span>
+                  <span data-lang="fr">
+                    <span class="line"><span class="line-in">RÉVOQUEZ.</span></span>
+                    <span class="line"><span class="line-in">L’AGENT</span></span>
+                    <span class="line"><span class="line-in">S’ARRÊTE.</span></span>
+                  </span>
+                </h2>
+                <span class="stat" data-fade data-lang="en">[ CAPS — UNFORGEABLE ]</span>
+                <span class="stat" data-fade data-lang="fr">[ CAPS — INFALSIFIABLES ]</span>
+              </div>
+              <div class="note">
+                <p data-fade data-lang="en">
+                  Autonomy is bounded by revocable capability tokens and a signed audit trail —
+                  not ambient trust hoping the model behaves.
+                </p>
+                <p data-fade data-lang="fr">
+                  L’autonomie est bornée par des jetons de capacité révocables et une piste d’audit signée —
+                  pas une confiance ambiante qui espère que le modèle se tienne.
+                </p>
+                <a class="link" href="why.html#caps" data-fade data-interactive>
+                  <span data-lang="en">Why caps</span>
+                  <span data-lang="fr">Pourquoi les caps</span>
+                  <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3.5 9.5 6l-3 2.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- III Surfaces -->
+        <section class="stage-section" id="surfaces" aria-labelledby="sec-surfaces">
+          <div class="stage-pin">
+            <div class="panel layout-left" data-panel data-layout="left">
+              <div class="head">
+                <span class="sec-label" data-fade><b>III</b><i></i><span>SEC.003</span></span>
+                <h2 class="display" id="sec-surfaces">
+                  <span data-lang="en">
+                    <span class="line"><span class="line-in">CHAT.</span></span>
+                    <span class="line"><span class="line-in">CREATE.</span></span>
+                    <span class="line"><span class="line-in">MEMORY.</span></span>
+                  </span>
+                  <span data-lang="fr">
+                    <span class="line"><span class="line-in">CHAT.</span></span>
+                    <span class="line"><span class="line-in">CREATE.</span></span>
+                    <span class="line"><span class="line-in">MEMORY.</span></span>
+                  </span>
+                </h2>
+                <span class="stat" data-fade data-lang="en">[ FIRST-CLASS SURFACES ]</span>
+                <span class="stat" data-fade data-lang="fr">[ SURFACES DE PREMIER PLAN ]</span>
+              </div>
+              <div class="note">
+                <p data-fade data-lang="en">
+                  The same rail you meet in Preview: multi-session chat, Create packs with sticky jobs,
+                  and Memory as a decision journal — not plugins bolted on later.
+                </p>
+                <p data-fade data-lang="fr">
+                  Le même rail que dans la Preview : chat multi-sessions, packs Create avec jobs persistants,
+                  et Memory comme journal de décisions — pas des plugins ajoutés après coup.
+                </p>
+                <a class="link" href="docs/use.html" data-fade data-interactive>
+                  <span data-lang="en">Open the manual</span>
+                  <span data-lang="fr">Ouvrir le manuel</span>
+                  <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3.5 9.5 6l-3 2.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- IV Local -->
+        <section class="stage-section" id="local" aria-labelledby="sec-local">
+          <div class="stage-pin">
+            <div class="panel layout-left" data-panel data-layout="left">
+              <div class="head">
+                <span class="sec-label" data-fade><b>IV</b><i></i><span>SEC.004</span></span>
+                <h2 class="display" id="sec-local">
+                  <span data-lang="en">
+                    <span class="line"><span class="line-in">YOUR MACHINE</span></span>
+                    <span class="line"><span class="line-in">RUNS THE</span></span>
+                    <span class="line"><span class="line-in">MODEL.</span></span>
+                  </span>
+                  <span data-lang="fr">
+                    <span class="line"><span class="line-in">VOTRE MACHINE</span></span>
+                    <span class="line"><span class="line-in">FAIT TOURNER</span></span>
+                    <span class="line"><span class="line-in">LE MODÈLE.</span></span>
+                  </span>
+                </h2>
+                <span class="stat" data-fade data-lang="en">[ LOCAL GGUF — OFFLINE DEFAULT ]</span>
+                <span class="stat" data-fade data-lang="fr">[ GGUF LOCAL — HORS LIGNE PAR DÉFAUT ]</span>
+              </div>
+              <div class="note">
+                <p data-fade data-lang="en">
+                  Inference and placement are runtime concerns on your host.
+                  Cloud providers stay opt-in — the product does not need a remote API to breathe.
+                </p>
+                <p data-fade data-lang="fr">
+                  L’inférence et le placement sont des préoccupations runtime sur votre hôte.
+                  Les providers cloud restent en opt-in — le produit n’a pas besoin d’une API distante pour respirer.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- V Bound -->
+        <section class="stage-section" id="bound" aria-labelledby="sec-bound">
+          <div class="stage-pin">
+            <div class="panel layout-corner" data-panel data-layout="corner">
+              <div class="head">
+                <span class="sec-label" data-fade><b>V</b><i></i><span>SEC.005</span></span>
+                <h2 class="display" id="sec-bound">
+                  <span data-lang="en">
+                    <span class="line"><span class="line-in">NETWORK</span></span>
+                    <span class="line"><span class="line-in">DENIES BY</span></span>
+                    <span class="line"><span class="line-in">DEFAULT.</span></span>
+                  </span>
+                  <span data-lang="fr">
+                    <span class="line"><span class="line-in">LE RÉSEAU</span></span>
+                    <span class="line"><span class="line-in">REFUSE PAR</span></span>
+                    <span class="line"><span class="line-in">DÉFAUT.</span></span>
+                  </span>
+                </h2>
+                <span class="stat" data-fade data-lang="en">[ EGRESS — DENY ]</span>
+                <span class="stat" data-fade data-lang="fr">[ SORTIE — REFUS ]</span>
+              </div>
+              <div class="note">
+                <p data-fade data-lang="en">
+                  Web search and fetch are opt-in. Agents stay inside the caps you grant —
+                  that is the product story, not fine print under a download button.
+                </p>
+                <p data-fade data-lang="fr">
+                  Recherche et fetch web sont en opt-in. Les agents restent dans les caps que vous accordez —
+                  c’est l’histoire du produit, pas une note sous le bouton de téléchargement.
+                </p>
+                <a class="link" href="docs/network.html" data-fade data-interactive>
+                  <span data-lang="en">Network manual</span>
+                  <span data-lang="fr">Manuel réseau</span>
+                  <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3.5 9.5 6l-3 2.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VI Path -->
+        <section class="stage-section" id="path" aria-labelledby="sec-path">
+          <div class="stage-pin">
+            <div class="panel layout-centre" data-panel data-layout="centre">
+              <div class="head">
+                <span class="sec-label" data-fade><b>VI</b><i></i><span>SEC.006</span></span>
+                <h2 class="display" id="sec-path">
+                  <span data-lang="en">
+                    <span class="line"><span class="line-in">FIFTEEN</span></span>
+                    <span class="line"><span class="line-in">MINUTES.</span></span>
+                  </span>
+                  <span data-lang="fr">
+                    <span class="line"><span class="line-in">QUINZE</span></span>
+                    <span class="line"><span class="line-in">MINUTES.</span></span>
+                  </span>
+                </h2>
+                <span class="stat" data-fade data-lang="en">[ NO CARGO — NO CLONE ]</span>
+                <span class="stat" data-fade data-lang="fr">[ PAS DE CARGO — PAS DE CLONE ]</span>
+              </div>
+              <div class="note">
+                <p data-fade data-lang="en">
+                  Install Preview from the release zip. One offline chat. One note. Feedback from the UI.
+                  That is the cohort path — Windows, Linux, and Mac Apple Silicon.
+                </p>
+                <p data-fade data-lang="fr">
+                  Installez la Preview depuis l’archive de release. Un chat hors ligne. Une note. Un retour depuis l’UI.
+                  C’est le parcours cohorte — Windows, Linux et Mac Apple Silicon.
+                </p>
+                <a class="link" href="docs/first-run.html" data-fade data-interactive>
+                  <span data-lang="en">First run</span>
+                  <span data-lang="fr">Premier lancement</span>
+                  <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3.5 9.5 6l-3 2.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VII Install closer -->
+        <section class="stage-section" id="install-beat" aria-labelledby="sec-install">
+          <div class="stage-pin">
+            <div class="panel layout-closer" data-panel data-layout="closer">
+              <h2 class="sr-only" id="sec-install">Install Preview</h2>
+              <div class="closer-stack">
+                <p class="closer-line" data-lang="en">Agents are system services.</p>
+                <p class="closer-line" data-lang="fr">Les agents sont des services système.</p>
+                <p class="closer-line" data-lang="en">Capabilities, audit, offline by default.</p>
+                <p class="closer-line" data-lang="fr">Capacités, audit, hors ligne par défaut.</p>
+                <p class="closer-line" data-lang="en">Leave it local.</p>
+                <p class="closer-line" data-lang="fr">Gardez-le local.</p>
+              </div>
+              <a class="link closer-cta" href="install.html" data-interactive>
+                <span data-lang="en">Get Preview <span data-aos-version="0.19.0">0.19.0</span></span>
+                <span data-lang="fr">Obtenir la Preview <span data-aos-version="0.19.0">0.19.0</span></span>
+                <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 3.5 9.5 6l-3 2.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
               </a>
             </div>
-            <p class="hero-honesty" data-lang="en">
-              Host app — not a bootable OS. NVIDIA recommended; CPU path ships in the same package.
+          </div>
+        </section>
+      </div>
+
+      <footer class="footer">
+        <div class="footer-top">
+          <div class="footer-brand">
+            <span class="wordmark">(AKASHA OS)</span>
+            <p data-lang="en">
+              Agent-native OS Preview — host app on Windows, Linux, and macOS Apple Silicon.
+              Dual licensed AGPL-3.0-only and commercial. Trademark reserved.
             </p>
-            <p class="hero-honesty" data-lang="fr">
-              Appli hôte — pas un OS bootable. NVIDIA recommandé ; le chemin CPU est dans le même paquet.
+            <p data-lang="fr">
+              Preview d’OS natif agents — appli hôte sur Windows, Linux et macOS Apple Silicon.
+              Double licence AGPL-3.0-only et commerciale. Marque réservée.
             </p>
           </div>
-          <figure class="hero-plane">
-            <img
-              src="media/create.png"
-              width="1267"
-              height="792"
-              alt="Akasha OS Preview — Create module with prompt, layers, and generation controls"
-              decoding="async"
-              fetchpriority="high"
-            />
-            <figcaption data-lang="en">Preview UI — Create</figcaption>
-            <figcaption data-lang="fr">UI Preview — Create</figcaption>
-          </figure>
-        </section>
-
-        <section class="band surfaces" aria-labelledby="surfaces-title">
-          <h2 id="surfaces-title">
-            <span data-lang="en">What you open</span>
-            <span data-lang="fr">Ce que vous ouvrez</span>
-          </h2>
-          <p class="band-lede" data-lang="en">
-            The same rail you meet in Preview: Chat, Create, Memory, and Caps — each a first-class surface, not a plugin bolted on later.
-          </p>
-          <p class="band-lede" data-lang="fr">
-            Le même rail que dans la Preview : Chat, Create, Memory et Caps — chacune une surface de premier plan, pas un plugin ajouté après coup.
-          </p>
-          <ul class="rail-list">
-            <li>
-              <a href="docs/use.html#chat">
-                <span class="rail-name">Chat</span>
-                <span data-lang="en">Multi-session, local models, offline by default.</span>
-                <span data-lang="fr">Multi-sessions, modèles locaux, hors ligne par défaut.</span>
-              </a>
-            </li>
-            <li>
-              <a href="docs/use.html#image-tts">
-                <span class="rail-name">Create</span>
-                <span data-lang="en">Image and video packs with catalogue recipes and job progress.</span>
-                <span data-lang="fr">Packs image et vidéo avec recettes catalogue et progression de job.</span>
-              </a>
-            </li>
-            <li>
-              <a href="docs/use.html#memory">
-                <span class="rail-name">Memory</span>
-                <span data-lang="en">Decision journal and long-term remember / recall.</span>
-                <span data-lang="fr">Journal de décisions et mémoire long terme remember / recall.</span>
-              </a>
-            </li>
-            <li>
-              <a href="why.html#caps">
-                <span class="rail-name">Caps</span>
-                <span data-lang="en">Revocable capability tokens — agents stay bounded.</span>
-                <span data-lang="fr">Jetons de capacité révocables — les agents restent bornés.</span>
-              </a>
-            </li>
-          </ul>
-          <figure class="band-shot">
-            <img
-              src="media/rail.png"
-              width="1267"
-              height="792"
-              alt="Akasha OS Preview navigation rail with Chat, Agents, Create, and Memory"
-              loading="lazy"
-              decoding="async"
-            />
-          </figure>
-          <figure class="band-shot chat-shot">
-            <img
-              src="media/chat.png"
-              width="1267"
-              height="792"
-              alt="Akasha OS Preview chat composer with local tools"
-              loading="lazy"
-              decoding="async"
-            />
-            <figcaption data-lang="en">Chat stays local unless you opt in to web tools.</figcaption>
-            <figcaption data-lang="fr">Le chat reste local tant que vous n’activez pas les outils web.</figcaption>
-          </figure>
-        </section>
-
-        <section class="band create-story" aria-labelledby="create-title">
-          <div class="create-copy">
-            <h2 id="create-title">Create</h2>
-            <p class="band-lede" data-lang="en">
-              Pick a pack and Preview applies the catalogue recipe — size, frames, flow-shift, offload.
-              Incomplete downloads show as incomplete; generation refuses missing annexes with a clear list.
-              Leave and come back: job progress stays on the Create panel.
-            </p>
-            <p class="band-lede" data-lang="fr">
-              Choisissez un pack : la Preview applique la recette catalogue — taille, frames, flow-shift, offload.
-              Un téléchargement incomplet s’affiche comme incomplet ; la génération refuse les annexes manquantes avec une liste claire.
-              Partez et revenez : la progression du job reste sur le panneau Create.
-            </p>
+          <div class="footer-col">
+            <span class="mono">Start</span>
+            <a href="install.html">Install</a>
+            <a href="docs/first-run.html"><span data-lang="en">First run</span><span data-lang="fr">Premier lancement</span></a>
+            <a href="docs/"><span data-lang="en">Manual</span><span data-lang="fr">Manuel</span></a>
           </div>
-          <figure class="band-shot create-shot">
-            <img
-              src="media/create.png"
-              width="1267"
-              height="792"
-              alt="Akasha OS Preview Create module with layers and generation controls"
-              loading="lazy"
-              decoding="async"
-            />
-            <figcaption data-lang="en">Catalogue packs drive defaults; annexes must be complete before generate.</figcaption>
-            <figcaption data-lang="fr">Les packs catalogue posent les défauts ; les annexes doivent être complètes avant de générer.</figcaption>
-          </figure>
-        </section>
-
-        <section class="band autonomy" aria-labelledby="auto-title">
-          <h2 id="auto-title">
-            <span data-lang="en">Bounded autonomy</span>
-            <span data-lang="fr">Autonomie bornée</span>
-          </h2>
-          <p class="band-lede" data-lang="en">
-            Network egress is deny-by-default. Agents run under revocable caps with an audit trail.
-            Local GGUF inference and placement are runtime concerns — not a cloud dependency you hope stays up.
-          </p>
-          <p class="band-lede" data-lang="fr">
-            La sortie réseau est refusée par défaut. Les agents tournent sous des caps révocables avec piste d’audit.
-            L’inférence GGUF locale et le placement sont des préoccupations runtime — pas une dépendance cloud à espérer disponible.
-          </p>
-        </section>
-
-        <section class="band path" aria-labelledby="path-title">
-          <h2 id="path-title">
-            <span data-lang="en">Fifteen minutes</span>
-            <span data-lang="fr">Quinze minutes</span>
-          </h2>
-          <ol class="path-steps">
-            <li>
-              <span data-lang="en">Install Preview without cloning the repo or using cargo.</span>
-              <span data-lang="fr">Installez la Preview sans cloner le dépôt ni utiliser cargo.</span>
-            </li>
-            <li>
-              <span data-lang="en">Have one offline chat with a local model.</span>
-              <span data-lang="fr">Faites un chat hors ligne avec un modèle local.</span>
-            </li>
-            <li>
-              <span data-lang="en">Write one note, then send feedback from the UI.</span>
-              <span data-lang="fr">Écrivez une note, puis envoyez un retour depuis l’UI.</span>
-            </li>
-          </ol>
-          <p class="path-links">
-            <a href="install.html">
-              <span data-lang="en">Install guide</span>
-              <span data-lang="fr">Guide d’installation</span>
-            </a>
-            <a href="docs/first-run.html">
-              <span data-lang="en">First run</span>
-              <span data-lang="fr">Premier lancement</span>
-            </a>
-            <a href="docs/whats-new.html" data-aos-whats-new>
-              <span data-lang="en">What’s new</span>
-              <span data-lang="fr">Nouveautés</span>
-            </a>
-          </p>
-        </section>
-
-        <section class="band close" aria-labelledby="close-title">
-          <h2 id="close-title">
-            <span data-lang="en">Install Preview</span>
-            <span data-lang="fr">Installer la Preview</span>
-          </h2>
-          <p class="band-lede" data-lang="en">
-            Zip or tarball from GitHub Releases, then the installer script. News, community, and about stay one click away.
-          </p>
-          <p class="band-lede" data-lang="fr">
-            Archive depuis GitHub Releases, puis le script d’installation. News, community et about restent à un clic.
-          </p>
-          <div class="hero-cta">
-            <a class="key" href="install.html">
-              <span class="key-label" data-lang="en">Get Preview</span>
-              <span class="key-label" data-lang="fr">Obtenir la Preview</span>
-              <span class="key-rule" aria-hidden="true"></span>
-              <span class="key-copy">
-                <span class="key-sub"
-                  ><span data-aos-version="0.19.0">0.19.0</span></span
-                >
-              </span>
-              <svg class="key-arrow" viewBox="0 0 32 32" aria-hidden="true">
-                <path
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="square"
-                  d="M6 16h18M18 8l8 8-8 8"
-                />
-              </svg>
-            </a>
-            <a class="ghost" href="community.html">
-              <span data-lang="en">Community</span>
-              <span data-lang="fr">Communauté</span>
-            </a>
-            <a class="ghost" href="about.html">About</a>
+          <div class="footer-col">
+            <span class="mono">Product</span>
+            <a href="why.html"><span data-lang="en">Why</span><span data-lang="fr">Pourquoi</span></a>
+            <a href="docs/whats-new.html" data-aos-whats-new><span data-lang="en">News</span><span data-lang="fr">Nouveautés</span></a>
+            <a href="community.html"><span data-lang="en">Community</span><span data-lang="fr">Communauté</span></a>
           </div>
-          <p class="repo">
-            <a href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
-          </p>
-        </section>
-      </main>
-    </div>
+          <div class="footer-col">
+            <span class="mono">Meta</span>
+            <a href="about.html">About</a>
+            <a href="grant.html">Grant</a>
+            <a href="https://github.com/azerothl/akasha-os">GitHub</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span class="mono">© Akasha OS</span>
+          <a class="mono" href="https://github.com/azerothl/akasha-os">github.com/azerothl/akasha-os</a>
+        </div>
+      </footer>
+    </main>
+
     <script src="app.js"></script>
+    <script type="module" src="experience.js"></script>
   </body>
 </html>
