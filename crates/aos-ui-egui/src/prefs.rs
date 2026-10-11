@@ -214,6 +214,9 @@ pub struct Preferences {
     /// Optional SearXNG instance base URL (`https://searx.example`). Empty = unused.
     #[serde(default)]
     pub searxng_url: String,
+    /// Explicit loopback URL copied from Song Maker's local DeclUI host.
+    #[serde(default)]
+    pub song_maker_host_url: String,
     #[serde(default = "default_fetch_max")]
     pub web_fetch_max_bytes: u64,
     #[serde(default = "default_browse_chars")]
@@ -439,6 +442,7 @@ impl Default for Preferences {
             default_timeout_secs: default_timeout_secs(),
             web_search_engine: default_search_engine(),
             searxng_url: String::new(),
+            song_maker_host_url: String::new(),
             web_fetch_max_bytes: default_fetch_max(),
             web_browse_max_chars: default_browse_chars(),
             default_image_model: None,
@@ -652,6 +656,19 @@ mod tests {
         // Nouveaux champs boutons : défauts stables même sans migration.
         assert_eq!(prefs.custom_theme.success, "#34D399");
         assert_eq!(prefs.custom_theme.warning, "#FBBF24");
+        assert!(prefs.song_maker_host_url.is_empty());
+    }
+
+    #[test]
+    fn song_maker_host_url_persists_without_enabling_network_access() {
+        let prefs = Preferences {
+            song_maker_host_url: "http://127.0.0.1:43001".into(),
+            ..Preferences::default()
+        };
+        let raw = serde_json::to_string(&prefs).expect("serialize preferences");
+        let loaded: Preferences = serde_json::from_str(&raw).expect("reload preferences");
+        assert_eq!(loaded.song_maker_host_url, "http://127.0.0.1:43001");
+        assert!(!loaded.network_online);
     }
 
     #[test]

@@ -11,7 +11,7 @@ use crate::secret_keygen::{
     apply_lan_preset, generate, is_valid_lan_session_key, KeygenAlphabet, KeygenTarget,
     KEYGEN_LEN_MAX, KEYGEN_LEN_MIN,
 };
-use crate::{i18n, Tab, UiApp};
+use crate::{i18n, settings_ui_state, Tab, UiApp};
 use eframe::egui;
 use std::collections::HashSet;
 
@@ -78,7 +78,13 @@ fn is_valid_secret_name(raw: &str) -> bool {
 
 const SECRETS_REVEAL_TTL_SECS: f64 = 300.0;
 
-const SETTINGS_ADVANCED_IDS: [&str; 4] = ["secrets", "catalogue", "schedule", "backup"];
+const SETTINGS_ADVANCED_IDS: [&str; 5] = [
+    "secrets",
+    "catalogue",
+    "schedule",
+    "backup",
+    "song_maker",
+];
 
 fn settings_pill_label<'a>(id: &'a str, t: &'a i18n::UiStrings) -> &'a str {
     match id {
@@ -93,6 +99,7 @@ fn settings_pill_label<'a>(id: &'a str, t: &'a i18n::UiStrings) -> &'a str {
         "catalogue" => t.settings_pill_catalogue,
         "schedule" => t.settings_pill_schedule,
         "backup" => t.settings_pill_backup,
+        "song_maker" => "Song Maker",
         _ => id,
     }
 }
@@ -128,7 +135,165 @@ impl UiApp {
         }
     }
 
+    fn ui_song_maker_connector(&mut self, ui: &mut egui::Ui, french: bool) {
+        if french {
+            ui.label("Connectez Akasha au service local de Song Maker pour consulter ses projets.");
+            ui.weak("Dans Song Maker, activez l’accès local puis copiez l’adresse affichée ici.");
+        } else {
+            ui.label("Connect Akasha to Song Maker's local service to view its projects.");
+            ui.weak("In Song Maker, enable local access, then copy the displayed address here.");
+        }
+
+        let endpoint_label = if french { "Adresse locale" } else { "Local address" };
+        let connect_label = if french {
+            "Découvrir et charger les projets"
+        } else {
+            "Discover and load projects"
+        };
+        let connecting = matches!(
+            &self.settings_ui.song_maker.status,
+            settings_ui_state::SongMakerConnectionStatus::Connecting
+        );
+
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(endpoint_label);
+            let endpoint_changed = ui
+                .add_enabled(
+                    !connecting,
+                    egui::TextEdit::singleline(&mut self.prefs.song_maker_host_url)
+                        .desired_width(270.0)
+                        .hint_text("http://127.0.0.1:port"),
+                )
+                .changed();
+            if endpoint_changed {
+                save_preferences(&self.prefs);
+                self.settings_ui.song_maker.reset();
+            }
+            if ui
+                .add_enabled(
+                    !connecting && !self.prefs.song_maker_host_url.trim().is_empty(),
+                    egui::Button::new(connect_label),
+                )
+                .clicked()
+            {
+                save_preferences(&self.prefs);
+                if let Err(message) = self
+                    .settings_ui
+                    .song_maker
+                    .start_probe(self.prefs.song_maker_host_url.clone())
+                {
+                    self.settings_ui.song_maker.status =
+                        settings_ui_state::SongMakerConnectionStatus::Failed(message);
+                }
+            }
+            if ui
+                .add_enabled(
+                    !connecting,
+                    egui::Button::new(if french { "Effacer" } else { "Clear" }),
+                )
+                .clicked()
+            {
+                self.prefs.song_maker_host_url.clear();
+                save_preferences(&self.prefs);
+                self.settings_ui.song_maker.reset();
+            }
+        });
+
+        if french {
+            ui.weak("Akasha ne contacte que localhost, uniquement après ce clic.");
+        } else {
+            ui.weak("Akasha contacts localhost only, and only after you click the button.");
+        }
+
+        match &self.settings_ui.song_maker.status {
+            settings_ui_state::SongMakerConnectionStatus::Idle => {
+                ui.weak(if french {
+                    "Non connecté. Aucun accès réseau n’est lancé automatiquement."
+                } else {
+                    "Not connected. No network request runs automatically."
+                });
+            }
+            settings_ui_state::SongMakerConnectionStatus::Connecting => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(if french {
+                        "Découverte de Song Maker…"
+                    } else {
+                        "Discovering Song Maker…"
+                    });
+                });
+            }
+            settings_ui_state::SongMakerConnectionStatus::Failed(message) => {
+                ui.colored_label(ui.visuals().error_fg_color, message.as_str());
+            }
+            settings_ui_state::SongMakerConnectionStatus::Connected(connection) => {
+                ui.horizontal(|ui| {
+                    ui.colored_label(
+                        ui.visuals().hyperlink_color,
+                        if french { "Connecté" } else { "Connected" },
+                    );
+                    ui.monospace(&connection.endpoint);
+                    ui.weak(format!("API {}", connection.api_version));
+                });
+
+                if connection.capabilities.is_empty() {
+                    ui.weak(if french {
+                        "L’hôte n’annonce aucune capacité."
+                    } else {
+                        "The host advertises no capabilities."
+                    });
+                } else {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(if french { "Capacités :" } else { "Capabilities:" });
+                        for capability in &connection.capabilities {
+                            ui.label(egui::RichText::new(capability).small());
+                        }
+                    });
+                }
+
+                if let Some(message) = &connection.projects_error {
+                    ui.colored_label(ui.visuals().warn_fg_color, message.as_str());
+                } else {
+                    ui.label(if french {
+                        format!("{} projet(s) accessibles", connection.projects.len())
+                    } else {
+                        format!("{} accessible project(s)", connection.projects.len())
+                    });
+                    if connection.projects.is_empty() {
+                        ui.weak(if french {
+                            "Aucun projet n’a été trouvé dans cette bibliothèque."
+                        } else {
+                            "No projects were found in this library."
+                        });
+                    } else {
+                        egui::ScrollArea::vertical()
+                            .max_height(220.0)
+                            .show(ui, |ui| {
+                                for project in &connection.projects {
+                                    ui.horizontal(|ui| {
+                                        ui.label(&project.title);
+                                        ui.weak(format!("#{}", project.id));
+                                        if let Some(updated_at) = &project.updated_at {
+                                            ui.weak(updated_at);
+                                        }
+                                    });
+                                }
+                            });
+                    }
+                }
+
+                ui.weak(if french {
+                    "L’hôte Song Maker actuel est en lecture seule : génération, séparation et export restent dans Song Maker."
+                } else {
+                    "The current Song Maker host is read-only: generate, separate, and export in Song Maker itself."
+                });
+            }
+        }
+    }
+
     pub(crate) fn ui_settings(&mut self, ui: &mut egui::Ui) {
+        self.settings_ui.song_maker.poll();
         let t = i18n::strings(&self.prefs.language);
         ui.heading(t.settings_title);
         crate::ui_primitives::search_field(
@@ -140,7 +305,7 @@ impl UiApp {
         );
         // P1 pagination lite : 850 lignes en un scroll -> pills de sections.
         // Recherche non vide = filtre global historique ; sinon une seule section.
-        // Primary pills + menu Avancé (Secrets / Catalogue / Planif / Sauvegarde) — #183.
+        // Primary pills + menu Avancé (Secrets / Catalogue / Planif / Sauvegarde / intégrations).
         let main_sections: [(&str, &str); 7] = [
             ("all", t.settings_pill_all),
             ("me", t.settings_pill_me),
@@ -248,6 +413,7 @@ impl UiApp {
                 ["catalogue", "catalog", "module", "community", "communauté"].as_slice(),
                 ["planification", "schedule", "tâche", "task"].as_slice(),
                 ["sauvegarde", "backup", "restauration", "restore", "export"].as_slice(),
+                ["song maker", "song-maker", "hôte", "host", "intégration", "integration"].as_slice(),
             ]
             .iter()
             .any(|terms| terms.iter().any(|term| term.contains(query.as_str())))
@@ -1367,6 +1533,22 @@ impl UiApp {
                         }
                         ui.end_row();
                     });
+            });
+        }
+
+        if section_visible(
+            "song_maker",
+            &[
+                "song maker",
+                "song-maker",
+                "musique",
+                "music",
+                "intégration",
+                "integration",
+            ],
+        ) {
+            show_settings_section(ui, show_section_heading, "Song Maker", |ui| {
+                self.ui_song_maker_connector(ui, self.prefs.language == "fr");
             });
         }
 
