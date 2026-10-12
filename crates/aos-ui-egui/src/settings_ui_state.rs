@@ -1,8 +1,73 @@
 //! Mutable state owned by the Settings panel (secrets, catalogue, schedule form).
 
 use crate::secret_keygen::{KeygenAlphabet, KeygenTarget, LAN_SESSION_KEY_HEX_LEN};
+use crate::song_maker::{self, SongMakerConnection};
 use aos_proto::{ModuleCatalogue, ModuleInfo};
 use std::collections::HashMap;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+
+#[derive(Debug)]
+pub(crate) enum SongMakerConnectionStatus {
+    Idle,
+    Connecting,
+    Connected(SongMakerConnection),
+    Failed(String),
+}
+
+#[derive(Debug)]
+pub(crate) struct SongMakerSettingsState {
+    pub(crate) status: SongMakerConnectionStatus,
+    receiver: Option<Receiver<Result<SongMakerConnection, String>>>,
+}
+
+impl Default for SongMakerSettingsState {
+    fn default() -> Self {
+        Self {
+            status: SongMakerConnectionStatus::Idle,
+            receiver: None,
+        }
+    }
+}
+
+impl SongMakerSettingsState {
+    pub(crate) fn start_probe(&mut self, endpoint: String) -> Result<(), String> {
+        if self.receiver.is_some() {
+            return Ok(());
+        }
+        let (sender, receiver) = mpsc::channel();
+        std::thread::Builder::new()
+            .name("akasha-song-maker-discovery".into())
+            .spawn(move || {
+                let _ = sender.send(song_maker::connect_and_list(&endpoint));
+            })
+            .map_err(|error| format!("Le client Song Maker n’a pas pu démarrer : {error}"))?;
+        self.receiver = Some(receiver);
+        self.status = SongMakerConnectionStatus::Connecting;
+        Ok(())
+    }
+
+    pub(crate) fn poll(&mut self) {
+        let result = match self.receiver.as_ref().map(Receiver::try_recv) {
+            Some(Ok(result)) => Some(result),
+            Some(Err(TryRecvError::Disconnected)) => Some(Err(
+                "Le client Song Maker s’est interrompu avant de répondre.".to_string(),
+            )),
+            Some(Err(TryRecvError::Empty)) | None => None,
+        };
+        if let Some(result) = result {
+            self.receiver = None;
+            self.status = match result {
+                Ok(connection) => SongMakerConnectionStatus::Connected(connection),
+                Err(message) => SongMakerConnectionStatus::Failed(message),
+            };
+        }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.receiver = None;
+        self.status = SongMakerConnectionStatus::Idle;
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct SettingsUiState {
@@ -40,6 +105,7 @@ pub(crate) struct SettingsUiState {
     pub(crate) installed_modules: Vec<ModuleInfo>,
     pub(crate) schedule_goal: String,
     pub(crate) schedule_interval_secs: u64,
+    pub(crate) song_maker: SongMakerSettingsState,
 }
 
 impl Default for SettingsUiState {
@@ -74,6 +140,7 @@ impl Default for SettingsUiState {
             installed_modules: Vec::new(),
             schedule_goal: String::new(),
             schedule_interval_secs: 60,
+            song_maker: SongMakerSettingsState::default(),
         }
     }
 }

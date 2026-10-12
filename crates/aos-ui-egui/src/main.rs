@@ -100,6 +100,7 @@ mod session_event_controller;
 mod session_nav;
 mod settings_controller;
 mod settings_ui_state;
+mod song_maker;
 mod skill_offer;
 mod slash;
 mod theme;
