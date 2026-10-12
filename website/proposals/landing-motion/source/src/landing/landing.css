@@ -1,0 +1,25 @@
+.fs-scene {
+  position: relative;
+  background: #050812;
+  color: #f3f7ff;
+}
+
+.fs-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.fs-scene--static {
+  height: auto;
+}
+
+.fs-scene--static .fs-stage {
+  position: relative;
+  height: auto;
+  min-height: 100svh;
+  padding: 80px 0;
+}
+
