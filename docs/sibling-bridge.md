@@ -85,6 +85,15 @@ Wire note: OS daemons speak **CBOR**. The adapter transcodes JSON ↔ CBOR
 - Copy-paste of sibling source into this tree
 - “Assistant as module” façade (post-contract, once ABIs stabilize)
 
+## Song Maker native client
+
+The optional native connector in Akasha OS consumes Song Maker's separate
+`song-maker.host.v1` loopback API. It is configured explicitly in **Settings →
+Advanced → Song Maker** and currently reads the host's project list only. See
+[Song Maker connector](song-maker-connector.md) for setup and capability
+limits. This connector is independent of `aos-bridged` and its memory/secrets
+routes.
+
 ## Next steps
 
 1. Optional: package a thin “assistant façade” as a dual-surface module once
