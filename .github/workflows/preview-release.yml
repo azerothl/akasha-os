@@ -128,6 +128,7 @@ jobs:
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}\aos-release-cost\timings.tsv
           AOS_MODULE_PACK_PLATFORM: windows-x64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
+          AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
         run: |
           $timingsDir = Split-Path -Parent $env:AOS_RELEASE_COST_TIMINGS
           New-Item -ItemType Directory -Force -Path $timingsDir | Out-Null
@@ -279,6 +280,7 @@ jobs:
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
           AOS_MODULE_PACK_PLATFORM: linux-x64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
+          AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
           # Host only — must not leak to wasm32 (rust-lld rejects -fuse-ld=lld).
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         run: |
@@ -294,9 +296,10 @@ jobs:
           fi
           export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
           chmod +x packaging/build-preview.sh packaging/release-cost.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
-          BUILD_START=$SECONDS
+          BUILD_START_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
           bash packaging/build-preview.sh
-          printf 'package-build\t%s\n' "$(((SECONDS - BUILD_START) * 1000))" >> "$AOS_RELEASE_COST_TIMINGS"
+          BUILD_END_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
+          printf 'package-build\t%s\n' "$((BUILD_END_MS - BUILD_START_MS))" >> "$AOS_RELEASE_COST_TIMINGS"
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           for bin in \
             aos-session aos-busd aos-modeld aos-modeld-cpu aos-agentd \
@@ -339,13 +342,15 @@ jobs:
           ls -lah "${OUT}/bin" | head -n 80
           du -sh "${OUT}" "${OUT}/bin"
           ARCHIVE="dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz"
-          ARCHIVE_START=$SECONDS
+          ARCHIVE_START_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
           tar -C dist -czf "${ARCHIVE}" "AgentOS-Preview-${VERSION}-linux-x64"
-          printf 'archive-compression\t%s\n' "$(((SECONDS - ARCHIVE_START) * 1000))" >> "$AOS_RELEASE_COST_TIMINGS"
-          VERIFY_START=$SECONDS
+          ARCHIVE_END_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
+          printf 'archive-compression\t%s\n' "$((ARCHIVE_END_MS - ARCHIVE_START_MS))" >> "$AOS_RELEASE_COST_TIMINGS"
+          VERIFY_START_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
           tar -tzf "${ARCHIVE}" >/dev/null
           gzip -t "${ARCHIVE}"
-          printf 'package-verification\t%s\n' "$(((SECONDS - VERIFY_START) * 1000))" >> "$AOS_RELEASE_COST_TIMINGS"
+          VERIFY_END_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
+          printf 'package-verification\t%s\n' "$((VERIFY_END_MS - VERIFY_START_MS))" >> "$AOS_RELEASE_COST_TIMINGS"
           ls -lh "${ARCHIVE}"
           sha256sum "${ARCHIVE}"
           if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats | tee "$CACHE_STATS"; fi
@@ -430,6 +435,7 @@ jobs:
           RUSTC_WRAPPER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
+          AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
           VERSION: ${{ steps.ver.outputs.version }}
           AOS_MODULE_PACK_PLATFORM: macos-arm64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
