@@ -74,7 +74,7 @@ def replace_module_metadata(
     kept: list[str] = []
     skip_children = False
     for line in lines:
-        if re.match(r"^    (?:package|platforms|minimum_host_api):", line):
+        if re.match(r"^    (?:package|platforms|minimum_host_api|dependencies):", line):
             skip_children = True
             continue
         if skip_children:
@@ -90,6 +90,7 @@ def replace_module_metadata(
         f"    minimum_host_api: {min_api}\n"
         f"    platforms:\n"
         f"      - {platform_id}\n"
+        "    dependencies: []\n"
         f"    package:\n"
         f"      url: {url}\n"
         f"      sha256: sha256:{archive_hash}\n"

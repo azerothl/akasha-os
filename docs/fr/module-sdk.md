@@ -156,8 +156,8 @@ de branche hôte spécifique Create.
 - Les archives Preview gardent Notes, Tasks et ext-rt dans le socle. Canvas,
   Create et Illustration Studio sont publiés comme paquets ZIP téléchargeables
   séparément ; leurs entrées du catalogue signé précisent la plateforme, l’API
-  hôte minimale, la taille, le SHA-256 et l’empreinte des entrées de build. La
-  revue habituelle des caps reste obligatoire. Les ressources Illustration et
+  hôte minimale, les dépendances, la taille, le SHA-256 et l’empreinte des
+  entrées de build. La revue habituelle des caps reste obligatoire. Les ressources Illustration et
   le pack renderer restent pour l’instant dans l’archive de base.
 - Index communautaire opt-in : Git signé `community/catalogue.yaml` (cache hors ligne)
 - Désinstall : Settings → Catalogue local de modules → Modules installés ; les

@@ -153,8 +153,8 @@ host branches.
 - Preview release archives keep Notes, Tasks, and ext-rt bundled. Canvas, Create,
   and Illustration Studio are published as separately downloadable ZIP packs;
   their signed catalogue entries include the platform, minimum host API,
-  archive size, SHA-256, and build-input fingerprint. Their capabilities still
-  require the normal installation review. Illustration's shared assets and
+  dependencies, archive size, SHA-256, and build-input fingerprint. Their
+  capabilities still require the normal installation review. Illustration's shared assets and
   renderer pack remain in the base archive for now.
 - Opt-in community index: signed Git `community/catalogue.yaml` (cached offline)
 - Uninstall: Settings → Local module catalogue → Installed modules; bundled apps

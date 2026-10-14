@@ -124,7 +124,8 @@ foreach ($module in $modulesToVerify) {
             throw "Optional module pack metadata is incomplete: $module"
         }
         if ($entry.Value -notmatch '(?m)^    minimum_host_api: [1-9][0-9]*\s*$' -or
-            $entry.Value -notmatch '(?m)^      - windows-x64\s*$') {
+            $entry.Value -notmatch '(?m)^      - windows-x64\s*$' -or
+            $entry.Value -notmatch '(?m)^    dependencies: \[\s*\]\s*$') {
             throw "Optional module pack compatibility metadata is invalid: $module"
         }
         $packName = [System.IO.Path]::GetFileName(([uri]$urlMatch.Groups[1].Value).AbsolutePath)
