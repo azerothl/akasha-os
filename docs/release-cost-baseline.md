@@ -70,7 +70,7 @@ Run [38602553174](https://github.com/azerothl/akasha-os/actions/runs/38602553174
 on commit `a18d910664b531a2f8d8ec9b964d121099090363`, dispatched with
 `macos_only=false`, `include_macos_in_full_build=true`,
 `create_release=false`, `upload_release=false`, and `cache_profile=cold`.
-Windows, Linux, and macOS ran in parallel; the full run wall time was 93m 08s.
+Windows, Linux, and macOS ran in parallel; the full run wall time was 93m 12s.
 Cargo cache and sccache setup were skipped on every platform. No GGUF files
 were included; model weights remain first-run downloads.
 
