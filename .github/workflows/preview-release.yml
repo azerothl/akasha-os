@@ -194,28 +194,6 @@ jobs:
             --report dist/release-cost-windows-x64.json `
             --summary $env:GITHUB_STEP_SUMMARY
 
-      - name: Add GitHub Actions step timings
-        uses: actions/github-script@v7
-        env:
-          JOB_ID: ${{ github.job }}
-        with:
-          script: |
-            const result = await github.rest.actions.listJobsForWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-              per_page: 100,
-            });
-            const job = result.data.jobs.find((candidate) => candidate.name === process.env.JOB_ID);
-            if (!job) throw new Error(`Could not find job ${process.env.JOB_ID}`);
-            const rows = job.steps
-              .filter((step) => step.started_at && step.completed_at)
-              .map((step) => {
-                const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
-                return `| ${step.name.replaceAll('|', '\\|')} | ${seconds.toFixed(1)} s |`;
-              });
-            await core.summary.addHeading('GitHub Actions step durations').addRaw('| Step | Duration |\n|---|---:|\n' + rows.join('\n') + '\n').write();
-
       - uses: actions/upload-artifact@v4
         with:
           name: preview-windows-x64
@@ -366,28 +344,6 @@ jobs:
             --report dist/release-cost-linux-x64.json \
             --summary "$GITHUB_STEP_SUMMARY"
 
-      - name: Add GitHub Actions step timings
-        uses: actions/github-script@v7
-        env:
-          JOB_ID: ${{ github.job }}
-        with:
-          script: |
-            const result = await github.rest.actions.listJobsForWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-              per_page: 100,
-            });
-            const job = result.data.jobs.find((candidate) => candidate.name === process.env.JOB_ID);
-            if (!job) throw new Error(`Could not find job ${process.env.JOB_ID}`);
-            const rows = job.steps
-              .filter((step) => step.started_at && step.completed_at)
-              .map((step) => {
-                const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
-                return `| ${step.name.replaceAll('|', '\\|')} | ${seconds.toFixed(1)} s |`;
-              });
-            await core.summary.addHeading('GitHub Actions step durations').addRaw('| Step | Duration |\n|---|---:|\n' + rows.join('\n') + '\n').write();
-
       - uses: actions/upload-artifact@v4
         with:
           name: preview-linux-x64
@@ -534,28 +490,6 @@ jobs:
             --report dist/release-cost-macos-arm64.json \
             --summary "$GITHUB_STEP_SUMMARY"
 
-      - name: Add GitHub Actions step timings
-        uses: actions/github-script@v7
-        env:
-          JOB_ID: ${{ github.job }}
-        with:
-          script: |
-            const result = await github.rest.actions.listJobsForWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-              per_page: 100,
-            });
-            const job = result.data.jobs.find((candidate) => candidate.name === process.env.JOB_ID);
-            if (!job) throw new Error(`Could not find job ${process.env.JOB_ID}`);
-            const rows = job.steps
-              .filter((step) => step.started_at && step.completed_at)
-              .map((step) => {
-                const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
-                return `| ${step.name.replaceAll('|', '\\|')} | ${seconds.toFixed(1)} s |`;
-              });
-            await core.summary.addHeading('GitHub Actions step durations').addRaw('| Step | Duration |\n|---|---:|\n' + rows.join('\n') + '\n').write();
-
       - uses: actions/upload-artifact@v4
         with:
           name: preview-macos-arm64
@@ -564,6 +498,64 @@ jobs:
             dist/release-cost-macos-arm64.json
           compression-level: 0
           retention-days: 7
+
+  release-cost-summary:
+    if: always()
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Summarize complete platform job timings
+        uses: actions/github-script@v7
+        env:
+          RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
+        with:
+          script: |
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+            const platformIds = ['windows', 'linux', 'macos'];
+            const platformJobs = platformIds.map((id) => ({
+              id,
+              job: jobs.find((candidate) => candidate.name === id),
+            }));
+            const completed = platformJobs
+              .map(({ job }) => job)
+              .filter((job) => job && job.started_at && job.completed_at);
+            const start = Math.min(...completed.map((job) => Date.parse(job.started_at)));
+            const end = Math.max(...completed.map((job) => Date.parse(job.completed_at)));
+            const duration = (ms) => {
+              const total = Math.max(0, Math.round(ms / 1000));
+              return `${Math.floor(total / 60)}m ${total % 60}s`;
+            };
+            const jobRows = platformJobs.map(({ id, job }) => {
+              if (!job) return `| ${id} | not run | — |`;
+              const seconds = job.started_at && job.completed_at
+                ? (Date.parse(job.completed_at) - Date.parse(job.started_at)) / 1000
+                : null;
+              return `| ${id} | ${job.conclusion || job.status} | ${seconds === null ? '—' : duration(seconds * 1000)} |`;
+            });
+            const stepRows = platformJobs.flatMap(({ id, job }) =>
+              (job?.steps || [])
+                .filter((step) => step.started_at && step.completed_at)
+                .map((step) => {
+                  const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
+                  return `| ${id} | ${step.name.replaceAll('|', '\\|')} | ${duration(seconds * 1000)} |`;
+                })
+            );
+            core.summary.addHeading('Preview release cost: complete CI timings');
+            core.summary.addRaw(`Requested cache profile: **${process.env.RELEASE_CACHE_PROFILE}**\n\n`);
+            if (Number.isFinite(start) && Number.isFinite(end)) {
+              core.summary.addRaw(`Platform jobs wall time: **${duration(end - start)}** (parallel jobs; individual durations are not additive).\n\n`);
+            }
+            core.summary.addRaw('| Platform | Result | Job duration |\n|---|---|---:|\n' + jobRows.join('\n') + '\n\n');
+            core.summary.addRaw('| Platform | GitHub Actions step | Duration |\n|---|---|---:|\n' + stepRows.join('\n') + '\n');
+            await core.summary.write();
 
   release-macos-only:
     needs: [macos]
