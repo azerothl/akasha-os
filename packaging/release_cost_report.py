@@ -159,6 +159,9 @@ def main() -> int:
 
     archive_bytes, archive_raw, archive_compressed, archive_counts, gguf = read_archive(archive_path)
     components = []
+    include_component_zip_comparison = (
+        os.environ.get("AOS_RELEASE_COST_COMPONENT_ZIPS", "true").strip().lower() == "true"
+    )
     for name in sorted(set(groups) | set(archive_raw)):
         files = groups.get(name, [])
         raw_bytes = archive_raw.get(name, sum(size for _relative, _path, size in files))
@@ -166,7 +169,9 @@ def main() -> int:
             "name": name,
             "files": archive_counts.get(name, len(files)),
             "uncompressed_bytes": raw_bytes,
-            "standalone_zip_bytes": isolated_zip_size(files) if files else None,
+            "standalone_zip_bytes": (
+                isolated_zip_size(files) if files and include_component_zip_comparison else None
+            ),
             "archive_uncompressed_bytes": archive_raw.get(name, 0),
             "archive_compressed_bytes": archive_compressed.get(name),
         })
@@ -183,6 +188,7 @@ def main() -> int:
         "cache_profile_requested": args.cache_profile,
         "archive": {"path": archive_path.name, "bytes": archive_bytes, "sha256": sha256_file(archive_path)},
         "components": components,
+        "component_zip_comparison_enabled": include_component_zip_comparison,
         "component_measurement_overhead_ms": measurement_overhead_ms,
         "timings": parse_timings(args.timings),
         "sccache_summary": cache_summary(args.sccache_stats),
@@ -208,8 +214,12 @@ def main() -> int:
         lines.append(
             f"| `{item['name']}` | {item['files']} | {human_bytes(item['uncompressed_bytes'])} | {human_bytes(item['standalone_zip_bytes'])} | {human_bytes(item['archive_compressed_bytes'])} |"
         )
-    lines.extend(["", "The standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.", ""])
-    lines.append(f"Component measurement overhead: {measurement_overhead_ms / 1000:.1f} s (separate ZIP comparisons).")
+    if include_component_zip_comparison:
+        lines.extend(["", "The standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.", ""])
+    else:
+        lines.extend(["", "Standalone per-component ZIP comparisons are disabled for this run to avoid adding compression work to normal release builds. For tar.gz, archive-level compressed size is not available per member.", ""])
+    overhead_note = "includes separate ZIP comparisons" if include_component_zip_comparison else "does not include separate ZIP comparisons"
+    lines.append(f"Component measurement overhead: {measurement_overhead_ms / 1000:.1f} s ({overhead_note}).")
     if gguf:
         lines.append(f"First-run GGUF models included: {len(gguf)} file(s).")
     else:

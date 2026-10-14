@@ -50,12 +50,14 @@ GitHub Actions job summary. The report records:
 - whether any `.gguf` file is present. GGUFs downloaded on first launch are
   outside the Preview archive when absent from the report.
 
-The report also measures each component as a separate deflated ZIP to compare
-possible future pack boundaries. This column is a separate compression run; its
-values do not add up to the platform archive. ZIP releases expose exact
-per-component compressed bytes from their archive directory. The Linux `.tar.gz`
-format has no per-member compressed byte count, so its report marks that field
-unavailable and gives the separate ZIP comparison instead.
+Manual full non-publishing benchmark runs also measure each component as a
+separate deflated ZIP to compare possible future pack boundaries. This column is
+a separate compression run; its values do not add up to the platform archive.
+That comparison is disabled on normal release builds so it cannot add extra
+compression work to every release. ZIP releases expose exact per-component
+compressed bytes from their archive directory. The Linux `.tar.gz` format has no
+per-member compressed byte count, so its report marks that field unavailable and
+gives the optional separate ZIP comparison instead.
 
 The detailed phase durations sit inside the overall `package-build` duration and
 must not be added to it. `native-cpu-companion` is inside `package-assembly`.
