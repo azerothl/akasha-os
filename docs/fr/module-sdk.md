@@ -129,6 +129,23 @@ de branche hôte spécifique Create.
 - Catalogue local signé : `share/modules/catalogue.yaml` + `catalogue.yaml.sig`
   (ed25519) ; Settings → Catalogue local de modules → Install exécute toujours
   la revue de caps
+- Un module téléchargeable peut déclarer dans son entrée signée un objet
+  `package` (`url`, empreinte d’archive `sha256`, `size_bytes`, `input_sha256`),
+  `minimum_host_api`, `platforms` et `dependencies`. L’URL doit être en HTTPS et
+  pointer vers un ZIP dont la racine contient l’arborescence du paquet. L’hôte
+  vérifie l’empreinte et la taille de
+  l’archive, le manifeste, la version, l’API et l’empreinte WASM avant
+  l’installation. Il extrait d’abord le paquet dans un cache versionné ;
+  l’activation conserve l’installation transactionnelle existante et l’état
+  installé si la validation échoue. Les limites sont de 64 Mio, 4 096 fichiers
+  et 128 Mio après extraction.
+- `platforms` utilise des identifiants tels que `windows-x64`, `linux-x64` et
+  `macos-arm64` ; une liste vide ou `any` indique un paquet portable. Les
+  dépendances doivent déjà être installées et actives. `input_sha256` identifie
+  le module, le SDK, les scripts, le lockfile et les outils de compilation pour
+  la réutilisation immuable. La signature d’un paquet n’accorde
+  aucune permission : la première installation conserve la revue de caps, et
+  une mise à jour la relance si elle demande des caps supplémentaires.
 - Index communautaire opt-in : Git signé `community/catalogue.yaml` (cache hors ligne)
 - Désinstall : Settings → Catalogue local de modules → Modules installés ; les
   apps bundlées peuvent être retirées — le choix persiste au boot (voir

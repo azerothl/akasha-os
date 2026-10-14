@@ -128,6 +128,22 @@ host branches.
 - Local signed catalogue: `share/modules/catalogue.yaml` + `catalogue.yaml.sig`
   (ed25519); Settings → Local module catalogue → Install still runs per-package
   cap review
+- A downloadable module can add a signed `package` object (`url`, archive
+  `sha256`, `size_bytes`, and `input_sha256`), `minimum_host_api`, `platforms`,
+  and `dependencies` to its catalogue entry. The URL must be HTTPS and point to
+  a ZIP containing the package tree at its root. The host checks the archive
+  digest and size, module manifest/version/API and WASM digest before installing
+  it. Archives are limited to 64 MiB, 4,096 files and 128 MiB after extraction.
+  It extracts into a versioned cache first; module activation still uses the
+  existing transactional installer, preserving the current install if
+  validation fails.
+- `platforms` uses host IDs such as `windows-x64`, `linux-x64`, and
+  `macos-arm64`; an empty list or `any` means platform-independent. Dependencies
+  must already be installed and active. `input_sha256` identifies the module,
+  SDK, build scripts, lockfile and toolchain inputs for immutable reuse. A signed
+  pack never grants permissions: first install still shows the normal
+  capability review, and updates prompt again if they request additional
+  capabilities.
 - Opt-in community index: signed Git `community/catalogue.yaml` (cached offline)
 - Uninstall: Settings → Local module catalogue → Installed modules; bundled apps
   can be removed — choice persists across boots (see [FEATURES.md](FEATURES.md))

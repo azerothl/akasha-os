@@ -8,6 +8,8 @@ use aos_proto::{CatalogueEntry, ModuleCatalogue};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -23,6 +25,9 @@ const SOURCE_BUNDLED: &str = "bundled";
 const SOURCE_COMMUNITY: &str = "community";
 const INDEX_MAX_BYTES: u64 = 512 * 1024;
 const PACKAGE_MAX_BYTES: u64 = 32 * 1024 * 1024;
+const MODULE_ARCHIVE_MAX_BYTES: u64 = 64 * 1024 * 1024;
+const MODULE_ARCHIVE_UNPACKED_MAX_BYTES: u64 = 128 * 1024 * 1024;
+const MODULE_ARCHIVE_MAX_FILES: usize = 4096;
 
 #[derive(Debug, Error)]
 pub enum CatalogueError {
@@ -42,6 +47,10 @@ pub enum CatalogueError {
     NotFound(String),
     #[error("fetch: {0}")]
     Fetch(String),
+    #[error("archive de module invalide: {0}")]
+    InvalidPackageArchive(String),
+    #[error("module incompatible avec cet hôte: {0}")]
+    IncompatibleHost(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -469,6 +478,47 @@ pub enum ResolvedPackage {
     File { path: PathBuf },
 }
 
+/// Stable host identifier used by signed package metadata and Settings.
+pub fn host_platform_id() -> String {
+    let os = match std::env::consts::OS {
+        "windows" => "windows",
+        "linux" => "linux",
+        "macos" => "macos",
+        other => other,
+    };
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => other,
+    };
+    format!("{os}-{arch}")
+}
+
+/// Validate the signed host constraints before downloading or installing a pack.
+pub fn ensure_entry_compatible_with_host(entry: &CatalogueEntry) -> Result<(), CatalogueError> {
+    if entry.minimum_host_api > aos_proto::OS_API_VERSION {
+        return Err(CatalogueError::IncompatibleHost(format!(
+            "{} nécessite l'API hôte {}, version disponible {}",
+            entry.name,
+            entry.minimum_host_api,
+            aos_proto::OS_API_VERSION
+        )));
+    }
+    if !entry.platforms.is_empty()
+        && !entry.platforms.iter().any(|platform| {
+            platform.eq_ignore_ascii_case("any")
+                || platform.eq_ignore_ascii_case(&host_platform_id())
+        })
+    {
+        return Err(CatalogueError::IncompatibleHost(format!(
+            "{} n'est pas publié pour {}",
+            entry.name,
+            host_platform_id()
+        )));
+    }
+    Ok(())
+}
+
 /// Resolve a listed package from the local tree, cache, or a fetch.
 pub fn resolve_package(
     entry: &CatalogueEntry,
@@ -477,6 +527,11 @@ pub fn resolve_package(
     bundled_index: Option<&Path>,
     fetch: impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<ResolvedPackage, CatalogueError> {
+    if entry.package.is_some() && entry.kind != "module" {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "les archives de capacité doivent être des modules".into(),
+        ));
+    }
     match entry.kind.as_str() {
         "skill" => {
             let bytes = resolve_file_bytes(entry, extra, home, bundled_index, &fetch)?;
@@ -487,6 +542,7 @@ pub fn resolve_package(
             Ok(ResolvedPackage::Skill { bytes })
         }
         "module" => {
+            ensure_entry_compatible_with_host(entry)?;
             let dir = resolve_module_dir(entry, extra, home, bundled_index, &fetch)?;
             let wasm = std::fs::read(dir.join("module.wasm"))?;
             let hash = sha256_hex(&wasm);
@@ -638,8 +694,18 @@ fn resolve_module_dir(
     bundled_index: Option<&Path>,
     fetch: &impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
 ) -> Result<PathBuf, CatalogueError> {
+    ensure_entry_compatible_with_host(entry)?;
+    if let Some(artifact) = &entry.package {
+        validate_package_artifact_metadata(entry, artifact)?;
+    }
     if let Some(local) = resolve_local_module_package(home, bundled_index, &entry.path) {
+        if entry.package.is_some() {
+            validate_downloaded_module_dir(entry, &local)?;
+        }
         return Ok(local);
+    }
+    if let Some(artifact) = &entry.package {
+        return resolve_downloaded_module_archive(entry, artifact, extra, fetch);
     }
     let local = home.join(&entry.path);
     if local.is_dir() && local.join("module.wasm").is_file() {
@@ -656,6 +722,310 @@ fn resolve_module_dir(
     std::fs::write(dest.join("manifest.yaml"), manifest)?;
     std::fs::write(dest.join("module.wasm"), wasm)?;
     Ok(dest)
+}
+
+fn resolve_downloaded_module_archive(
+    entry: &CatalogueEntry,
+    artifact: &aos_proto::CataloguePackageArtifact,
+    extra: &ExtraCatalogueSource,
+    fetch: &impl Fn(&str) -> Result<Vec<u8>, CatalogueError>,
+) -> Result<PathBuf, CatalogueError> {
+    let parsed_url = url::Url::parse(&artifact.url)
+        .map_err(|e| CatalogueError::InvalidPackageArchive(format!("URL invalide: {e}")))?;
+    let digest = artifact.sha256.trim().trim_start_matches("sha256:");
+    let cache_root = extra
+        .cache_dir
+        .join("packages")
+        .join(&entry.name);
+    let package_dir = cache_root.join(digest.to_ascii_lowercase());
+    let archive_path = cache_root.join(format!("{}.zip", digest.to_ascii_lowercase()));
+    let archive_bytes = match read_cached_module_archive(&archive_path, artifact, digest)? {
+        Some(bytes) => bytes,
+        None => fetch(parsed_url.as_str())?,
+    };
+    if archive_bytes.len() as u64 != artifact.size_bytes {
+        return Err(CatalogueError::InvalidPackageArchive(format!(
+            "taille reçue {} octets, catalogue: {} octets",
+            archive_bytes.len(),
+            artifact.size_bytes
+        )));
+    }
+    if !hashes_equal(digest, &sha256_hex(&archive_bytes)) {
+        return Err(CatalogueError::HashMismatch(entry.name.clone()));
+    }
+
+    std::fs::create_dir_all(&cache_root)?;
+    if !archive_path.is_file() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temporary_archive = cache_root.join(format!(
+            ".{digest}-{}-{nonce}.tmp",
+            std::process::id()
+        ));
+        {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary_archive)?;
+            file.write_all(&archive_bytes)?;
+            file.sync_all()?;
+        }
+        if let Err(error) = std::fs::rename(&temporary_archive, &archive_path) {
+            let _ = std::fs::remove_file(&temporary_archive);
+            if !archive_path.is_file() {
+                return Err(CatalogueError::Io(error));
+            }
+        }
+    }
+
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let staging = cache_root.join(format!(
+        ".{}-{}-{nonce}.staging",
+        entry.name,
+        std::process::id()
+    ));
+    std::fs::create_dir(&staging)?;
+    if let Err(error) = extract_module_archive(&archive_bytes, &staging)
+        .and_then(|()| validate_downloaded_module_dir(entry, &staging))
+    {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    let backup = cache_root.join(format!(
+        ".{}-{}-{nonce}.backup",
+        entry.name,
+        std::process::id()
+    ));
+    let had_previous = std::fs::symlink_metadata(&package_dir).is_ok();
+    if had_previous {
+        std::fs::rename(&package_dir, &backup)?;
+    }
+    if let Err(error) = std::fs::rename(&staging, &package_dir) {
+        if had_previous {
+            let _ = std::fs::rename(&backup, &package_dir);
+        }
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(CatalogueError::Io(error));
+    }
+    if had_previous {
+        remove_cached_path(&backup)?;
+    }
+    Ok(package_dir)
+}
+
+fn remove_cached_path(path: &Path) -> Result<(), CatalogueError> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(CatalogueError::Io(error)),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        std::fs::remove_file(path)?;
+    } else {
+        std::fs::remove_dir_all(path)?;
+    }
+    Ok(())
+}
+
+fn validate_package_artifact_metadata(
+    entry: &CatalogueEntry,
+    artifact: &aos_proto::CataloguePackageArtifact,
+) -> Result<(), CatalogueError> {
+    ensure_entry_compatible_with_host(entry)?;
+    if entry.name.is_empty()
+        || !entry
+            .name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "nom de module invalide".into(),
+        ));
+    }
+    let digest = artifact.sha256.trim().trim_start_matches("sha256:");
+    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "empreinte SHA-256 invalide".into(),
+        ));
+    }
+    let input_digest = artifact
+        .input_sha256
+        .trim()
+        .trim_start_matches("sha256:");
+    if input_digest.len() != 64
+        || !input_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "empreinte des entrées de build invalide".into(),
+        ));
+    }
+    if artifact.size_bytes == 0 || artifact.size_bytes > MODULE_ARCHIVE_MAX_BYTES {
+        return Err(CatalogueError::InvalidPackageArchive(format!(
+            "taille déclarée hors limite ({} octets)",
+            artifact.size_bytes
+        )));
+    }
+    if entry.minimum_host_api == 0 {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "version minimale de l'API hôte absente".into(),
+        ));
+    }
+    let parsed_url = url::Url::parse(&artifact.url)
+        .map_err(|e| CatalogueError::InvalidPackageArchive(format!("URL invalide: {e}")))?;
+    if parsed_url.scheme() != "https" || !parsed_url.path().ends_with(".zip") {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "l'URL du pack doit pointer vers une archive ZIP en HTTPS".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn read_cached_module_archive(
+    archive_path: &Path,
+    artifact: &aos_proto::CataloguePackageArtifact,
+    digest: &str,
+) -> Result<Option<Vec<u8>>, CatalogueError> {
+    if !archive_path.is_file() {
+        return Ok(None);
+    }
+    if std::fs::metadata(archive_path)?.len() != artifact.size_bytes {
+        std::fs::remove_file(archive_path)?;
+        return Ok(None);
+    }
+    let bytes = std::fs::read(archive_path)?;
+    if !hashes_equal(digest, &sha256_hex(&bytes)) {
+        std::fs::remove_file(archive_path)?;
+        return Ok(None);
+    }
+    Ok(Some(bytes))
+}
+
+fn extract_module_archive(bytes: &[u8], destination: &Path) -> Result<(), CatalogueError> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|e| CatalogueError::InvalidPackageArchive(e.to_string()))?;
+    if archive.len() > MODULE_ARCHIVE_MAX_FILES {
+        return Err(CatalogueError::InvalidPackageArchive(
+            "trop de fichiers dans le pack".into(),
+        ));
+    }
+    let mut unpacked_bytes = 0u64;
+    let mut seen_paths = HashSet::new();
+    for index in 0..archive.len() {
+        let mut item = archive
+            .by_index(index)
+            .map_err(|e| CatalogueError::InvalidPackageArchive(e.to_string()))?;
+        if item.is_dir() {
+            continue;
+        }
+        if item.is_symlink() {
+            return Err(CatalogueError::InvalidPackageArchive(
+                "les liens symboliques sont refusés".into(),
+            ));
+        }
+        let archive_name = item.name();
+        if archive_name.contains('\\') || archive_name.contains(':') || archive_name.starts_with('/') {
+            return Err(CatalogueError::InvalidPackageArchive(
+                "chemin de fichier non portable".into(),
+            ));
+        }
+        let relative = item.enclosed_name().ok_or_else(|| {
+            CatalogueError::InvalidPackageArchive("chemin de fichier dangereux".into())
+        })?;
+        if relative.components().any(|component| {
+            !matches!(component, std::path::Component::Normal(_))
+        }) {
+            return Err(CatalogueError::InvalidPackageArchive(
+                "chemin de fichier dangereux".into(),
+            ));
+        }
+        let portable_key = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().to_lowercase())
+            .collect::<Vec<_>>()
+            .join("/");
+        if !seen_paths.insert(portable_key) {
+            return Err(CatalogueError::InvalidPackageArchive(
+                "chemin de fichier dupliqué".into(),
+            ));
+        }
+        unpacked_bytes = unpacked_bytes.saturating_add(item.size());
+        if unpacked_bytes > MODULE_ARCHIVE_UNPACKED_MAX_BYTES {
+            return Err(CatalogueError::InvalidPackageArchive(
+                "contenu décompressé trop volumineux".into(),
+            ));
+        }
+        let output = destination.join(relative);
+        let parent = output.parent().ok_or_else(|| {
+            CatalogueError::InvalidPackageArchive("chemin de fichier invalide".into())
+        })?;
+        std::fs::create_dir_all(parent)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&output)?;
+        let expected_size = item.size();
+        let mut copied = 0u64;
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let count = item.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            copied = copied.saturating_add(count as u64);
+            if copied > expected_size || copied > MODULE_ARCHIVE_UNPACKED_MAX_BYTES {
+                return Err(CatalogueError::InvalidPackageArchive(
+                    "contenu décompressé supérieur à la taille déclarée".into(),
+                ));
+            }
+            file.write_all(&buffer[..count])?;
+        }
+        if copied != expected_size {
+            return Err(CatalogueError::InvalidPackageArchive(
+                "taille de fichier incohérente".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_downloaded_module_dir(
+    entry: &CatalogueEntry,
+    package_dir: &Path,
+) -> Result<(), CatalogueError> {
+    let manifest_bytes = std::fs::read(package_dir.join("manifest.yaml"))?;
+    let manifest: aos_proto::ModuleManifest = serde_yaml::from_slice(&manifest_bytes)
+        .map_err(|e| CatalogueError::InvalidPackageArchive(e.to_string()))?;
+    if manifest.name != entry.name || manifest.version != entry.version {
+        return Err(CatalogueError::InvalidPackageArchive(format!(
+            "manifeste {} v{} différent du catalogue {} v{}",
+            manifest.name, manifest.version, entry.name, entry.version
+        )));
+    }
+    if manifest.min_os_api != entry.minimum_host_api {
+        return Err(CatalogueError::InvalidPackageArchive(format!(
+            "API minimale du manifeste ({}) différente du catalogue ({})",
+            manifest.min_os_api, entry.minimum_host_api
+        )));
+    }
+    if manifest.min_os_api > aos_proto::OS_API_VERSION {
+        return Err(CatalogueError::IncompatibleHost(format!(
+            "{} nécessite l'API hôte {}",
+            entry.name, manifest.min_os_api
+        )));
+    }
+    let wasm = std::fs::read(package_dir.join("module.wasm"))?;
+    let wasm_hash = sha256_hex(&wasm);
+    if !hashes_equal(&manifest.hash, &wasm_hash) || !hashes_equal(&entry.hash, &wasm_hash) {
+        return Err(CatalogueError::HashMismatch(entry.name.clone()));
+    }
+    Ok(())
 }
 
 /// Index URL `…/community/catalogue.yaml` + path `community/skills/…` → raw file URL.
@@ -786,8 +1156,13 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, CatalogueError> {
     if !resp.status().is_success() {
         return Err(CatalogueError::Fetch(format!("status {}", resp.status())));
     }
-    let limit = if url.ends_with("catalogue.yaml") || url.ends_with("catalogue.yaml.sig") {
+    let url_path = url::Url::parse(url)
+        .map(|parsed| parsed.path().to_string())
+        .unwrap_or_default();
+    let limit = if url_path.ends_with("catalogue.yaml") || url_path.ends_with("catalogue.yaml.sig") {
         INDEX_MAX_BYTES
+    } else if url_path.ends_with(".zip") {
+        MODULE_ARCHIVE_MAX_BYTES
     } else {
         PACKAGE_MAX_BYTES
     };
@@ -1122,6 +1497,10 @@ mod tests {
             attested_caps: vec![],
             license: String::new(),
             source: SOURCE_BUNDLED.into(),
+            package: None,
+            minimum_host_api: 0,
+            platforms: vec![],
+            dependencies: vec![],
         };
         let extra = ExtraCatalogueSource::open(&home, home.join("var/catalogue/community"));
         fn no_fetch(_url: &str) -> Result<Vec<u8>, CatalogueError> {

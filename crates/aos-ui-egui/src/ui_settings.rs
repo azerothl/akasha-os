@@ -27,6 +27,16 @@ fn catalogue_module_names<'a>(
         .collect()
 }
 
+fn catalogue_size_label(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 {
+        format!("{:.1} MiB", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        format!("{:.1} KiB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
 fn color_from_hex(value: &str) -> egui::Color32 {
     let raw = value.trim().trim_start_matches('#');
     if raw.len() != 6 {
@@ -1949,6 +1959,23 @@ impl UiApp {
                                 .installed_skills
                                 .iter()
                                 .any(|n| n == &e.name);
+                            let missing_dependencies: Vec<&str> = e
+                                .dependencies
+                                .iter()
+                                .filter(|dependency| {
+                                    !self
+                                        .settings_ui
+                                        .installed_modules
+                                        .iter()
+                                        .any(|module| {
+                                            &module.name == *dependency && !module.quarantined
+                                        })
+                                })
+                                .map(String::as_str)
+                                .collect();
+                            let host_compatible =
+                                aos_platform::catalogue::ensure_entry_compatible_with_host(e)
+                                    .is_ok();
                             ui.horizontal(|ui| {
                                 let mut label = format!(
                                     "{} {} ({}) [{}]",
@@ -1971,13 +1998,25 @@ impl UiApp {
                                     "module" => {
                                         if aos_proto::decl_ui::is_protected_by_host(&e.name) {
                                             ui.weak(t.settings_bundled_locked);
-                                        } else if installed_mod.is_some() {
+                                        } else if let Some(installed) = installed_mod {
+                                            if (installed.version != e.version || e.package.is_some())
+                                                && host_compatible
+                                                && missing_dependencies.is_empty()
+                                                && ui.button(t.settings_catalogue_update).clicked()
+                                            {
+                                                let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
+                                                    name: e.name.clone(),
+                                                });
+                                            }
                                             if ui.button(t.settings_catalogue_uninstall).clicked() {
                                                 let _ = self.cmd_tx.send(Cmd::ModuleUninstall {
                                                     name: e.name.clone(),
                                                 });
                                             }
-                                        } else if ui.button(t.settings_catalogue_install).clicked() {
+                                        } else if host_compatible
+                                            && missing_dependencies.is_empty()
+                                            && ui.button(t.settings_catalogue_install).clicked()
+                                        {
                                             let _ = self.cmd_tx.send(Cmd::CatalogueInstall {
                                                 name: e.name.clone(),
                                             });
@@ -2000,6 +2039,25 @@ impl UiApp {
                                     _ => {}
                                 }
                             });
+                            if e.kind == "module" {
+                                if let Some(package) = &e.package {
+                                    ui.weak(format!(
+                                        "{}: {}",
+                                        t.settings_catalogue_package_size,
+                                        catalogue_size_label(package.size_bytes)
+                                    ));
+                                }
+                            }
+                            if !host_compatible {
+                                ui.weak(t.settings_catalogue_unavailable);
+                            }
+                            if !missing_dependencies.is_empty() {
+                                ui.weak(format!(
+                                    "{}: {}",
+                                    t.settings_catalogue_missing_dependencies,
+                                    missing_dependencies.join(", ")
+                                ));
+                            }
                             if !e.attested_caps.is_empty() {
                                 ui.weak(format!(
                                     "{}: {}",

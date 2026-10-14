@@ -3777,6 +3777,30 @@ pub struct CatalogueEntry {
     /// `bundled` | `community` — set by the host when merging sources.
     #[serde(default)]
     pub source: String,
+    /// Optional immutable release archive for a downloadable capability pack.
+    /// Its metadata is covered by the signed catalogue.
+    #[serde(default)]
+    pub package: Option<CataloguePackageArtifact>,
+    /// Minimum `OS_API_VERSION` needed to install this entry.
+    #[serde(default)]
+    pub minimum_host_api: u32,
+    /// Supported host identifiers (for example `windows-x64`); empty means any.
+    #[serde(default)]
+    pub platforms: Vec<String>,
+    /// Modules that must already be installed before this entry can be installed.
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
+/// Immutable downloadable `.aospkg` archive referenced by a signed catalogue.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CataloguePackageArtifact {
+    pub url: String,
+    pub sha256: String,
+    pub size_bytes: u64,
+    /// SHA-256 over the module, SDK, build scripts, lockfile and toolchain inputs.
+    #[serde(default)]
+    pub input_sha256: String,
 }
 
 /// `module.catalogue` — registre signé (bundled + opt-in extra Git source).
