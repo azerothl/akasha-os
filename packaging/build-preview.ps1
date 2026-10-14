@@ -14,6 +14,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:ReleaseCostTimings = $env:AOS_RELEASE_COST_TIMINGS
+$script:ReleaseCostStack = New-Object 'System.Collections.Generic.List[object]'
+function Start-ReleaseCostPhase {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    if ([string]::IsNullOrWhiteSpace($script:ReleaseCostTimings)) { return }
+    $phase = [pscustomobject]@{
+        Name = $Name
+        Watch = [System.Diagnostics.Stopwatch]::StartNew()
+    }
+    $script:ReleaseCostStack.Add($phase) | Out-Null
+}
+function Stop-ReleaseCostPhase {
+    if ([string]::IsNullOrWhiteSpace($script:ReleaseCostTimings) -or $script:ReleaseCostStack.Count -eq 0) { return }
+    $index = $script:ReleaseCostStack.Count - 1
+    $phase = $script:ReleaseCostStack[$index]
+    $script:ReleaseCostStack.RemoveAt($index)
+    $phase.Watch.Stop()
+    $timingsDir = Split-Path -Parent $script:ReleaseCostTimings
+    New-Item -ItemType Directory -Force -Path $timingsDir | Out-Null
+    Add-Content -LiteralPath $script:ReleaseCostTimings `
+        -Encoding utf8NoBOM `
+        -Value ("{0}`t{1}" -f $phase.Name, $phase.Watch.ElapsedMilliseconds)
+}
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $Version) {
     $verFile = Join-Path $root "VERSION"
@@ -25,6 +48,7 @@ if (-not $OutDir) { $OutDir = Join-Path $root "dist\AgentOS-Preview-$Version-$su
 $env:CARGO_TARGET_DIR = Join-Path $root "target"
 
 if (-not $SkipBuild) {
+    Start-ReleaseCostPhase "native-build"
     Write-Host "== cargo build --release (aos-auditd sans CUDA/llama) =="
     # Separate resolve: aos-platform default features are additive. Building
     # aos-auditd alone keeps embeddings (llama) off for that binary.
@@ -56,6 +80,8 @@ if (-not $SkipBuild) {
         if ($LASTEXITCODE -ne 0) { throw "build aos-platformd failed" }
     }
 
+    Stop-ReleaseCostPhase
+    Start-ReleaseCostPhase "wasm-modules"
     Write-Host "== package notes module =="
     pwsh -NoProfile -File (Join-Path $root "modules\build-notes.ps1")
     if ($LASTEXITCODE -ne 0) { throw "build-notes.ps1 failed ($LASTEXITCODE)" }
@@ -92,8 +118,10 @@ if (-not $SkipBuild) {
         Remove-Item Env:UPDATE_CATALOGUE -ErrorAction SilentlyContinue
         Pop-Location
     }
+    Stop-ReleaseCostPhase
 }
 
+Start-ReleaseCostPhase "package-assembly"
 $binSrc = Join-Path $root "target\release"
 New-Item -ItemType Directory -Force -Path `
     "$OutDir\bin", "$OutDir\etc", "$OutDir\share\models", `
@@ -117,12 +145,14 @@ foreach ($b in $bins) {
 if ($CpuOnly) {
     Copy-Item (Join-Path $OutDir "bin\aos-modeld.exe") (Join-Path $OutDir "bin\aos-modeld-cpu.exe") -Force
 } else {
+    Start-ReleaseCostPhase "native-cpu-companion"
     Write-Host "== cargo build --release (aos-modeld-cpu, no CUDA) =="
     cargo build --release -p aos-model --no-default-features
     if ($LASTEXITCODE -ne 0) { throw "build aos-modeld-cpu failed" }
     $cpuSrc = Join-Path $binSrc "aos-modeld.exe"
     if (-not (Test-Path $cpuSrc)) { throw "manque aos-modeld.exe after cpu rebuild" }
     Copy-Item $cpuSrc (Join-Path $OutDir "bin\aos-modeld-cpu.exe") -Force
+    Stop-ReleaseCostPhase
 }
 
 if ($CpuOnly) {
@@ -424,6 +454,7 @@ Akasha OS Preview $Version (Windows x64 ; NVIDIA ou CPU)
 5. Voir FIRST-RUN.md, INSTALL.md, TESTER.md, docs/FEATURES.md (et docs/fr/ pour le français)
 "@ | Set-Content "$OutDir\README.txt" -Encoding utf8
 
+Stop-ReleaseCostPhase
 Write-Host "== package prêt : $OutDir =="
 $files = Get-ChildItem $OutDir -Recurse -File
 $sum = ($files | Measure-Object -Property Length -Sum).Sum

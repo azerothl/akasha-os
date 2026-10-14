@@ -16,6 +16,7 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MODELS="${SKIP_MODELS:-0}"
 REQUIRE_CUDA="${REQUIRE_CUDA:-0}"
 PREVIEW_PROFILE="${AOS_PREVIEW_PROFILE:-standard}"
+. "${ROOT}/packaging/release-cost.sh"
 
 sha256_file() {
   local path="$1"
@@ -47,6 +48,7 @@ sync_module_wasm() {
 }
 
 if [ "$SKIP_BUILD" != "1" ]; then
+  aos_release_cost_start "native-build"
   # Separate cargo resolve so aos-auditd does not feature-unify llama/CUDA into
   # the audit binary (GitHub Release 2 GiB limit).
   echo "== cargo build --release (aos-auditd sans CUDA/llama) =="
@@ -71,6 +73,8 @@ if [ "$SKIP_BUILD" != "1" ]; then
     echo "== cargo build --release (aos-platformd sans embeddings) =="
     cargo build --release -p aos-platform --bin aos-platformd --no-default-features
   fi
+  aos_release_cost_end
+  aos_release_cost_start "wasm-modules"
   echo "== notes module =="
   if command -v pwsh >/dev/null 2>&1; then
     pwsh -NoProfile -File "${ROOT}/modules/build-notes.ps1"
@@ -162,8 +166,10 @@ EOF
   echo "== refresh bundled catalogue signature =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     catalogue::tests::committed_catalogue_signature_matches -- --nocapture)
+  aos_release_cost_end
 fi
 
+aos_release_cost_start "package-assembly"
 mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/share/models/lora" "${OUT}/share/models/vae" "${OUT}/share/models/styles" "${OUT}/share/models/upscale" \
   "${OUT}/share/modules" "${OUT}/share/skills" \
@@ -179,9 +185,11 @@ if [ "$CPU_ONLY" = "1" ]; then
   cp -f "${OUT}/bin/aos-modeld" "${OUT}/bin/aos-modeld-cpu"
 else
   echo "== cargo build --release (aos-modeld-cpu, no CUDA) =="
+  if [ "$CPU_ONLY" != "1" ]; then aos_release_cost_start "native-cpu-companion"; fi
   cargo build --release -p aos-model --no-default-features
   cp -f "${CARGO_TARGET_DIR}/release/aos-modeld" "${OUT}/bin/aos-modeld-cpu"
   chmod +x "${OUT}/bin/aos-modeld-cpu"
+  if [ "$CPU_ONLY" != "1" ]; then aos_release_cost_end; fi
 fi
 if command -v strip >/dev/null 2>&1; then
   echo "== strip release binaries =="
@@ -519,6 +527,7 @@ Akasha OS Preview ${VERSION} (Linux x64 ; NVIDIA ou CPU)
 EOF
 
 echo "== package prêt : ${OUT} =="
+aos_release_cost_end
 du -sh "${OUT}"
 echo "== plus gros fichiers =="
 du -ah "${OUT}" 2>/dev/null | sort -hr | head -n 25 || true
