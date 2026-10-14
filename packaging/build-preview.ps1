@@ -38,6 +38,10 @@ function Stop-ReleaseCostPhase {
         -Value ("{0}`t{1}" -f $phase.Name, $phase.Watch.ElapsedMilliseconds)
 }
 $root = Split-Path -Parent $PSScriptRoot
+$optionalModules = @()
+if ($env:AOS_MODULE_PACK_RELEASE_TAG -and $env:AOS_OPTIONAL_MODULES) {
+    $optionalModules = @($env:AOS_OPTIONAL_MODULES.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
 if (-not $Version) {
     $verFile = Join-Path $root "VERSION"
     if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() } else { $Version = "0.10.0" }
@@ -108,6 +112,12 @@ if (-not $SkipBuild) {
     }
     bash $illustBuild
     if ($LASTEXITCODE -ne 0) { throw "build-illustration-studio.sh failed ($LASTEXITCODE)" }
+    if ($env:AOS_MODULE_PACK_RELEASE_TAG) {
+        Start-ReleaseCostPhase "module-pack-archives"
+        python (Join-Path $root "packaging\module_pack_release.py")
+        if ($LASTEXITCODE -ne 0) { throw "module pack release metadata failed ($LASTEXITCODE)" }
+        Stop-ReleaseCostPhase
+    }
     Write-Host "== refresh bundled catalogue signature =="
     Push-Location $root
     try {
@@ -276,48 +286,52 @@ if (Test-Path $extrt) {
     Write-Warning "ext-rt.aospkg absent — lancer modules\build-ext-rt.ps1"
 }
 
-$canvasShare = Join-Path $root "share\modules\canvas.aospkg"
-$canvas = Join-Path $root "modules\canvas.aospkg"
-if (Test-Path $canvasShare) {
-    Copy-ReplaceDir $canvasShare (Join-Path $OutDir "share\modules\canvas.aospkg")
-} elseif (Test-Path $canvas) {
-    Copy-ReplaceDir $canvas (Join-Path $OutDir "share\modules\canvas.aospkg")
-} else {
-    Write-Warning "canvas.aospkg absent — lancer modules\build-canvas.ps1"
-}
-
-$createShare = Join-Path $root "share\modules\create.aospkg"
-$create = Join-Path $root "modules\create.aospkg"
-$createOut = Join-Path $OutDir "share\modules\create.aospkg"
-if (Test-Path $createShare) {
-    Copy-ReplaceDir $createShare $createOut
-} elseif (Test-Path $create) {
-    Copy-ReplaceDir $create $createOut
-} else {
-    throw "create.aospkg absent — run modules\build-create.ps1"
-}
-foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
-    $path = Join-Path $createOut $rel
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "create.aospkg incomplete — missing $rel"
-    }
-    if ((Get-Item -LiteralPath $path).Length -eq 0) {
-        throw "create.aospkg incomplete — empty $rel"
+if ($optionalModules -notcontains "canvas") {
+    $canvasShare = Join-Path $root "share\modules\canvas.aospkg"
+    $canvas = Join-Path $root "modules\canvas.aospkg"
+    if (Test-Path $canvasShare) {
+        Copy-ReplaceDir $canvasShare (Join-Path $OutDir "share\modules\canvas.aospkg")
+    } elseif (Test-Path $canvas) {
+        Copy-ReplaceDir $canvas (Join-Path $OutDir "share\modules\canvas.aospkg")
+    } else {
+        Write-Warning "canvas.aospkg absent — lancer modules\build-canvas.ps1"
     }
 }
 
-# Illustration Studio is discoverable through the bundled local catalogue, so
-# ship its package alongside the catalogue entry used by a fresh Preview.
-$illustrationShare = Join-Path $root "share\modules\illustration-studio.aospkg"
-$illustrationOut = Join-Path $OutDir "share\modules\illustration-studio.aospkg"
-if (-not (Test-Path -LiteralPath $illustrationShare -PathType Container)) {
-    throw "illustration-studio.aospkg absent — run modules\build-illustration-studio.sh"
+if ($optionalModules -notcontains "create") {
+    $createShare = Join-Path $root "share\modules\create.aospkg"
+    $create = Join-Path $root "modules\create.aospkg"
+    $createOut = Join-Path $OutDir "share\modules\create.aospkg"
+    if (Test-Path $createShare) {
+        Copy-ReplaceDir $createShare $createOut
+    } elseif (Test-Path $create) {
+        Copy-ReplaceDir $create $createOut
+    } else {
+        throw "create.aospkg absent — run modules\build-create.ps1"
+    }
+    foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
+        $path = Join-Path $createOut $rel
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "create.aospkg incomplete — missing $rel"
+        }
+        if ((Get-Item -LiteralPath $path).Length -eq 0) {
+            throw "create.aospkg incomplete — empty $rel"
+        }
+    }
 }
-Copy-ReplaceDir $illustrationShare $illustrationOut
-foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
-    $path = Join-Path $illustrationOut $rel
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
-        throw "illustration-studio.aospkg incomplete — missing or empty $rel"
+
+if ($optionalModules -notcontains "illustration-studio") {
+    $illustrationShare = Join-Path $root "share\modules\illustration-studio.aospkg"
+    $illustrationOut = Join-Path $OutDir "share\modules\illustration-studio.aospkg"
+    if (-not (Test-Path -LiteralPath $illustrationShare -PathType Container)) {
+        throw "illustration-studio.aospkg absent — run modules\build-illustration-studio.sh"
+    }
+    Copy-ReplaceDir $illustrationShare $illustrationOut
+    foreach ($rel in @("manifest.yaml", "module.wasm", "ui\index.json")) {
+        $path = Join-Path $illustrationOut $rel
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+            throw "illustration-studio.aospkg incomplete — missing or empty $rel"
+        }
     }
 }
 

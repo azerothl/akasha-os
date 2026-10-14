@@ -147,9 +147,15 @@ host branches.
 - `packaging/module_pack_inputs.py` computes a stable input digest with
   `python packaging/module_pack_inputs.py <module>`; `--json` prints the module,
   target and digest. It includes source/package inputs, the shared SDK, module
-  scripts and the platform packaging scripts that still generate some module
-  packages inline, lockfiles, WASM target, Rust/Cargo toolchain, build flags and
-  host API version; generated WASM and generated manifests are excluded.
+  scripts and the platform packaging/archive recipes, lockfiles, WASM target,
+  Rust/Cargo toolchain, build flags and host API version; generated WASM and
+  generated manifests are excluded.
+- Preview release archives keep Notes, Tasks, and ext-rt bundled. Canvas, Create,
+  and Illustration Studio are published as separately downloadable ZIP packs;
+  their signed catalogue entries include the platform, minimum host API,
+  archive size, SHA-256, and build-input fingerprint. Their capabilities still
+  require the normal installation review. Illustration's shared assets and
+  renderer pack remain in the base archive for now.
 - Opt-in community index: signed Git `community/catalogue.yaml` (cached offline)
 - Uninstall: Settings → Local module catalogue → Installed modules; bundled apps
   can be removed — choice persists across boots (see [FEATURES.md](FEATURES.md))

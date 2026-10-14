@@ -32,6 +32,7 @@ PACKAGING_BUILD_SCRIPTS = {
     "packaging/build-preview.ps1",
     "packaging/build-preview.sh",
     "packaging/build-preview-macos.sh",
+    "packaging/module_pack_release.py",
 }
 
 

@@ -126,6 +126,8 @@ jobs:
           CMAKE_CUDA_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}\aos-release-cost\timings.tsv
+          AOS_MODULE_PACK_PLATFORM: windows-x64
+          AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
         run: |
           $timingsDir = Split-Path -Parent $env:AOS_RELEASE_COST_TIMINGS
           New-Item -ItemType Directory -Force -Path $timingsDir | Out-Null
@@ -134,6 +136,10 @@ jobs:
           if ($env:RUSTC_WRAPPER -eq "sccache") { sccache --show-stats }
           else { "sccache disabled for cold profile" | Set-Content -LiteralPath $cacheStats }
           $ver = (Get-Content VERSION -Raw).Trim()
+          if ($env:AOS_OPTIONAL_MODULES) {
+            if ($env:GITHUB_REF.StartsWith("refs/tags/v")) { $env:AOS_MODULE_PACK_RELEASE_TAG = $env:GITHUB_REF_NAME }
+            else { $env:AOS_MODULE_PACK_RELEASE_TAG = "v$ver" }
+          }
           $buildWatch = [System.Diagnostics.Stopwatch]::StartNew()
           .\packaging\build-preview.ps1 -SkipModels -RequireCuda -Version $ver
           $buildWatch.Stop()
@@ -141,6 +147,7 @@ jobs:
           $dir = "dist\AgentOS-Preview-$ver-windows-x64"
           $zip = "dist\AgentOS-Preview-$ver-windows-x64.zip"
           foreach ($module in @("notes", "tasks", "ext-rt", "canvas", "create", "illustration-studio")) {
+            if ($env:AOS_OPTIONAL_MODULES -and $env:AOS_OPTIONAL_MODULES.Split(',') -contains $module) { continue }
             $manifest = Join-Path $dir "share\modules\$module.aospkg\manifest.yaml"
             $wasm = Join-Path $dir "share\modules\$module.aospkg\module.wasm"
             if ($module -eq "create" -or $module -eq "illustration-studio") {
@@ -199,6 +206,7 @@ jobs:
           name: preview-windows-x64
           path: |
             dist/AgentOS-Preview-*-windows-x64.zip
+            dist/module-packs/*.zip
             dist/release-cost-windows-x64.json
           compression-level: 0
           retention-days: 7
@@ -269,6 +277,8 @@ jobs:
           CMAKE_CUDA_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
+          AOS_MODULE_PACK_PLATFORM: linux-x64
+          AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
           # Host only — must not leak to wasm32 (rust-lld rejects -fuse-ld=lld).
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         run: |
@@ -278,6 +288,10 @@ jobs:
           if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats; else echo "sccache disabled for cold profile" > "$CACHE_STATS"; fi
           VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
+          if [ -n "${AOS_OPTIONAL_MODULES:-}" ]; then
+            if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then AOS_MODULE_PACK_RELEASE_TAG="${GITHUB_REF_NAME}"; else AOS_MODULE_PACK_RELEASE_TAG="v${VERSION}"; fi
+            export AOS_MODULE_PACK_RELEASE_TAG
+          fi
           export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
           chmod +x packaging/build-preview.sh packaging/release-cost.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
           BUILD_START=$SECONDS
@@ -290,6 +304,7 @@ jobs:
             test -x "${OUT}/bin/${bin}"
           done
           for module in notes tasks ext-rt canvas create illustration-studio; do
+            if [[ ",${AOS_OPTIONAL_MODULES:-}," == *",${module},"* ]]; then continue; fi
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
             if [ "${module}" = "create" ] || [ "${module}" = "illustration-studio" ]; then
@@ -349,6 +364,7 @@ jobs:
           name: preview-linux-x64
           path: |
             dist/AgentOS-Preview-*-linux-x64.tar.gz
+            dist/module-packs/*.zip
             dist/release-cost-linux-x64.json
           compression-level: 0
           retention-days: 7
@@ -415,12 +431,18 @@ jobs:
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
           VERSION: ${{ steps.ver.outputs.version }}
+          AOS_MODULE_PACK_PLATFORM: macos-arm64
+          AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
         run: |
           mkdir -p "$(dirname "$AOS_RELEASE_COST_TIMINGS")"
           rm -f "$AOS_RELEASE_COST_TIMINGS"
           CACHE_STATS="$RUNNER_TEMP/aos-release-cost/sccache-stats.txt"
           if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats; else echo "sccache disabled for cold profile" > "$CACHE_STATS"; fi
           export VERSION
+          if [ -n "${AOS_OPTIONAL_MODULES:-}" ]; then
+            if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then AOS_MODULE_PACK_RELEASE_TAG="${GITHUB_REF_NAME}"; else AOS_MODULE_PACK_RELEASE_TAG="v${VERSION}"; fi
+            export AOS_MODULE_PACK_RELEASE_TAG
+          fi
           chmod +x packaging/build-preview-macos.sh packaging/release-cost.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
           BUILD_START=$SECONDS
           ./packaging/build-preview-macos.sh
@@ -432,6 +454,7 @@ jobs:
             test -x "${OUT}/bin/${bin}"
           done
           for module in notes tasks ext-rt canvas create illustration-studio; do
+            if [[ ",${AOS_OPTIONAL_MODULES:-}," == *",${module},"* ]]; then continue; fi
             test -s "${OUT}/share/modules/${module}.aospkg/manifest.yaml"
             test -s "${OUT}/share/modules/${module}.aospkg/module.wasm"
             if [ "${module}" = "create" ] || [ "${module}" = "illustration-studio" ]; then
@@ -495,6 +518,7 @@ jobs:
           name: preview-macos-arm64
           path: |
             dist/AgentOS-Preview-*-macos-arm64.zip
+            dist/module-packs/*.zip
             dist/release-cost-macos-arm64.json
           compression-level: 0
           retention-days: 7
@@ -599,6 +623,7 @@ jobs:
           cp -f "${MAC_ZIP}" "release-assets/$(basename "${MAC_ZIP}")"
           MAC_NAME="$(basename "${MAC_ZIP}")"
           MAC_SHA="$(sha256sum "release-assets/${MAC_NAME}" | awk '{print $1}')"
+          find artifacts -type f -name 'aos-module-*.zip' -exec cp {} release-assets/ \;
 
           max=$((2 * 1024 * 1024 * 1024 - 1))
           size=$(stat -c%s "release-assets/${MAC_NAME}")
@@ -633,6 +658,32 @@ jobs:
           echo "== upload assets =="
           ls -lah release-assets
 
+      - name: Upload immutable optional module packs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.prep.outputs.tag }}"
+          mkdir -p existing-module-packs
+          for pack in release-assets/aos-module-*.zip; do
+            [ -f "$pack" ] || continue
+            name="$(basename "$pack")"
+            existing_id="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq ".assets[] | select(.name == \"$name\") | .name" 2>/dev/null || true)"
+            if [ -n "$existing_id" ]; then
+              gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "$name" -D existing-module-packs
+              local_sha="$(sha256sum "$pack" | awk '{print $1}')"
+              prior_sha="$(sha256sum "existing-module-packs/$name" | awk '{print $1}')"
+              if [ "$local_sha" != "$prior_sha" ]; then
+                echo "::error::refusing to replace immutable module pack $name"
+                exit 1
+              fi
+              rm -f "existing-module-packs/$name"
+              echo "Already published with identical bytes: $name"
+            else
+              gh release upload "$TAG" "$pack" -R "$GITHUB_REPOSITORY"
+            fi
+          done
+
       - name: Upload to existing GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -641,7 +692,8 @@ jobs:
           make_latest: false
           overwrite_files: true
           files: |
-            release-assets/*
+            release-assets/*macos-arm64.zip
+            release-assets/latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
