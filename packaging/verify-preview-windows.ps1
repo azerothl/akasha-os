@@ -50,6 +50,10 @@ $requiredFiles = @(
     "docs\harness.md",
     "docs\mcp-server.md"
 )
+$optionalModules = @()
+if ($env:AOS_MODULE_PACK_RELEASE_TAG -and $env:AOS_OPTIONAL_MODULES) {
+    $optionalModules = @($env:AOS_OPTIONAL_MODULES.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
 
 $binaries = @(
     "aos-session.exe",
@@ -70,6 +74,7 @@ foreach ($binary in $binaries) {
 }
 
 foreach ($module in @("notes", "ext-rt", "canvas", "create", "illustration-studio")) {
+    if ($optionalModules -contains $module) { continue }
     $requiredFiles += "share\modules\$module.aospkg\manifest.yaml"
     $requiredFiles += "share\modules\$module.aospkg\module.wasm"
     if ($module -eq "create" -or $module -eq "illustration-studio") {
@@ -103,6 +108,39 @@ if ($previewProfile -ne "minimal") {
     $modulesToVerify += "tasks"
 }
 foreach ($module in $modulesToVerify) {
+    if ($optionalModules -contains $module) {
+        $escapedModule = [regex]::Escape($module)
+        $entry = [regex]::Match(
+            $catalogueText,
+            "(?ms)^  - name: $escapedModule\r?\n(?:(?!  - name: ).)*"
+        )
+        if (-not $entry.Success) { throw "Module catalogue entry is missing: $module" }
+        $urlMatch = [regex]::Match($entry.Value, '(?m)^      url: (https://\S+\.zip)\s*$')
+        $archiveHashMatch = [regex]::Match($entry.Value, '(?m)^      sha256: sha256:([a-f0-9]{64})\s*$')
+        $sizeMatch = [regex]::Match($entry.Value, '(?m)^      size_bytes: ([1-9][0-9]*)\s*$')
+        $inputHashMatch = [regex]::Match($entry.Value, '(?m)^      input_sha256: sha256:([a-f0-9]{64})\s*$')
+        if (-not $urlMatch.Success -or -not $archiveHashMatch.Success -or
+            -not $sizeMatch.Success -or -not $inputHashMatch.Success) {
+            throw "Optional module pack metadata is incomplete: $module"
+        }
+        if ($entry.Value -notmatch '(?m)^    minimum_host_api: [1-9][0-9]*\s*$' -or
+            $entry.Value -notmatch '(?m)^      - windows-x64\s*$' -or
+            $entry.Value -notmatch '(?m)^    dependencies: \[\s*\]\s*$') {
+            throw "Optional module pack compatibility metadata is invalid: $module"
+        }
+        $packName = [System.IO.Path]::GetFileName(([uri]$urlMatch.Groups[1].Value).AbsolutePath)
+        $packPath = Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) "dist\module-packs") $packName
+        if (-not (Test-Path -LiteralPath $packPath -PathType Leaf)) {
+            throw "Optional module pack archive is missing: $packPath"
+        }
+        $packItem = Get-Item -LiteralPath $packPath
+        $packHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $packPath).Hash.ToLowerInvariant()
+        if ($packItem.Length -ne [long]$sizeMatch.Groups[1].Value -or
+            $packHash -ne $archiveHashMatch.Groups[1].Value) {
+            throw "Optional module pack size or archive hash mismatch: $module"
+        }
+        continue
+    }
     $moduleBase = Join-Path $resolvedOut "share\modules\$module.aospkg"
     $wasmHash = (Get-FileHash -Algorithm SHA256 `
         -LiteralPath (Join-Path $moduleBase "module.wasm")).Hash.ToLowerInvariant()

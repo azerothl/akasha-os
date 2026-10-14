@@ -146,6 +146,19 @@ de branche hôte spécifique Create.
   la réutilisation immuable. La signature d’un paquet n’accorde
   aucune permission : la première installation conserve la revue de caps, et
   une mise à jour la relance si elle demande des caps supplémentaires.
+- `packaging/module_pack_inputs.py` calcule l’empreinte stable avec
+  `python packaging/module_pack_inputs.py <module>` ; `--json` affiche le nom du
+  module, la cible et l’empreinte. Le calcul inclut les sources et fichiers du
+  paquet, le SDK partagé, les scripts de module et les recettes de packaging et
+  d’archive, les lockfiles, la cible WASM, la toolchain Rust/Cargo, les options
+  de build et la version de l’API hôte ; le WASM et les manifestes générés sont
+  exclus.
+- Les archives Preview gardent Notes, Tasks et ext-rt dans le socle. Canvas,
+  Create et Illustration Studio sont publiés comme paquets ZIP téléchargeables
+  séparément ; leurs entrées du catalogue signé précisent la plateforme, l’API
+  hôte minimale, les dépendances, la taille, le SHA-256 et l’empreinte des
+  entrées de build. La revue habituelle des caps reste obligatoire. Les ressources Illustration et
+  le pack renderer restent pour l’instant dans l’archive de base.
 - Index communautaire opt-in : Git signé `community/catalogue.yaml` (cache hors ligne)
 - Désinstall : Settings → Catalogue local de modules → Modules installés ; les
   apps bundlées peuvent être retirées — le choix persiste au boot (voir

@@ -4,6 +4,10 @@
 # GGUF optional (SKIP_MODELS=1) — downloaded on first run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+is_optional_module() {
+  [ -n "${AOS_MODULE_PACK_RELEASE_TAG:-}" ] &&
+    [[ ",${AOS_OPTIONAL_MODULES:-}," == *",$1,"* ]]
+}
 VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.19.0)}"
 OUT="${OUT:-${ROOT}/dist/AgentOS-Preview-${VERSION}-macos-arm64}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
@@ -151,6 +155,11 @@ EOF
     fi
     sync_module_wasm "ext-rt" "${WASM_EXT}"
   fi
+  if [ -n "${AOS_MODULE_PACK_RELEASE_TAG:-}" ]; then
+    aos_release_cost_start "module-pack-archives"
+    python3 "${ROOT}/packaging/module_pack_release.py"
+    aos_release_cost_end
+  fi
   echo "== refresh bundled catalogue signature =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     catalogue::tests::committed_catalogue_signature_matches -- --nocapture)
@@ -203,6 +212,10 @@ if [ -f "${ROOT}/share/models/catalog-offerings.json" ]; then
 fi
 
 for pkg in notes ext-rt canvas create illustration-studio; do
+  if is_optional_module "${pkg}"; then
+    echo "  ${pkg} is an external optional pack"
+    continue
+  fi
   for base in "${ROOT}/share/modules/${pkg}.aospkg" "${ROOT}/modules/${pkg}.aospkg"; do
     if [ -d "${base}" ]; then
       rm -rf "${OUT}/share/modules/${pkg}.aospkg"
@@ -211,16 +224,18 @@ for pkg in notes ext-rt canvas create illustration-studio; do
     fi
   done
 done
-if [ ! -d "${OUT}/share/modules/illustration-studio.aospkg" ]; then
+if ! is_optional_module illustration-studio && [ ! -d "${OUT}/share/modules/illustration-studio.aospkg" ]; then
   echo "ERROR: illustration-studio.aospkg absent — run modules/build-illustration-studio.sh" >&2
   exit 1
 fi
-for rel in manifest.yaml module.wasm ui/index.json; do
-  if [ ! -s "${OUT}/share/modules/illustration-studio.aospkg/${rel}" ]; then
-    echo "ERROR: illustration-studio.aospkg incomplete — missing ${rel}" >&2
-    exit 1
-  fi
-done
+if ! is_optional_module illustration-studio; then
+  for rel in manifest.yaml module.wasm ui/index.json; do
+    if [ ! -s "${OUT}/share/modules/illustration-studio.aospkg/${rel}" ]; then
+      echo "ERROR: illustration-studio.aospkg incomplete — missing ${rel}" >&2
+      exit 1
+    fi
+  done
+fi
 if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
   for base in "${ROOT}/share/modules/tasks.aospkg" "${ROOT}/modules/tasks.aospkg"; do
     if [ -d "${base}" ]; then

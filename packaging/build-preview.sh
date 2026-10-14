@@ -3,6 +3,10 @@
 # GGUF optionnels (SKIP_MODELS=1) — téléchargés au premier run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+is_optional_module() {
+  [ -n "${AOS_MODULE_PACK_RELEASE_TAG:-}" ] &&
+    [[ ",${AOS_OPTIONAL_MODULES:-}," == *",$1,"* ]]
+}
     VERSION="${VERSION:-$(tr -d '[:space:]' < "${ROOT}/VERSION" 2>/dev/null || echo 0.10.0)}"
 CPU_ONLY="${CPU_ONLY:-0}"
 if [ "$CPU_ONLY" = "1" ]; then
@@ -162,6 +166,11 @@ EOF
       exit 1
     fi
     sync_module_wasm "ext-rt" "${WASM_EXT}"
+  fi
+  if [ -n "${AOS_MODULE_PACK_RELEASE_TAG:-}" ]; then
+    aos_release_cost_start "module-pack-archives"
+    python3 "${ROOT}/packaging/module_pack_release.py"
+    aos_release_cost_end
   fi
   echo "== refresh bundled catalogue signature =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
@@ -351,14 +360,18 @@ elif [ -d "${ROOT}/modules/ext-rt.aospkg" ]; then
   rm -rf "${OUT}/share/modules/ext-rt.aospkg"
   cp -a "${ROOT}/modules/ext-rt.aospkg" "${OUT}/share/modules/ext-rt.aospkg"
 fi
-if [ -d "${ROOT}/share/modules/canvas.aospkg" ]; then
+if is_optional_module canvas; then
+  echo "  canvas is an external optional pack"
+elif [ -d "${ROOT}/share/modules/canvas.aospkg" ]; then
   rm -rf "${OUT}/share/modules/canvas.aospkg"
   cp -a "${ROOT}/share/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
 elif [ -d "${ROOT}/modules/canvas.aospkg" ]; then
   rm -rf "${OUT}/share/modules/canvas.aospkg"
   cp -a "${ROOT}/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
 fi
-if [ -d "${ROOT}/share/modules/create.aospkg" ]; then
+if is_optional_module create; then
+  echo "  create is an external optional pack"
+elif [ -d "${ROOT}/share/modules/create.aospkg" ]; then
   rm -rf "${OUT}/share/modules/create.aospkg"
   cp -a "${ROOT}/share/modules/create.aospkg" "${OUT}/share/modules/create.aospkg"
 elif [ -d "${ROOT}/modules/create.aospkg" ]; then
@@ -368,14 +381,18 @@ else
   echo "ERROR: create.aospkg absent — run modules/build-create.sh" >&2
   exit 1
 fi
-for rel in manifest.yaml module.wasm ui/index.json; do
-  if [ ! -s "${OUT}/share/modules/create.aospkg/${rel}" ]; then
-    echo "ERROR: create.aospkg incomplete — missing ${rel}" >&2
-    exit 1
-  fi
-done
+if ! is_optional_module create; then
+  for rel in manifest.yaml module.wasm ui/index.json; do
+    if [ ! -s "${OUT}/share/modules/create.aospkg/${rel}" ]; then
+      echo "ERROR: create.aospkg incomplete — missing ${rel}" >&2
+      exit 1
+    fi
+  done
+fi
 
-if [ -d "${ROOT}/share/modules/illustration-studio.aospkg" ]; then
+if is_optional_module illustration-studio; then
+  echo "  illustration-studio is an external optional pack"
+elif [ -d "${ROOT}/share/modules/illustration-studio.aospkg" ]; then
   rm -rf "${OUT}/share/modules/illustration-studio.aospkg"
   cp -a "${ROOT}/share/modules/illustration-studio.aospkg" "${OUT}/share/modules/illustration-studio.aospkg"
 elif [ -d "${ROOT}/modules/illustration-studio.aospkg" ]; then
@@ -385,12 +402,14 @@ else
   echo "ERROR: illustration-studio.aospkg absent — run modules/build-illustration-studio.sh" >&2
   exit 1
 fi
-for rel in manifest.yaml module.wasm ui/index.json; do
-  if [ ! -s "${OUT}/share/modules/illustration-studio.aospkg/${rel}" ]; then
-    echo "ERROR: illustration-studio.aospkg incomplete — missing ${rel}" >&2
-    exit 1
-  fi
-done
+if ! is_optional_module illustration-studio; then
+  for rel in manifest.yaml module.wasm ui/index.json; do
+    if [ ! -s "${OUT}/share/modules/illustration-studio.aospkg/${rel}" ]; then
+      echo "ERROR: illustration-studio.aospkg incomplete — missing ${rel}" >&2
+      exit 1
+    fi
+  done
+fi
 
 if [ -d "${ROOT}/share/assets/illustration" ]; then
   rm -rf "${OUT}/share/assets/illustration"
@@ -444,6 +463,9 @@ verify_packaged_catalogue_module() {
 }
 
 for module in notes ext-rt canvas create illustration-studio; do
+  if is_optional_module "${module}"; then
+    continue
+  fi
   verify_packaged_catalogue_module "${module}"
 done
 if [ "${PREVIEW_PROFILE}" != "minimal" ]; then

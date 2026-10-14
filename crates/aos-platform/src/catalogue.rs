@@ -694,8 +694,14 @@ fn resolve_module_dir(
         validate_package_artifact_metadata(entry, artifact)?;
     }
     if let Some(local) = resolve_local_module_package(home, bundled_index, &entry.path) {
-        if entry.package.is_some() {
-            validate_downloaded_module_dir(entry, &local)?;
+        if let Some(artifact) = &entry.package {
+            if validate_downloaded_module_dir(entry, &local).is_ok() {
+                return Ok(local);
+            }
+            // An older bundled copy may survive an in-place Preview upgrade.
+            // Do not let that stale directory mask the exact signed release
+            // archive; it is still validated before the installer activates it.
+            return resolve_downloaded_module_archive(entry, artifact, extra, fetch);
         }
         return Ok(local);
     }
