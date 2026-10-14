@@ -480,12 +480,7 @@ pub enum ResolvedPackage {
 
 /// Stable host identifier used by signed package metadata and Settings.
 pub fn host_platform_id() -> String {
-    let os = match std::env::consts::OS {
-        "windows" => "windows",
-        "linux" => "linux",
-        "macos" => "macos",
-        other => other,
-    };
+    let os = std::env::consts::OS;
     let arch = match std::env::consts::ARCH {
         "x86_64" => "x64",
         "aarch64" => "arm64",
