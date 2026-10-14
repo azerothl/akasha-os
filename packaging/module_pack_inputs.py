@@ -28,6 +28,11 @@ TEXT_SUFFIXES = {
     ".c", ".css", ".html", ".js", ".json", ".lock", ".md", ".ps1",
     ".rs", ".sh", ".toml", ".ts", ".tsx", ".txt", ".wgsl", ".yaml", ".yml",
 }
+PACKAGING_BUILD_SCRIPTS = {
+    "packaging/build-preview.ps1",
+    "packaging/build-preview.sh",
+    "packaging/build-preview-macos.sh",
+}
 
 
 def is_input(path: str, module: str) -> bool:
@@ -62,6 +67,8 @@ def is_input(path: str, module: str) -> bool:
         f"modules/build-{module}.sh",
     }:
         return True
+    if path in PACKAGING_BUILD_SCRIPTS:
+        return True
     return module == "illustration-studio" and path.startswith("crates/aos-scene/")
 
 
@@ -94,7 +101,7 @@ def input_paths(root: Path, module: str) -> list[Path]:
         f"modules/build-{module}.ps1",
         f"modules/build-{module}.sh",
         "packaging/module_pack_inputs.py",
-    ):
+    ) + tuple(sorted(PACKAGING_BUILD_SCRIPTS)):
         path = root / relative
         if path.is_file():
             result.add(path)
