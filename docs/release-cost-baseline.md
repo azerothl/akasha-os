@@ -64,6 +64,68 @@ must not be added to it. `native-cpu-companion` is inside `package-assembly`.
 The macOS packaging script creates its ZIP internally, so its `package-build`
 duration includes the separately reported compression phase as well.
 
+## Full cold run (2026-10-14)
+
+Run [38602553174](https://github.com/azerothl/akasha-os/actions/runs/38602553174)
+on commit `a18d910664b531a2f8d8ec9b964d121099090363`, dispatched with
+`macos_only=false`, `include_macos_in_full_build=true`,
+`create_release=false`, `upload_release=false`, and `cache_profile=cold`.
+Windows, Linux, and macOS ran in parallel; the full run wall time was 93m 08s.
+Cargo cache and sccache setup were skipped on every platform. No GGUF files
+were included; model weights remain first-run downloads.
+
+| Platform | Job duration | `Build Preview package` | Release archive | Archive SHA-256 |
+|---|---:|---:|---:|---|
+| Windows x64 + CUDA | 93m 08s | 85m 28s | 654,562,992 bytes (624.2 MiB) | `31bcfed803b2c0455d8178a09ba750ab9321c342a39ba33f34f63a4ce77d9ff7` |
+| Linux x64 + CUDA | 54m 21s | 52m 02s | 942,589,774 bytes (898.9 MiB) | `8b0e0bcce2b6a74806c2d94841bdffe6f0f9d3ecefee1251e232cb74a35f747d` |
+| macOS arm64 + Metal | 31m 47s | 30m 58s | 53,839,654 bytes (51.3 MiB) | `fed0751f57f6c6fa02547d148f4a8713641c33bd117ed68e4790ebde33c21ec8` |
+
+The phase timings below are in seconds. The `package-build` row is an outer
+wrapper that contains the listed phases; do not add it to them.
+
+| Phase | Windows | Linux | macOS |
+|---|---:|---:|---:|
+| `native-build` | 4,395.3 | 2,611.0 | 1,575.0 |
+| `wasm-modules` | 563.8 | 170.0 | 238.0 |
+| `native-cpu-companion` | 46.5 | 129.0 | 32.0 |
+| `package-assembly` | 52.7 | 138.0 | 32.0 |
+| `package-build` | 5,013.4 | not recorded* | 1,851.0 |
+| `archive-compression` | 31.5 | not recorded* | 6.0 |
+| `package-verification` | 3.7 | not recorded* | 1.0 |
+
+*The cold Linux run recorded zero for its three outer wrapper timers because the
+workflow step ran with `sh`, where Bash's `$SECONDS` variable is unavailable.
+The packaging script's internal Linux phase timings and GitHub Actions step
+duration remain valid. Commit `8f4e58d` changes those outer timers to Python's
+monotonic clock; the next full run supplies corrected values.
+
+The six WASM packages were small relative to the native binaries, although
+their build phase was measurable on all three runners:
+
+| Module | Windows archive ZIP | Linux standalone ZIP comparison | macOS archive ZIP |
+|---|---:|---:|---:|
+| Illustration Studio | 338.1 KiB | 337.8 KiB | 336.8 KiB |
+| Notes | 148.6 KiB | 147.5 KiB | 147.0 KiB |
+| Create | 117.8 KiB | 116.9 KiB | 116.4 KiB |
+| Canvas | 109.8 KiB | 109.1 KiB | 108.6 KiB |
+| Tasks | 90.1 KiB | 89.7 KiB | 89.2 KiB |
+| ext-rt | 80.1 KiB | 80.4 KiB | 79.3 KiB |
+| **Total** | **880.6 KiB** | **881.4 KiB** | **877.3 KiB** |
+
+The Windows and macOS columns are exact compressed member sizes in their ZIP
+release archives. Linux uses separate ZIP comparisons because tar.gz has no
+per-file compressed size. The module packages represent about 0.14% of the
+Windows archive, 0.10% by the Linux comparison, and 1.67% of the macOS archive.
+The Illustration assets and renderer pack are additional small components. This
+supports optional installation as a user choice, but does not indicate a large
+base-download reduction. Reusing unchanged module builds could save the measured
+WASM phase—9m 24s on Windows, 2m 50s on Linux, and 3m 58s on macOS—without
+changing the much larger native build.
+
+Standalone per-component ZIP measurement itself took 75.9s on Windows, 88.9s on
+Linux, and 5.5s on macOS. The workflow now disables that extra compression on
+normal release builds and keeps it on full non-publishing benchmark runs.
+
 For a full non-publishing baseline, dispatch `preview-release` with
 `macos_only=false`, `include_macos_in_full_build=true`, and
 `create_release=false`. Set `cache_profile=cold` for the run without sccache or
