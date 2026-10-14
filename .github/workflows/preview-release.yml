@@ -24,6 +24,17 @@ on:
         description: "Full Win/Linux/macOS build and publish a new Release (tag push alternative)"
         type: boolean
         default: false
+      cache_profile:
+        description: "Reuse GitHub caches (default) or run without Rust/sccache caches for a cold comparison"
+        type: choice
+        options:
+          - reuse
+          - cold
+        default: reuse
+      include_macos_in_full_build:
+        description: "Build macOS during a full manual run without publishing a Release"
+        type: boolean
+        default: false
 
 concurrency:
   group: preview-release-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.macos_only && 'macos-only' || 'full' }}
@@ -42,7 +53,6 @@ env:
   # Avoid native host tuning in CI (no GPU / unstable ISA assumptions).
   GGML_NATIVE: "OFF"
   SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: sccache
 
 permissions:
   contents: read
@@ -52,6 +62,9 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || !inputs.macos_only
     runs-on: windows-2022
     timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -61,9 +74,11 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Setup sccache
+        if: github.event_name != 'workflow_dispatch' || inputs.cache_profile != 'cold'
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Cargo
+        if: github.event_name != 'workflow_dispatch' || inputs.cache_profile != 'cold'
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: preview-cuda-windows
@@ -105,13 +120,25 @@ jobs:
         # Do not force CMAKE_GENERATOR=Ninja on Windows: CUDA+MSVC needs VS env;
         # cmake-rs defaults to the VS generator which is reliable on GHA.
         env:
-          CMAKE_C_COMPILER_LAUNCHER: sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
-          CMAKE_CUDA_COMPILER_LAUNCHER: sccache
+          RUSTC_WRAPPER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          CMAKE_C_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          CMAKE_CUDA_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
+          AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}\aos-release-cost\timings.tsv
+          AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
         run: |
-          sccache --show-stats
+          $timingsDir = Split-Path -Parent $env:AOS_RELEASE_COST_TIMINGS
+          New-Item -ItemType Directory -Force -Path $timingsDir | Out-Null
+          Remove-Item -LiteralPath $env:AOS_RELEASE_COST_TIMINGS -ErrorAction SilentlyContinue
+          $cacheStats = Join-Path $timingsDir "sccache-stats.txt"
+          if ($env:RUSTC_WRAPPER -eq "sccache") { sccache --show-stats }
+          else { "sccache disabled for cold profile" | Set-Content -LiteralPath $cacheStats }
           $ver = (Get-Content VERSION -Raw).Trim()
+          $buildWatch = [System.Diagnostics.Stopwatch]::StartNew()
           .\packaging\build-preview.ps1 -SkipModels -RequireCuda -Version $ver
+          $buildWatch.Stop()
+          Add-Content -LiteralPath $env:AOS_RELEASE_COST_TIMINGS -Encoding utf8NoBOM -Value ("package-build`t{0}" -f $buildWatch.ElapsedMilliseconds)
           $dir = "dist\AgentOS-Preview-$ver-windows-x64"
           $zip = "dist\AgentOS-Preview-$ver-windows-x64.zip"
           foreach ($module in @("notes", "tasks", "ext-rt", "canvas", "create", "illustration-studio")) {
@@ -145,16 +172,35 @@ jobs:
               throw "catalogue hash mismatch for $module (wasm=$wasmHash, catalogue=$($catalogueMatch.Groups[1].Value))"
             }
           }
+          $archiveWatch = [System.Diagnostics.Stopwatch]::StartNew()
           Compress-Archive -Path "$dir\*" -DestinationPath $zip -Force
+          $archiveWatch.Stop()
+          Add-Content -LiteralPath $env:AOS_RELEASE_COST_TIMINGS -Encoding utf8NoBOM -Value ("archive-compression`t{0}" -f $archiveWatch.ElapsedMilliseconds)
+          $verifyWatch = [System.Diagnostics.Stopwatch]::StartNew()
           .\packaging\verify-preview-windows.ps1 `
             -OutDir $dir -Version $ver -ArchivePath $zip -RequireCuda
+          $verifyWatch.Stop()
+          Add-Content -LiteralPath $env:AOS_RELEASE_COST_TIMINGS -Encoding utf8NoBOM -Value ("package-verification`t{0}" -f $verifyWatch.ElapsedMilliseconds)
           Get-FileHash -Algorithm SHA256 $zip
-          sccache --show-stats
+          if ($env:RUSTC_WRAPPER -eq "sccache") {
+            sccache --show-stats | Tee-Object -FilePath $cacheStats
+          }
+          python packaging/release_cost_report.py `
+            --platform windows-x64 `
+            --package-dir $dir `
+            --archive $zip `
+            --cache-profile $env:AOS_RELEASE_CACHE_PROFILE `
+            --timings $env:AOS_RELEASE_COST_TIMINGS `
+            --sccache-stats $cacheStats `
+            --report dist/release-cost-windows-x64.json `
+            --summary $env:GITHUB_STEP_SUMMARY
 
       - uses: actions/upload-artifact@v4
         with:
           name: preview-windows-x64
-          path: dist/AgentOS-Preview-*-windows-x64.zip
+          path: |
+            dist/AgentOS-Preview-*-windows-x64.zip
+            dist/release-cost-windows-x64.json
           compression-level: 0
           retention-days: 7
 
@@ -162,6 +208,9 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || !inputs.macos_only
     runs-on: ubuntu-22.04
     timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
     container:
       image: nvidia/cuda:12.4.1-devel-ubuntu22.04
     steps:
@@ -174,6 +223,7 @@ jobs:
           apt-get install -y -qq \
             build-essential pkg-config curl ca-certificates git cmake ninja-build \
             findutils zstd clang libclang-dev libssl-dev \
+            python3 \
             libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libwayland-dev \
@@ -187,9 +237,11 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Setup sccache
+        if: github.event_name != 'workflow_dispatch' || inputs.cache_profile != 'cold'
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Cargo
+        if: github.event_name != 'workflow_dispatch' || inputs.cache_profile != 'cold'
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: preview-cuda-linux
@@ -212,18 +264,28 @@ jobs:
           SKIP_MODELS: "1"
           REQUIRE_CUDA: "1"
           CMAKE_GENERATOR: Ninja
-          CMAKE_C_COMPILER_LAUNCHER: sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
-          CMAKE_CUDA_COMPILER_LAUNCHER: sccache
+          RUSTC_WRAPPER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          CMAKE_C_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          CMAKE_CUDA_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
+          AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
+          AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
           # Host only — must not leak to wasm32 (rust-lld rejects -fuse-ld=lld).
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         run: |
-          sccache --show-stats
+          mkdir -p "$(dirname "$AOS_RELEASE_COST_TIMINGS")"
+          rm -f "$AOS_RELEASE_COST_TIMINGS"
+          CACHE_STATS="$RUNNER_TEMP/aos-release-cost/sccache-stats.txt"
+          if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats; else echo "sccache disabled for cold profile" > "$CACHE_STATS"; fi
           VERSION="$(tr -d '[:space:]' < VERSION)"
           export VERSION
           export LIBCLANG_PATH="$(dirname "$(ls -1 /usr/lib/llvm-*/lib/libclang.so* 2>/dev/null | head -n1)")"
-          chmod +x packaging/build-preview.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
+          chmod +x packaging/build-preview.sh packaging/release-cost.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
+          BUILD_START_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
           bash packaging/build-preview.sh
+          BUILD_END_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
+          printf 'package-build\t%s\n' "$((BUILD_END_MS - BUILD_START_MS))" >> "$AOS_RELEASE_COST_TIMINGS"
           OUT="dist/AgentOS-Preview-${VERSION}-linux-x64"
           for bin in \
             aos-session aos-busd aos-modeld aos-modeld-cpu aos-agentd \
@@ -265,24 +327,44 @@ jobs:
           ls -lah "${OUT}/bin" | head -n 80
           du -sh "${OUT}" "${OUT}/bin"
           ARCHIVE="dist/AgentOS-Preview-${VERSION}-linux-x64.tar.gz"
+          ARCHIVE_START_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
           tar -C dist -czf "${ARCHIVE}" "AgentOS-Preview-${VERSION}-linux-x64"
+          ARCHIVE_END_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
+          printf 'archive-compression\t%s\n' "$((ARCHIVE_END_MS - ARCHIVE_START_MS))" >> "$AOS_RELEASE_COST_TIMINGS"
+          VERIFY_START_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
           tar -tzf "${ARCHIVE}" >/dev/null
           gzip -t "${ARCHIVE}"
+          VERIFY_END_MS=$(python3 -c 'import time; print(time.perf_counter_ns() // 1_000_000)')
+          printf 'package-verification\t%s\n' "$((VERIFY_END_MS - VERIFY_START_MS))" >> "$AOS_RELEASE_COST_TIMINGS"
           ls -lh "${ARCHIVE}"
           sha256sum "${ARCHIVE}"
-          sccache --show-stats
+          if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats | tee "$CACHE_STATS"; fi
+          python3 packaging/release_cost_report.py \
+            --platform linux-x64 \
+            --package-dir "$OUT" \
+            --archive "$ARCHIVE" \
+            --cache-profile "$AOS_RELEASE_CACHE_PROFILE" \
+            --timings "$AOS_RELEASE_COST_TIMINGS" \
+            --sccache-stats "$CACHE_STATS" \
+            --report dist/release-cost-linux-x64.json \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
           name: preview-linux-x64
-          path: dist/AgentOS-Preview-*-linux-x64.tar.gz
+          path: |
+            dist/AgentOS-Preview-*-linux-x64.tar.gz
+            dist/release-cost-linux-x64.json
           compression-level: 0
           retention-days: 7
 
   macos:
-    if: github.event_name != 'workflow_dispatch' || inputs.macos_only || inputs.create_release
+    if: github.event_name != 'workflow_dispatch' || inputs.macos_only || inputs.create_release || inputs.include_macos_in_full_build
     runs-on: macos-14
     timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -303,9 +385,11 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Setup sccache
+        if: github.event_name != 'workflow_dispatch' || inputs.cache_profile != 'cold'
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Cargo
+        if: github.event_name != 'workflow_dispatch' || inputs.cache_profile != 'cold'
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: preview-metal-macos
@@ -332,13 +416,21 @@ jobs:
       - name: Build Preview package (Metal)
         env:
           SKIP_MODELS: "1"
-          RUSTC_WRAPPER: sccache
+          RUSTC_WRAPPER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
+          AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
+          AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
+          AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          sccache --show-stats
+          mkdir -p "$(dirname "$AOS_RELEASE_COST_TIMINGS")"
+          rm -f "$AOS_RELEASE_COST_TIMINGS"
+          CACHE_STATS="$RUNNER_TEMP/aos-release-cost/sccache-stats.txt"
+          if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats; else echo "sccache disabled for cold profile" > "$CACHE_STATS"; fi
           export VERSION
-          chmod +x packaging/build-preview-macos.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
+          chmod +x packaging/build-preview-macos.sh packaging/release-cost.sh modules/build-canvas.sh modules/build-create.sh modules/build-illustration-studio.sh
+          BUILD_START=$SECONDS
           ./packaging/build-preview-macos.sh
+          printf 'package-build\t%s\n' "$(((SECONDS - BUILD_START) * 1000))" >> "$AOS_RELEASE_COST_TIMINGS"
           OUT="dist/AgentOS-Preview-${VERSION}-macos-arm64"
           for bin in \
             aos-session aos-busd aos-modeld aos-modeld-cpu aos-agentd \
@@ -388,17 +480,88 @@ jobs:
             echo "::error::missing ${ZIP} (build-preview-macos.sh should create it)"
             exit 1
           fi
+          VERIFY_START=$SECONDS
           unzip -t "${ZIP}" >/dev/null
+          printf 'package-verification\t%s\n' "$(((SECONDS - VERIFY_START) * 1000))" >> "$AOS_RELEASE_COST_TIMINGS"
           ls -lh "${ZIP}"
           shasum -a 256 "${ZIP}"
-          sccache --show-stats
+          if [ "${RUSTC_WRAPPER:-}" = "sccache" ]; then sccache --show-stats | tee "$CACHE_STATS"; fi
+          python3 packaging/release_cost_report.py \
+            --platform macos-arm64 \
+            --package-dir "$OUT" \
+            --archive "$ZIP" \
+            --cache-profile "$AOS_RELEASE_CACHE_PROFILE" \
+            --timings "$AOS_RELEASE_COST_TIMINGS" \
+            --sccache-stats "$CACHE_STATS" \
+            --report dist/release-cost-macos-arm64.json \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
           name: preview-macos-arm64
-          path: dist/AgentOS-Preview-*-macos-arm64.zip
+          path: |
+            dist/AgentOS-Preview-*-macos-arm64.zip
+            dist/release-cost-macos-arm64.json
           compression-level: 0
           retention-days: 7
+
+  release-cost-summary:
+    if: always()
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Summarize complete platform job timings
+        uses: actions/github-script@v7
+        env:
+          RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
+        with:
+          script: |
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+            const platformIds = ['windows', 'linux', 'macos'];
+            const platformJobs = platformIds.map((id) => ({
+              id,
+              job: jobs.find((candidate) => candidate.name === id),
+            }));
+            const completed = platformJobs
+              .map(({ job }) => job)
+              .filter((job) => job && job.started_at && job.completed_at);
+            const start = Math.min(...completed.map((job) => Date.parse(job.started_at)));
+            const end = Math.max(...completed.map((job) => Date.parse(job.completed_at)));
+            const duration = (ms) => {
+              const total = Math.max(0, Math.round(ms / 1000));
+              return `${Math.floor(total / 60)}m ${total % 60}s`;
+            };
+            const jobRows = platformJobs.map(({ id, job }) => {
+              if (!job) return `| ${id} | not run | — |`;
+              const seconds = job.started_at && job.completed_at
+                ? (Date.parse(job.completed_at) - Date.parse(job.started_at)) / 1000
+                : null;
+              return `| ${id} | ${job.conclusion || job.status} | ${seconds === null ? '—' : duration(seconds * 1000)} |`;
+            });
+            const stepRows = platformJobs.flatMap(({ id, job }) =>
+              (job?.steps || [])
+                .filter((step) => step.started_at && step.completed_at)
+                .map((step) => {
+                  const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
+                  return `| ${id} | ${step.name.replaceAll('|', '\\|')} | ${duration(seconds * 1000)} |`;
+                })
+            );
+            core.summary.addHeading('Preview release cost: complete CI timings');
+            core.summary.addRaw(`Requested cache profile: **${process.env.RELEASE_CACHE_PROFILE}**\n\n`);
+            if (Number.isFinite(start) && Number.isFinite(end)) {
+              core.summary.addRaw(`Platform jobs wall time: **${duration(end - start)}** (parallel jobs; individual durations are not additive).\n\n`);
+            }
+            core.summary.addRaw('| Platform | Result | Job duration |\n|---|---|---:|\n' + jobRows.join('\n') + '\n\n');
+            core.summary.addRaw('| Platform | GitHub Actions step | Duration |\n|---|---|---:|\n' + stepRows.join('\n') + '\n');
+            await core.summary.write();
 
   release-macos-only:
     needs: [macos]

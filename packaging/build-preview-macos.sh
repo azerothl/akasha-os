@@ -11,6 +11,7 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_MODELS="${SKIP_MODELS:-0}"
 PREVIEW_PROFILE="${AOS_PREVIEW_PROFILE:-standard}"
+. "${ROOT}/packaging/release-cost.sh"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "ERROR: build-preview-macos.sh must run on macOS" >&2
@@ -63,6 +64,7 @@ sync_module_wasm() {
 }
 
 if [ "$SKIP_BUILD" != "1" ]; then
+  aos_release_cost_start "native-build"
   echo "== cargo build --release (aos-auditd sans llama) =="
   cargo build --release -p aos-auditd
 
@@ -72,6 +74,8 @@ if [ "$SKIP_BUILD" != "1" ]; then
   cargo build --release -p aos-model --no-default-features --features metal
   cargo build --release -p aos-platform --no-default-features --features embeddings,metal
 
+  aos_release_cost_end
+  aos_release_cost_start "wasm-modules"
   echo "== notes module =="
   if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
     echo "== canvas module =="
@@ -150,8 +154,10 @@ EOF
   echo "== refresh bundled catalogue signature =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     catalogue::tests::committed_catalogue_signature_matches -- --nocapture)
+  aos_release_cost_end
 fi
 
+aos_release_cost_start "package-assembly"
 mkdir -p "${OUT}/bin" "${OUT}/etc" "${OUT}/share/models" \
   "${OUT}/share/models/lora" "${OUT}/share/models/vae" "${OUT}/share/models/styles" "${OUT}/share/models/upscale" \
   "${OUT}/share/modules" "${OUT}/share/skills" \
@@ -173,6 +179,7 @@ for b in "${PREVIEW_BINS[@]}"; do
 done
 
 echo "== cargo build --release (aos-modeld-cpu, no Metal) =="
+if [ "$SKIP_BUILD" != "1" ]; then aos_release_cost_start "native-cpu-companion"; fi
 cargo build --release -p aos-model --no-default-features
 cpu_src="${CARGO_TARGET_DIR}/release/aos-modeld"
 if [ ! -f "${cpu_src}" ]; then
@@ -182,6 +189,7 @@ fi
 echo "cp -f ${cpu_src} ${OUT}/bin/aos-modeld-cpu"
 cp -f "${cpu_src}" "${OUT}/bin/aos-modeld-cpu"
 chmod +x "${OUT}/bin/aos-modeld-cpu"
+if [ "$SKIP_BUILD" != "1" ]; then aos_release_cost_end; fi
 
 cp -f "${ROOT}/data/models/catalog.yaml" "${OUT}/data/models/"
 cp -f "${ROOT}/VERSION" "${OUT}/VERSION"
@@ -325,6 +333,7 @@ Build non signé : si macOS bloque l'ouverture, install.sh exécute xattr -cr su
 EOF
 
 echo "== package prêt : ${OUT} =="
+aos_release_cost_end
 du -sh "${OUT}"
 MAX_BYTES=$((2 * 1024 * 1024 * 1024 - 1))
 TREE_BYTES="$(dir_size_bytes "${OUT}")"
@@ -341,5 +350,11 @@ if [ ! -d "${OUT}" ]; then
 fi
 rm -f "${ZIP_PATH}"
 echo "== ditto -c -k --keepParent ${OUT} ${ZIP_PATH} =="
+_AOS_ARCHIVE_START="$SECONDS"
 ditto -c -k --keepParent "${OUT}" "${ZIP_PATH}"
+if [ -n "${AOS_RELEASE_COST_TIMINGS:-}" ]; then
+  mkdir -p "$(dirname "$AOS_RELEASE_COST_TIMINGS")"
+  printf 'archive-compression\t%s\n' "$(((SECONDS - _AOS_ARCHIVE_START) * 1000))" \
+    >> "$AOS_RELEASE_COST_TIMINGS"
+fi
 ls -lh "${ZIP_PATH}"
