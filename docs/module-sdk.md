@@ -144,6 +144,11 @@ host branches.
   pack never grants permissions: first install still shows the normal
   capability review, and updates prompt again if they request additional
   capabilities.
+- `packaging/module_pack_inputs.py` computes a stable input digest with
+  `python packaging/module_pack_inputs.py <module>`; `--json` prints the module,
+  target and digest. It includes source/package inputs, the shared SDK, build
+  scripts, lockfiles, WASM target, Rust/Cargo toolchain, build flags and host API
+  version; generated WASM and generated manifests are excluded.
 - Opt-in community index: signed Git `community/catalogue.yaml` (cached offline)
 - Uninstall: Settings → Local module catalogue → Installed modules; bundled apps
   can be removed — choice persists across boots (see [FEATURES.md](FEATURES.md))

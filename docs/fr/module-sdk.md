@@ -146,6 +146,12 @@ de branche hôte spécifique Create.
   la réutilisation immuable. La signature d’un paquet n’accorde
   aucune permission : la première installation conserve la revue de caps, et
   une mise à jour la relance si elle demande des caps supplémentaires.
+- `packaging/module_pack_inputs.py` calcule l’empreinte stable avec
+  `python packaging/module_pack_inputs.py <module>` ; `--json` affiche le nom du
+  module, la cible et l’empreinte. Le calcul inclut les sources et fichiers du
+  paquet, le SDK partagé, les scripts, lockfiles, cible WASM, toolchain Rust/Cargo,
+  options de build et version de l’API hôte ; le WASM et les manifestes générés
+  sont exclus.
 - Index communautaire opt-in : Git signé `community/catalogue.yaml` (cache hors ligne)
 - Désinstall : Settings → Catalogue local de modules → Modules installés ; les
   apps bundlées peuvent être retirées — le choix persiste au boot (voir
