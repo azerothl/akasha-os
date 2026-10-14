@@ -6021,12 +6021,42 @@ fn install_catalogue_entry(
     {
         return Err("signature catalogue invalide".into());
     }
+    if entry.kind == "module" && !entry.dependencies.is_empty() {
+        let installed_names: std::collections::HashSet<String> = s
+            .modules
+            .lock()
+            .unwrap()
+            .list()
+            .into_iter()
+            .filter(|module| !module.quarantined)
+            .map(|module| module.name)
+            .collect();
+        let missing: Vec<&str> = entry
+            .dependencies
+            .iter()
+            .filter(|dependency| !installed_names.contains(dependency.as_str()))
+            .map(String::as_str)
+            .collect();
+        if !missing.is_empty() {
+            return Err(format!(
+                "dépendances de modules manquantes pour {}: {}",
+                entry.name,
+                missing.join(", ")
+            ));
+        }
+    }
     let home = extra.home.clone();
-    let approved = aos_platform::catalogue::bundled_install_approved_caps(
-        bundled_cat.as_ref(),
-        &entry,
-        approved,
-    );
+    let approved = if entry.kind == "module" && entry.package.is_some() {
+        // A signed pack hash authenticates its contents but never grants its
+        // requested permissions. Keep the existing interactive cap review.
+        approved
+    } else {
+        aos_platform::catalogue::bundled_install_approved_caps(
+            bundled_cat.as_ref(),
+            &entry,
+            approved,
+        )
+    };
     let bundled_index = bundled_cat.as_ref().map(|c| c.path());
     let resolved = aos_platform::catalogue::resolve_package(
         &entry,
