@@ -4,7 +4,9 @@
       "command": "aos-mcpd",
       "args": [],
       "env": {
-        "AOS_BUS_ADDR": "127.0.0.1:24701"
+        "AOS_BUS_ADDR": "127.0.0.1:24701",
+        "AOS_MCP_TOOLS": "",
+        "AOS_MCP_CAPS": ""
       }
     }
   }

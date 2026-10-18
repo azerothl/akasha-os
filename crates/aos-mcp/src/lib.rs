@@ -12,6 +12,9 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+mod os_tools;
+pub use os_tools::OsToolPolicy;
+
 pub const PROTOCOL_VERSION: &str = "2024-11-05";
 pub const DEFAULT_FROM: &str = "service:mcp";
 pub const DEFAULT_BUS: &str = "127.0.0.1:24701";
@@ -253,6 +256,7 @@ pub struct BusState {
     bus_addr: String,
     from: String,
     client: Mutex<Option<Arc<BusClient>>>,
+    os_policy: OsToolPolicy,
 }
 
 impl BusState {
@@ -261,13 +265,31 @@ impl BusState {
             bus_addr,
             from,
             client: Mutex::new(None),
+            os_policy: OsToolPolicy::default(),
         }
     }
 
     pub fn from_env() -> Self {
         let bus_addr = std::env::var("AOS_BUS_ADDR").unwrap_or_else(|_| DEFAULT_BUS.into());
         let from = std::env::var("AOS_MCP_FROM").unwrap_or_else(|_| DEFAULT_FROM.into());
-        Self::new(bus_addr, from)
+        Self::new(bus_addr, from).with_os_tools(OsToolPolicy::from_env())
+    }
+
+    pub fn with_os_tools(mut self, policy: OsToolPolicy) -> Self {
+        self.os_policy = policy;
+        self
+    }
+
+    pub async fn tool_catalog(&self) -> Value {
+        let mut catalog = tool_catalog();
+        let tools = catalog["tools"].as_array_mut().expect("static tool catalogue");
+        tools.extend(self.os_policy.media_catalog());
+        if self.os_policy.has_module_tools() {
+            if let Ok(client) = self.client().await {
+                tools.extend(self.os_policy.module_catalog(&client).await);
+            }
+        }
+        catalog
     }
 
     pub fn bus_addr(&self) -> &str {
@@ -296,6 +318,11 @@ impl BusState {
     }
 
     async fn call_tool_inner(&self, name: &str, args: Value) -> Result<Value, String> {
+        if !matches!(name, "akasha_models" | "akasha_infer" | "akasha_mem_stats"
+            | "akasha_mem_context" | "akasha_mem_list" | "akasha_mem_recall"
+            | "akasha_mem_remember") {
+            return self.call_os_tool(name, args).await;
+        }
         let client = self
             .client()
             .await
@@ -484,7 +511,7 @@ pub async fn handle_message(bus: &BusState, req: JsonRpcRequest) -> Option<JsonR
         "notifications/initialized" | "notifications/cancelled" => None,
         "initialize" => Some(JsonRpcResponse::result(id, initialize_result())),
         "ping" => Some(JsonRpcResponse::result(id, json!({}))),
-        "tools/list" => Some(JsonRpcResponse::result(id, tool_catalog())),
+        "tools/list" => Some(JsonRpcResponse::result(id, bus.tool_catalog().await)),
         "tools/call" => {
             if is_notification {
                 return None;
