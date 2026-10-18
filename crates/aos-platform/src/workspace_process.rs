@@ -287,10 +287,10 @@ async fn finish_drain(
 }
 
 #[cfg(windows)]
-struct ProcessGroup(isize);
+pub(crate) struct ProcessGroup(isize);
 #[cfg(windows)]
 impl ProcessGroup {
-    fn new(child: &tokio::process::Child) -> Result<Self, String> {
+    pub(crate) fn new(child: &tokio::process::Child) -> Result<Self, String> {
         use windows::Win32::{
             Foundation::{CloseHandle, HANDLE},
             System::JobObjects::*,
@@ -332,10 +332,10 @@ impl Drop for ProcessGroup {
 }
 
 #[cfg(unix)]
-struct ProcessGroup(i32);
+pub(crate) struct ProcessGroup(i32);
 #[cfg(unix)]
 impl ProcessGroup {
-    fn new(child: &tokio::process::Child) -> Result<Self, String> {
+    pub(crate) fn new(child: &tokio::process::Child) -> Result<Self, String> {
         child
             .id()
             .map(|id| Self(id as i32))

@@ -37,7 +37,33 @@
       "studio_heading": "Code Studio",
       "studio_submit": "Inspect Code Studio project",
       "studio_reindex": "Refresh its index",
-      "studio_help": "Map this folder to the same project in studio-adapter.json. Then open Code Studio and select this project ID."
+      "studio_help": "Map this folder to the same project in studio-adapter.json. Then open Code Studio and select this project ID.",
+      "memory_heading": "Project memory",
+      "memory_read": "Read project memory",
+      "memory_update": "Save project memory",
+      "debug_heading": "Debug",
+      "debug_start": "Start configured debug session",
+      "debug_request": "Inspect or step",
+      "debug_stop": "Stop debug session",
+      "debug_help": "Use a configured launch. Start requires confirmation; copy its session ID into the controls below. No attach or expression evaluation.",
+      "refactor_heading": "Refactor review",
+      "refactor_review": "Review proposed changes",
+      "refactor_apply": "Apply reviewed changes",
+      "refactor_undo": "Undo reviewed changes",
+      "refactor_help": "Agents submit proposals for separate folders. Review before applying; copy the plan ID and review fingerprint below. Changed files are preserved when a conflict is detected.",
+      "root": "Workspace",
+      "configuration": "Debug configuration",
+      "session_id": "Session ID",
+      "command": "Action",
+      "thread_id": "Thread ID (optional)",
+      "frame_id": "Frame ID (optional)",
+      "variables_reference": "Variables ID (optional)",
+      "path": "Source path (optional)",
+      "lines": "Breakpoint lines as JSON (optional)",
+      "plan_id": "Plan ID",
+      "review_sha256": "Review fingerprint",
+      "field": "Memory field",
+      "text": "Project context"
     },
     "fr": {
       "tab_dev_assistant": "Assistant dev",
@@ -72,7 +98,33 @@
       "studio_heading": "Code Studio",
       "studio_submit": "Inspecter le projet Code Studio",
       "studio_reindex": "Actualiser son index",
-      "studio_help": "Liez ce dossier au même projet dans studio-adapter.json. Ouvrez ensuite Code Studio et sélectionnez cet identifiant de projet."
+      "studio_help": "Liez ce dossier au même projet dans studio-adapter.json. Ouvrez ensuite Code Studio et sélectionnez cet identifiant de projet.",
+      "memory_heading": "Mémoire du projet",
+      "memory_read": "Lire la mémoire du projet",
+      "memory_update": "Enregistrer le contexte",
+      "debug_heading": "Débogage",
+      "debug_start": "Démarrer la configuration",
+      "debug_request": "Inspecter ou avancer",
+      "debug_stop": "Arrêter le débogage",
+      "debug_help": "Choisissez une configuration autorisée. Confirmez le démarrage, puis copiez son identifiant de session ci-dessous. Le rattachement à un processus et l’évaluation d’expressions sont indisponibles.",
+      "refactor_heading": "Revue de refactorisation",
+      "refactor_review": "Examiner les propositions",
+      "refactor_apply": "Appliquer les changements revus",
+      "refactor_undo": "Annuler les changements revus",
+      "refactor_help": "Les agents proposent des changements dans des dossiers distincts. Examinez-les, puis copiez le plan et son empreinte de revue. Les modifications externes sont préservées en cas de conflit.",
+      "root": "Workspace",
+      "configuration": "Configuration de débogage",
+      "session_id": "Identifiant de session",
+      "command": "Action",
+      "thread_id": "Identifiant du fil (optionnel)",
+      "frame_id": "Identifiant du cadre (optionnel)",
+      "variables_reference": "Identifiant des variables (optionnel)",
+      "path": "Chemin source (optionnel)",
+      "lines": "Lignes des points d’arrêt en JSON (optionnel)",
+      "plan_id": "Identifiant du plan",
+      "review_sha256": "Empreinte de la revue",
+      "field": "Champ mémoire",
+      "text": "Contexte du projet"
     }
   },
   "root": {
@@ -387,6 +439,299 @@
           "field",
           "value"
         ]
+      },
+      {
+        "kind": "heading",
+        "label_key": "memory_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.studio_memory",
+        "label_key": "memory_read",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            }
+          },
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.studio_memory"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.studio_memory_update",
+        "label_key": "memory_update",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "field": {
+              "type": "string",
+              "enum": [
+                "project_summary",
+                "evolution_summary",
+                "policy_notes"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 8192,
+              "format": "textarea"
+            }
+          },
+          "required": [
+            "root",
+            "field",
+            "text"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.studio_memory_update"
+      },
+      {
+        "kind": "heading",
+        "label_key": "debug_heading"
+      },
+      {
+        "kind": "text",
+        "label_key": "debug_help"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.debug_start",
+        "label_key": "debug_start",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "configuration": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "configuration"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.debug_start"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.debug_request",
+        "label_key": "debug_request",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string",
+              "enum": [
+                "threads",
+                "stackTrace",
+                "scopes",
+                "variables",
+                "continue",
+                "next",
+                "stepIn",
+                "stepOut",
+                "pause",
+                "setBreakpoints",
+                "events"
+              ]
+            },
+            "thread_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "frame_id": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "variables_reference": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "path": {
+              "type": "string"
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "root",
+            "session_id",
+            "command"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.debug_request"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.debug_stop",
+        "label_key": "debug_stop",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "session_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "session_id"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.debug_stop"
+      },
+      {
+        "kind": "heading",
+        "label_key": "refactor_heading"
+      },
+      {
+        "kind": "text",
+        "label_key": "refactor_help"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.refactor_review",
+        "label_key": "refactor_review",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "plan_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "plan_id"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.refactor_review",
+        "items": [
+          "state",
+          "review_sha256",
+          "can_apply",
+          "can_undo"
+        ]
+      },
+      {
+        "kind": "diff_view",
+        "bind": "dev-assistant.refactor_review"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.refactor_apply",
+        "label_key": "refactor_apply",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "review_sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "plan_id",
+            "review_sha256"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.refactor_apply"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.refactor_undo",
+        "label_key": "refactor_undo",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "description": "Bound workspace id"
+            },
+            "plan_id": {
+              "type": "string"
+            },
+            "review_sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "plan_id",
+            "review_sha256"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.refactor_undo"
       }
     ]
   },

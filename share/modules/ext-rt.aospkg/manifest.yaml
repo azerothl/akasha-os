@@ -1,6 +1,6 @@
 name: ext-rt
-version: 1.0.0
-hash: 4bd702f9d38b4169c2af21022da036832f6c0ddae556bd4051f166076721c343
+version: 1.1.0
+hash: fa60f81d461ebe0763ab2b4cd81ed874d93d4d5c1c7696dcf5e59ee0982dc83c
 permissions:
   required_caps: []
 tools:

@@ -471,7 +471,7 @@ async fn execute_room_tool_backends(
         }
         Some(ToolBackend::Mcp { server }) => {
             if let Some(session) = mcp_sessions.get_mut(&server) {
-                match session.call_tool(name, args.clone()).await {
+                match session.call_tool_guarded(bus, name, args.clone()).await {
                     Ok(r) => r,
                     Err(e) => format!("mcp err: {e}"),
                 }
@@ -484,7 +484,7 @@ async fn execute_room_tool_backends(
             if let Some(rest) = name.strip_prefix("mcp.") {
                 let server = rest.split(':').next().unwrap_or("");
                 if let Some(session) = mcp_sessions.get_mut(server) {
-                    match session.call_tool(name, args.clone()).await {
+                    match session.call_tool_guarded(bus, name, args.clone()).await {
                         Ok(r) => r,
                         Err(e) => format!("mcp err: {e}"),
                     }

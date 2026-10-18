@@ -26,6 +26,7 @@ pub struct Request {
     pub path: Option<String>,
     pub text: Option<String>,
     pub position: Option<Position>,
+    pub field: Option<String>,
 }
 
 #[derive(Deserialize, serde::Serialize)]
@@ -85,13 +86,15 @@ pub fn prepare(
     if !caps.contains(&required) {
         return Err(format!("required capability: {required}"));
     }
-    if intent != "studio.project" {
+    if !matches!(intent, "studio.project" | "studio.memory") {
         let required = format!("{intent}:/host/{id}/**");
         if !caps.contains(&required) {
             return Err(format!("required capability: {required}"));
         }
     }
-    if intent == "studio.reindex" && !caps.contains(&format!("fs.write:/host/{id}/**")) {
+    if matches!(intent, "studio.reindex" | "studio.memory.update")
+        && !caps.contains(&format!("fs.write:/host/{id}/**"))
+    {
         return Err("Studio reindex requires workspace write capability".into());
     }
     let host = PathBuf::from(mgr.resolve_host_path(id).ok_or("workspace is not bound")?)
@@ -116,7 +119,26 @@ pub fn prepare(
         return Err("invalid configured Studio project id".into());
     }
     let body = match intent {
-        "studio.project" => None,
+        "studio.project" | "studio.memory" => None,
+        "studio.memory.update" => {
+            let field = request
+                .field
+                .as_deref()
+                .ok_or("project memory field required")?;
+            if !matches!(
+                field,
+                "project_summary" | "evolution_summary" | "policy_notes"
+            ) {
+                return Err("project memory field is not allowed".into());
+            }
+            let text = request.text.ok_or("project memory text required")?;
+            if text.len() > 8192 {
+                return Err("project memory field exceeds 8 KiB".into());
+            }
+            let mut patch = serde_json::Map::new();
+            patch.insert(field.into(), json!(text));
+            Some(Value::Object(patch))
+        }
         "studio.reindex" => Some(json!({"force": false})),
         "studio.lsp" => {
             let action = request.action.as_deref().ok_or("LSP action required")?;
@@ -142,8 +164,8 @@ pub fn prepare(
             if !resolved.starts_with(&host) || !resolved.is_file() {
                 return Err("LSP path escapes workspace".into());
             }
-            let text = request.text.unwrap_or_default();
-            if text.len() > 256 * 1024 {
+            let text = request.text;
+            if text.as_ref().is_some_and(|text| text.len() > 256 * 1024) {
                 return Err("LSP text exceeds 256 KiB".into());
             }
             if action != "diagnostics" && request.position.is_none() {
@@ -165,9 +187,8 @@ pub fn prepare(
 }
 
 async fn read_json(response: reqwest::Response) -> Result<Value, String> {
-    let mut response = response
-        .error_for_status()
-        .map_err(|e| format!("Studio request failed: {e}"))?;
+    let mut response = response;
+    let status = response.status();
     let mut data = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         if data.len() + chunk.len() > 2 * 1024 * 1024 {
@@ -175,7 +196,19 @@ async fn read_json(response: reqwest::Response) -> Result<Value, String> {
         }
         data.extend_from_slice(&chunk);
     }
-    serde_json::from_slice(&data).map_err(|e| format!("invalid Studio response: {e}"))
+    let value: Value = serde_json::from_slice(&data)
+        .map_err(|e| format!("invalid Studio response (HTTP {status}): {e}"))?;
+    if !status.is_success() {
+        let reason = value["error"]
+            .as_str()
+            .or_else(|| value["message"].as_str())
+            .unwrap_or("request refused");
+        return Err(format!(
+            "Studio HTTP {status}: {}",
+            reason.chars().take(2048).collect::<String>()
+        ));
+    }
+    Ok(value)
 }
 
 impl Prepared {
@@ -210,7 +243,7 @@ impl Prepared {
             return Err("Studio project path differs from the bound workspace".into());
         }
         let base = format!("api/studio/projects/{}", self.project);
-        if self.operation == "studio.project" {
+        if matches!(self.operation.as_str(), "studio.project" | "studio.memory") {
             let metadata = read_json(
                 client
                     .get(self.origin.join(&base).unwrap())
@@ -233,7 +266,7 @@ impl Prepared {
             .await?;
             // Current Studio selects projects in its own load menu; don't invent a deep link.
             return Ok(
-                json!({"ok":true,"workspace_id":self.workspace_id,"project_id":self.project,
+                json!({"ok":true,"workspace_id":self.workspace_id,"project_id":self.project,"namespace":format!("studio-project:{}",self.project),
                 "ui_url":self.ui.as_str(),"project":metadata,"code_rag":index,
                 "handoff":"Open Code Studio and select this project in Load project",
                 "rows":[{"field":"project_id","value":self.project},
@@ -241,6 +274,20 @@ impl Prepared {
                     {"field":"code_index","value":index["status"]},
                     {"field":"project_summary","value":metadata["project_summary"]},
                     {"field":"evolution_summary","value":metadata["evolution_summary"]}]}),
+            );
+        }
+        if self.operation == "studio.memory.update" {
+            let result = read_json(
+                client
+                    .patch(self.origin.join(&base).unwrap())
+                    .json(&self.body)
+                    .send()
+                    .await
+                    .map_err(|e| e.to_string())?,
+            )
+            .await?;
+            return Ok(
+                json!({"ok":true,"namespace":format!("studio-project:{}",self.project),"result":result}),
             );
         }
         let suffix = if self.operation == "studio.lsp" {
@@ -426,6 +473,26 @@ mod tests {
         )
         .unwrap();
         assert!(prepare(&f.mgr, &f.policy, "studio.lsp", req, &caps).is_ok());
+    }
+
+    #[test]
+    fn memory_patch_is_single_field_scoped_and_does_not_forward_runtime_settings() {
+        let f=Fixture::new("http://127.0.0.1:1");
+        let caps=["fs.read","fs.write","studio.memory.update"].iter().map(|k|format!("{k}:/host/demo/**")).collect::<Vec<_>>();
+        let request=|field:&str,text:&str|serde_json::from_value(json!({"root":"demo","field":field,"text":text})).unwrap();
+        let prepared=prepare(&f.mgr,&f.policy,"studio.memory.update",request("policy_notes","literal {{args.text}}"),&caps).unwrap();
+        assert_eq!(prepared.body.unwrap(),json!({"policy_notes":"literal {{args.text}}"}));
+        for field in ["verify_argv","verify_skip","tech_stack","unknown"] { assert!(prepare(&f.mgr,&f.policy,"studio.memory.update",request(field,"text"),&caps).is_err()); }
+        assert!(prepare(&f.mgr,&f.policy,"studio.memory.update",request("project_summary",&"x".repeat(8193)),&caps).is_err());
+        assert!(prepare(&f.mgr,&f.policy,"studio.memory.update",request("project_summary","text"),&caps[..2]).is_err());
+    }
+    #[test]
+    fn omitted_lsp_text_remains_null_so_the_daemon_reads_disk() {
+        let f=Fixture::new("http://127.0.0.1:1");
+        let req=serde_json::from_value(json!({"root":"demo","action":"definition","path":"main.rs","position":{"line":0,"character":3}})).unwrap();
+        let caps=["fs.read:/host/demo/**".into(),"studio.lsp:/host/demo/**".into()];
+        let prepared=prepare(&f.mgr,&f.policy,"studio.lsp",req,&caps).unwrap();
+        assert!(prepared.body.unwrap()["text"].is_null());
     }
     #[test]
     fn only_numeric_loopback_origins_are_accepted() {

@@ -22,6 +22,7 @@ thiserror.workspace = true
 tokio.workspace = true
 futures.workspace = true
 wasmtime = "47"
+ignore = "0.4"
 sha2 = "0.10"
 hmac = "0.12"
 base64 = "0.22"

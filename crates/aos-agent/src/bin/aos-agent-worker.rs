@@ -28,7 +28,7 @@ use aos_agent::context_budget::{
     DEFAULT_N_CTX_HINT, MAX_INFER_STALL_RETRIES, MAX_OVERFLOW_INFER_RETRIES,
 };
 use aos_agent::device_tools::{capture_png_path_from_tool_result, invoke_device_tool};
-use aos_agent::mcp::{open_mcp_tools_with_secrets, McpSession};
+use aos_agent::mcp::{open_mcp_tools_guarded, McpSession};
 use aos_agent::module_discovery::{
     active_module_names, discover_module_tools, merge_skill_tools_for_modules,
     missing_module_hints, module_fallback_allowed, tool_in_catalog, tool_unavailable_message,
@@ -362,7 +362,7 @@ async fn main() {
     let tool_ids = merge_skill_tools_for_modules(&spec.tools, &skill_docs, &installed_modules);
     let mcp_secrets = load_mcp_secrets(&agent_id);
     let (mut mcp_sessions, mcp_tools) =
-        open_mcp_tools_with_secrets(&spec.mcp_servers, &mcp_secrets).await;
+        open_mcp_tools_guarded(&spec.mcp_servers, &mcp_secrets, &bus).await;
     let mut module_tools = discover_module_tools(&bus).await;
     module_tools.extend(mcp_tools.clone());
     let mut tools = select_tools_mode(&tool_ids, &module_tools, deep);
@@ -2856,7 +2856,7 @@ async fn execute_action(
                 }
                 Some(ToolBackend::Mcp { server }) => {
                     if let Some(session) = mcp_sessions.get_mut(&server) {
-                        match session.call_tool(other, args.clone()).await {
+                        match session.call_tool_guarded(bus, other, args.clone()).await {
                             Ok(r) => r,
                             Err(e) => format!("mcp err: {e}"),
                         }
@@ -2870,7 +2870,7 @@ async fn execute_action(
                 None if other.starts_with("mcp.") => {
                     if let Some((server, _)) = parse_mcp_name(other) {
                         if let Some(session) = mcp_sessions.get_mut(&server) {
-                            match session.call_tool(other, args.clone()).await {
+                            match session.call_tool_guarded(bus, other, args.clone()).await {
                                 Ok(r) => r,
                                 Err(e) => format!("mcp err: {e}"),
                             }

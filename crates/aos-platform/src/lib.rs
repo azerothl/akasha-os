@@ -55,6 +55,8 @@ pub mod supervisor;
 pub mod trust;
 pub mod user_docs;
 pub mod workspace;
+pub mod workspace_debug;
+pub mod workspace_refactor;
 pub mod workspace_git;
 pub mod workspace_patch;
 pub mod workspace_search;

@@ -32,3 +32,9 @@ path = "src/bin/aos-agent-worker.rs"
 [[bin]]
 name = "aos-gate-p1"
 path = "src/bin/aos-gate-p1.rs"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

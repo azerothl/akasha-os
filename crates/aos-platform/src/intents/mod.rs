@@ -12,6 +12,8 @@ pub mod speech;
 pub mod system_hardware;
 pub mod workspace;
 pub mod workspace_execution;
+pub mod workspace_debug;
+pub mod workspace_refactor;
 
 use crate::subsystem::PlatformSubsystem;
 use aos_ipc::BusService;

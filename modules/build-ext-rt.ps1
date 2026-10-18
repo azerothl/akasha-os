@@ -55,7 +55,7 @@ Copy-Item (Join-OsPath $pkg handlers.yaml) (Join-OsPath $pkg assets handlers.yam
 
 $manifest = @"
 name: ext-rt
-version: 1.0.0
+version: 1.1.0
 hash: $hash
 permissions:
   required_caps: []
