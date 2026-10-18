@@ -9,6 +9,20 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 > Date: 28/09/2026 · Preview **0.19.0**
 
+### Source candidate under verification — 18 October 2026
+
+These additions are local source changes, not a published Preview release:
+
+- Opt-in MCP image, short-video, upscale and installed read-only Notes/Tasks
+  tools, with explicit allowlists, capabilities and audit. Remaining scope:
+  [MCP server](mcp-server.md).
+- Supervised workspace tasks/staged commits, Problems, native dev surfaces and
+  the selected Code Studio adapter: [contract and limits](dev-assistant-studio.md).
+- Optional experimental Spark-X2.5 offering and llama.cpp binding update:
+  [actual CPU/CUDA generation and remaining checks](spark-x25-validation.md).
+- Signed immutable WASM pack restoration and observed build decisions:
+  [release modes and measurement requirements](module-pack-reuse.md).
+
 ### What's new in 0.19.0
 
 #### Features

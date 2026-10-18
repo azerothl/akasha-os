@@ -556,3 +556,12 @@ Piste VM seL4 (PV.1–PV.3) séparée : [phases/phase-vm-sel4.md](phases/phase-v
 - Plan d’admin `aos-serverd` exposé réseau (socket de contrôle local seulement)
 
 Protocole cohorte : [TESTER.md](TESTER.md).
+
+
+## Candidat source en vérification — 18 octobre 2026
+
+Ces ajouts locaux ne constituent pas une nouvelle version publiée : outils MCP
+image/vidéo/upscale et lecture Notes/Tasks sous allowlist, tâches de workspace et
+commits confirmés, adaptateur Code Studio, modèle Spark optionnel et restauration
+de packs WASM signés. Les limites et preuves figurent dans le
+[bilan par ticket](../tickets/open-ticket-delivery-2026-10-18.md).
