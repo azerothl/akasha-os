@@ -1376,8 +1376,8 @@ min_os_api: 1
             err,
             ModuleError::OsApiTooNew {
                 required: 999,
-                current: 1
-            }
+                current
+            } if current == aos_proto::OS_API_VERSION
         ));
         let _ = std::fs::remove_dir_all(&base);
     }

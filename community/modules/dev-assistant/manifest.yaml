@@ -1,5 +1,5 @@
 name: dev-assistant
-version: 0.1.0
+version: 0.2.0
 hash: "ci"
 permissions:
   # Host `/host/<id>/**` caps are granted after workspace.bind + cap review
@@ -58,7 +58,53 @@ tools:
         path: { type: string, description: optional /host/<id>/… or repo-relative path }
         staged: { type: boolean, description: when true, show staged (--cached) diff }
       required: [root]
+  - name: dev-assistant.run
+    description: Run a fixed allowlisted workspace task after explicit capabilities and host confirmation
+    input_schema:
+      type: object
+      properties:
+        root: { type: string }
+        task: { type: string }
+      required: [root, task]
+  - name: dev-assistant.git_commit
+    description: Commit staged changes only, after explicit capabilities and host confirmation; no hooks or signing
+    input_schema:
+      type: object
+      properties:
+        root: { type: string }
+        message: { type: string }
+      required: [root, message]
+  - name: dev-assistant.studio_project
+    description: Inspect the mapped local Code Studio project and its persistent code index
+    input_schema:
+      type: object
+      properties:
+        root: { type: string }
+      required: [root]
+  - name: dev-assistant.studio_reindex
+    description: Incrementally refresh the mapped Code Studio index after host confirmation
+    input_schema:
+      type: object
+      properties:
+        root: { type: string }
+      required: [root]
+  - name: dev-assistant.studio_lsp
+    description: Query diagnostics, definition or references through Code Studio after host confirmation
+    input_schema:
+      type: object
+      properties:
+        root: { type: string }
+        action: { type: string, enum: [diagnostics, definition, references] }
+        path: { type: string }
+        text: { type: string }
+        position:
+          type: object
+          properties:
+            line: { type: integer, minimum: 0 }
+            character: { type: integer, minimum: 0 }
+      required: [root, action, path]
 ui:
   entry: ui/index.html
   mode: declarative_ui
-min_os_api: 1
+  contract: 2
+min_os_api: 2

@@ -17,6 +17,8 @@ pub mod device_capture;
 pub mod device_usb;
 pub mod downloads_layout;
 pub mod host_folder;
+pub mod mix;
+pub mod speech;
 pub mod workspace;
 mod illustration;
 mod illustration_action;
@@ -3676,7 +3678,7 @@ mod preview_prompt_tests {
 // ---------------------------------------------------------------------------
 
 /// Host module API level (`manifest.min_os_api` must be ≤ this value).
-pub const OS_API_VERSION: u32 = 1;
+pub const OS_API_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleManifest {

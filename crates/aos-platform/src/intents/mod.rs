@@ -11,6 +11,7 @@ pub mod mix;
 pub mod speech;
 pub mod system_hardware;
 pub mod workspace;
+pub mod workspace_execution;
 
 use crate::subsystem::PlatformSubsystem;
 use aos_ipc::BusService;
@@ -22,6 +23,7 @@ pub fn register_audit_and_fs(svc: &mut BusService, sub: &Arc<PlatformSubsystem>)
     device_usb::register(svc, sub.clone());
     host_folder::register(svc, sub.clone());
     workspace::register(svc, sub.clone());
+    workspace_execution::register(svc, sub.clone());
     mix::register(svc, sub.clone());
     speech::register(svc, sub.clone());
     system_hardware::register(svc, sub.clone());

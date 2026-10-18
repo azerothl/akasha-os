@@ -148,6 +148,7 @@ pub struct PlatformSubsystem {
     pub workspaces: Mutex<crate::workspace::WorkspaceBindManager>,
     /// Multi-file patch undo groups (#247 DA.3).
     pub workspace_patches: Mutex<crate::workspace_patch::WorkspacePatchManager>,
+    pub workspace_process_policy: PathBuf,
     /// Mix Path A sessions (presets + confirm/undo; no DAW).
     pub mix: Mutex<crate::mix::MixSessionStore>,
     /// Opt-in ASR transcripts for the tool gate (no bundled STT).
@@ -271,6 +272,7 @@ impl PlatformSubsystem {
             host_folders: Mutex::new(host_folders),
             workspaces: Mutex::new(workspaces),
             workspace_patches: Mutex::new(workspace_patches),
+            workspace_process_policy: PathBuf::from(&config.sessions_dir).join("workspace-process-policy.json"),
             mix: Mutex::new(crate::mix::MixSessionStore::default()),
             speech: Mutex::new(crate::speech::SpeechTranscriptStore::default()),
             net: Mutex::new(net),
@@ -525,6 +527,10 @@ impl PlatformSubsystem {
             "module.compile",
             "module.uninstall",
             "media.generate",
+            "process.run",
+            "git.commit",
+            "studio.lsp",
+            "studio.reindex",
             "device.camera",
             "device.mic",
             "device.usb",
@@ -1810,6 +1816,15 @@ impl HostServices for PlatformSubsystem {
                     });
                 }
                 serde_json::to_value(resp).map_err(|e| e.to_string())
+            }
+            "process.run" | "git.commit" | "studio.project" | "studio.lsp" | "studio.reindex" => {
+                // module.invoke runs guest host calls on spawn_blocking; the
+                // normal asynchronous confirmation service stays responsive.
+                let runtime = tokio::runtime::Handle::try_current()
+                    .map_err(|_| "workspace execution needs the running host".to_string())?;
+                runtime.block_on(crate::intents::workspace_execution::dispatch(
+                    self, service, args, &ctx.actor, &ctx.granted_caps, &ctx.trace_id,
+                ))
             }
             "git.status" => {
                 let root = args["root"].as_str().unwrap_or("").to_string();

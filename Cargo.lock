@@ -416,6 +416,7 @@ dependencies = [
  "hmac",
  "image",
  "keyring",
+ "libc",
  "nokhwa",
  "printpdf",
  "rand 0.8.8",

@@ -70,6 +70,10 @@ pub const UI_V1_WIDGET_KINDS: &[&str] = &[
 
 /// Additional widget kinds introduced with [`UI_CONTRACT_V2`] (lot 1+).
 pub const UI_V2_ADDITIONAL_WIDGET_KINDS: &[&str] = &[
+    "code_editor",
+    "diff_view",
+    "file_tree",
+    "problems_list",
     "plain_column",
     "slider",
     "number",

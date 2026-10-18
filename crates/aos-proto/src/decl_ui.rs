@@ -705,7 +705,7 @@ impl DeclUiWidget {
                     return Err(err(DeclUiError::MissingField("label_key")));
                 }
             }
-            "stat_row" | "table" | "line_chart" | "bar_chart" | "pie" | "scatter" => {
+            "stat_row" | "table" | "line_chart" | "bar_chart" | "pie" | "scatter" | "diff_view" | "file_tree" | "problems_list" => {
                 if self.bind.as_ref().is_none_or(|b| b.is_empty()) {
                     return Err(err(DeclUiError::MissingField("bind")));
                 }
@@ -734,6 +734,13 @@ impl DeclUiWidget {
                 }
             }
             "checkbox" | "textarea" => {}
+            "code_editor" => {
+                if self.state_key.as_ref().is_none_or(|key| key.is_empty())
+                    && self.bind.as_ref().is_none_or(|key| key.is_empty())
+                    && self.label.as_ref().is_none_or(|key| key.is_empty()) {
+                    return Err(err(DeclUiError::MissingField("state_key, bind or label")));
+                }
+            }
             "text_input" | "file_picker" => {
                 if self.state_key.as_ref().is_none_or(|k| k.is_empty()) {
                     return Err(err(DeclUiError::MissingField("state_key")));
@@ -921,6 +928,18 @@ fn first_enum_property(schema: &serde_json::Value) -> Option<(String, Vec<String
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dev_assistant_reference_uses_the_supported_v2_vocabulary() {
+        let raw = include_str!("../../../community/modules/dev-assistant/ui/index.html");
+        let doc = super::DeclUiDocument::parse_json(raw.as_bytes()).expect("reference Dev Assistant contract");
+        assert_eq!(doc.contract, Some(2));
+        let kinds = doc.collect_widget_kinds();
+        for kind in ["diff_view", "file_tree", "problems_list"] {
+            assert!(kinds.contains(&kind.to_owned()), "missing {kind}");
+            assert!(!crate::rich_decl_ui::is_widget_kind_valid(kind, 1));
+        }
+        assert!(doc.referenced_tools().contains(&"dev-assistant.studio_project".to_owned()));
+    }
     use super::*;
 
     #[test]
