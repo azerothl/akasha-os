@@ -176,7 +176,7 @@ mod tests {
                 caps: vec![],
                 trace_id: String::new(),
             },
-            Some("echo hello-from-host-stt"),
+            Some(if cfg!(windows) { "cmd.exe /C echo hello-from-host-stt" } else { "echo hello-from-host-stt" }),
         );
         let _ = std::fs::remove_file(&path);
         assert!(resp.ok);

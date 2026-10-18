@@ -236,7 +236,7 @@ pub fn apply_prompt_defaults(brief: &mut IllustrationBrief) {
     let photo = text.contains("doodle")
         || text.contains("sur cette photo")
         || text.contains("sur la photo");
-    if (photo || !brief.photo.trim().is_empty()) && (brief.look == IllustrationLook::Ink || photo)
+    if photo || (!brief.photo.trim().is_empty() && brief.look == IllustrationLook::Ink)
     {
         brief.look = IllustrationLook::Doodle;
         if brief.palette == IllustrationLook::Ink.default_palette() || photo {
