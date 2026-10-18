@@ -34,7 +34,38 @@ Logs sur **stderr** uniquement.
 | `akasha_mem_recall` | `mem.user.recall` |
 | `akasha_mem_remember` | `mem.user.remember` |
 
-Hors MVP : secrets, shell, FS, agents, modules notes/tasks.
+## Outils Create et modules optionnels (#439)
+
+Les outils OS supplémentaires sont masqués et refusés sans une liste explicite
+et des capacités configurées dans l'environnement du serveur :
+
+```json
+"AOS_MCP_TOOLS": "akasha_image_generate;akasha_video_generate;notes.list",
+"AOS_MCP_CAPS": "media.generate;fs.write:/downloads/**;tool.invoke:notes"
+```
+
+`akasha_image_generate`, `akasha_video_generate` et `akasha_image_upscale`
+appellent les intents Create existants. La vidéo utilise `sd_mode=vid_gen`,
+17 images à 8 FPS par défaut. Les chemins d'entrée demandent `fs.read` ; les
+sorties restent dans `/downloads` et demandent `fs.write`. Les résultats sont des
+chemins VFS et des métadonnées, sans binaire dans le flux MCP.
+
+Les outils de module sont découverts depuis les manifestes installés et revus.
+`notes.list` devient `akasha_module__notes__list` ; seuls `notes.list`,
+`notes.read`, `notes.search`, `notes.links`, `notes.related` et `tasks.list` sont
+admis. Un module absent n'apparaît pas. Chaque appel garde `module.invoke` et
+ses contrôles de capacités.
+
+L'acteur transmis est `mcp:<AOS_MCP_FROM>` : les permissions ne sont pas
+déduites du statut de service. Le client ne peut fournir ni acteur ni caps.
+Les refus sont journalisés sur stderr et les appels dans `mcp.tool.call`
+quand le service d'audit est joignable. Les modèles nécessaires doivent déjà
+être installés ; voir les limites détaillées dans la [version anglaise](../mcp-server.md).
+
+Secrets, shell, FS arbitraire, agents, outils de module destructifs et annulation
+globale de média restent hors périmètre. `notes.create` peut écraser une note et
+nécessite donc un contrat de confirmation avant exposition. Le serveur ne
+déclare pas de prise en charge de progression ou d'annulation MCP.
 
 ## Exemple de config IDE
 

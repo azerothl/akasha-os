@@ -10,7 +10,7 @@
 
 Can Akasha OS implement a **per-expert working-set LRU** (promote/demote individual MoE experts between host RAM and GPU) on the current llama.cpp path?
 
-## Evidence from the bound API (`llama-cpp-sys-2` 0.1.154)
+## Evidence from the bound API (`llama-cpp-sys-2` 0.1.159)
 
 Audit of generated bindings (`llama_model_*`, `llama_get_*`, tensor APIs):
 

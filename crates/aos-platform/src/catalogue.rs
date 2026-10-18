@@ -1476,7 +1476,7 @@ mod tests {
         assert_eq!(brief.kind, "skill");
         assert_eq!(brief.license, "MIT");
         let md = std::fs::read(root.join("community/skills/morning-brief/SKILL.md")).unwrap();
-        cat.check_entry_hash("morning-brief", Some("skill"), &sha256_hex(&md))
+        cat.check_entry_hash("morning-brief", Some("skill"), &sha256_catalogue_content_hex(&md))
             .unwrap();
     }
 
@@ -1527,3 +1527,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(test)]
+mod package_tests;

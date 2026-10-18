@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-llama-cpp-sys-2 = { version = "0.1.154", default-features = false }
+llama-cpp-sys-2 = { version = "=0.1.159", default-features = false }
 hf-chat-template = { version = "1.0", default-features = true }
 serde_json.workspace = true
 thiserror.workspace = true

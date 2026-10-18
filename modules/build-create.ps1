@@ -14,7 +14,7 @@ function Join-OsPath {
 Write-Host "== build wasm32 (create) =="
 $target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-OsPath $root target }
 $env:CARGO_TARGET_DIR = $target
-cargo build --manifest-path (Join-OsPath $root modules create Cargo.toml) --target wasm32-unknown-unknown --release
+cargo build --manifest-path (Join-OsPath $root modules create Cargo.toml) --target wasm32-unknown-unknown --release --locked
 if ($LASTEXITCODE -ne 0) { throw "create wasm build failed" }
 
 function Resolve-WasmArtifact {

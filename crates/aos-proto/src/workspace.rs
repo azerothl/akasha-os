@@ -21,6 +21,8 @@ pub mod intents {
     pub const GIT_STATUS: &str = "git.status";
     /// Read-only unified diff (#247 P1 / DA.5). No commit/push.
     pub const GIT_DIFF: &str = "git.diff";
+    pub const PROCESS_RUN: &str = "process.run";
+    pub const GIT_COMMIT: &str = "git.commit";
 }
 
 /// Logical VFS prefix for a bound host workspace: `/host/<id>`.
@@ -104,8 +106,7 @@ pub fn vfs_relative_path(path: &str) -> Option<String> {
     if p == prefix {
         return Some(String::new());
     }
-    p.strip_prefix(&format!("{prefix}/"))
-        .map(|s| s.to_string())
+    p.strip_prefix(&format!("{prefix}/")).map(|s| s.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -361,6 +362,53 @@ pub struct GitDiffResponse {
     pub message: Option<String>,
 }
 
+/// A named, administrator-configured command, not an arbitrary command line.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceTaskRequest {
+    pub root: String,
+    pub task: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GitCommitRequest {
+    pub root: String,
+    pub message: String,
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub caps: Vec<String>,
+    #[serde(default)]
+    pub trace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceProblem {
+    pub path: String,
+    pub line: u64,
+    pub column: u64,
+    pub severity: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceTaskResponse {
+    pub ok: bool,
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub timed_out: bool,
+    pub truncated: bool,
+    pub problems: Vec<WorkspaceProblem>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,7 +416,10 @@ mod tests {
     #[test]
     fn caps_use_host_id_glob() {
         assert_eq!(fs_read_cap("my-repo-ab12"), "fs.read:/host/my-repo-ab12/**");
-        assert_eq!(fs_write_cap("my-repo-ab12"), "fs.write:/host/my-repo-ab12/**");
+        assert_eq!(
+            fs_write_cap("my-repo-ab12"),
+            "fs.write:/host/my-repo-ab12/**"
+        );
         assert_eq!(host_vfs_prefix("my-repo-ab12"), "/host/my-repo-ab12");
     }
 

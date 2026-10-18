@@ -36,7 +36,45 @@ Logs go to **stderr** only (MCP forbids non-protocol bytes on stdout).
 | `akasha_mem_recall` | `mem.user.recall` |
 | `akasha_mem_remember` | `mem.user.remember` |
 
-Out of scope for MVP: secrets, shell, FS, agent spawn/steer, notes/tasks modules.
+## Optional Create and module tools (#439)
+
+Additional OS tools are hidden and denied until the server configuration
+supplies both an exact allowlist and explicit capabilities. MCP arguments
+cannot change these grants, the actor, or the audit trace.
+
+```json
+"AOS_MCP_TOOLS": "akasha_image_generate;akasha_video_generate;notes.list",
+"AOS_MCP_CAPS": "media.generate;fs.write:/downloads/**;tool.invoke:notes"
+```
+
+| MCP name | OS intent | Requirements |
+|----------|-----------|--------------|
+| `akasha_image_generate` | `media.image.generate` | `media.generate` + output `fs.write` |
+| `akasha_video_generate` | `media.image.generate`, `sd_mode=vid_gen` | Same; installed video model/runtime |
+| `akasha_image_upscale` | `media.image.upscale` | Same + input `fs.read` and installed upscaler |
+| `akasha_module__notes__list` (example) | `module.invoke`, `notes.list` | Allowlisted OS name + `tool.invoke:notes`, installed and cap-reviewed Notes |
+
+Module entries are derived from installed `module.describe` manifests. The
+admitted read-only tools are `notes.list`, `notes.read`, `notes.search`,
+`notes.links`, `notes.related`, and `tasks.list`. Missing modules are omitted.
+Write/destructive tools, including `notes.create` (which can overwrite notes),
+need a separate confirmation contract before exposure.
+
+Image/video calls take `prompt`, optional `model_id`, `path`, and typed Create
+`options`. Video defaults to 17 frames at 8 FPS; limits are 129 frames, 120 FPS,
+2048 pixels per dimension and 100 steps. Input image paths (`init_image`,
+`end_image`, `mask_image`) need scoped `fs.read`. Unknown options, path traversal
+and caller-supplied capabilities/identity are refused. Model downloads are not
+triggered by calls.
+
+Results contain VFS paths and metadata. Calls use the normal bus handlers as
+actor `mcp:<AOS_MCP_FROM>` with the server grants, without the service/human
+permission bypass. Calls and refusals record `mcp.tool.call` audit events when
+the audit service is reachable, plus refusal diagnostics on stderr. The current
+stdio loop buffers one call at a time; it does not advertise progress or cancel.
+
+Secrets, shell, arbitrary FS intents, agent spawn/steer, destructive module tools
+and global media cancellation remain outside this façade.
 
 ## IDE config example
 

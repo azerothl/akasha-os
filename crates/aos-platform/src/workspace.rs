@@ -187,7 +187,7 @@ mod tests {
         let root = temp_root("roundtrip");
         let mut mgr = WorkspaceBindManager::open(&root).unwrap();
         let info = mgr
-            .bind("/tmp/aos-demo-project", None, "agent:test")
+            .bind(&temp_root("demo-project").to_string_lossy(), None, "agent:test")
             .unwrap();
         assert!(info.vfs_root.starts_with("/host/"));
         assert!(info.caps.iter().any(|c| c.starts_with("fs.read:/host/")));

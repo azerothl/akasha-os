@@ -894,10 +894,22 @@ mod vision_catalog_tests {
     }
 
     #[test]
+    fn spark_offering_is_pinned_optional_and_not_auto_selected() {
+        let file: OfferingsFile = serde_json::from_str(include_str!("../../../share/models/catalog-offerings.json")).unwrap();
+        let spark = file.models.iter().find(|m|m.id == "local:spark-x2.5-4b-q4_k_m").expect("Spark offering");
+        assert!(spark.optional);
+        assert_eq!(spark.bytes, 2_600_224_352);
+        assert_eq!(spark.sha256, "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428");
+        assert!(spark.url.contains("/resolve/9826e0be84e6e6e8b9668abc91421109a1df1e2d/"));
+        assert!(spark.profiles.iter().any(|p|p == "chat"));
+        assert!(!file.packs.values().any(|p|p.chat == spark.id));
+    }
+
+    #[test]
     fn catalog_parses_mmproj_role_and_vision_profile() {
         let raw = include_str!("../../../share/models/catalog-offerings.json");
         let file: OfferingsFile = serde_json::from_str(raw).expect("catalog json");
-        assert_eq!(file.version, "0.3.5");
+        assert_eq!(file.version, "0.3.6");
         let gemma = file
             .models
             .iter()

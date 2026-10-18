@@ -79,38 +79,43 @@ if [ "$SKIP_BUILD" != "1" ]; then
   cargo build --release -p aos-platform --no-default-features --features embeddings,metal
 
   aos_release_cost_end
+  aos_release_cost_start "module-pack-restore"
+  python3 "${ROOT}/packaging/module_pack_reuse.py"
+  aos_release_cost_end
+  module_was_restored() { grep -qxF "$1" "${ROOT}/dist/module-reuse/restored.txt"; }
   aos_release_cost_start "wasm-modules"
   echo "== notes module =="
-  if [ -f "${ROOT}/modules/build-canvas.sh" ]; then
+  if [ -f "${ROOT}/modules/build-canvas.sh" ] && ! module_was_restored canvas; then
     echo "== canvas module =="
     "${ROOT}/modules/build-canvas.sh"
   fi
-  if [ -f "${ROOT}/modules/build-create.sh" ]; then
+  if [ -f "${ROOT}/modules/build-create.sh" ] && ! module_was_restored create; then
     echo "== create module =="
     "${ROOT}/modules/build-create.sh"
   fi
   # Rebuild illustration-studio so catalogue hash/caps match packaged wasm (E10).
-  if [ -f "${ROOT}/modules/build-illustration-studio.sh" ]; then
+  if [ -f "${ROOT}/modules/build-illustration-studio.sh" ] && ! module_was_restored illustration-studio; then
     echo "== illustration-studio module =="
     "${ROOT}/modules/build-illustration-studio.sh"
   fi
-  env -u RUSTFLAGS \
-    cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
-    --target wasm32-unknown-unknown --release
-  mkdir -p "${ROOT}/modules/notes.aospkg/ui" "${ROOT}/modules/notes.aospkg/schemas"
-  WASM_SRC=""
-  for cand in \
-    "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_notes.wasm" \
-    "${ROOT}/target/wasm32-unknown-unknown/release/module_notes.wasm"
-  do
-    if [ -f "${cand}" ]; then WASM_SRC="${cand}"; break; fi
-  done
-  if [ -z "${WASM_SRC}" ]; then
-    echo "ERROR: module_notes.wasm introuvable" >&2
-    exit 1
-  fi
-  cp -f "${WASM_SRC}" "${ROOT}/modules/notes.aospkg/module.wasm"
-  cat > "${ROOT}/modules/notes.aospkg/manifest.yaml" <<'EOF'
+  if ! module_was_restored notes; then
+    env -u RUSTFLAGS \
+      cargo build --manifest-path "${ROOT}/modules/notes/Cargo.toml" \
+      --target wasm32-unknown-unknown --release --locked
+    mkdir -p "${ROOT}/modules/notes.aospkg/ui" "${ROOT}/modules/notes.aospkg/schemas"
+    WASM_SRC=""
+    for cand in \
+      "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_notes.wasm" \
+      "${ROOT}/target/wasm32-unknown-unknown/release/module_notes.wasm"
+    do
+      if [ -f "${cand}" ]; then WASM_SRC="${cand}"; break; fi
+    done
+    if [ -z "${WASM_SRC}" ]; then
+      echo "ERROR: module_notes.wasm introuvable" >&2
+      exit 1
+    fi
+    cp -f "${WASM_SRC}" "${ROOT}/modules/notes.aospkg/module.wasm"
+    cat > "${ROOT}/modules/notes.aospkg/manifest.yaml" <<'EOF'
 name: notes
 version: 0.1.0
 hash: "ci"
@@ -122,26 +127,29 @@ ui:
   mode: declarative_ui
 min_os_api: 1
 EOF
-  sync_module_wasm "notes" "${WASM_SRC}"
+    sync_module_wasm "notes" "${WASM_SRC}"
 
-  echo "== tasks module =="
-  if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
-    if [ -f "${ROOT}/modules/build-tasks.sh" ]; then
-      "${ROOT}/modules/build-tasks.sh"
-    else
-      echo "ERROR: modules/build-tasks.sh required" >&2
-      exit 1
-    fi
-    sync_module_wasm "tasks" "${ROOT}/modules/tasks.aospkg/module.wasm"
-  else
-    echo "  skip tasks (minimal profile)"
   fi
+  if ! module_was_restored tasks; then
+    echo "== tasks module =="
+    if [ "${PREVIEW_PROFILE}" != "minimal" ] || [ -n "${AOS_MODULE_PACK_RELEASE_TAG:-}" ]; then
+      if [ -f "${ROOT}/modules/build-tasks.sh" ]; then
+        "${ROOT}/modules/build-tasks.sh"
+      else
+        echo "ERROR: modules/build-tasks.sh required" >&2
+        exit 1
+      fi
+      sync_module_wasm "tasks" "${ROOT}/modules/tasks.aospkg/module.wasm"
+    else
+      echo "  skip tasks (minimal profile)"
+    fi
 
-  if [ -f "${ROOT}/modules/ext-rt/Cargo.toml" ]; then
+  fi
+  if [ -f "${ROOT}/modules/ext-rt/Cargo.toml" ] && ! module_was_restored ext-rt; then
     echo "== ext-rt wasm =="
     env -u RUSTFLAGS \
       cargo build --manifest-path "${ROOT}/modules/ext-rt/Cargo.toml" \
-      --target wasm32-unknown-unknown --release
+      --target wasm32-unknown-unknown --release --locked
     WASM_EXT=""
     for cand in \
       "${CARGO_TARGET_DIR}/wasm32-unknown-unknown/release/module_ext_rt.wasm" \
@@ -163,6 +171,7 @@ EOF
   echo "== refresh bundled catalogue signature =="
   (cd "${ROOT}" && UPDATE_CATALOGUE=1 cargo test -p aos-platform --no-default-features \
     catalogue::tests::committed_catalogue_signature_matches -- --nocapture)
+  python3 "${ROOT}/packaging/module_pack_release.py" --export-index
   aos_release_cost_end
 fi
 
@@ -236,7 +245,7 @@ if ! is_optional_module illustration-studio; then
     fi
   done
 fi
-if [ "${PREVIEW_PROFILE}" != "minimal" ]; then
+if [ "${PREVIEW_PROFILE}" != "minimal" ] || [ -n "${AOS_MODULE_PACK_RELEASE_TAG:-}" ]; then
   for base in "${ROOT}/share/modules/tasks.aospkg" "${ROOT}/modules/tasks.aospkg"; do
     if [ -d "${base}" ]; then
       rm -rf "${OUT}/share/modules/tasks.aospkg"

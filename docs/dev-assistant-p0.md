@@ -1,7 +1,7 @@
 # Dev Assistant P0 — module contract (Preview 0.19 / #247)
 
 **Language:** English | Français (follow-up)  
-**Status:** DA.1–DA.4 **live**  
+**Status:** DA.1–DA.5 **live**; further source candidate: [commands and Code Studio adapter](dev-assistant-studio.md)
 **Tracking:** [issue #247](https://github.com/azerothl/akasha-os/issues/247)
 
 ## Goal
@@ -31,21 +31,21 @@ A Dev Assistant package **must**:
 2. Surface the returned `caps` (`fs.read/write:/host/<id>/**`) and require the
    normal **cap-review** path before search/patch (fail-closed; never mint caps
    inside the module).
-3. Use **DeclUI v1** widgets only (`form`, `table`, `textarea`, `button`,
-   `heading`, `text`, `column` / `row`) — **no** `code_editor`, `diff_view`,
-   `file_tree`, or `problems_list` (P2).
+3. Use the host-supported DeclUI contract. The source candidate reference
+   requires **host API 2 / UI contract 2** for its native dev surfaces; existing
+   UI 1 packages remain compatible. See [the adapter contract](dev-assistant-studio.md).
 4. Prefer `fs.search` / `code.search`, then `fs.apply_patch` (and
    `fs.undo_patch`), over full-file `fs.write` for host trees.
 5. Stay **advisory by default**; mutating tools (`apply_patch`, `unbind`) only
    after an explicit user goal (existing advisory kit).
 
-### Package layout (script + DeclUI v1)
+### Package layout (script + DeclUI)
 
 ```text
 dev-assistant/
 ├── manifest.yaml      # name, tools, ui.mode=declarative_ui, required_caps
 ├── handlers.yaml      # ext-rt steps → workspace.* / fs.search / fs.apply_patch
-└── ui/index.html      # declarative_ui JSON document (v1 widgets)
+└── ui/index.html      # declarative_ui JSON document
 ```
 
 Reference source (MIT, not in the Preview zip catalogue by default):
@@ -79,7 +79,9 @@ once the id is known to testers.
 
 ## Non-goals (remaining P1–P2)
 
-`process.run`, `git.commit`, LSP, DAP, DeclUI IDE widgets — see issue #247.
+The source candidate adds supervised `process.run`, staged `git.commit`, native
+Dev Assistant widgets and a scoped Code Studio adapter. DAP and subtree
+multi-agent refactors remain open; see [the exact boundaries](dev-assistant-studio.md).
 
 ## DA.5 — read-only git (0.20 start / #247 P1 slice)
 
@@ -90,7 +92,8 @@ Live on the host bus (and `host_call`):
 | `git.status` | `fs.read:/host/<id>/**` | Porcelain `-b` + entries; max 500 lines |
 | `git.diff` | `fs.read:/host/<id>/**` | Unified worktree or `--cached`; max 256 KiB |
 
-No `git.commit` / push / fetch. Requires a `.git` work tree under the bound host folder.
+DA.5 itself does not commit, push or fetch. The source candidate adds a separate
+confirmed `git.commit` intent. Requires a `.git` work tree under the bound host folder.
 
 ## Related
 

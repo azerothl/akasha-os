@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-18",
+  "base_revision": "ba773c0bc211c4704cbf7e987cd915c267527174",
+  "branch": "codex/open-tickets",
+  "binding": "llama-cpp-sys-2 = 0.1.159",
+  "host": {
+    "os": "Windows",
+    "gpu": "NVIDIA RTX 4080 SUPER 16 GiB",
+    "cuda_toolkit": "13.3"
+  },
+  "prompt": "Réponds en un seul mot : quelle est la capitale de la France ?",
+  "scope": "load/template/generation smoke; not a quality or performance benchmark",
+  "inference": [
+    {
+      "model": "Spark-X2.5",
+      "filename": "Spark-X2.5-4B-Q4_K_M.gguf",
+      "bytes": 2600224352,
+      "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428",
+      "backend": "cpu-only",
+      "output": "Paris",
+      "raw_stats": "prompt=36 généré=1 TTFT=2 ms tok/s=9.6 stop=Eog",
+      "log_sha256": "b8f813f09f6f5e66586ae4ba49a5deea83cd556ed73cffd6f44dc6f59705e4c3"
+    },
+    {
+      "model": "Spark-X2.5",
+      "filename": "Spark-X2.5-4B-Q4_K_M.gguf",
+      "bytes": 2600224352,
+      "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428",
+      "backend": "cuda",
+      "output": "Paris",
+      "raw_stats": "prompt=36 généré=1 TTFT=2 ms tok/s=103.9 stop=Eog",
+      "log_sha256": "80577cd63bcc9dcecdea7c285b8863df9c1371c97165f324e45f3d8c06e35991"
+    },
+    {
+      "model": "Qwen3.5",
+      "filename": "Qwen3.5-4B-Q4_K_M.gguf",
+      "bytes": 2740937888,
+      "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "backend": "cpu-only",
+      "output": "Paris",
+      "raw_stats": "prompt=27 généré=1 TTFT=2 ms tok/s=12.6 stop=Eog",
+      "log_sha256": "377196a11f1d151bc8420c670e63b428787010e95e6e322c5e885484cc4d672a"
+    },
+    {
+      "model": "Qwen3.5",
+      "filename": "Qwen3.5-4B-Q4_K_M.gguf",
+      "bytes": 2740937888,
+      "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "backend": "cuda",
+      "output": "Paris",
+      "raw_stats": "prompt=27 généré=1 TTFT=3 ms tok/s=53.9 stop=Eog",
+      "log_sha256": "033b60a9d039fb5d51370e739d1bf739ad9681f2d7f7a38d3ac94b1041568b72"
+    }
+  ],
+  "multi_gpu": {
+    "status": "blocked",
+    "physical_backend_gpu_count": 1,
+    "runner_exit_code": 77,
+    "user_decision": "keep #434 and #435 open"
+  },
+  "test_results": {
+    "aos_proto": {
+      "passed": 194
+    },
+    "aos_mcp": {
+      "unit_passed": 8,
+      "ipc_integration_passed": 1
+    },
+    "aos_session": {
+      "passed": 51
+    },
+    "aos_ui_egui": {
+      "passed": 541,
+      "ignored": 1
+    },
+    "aos_platform_no_default_features": {
+      "passed": 279
+    },
+    "aos_model_no_default_features": {
+      "passed": 43
+    },
+    "aos_llama_cpu_only": {
+      "passed": 20
+    },
+    "aos_llama_cuda_mtmd": {
+      "passed": 20
+    },
+    "module_pack_contract_windows": {
+      "passed": 9
+    },
+    "module_pack_contract_ubuntu_wsl": {
+      "passed": 9
+    }
+  },
+  "validation_limits": [
+    "No new branch CI run or full release comparison",
+    "No additional-machine or Metal inference validation",
+    "MCP media engine and Code Studio tests use service doubles",
+    "No real installed native UI workflow proof",
+    "DAP and subtree multi-agent refactoring remain open"
+  ],
+  "implementation_revision": "b49f0c9"
+}

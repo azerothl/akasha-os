@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
-    if !(5..=6).contains(&args.len()) && !(args.len() == 8 && args[6] == "--refine")
-        && !(args.len() == 7 && args[6] == "--release") {
+    if !((5..=6).contains(&args.len()) || args.len() == 8 && args[6] == "--refine"
+        || args.len() == 7 && args[6] == "--release") {
         return Err("expected BUS SUBJECT CONSTRUCTION_FILE FRAME_SUBJECT [SESSION_ID [--refine CORRECTION]]".into());
     }
     let bus = BusClient::connect(&args[1], "illustration-benchmark").await?;

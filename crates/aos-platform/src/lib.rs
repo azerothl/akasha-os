@@ -49,6 +49,7 @@ pub mod skill;
 pub mod skill_pass;
 pub mod speech;
 pub mod storage;
+pub mod studio_adapter;
 pub mod subsystem;
 pub mod supervisor;
 pub mod trust;
@@ -57,6 +58,7 @@ pub mod workspace;
 pub mod workspace_git;
 pub mod workspace_patch;
 pub mod workspace_search;
+pub mod workspace_process;
 
 pub use audit::AuditJournal;
 pub use chat_session::ChatSessionStore;

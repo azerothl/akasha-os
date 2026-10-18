@@ -15,6 +15,8 @@ use egui_plot::{Bar, BarChart, Line, Plot, PlotPoints, Points};
 use serde_json::Value;
 use std::collections::HashMap;
 
+mod dev_widgets;
+
 #[derive(Debug, Clone)]
 pub struct DeclUiServiceAction {
     pub action_id: String,
@@ -1059,6 +1061,12 @@ impl DeclUiPanelState {
                     form_fields.insert(key, if on { "true".into() } else { "false".into() });
                 }
             }
+            "code_editor" | "diff_view" | "file_tree" | "problems_list" => {
+                let value = w.bind.as_ref().map(|bind| resolve_bind(cache, bind, w.source.as_deref())).unwrap_or(Value::Null);
+                actions.local_patch.extend(dev_widgets::render(
+                    ui, w, &value, local_state, form_fields, enabled, language,
+                ));
+            }
             "textarea" => {
                 if let Some(state_key) = &w.state_key {
                     let label = widget_text(w, doc, language).unwrap_or_else(|| state_key.clone());
@@ -1306,7 +1314,7 @@ impl DeclUiPanelState {
                                 ) {
                                     ui.label(prefix);
                                 }
-                                render_form_fields(ui, &fields, form_fields, inline);
+                                render_form_fields(ui, &fields, form_fields, inline, language);
                                 let submit = widget_text(w, doc, language)
                                     .or_else(|| w.label.clone())
                                     .unwrap_or_else(|| "Submit".into());
@@ -1323,7 +1331,7 @@ impl DeclUiPanelState {
                                 }
                             });
                         } else {
-                            render_form_fields(ui, &fields, form_fields, inline);
+                            render_form_fields(ui, &fields, form_fields, inline, language);
                             let submit = widget_text(w, doc, language)
                                 .or_else(|| w.label.clone())
                                 .unwrap_or_else(|| "Submit".into());
@@ -2252,6 +2260,7 @@ fn render_form_fields(
     fields: &[SchemaField],
     form_fields: &mut HashMap<String, String>,
     inline: bool,
+    language: &str,
 ) {
     for field in fields {
         form_fields
@@ -2284,6 +2293,10 @@ fn render_form_fields(
                                 );
                             }
                         });
+                }
+                FieldKind::Code => {
+                    let widget = DeclUiWidget { kind: "code_editor".into(), label: Some(field.key.clone()), ..Default::default() };
+                    dev_widgets::render(ui, &widget, &Value::Null, &HashMap::new(), form_fields, true, language);
                 }
                 FieldKind::Textarea => {
                     ui.add(
@@ -2328,7 +2341,11 @@ fn render_form_fields(
                                 }
                             });
                     }
-                    FieldKind::Textarea => {
+                    FieldKind::Code => {
+                    let widget = DeclUiWidget { kind: "code_editor".into(), label: Some(field.key.clone()), ..Default::default() };
+                    dev_widgets::render(ui, &widget, &Value::Null, &HashMap::new(), form_fields, true, language);
+                }
+                FieldKind::Textarea => {
                         ui.add(
                             egui::TextEdit::multiline(form_fields.get_mut(&field.key).unwrap())
                                 .hint_text(field.hint.as_deref().unwrap_or("")),
@@ -2473,6 +2490,7 @@ struct SchemaField {
 #[derive(Clone)]
 enum FieldKind {
     Text,
+    Code,
     Textarea,
     Number,
     Bool,
@@ -2496,7 +2514,9 @@ impl FieldKind {
             Some("string") => {
                 let fmt = v.get("format").and_then(|f| f.as_str()).unwrap_or("");
                 let long = v.get("maxLength").and_then(|m| m.as_u64()).unwrap_or(0) > 120;
-                if fmt == "textarea" || long {
+                if fmt == "code" {
+                    FieldKind::Code
+                } else if fmt == "textarea" || long {
                     FieldKind::Textarea
                 } else {
                     FieldKind::Text

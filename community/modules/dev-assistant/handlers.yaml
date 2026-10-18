@@ -45,3 +45,36 @@ tools:
           path: "{{args.path}}"
           staged: "{{args.staged}}"
 
+
+  dev-assistant.run:
+    steps:
+      - service: process.run
+        args:
+          root: "{{args.root}}"
+          task: "{{args.task}}"
+  dev-assistant.git_commit:
+    steps:
+      - service: git.commit
+        args:
+          root: "{{args.root}}"
+          message: "{{args.message}}"
+
+  dev-assistant.studio_project:
+    steps:
+      - service: studio.project
+        args:
+          root: "{{args.root}}"
+  dev-assistant.studio_reindex:
+    steps:
+      - service: studio.reindex
+        args:
+          root: "{{args.root}}"
+  dev-assistant.studio_lsp:
+    steps:
+      - service: studio.lsp
+        args:
+          root: "{{args.root}}"
+          action: "{{args.action}}"
+          path: "{{args.path}}"
+          text: "{{args.text}}"
+          position: "{{args.position}}"

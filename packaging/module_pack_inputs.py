@@ -22,7 +22,7 @@ MODULES = {
     "illustration-studio",
 }
 TARGET = "wasm32-unknown-unknown"
-FINGERPRINT_SCHEMA = "aos-module-build-inputs/v1"
+FINGERPRINT_SCHEMA = "aos-module-build-inputs/v2"
 IGNORED_DIRECTORIES = {".git", "target", "node_modules", "dist", "build"}
 TEXT_SUFFIXES = {
     ".c", ".css", ".html", ".js", ".json", ".lock", ".md", ".ps1",
@@ -33,24 +33,25 @@ PACKAGING_BUILD_SCRIPTS = {
     "packaging/build-preview.sh",
     "packaging/build-preview-macos.sh",
     "packaging/module_pack_release.py",
+    "packaging/module_pack_reuse.py",
 }
 
 
 def is_input(path: str, module: str) -> bool:
-    generated_names = {"module.wasm", "manifest.yaml", "build-inputs.sha256"}
-    if Path(path).name in generated_names and (
-        path.startswith(f"share/modules/{module}.aospkg/")
-        or path.startswith(f"modules/{module}.aospkg/")
-    ):
-        # Canvas keeps its source manifest template in the shared package dir.
-        if path == "share/modules/canvas.aospkg/manifest.yaml":
-            return True
-        return False
-
+    # Each guest has its own Cargo workspace and lockfile. The host lockfile
+    # does not participate in those resolves. Illustration alone depends on
+    # the host aos-scene crate and its inherited workspace metadata.
+    if path in {"Cargo.toml", "Cargo.lock"}:
+        return module == "illustration-studio"
+    # Generated packages must not change the fingerprint after compilation.
+    # Canvas alone uses its shared manifest/UI as source templates.
+    if path.startswith((f"modules/{module}.aospkg/", f"share/modules/{module}.aospkg/")):
+        return module == "canvas" and path in {
+            "share/modules/canvas.aospkg/manifest.yaml",
+            "share/modules/canvas.aospkg/ui/index.html",
+        }
     prefixes = (
         f"modules/{module}/",
-        f"modules/{module}.aospkg/",
-        f"share/modules/{module}.aospkg/",
         "modules/sdk/",
     )
     if path.startswith(prefixes):
@@ -114,6 +115,8 @@ def input_paths(root: Path, module: str) -> list[Path]:
 
 def stable_file_bytes(path: Path) -> bytes:
     data = path.read_bytes()
+    if path.name == "manifest.yaml" and path.parent.name == "canvas.aospkg":
+        data = re.sub(rb"(?m)^hash:.*$", b"hash: BUILD_HASH", data)
     if path.suffix.lower() in TEXT_SUFFIXES or path.name in {"Cargo.lock", "LICENSE", "Makefile"}:
         return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     return data

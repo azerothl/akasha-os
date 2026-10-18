@@ -24,6 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
              Env:\n\
                AOS_BUS_ADDR   bus host:port (default {DEFAULT_BUS})\n\
                AOS_MCP_FROM   Intent.from (default {DEFAULT_FROM})\n\
+               AOS_MCP_TOOLS  opt-in OS tool allowlist (semicolon-separated)\n\
+               AOS_MCP_CAPS   explicit OS capabilities (semicolon-separated)\n\
              \n\
              Opt-in only; not started by aos-session. Preview must be running.\n\
              See docs/mcp-server.md."

@@ -31,6 +31,11 @@ on:
           - reuse
           - cold
         default: reuse
+      module_reuse_mode:
+        description: "Signed module packs: prefer reuses exact inputs, off rebuilds, require fails on any miss"
+        type: choice
+        options: [prefer, "off", require]
+        default: prefer
       include_macos_in_full_build:
         description: "Build macOS during a full manual run without publishing a Release"
         type: boolean
@@ -53,6 +58,7 @@ env:
   # Avoid native host tuning in CI (no GPU / unstable ISA assumptions).
   GGML_NATIVE: "OFF"
   SCCACHE_GHA_ENABLED: "true"
+  AOS_MODULE_REUSE_MODE: ${{ inputs.module_reuse_mode || 'prefer' }}
 
 permissions:
   contents: read
@@ -115,6 +121,9 @@ jobs:
             throw "VERSION file is '$ver' but tag is '$($env:GITHUB_REF_NAME)'. Update VERSION before tagging."
           }
 
+      - name: Install module index verifier
+        run: python -m pip install "cryptography>=46,<50"
+
       - name: Build Preview package
         shell: pwsh
         # Do not force CMAKE_GENERATOR=Ninja on Windows: CUDA+MSVC needs VS env;
@@ -126,6 +135,7 @@ jobs:
           CMAKE_CUDA_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}\aos-release-cost\timings.tsv
+          GH_TOKEN: ${{ github.token }}
           AOS_MODULE_PACK_PLATFORM: windows-x64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
           AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
@@ -207,7 +217,7 @@ jobs:
           name: preview-windows-x64
           path: |
             dist/AgentOS-Preview-*-windows-x64.zip
-            dist/module-packs/*.zip
+            dist/module-packs/aos-module-*
             dist/release-cost-windows-x64.json
           compression-level: 0
           retention-days: 7
@@ -266,6 +276,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install module index verifier
+        run: python -m pip install "cryptography>=46,<50"
+
       - name: Build Preview package
         env:
           CUDA_HOME: /usr/local/cuda
@@ -278,6 +291,7 @@ jobs:
           CMAKE_CUDA_COMPILER_LAUNCHER: ${{ inputs.cache_profile != 'cold' && 'sccache' || '' }}
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
+          GH_TOKEN: ${{ github.token }}
           AOS_MODULE_PACK_PLATFORM: linux-x64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
           AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
@@ -369,7 +383,7 @@ jobs:
           name: preview-linux-x64
           path: |
             dist/AgentOS-Preview-*-linux-x64.tar.gz
-            dist/module-packs/*.zip
+            dist/module-packs/aos-module-*
             dist/release-cost-linux-x64.json
           compression-level: 0
           retention-days: 7
@@ -429,6 +443,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install module index verifier
+        run: python -m pip install "cryptography>=46,<50"
+
       - name: Build Preview package (Metal)
         env:
           SKIP_MODELS: "1"
@@ -437,6 +454,7 @@ jobs:
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
           AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
           VERSION: ${{ steps.ver.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
           AOS_MODULE_PACK_PLATFORM: macos-arm64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
         run: |
@@ -524,7 +542,7 @@ jobs:
           name: preview-macos-arm64
           path: |
             dist/AgentOS-Preview-*-macos-arm64.zip
-            dist/module-packs/*.zip
+            dist/module-packs/aos-module-*
             dist/release-cost-macos-arm64.json
           compression-level: 0
           retention-days: 7
@@ -629,7 +647,7 @@ jobs:
           cp -f "${MAC_ZIP}" "release-assets/$(basename "${MAC_ZIP}")"
           MAC_NAME="$(basename "${MAC_ZIP}")"
           MAC_SHA="$(sha256sum "release-assets/${MAC_NAME}" | awk '{print $1}')"
-          find artifacts -type f -name 'aos-module-*.zip' -exec cp {} release-assets/ \;
+          find artifacts -type f -name 'aos-module-*' -exec cp {} release-assets/ \;
 
           max=$((2 * 1024 * 1024 * 1024 - 1))
           size=$(stat -c%s "release-assets/${MAC_NAME}")
@@ -699,6 +717,7 @@ jobs:
           overwrite_files: true
           files: |
             release-assets/*macos-arm64.zip
+            release-assets/aos-module-catalogue-*.yaml*
             release-assets/latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -734,7 +753,7 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           mkdir -p release-assets
-          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release-assets/ \;
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name 'aos-module-catalogue-*.yaml*' \) -exec cp {} release-assets/ \;
           ls -lah release-assets
 
           # GitHub Release assets must be < 2 GiB each.
@@ -789,6 +808,29 @@ jobs:
             "notes": "Akasha OS Preview ${VERSION} — Win/Linux (CUDA + CPU modeld) + macOS Apple Silicon (Metal + CPU modeld). Models download on first run. See FIRST-RUN.md."
           }
           EOF
+
+      - name: Check immutable module packs before publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ steps.prep.outputs.version }}"
+          mkdir -p existing-module-packs
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            for pack in release-assets/aos-module-*.zip; do
+              [ -f "$pack" ] || continue
+              name="$(basename "$pack")"
+              present="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq ".assets[] | select(.name == \"$name\") | .name")"
+              if [ -n "$present" ]; then
+                gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "$name" -D existing-module-packs
+                test "$(sha256sum "$pack" | cut -d' ' -f1)" = "$(sha256sum "existing-module-packs/$name" | cut -d' ' -f1)" || {
+                  echo "::error::refusing to replace immutable module pack $name"; exit 1;
+                }
+                # Keep the published identical asset out of the general uploader.
+                rm -f "$pack" "existing-module-packs/$name"
+              fi
+            done
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

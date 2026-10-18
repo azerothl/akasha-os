@@ -20,7 +20,7 @@ fn main() {
     println!(
         "gpu_offload={} devices={}",
         LlamaBackend::supports_gpu_offload(),
-        LlamaBackend::max_devices()
+        LlamaBackend::gpu_device_count()
     );
 
     let opts = LoadOptions {

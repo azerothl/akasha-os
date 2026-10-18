@@ -12,9 +12,10 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from module_pack_inputs import MODULES
 
 
-OPTIONAL_MODULES = {"canvas", "create", "illustration-studio"}
+OPTIONAL_MODULES = MODULES
 PLATFORMS = {"windows-x64", "linux-x64", "macos-arm64"}
 
 
@@ -147,6 +148,16 @@ def platform_id() -> str:
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     tag = os.environ.get("AOS_MODULE_PACK_RELEASE_TAG", "").strip()
+    if "--export-index" in sys.argv:
+        if not tag:
+            return 0
+        output = root / "dist/module-packs"
+        output.mkdir(parents=True, exist_ok=True)
+        index = root / "share/modules/catalogue.yaml"
+        destination = output / f"aos-module-catalogue-{platform_id()}.yaml"
+        destination.write_bytes(index.read_bytes())
+        destination.with_suffix(".yaml.sig").write_bytes(index.with_suffix(".yaml.sig").read_bytes())
+        return 0
     module_names = {
         value.strip()
         for value in os.environ.get("AOS_OPTIONAL_MODULES", "").split(",")
@@ -159,6 +170,9 @@ def main() -> int:
         raise SystemExit(f"invalid release tag for optional module packs: {tag}")
     if not module_names <= OPTIONAL_MODULES:
         raise SystemExit(f"unsupported optional module(s): {sorted(module_names - OPTIONAL_MODULES)}")
+    # Base modules also get reusable archives; only AOS_OPTIONAL_MODULES controls
+    # which packages are omitted from the Preview base distribution.
+    module_names = MODULES
 
     platform_name = os.environ.get("AOS_MODULE_PACK_PLATFORM", platform_id())
     if platform_name != platform_id():
@@ -171,6 +185,9 @@ def main() -> int:
     catalogue = catalogue_path.read_text(encoding="utf-8")
     output_dir = root / "dist/module-packs"
     records: list[dict[str, object]] = []
+    reuse_report = root / "dist/module-reuse/report.json"
+    reused = {record["module"]: record for record in json.loads(reuse_report.read_text())
+        if record["outcome"] == "restored"} if reuse_report.is_file() else {}
     for module in sorted(module_names):
         package_dir = root / f"share/modules/{module}.aospkg"
         if not (package_dir / "manifest.yaml").is_file() or not (package_dir / "module.wasm").is_file():
@@ -187,7 +204,16 @@ def main() -> int:
             raise SystemExit(f"invalid build input fingerprint for {module}")
         asset_name = f"aos-module-{module}-{platform_name}-{input_hash}.zip"
         archive_path = output_dir / asset_name
-        archive_hash, archive_size = create_archive(package_dir, archive_path)
+        if module in reused:
+            record = reused[module]
+            if record["input_sha256"] != input_hash:
+                raise SystemExit(f"build inputs changed after restoring {module}")
+            archive_hash = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+            if archive_hash != record["archive_sha256"].removeprefix("sha256:"):
+                raise SystemExit(f"restored immutable archive changed for {module}")
+            archive_size = archive_path.stat().st_size
+        else:
+            archive_hash, archive_size = create_archive(package_dir, archive_path)
         asset_url = f"https://github.com/{repository}/releases/download/{tag}/{asset_name}"
         catalogue = replace_module_metadata(
             catalogue,

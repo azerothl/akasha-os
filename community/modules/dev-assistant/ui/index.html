@@ -22,12 +22,22 @@
       "patch_submit": "Apply patch",
       "undo_hint": "undo_group_id from last apply",
       "undo_submit": "Undo patch",
-      "git_heading": "Git (read-only)",
+      "git_heading": "Git",
       "git_status_submit": "Git status",
       "git_diff_submit": "Git diff",
       "git_root_hint": "workspace id or /host/<id>",
       "git_path_hint": "optional path filter",
-      "git_empty": "No git output (needs fs.read + a .git work tree)."
+      "git_empty": "No git output (needs fs.read + a .git work tree).",
+      "run_heading": "Project tasks",
+      "run_submit": "Run configured task",
+      "task_hint": "Name in the workspace process policy",
+      "commit_submit": "Commit staged changes",
+      "commit_message_hint": "Commit message (stages no files)",
+      "execution_help": "Commands require scoped capabilities, an allowlisted task and confirmation in the Control bar.",
+      "studio_heading": "Code Studio",
+      "studio_submit": "Inspect Code Studio project",
+      "studio_reindex": "Refresh its index",
+      "studio_help": "Map this folder to the same project in studio-adapter.json. Then open Code Studio and select this project ID."
     },
     "fr": {
       "tab_dev_assistant": "Assistant dev",
@@ -47,12 +57,22 @@
       "patch_submit": "Appliquer le patch",
       "undo_hint": "undo_group_id du dernier apply",
       "undo_submit": "Annuler le patch",
-      "git_heading": "Git (lecture seule)",
+      "git_heading": "Git",
       "git_status_submit": "Statut git",
       "git_diff_submit": "Diff git",
       "git_root_hint": "id workspace ou /host/<id>",
       "git_path_hint": "filtre de chemin optionnel",
-      "git_empty": "Pas de sortie git (fs.read + dépôt .git requis)."
+      "git_empty": "Pas de sortie git (fs.read + dépôt .git requis).",
+      "run_heading": "Tâches du projet",
+      "run_submit": "Exécuter la tâche configurée",
+      "task_hint": "Nom défini dans la politique du workspace",
+      "commit_submit": "Commit des changements préparés",
+      "commit_message_hint": "Message du commit (aucun ajout automatique)",
+      "execution_help": "Les commandes demandent des capacités limitées au workspace, une tâche autorisée et une confirmation dans la barre de contrôle.",
+      "studio_heading": "Code Studio",
+      "studio_submit": "Inspecter le projet Code Studio",
+      "studio_reindex": "Actualiser son index",
+      "studio_help": "Liez ce dossier au même projet dans studio-adapter.json. Ouvrez ensuite Code Studio et sélectionnez cet identifiant de projet."
     }
   },
   "root": {
@@ -64,19 +84,26 @@
       },
       {
         "kind": "text",
-        "label": "P0 contract: bind → cap review → search/patch. No IDE widgets."
+        "label_key": "execution_help"
       },
       {
         "kind": "form",
         "tool": "dev-assistant.bind",
         "label_key": "bind_submit",
-        "refresh_binds": ["dev-assistant.list"],
+        "refresh_binds": [
+          "dev-assistant.list"
+        ],
         "args": {
           "type": "object",
           "properties": {
-            "host_path": { "type": "string", "x-hint-key": "bind_path_hint" }
+            "host_path": {
+              "type": "string",
+              "x-hint-key": "bind_path_hint"
+            }
           },
-          "required": ["host_path"]
+          "required": [
+            "host_path"
+          ]
         }
       },
       {
@@ -93,7 +120,12 @@
         "kind": "table",
         "bind": "dev-assistant.list",
         "source": "bindings",
-        "columns": ["workspace_id", "display_name", "host_path", "vfs_root"]
+        "columns": [
+          "workspace_id",
+          "display_name",
+          "host_path",
+          "vfs_root"
+        ]
       },
       {
         "kind": "heading",
@@ -103,14 +135,25 @@
         "kind": "form",
         "tool": "dev-assistant.search",
         "label_key": "search_submit",
-        "refresh_binds": ["dev-assistant.search"],
+        "refresh_binds": [
+          "dev-assistant.search"
+        ],
         "args": {
           "type": "object",
           "properties": {
-            "root": { "type": "string", "x-hint-key": "search_root_hint" },
-            "query": { "type": "string", "x-hint-key": "search_query_hint" }
+            "root": {
+              "type": "string",
+              "x-hint-key": "search_root_hint"
+            },
+            "query": {
+              "type": "string",
+              "x-hint-key": "search_query_hint"
+            }
           },
-          "required": ["root", "query"]
+          "required": [
+            "root",
+            "query"
+          ]
         }
       },
       {
@@ -123,7 +166,11 @@
         "kind": "table",
         "bind": "dev-assistant.search",
         "source": "hits",
-        "columns": ["path", "line", "preview"]
+        "columns": [
+          "path",
+          "line",
+          "preview"
+        ]
       },
       {
         "kind": "heading",
@@ -136,10 +183,21 @@
         "args": {
           "type": "object",
           "properties": {
-            "path": { "type": "string", "x-hint-key": "patch_path_hint" },
-            "content": { "type": "string", "x-hint-key": "patch_content_hint", "x-widget": "textarea" }
+            "path": {
+              "type": "string",
+              "x-hint-key": "patch_path_hint"
+            },
+            "content": {
+              "type": "string",
+              "x-hint-key": "patch_content_hint",
+              "x-widget": "textarea",
+              "format": "code"
+            }
           },
-          "required": ["path", "content"]
+          "required": [
+            "path",
+            "content"
+          ]
         }
       },
       {
@@ -149,9 +207,14 @@
         "args": {
           "type": "object",
           "properties": {
-            "undo_group_id": { "type": "string", "x-hint-key": "undo_hint" }
+            "undo_group_id": {
+              "type": "string",
+              "x-hint-key": "undo_hint"
+            }
           },
-          "required": ["undo_group_id"]
+          "required": [
+            "undo_group_id"
+          ]
         }
       },
       {
@@ -165,9 +228,14 @@
         "args": {
           "type": "object",
           "properties": {
-            "root": { "type": "string", "x-hint-key": "git_root_hint" }
+            "root": {
+              "type": "string",
+              "x-hint-key": "git_root_hint"
+            }
           },
-          "required": ["root"]
+          "required": [
+            "root"
+          ]
         }
       },
       {
@@ -177,10 +245,14 @@
         "label_key": "git_empty"
       },
       {
-        "kind": "table",
+        "kind": "file_tree",
         "bind": "dev-assistant.git_status",
         "source": "entries",
-        "columns": ["status", "path"]
+        "columns": [
+          "status",
+          "path"
+        ],
+        "selected_key": "selected_path"
       },
       {
         "kind": "form",
@@ -189,13 +261,134 @@
         "args": {
           "type": "object",
           "properties": {
-            "root": { "type": "string", "x-hint-key": "git_root_hint" },
-            "path": { "type": "string", "x-hint-key": "git_path_hint" },
-            "staged": { "type": "boolean" }
+            "root": {
+              "type": "string",
+              "x-hint-key": "git_root_hint"
+            },
+            "path": {
+              "type": "string",
+              "x-hint-key": "git_path_hint"
+            },
+            "staged": {
+              "type": "boolean"
+            }
           },
-          "required": ["root"]
+          "required": [
+            "root"
+          ]
         }
+      },
+      {
+        "kind": "diff_view",
+        "bind": "dev-assistant.git_diff"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.git_commit",
+        "label_key": "commit_submit",
+        "refresh_binds": [
+          "dev-assistant.git_status"
+        ],
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "x-hint-key": "git_root_hint"
+            },
+            "message": {
+              "type": "string",
+              "x-hint-key": "commit_message_hint"
+            }
+          },
+          "required": [
+            "root",
+            "message"
+          ]
+        }
+      },
+      {
+        "kind": "heading",
+        "label_key": "run_heading"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.run",
+        "label_key": "run_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "x-hint-key": "git_root_hint"
+            },
+            "task": {
+              "type": "string",
+              "x-hint-key": "task_hint"
+            }
+          },
+          "required": [
+            "root",
+            "task"
+          ]
+        }
+      },
+      {
+        "kind": "problems_list",
+        "bind": "dev-assistant.run",
+        "selected_key": "selected_path"
+      },
+      {
+        "kind": "heading",
+        "label_key": "studio_heading"
+      },
+      {
+        "kind": "text",
+        "label_key": "studio_help"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.studio_project",
+        "label_key": "studio_submit",
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "x-hint-key": "search_root_hint"
+            }
+          },
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.studio_reindex",
+        "label_key": "studio_reindex",
+        "args": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "x-hint-key": "search_root_hint"
+            }
+          },
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "kind": "table",
+        "bind": "dev-assistant.studio_project",
+        "columns": [
+          "field",
+          "value"
+        ]
       }
     ]
-  }
+  },
+  "contract": 2
 }
