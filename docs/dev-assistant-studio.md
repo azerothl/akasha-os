@@ -1,7 +1,8 @@
 # Dev Assistant commands and Code Studio adapter (#247)
 
-**Source candidate, 18 October 2026.** P0 and read-only Git are already on main
-(#407, #431). The chosen IDE direction is reuse of Akasha Code Studio through
+**18 October 2026.** P0 and read-only Git are on main (#407, #431).
+The supervised command/widget/Studio adapter slice was merged in [#450](https://github.com/azerothl/akasha-os/pull/450).
+The API 3 additions below are a follow-up source candidate. The chosen IDE direction is reuse of Akasha Code Studio through
 an adapter, confirmed by the user. This document does not claim that the #247
 product-gap umbrella is complete or that a new Preview release has shipped.
 
@@ -96,8 +97,30 @@ Loopback routing does not provide a network sandbox for that separate process.
 [`community/modules/dev-assistant`](../community/modules/dev-assistant/) is a
 source reference, not automatically installed in Preview. Package/install it
 with [write-a-module.md](write-a-module.md) after building this host candidate.
-It requires **host API 2** and **DeclUI contract 2**. Older modules retain their
-API 1 / UI 1 compatibility.
+Version 0.3.0 requires **host API 3**, **DeclUI contract 2**, and the rebuilt
+ext-rt 1.1.0 WASM. API 1/2 and UI 1 modules remain supported.
+The new handlers use explicit typed `{$arg: field}` references so optional
+fields are omitted and JSON arrays/objects keep their types; template-looking
+file contents are passed literally.
+
+The source manifest intentionally requests no host access. Bind first, then put
+only the chosen workspace grants in the local source manifest and repackage/update
+it with explicit capability review, for example:
+
+```yaml
+permissions:
+  required_caps:
+    - fs.read:/host/my-project/**
+    - fs.write:/host/my-project/**
+    - debug.run:/host/my-project/**
+```
+
+Add `process.run`, `git.commit`, `studio.lsp`, `studio.reindex`,
+`studio.memory.update`, `refactor.manage` or assigned `refactor.submit` scopes only
+when needed. Granting an actor a capability does not silently grant it to an
+installed WASM module. The host refuses approval of undeclared manifest grants.
+A generic unconfigured reference can bind/list projects; other operations fail
+closed until the package declares and receives its exact grants.
 
 `code_editor`, `diff_view`, `file_tree` and `problems_list` render host-supplied
 data; they cannot read files, apply patches or execute commands themselves.
@@ -106,17 +129,134 @@ paths returned by Git status, not every repository file. File/problem
 selection stores a path; it does not implement full IDE navigation. Diffs
 display at most 5,000 lines; editor text is limited to 64 KiB.
 
-## Remaining acceptance work
+## Project memory
 
-- Real installed module → confirmation → command/commit UI flow; headless
-  rendering and command tests alone do not establish native UI activation.
-- Real Code Studio daemon integration, including project identity, index
-  refresh, language-server availability and navigation. HTTP contract tests
-  use a deterministic server and are not proof of installed Studio.
-- Light DAP and multi-agent refactoring across subtrees remain outside this
-  adapter slice. Do not mark #247 complete on the strength of these additions.
-- Structural/symbol index quality, ignore/secret policy and very large
-  repository evidence require the Code Studio delivery and its own tests.
+`studio.memory` reads the mapped project's summaries and code-index status under
+`studio-project:<project-id>`. It requires scoped `fs.read`.
+`studio.memory.update` requires scoped read/write plus
+`studio.memory.update:/host/<id>/**` and a host confirmation. It PATCHes exactly
+one of `project_summary`, `evolution_summary`, or `policy_notes` (8 KiB maximum).
+Runtime settings, verification commands and project IDs cannot be edited through
+this intent. Persistence and structural indexing are provided by Code Studio;
+this adapter does not create another embedding database or claim retrieval quality.
+
+## Light DAP
+
+Configure `workspace-debug-policy.json` beside the process policy, outside the
+bound project. No launch is available by default:
+
+```json
+{
+  "workspaces": {
+    "my-project": {
+      "python": {
+        "adapter": {"program": "C:/Python/python.exe", "args": ["-m", "debugpy.adapter"]},
+        "program": "main.py",
+        "args": [],
+        "stop_on_entry": true
+      }
+    }
+  }
+}
+```
+
+Install the chosen adapter separately. Its executable must be absolute and the
+debuggee must be an existing file inside the bound project. `debug.start`
+requires `debug.run:/host/<id>/**`, scoped read/write and confirmation showing
+the fixed adapter/program arguments. The guest supplies only the configured name.
+
+`debug.request` accepts `threads`, `stackTrace`, `scopes`, `variables`, `events`,
+`continue`, `next`, `stepIn`, `stepOut`, `pause`, and `setBreakpoints` with their
+explicit IDs/relative source path. `debug.stop` always permits the owner to clean
+up, including after capability revocation. Sessions belong to an actor and
+workspace, expire after 15 minutes and are limited to four. Frames are limited
+to 1 MiB, events to 64 (oversized events truncated), stack traces to 50 frames,
+variable pages to 100, and breakpoints to 64. Replies and event source paths are
+mapped back to `/host/<id>`; outside source paths are redacted.
+
+Attach, expression evaluation, variable mutation, `runInTerminal`, arbitrary DAP
+messages and guest-provided executables/environment are unavailable. Debugging
+uses the account's process rights; it is not a process or network sandbox.
+`offline_strict` refuses launches/requests and switching mode stops owned debug
+sessions. The reference native forms expose start, inspect/step and stop.
+
+## Reviewed proposals over agent subtrees
+
+`refactor.create` assigns 2..8 **existing distinct** `agent:<id>` identities to
+disjoint existing relative directories. It requires scoped `refactor.manage`
+and read capabilities. For example:
+
+```json
+{"root":"my-project","assignments":[
+  {"part_id":"front","actor":"agent:front","subtree":"frontend"},
+  {"part_id":"back","actor":"agent:back","subtree":"backend"}
+]}
+```
+
+The response returns the plan ID and scoped grants to review; it neither starts
+inference nor grants permissions. Each assigned actor calls `refactor.submit`:
+
+```json
+{"root":"my-project","plan_id":"returned-plan-id","part_id":"front","changes":[
+  {"path":"frontend/main.ts","base_sha256":"sha256-of-current-UTF8-text","content":"complete proposed text"}
+]}
+```
+
+Submission checks actor identity, subtree membership, `fs.read` and
+`refactor.submit` for every target, and the current base hash. It writes proposals
+only. Files must already exist, be UTF-8 and at most 64 KiB; up to 40 files per
+part. Root/nested `.gitignore` and `.ignore` rules apply. Common build directories,
+`.git`, `.env*`, key/certificate filenames and obvious private key bodies are
+excluded. **This is not a complete secret scanner or a sandbox for the agents' other tools.**
+Existing broad grants are not revoked by creating a plan.
+
+The coordinator or `human:ui` calls `refactor.review` to inspect before/after
+contents and a replacement diff, then `refactor.apply` with the exact returned
+`review_sha256`. All parts must have submitted. Apply/undo require scoped
+`refactor.manage`, read/write capabilities and a live host confirmation. Changing
+a proposal invalidates the review fingerprint. The native module exposes review,
+apply and undo forms; its diff display keeps the existing 5,000-line display cap.
+The complete before/after proposal remains available in the tool response.
+
+A durable journal at `sessions/workspace-refactor-plans.json` stores before-images
+before host writes. Application checks all base files first, rechecks each file
+before replacement, and attempts rollback on write failure. `refactor.undo` with
+a fresh review fingerprint supports both completed and interrupted plans, refusing
+to overwrite an external edit. This is optimistic multi-file application with
+recovery, not a serializable filesystem transaction. Journals contain source
+text in the local session directory: retain them for undo and review cleanup
+manually. Limits: 2 MiB per applied before/after batch, 8 MiB journal, 16 retained plans.
+
+## External MCP under offline-strict
+
+Production worker/room discovery and tool calls query authoritative `net.status`.
+Unknown/unavailable policy and `offline_strict` refuse host MCP. Discovery is
+bounded to 30 seconds, tools to 60 seconds and protocol lines to 1 MiB. Active
+calls and idle sessions recheck mode every second (policy calls time out after
+three seconds). Refusal closes the owned Windows job/Unix process group; process
+exit and session drop also clean up the group. A transition is detected within
+the polling/policy deadline, not atomically at the network layer. Servers can
+have account rights, and escaped processes are not contained by this mechanism.
+
+Studio LSP/reindex are also refused in offline-strict because their separate
+daemon can launch host tools. Read-only project metadata remains loopback-only.
+The separate MCP *server* façade is documented in [mcp-server.md](mcp-server.md).
+
+## Evidence and remaining acceptance work
+
+See [the measured follow-up](tickets/dev-assistant-follow-up-2026-10-18.md) and
+[its machine-readable evidence](tickets/evidence/2026-10-18-dev-assistant-validation.json).
+Real debugpy stepping, real daemon indexing/LSP and memory across restart were
+observed locally. WASM→host confirmations are exercised against the real module
+runtime and filesystem, with deterministic proposal bodies.
+
+Remaining: a human-operated freshly installed native module path on the target
+OSes, semantic multi-agent refactoring with real models, retrieval/secret-scan
+quality and representative large monorepos. The tested LSP daemon capability
+still depends on [Akasha PR #169](https://github.com/azerothl/Akasha/pull/169),
+which remains open. No upstream PR was merged as part of this follow-up.
+The reference remains optional source, not a newly shipped Preview release.
+#247, #434 and #435 remain open.
 
 Related: [ticket delivery log](tickets/open-ticket-delivery-2026-10-18.md),
 [workspace contract](dev-assistant-p0.md), [MCP server](mcp-server.md).

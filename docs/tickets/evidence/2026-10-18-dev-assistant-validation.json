@@ -1,0 +1,187 @@
+{
+  "observed_at_utc": "2026-10-18T18:36:28.183041+00:00",
+  "source_base": "9b91f972365cfcc171676dc9a1fb0c2b50a34534",
+  "branch": "codex/dev-assistant-studio-completion",
+  "delivery": "local source candidate; no new PR, release or remote CI yet",
+  "tickets": {
+    "247": "open: remaining acceptance work below",
+    "434": "open: user decision, additional machines unavailable",
+    "435": "open: user decision, second GPU unavailable"
+  },
+  "local_windows_checks": {
+    "platform": {
+      "passed": 295,
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "agent": {
+      "passed": 376,
+      "command": "cargo test -p aos-agent --lib --locked"
+    },
+    "protocol": {
+      "passed": 194,
+      "command": "cargo test -p aos-proto --lib --locked"
+    },
+    "ui": {
+      "passed": 542,
+      "ignored": 1,
+      "command": "cargo test -p aos-ui-egui --no-default-features --bin aos-ui-egui --locked"
+    },
+    "clippy": {
+      "status": "passed",
+      "command": "cargo clippy -p aos-platform -p aos-agent -p aos-proto -p aos-ui-egui --no-default-features --all-targets --locked -- -D warnings"
+    },
+    "pack_contracts": {
+      "passed": 9,
+      "command": "python -m unittest discover -s packaging/tests -v"
+    },
+    "wasm_host_confirmation": "real packaged module -> host -> deny unchanged -> approve file apply",
+    "mcp_policy": "real IPC and stdio process; online -> offline idle process termination observed",
+    "ext_rt_unit_tests": 2
+  },
+  "debugpy_real": {
+    "adapter": "debugpy",
+    "ok": true,
+    "stack": {
+      "stackFrames": [
+        {
+          "column": 1,
+          "id": 2,
+          "line": 3,
+          "name": "<module>",
+          "source": {
+            "path": "/host/fixture/main.py",
+            "sourceReference": 0
+          }
+        }
+      ],
+      "totalFrames": 1
+    },
+    "start": {
+      "expires_after_sec": 900,
+      "ok": true,
+      "session_id": "debug-47232-1",
+      "workspace_id": "fixture"
+    },
+    "step_stops": 2,
+    "stop": {
+      "ok": true,
+      "session_id": "debug-47232-1",
+      "stopped": true
+    },
+    "variables": {
+      "variables": [
+        {
+          "evaluateName": "special variables",
+          "name": "special variables",
+          "type": "",
+          "value": "",
+          "variablesReference": 5
+        },
+        {
+          "evaluateName": "value",
+          "name": "value",
+          "type": "int",
+          "value": "42",
+          "variablesReference": 0
+        }
+      ]
+    },
+    "wrong_actor_denied": true
+  },
+  "studio_real": {
+    "ok": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-studio-adapter-real-j3qq52v0",
+    "daemon_sha256": "964889430da97609aa8e0ce22eab3b1d610eb6b5fa60701a195249878bed2928",
+    "daemon_status": {
+      "status": "ok"
+    },
+    "restart_status": {
+      "status": "ok"
+    },
+    "probe": {
+      "before_index": {
+        "built_at": "2026-10-18T18:26:57.939357600+00:00",
+        "chunks_indexed": 3,
+        "files_indexed": 3,
+        "stale": true,
+        "status": "stale"
+      },
+      "definitions": {
+        "document_version": 1,
+        "file_version": "745dc855c05fa0d062bd26b63f30bd712a6bcece186e5fd78f9f04c4ef46fe5f",
+        "language": "typescript",
+        "path": "main.ts",
+        "result": {
+          "excluded_outside_workspace": 0,
+          "locations": [
+            {
+              "path": "main.ts",
+              "range": {
+                "end": {
+                  "character": 19,
+                  "line": 0
+                },
+                "start": {
+                  "character": 13,
+                  "line": 0
+                }
+              }
+            }
+          ],
+          "status": "ready"
+        },
+        "schema_version": 1,
+        "server": "typescript-language-server"
+      },
+      "index": {
+        "built_at": "2026-10-18T18:27:08.369324600+00:00",
+        "chunks_indexed": 2005,
+        "files_indexed": 2005,
+        "stale": false,
+        "status": "ready"
+      },
+      "memory": "Akasha OS fixture: project memory stays scoped",
+      "memory_update": {
+        "namespace": "studio-project:ca87ccd3-e460-4fc0-a1f2-c05cbe049a34",
+        "ok": true,
+        "result": {
+          "evolution_summary": null,
+          "id": "ca87ccd3-e460-4fc0-a1f2-c05cbe049a34",
+          "name": "Akasha OS adapter fixture",
+          "ok": true,
+          "policy_notes": null,
+          "project_summary": "Akasha OS fixture: project memory stays scoped",
+          "tech_stack": null,
+          "ticket_enforcement_mode": "off",
+          "verify_argv": null,
+          "verify_skip": false,
+          "verify_timeout_sec": null
+        }
+      },
+      "ok": true,
+      "project": "ca87ccd3-e460-4fc0-a1f2-c05cbe049a34",
+      "unknown_project_denied": true
+    },
+    "memory_survived_restart": true,
+    "fixture_files": 2000,
+    "probe_elapsed_ms": 10500,
+    "scope": "real daemon/index/TypeScript LSP on a generated fixture; no LLM task or user data"
+  },
+  "runtime": {
+    "ext_rt_version": "1.1.0",
+    "wasm_sha256": "fa60f81d461ebe0763ab2b4cd81ed874d93d4d5c1c7696dcf5e59ee0982dc83c",
+    "module_host_api": 3,
+    "decl_ui_contract": 2
+  },
+  "limits": [
+    "DAP smoke uses a generated Python fixture, not installed native UI clicks.",
+    "Refactor proposals are deterministic test bodies; no claim of real model semantic refactoring.",
+    "Studio scale smoke has 2000 generated TypeScript sources; not a representative real monorepo or retrieval-quality benchmark.",
+    "Tested daemon LSP still depends on open azerothl/Akasha PR 169; no upstream merge performed.",
+    "Ignore and credential-path/private-key exclusions are not a full secret scanner.",
+    "Host process supervision and network-mode polling do not provide an OS/network sandbox.",
+    "Initial quota timing failure under parallel load; complete serial rerun passed.",
+    "New source has no Linux/macOS CI evidence yet."
+  ],
+  "source_commit": "e21b63b0075ec306d29c6d70e8dd9e03de31c1ea"
+}

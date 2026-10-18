@@ -1,17 +1,27 @@
 # Dev Assistant (reference module)
 
 **License:** MIT (community tree)  
-**Contract:** [docs/dev-assistant-p0.md](../../../docs/dev-assistant-p0.md) (DA.4 / #247)
+**Version:** 0.3.0 — host API 3, DeclUI contract 2, ext-rt 1.1.0.
 
-Script + DeclUI v1 reference for large **host** projects. Not shipped in the
-signed Preview catalogue by default — copy into `var/modules/src/dev-assistant/`
-(or package from this tree) and install with cap review.
+Optional script module for bound host projects. It is not installed by default.
+Copy to `var/modules/src/dev-assistant/`, package with the rebuilt host/runtime,
+and install with capability review. Existing installed copies require a package update.
 
-## Flow
+1. Bind an absolute host folder. Add only that workspace's required capabilities
+   to the local source manifest, repackage/update and approve the declared grants.
+   The generic reference requests no host access; actor grants alone do not grant
+   permissions to the installed module.
+2. Search, propose replacements with undo, inspect Git status/diff.
+3. Configure named host tasks, staged-only commits or DAP launches in the host
+   session policies. Review scoped grants and confirm each launch/mutation.
+4. Map the same directory to an existing Code Studio project for persistent
+   project memory, indexing and read-only LSP navigation.
+5. Existing agents can submit separate subtree proposals; review their exact
+   fingerprint before confirmed application or recovery/undo.
 
-1. Bind an absolute host folder → note `workspace_id` and returned caps.
-2. Accept `fs.read/write:/host/<id>/**` via cap review (fail-closed).
-3. Search with `dev-assistant.search`; patch with `dev-assistant.apply_patch`.
-4. Undo via `undo_group_id`.
+Native forms expose commands, memory, debugging and refactor review. Code Studio
+retains the full editor UX. MCP host clients require online mode; host tools
+have account rights and are not network-sandboxed.
 
-No `code_editor` / git / `process.run` (P1–P2).
+[Configuration, capabilities and limits](../../../docs/dev-assistant-studio.md) ·
+[Observed evidence and remaining work](../../../docs/tickets/dev-assistant-follow-up-2026-10-18.md).
