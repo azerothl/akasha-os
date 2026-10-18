@@ -192,6 +192,11 @@ def main() -> int:
         "component_measurement_overhead_ms": measurement_overhead_ms,
         "timings": parse_timings(args.timings),
         "sccache_summary": cache_summary(args.sccache_stats),
+        "module_reuse_mode": os.environ.get("AOS_MODULE_REUSE_MODE", "off"),
+        "module_reuse": (
+            json.loads((Path(__file__).resolve().parents[1] / "dist/module-reuse/report.json").read_text(encoding="utf-8"))
+            if (Path(__file__).resolve().parents[1] / "dist/module-reuse/report.json").is_file() else []
+        ),
         "first_run_gguf": {"count": len(gguf), "paths": gguf},
         "compression_notes": (
             "archive_compressed_bytes is exact for ZIP releases. For tar.gz, per-component archive compressed sizes are unavailable; standalone_zip_bytes is a separate, reproducible comparison and is not additive to the release archive."
@@ -229,6 +234,12 @@ def main() -> int:
         lines.extend(["", "| Build phase | Duration |", "|---|---:|"])
         for item in timings:
             lines.append(f"| `{item['phase']}` | {item['duration_ms'] / 1000:.1f} s |")
+    if document["module_reuse"]:
+        lines.extend(["", f"Module reuse mode: `{document['module_reuse_mode']}`.", "",
+            "| Module | Decision | Source release | Lookup/restore |", "|---|---|---|---:|"])
+        for item in document["module_reuse"]:
+            lines.append(f"| `{item['module']}` | {item['outcome']} | {item.get('source_release', '—')} | {item.get('seconds', 0):.3f} s |")
+        lines.append("These are observed restore decisions; savings require a comparable CI build.")
     if document["sccache_summary"]:
         lines.extend(["", "sccache:", "```text", *document["sccache_summary"], "```"])
     markdown = "\n".join(lines) + "\n"

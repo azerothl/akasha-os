@@ -17,7 +17,7 @@ CANVAS_TARGET="${CANVAS_DIR}/target"
 echo "== build wasm32 (canvas) =="
 CARGO_TARGET_DIR="${CANVAS_TARGET}" \
   cargo build --manifest-path "${CANVAS_DIR}/Cargo.toml" \
-  --target wasm32-unknown-unknown --release
+  --target wasm32-unknown-unknown --release --locked
 
 WASM_SRC="${CANVAS_TARGET}/wasm32-unknown-unknown/release/module_canvas.wasm"
 if [[ ! -f "$WASM_SRC" ]]; then

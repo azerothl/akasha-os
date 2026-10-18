@@ -12,7 +12,7 @@ function Join-OsPath {
 }
 
 Write-Host "== build ext-rt wasm32 =="
-cargo build --manifest-path (Join-OsPath $root modules ext-rt Cargo.toml) --target wasm32-unknown-unknown --release
+cargo build --manifest-path (Join-OsPath $root modules ext-rt Cargo.toml) --target wasm32-unknown-unknown --release --locked
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm ext-rt" }
 
 function Resolve-WasmArtifact {

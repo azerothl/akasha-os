@@ -16,7 +16,7 @@ Write-Host "== build wasm32 (canvas) =="
 # (stale module_canvas.wasm there drops canvas.path from the packaged guest).
 $canvasTarget = Join-OsPath $root modules canvas target
 $env:CARGO_TARGET_DIR = $canvasTarget
-cargo build --manifest-path (Join-OsPath $root modules canvas Cargo.toml) --target wasm32-unknown-unknown --release
+cargo build --manifest-path (Join-OsPath $root modules canvas Cargo.toml) --target wasm32-unknown-unknown --release --locked
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm" }
 
 function Resolve-WasmArtifact {

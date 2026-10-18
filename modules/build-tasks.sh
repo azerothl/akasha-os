@@ -12,7 +12,7 @@ echo "== build wasm32 (tasks) =="
 TASKS_TARGET="${CARGO_TARGET_DIR:-${ROOT}/target}"
 CARGO_TARGET_DIR="${TASKS_TARGET}" \
   cargo build --manifest-path "${TASKS_DIR}/Cargo.toml" \
-  --target wasm32-unknown-unknown --release
+  --target wasm32-unknown-unknown --release --locked
 
 WASM_SRC=""
 for cand in \

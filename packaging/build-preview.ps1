@@ -85,33 +85,46 @@ if (-not $SkipBuild) {
     }
 
     Stop-ReleaseCostPhase
+    Start-ReleaseCostPhase "module-pack-restore"
+    python (Join-Path $root "packaging/module_pack_reuse.py")
+    if ($LASTEXITCODE -ne 0) { throw "signed module pack restoration failed" }
+    $reusedModules = @(Get-Content (Join-Path $root "dist/module-reuse/restored.txt"))
+    Stop-ReleaseCostPhase
     Start-ReleaseCostPhase "wasm-modules"
-    Write-Host "== package notes module =="
-    pwsh -NoProfile -File (Join-Path $root "modules\build-notes.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "build-notes.ps1 failed ($LASTEXITCODE)" }
-    Write-Host "== package tasks module =="
-    pwsh -NoProfile -File (Join-Path $root "modules\build-tasks.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "build-tasks.ps1 failed ($LASTEXITCODE)" }
-    if (Test-Path (Join-Path $root "modules\build-ext-rt.ps1")) {
+    if ($reusedModules -notcontains "notes") {
+        Write-Host "== package notes module =="
+        pwsh -NoProfile -File (Join-Path $root "modules\build-notes.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "build-notes.ps1 failed ($LASTEXITCODE)" }
+    }
+    if ($reusedModules -notcontains "tasks") {
+        Write-Host "== package tasks module =="
+        pwsh -NoProfile -File (Join-Path $root "modules\build-tasks.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "build-tasks.ps1 failed ($LASTEXITCODE)" }
+    }
+    if (($reusedModules -notcontains "ext-rt") -and (Test-Path (Join-Path $root "modules\build-ext-rt.ps1"))) {
         Write-Host "== package ext-rt module =="
         pwsh -NoProfile -File (Join-Path $root "modules\build-ext-rt.ps1")
         if ($LASTEXITCODE -ne 0) { throw "build-ext-rt.ps1 failed ($LASTEXITCODE)" }
     }
-    if (Test-Path (Join-Path $root "modules\build-canvas.ps1")) {
+    if (($reusedModules -notcontains "canvas") -and (Test-Path (Join-Path $root "modules\build-canvas.ps1"))) {
         Write-Host "== package canvas module =="
         pwsh -NoProfile -File (Join-Path $root "modules\build-canvas.ps1")
         if ($LASTEXITCODE -ne 0) { throw "build-canvas.ps1 failed ($LASTEXITCODE)" }
     }
-    Write-Host "== package create module =="
-    pwsh -NoProfile -File (Join-Path $root "modules\build-create.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "build-create.ps1 failed ($LASTEXITCODE)" }
-    Write-Host "== package illustration-studio module =="
-    $illustBuild = Join-Path $root "modules\build-illustration-studio.sh"
-    if (-not (Test-Path -LiteralPath $illustBuild)) {
-        throw "missing $illustBuild"
+    if ($reusedModules -notcontains "create") {
+        Write-Host "== package create module =="
+        pwsh -NoProfile -File (Join-Path $root "modules\build-create.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "build-create.ps1 failed ($LASTEXITCODE)" }
+    }
+    if ($reusedModules -notcontains "illustration-studio") {
+        Write-Host "== package illustration-studio module =="
+        $illustBuild = Join-Path $root "modules\build-illustration-studio.sh"
+        if (-not (Test-Path -LiteralPath $illustBuild)) {
+            throw "missing $illustBuild"
     }
     bash $illustBuild
     if ($LASTEXITCODE -ne 0) { throw "build-illustration-studio.sh failed ($LASTEXITCODE)" }
+    }
     if ($env:AOS_MODULE_PACK_RELEASE_TAG) {
         Start-ReleaseCostPhase "module-pack-archives"
         python (Join-Path $root "packaging\module_pack_release.py")
@@ -128,6 +141,8 @@ if (-not $SkipBuild) {
         Remove-Item Env:UPDATE_CATALOGUE -ErrorAction SilentlyContinue
         Pop-Location
     }
+    python (Join-Path $root "packaging/module_pack_release.py") --export-index
+    if ($LASTEXITCODE -ne 0) { throw "signed module index export failed" }
     Stop-ReleaseCostPhase
 }
 

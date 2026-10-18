@@ -22,6 +22,50 @@ env:
   RUSTFLAGS: "-Clinker=clang -Clink-arg=-fuse-ld=mold"
 
 jobs:
+  model-bindings:
+    name: Model bindings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            features: mtmd
+          - os: windows-latest
+            features: mtmd
+          - os: macos-latest
+            features: mtmd,metal
+    env:
+      RUSTFLAGS: ""
+      SCCACHE_GHA_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev cmake ninja-build
+      - name: Compile and exercise llama.cpp and mtmd bindings
+        run: cargo test -p aos-llama --no-default-features --features "${{ matrix.features }}" --locked
+
+  module-pack-contract:
+    name: Signed module packs (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "cryptography>=46,<50"
+      - run: python -m unittest discover -s packaging/tests -v
+
   illustration-platforms:
     name: Illustration Studio (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

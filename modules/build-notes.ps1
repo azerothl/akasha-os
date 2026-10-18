@@ -17,7 +17,7 @@ function Join-OsPath {
 }
 
 Write-Host "== build wasm32 =="
-cargo build --manifest-path (Join-OsPath $root modules notes Cargo.toml) --target wasm32-unknown-unknown --release
+cargo build --manifest-path (Join-OsPath $root modules notes Cargo.toml) --target wasm32-unknown-unknown --release --locked
 if ($LASTEXITCODE -ne 0) { throw "échec build wasm" }
 
 function Resolve-WasmArtifact {
