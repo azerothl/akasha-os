@@ -1,6 +1,30 @@
 {
-  "version": "0.3.5",
+  "version": "0.3.6",
   "models": [
+    {
+      "id": "local:spark-x2.5-4b-q4_k_m",
+      "name": "Spark-X2.5 4B Q4_K_M",
+      "profiles": ["chat"],
+      "filename": "Spark-X2.5-4B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/XHToken/Spark-X2.5-4B-GGUF/resolve/9826e0be84e6e6e8b9668abc91421109a1df1e2d/Spark-X2.5-4B-Q4_K_M.gguf",
+      "bytes": 2600224352,
+      "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428",
+      "min_vram_mib": 0,
+      "min_disk_bytes": 2860246788,
+      "quality_score": 0,
+      "speed_score": 0,
+      "n_layers": 36,
+      "n_params": 4100000000.0,
+      "weights_bytes": 2600224352,
+      "embed_bytes": 0,
+      "kv_bytes_per_token": 147456,
+      "replaces": [],
+      "optional": true,
+      "format": "gguf",
+      "license": "Apache-2.0",
+      "tags": ["experimental", "hybrid-attention"],
+      "description": "GGUF officiel XHToken · Apache-2.0. Chat local optionnel ; scores non évalués, contexte limité par le budget mémoire de Preview."
+    },
     {
       "id": "local:qwen3-embedding-0.6b",
       "name": "Qwen3 Embedding 0.6B",

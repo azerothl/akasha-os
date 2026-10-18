@@ -1083,8 +1083,14 @@ impl LlamaContext {
                 .to_str()
                 .ok_or(LlamaError::InvalidPath)
                 .and_then(|s| CString::new(s).map_err(|_| LlamaError::InvalidPath))?;
-            let wrap =
-                unsafe { sys::mtmd_helper_bitmap_init_from_file(mtmd, path_c.as_ptr(), false) };
+            let wrap = unsafe {
+                sys::mtmd_helper_bitmap_init_from_file(
+                    mtmd,
+                    path_c.as_ptr(),
+                    false,
+                    sys::mtmd_helper_init_opt_default(),
+                )
+            };
             if wrap.bitmap.is_null() {
                 for b in bitmaps {
                     unsafe { sys::mtmd_bitmap_free(b) };
