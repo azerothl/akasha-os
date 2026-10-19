@@ -400,6 +400,7 @@ name = "aos-platform"
 version = "0.19.0"
 dependencies = [
  "ab_glyph",
+ "aho-corasick",
  "aos-agent",
  "aos-caps",
  "aos-ipc",

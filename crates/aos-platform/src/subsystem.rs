@@ -1758,7 +1758,8 @@ impl HostServices for PlatformSubsystem {
                         action: service.into(),
                         target: req.root.clone(),
                         detail: serde_json::json!({
-                            "query": req.query,
+                            "query_bytes": req.query.len(),
+                            "query_redacted": true,
                             "hits": resp.hits.len(),
                             "on_behalf_of": ctx.actor,
                         }),
@@ -1825,7 +1826,7 @@ impl HostServices for PlatformSubsystem {
                 }
                 serde_json::to_value(resp).map_err(|e| e.to_string())
             }
-            "refactor.create" | "refactor.submit" | "refactor.review" | "refactor.apply" | "refactor.undo" | "process.run" | "git.commit" | "debug.start" | "debug.request" | "debug.stop" | "studio.project" | "studio.lsp" | "studio.reindex" | "studio.memory" | "studio.memory.update" => {
+            "workspace.inspect" | "workspace.inventory" | "workspace.read" | "refactor.create" | "refactor.submit" | "refactor.review" | "refactor.apply" | "refactor.undo" | "process.run" | "git.commit" | "debug.start" | "debug.request" | "debug.stop" | "studio.project" | "studio.lsp" | "studio.reindex" | "studio.memory" | "studio.memory.update" => {
                 // module.invoke runs guest host calls on spawn_blocking; the
                 // normal asynchronous confirmation service stays responsive.
                 let runtime = tokio::runtime::Handle::try_current()

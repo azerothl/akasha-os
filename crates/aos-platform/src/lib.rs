@@ -60,6 +60,8 @@ pub mod workspace_refactor;
 pub mod workspace_git;
 pub mod workspace_patch;
 pub mod workspace_search;
+pub mod workspace_policy;
+pub mod workspace_inventory;
 pub mod workspace_process;
 
 pub use audit::AuditJournal;

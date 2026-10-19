@@ -1,5 +1,5 @@
 name: dev-assistant
-version: 0.3.0
+version: 0.4.0
 hash: "ci"
 permissions:
   # Bind first. Declare chosen /host/<id>/** caps in the local source manifest,
@@ -299,8 +299,52 @@ tools:
       - root
       - plan_id
       - review_sha256
+  - name: dev-assistant.inspect
+    description: Build a bounded durable source file map with ignore and credential
+      filtering; requires exact workspace read grant
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root:
+          type: string
+        max_files:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 67108864
+      required:
+      - root
+  - name: dev-assistant.inventory
+    description: Read the cached source map; freshness is explicitly not rechecked
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root:
+          type: string
+      required:
+      - root
+  - name: dev-assistant.read_safe
+    description: Read an existing UTF-8 source file through the ignore and credential
+      policy; maximum 64 KiB
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root:
+          type: string
+        path:
+          type: string
+      required:
+      - root
+      - path
+
 ui:
   entry: ui/index.html
   mode: declarative_ui
   contract: 2
-min_os_api: 3
+min_os_api: 4

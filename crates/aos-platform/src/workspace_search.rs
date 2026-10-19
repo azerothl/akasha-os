@@ -1,283 +1,117 @@
-//! Bounded host workspace search (Preview 0.19 / #247 DA.2).
-//!
-//! Prefers the `rg` (ripgrep) binary when available; falls back to a
-//! recursive walk + line scan so CI/dev hosts without `rg` still work.
-
-use crate::storage::StorageFs;
-use crate::workspace::WorkspaceBindManager;
-use aos_proto::workspace::{
-    fs_read_cap, host_vfs_prefix, looks_like_host_vfs_path, workspace_id_from_vfs_path, FsSearchHit,
-    FsSearchRequest, FsSearchResponse, FS_SEARCH_MAX_LIMIT,
+//! Native, bounded workspace search using the shared ignore/credential policy.
+//! Query text is always literal data; no search subprocess is executed.
+use crate::{
+    storage::StorageFs,
+    workspace::WorkspaceBindManager,
+    workspace_policy::{self, ScanLimits, WorkspacePolicy},
 };
-use std::fs;
-use std::io::{BufRead, BufReader};
+use aos_proto::workspace::{FsSearchHit, FsSearchRequest, FsSearchResponse, FS_SEARCH_MAX_LIMIT};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
-/// Resolve search root + run bounded search under a bound workspace.
 pub fn search_workspace(mgr: &WorkspaceBindManager, req: &FsSearchRequest) -> FsSearchResponse {
-    let limit = req.limit.clamp(1, FS_SEARCH_MAX_LIMIT);
-    if req.query.trim().is_empty() {
-        return FsSearchResponse {
+    match search(mgr, req) {
+        Ok(response) => response,
+        Err(message) => FsSearchResponse {
             ok: false,
             hits: vec![],
             truncated: false,
-            message: Some("query vide".into()),
-        };
-    }
-
-    let (workspace_id, host_root, vfs_prefix) = match resolve_search_root(mgr, &req.root) {
-        Ok(v) => v,
-        Err(msg) => {
-            return FsSearchResponse {
-                ok: false,
-                hits: vec![],
-                truncated: false,
-                message: Some(msg),
-            };
-        }
-    };
-
-    // Cap gate: caller must present `fs.read:/host/<id>/**` (or matching path).
-    let vfs_file = format!("{vfs_prefix}/");
-    let allowed = StorageFs::check_cap(&req.caps, "fs.read", &vfs_file).is_ok()
-        || StorageFs::check_cap(&req.caps, "fs.read", &vfs_prefix).is_ok();
-    if !allowed {
-        return FsSearchResponse {
-            ok: false,
-            hits: vec![],
-            truncated: false,
-            message: Some(format!(
-                "permission refusée: {} requis (workspace {workspace_id})",
-                fs_read_cap(&workspace_id)
-            )),
-        };
-    }
-
-    let mut hits = match run_ripgrep(&host_root, &vfs_prefix, req, limit) {
-        Ok(h) => h,
-        Err(rg_err) => match walk_search(&host_root, &vfs_prefix, req, limit) {
-            Ok(h) => h,
-            Err(walk_err) => {
-                return FsSearchResponse {
-                    ok: false,
-                    hits: vec![],
-                    truncated: false,
-                    message: Some(format!("search failed: rg={rg_err}; walk={walk_err}")),
-                };
-            }
+            message: Some(message),
         },
-    };
-
-    let truncated = hits.len() as u32 >= limit;
-    if hits.len() > limit as usize {
-        hits.truncate(limit as usize);
-    }
-
-    FsSearchResponse {
-        ok: true,
-        hits,
-        truncated,
-        message: None,
     }
 }
-
-fn resolve_search_root(
-    mgr: &WorkspaceBindManager,
-    root: &str,
-) -> Result<(String, PathBuf, String), String> {
-    let root = root.trim();
-    if root.is_empty() {
-        return Err("root vide".into());
+fn search(mgr: &WorkspaceBindManager, req: &FsSearchRequest) -> Result<FsSearchResponse, String> {
+    if req.query.trim().is_empty() || req.query.len() > 8192 || req.query.contains('\0') {
+        return Err("query must contain 1..8192 non-NUL bytes".into());
     }
-
-    // Bare workspace id.
-    if !root.contains('/') && !root.contains('\\') {
-        let host = mgr
-            .resolve_host_path(root)
-            .ok_or_else(|| format!("workspace inconnu: {root}"))?;
-        return Ok((root.to_string(), PathBuf::from(host), host_vfs_prefix(root)));
-    }
-
-    if looks_like_host_vfs_path(root) {
-        let id = workspace_id_from_vfs_path(root)
-            .ok_or_else(|| format!("chemin VFS invalide: {root}"))?;
-        let host = mgr
-            .resolve_vfs_to_host(root)
-            .ok_or_else(|| format!("workspace non lié: {id}"))?;
-        return Ok((id.clone(), host, host_vfs_prefix(&id)));
-    }
-
-    Err(format!(
-        "root doit être un workspace_id ou un chemin /host/<id>/… (reçu: {root})"
-    ))
-}
-
-fn run_ripgrep(
-    host_root: &Path,
-    vfs_prefix: &str,
-    req: &FsSearchRequest,
-    limit: u32,
-) -> Result<Vec<FsSearchHit>, String> {
-    let mut cmd = Command::new("rg");
-    cmd.arg("--line-number")
-        .arg("--with-filename")
-        .arg("--no-heading")
-        .arg("--color=never")
-        .arg("--max-count")
-        .arg(limit.to_string())
-        .arg("--max-filesize")
-        .arg("1M");
-    if !req.case_sensitive {
-        cmd.arg("-i");
-    }
-    if let Some(glob) = &req.glob {
-        if !glob.is_empty() {
-            cmd.arg("--glob").arg(glob);
-        }
-    }
-    // Fixed-string by default for agent safety (no ReDoS from LLM patterns).
-    cmd.arg("-F").arg(&req.query).arg(host_root);
-    cmd.stdout(Stdio::piped()).stderr(Stdio::null());
-
-    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-    let stdout = child.stdout.take().ok_or_else(|| "rg stdout".to_string())?;
-    let reader = BufReader::new(stdout);
-    let mut hits = Vec::new();
-    for line in reader.lines().map_while(Result::ok) {
-        if let Some(hit) = parse_rg_line(&line, host_root, vfs_prefix) {
-            hits.push(hit);
-            if hits.len() as u32 >= limit {
-                break;
-            }
-        }
-    }
-    let _ = child.kill();
-    let _ = child.wait();
-    Ok(hits)
-}
-
-/// `path:line:preview` (ripgrep default with -n --with-filename).
-fn parse_rg_line(line: &str, host_root: &Path, vfs_prefix: &str) -> Option<FsSearchHit> {
-    let bytes = line.as_bytes();
-    let mut split_at = None;
-    for i in 0..bytes.len().saturating_sub(2) {
-        if bytes[i] == b':' && bytes[i + 1].is_ascii_digit() {
-            let mut j = i + 1;
-            while j < bytes.len() && bytes[j].is_ascii_digit() {
-                j += 1;
-            }
-            if j < bytes.len() && bytes[j] == b':' && j > i + 1 {
-                split_at = Some((i, j));
-                break;
-            }
-        }
-    }
-    let (path_end, preview_start) = split_at?;
-    let path_str = &line[..path_end];
-    let line_no: u32 = line[path_end + 1..preview_start].parse().ok()?;
-    let preview = line[preview_start + 1..].chars().take(240).collect::<String>();
-
-    let abs = PathBuf::from(path_str);
-    let rel = abs.strip_prefix(host_root).ok()?;
-    let vfs = if rel.as_os_str().is_empty() {
-        vfs_prefix.to_string()
+    let (id, root, relative) = resolve_search_root(mgr, &req.root)?;
+    // This retains the P0 root read grant requirement. Subpaths cannot escape or
+    // mislabel hits as files at the workspace root.
+    let vfs = format!("/host/{id}/");
+    StorageFs::check_cap(&req.caps, "fs.read", &vfs).map_err(|e| e.to_string())?;
+    let mut policy = WorkspacePolicy::new(&root)?;
+    let start = if relative.is_empty() {
+        policy.root().to_path_buf()
     } else {
-        format!("{vfs_prefix}/{}", rel.to_string_lossy().replace('\\', "/"))
+        let directory = root.join(&relative).is_dir();
+        policy.checked(&relative, directory)?
     };
-    Some(FsSearchHit {
-        path: vfs,
-        line: line_no,
-        column: 1,
-        preview,
-    })
-}
-
-fn walk_search(
-    host_root: &Path,
-    vfs_prefix: &str,
-    req: &FsSearchRequest,
-    limit: u32,
-) -> Result<Vec<FsSearchHit>, String> {
+    let mut glob = ignore::gitignore::GitignoreBuilder::new(policy.root());
+    if let Some(pattern) = req.glob.as_deref().filter(|p| !p.is_empty()) {
+        if pattern.len() > 1024 || pattern == "!" {
+            return Err("invalid search glob".into());
+        }
+        glob.add_line(None, pattern.strip_prefix('!').unwrap_or(pattern))
+            .map_err(|e| e.to_string())?;
+    }
+    let glob = glob.build().map_err(|e| e.to_string())?;
     let needle = if req.case_sensitive {
         req.query.clone()
     } else {
-        req.query.to_ascii_lowercase()
+        req.query.to_lowercase()
     };
+    let limit = req.limit.clamp(1, FS_SEARCH_MAX_LIMIT) as usize;
     let mut hits = Vec::new();
-    walk_dir(host_root, host_root, vfs_prefix, &needle, req, limit, &mut hits)?;
-    Ok(hits)
-}
-
-fn walk_dir(
-    dir: &Path,
-    host_root: &Path,
-    vfs_prefix: &str,
-    needle: &str,
-    req: &FsSearchRequest,
-    limit: u32,
-    hits: &mut Vec<FsSearchHit>,
-) -> Result<(), String> {
-    if hits.len() as u32 >= limit {
-        return Ok(());
-    }
-    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
-    for ent in entries.flatten() {
-        if hits.len() as u32 >= limit {
-            break;
-        }
-        let path = ent.path();
-        let name = ent.file_name().to_string_lossy().to_string();
-        if name == ".git" || name == "node_modules" || name == "target" || name.starts_with('.') {
-            continue;
-        }
-        let meta = match ent.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        if meta.is_dir() {
-            walk_dir(&path, host_root, vfs_prefix, needle, req, limit, hits)?;
-            continue;
-        }
-        if !meta.is_file() || meta.len() > 1_048_576 {
-            continue;
-        }
-        if let Some(glob) = &req.glob {
-            if !glob.is_empty() && !simple_glob_match(glob, &name) {
-                continue;
-            }
-        }
-        let Ok(content) = fs::read_to_string(&path) else {
-            continue;
-        };
-        for (idx, line) in content.lines().enumerate() {
-            let hay = if req.case_sensitive {
-                line.to_string()
-            } else {
-                line.to_ascii_lowercase()
-            };
-            if hay.contains(needle) {
-                let rel = path.strip_prefix(host_root).unwrap_or(&path);
-                hits.push(FsSearchHit {
-                    path: format!("{vfs_prefix}/{}", rel.to_string_lossy().replace('\\', "/")),
-                    line: (idx + 1) as u32,
-                    column: 1,
-                    preview: line.chars().take(240).collect(),
-                });
-                if hits.len() as u32 >= limit {
-                    return Ok(());
+    let report =
+        workspace_policy::scan(&mut policy, &start, ScanLimits::default(), |path, text| {
+            if req.glob.as_ref().is_some_and(|g| !g.is_empty()) {
+                let matches = glob
+                    .matched_path_or_any_parents(root.join(path), false)
+                    .is_ignore();
+                let negative = req
+                    .glob
+                    .as_ref()
+                    .is_some_and(|pattern| pattern.starts_with('!'));
+                if matches == negative {
+                    return true;
                 }
             }
-        }
-    }
-    Ok(())
+            for (index, line) in text.lines().enumerate() {
+                let matches = if req.case_sensitive {
+                    line.contains(&needle)
+                } else {
+                    line.to_lowercase().contains(&needle)
+                };
+                if matches {
+                    hits.push(FsSearchHit {
+                        path: format!("/host/{id}/{path}"),
+                        line: index as u32 + 1,
+                        column: 1,
+                        preview: line.chars().take(240).collect(),
+                    });
+                    if hits.len() > limit {
+                        return false;
+                    }
+                }
+            }
+            true
+        })?;
+    let truncated = hits.len() > limit || !report.complete;
+    hits.truncate(limit);
+    Ok(FsSearchResponse{ok:true,hits,truncated,message:Some(format!("project policy: {} text files eligible, {} files withheld for credentials; scan_complete={}",report.eligible_files,report.finding_files,report.complete))})
 }
-
-fn simple_glob_match(pattern: &str, name: &str) -> bool {
-    if let Some(suf) = pattern.strip_prefix('*') {
-        return name.ends_with(suf);
+fn resolve_search_root(
+    mgr: &WorkspaceBindManager,
+    raw: &str,
+) -> Result<(String, PathBuf, String), String> {
+    let raw = raw.trim();
+    let logical = raw
+        .strip_prefix("/host/")
+        .unwrap_or(raw)
+        .trim_end_matches('/');
+    let (id, relative) = logical.split_once('/').unwrap_or((logical, ""));
+    if id.is_empty()
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err("root must be a bound workspace id or /host/<id>/path".into());
     }
-    pattern == name
+    if !raw.starts_with("/host/") && !relative.is_empty() {
+        return Err("subpaths require /host/<id>/path".into());
+    }
+    let host = mgr.resolve_host_path(id).ok_or("unknown workspace")?;
+    let root = Path::new(&host).canonicalize().map_err(|e| e.to_string())?;
+    Ok((id.into(), root, relative.into()))
 }
 
 #[cfg(test)]
@@ -285,6 +119,7 @@ mod tests {
     use super::*;
     use crate::workspace::WorkspaceBindManager;
     use aos_proto::workspace::FsSearchRequest;
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir(label: &str) -> PathBuf {
@@ -361,5 +196,77 @@ mod tests {
         assert!(!resp.ok);
         assert!(resp.message.as_deref().unwrap_or("").contains("permission"));
         let _ = fs::remove_dir_all(&root);
+    }
+    #[test]
+    fn subpaths_keep_their_vfs_prefix_and_queries_never_execute_options() {
+        let home = temp_dir("subpath");
+        let project = home.join("project");
+        fs::create_dir_all(project.join("src")).unwrap();
+        fs::write(
+            project.join("src/main.rs"),
+            "literal --pre=forbidden-command\nmarker\n",
+        )
+        .unwrap();
+        fs::write(
+            project.join("source.txt"),
+            format!("marker\napi_key='ghp_{}'\n", "Z".repeat(36)),
+        )
+        .unwrap();
+        fs::write(project.join(".ignore"), "ignored/\n").unwrap();
+        fs::create_dir_all(project.join("ignored")).unwrap();
+        fs::write(project.join("ignored/no.rs"), "marker\n").unwrap();
+        let mut mgr = WorkspaceBindManager::open(home.join("sessions")).unwrap();
+        let binding = mgr
+            .bind(project.to_str().unwrap(), Some("demo"), "test")
+            .unwrap();
+        let mut req = FsSearchRequest {
+            root: "/host/demo/src".into(),
+            query: "--pre=forbidden-command".into(),
+            glob: Some("*.rs".into()),
+            limit: 10,
+            case_sensitive: true,
+            actor: "agent:test".into(),
+            caps: binding.caps,
+            trace_id: "test".into(),
+        };
+        let response = search_workspace(&mgr, &req);
+        assert!(response.ok, "{:?}", response.message);
+        assert_eq!(response.hits[0].path, "/host/demo/src/main.rs");
+        req.root = "demo".into();
+        req.query = "marker".into();
+        req.glob = None;
+        let response = search_workspace(&mgr, &req);
+        assert!(response.ok);
+        assert_eq!(response.hits.len(), 1);
+        assert!(!response.hits[0].preview.contains(&"Z".repeat(36)));
+        assert!(response.message.unwrap().contains("1 files withheld"));
+        let _ = fs::remove_dir_all(home);
+    }
+    #[test]
+    fn unicode_lowercase_matching_and_negative_globs_are_preserved() {
+        let home = temp_dir("unicode");
+        let project = home.join("project");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("source.rs"), "ÉCOLE\n").unwrap();
+        fs::write(project.join("notes.md"), "ÉCOLE\n").unwrap();
+        let mut mgr = WorkspaceBindManager::open(home.join("sessions")).unwrap();
+        let binding = mgr
+            .bind(project.to_str().unwrap(), Some("demo"), "test")
+            .unwrap();
+        let req = FsSearchRequest {
+            root: "demo".into(),
+            query: "école".into(),
+            glob: Some("!*.md".into()),
+            limit: 10,
+            case_sensitive: false,
+            actor: "test".into(),
+            caps: binding.caps,
+            trace_id: "test".into(),
+        };
+        let result = search_workspace(&mgr, &req);
+        assert!(result.ok, "{:?}", result.message);
+        assert_eq!(result.hits.len(), 1);
+        assert_eq!(result.hits[0].path, "/host/demo/source.rs");
+        let _ = fs::remove_dir_all(home);
     }
 }
