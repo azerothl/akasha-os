@@ -1,0 +1,520 @@
+[
+  {
+    "id": "quoted-password",
+    "category": "literal",
+    "text": "password = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-password",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"password\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-password",
+    "category": "structured",
+    "text": "port = 4000; password = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-passwd",
+    "category": "literal",
+    "text": "passwd = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-passwd",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"passwd\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-passwd",
+    "category": "structured",
+    "text": "port = 4000; passwd = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-token",
+    "category": "literal",
+    "text": "token = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-token",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"token\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-token",
+    "category": "structured",
+    "text": "port = 4000; token = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-api_key",
+    "category": "literal",
+    "text": "api_key = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-api_key",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"api_key\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-api_key",
+    "category": "structured",
+    "text": "port = 4000; api_key = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-apikey",
+    "category": "literal",
+    "text": "apikey = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-apikey",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"apikey\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-apikey",
+    "category": "structured",
+    "text": "port = 4000; apikey = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-secret",
+    "category": "literal",
+    "text": "secret = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-secret",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"secret\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-secret",
+    "category": "structured",
+    "text": "port = 4000; secret = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-access_token",
+    "category": "literal",
+    "text": "access_token = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-access_token",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"access_token\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-access_token",
+    "category": "structured",
+    "text": "port = 4000; access_token = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-client_secret",
+    "category": "literal",
+    "text": "client_secret = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-client_secret",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"client_secret\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-client_secret",
+    "category": "structured",
+    "text": "port = 4000; client_secret = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "quoted-authorization",
+    "category": "literal",
+    "text": "authorization = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-authorization",
+    "category": "structured",
+    "text": "{\"name\": \"fixture\", \"authorization\": \"SyntheticOnlyValue438927=\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "second-authorization",
+    "category": "structured",
+    "text": "port = 4000; authorization = \"SyntheticOnlyValue438927\";",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "key-0",
+    "category": "private-key",
+    "text": "-----BEGIN PRIVATE KEY-----\nsynthetic material only",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "key-1",
+    "category": "private-key",
+    "text": "-----BEGIN RSA PRIVATE KEY-----\nsynthetic material only",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "key-2",
+    "category": "private-key",
+    "text": "-----BEGIN EC PRIVATE KEY-----\nsynthetic material only",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "key-3",
+    "category": "private-key",
+    "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nsynthetic material only",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "key-4",
+    "category": "private-key",
+    "text": "-----BEGIN ENCRYPTED PRIVATE KEY-----\nsynthetic material only",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "prefix-0",
+    "category": "token-shape",
+    "text": "ghp_SyntheticFixtureOnly123456789",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "prefix-1",
+    "category": "token-shape",
+    "text": "github_pat_SyntheticFixtureOnly123456789",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "prefix-2",
+    "category": "token-shape",
+    "text": "sk-SyntheticFixtureOnly123456789",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "access-AKIA",
+    "category": "token-shape",
+    "text": "AKIASYNTHETIC1234567",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "access-ASIA",
+    "category": "token-shape",
+    "text": "ASIASYNTHETIC1234567",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "http-bearer",
+    "category": "authorization",
+    "text": "Authorization: Bearer SyntheticOnlyValue438927",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "json-bearer",
+    "category": "authorization",
+    "text": "{\"Authorization\": \"Bearer SyntheticOnlyValue438927\"}",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "http-basic",
+    "category": "authorization",
+    "text": "Authorization: Basic U3ludGhldGljT25seTpGaXh0dXJl",
+    "sensitive": true,
+    "expected_detected": true
+  },
+  {
+    "id": "placeholder-0",
+    "category": "placeholder",
+    "text": "token = \"changeme\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-1",
+    "category": "placeholder",
+    "text": "token = \"example\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-2",
+    "category": "placeholder",
+    "text": "token = \"placeholder\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-3",
+    "category": "placeholder",
+    "text": "token = \"redacted\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-4",
+    "category": "placeholder",
+    "text": "token = \"password\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-5",
+    "category": "placeholder",
+    "text": "token = \"test\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-6",
+    "category": "placeholder",
+    "text": "token = \"dummy\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-7",
+    "category": "placeholder",
+    "text": "token = \"none\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-8",
+    "category": "placeholder",
+    "text": "token = \"null\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-9",
+    "category": "placeholder",
+    "text": "token = \"${MY_API_KEY}\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "placeholder-10",
+    "category": "placeholder",
+    "text": "token = \"<insert-token-here>\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-0",
+    "category": "benign-code",
+    "text": "let token = response.get_token();",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-1",
+    "category": "benign-code",
+    "text": "password = os.getenv(\"PASSWORD\")",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-2",
+    "category": "benign-code",
+    "text": "const token: AuthenticationToken = response.token;",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-3",
+    "category": "benign-code",
+    "text": "public_key = \"publicfixturevalue123\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-4",
+    "category": "benign-code",
+    "text": "const api_key_count = 124;",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-5",
+    "category": "benign-code",
+    "text": "Authorization: Bearer <insert-token-here>",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-6",
+    "category": "benign-code",
+    "text": "token = \"${MY_API_KEY}\"",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-7",
+    "category": "benign-code",
+    "text": "{\"token\": null}",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-8",
+    "category": "benign-code",
+    "text": "{\"token\": false}",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-9",
+    "category": "benign-code",
+    "text": "-----BEGIN PUBLIC KEY-----",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-10",
+    "category": "benign-code",
+    "text": "ghp_short",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-11",
+    "category": "benign-code",
+    "text": "AKIApublicfixture",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-12",
+    "category": "benign-code",
+    "text": "let secret = \"a short\";",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "benign-13",
+    "category": "benign-code",
+    "text": "token = \"token with spaces\";",
+    "sensitive": false,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-0",
+    "category": "unsupported-sensitive",
+    "text": "password = \"short7\"",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-1",
+    "category": "unsupported-sensitive",
+    "text": "const databasePassword = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-2",
+    "category": "unsupported-sensitive",
+    "text": "password = \"Syn\" + \"theticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-3",
+    "category": "unsupported-sensitive",
+    "text": "password:\n  SyntheticOnlyValue438927",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-4",
+    "category": "unsupported-sensitive",
+    "text": "-----begin private key-----",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-5",
+    "category": "unsupported-sensitive",
+    "text": "-----BEGIN\nPRIVATE KEY-----",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-miss-6",
+    "category": "unsupported-sensitive",
+    "text": "custom_credential = \"SyntheticOnlyValue438927\"",
+    "sensitive": true,
+    "expected_detected": false
+  },
+  {
+    "id": "known-fp-identifier",
+    "category": "unsupported-benign",
+    "text": "token = SYNTHETIC_DEFAULT_TOKEN",
+    "sensitive": false,
+    "expected_detected": true
+  },
+  {
+    "id": "known-fp-prefix-prose",
+    "category": "unsupported-benign",
+    "text": "Documentation mentions sk-SyntheticFixtureOnly123456789 as an example.",
+    "sensitive": false,
+    "expected_detected": true
+  }
+]
