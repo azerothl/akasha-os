@@ -32,7 +32,7 @@ A Dev Assistant package **must**:
    normal **cap-review** path before search/patch (fail-closed; never mint caps
    inside the module).
 3. Use the host-supported DeclUI contract. The source candidate reference
-   requires **host API 2 / UI contract 2** for its native dev surfaces; existing
+   requires **host API 3 / UI contract 2** for its native dev surfaces; existing
    UI 1 packages remain compatible. See [the adapter contract](dev-assistant-studio.md).
 4. Prefer `fs.search` / `code.search`, then `fs.apply_patch` (and
    `fs.undo_patch`), over full-file `fs.write` for host trees.

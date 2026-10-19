@@ -2294,7 +2294,7 @@ fn render_form_fields(
                             }
                         });
                 }
-                FieldKind::Code => {
+                FieldKind::Code | FieldKind::Json => {
                     let widget = DeclUiWidget { kind: "code_editor".into(), label: Some(field.key.clone()), ..Default::default() };
                     dev_widgets::render(ui, &widget, &Value::Null, &HashMap::new(), form_fields, true, language);
                 }
@@ -2341,7 +2341,7 @@ fn render_form_fields(
                                 }
                             });
                     }
-                    FieldKind::Code => {
+                    FieldKind::Code | FieldKind::Json => {
                     let widget = DeclUiWidget { kind: "code_editor".into(), label: Some(field.key.clone()), ..Default::default() };
                     dev_widgets::render(ui, &widget, &Value::Null, &HashMap::new(), form_fields, true, language);
                 }
@@ -2375,7 +2375,7 @@ fn submit_decl_form(
     let mut clear_keys = Vec::new();
     for field in fields {
         if let Some(v) = form_fields.get(&field.key) {
-            args.insert(field.key.clone(), field.parse_value(v));
+            if field.required || !v.is_empty() { args.insert(field.key.clone(), field.parse_value(v)); }
         }
         clear_keys.push(field.key.clone());
     }
@@ -2472,6 +2472,7 @@ fn schema_fields(schema: &Value, doc: &DeclUiDocument, language: &str) -> Vec<Sc
                 label,
                 hint,
                 kind: FieldKind::from_schema(v),
+                required: schema["required"].as_array().is_some_and(|keys|keys.iter().any(|key|key.as_str()==Some(k))),
             });
         }
     }
@@ -2485,12 +2486,14 @@ struct SchemaField {
     label: String,
     hint: Option<String>,
     kind: FieldKind,
+    required: bool,
 }
 
 #[derive(Clone)]
 enum FieldKind {
     Text,
     Code,
+    Json,
     Textarea,
     Number,
     Bool,
@@ -2509,6 +2512,7 @@ impl FieldKind {
             }
         }
         match v.get("type").and_then(|t| t.as_str()) {
+            Some("object" | "array") => FieldKind::Json,
             Some("boolean") => FieldKind::Bool,
             Some("integer") | Some("number") => FieldKind::Number,
             Some("string") => {
@@ -2539,6 +2543,7 @@ impl SchemaField {
     fn parse_value(&self, raw: &str) -> Value {
         match &self.kind {
             FieldKind::Bool => Value::Bool(raw == "true" || raw == "1"),
+            FieldKind::Json => serde_json::from_str(raw).unwrap_or_else(|_|Value::String(raw.into())),
             FieldKind::Number => {
                 if let Ok(i) = raw.parse::<i64>() {
                     Value::Number(i.into())
@@ -4536,6 +4541,17 @@ mod illustration_library_tests {
     };
     use serde_json::json;
     use std::collections::HashMap;
+
+    #[test]
+    fn dev_assistant_json_fields_remain_typed_and_empty_optionals_are_omitted() {
+        use super::{schema_fields, submit_decl_form, DeclUiActions, DeclUiDocument};
+        let doc=DeclUiDocument::parse_json(include_str!("../../../community/modules/dev-assistant/ui/index.html").as_bytes()).unwrap();
+        let schema=serde_json::json!({"type":"object","properties":{"root":{"type":"string"},"lines":{"type":"array"},"frame_id":{"type":"integer"}},"required":["root","lines"]});
+        let fields=schema_fields(&schema,&doc,"fr");let values=HashMap::from([("root".into(),"demo".into()),("lines".into(),"[1,3]".into()),("frame_id".into(),String::new())]);
+        let schemas=HashMap::from([("dev-assistant.debug_request".into(),schema)]);let mut actions=DeclUiActions::default();
+        submit_decl_form(&mut actions,"dev-assistant.debug_request",&fields,&values,vec![],&schemas);
+        let args=actions.invoke.unwrap().args;assert_eq!(args["lines"],serde_json::json!([1,3]));assert!(args.get("frame_id").is_none());
+    }
 
     #[test]
     fn selection_is_scoped_to_the_active_project() {

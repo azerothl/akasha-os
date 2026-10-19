@@ -200,3 +200,25 @@ fail-closed; see [dev-assistant-p0.md](dev-assistant-p0.md),
 - Share a package: [community.md](community.md) (discussions / `community/modules/`)
 - Target architecture: [technical-specs.md](technical-specs.md) §7
 - ADR: [adr/0009-rich-module-app-contract.md](adr/0009-rich-module-app-contract.md)
+
+
+### Typed script arguments (host API 3 reference modules)
+
+The rebuilt ext-rt 1.1.0 supports `{$arg: field}` in `handlers.yaml`:
+
+```yaml
+steps:
+  - service: debug.request
+    args:
+      root: {$arg: root}
+      session_id: {$arg: session_id}
+      command: {$arg: command}
+      lines: {$arg: lines}
+```
+
+This passes the JSON value unchanged; a missing argument omits that object field.
+It preserves arrays, objects, numbers and literal template-looking source text.
+Existing `{{args.field}}` string interpolation remains supported and is evaluated
+once against the template source; replacement text is not evaluated again.
+The Dev Assistant 0.3.0 reference requires host API 3 for debug, project memory
+and refactor intents. This does not change the UI contract version (2).

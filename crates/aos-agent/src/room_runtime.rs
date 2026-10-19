@@ -17,7 +17,7 @@ use crate::context_budget::{
     DEFAULT_N_CTX_HINT, MAX_OVERFLOW_INFER_RETRIES,
 };
 use crate::device_tools::capture_png_path_from_tool_result;
-use crate::mcp::open_mcp_tools_with_secrets;
+use crate::mcp::open_mcp_tools_guarded;
 use crate::module_discovery::{
     active_module_names, discover_module_tools, merge_skill_tools_for_modules, tool_in_catalog,
     tool_unavailable_message,
@@ -842,7 +842,7 @@ fn repair_room_tool_json(raw: &str) -> String {
 
 #[allow(clippy::too_many_arguments)] // Runtime context is explicit at this orchestration boundary.
 async fn run_room_tool_loop(
-    bus: &BusClient,
+    bus: &Arc<BusClient>,
     round: &RoomRoundState,
     agent_id: &str,
     display_name: &str,
@@ -854,7 +854,7 @@ async fn run_room_tool_loop(
     mcp_servers: &[String],
     images: &[String],
 ) -> Result<(String, Option<String>, Vec<ProducedArtifact>), String> {
-    let (mut mcp_sessions, _) = open_mcp_tools_with_secrets(mcp_servers, &HashMap::new()).await;
+    let (mut mcp_sessions, _) = open_mcp_tools_guarded(mcp_servers, &HashMap::new(), bus).await;
     let trace_base = format!(
         "room-{agent_id}-{}",
         std::time::SystemTime::now()
@@ -1121,7 +1121,7 @@ async fn run_room_tool_loop(
 
 /// Exécute un tour agent unique (`agent.room_turn`).
 pub async fn execute_room_turn(
-    bus: &BusClient,
+    bus: &Arc<BusClient>,
     round: &RoomRoundState,
     req: &AgentRoomTurnRequest,
 ) -> Result<AgentRoomTurnResponse, String> {
@@ -1314,7 +1314,7 @@ pub async fn execute_room_turn(
 
 /// Orchestre un message utilisateur complet (conducteur déterministe).
 pub async fn execute_room_conduct(
-    bus: &BusClient,
+    bus: &Arc<BusClient>,
     round: Arc<RoomRoundState>,
     req: &AgentRoomConductRequest,
 ) -> Result<AgentRoomConductResponse, String> {

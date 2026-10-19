@@ -4977,6 +4977,9 @@ async fn main() {
                                 net.grant("net.connect:*:*".into());
                             }
                         }
+                        if mode == aos_platform::net::NetMode::OfflineStrict {
+                            s.debug.lock().await.stop_all().await;
+                        }
                         s.audit(AuditAppendRequest {
                             trace_id: String::new(),
                             actor: "human:ui".into(),

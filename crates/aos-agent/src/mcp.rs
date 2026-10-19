@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
 use crate::tools::{ToolBackend, ToolDesc};
@@ -47,9 +47,132 @@ pub struct McpSession {
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
     next_id: u64,
+    group: std::sync::Arc<std::sync::Mutex<Option<ProcessGroup>>>,
+    policy_watch: Option<tokio::task::JoinHandle<()>>,
+}
+
+#[cfg(windows)]
+struct ProcessGroup(isize);
+#[cfg(windows)]
+impl ProcessGroup {
+    fn new(child: &tokio::process::Child) -> Result<Self, String> {
+        use windows::Win32::{
+            Foundation::{CloseHandle, HANDLE},
+            System::JobObjects::*,
+        };
+        unsafe {
+            let job = CreateJobObjectW(None, None).map_err(|e| e.to_string())?;
+            let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            if let Err(error) = SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &limits as *const _ as *const std::ffi::c_void,
+                std::mem::size_of_val(&limits) as u32,
+            ) {
+                let _ = CloseHandle(job);
+                return Err(error.to_string());
+            }
+            let Some(raw) = child.raw_handle() else {
+                let _ = CloseHandle(job);
+                return Err("child handle unavailable".into());
+            };
+            if let Err(error) = AssignProcessToJobObject(job, HANDLE(raw)) {
+                let _ = CloseHandle(job);
+                return Err(format!("cannot supervise process tree: {error}"));
+            }
+            Ok(Self(job.0 as isize))
+        }
+    }
+}
+#[cfg(windows)]
+impl Drop for ProcessGroup {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::Foundation::CloseHandle(windows::Win32::Foundation::HANDLE(
+                self.0 as *mut std::ffi::c_void,
+            ));
+        }
+    }
+}
+
+#[cfg(unix)]
+struct ProcessGroup(i32);
+#[cfg(unix)]
+impl ProcessGroup {
+    fn new(child: &tokio::process::Child) -> Result<Self, String> {
+        child
+            .id()
+            .map(|id| Self(id as i32))
+            .ok_or("child id unavailable".into())
+    }
+}
+#[cfg(unix)]
+impl Drop for ProcessGroup {
+    fn drop(&mut self) {
+        unsafe {
+            libc::kill(-self.0, libc::SIGKILL);
+        }
+    }
+}
+
+impl Drop for McpSession {
+    fn drop(&mut self) {
+        if let Some(watch) = self.policy_watch.take() {
+            watch.abort();
+        }
+        self.group.lock().unwrap().take();
+        let _ = self.child.start_kill();
+    }
 }
 
 impl McpSession {
+    fn watch_policy(&mut self, bus: std::sync::Arc<aos_ipc::BusClient>) {
+        let group = self.group.clone();
+        self.policy_watch = Some(tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                if check_host_mcp_mode(&bus).await.is_err() {
+                    group.lock().unwrap().take();
+                    break;
+                }
+            }
+        }));
+    }
+
+    /// Production entry point: arbitrary host MCP servers have no network sandbox.
+    pub async fn call_tool_guarded(
+        &mut self,
+        bus: &aos_ipc::BusClient,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<String, String> {
+        if let Err(error) = check_host_mcp_mode(bus).await {
+            self.group.lock().unwrap().take();
+            let _ = self.child.start_kill();
+            return Err(error);
+        }
+        let result = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+            let call = self.call_tool(name, args);
+            tokio::pin!(call);
+            loop {
+                tokio::select! {
+                    result = &mut call => break result,
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                        check_host_mcp_mode(bus).await?;
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| "MCP tool timed out".to_string())
+        .and_then(|result| result);
+        if result.is_err() {
+            self.group.lock().unwrap().take();
+            let _ = self.child.start_kill();
+        }
+        result
+    }
     pub async fn spawn(name: &str, cfg: &McpServerConfig) -> Result<Self, String> {
         Self::spawn_resolved(name, cfg, None).await
     }
@@ -70,7 +193,12 @@ impl McpSession {
         for (k, v) in env_map {
             cmd.env(k, v);
         }
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000);
+        #[cfg(unix)]
+        cmd.process_group(0);
         let mut child = cmd.spawn().map_err(|e| format!("spawn mcp {name}: {e}"))?;
+        let group = ProcessGroup::new(&child)?;
         let stdin = child.stdin.take().ok_or("stdin mcp manquant")?;
         let stdout = child.stdout.take().ok_or("stdout mcp manquant")?;
         let mut session = Self {
@@ -79,6 +207,8 @@ impl McpSession {
             stdin,
             stdout: BufReader::new(stdout),
             next_id: 1,
+            group: std::sync::Arc::new(std::sync::Mutex::new(Some(group))),
+            policy_watch: None,
         };
         let _ = session
             .request(
@@ -126,13 +256,16 @@ impl McpSession {
         let mut buf = String::new();
         loop {
             buf.clear();
-            let n = self
-                .stdout
+            let n = (&mut self.stdout)
+                .take(1024 * 1024 + 1)
                 .read_line(&mut buf)
                 .await
                 .map_err(|e| e.to_string())?;
             if n == 0 {
                 return Err("mcp stdout fermé".into());
+            }
+            if n > 1024 * 1024 {
+                return Err("MCP message exceeds 1 MiB".into());
             }
             let trimmed = buf.trim();
             if trimmed.is_empty() {
@@ -210,12 +343,6 @@ impl McpSession {
             )
             .await?;
         Ok(result.to_string())
-    }
-}
-
-impl Drop for McpSession {
-    fn drop(&mut self) {
-        let _ = self.child.start_kill();
     }
 }
 
@@ -306,9 +433,167 @@ pub async fn open_mcp_tools_with_secrets(
     (sessions, tools)
 }
 
+/// Refuse startup if offline-strict or if the authoritative mode is unavailable.
+/// Callers must also use call_tool_guarded to recheck before each invocation.
+pub async fn open_mcp_tools_guarded(
+    names: &[String],
+    secrets: &HashMap<String, String>,
+    bus: &std::sync::Arc<aos_ipc::BusClient>,
+) -> (HashMap<String, McpSession>, Vec<ToolDesc>) {
+    if names.is_empty() {
+        return (HashMap::new(), Vec::new());
+    }
+    if let Err(error) = check_host_mcp_mode(bus).await {
+        eprintln!("[mcp] {error}");
+        return (HashMap::new(), Vec::new());
+    }
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        async {
+            let discovery = open_mcp_tools_with_secrets(names, secrets);
+            tokio::pin!(discovery);
+            loop {
+                tokio::select! {
+                    result = &mut discovery => break result,
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                        if check_host_mcp_mode(bus).await.is_err() { return (HashMap::new(), Vec::new()); }
+                    }
+                }
+            }
+        },
+    )
+    .await
+    {
+        Ok((mut sessions, tools)) => {
+            if check_host_mcp_mode(bus).await.is_err() { return (HashMap::new(), Vec::new()); }
+            for session in sessions.values_mut() {
+                session.watch_policy(bus.clone());
+            }
+            (sessions, tools)
+        },
+        Err(_) => {
+            eprintln!("[mcp] discovery timed out; host MCP disabled");
+            (HashMap::new(), Vec::new())
+        }
+    }
+}
+pub async fn check_host_mcp_mode(bus: &aos_ipc::BusClient) -> Result<(), String> {
+    let status = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        bus.call::<_, serde_json::Value>("net.status", &(), vec![]),
+    )
+    .await
+    .map_err(|_| "MCP disabled: network policy timed out")?
+    .map_err(|_| "MCP disabled: network policy unavailable")?;
+    if status["mode"] != "online" {
+        return Err(
+            "MCP host processes are disabled in offline_strict; they are not network-sandboxed"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn host_mcp_checks_live_mode_and_refuses_offline_or_unknown_policy() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let broker = tokio::spawn(async move {
+            aos_ipc::broker::serve(listener).await.unwrap();
+        });
+        let online = Arc::new(AtomicBool::new(true));
+        let mode = online.clone();
+        let mut service = aos_ipc::BusService::new("mcp-network-test");
+        service.on("net.status", move |ctx| {
+            let mode = mode.clone();
+            async move {
+                let _ = ctx
+                    .respond(
+                        aos_ipc::msg::Status::Ok,
+                        &serde_json::json!({
+                "mode":if mode.load(Ordering::SeqCst){"online"}else{"offline_strict"}}),
+                    )
+                    .await;
+            }
+        });
+        let service_addr = addr.clone();
+        let server = tokio::spawn(async move {
+            service.serve(&service_addr).await.unwrap();
+        });
+        let bus = aos_ipc::BusClient::connect(&addr, "test:mcp")
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while !bus.lookup("net.status").await.unwrap() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(check_host_mcp_mode(&bus).await.is_ok());
+
+        // Real stdio subprocess, no model or outside service. The policy watcher
+        // must also reap an idle server after an online -> offline transition.
+        #[cfg(windows)]
+        let (command, args) = (
+            "powershell.exe",
+            vec![
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                r#"while ($line = [Console]::ReadLine()) { $r = ConvertFrom-Json $line; if ($null -ne $r.id) { [Console]::WriteLine((@{jsonrpc='2.0';id=$r.id;result=@{tools=@()}} | ConvertTo-Json -Depth 5 -Compress)) } }"#,
+            ],
+        );
+        #[cfg(unix)]
+        let (command, args) = (
+            "/bin/sh",
+            vec![
+                "-c",
+                r#"while IFS= read -r line; do case "$line" in *'"id":'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}';; esac; done"#,
+            ],
+        );
+        let cfg = McpServerConfig {
+            command: command.into(),
+            args: args.into_iter().map(String::from).collect(),
+            env: HashMap::new(),
+        };
+        let mut session = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            McpSession::spawn("policy-fixture", &cfg),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(session.child.try_wait().unwrap().is_none());
+        session.watch_policy(bus.clone());
+        online.store(false, Ordering::SeqCst);
+        assert!(check_host_mcp_mode(&bus)
+            .await
+            .unwrap_err()
+            .contains("offline_strict"));
+        let (sessions, tools) =
+            open_mcp_tools_guarded(&["must-not-spawn".into()], &HashMap::new(), &bus).await;
+        assert!(sessions.is_empty() && tools.is_empty());
+
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            while session.child.try_wait().unwrap().is_none() {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("offline transition must stop the idle MCP process");
+        assert!(session.group.lock().unwrap().is_none());
+        server.abort();
+        broker.abort();
+    }
 
     #[test]
     fn resolve_secret_placeholder_ok() {

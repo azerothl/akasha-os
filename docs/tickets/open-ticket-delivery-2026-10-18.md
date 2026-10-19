@@ -11,9 +11,12 @@ Décisions explicites de l'utilisateur :
 - Réutiliser **Code Studio via un adaptateur Akasha** pour la profondeur IDE du #247.
 - Faute de machines supplémentaires, **conserver #434 et #435 ouverts**.
 
-Aucun ticket n'est fermé par ce document. Les modifications restent locales,
-sans push, PR, fusion ou publication. « Implémenté » ci-dessous décrit ce
-candidat source ; cela ne signifie pas « distribué et validé sur tous les OS ».
+Aucun ticket n'est fermé par ce document. Le lot initial a été publié puis
+fusionné via [PR #450](https://github.com/azerothl/akasha-os/pull/450), commit
+`9b91f972365cfcc171676dc9a1fb0c2b50a34534`, le 18 octobre à 17:38:24 UTC,
+après succès des vérifications CI. Cela ne constitue pas une nouvelle release
+ni une validation sur toutes les machines. La [suite du #247](dev-assistant-follow-up-2026-10-18.md)
+est suivie séparément ; #434 et #435 restent ouverts.
 
 ## État par ticket
 
@@ -50,7 +53,8 @@ candidat source ; cela ne signifie pas « distribué et validé sur tous les OS 
 Après le test complet de plateforme, le drainage des sorties a reçu une borne
 supplémentaire contre les pipes restés ouverts ; les 8 tests de commandes ont
 été relancés avec succès. Les nouveaux contrats et les bindings CPU/mtmd/Metal
-sont ajoutés à la matrice CI, mais **cette branche n'a pas encore tourné en CI**.
+sont ajoutés à la matrice CI, et ont réussi dans la CI de #450. Le job CUDA manuel était ignoré ; les
+smokes CUDA cités ici restent des essais locaux.
 
 Les correctifs de validation incluent les chemins temporaires Windows,
 `echo` via l'interpréteur Windows, le hash canonique LF du catalogue et deux
@@ -96,6 +100,6 @@ du poids total ni du temps de compilation natif.
 - `1995d0c` — portabilité des fixtures et Clippy.
 - `b49f0c9` — commandes, surfaces natives et adaptateur Code Studio.
 
-La preuve locale décrit ce code. La suite logique exige publication de branche
-et CI pour les validations de build sur les autres plateformes ; cela ne
-remplace pas les tests matériels explicitement laissés ouverts.
+Ces commits ont été intégrés par #450. La CI de cette PR a réussi ; cela ne
+remplace pas les tests matériels explicitement laissés ouverts. Les ajouts
+suivants au #247 ont leur propre bilan de preuves et de limites.

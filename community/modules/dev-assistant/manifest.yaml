@@ -1,9 +1,9 @@
 name: dev-assistant
-version: 0.2.0
+version: 0.3.0
 hash: "ci"
 permissions:
-  # Host `/host/<id>/**` caps are granted after workspace.bind + cap review
-  # (fail-closed). Bind itself only needs a user-confirmed absolute path.
+  # Bind first. Declare chosen /host/<id>/** caps in the local source manifest,
+  # then repackage/update with explicit cap review. No ambient host grants.
   required_caps: []
 tools:
   - name: dev-assistant.bind
@@ -103,8 +103,204 @@ tools:
             line: { type: integer, minimum: 0 }
             character: { type: integer, minimum: 0 }
       required: [root, action, path]
+  - name: dev-assistant.studio_memory
+    description: Read durable project summaries and code index in the mapped project
+      namespace
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: &id001
+          type: string
+          description: Bound workspace id
+      required:
+      - root
+  - name: dev-assistant.studio_memory_update
+    description: Update one project memory field after host confirmation
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        field:
+          type: string
+          enum:
+          - project_summary
+          - evolution_summary
+          - policy_notes
+        text:
+          type: string
+          maxLength: 8192
+      required:
+      - root
+      - field
+      - text
+  - name: dev-assistant.debug_start
+    description: Start an administrator-configured DAP launch after host confirmation;
+      online mode only
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        configuration: &id002
+          type: string
+      required:
+      - root
+      - configuration
+  - name: dev-assistant.debug_request
+    description: Inspect or step the actor-owned debug session; evaluate and attach
+      are unavailable
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        session_id: *id002
+        command:
+          type: string
+          enum:
+          - threads
+          - stackTrace
+          - scopes
+          - variables
+          - continue
+          - next
+          - stepIn
+          - stepOut
+          - pause
+          - setBreakpoints
+          - events
+        thread_id:
+          type: integer
+          minimum: 1
+        frame_id:
+          type: integer
+          minimum: 0
+        variables_reference:
+          type: integer
+          minimum: 1
+        path: *id002
+        lines:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          maxItems: 64
+      required:
+      - root
+      - session_id
+      - command
+  - name: dev-assistant.debug_stop
+    description: Stop the current actor-owned debug session and its supervised process
+      group
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        session_id: *id002
+      required:
+      - root
+      - session_id
+  - name: dev-assistant.refactor_create
+    description: Coordinate 2 to 8 existing distinct agents on disjoint subtrees; does
+      not launch inference or grant capabilities
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        assignments:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              part_id: *id002
+              actor: *id002
+              subtree: *id002
+            required:
+            - part_id
+            - actor
+            - subtree
+          minItems: 2
+          maxItems: 8
+      required:
+      - root
+      - assignments
+  - name: dev-assistant.refactor_submit
+    description: Assigned agent proposes existing text file changes without writing
+      host files
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        plan_id: *id002
+        part_id: *id002
+        changes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              path: *id002
+              base_sha256: *id002
+              content:
+                type: string
+                maxLength: 65536
+            required:
+            - path
+            - base_sha256
+            - content
+          maxItems: 40
+      required:
+      - root
+      - plan_id
+      - part_id
+      - changes
+  - name: dev-assistant.refactor_review
+    description: Inspect proposed before/after contents and get the exact review fingerprint
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        plan_id: *id002
+      required:
+      - root
+      - plan_id
+  - name: dev-assistant.refactor_apply
+    description: Review fingerprint and host confirmation required; preserve conflicting
+      external edits
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        plan_id: *id002
+        review_sha256: *id002
+      required:
+      - root
+      - plan_id
+      - review_sha256
+  - name: dev-assistant.refactor_undo
+    description: Review fingerprint and host confirmation required; preserve conflicting
+      external edits
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root: *id001
+        plan_id: *id002
+        review_sha256: *id002
+      required:
+      - root
+      - plan_id
+      - review_sha256
 ui:
   entry: ui/index.html
   mode: declarative_ui
   contract: 2
-min_os_api: 2
+min_os_api: 3

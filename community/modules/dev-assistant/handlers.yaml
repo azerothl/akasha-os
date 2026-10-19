@@ -73,8 +73,118 @@ tools:
     steps:
       - service: studio.lsp
         args:
-          root: "{{args.root}}"
-          action: "{{args.action}}"
-          path: "{{args.path}}"
-          text: "{{args.text}}"
-          position: "{{args.position}}"
+          root: {$arg: root}
+          action: {$arg: action}
+          path: {$arg: path}
+          text: {$arg: text}
+          position: {$arg: position}
+
+  dev-assistant.studio_memory:
+    steps:
+    - service: studio.memory
+      args:
+        root:
+          $arg: root
+
+  dev-assistant.studio_memory_update:
+    steps:
+    - service: studio.memory.update
+      args:
+        root:
+          $arg: root
+        field:
+          $arg: field
+        text:
+          $arg: text
+
+  dev-assistant.debug_start:
+    steps:
+    - service: debug.start
+      args:
+        root:
+          $arg: root
+        configuration:
+          $arg: configuration
+
+  dev-assistant.debug_request:
+    steps:
+    - service: debug.request
+      args:
+        root:
+          $arg: root
+        session_id:
+          $arg: session_id
+        command:
+          $arg: command
+        thread_id:
+          $arg: thread_id
+        frame_id:
+          $arg: frame_id
+        variables_reference:
+          $arg: variables_reference
+        path:
+          $arg: path
+        lines:
+          $arg: lines
+
+  dev-assistant.debug_stop:
+    steps:
+    - service: debug.stop
+      args:
+        root:
+          $arg: root
+        session_id:
+          $arg: session_id
+
+  dev-assistant.refactor_create:
+    steps:
+    - service: refactor.create
+      args:
+        root:
+          $arg: root
+        assignments:
+          $arg: assignments
+
+  dev-assistant.refactor_submit:
+    steps:
+    - service: refactor.submit
+      args:
+        root:
+          $arg: root
+        plan_id:
+          $arg: plan_id
+        part_id:
+          $arg: part_id
+        changes:
+          $arg: changes
+
+  dev-assistant.refactor_review:
+    steps:
+    - service: refactor.review
+      args:
+        root:
+          $arg: root
+        plan_id:
+          $arg: plan_id
+
+  dev-assistant.refactor_apply:
+    steps:
+    - service: refactor.apply
+      args:
+        root:
+          $arg: root
+        plan_id:
+          $arg: plan_id
+        review_sha256:
+          $arg: review_sha256
+
+  dev-assistant.refactor_undo:
+    steps:
+    - service: refactor.undo
+      args:
+        root:
+          $arg: root
+        plan_id:
+          $arg: plan_id
+        review_sha256:
+          $arg: review_sha256

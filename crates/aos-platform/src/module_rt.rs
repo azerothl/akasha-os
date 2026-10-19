@@ -1573,6 +1573,38 @@ min_os_api: 1
         let _ = std::fs::remove_dir_all(&base);
     }
 
+
+    #[test]
+    fn dev_assistant_reference_packages_installs_and_preserves_typed_wasm_arguments() {
+        struct AdapterHost;
+        impl HostServices for AdapterHost {
+            fn call(&self,ctx:&HostCallCtx,service:&str,args:serde_json::Value)->Result<serde_json::Value,String>{
+                if service=="ext.load_handlers" {
+                    let bytes=read_module_asset_from_dir(&ctx.module_dir,args["path"].as_str().unwrap_or("handlers.json")).map_err(|e|e.to_string())?;
+                    return Ok(serde_json::json!({"content":String::from_utf8_lossy(&bytes)}));
+                }
+                Ok(serde_json::json!({"service":service,"args":args,"actor":ctx.actor}))
+            }
+        }
+        let base=tmpbase("dev-assistant-v3");let repo=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut author=crate::module_compile::ModuleAuthor::open(base.join("author")).unwrap();
+        author.ext_rt_wasm=repo.join("share/modules/ext-rt.aospkg/module.wasm");
+        copy_dir_all(&repo.join("community/modules/dev-assistant"),&author.src_dir.join("dev-assistant"));
+        let pkg=author.package_script("dev-assistant").unwrap();
+        let mut runtime=ModuleRuntime::open(base.join("installed"),Arc::new(AdapterHost)).unwrap();
+        let info=runtime.install(Path::new(&pkg.package_dir),Some(vec![])).unwrap();
+        assert_eq!(info.version,"0.3.0");assert_eq!(info.tools.len(),22);
+        let args=serde_json::json!({"root":"demo","session_id":"example","command":"setBreakpoints","lines":[1,3],"path":"main.rs"});
+        let response=runtime.invoke("dev-assistant","dev-assistant.debug_request",&args,"human:ui",&[],"typed-debug").unwrap();
+        assert_eq!(response["service"],"debug.request");assert_eq!(response["args"],args);
+        let args=serde_json::json!({"root":"demo","plan_id":"fixture","part_id":"one","changes":[{"path":"one/a.rs","base_sha256":"abc","content":"{{literal}}"}]});
+        let response=runtime.invoke("dev-assistant","dev-assistant.refactor_submit",&args,"agent:one",&["tool.invoke:dev-assistant".into()],"typed-refactor").unwrap();
+        assert_eq!(response["service"],"refactor.submit");assert_eq!(response["args"],args);
+        let response=runtime.invoke("dev-assistant","dev-assistant.studio_lsp",&serde_json::json!({"root":"demo","action":"definition","path":"main.rs","position":{"line":0,"character":3}}),"human:ui",&[],"typed-lsp").unwrap();
+        assert_eq!(response["args"]["position"],serde_json::json!({"line":0,"character":3}));assert!(response["args"].get("text").is_none());
+        drop(runtime);let _=std::fs::remove_dir_all(&base);
+    }
+
     /// Regression: ext-rt must load handlers without re-locking `ModuleRuntime` (deadlock).
     #[test]
     fn ext_rt_handlers_invoke_sans_deadlock() {
