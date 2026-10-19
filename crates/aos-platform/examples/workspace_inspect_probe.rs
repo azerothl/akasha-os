@@ -10,8 +10,10 @@ use std::path::{Path, PathBuf};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 2 {
-        return Err("usage: workspace_inspect_probe REAL_REPO NEW_OUTPUT_DIR".into());
+    if !(2..=3).contains(&args.len()) {
+        return Err(
+            "usage: workspace_inspect_probe REAL_REPO NEW_OUTPUT_DIR [PAGE_ENTRIES]".into(),
+        );
     }
     let root = Path::new(&args[0]).canonicalize()?;
     let requested_output = PathBuf::from(&args[1]);
@@ -52,22 +54,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         memory_v2: false,
         memory_v2_shadow: false,
     };
-    let sub = PlatformSubsystem::open(&config)?;
+    let mut sub = PlatformSubsystem::open(&config)?;
     sub.workspaces
         .lock()
         .unwrap()
         .bind(&root.to_string_lossy(), Some("realrepo"), "human:ui")?;
     let caps = vec!["fs.read:/host/realrepo/**".into()];
     let begun = std::time::Instant::now();
-    let inventory = dispatch(
+    let page_entries = args
+        .get(2)
+        .map(|value| value.parse::<usize>())
+        .transpose()?;
+    if page_entries.is_some_and(|value| !(1..=5000).contains(&value)) {
+        return Err("page entries must be 1..5000".into());
+    }
+    let mut inventory = dispatch(
         &sub,
         "workspace.inspect",
-        json!({"root":"realrepo"}),
+        json!({"root":"realrepo","page_entries":page_entries}),
         "human:ui",
         &caps,
         "real-repo-inspect",
     )
     .await?;
+    let mut pages = vec![
+        json!({"elapsed_ms":begun.elapsed().as_millis(),"files_read":inventory["scan"]["files_read"],"visited_entries":inventory["scan"]["visited_entries"],"complete":inventory["scan"]["complete"]}),
+    ];
+    while inventory["continuation"]["available"] == true {
+        if pages.len() >= 128 || begun.elapsed().as_secs() > 120 {
+            return Err("proof inspection exceeded 128 pages or 120 seconds".into());
+        }
+        drop(sub);
+        sub = PlatformSubsystem::open(&config)?;
+        let cached = dispatch(
+            &sub,
+            "workspace.inventory",
+            json!({"root":"realrepo"}),
+            "human:ui",
+            &caps,
+            "between-pages-cache",
+        )
+        .await?;
+        assert_eq!(cached["content_version"], inventory["content_version"]);
+        assert!(cached.get("continuation_state").is_none());
+        let page_started = std::time::Instant::now();
+        inventory = dispatch(
+            &sub,
+            "workspace.inspect",
+            json!({"root":"realrepo","resume":true}),
+            "human:ui",
+            &caps,
+            "resumed-repo-inspect",
+        )
+        .await?;
+        pages.push(json!({"elapsed_ms":page_started.elapsed().as_millis(),"files_read":inventory["scan"]["files_read"],"visited_entries":inventory["scan"]["visited_entries"],"complete":inventory["scan"]["complete"]}));
+    }
     let inspect_ms = begun.elapsed().as_millis();
     std::fs::write(
         output.join("inventory.json"),
@@ -116,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     .is_err();
     assert!(denied);
-    let report = json!({"ok":true,"scope":"actual read-only repository; no source writes or embeddings quality claim","fixture":output,"inspection_ms":inspect_ms,"scan":inventory["scan"],"content_version":inventory["content_version"],"source_files":inventory["files"].as_array().unwrap().len(),"search_hits":response.hits.len(),"search_truncated":response.truncated,"cache_survived_host_restart":true,"ungranted_inspection_denied":denied});
+    let report = json!({"ok":true,"scope":"actual read-only repository; no source writes or embeddings quality claim","fixture":output,"inspection_ms":inspect_ms,"pages":pages,"host_restarted_between_pages":pages.len()>1,"host_restarts_between_pages":pages.len().saturating_sub(1),"continuation":inventory["continuation"],"scan":inventory["scan"],"content_version":inventory["content_version"],"source_files":inventory["files"].as_array().unwrap().len(),"search_hits":response.hits.len(),"search_truncated":response.truncated,"cache_survived_host_restart":true,"ungranted_inspection_denied":denied});
     std::fs::write(
         output.join("report.json"),
         serde_json::to_vec_pretty(&report)?,

@@ -337,13 +337,26 @@ impl WorkspacePolicy {
         Ok(text)
     }
 }
-fn read_bytes(path: &Path, allowance: u64) -> Result<Vec<u8>, String> {
+fn read_counted(reader: impl Read, allowance: u64) -> (Vec<u8>, Option<String>) {
     let mut bytes = Vec::new();
-    std::fs::File::open(path)
-        .map_err(|e| e.to_string())?
+    let error = reader
         .take((MAX_FILE_BYTES + 1).min(allowance + 1))
         .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
+        .err()
+        .map(|e| e.to_string());
+    (bytes, error)
+}
+fn read_bytes_counted(path: &Path, allowance: u64) -> (Vec<u8>, Option<String>) {
+    match std::fs::File::open(path) {
+        Ok(file) => read_counted(file, allowance),
+        Err(error) => (vec![], Some(error.to_string())),
+    }
+}
+fn read_bytes(path: &Path, allowance: u64) -> Result<Vec<u8>, String> {
+    let (bytes, error) = read_bytes_counted(path, allowance);
+    if let Some(error) = error {
+        return Err(error);
+    }
     Ok(bytes)
 }
 fn decode_text(bytes: Vec<u8>) -> Result<String, String> {
@@ -401,8 +414,38 @@ pub fn scan(
     policy: &mut WorkspacePolicy,
     start: &Path,
     limits: ScanLimits,
-    mut visit: impl FnMut(&str, &str) -> bool,
+    visit: impl FnMut(&str, &str) -> bool,
 ) -> Result<ScanReport, String> {
+    Ok(scan_page(policy, start, limits, None, PageBudget::default(), visit)?.report)
+}
+
+pub struct PageBudget {
+    pub duration: Duration,
+    pub entries: usize,
+}
+impl Default for PageBudget {
+    fn default() -> Self {
+        Self {
+            duration: Duration::from_secs(10),
+            entries: 50_000,
+        }
+    }
+}
+pub struct ScanPage {
+    pub report: ScanReport,
+    pub pending: Vec<String>,
+    pub coverage_gap: bool,
+}
+/// Pending paths are host-owned relative metadata, never caller-provided paths.
+/// Each resumed entry is checked again against the current canonical root/policy.
+pub fn scan_page(
+    policy: &mut WorkspacePolicy,
+    start: &Path,
+    limits: ScanLimits,
+    pending: Option<Vec<String>>,
+    budget: PageBudget,
+    mut visit: impl FnMut(&str, &str) -> bool,
+) -> Result<ScanPage, String> {
     let start = start.canonicalize().map_err(|e| e.to_string())?;
     if !start.starts_with(policy.root()) {
         return Err("scan root escapes workspace".into());
@@ -416,14 +459,47 @@ pub fn scan(
         ..Default::default()
     };
     let begun = Instant::now();
-    let mut stack = vec![start];
-    while let Some(path) = stack.pop() {
-        if begun.elapsed() > Duration::from_secs(10)
-            || report.visited_entries >= 50_000
-            || report.files_read >= limits.files
+    let mut stack = if let Some(pending) = pending {
+        if pending.len() > 50_000
+            || pending.iter().map(String::len).sum::<usize>() > 4 * 1024 * 1024
         {
+            return Err("invalid or oversized inspection continuation".into());
+        }
+        pending
+            .into_iter()
+            .map(|relative| {
+                if relative.is_empty() {
+                    return Ok(policy.root().to_path_buf());
+                }
+                if relative.contains(['\\', ':'])
+                    || relative.chars().any(char::is_control)
+                    || Path::new(&relative)
+                        .components()
+                        .any(|p| !matches!(p, Component::Normal(_)))
+                    || forbidden(Path::new(&relative))
+                {
+                    return Err("invalid inspection continuation path".to_string());
+                }
+                Ok(policy.root().join(relative))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        vec![start]
+    };
+    let mut yielded = false;
+    while let Some(path) = stack.pop() {
+        if begun.elapsed() >= budget.duration.min(Duration::from_secs(10))
+            || report.visited_entries >= budget.entries.clamp(1, 50_000)
+        {
+            stack.push(path);
+            yielded = true;
+            report.skip("page_boundary");
+            break;
+        }
+        if report.files_read >= limits.files {
             report.complete = false;
             report.skip("scan_limit");
+            stack.clear();
             break;
         }
         report.visited_entries += 1;
@@ -482,7 +558,22 @@ pub fn scan(
                 .into_iter()
                 .map(|entry| entry.path())
                 .collect::<Vec<_>>();
+            entries.retain(|entry| {
+                if forbidden(entry.strip_prefix(policy.root()).unwrap_or(entry)) {
+                    report.skip("excluded_path");
+                    false
+                } else {
+                    true
+                }
+            });
             entries.sort();
+            let queued_bytes: usize = stack.iter().map(|path| path.as_os_str().len()).sum();
+            let next_bytes: usize = entries.iter().map(|path| path.as_os_str().len()).sum();
+            if stack.len() + entries.len() > 50_000 || queued_bytes + next_bytes > 4 * 1024 * 1024 {
+                report.complete = false;
+                report.skip("queue_limit");
+                continue;
+            }
             stack.extend(entries.into_iter().rev());
             continue;
         }
@@ -497,22 +588,22 @@ pub fn scan(
         if report.bytes_read + metadata.len() > limits.bytes {
             report.complete = false;
             report.skip("byte_limit");
+            stack.clear();
             break;
         }
-        let bytes = match read_bytes(&path, limits.bytes - report.bytes_read) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                report.complete = false;
-                report.skip("unreadable");
-                continue;
-            }
-        };
         report.files_read += 1;
+        let (bytes, read_error) = read_bytes_counted(&path, limits.bytes - report.bytes_read);
         report.bytes_read += bytes.len() as u64;
         if report.bytes_read > limits.bytes {
             report.complete = false;
             report.skip("byte_limit");
+            stack.clear();
             break;
+        }
+        if read_error.is_some() {
+            report.complete = false;
+            report.skip("unreadable");
+            continue;
         }
         if bytes.len() as u64 > MAX_FILE_BYTES {
             report.skip("file_size");
@@ -542,10 +633,31 @@ pub fn scan(
         if !visit(&relative, &text) {
             report.complete = false;
             report.skip("result_limit");
+            stack.clear();
             break;
         }
     }
-    Ok(report)
+    let coverage_gap = !report.complete;
+    if yielded {
+        report.complete = false;
+    }
+    let pending = if yielded {
+        stack
+            .into_iter()
+            .map(|path| {
+                path.strip_prefix(policy.root())
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                    .map_err(|e| e.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        Vec::new()
+    };
+    Ok(ScanPage {
+        report,
+        pending,
+        coverage_gap,
+    })
 }
 
 #[cfg(test)]
@@ -735,6 +847,16 @@ mod tests {
         let _junction = Junction(path);
         let mut policy = WorkspacePolicy::new(&f.0).unwrap();
         assert!(policy.read_text("linked/outside.rs").is_err());
+        let root = policy.root().to_path_buf();
+        assert!(scan_page(
+            &mut policy,
+            &root,
+            ScanLimits::default(),
+            Some(vec!["linked/outside.rs".into()]),
+            PageBudget::default(),
+            |_, _| true
+        )
+        .is_err());
         let redirected = policy.root().join("linked/outside.rs");
         let metadata = redirected.symlink_metadata().unwrap();
         assert!(policy
@@ -754,5 +876,68 @@ mod tests {
             std::fs::read_to_string(outside.0.join("outside.rs")).unwrap(),
             "outside-marker\n"
         );
+    }
+    #[test]
+    fn time_slice_keeps_the_unvisited_entry_and_resumes_with_the_same_filter() {
+        let f = Fixture::new();
+        f.write("safe.rs", "fn safe() {}\n");
+        let token = format!("ghp_{}", "T".repeat(36));
+        f.write("secret.rs", &token);
+        let mut policy = WorkspacePolicy::new(&f.0).unwrap();
+        let root = policy.root().to_path_buf();
+        let paused = scan_page(
+            &mut policy,
+            &root,
+            ScanLimits::default(),
+            None,
+            PageBudget {
+                duration: Duration::ZERO,
+                entries: 50_000,
+            },
+            |_, _| panic!("zero-time page visited a file"),
+        )
+        .unwrap();
+        assert!(!paused.report.complete);
+        assert!(!paused.coverage_gap);
+        assert_eq!(paused.report.visited_entries, 0);
+        assert_eq!(paused.pending, vec![String::new()]);
+        let mut seen = vec![];
+        let finished = scan_page(
+            &mut policy,
+            &root,
+            ScanLimits::default(),
+            Some(paused.pending),
+            PageBudget::default(),
+            |path, _| {
+                seen.push(path.to_string());
+                true
+            },
+        )
+        .unwrap();
+        assert!(finished.report.complete);
+        assert!(finished.pending.is_empty());
+        assert_eq!(seen, vec!["safe.rs"]);
+        assert_eq!(finished.report.finding_files, 1);
+    }
+    #[test]
+    fn failed_reads_retain_consumed_bytes_for_budget_accounting() {
+        struct PartialError(bool);
+        impl Read for PartialError {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.0 {
+                    return Err(std::io::Error::other("fixture read failed"));
+                }
+                self.0 = true;
+                let n = 4.min(buf.len());
+                buf[..n].fill(b'x');
+                Ok(n)
+            }
+        }
+        let (bytes, error) = read_counted(PartialError(false), 16);
+        assert_eq!(bytes, b"xxxx");
+        assert!(error.is_some());
+        let (bytes, error) = read_counted(PartialError(false), 2);
+        assert_eq!(bytes.len(), 3);
+        assert!(error.is_none());
     }
 }
