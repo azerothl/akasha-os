@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import shlex
+import sys
+
 from aos_gate.asr import (
     extract_asr_transcript,
     overlay_asr_transcript,
@@ -44,7 +47,8 @@ def test_transcribe_not_configured(tmp_path):
 def test_transcribe_echo(tmp_path):
     wav = tmp_path / "clip.wav"
     wav.write_bytes(b"RIFF")
-    out = transcribe_via_host_command(str(wav), command="echo host-stt-ok")
+    command = shlex.join([sys.executable, "-c", "print('host-stt-ok')"])
+    out = transcribe_via_host_command(str(wav), command=command)
     assert out["ok"] is True
     assert "host-stt-ok" in out["transcript"]
     assert out["source_trust"] == "untrusted"
