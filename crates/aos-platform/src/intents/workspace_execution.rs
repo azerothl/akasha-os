@@ -390,7 +390,7 @@ mod tests {
         let sub = f.sub.clone();
         let home = f.home.clone();
         let caps = f.caps.clone();
-        let job = tokio::task::spawn_blocking(move || {
+        let mut job = tokio::task::spawn_blocking(move || {
             let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
             let mut author = crate::ModuleAuthor::open(home.join("author")).unwrap();
             author.ext_rt_wasm = repo.join("share/modules/ext-rt.aospkg/module.wasm");
@@ -465,12 +465,29 @@ mod tests {
                 assert_eq!(result.is_ok(), expected, "{result:?}");
             }
         });
+        // The blocking job packages, compiles and drives the real WASM module in a
+        // debug build before each confirmation; on a loaded CI runner that took more
+        // than the previous 30 s budget. When the wait expired, the test thread
+        // panicked and dropped `f`, deleting the fixture home while the job was still
+        // installing, which surfaced as a misleading Io(NotFound)/BadManifest panic.
+        // Race the confirmation against the job itself so a real job failure is
+        // reported as-is, and keep a generous deadline only for a genuine hang.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
         for approved in [false, true] {
-            let pending =
-                tokio::time::timeout(std::time::Duration::from_secs(30), notifications.recv())
-                    .await
-                    .unwrap()
-                    .unwrap();
+            let pending = tokio::select! {
+                pending = notifications.recv() => {
+                    pending.expect("confirmation channel closed")
+                }
+                result = &mut job => match result {
+                    Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+                    other => panic!(
+                        "WASM job ended before confirmation (approved={approved}): {other:?}"
+                    ),
+                },
+                _ = tokio::time::sleep_until(deadline) => {
+                    panic!("no refactor.apply confirmation within 300 s (approved={approved})")
+                }
+            };
             assert_eq!(pending.action, "refactor.apply");
             assert_eq!(pending.actor, "human:ui");
             assert_eq!(
