@@ -10,6 +10,10 @@ The previous DAP/Studio/subtree slice was merged through
 checks and the manual CUDA job skipped. This follow-up is not a new release.
 #247, #434 and #435 remain open.
 
+The later [synthetic filter evaluation](dev-assistant-filter-quality.md) improves
+assignment parsing and requires cache policy 3. The policy/budget measurements
+below remain the dated API-4 record, not the current compatibility contract.
+
 ## Explicit project context
 
 The reference module 0.4.0 requires **host API 4**, UI contract 2 and ext-rt 1.1.0.

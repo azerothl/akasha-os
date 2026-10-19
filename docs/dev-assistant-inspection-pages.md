@@ -93,8 +93,10 @@ unchanged fixture it matches one-pass inspection. Delta comparison is available
 for complete single-call scans; resumed scans explicitly report delta unavailable
 rather than comparing a final map against its own partial prefix.
 
-Cache policy version is now 2. Version-1 maps are not silently interpreted as
-resumable state: inspect again. The namespace remains `source-map:v1`, the public
+API 5 introduced cache policy 2. The subsequent
+[content-filter quality follow-up](dev-assistant-filter-quality.md) uses policy
+**3**: maps and continuations from policies 1 and 2 require a fresh inspection.
+The namespace remains `source-map:v1`, the public
 source-file map format. A new traversal replaces an unfinished one deliberately.
 
 ## Verification and remaining scope
