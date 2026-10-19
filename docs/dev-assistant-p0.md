@@ -14,7 +14,7 @@ without turning Preview into a full IDE (P1–P2 stay 0.20+).
 | Intent | Lot | Status |
 |--------|-----|--------|
 | `workspace.bind` / `unbind` / `list` | DA.1 | **Live** — persists under `sessions/workspace-bindings.json`; returns caps `fs.read/write:/host/<id>/**` |
-| `fs.search` / `code.search` | DA.2 | **Live** — bounded ripgrep (`rg`) with walk fallback; requires `fs.read:/host/<id>/**`; limit ≤ 200 |
+| `fs.search` / `code.search` | DA.2 | **Live P0; API 4 candidate** — native policy-filtered literal search; requires `fs.read:/host/<id>/**`; limit ≤ 200; [policy and bounds](dev-assistant-project-policy.md) |
 | `fs.apply_patch` / `fs.undo_patch` | DA.3 | **Live** — replace_all or unified diff; multi-file undo groups in `sessions/workspace-patch-undo.json` |
 
 Logical VFS root for a bind: `/host/<id>/…` mapped to the absolute host folder.
@@ -32,7 +32,7 @@ A Dev Assistant package **must**:
    normal **cap-review** path before search/patch (fail-closed; never mint caps
    inside the module).
 3. Use the host-supported DeclUI contract. The source candidate reference
-   requires **host API 3 / UI contract 2** for its native dev surfaces; existing
+   requires **host API 4 / UI contract 2** for its native dev surfaces; existing
    UI 1 packages remain compatible. See [the adapter contract](dev-assistant-studio.md).
 4. Prefer `fs.search` / `code.search`, then `fs.apply_patch` (and
    `fs.undo_patch`), over full-file `fs.write` for host trees.

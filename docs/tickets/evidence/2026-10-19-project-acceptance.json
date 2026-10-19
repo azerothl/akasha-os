@@ -1,0 +1,510 @@
+{
+  "observed_at_utc": "2026-10-19T04:29:08.954065+00:00",
+  "host": {
+    "os": "Windows",
+    "machine": "AMD64",
+    "extra_hardware_available": false
+  },
+  "branch": "codex/dev-assistant-project-acceptance",
+  "base_commit": "1c525d29b8a94c5d032d72d85c7a7daec929c253",
+  "merged_pr": {
+    "number": 451,
+    "url": "https://github.com/azerothl/akasha-os/pull/451",
+    "merged_at": "2026-10-19T03:27:47Z",
+    "merge_commit": "1c525d29b8a94c5d032d72d85c7a7daec929c253",
+    "ci_success": 18,
+    "expected_manual_cuda_skipped": true
+  },
+  "delivery": {
+    "scope": "local source candidate at observation time; no new Preview release",
+    "reference_module": "0.4.0",
+    "host_api": 4,
+    "declui_contract": 2,
+    "ext_rt": "1.1.0",
+    "tools": 25,
+    "compatible_prior_host_api_modules": [
+      1,
+      2,
+      3
+    ]
+  },
+  "checks": {
+    "platform": {
+      "passed": 306,
+      "failed": 0,
+      "log": "project-platform-final-tests.log",
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "agent": {
+      "passed": 376,
+      "failed": 0,
+      "command": "cargo test -p aos-agent --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "protocol": {
+      "passed": 194,
+      "failed": 0,
+      "command": "cargo test -p aos-proto --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "ui": {
+      "passed": 543,
+      "failed": 0,
+      "ignored": 1,
+      "command": "cargo test -p aos-ui-egui --no-default-features --bin aos-ui-egui --locked -- --test-threads=1"
+    },
+    "strict_clippy": {
+      "result": "passed",
+      "log": "project-clippy.log",
+      "log_sha256": "d8e0c1a00e0b36ecf5424e43590e71bdc1e2290e8727934b2920a97479256fc9",
+      "command": "cargo clippy -p aos-platform -p aos-agent -p aos-proto -p aos-ui-egui --no-default-features --all-targets --locked -- -D warnings"
+    },
+    "model_example_clippy_cpu": {
+      "result": "passed",
+      "log": "project-llama-clippy-cpu.log",
+      "log_sha256": "77bc891d23bd6c0ee32fa16ca7ef0394aa1338203bafa475f26e37d9544b11de",
+      "command": "cargo clippy -p aos-llama --example project_proposal --no-default-features --locked -- -D warnings"
+    },
+    "validator": {
+      "passed": 4,
+      "command": "python -m unittest discover -s scripts -p test_project_model_fixture.py -v"
+    },
+    "signed_packs": {
+      "passed": 9,
+      "command": "python -m unittest discover -s packaging/tests -v"
+    },
+    "versions": {
+      "result": "passed",
+      "command": "./packaging/check-version.ps1"
+    },
+    "site_docs": {
+      "result": "passed",
+      "command": "./packaging/check-site-docs.ps1"
+    },
+    "windows_junction": {
+      "result": "passed",
+      "scope": "generated actual NTFS junction; excluded from scan and explicit context read; outside target unchanged"
+    },
+    "wasm_host": {
+      "result": "passed within complete platform suite",
+      "scope": "reference module package and typed read/inspect/inventory calls through WASM host boundary, plus existing confirmations"
+    },
+    "readonly_preview": {
+      "result": "passed within complete UI suite",
+      "scope": "headless rendered egui text uses fresh tool content; no human native click claim"
+    }
+  },
+  "real_repository": {
+    "source_revision": "1c525d29b8a94c5d032d72d85c7a7daec929c253",
+    "archive_files": 1339,
+    "archive_sha256": "8883139fe5eb7695b872ebf0c44b068680eba7ea13bb51c4f1072fac59dd7f90",
+    "probe_sha256": "7b89bd793298fef7f88c75dbb98ac6c7adc2dbedc308f68161fc79ab7ed346f7",
+    "cold": {
+      "cache_survived_host_restart": true,
+      "content_version": "6e44f409baca542a7d68a179ed9f0b314e1274f6727e756baf9e9d5aea933457",
+      "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-w1fixc2e\\host",
+      "inspection_ms": 10043,
+      "ok": true,
+      "scan": {
+        "bytes_read": 6683604,
+        "complete": false,
+        "eligible_files": 310,
+        "files_read": 310,
+        "finding_files": 0,
+        "findings": [],
+        "findings_truncated": false,
+        "skipped": {
+          "scan_limit": 1
+        },
+        "visited_entries": 361
+      },
+      "scope": "actual read-only repository; no source writes or embeddings quality claim",
+      "search_hits": 2,
+      "search_truncated": true,
+      "source_files": 310,
+      "ungranted_inspection_denied": true
+    },
+    "native": {
+      "cache_survived_host_restart": true,
+      "content_version": "c0767e29216b6e315fa056ed835e1520b8becd3dfa822c77657662af8d253309",
+      "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-w1fixc2e\\host-repeat",
+      "inspection_ms": 7105,
+      "ok": true,
+      "scan": {
+        "bytes_read": 33567080,
+        "complete": true,
+        "eligible_files": 1248,
+        "files_read": 1318,
+        "finding_files": 5,
+        "findings": [
+          {
+            "findings": [
+              {
+                "line": 354,
+                "rule": "credential_token"
+              },
+              {
+                "line": 355,
+                "rule": "credential_token"
+              },
+              {
+                "line": 357,
+                "rule": "private_key"
+              },
+              {
+                "line": 373,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "crates/aos-platform/src/extract.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 796,
+                "rule": "private_key"
+              }
+            ],
+            "path": "crates/aos-platform/src/workspace_refactor.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 172,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 170,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/fr/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 301,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "python/aos_gate/tests/test_outcomes_trust_hitl.py"
+          }
+        ],
+        "findings_truncated": false,
+        "skipped": {
+          "binary": 65,
+          "file_size": 2,
+          "ignored": 3
+        },
+        "visited_entries": 1590
+      },
+      "scope": "actual read-only repository; no source writes or embeddings quality claim",
+      "search_hits": 20,
+      "search_truncated": true,
+      "source_files": 1248,
+      "ungranted_inspection_denied": true
+    },
+    "scope": "actual committed snapshot; cold scan partial, repeated same-snapshot scan complete; no reliable cold-latency or semantic-quality claim"
+  },
+  "historical_repository_run": {
+    "ok": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-4hefh1fn",
+    "source_revision": "1c525d29b8a94c5d032d72d85c7a7daec929c253",
+    "archive_files": 1339,
+    "archive_sha256": "8883139fe5eb7695b872ebf0c44b068680eba7ea13bb51c4f1072fac59dd7f90",
+    "probe_sha256": "3779b8c2c9ebc857b9f4fc957292e426830aa019ee45b34257d22700a732b038",
+    "native": {
+      "cache_survived_host_restart": true,
+      "content_version": "c0767e29216b6e315fa056ed835e1520b8becd3dfa822c77657662af8d253309",
+      "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-4hefh1fn\\host",
+      "inspection_ms": 9583,
+      "ok": true,
+      "scan": {
+        "bytes_read": 33567080,
+        "complete": true,
+        "eligible_files": 1248,
+        "files_read": 1318,
+        "finding_files": 5,
+        "findings": [
+          {
+            "findings": [
+              {
+                "line": 354,
+                "rule": "credential_token"
+              },
+              {
+                "line": 355,
+                "rule": "credential_token"
+              },
+              {
+                "line": 357,
+                "rule": "private_key"
+              },
+              {
+                "line": 373,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "crates/aos-platform/src/extract.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 796,
+                "rule": "private_key"
+              }
+            ],
+            "path": "crates/aos-platform/src/workspace_refactor.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 172,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 170,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/fr/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 301,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "python/aos_gate/tests/test_outcomes_trust_hitl.py"
+          }
+        ],
+        "findings_truncated": false,
+        "skipped": {
+          "binary": 65,
+          "file_size": 2,
+          "ignored": 3
+        },
+        "visited_entries": 1590
+      },
+      "scope": "actual read-only repository; no source writes or embeddings quality claim",
+      "search_hits": 20,
+      "search_truncated": true,
+      "source_files": 1248,
+      "ungranted_inspection_denied": true
+    },
+    "scope": "read-only native inspection of a real repository's committed snapshot; no generated source corpus or semantic retrieval benchmark"
+  },
+  "real_model": {
+    "ok": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-model-9ym1qqw5",
+    "model": "Qwen3.5-4B-Q4_K_M.gguf",
+    "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "model_probe_sha256": "b682c33dfa6bb3a7e32b412f2e83abac6733b26e933d9a8f2309d1f0a9a526b2",
+    "host_probe_sha256": "415640c3148ef786e314c639822a61a03bcdc4531efbb86481197e9431f8e962",
+    "python": {
+      "executable": "C:\\Users\\azero\\anaconda3\\python.exe",
+      "version": "3.12.7 | packaged by Anaconda, Inc. | (main, Oct  4 2024, 13:17:27) [MSC v.1929 64 bit (AMD64)]"
+    },
+    "source_context_from_native_host": true,
+    "source_context": {
+      "backend": {
+        "ok": true,
+        "path": "/host/fixture/backend/module.py",
+        "policy_version": 1,
+        "sha256": "de59ab068541fbac4b3b9ede8221708bbade25025f0fa35f38155973c2ab7582"
+      },
+      "frontend": {
+        "ok": true,
+        "path": "/host/fixture/frontend/module.py",
+        "policy_version": 1,
+        "sha256": "3fa47b22e9eb444a54d58e69e20fc9b36f210efa135ca5195c0741ef8cf11781"
+      }
+    },
+    "generation": {
+      "frontend": {
+        "prompt_tokens": 222,
+        "generated_tokens": 95,
+        "stop": "Eog",
+        "generation_ms": 966,
+        "gpu_devices": 1,
+        "scope": "real local model proposal; not autonomous agentd or overlapping GPU inference",
+        "attempts": 1
+      },
+      "backend": {
+        "prompt_tokens": 574,
+        "generated_tokens": 126,
+        "stop": "Eog",
+        "generation_ms": 1222,
+        "gpu_devices": 1,
+        "scope": "real local model proposal; not autonomous agentd or overlapping GPU inference",
+        "attempts": 2
+      }
+    },
+    "native": {
+      "applied": {
+        "files": [
+          "frontend/module.py",
+          "backend/module.py"
+        ],
+        "ok": true,
+        "plan_id": "refactor-26b39ae2436f7e30ad9d282f9caa6fe2",
+        "review_sha256": "8e87d9e0b92b34ed7f020730094cd78e7edc4f70da8b28aebf1e2391cb6552bb",
+        "state": "applied"
+      },
+      "approvals": [
+        {
+          "action": "process.run",
+          "approved": true
+        },
+        {
+          "action": "refactor.apply",
+          "approved": false
+        },
+        {
+          "action": "refactor.apply",
+          "approved": true
+        },
+        {
+          "action": "process.run",
+          "approved": true
+        },
+        {
+          "action": "refactor.undo",
+          "approved": true
+        }
+      ],
+      "audit_chain_verified": true,
+      "baseline": {
+        "exit_code": 0,
+        "ok": true,
+        "problems": [],
+        "stderr": "",
+        "stdout": "{\"ok\": true, \"cases\": 93, \"frontend_functions\": 1, \"backend_functions\": 2}\r\n",
+        "timed_out": false,
+        "truncated": false
+      },
+      "denied_confirmation_wrote_nothing": true,
+      "ok": true,
+      "originals_restored": true,
+      "scope": "native production intents, two actor-scoped real-model proposals, generated fixture only",
+      "submitted": [
+        {
+          "host_files_written": 0,
+          "ok": true,
+          "plan_id": "refactor-26b39ae2436f7e30ad9d282f9caa6fe2",
+          "state": "collecting"
+        },
+        {
+          "host_files_written": 0,
+          "ok": true,
+          "plan_id": "refactor-26b39ae2436f7e30ad9d282f9caa6fe2",
+          "state": "ready"
+        }
+      ],
+      "undo": {
+        "files": [
+          "frontend/module.py",
+          "backend/module.py"
+        ],
+        "ok": true,
+        "plan_id": "refactor-26b39ae2436f7e30ad9d282f9caa6fe2",
+        "review_sha256": "5e969766465c8cb48479d6589f393f48a28f89ea5fba024b9b7cc8358af18416",
+        "state": "undone"
+      },
+      "verified": {
+        "exit_code": 0,
+        "ok": true,
+        "problems": [],
+        "stderr": "",
+        "stdout": "{\"ok\": true, \"cases\": 93, \"frontend_functions\": 2, \"backend_functions\": 3}\r\n",
+        "timed_out": false,
+        "truncated": false
+      },
+      "wrong_actor_denied": true
+    },
+    "elapsed_ms": 13266,
+    "scope": "two real-model-authored proposals through scoped actor identities and confirmed host apply/test/undo; not autonomous agentd, representative monorepo quality, or overlapping GPU inference"
+  },
+  "retained_failures": [
+    {
+      "kind": "model candidate rejection",
+      "model": "Spark-X2.5-4B-Q4_K_M",
+      "fixture": "aos-project-model-qw2u2ylu",
+      "result": "two backend syntax-invalid candidates, including one feedback retry; no model candidate applied",
+      "log": "project-model-real.log"
+    },
+    {
+      "kind": "inadequate acceptance assertion",
+      "model": "Qwen3.5-4B-Q4_K_M",
+      "result": "initial behaviour-only pass retained duplicate function definitions; source review found the defect; validator now rejects duplicates and requires shared helper reachability; successful run used model feedback, no handwritten repair"
+    },
+    {
+      "kind": "scan deadline",
+      "fixture": "aos-project-corpus-q8ntt6g5",
+      "inspection_ms": 10021,
+      "files_read": 679,
+      "complete": false,
+      "result": "partial coverage correctly reported; marker prefilter optimized before complete run"
+    },
+    {
+      "kind": "test fixture reuse",
+      "test": "user_docs::tests::product_namespace_untouched",
+      "initial_platform_result": {
+        "passed": 305,
+        "failed": 1
+      },
+      "cause": "old helper reused PID-based directory with prior store; Windows recycled the PID",
+      "repair": "exclusive random test directory; no production-memory behaviour change",
+      "rerun_platform_passed": 306
+    },
+    {
+      "kind": "Windows interpreter alias",
+      "fixture": "aos-project-model-x5k_e44x",
+      "result": "inaccessible Store Python alias refused before any proposal application; probe now canonicalizes interpreter during context preparation; successful rerun uses installed Anaconda Python"
+    },
+    {
+      "kind": "second cold scan deadline",
+      "fixture": "aos-project-corpus-0m68cy1b",
+      "complete": false,
+      "result": "partial coverage was exposed; enumerated-path checks now avoid redundant ancestor metadata calls while requiring exact canonical identity"
+    },
+    {
+      "kind": "optional validation configuration",
+      "result": "default-feature CUDA Clippy rebuild was interrupted; CPU Clippy above passed and actual CUDA model execution is recorded separately; no CUDA-Clippy completion claim"
+    }
+  ],
+  "limits": [
+    "Automatic-context policy is a conservative heuristic, not complete DLP or an OS sandbox.",
+    "Source-file map is metadata, not structural embeddings or an atomic snapshot.",
+    "Two proposals were produced by sequential real-model calls under scoped actor identities; no autonomous agentd or overlapping GPU inference claim.",
+    "Fixture-only approvals are automated; human native installation/clicks/confirmations remain unverified.",
+    "Actual corpus inspection measures one committed repository snapshot on this Windows PC."
+  ],
+  "still_open": {
+    "247": [
+      "human fresh-install native flow on target operating systems (user explicitly requested it stay open on 19 October)",
+      "separate Studio LSP delivery (Akasha PR 169 remains open)",
+      "autonomous agent-runtime and representative large-project refactor/retrieval quality",
+      "structural project-memory evaluation and broader scanner recall/false-positive evaluation",
+      "CI of this local candidate",
+      "reliable complete cold-repository coverage within the fixed scan budget"
+    ],
+    "434": "additional-machine cohort evidence unavailable; kept OPEN",
+    "435": "two-GPU evidence unavailable; kept OPEN"
+  },
+  "probe_output_guard": {
+    "result": "passed",
+    "scope": "new output directory inside canonicalized corpus root was refused before creation, including Windows canonical path prefix handling"
+  },
+  "evidence_retention": "Detailed logs, raw model prompts/responses and native fixtures remain in the local evidence/temporary directories reported above; they are not bundled as user project sources.",
+  "implementation_commit": "75ae6399027051713a71df1cad59c3841972eaff"
+}

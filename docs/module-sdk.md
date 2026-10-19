@@ -201,7 +201,6 @@ fail-closed; see [dev-assistant-p0.md](dev-assistant-p0.md),
 - Target architecture: [technical-specs.md](technical-specs.md) §7
 - ADR: [adr/0009-rich-module-app-contract.md](adr/0009-rich-module-app-contract.md)
 
-
 ### Typed script arguments (host API 3 reference modules)
 
 The rebuilt ext-rt 1.1.0 supports `{$arg: field}` in `handlers.yaml`:
@@ -222,3 +221,13 @@ Existing `{{args.field}}` string interpolation remains supported and is evaluate
 once against the template source; replacement text is not evaluated again.
 The Dev Assistant 0.3.0 reference requires host API 3 for debug, project memory
 and refactor intents. This does not change the UI contract version (2).
+
+## Host API 4: filtered project context
+
+The Dev Assistant reference module 0.4.0 requires host API 4. Existing API 1–3
+modules remain supported. `workspace.inspect`, `workspace.inventory` and
+`workspace.read` expose a bounded source-file map and explicit filtered UTF-8
+reads on a capability-granted bound workspace. They do not provide ambient
+host access or a semantic symbol index. See
+[project context policy](dev-assistant-project-policy.md) for capabilities,
+ignore/credential filters, limits, cache freshness and observed acceptance.

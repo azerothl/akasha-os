@@ -113,3 +113,15 @@ isolé et affiche son chemin pour inspection. Les processus de fixture sont arr�
 
 [Contrats et configuration](../dev-assistant-studio.md) ·
 [Bilan du lot initial](open-ticket-delivery-2026-10-18.md).
+
+## Mise à jour du 19 octobre 2026
+
+Ce lot a été fusionné via [PR #451](https://github.com/azerothl/akasha-os/pull/451),
+commit `1c525d29b8a94c5d032d72d85c7a7daec929c253`, à 03:27:47 UTC. Ses 18 contrôles
+CI ont réussi ; le job CUDA manuel était ignoré comme prévu. Les résultats
+locaux du 18 octobre ci-dessus restent le relevé historique de ce lot.
+
+La [suite de validation et de politique projet](../dev-assistant-project-policy.md)
+traite maintenant le contexte filtré, la carte de sources persistante, un vrai
+dépôt et des propositions issues d'un modèle réel. Elle conserve les limites
+restantes et ne clôture pas #247, #434 ou #435.
