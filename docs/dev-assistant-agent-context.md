@@ -143,3 +143,8 @@ retrieval/refactor/scanner quality and per-member salon transport still need wor
 Studio LSP delivery depends on the separate open
 [Akasha PR #169](https://github.com/azerothl/Akasha/pull/169).
 #434 and #435 stay open for unavailable extra-machine and two-GPU evidence.
+
+Later acceptance: [the real-model worker follow-up](dev-assistant-real-worker.md)
+uses the production model daemon and Qwen weights, fixes Windows gate interpreter
+discovery and verifies a strict-gated Unicode source read. The scripted evidence
+above remains its original dated record; native human validation stays open.
