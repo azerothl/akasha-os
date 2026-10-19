@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{io::Write, path::Path};
-const POLICY_VERSION: u32 = 2;
+const POLICY_VERSION: u32 = 3;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
@@ -597,6 +597,32 @@ mod tests {
         assert!(result["scan"]["bytes_read"].as_u64().unwrap() <= 34);
         assert_eq!(result["scan"]["files_read"], 2);
         assert_eq!(result["scan"]["complete"], false);
+    }
+    #[test]
+    fn prior_filter_policy_cannot_be_read_or_resumed() {
+        let home = project(3);
+        let root = home.0.join("project");
+        let cache = home.0.join("sessions");
+        let caps = vec!["fs.read:/host/demo/**".into()];
+        let filename = cache.join("workspace-inventory-demo.json");
+        execute(&root, "demo", &cache, "workspace.inspect", &paged(1), &caps).unwrap();
+        let saved: Value = serde_json::from_slice(&std::fs::read(&filename).unwrap()).unwrap();
+        for version in [1, 2] {
+            let mut old = saved.clone();
+            old["policy_version"] = json!(version);
+            std::fs::write(&filename, old.to_string()).unwrap();
+            for (intent, request) in [
+                ("workspace.inventory", req()),
+                ("workspace.inspect", resume()),
+            ] {
+                assert!(execute(&root, "demo", &cache, intent, &request, &caps)
+                    .unwrap_err()
+                    .contains("binding/policy changed"));
+            }
+        }
+        let fresh = execute(&root, "demo", &cache, "workspace.inspect", &req(), &caps).unwrap();
+        assert_eq!(fresh["policy_version"], 3);
+        assert_eq!(fresh["scan"]["complete"], true);
     }
     #[test]
     fn expired_rebound_and_corrupt_continuations_are_refused() {

@@ -85,60 +85,7 @@ pub fn secret_findings(text: &str) -> Vec<SecretFinding> {
                     }
                 })
         });
-        let rule = rule.or_else(|| {
-            let (left, right) = line.split_once('=').or_else(|| line.split_once(':'))?;
-            let key = left
-                .trim_end_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-                .rsplit(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-                .next()?
-                .to_ascii_lowercase();
-            if ![
-                "password",
-                "passwd",
-                "token",
-                "api_key",
-                "apikey",
-                "secret",
-                "access_token",
-                "client_secret",
-                "authorization",
-            ]
-            .contains(&key.as_str())
-            {
-                return None;
-            }
-            let right = right.trim();
-            let first = right.chars().next()?;
-            let literal = if first == '\'' || first == '"' {
-                right[1..].split(first).next()?
-            } else {
-                right.trim_end_matches([',', ';'])
-            };
-            let lower = literal.to_ascii_lowercase();
-            let placeholder = [
-                "changeme",
-                "example",
-                "placeholder",
-                "redacted",
-                "password",
-                "test",
-                "dummy",
-                "none",
-                "null",
-            ]
-            .contains(&lower.as_str())
-                || literal.starts_with("${")
-                || (literal.starts_with('<') && literal.ends_with('>'));
-            (literal.len() >= 12
-                && !placeholder
-                && !literal.chars().any(char::is_whitespace)
-                && (first == '\''
-                    || first == '"'
-                    || literal
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || "_-+/=".contains(c))))
-            .then_some("credential_assignment")
-        });
+        let rule = rule.or_else(|| assignment_finding(line));
         if let Some(rule) = rule {
             findings.push(SecretFinding {
                 line: index as u32 + 1,
@@ -151,6 +98,135 @@ pub fn secret_findings(text: &str) -> Vec<SecretFinding> {
     }
     findings
 }
+// Inspect each separator outside strings, including later JSON members/assignments.
+// This is a line-oriented heuristic, not a language parser or expression evaluator.
+fn authorization_value(value: &str) -> &str {
+    value
+        .split_once(char::is_whitespace)
+        .and_then(|(scheme, tail)| {
+            (scheme.eq_ignore_ascii_case("bearer") || scheme.eq_ignore_ascii_case("basic"))
+                .then_some(tail.trim_start())
+        })
+        .unwrap_or(value)
+}
+
+fn assignment_finding(line: &str) -> Option<&'static str> {
+    let mut quote = None;
+    let mut escaped = false;
+    for (at, ch) in line.char_indices() {
+        if let Some(active) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == active {
+                quote = None;
+            }
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            continue;
+        }
+        if ch != '=' && ch != ':' {
+            continue;
+        }
+        let key = line[..at]
+            .trim_end_matches(|c: char| c.is_whitespace() || ['\'', '"', ']'].contains(&c))
+            .rsplit(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if ![
+            "password",
+            "passwd",
+            "token",
+            "api_key",
+            "apikey",
+            "secret",
+            "access_token",
+            "client_secret",
+            "authorization",
+        ]
+        .contains(&key.as_str())
+        {
+            continue;
+        }
+        let right = line[at + 1..].trim_start();
+        let Some(first) = right.chars().next() else {
+            continue;
+        };
+        let quoted = first == '\'' || first == '"';
+        let literal = if quoted {
+            // An escaped quote is not the end of the literal. No unescaping is
+            // attempted: encoded/concatenated credentials remain outside scope.
+            let mut escaped = false;
+            let end = right[1..].char_indices().find_map(|(i, c)| {
+                if escaped {
+                    escaped = false;
+                    None
+                } else if c == '\\' {
+                    escaped = true;
+                    None
+                } else {
+                    (c == first).then_some(i + 1)
+                }
+            });
+            let Some(end) = end else { continue };
+            &right[1..end]
+        } else {
+            let right = if key == "authorization" {
+                authorization_value(right)
+            } else {
+                right
+            };
+            let value = right
+                .split(|c: char| [',', ';', '}'].contains(&c) || c.is_whitespace())
+                .next()
+                .unwrap_or_default()
+                .trim();
+            // Do not mistake a type annotation or a source expression for a
+            // literal just because its first identifier is long.
+            let rest = right[value.len()..].trim_start();
+            if !rest.is_empty() && !rest.starts_with([',', ';', '}']) {
+                continue;
+            }
+            value
+        };
+        let value = if key == "authorization" {
+            authorization_value(literal)
+        } else {
+            literal
+        };
+        let lower = value.to_ascii_lowercase();
+        let placeholder = [
+            "changeme",
+            "example",
+            "placeholder",
+            "redacted",
+            "password",
+            "test",
+            "dummy",
+            "none",
+            "null",
+        ]
+        .contains(&lower.as_str())
+            || value.starts_with("${")
+            || (value.starts_with('<') && value.ends_with('>'));
+        if value.len() >= 12
+            && !placeholder
+            && !value.chars().any(char::is_whitespace)
+            && (quoted
+                || value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_-+/=".contains(c)))
+        {
+            return Some("credential_assignment");
+        }
+    }
+    None
+}
+
 pub fn forbidden(path: &Path) -> bool {
     path.components().any(|component| {
         let raw_name = component.as_os_str().to_string_lossy();
@@ -697,6 +773,70 @@ mod tests {
         assert!(secret_findings(
             "api_key = '${API_KEY}'\npassword = '<set-me>'\nlet token = response.get_token();\n"
         )
+        .is_empty());
+    }
+    #[test]
+    fn synthetic_quality_corpus_reaches_real_read_and_discovery_policy() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../fixtures/workspace-policy-quality.json"
+        ))
+        .unwrap();
+        let fixture = Fixture::new();
+        let mut expected_findings = 0;
+        for (i, case) in cases.iter().enumerate() {
+            let text = case["text"].as_str().unwrap();
+            let expected = case["expected_detected"].as_bool().unwrap();
+            assert_eq!(
+                !secret_findings(text).is_empty(),
+                expected,
+                "case {}",
+                case["id"]
+            );
+            let path = format!("case-{i}.txt");
+            fixture.write(&path, text);
+            let mut policy = WorkspacePolicy::new(&fixture.0).unwrap();
+            assert_eq!(
+                policy.read_text(&path).is_err(),
+                expected,
+                "read {}",
+                case["id"]
+            );
+            expected_findings += usize::from(expected);
+        }
+        let mut policy = WorkspacePolicy::new(&fixture.0).unwrap();
+        let root = policy.root().to_path_buf();
+        let mut exposed = 0;
+        let report = scan(&mut policy, &root, ScanLimits::default(), |_, text| {
+            assert!(secret_findings(text).is_empty());
+            exposed += 1;
+            true
+        })
+        .unwrap();
+        assert!(report.complete);
+        assert_eq!(report.finding_files, expected_findings);
+        assert_eq!(exposed, cases.len() - expected_findings);
+        let encoded = serde_json::to_string(&report).unwrap();
+        assert!(!encoded.contains("SyntheticOnlyValue"));
+        assert!(!encoded.contains("SyntheticFixtureOnly"));
+    }
+
+    #[test]
+    fn assignment_lexer_respects_strings_and_late_members() {
+        assert!(secret_findings(r#"let message = "password = 'a-long-fake-value'";"#).is_empty());
+        assert!(
+            !secret_findings(r#"{"note":"a=1; b=2", "token":"SyntheticOnlyValue438927="}"#)
+                .is_empty()
+        );
+        assert!(!secret_findings("héllo = 1; password = 'SyntheticOnlyValue438927';").is_empty());
+        assert!(!secret_findings(&format!(
+            "password{}= 'SyntheticOnlyValue438927'",
+            " ".repeat(65536)
+        ))
+        .is_empty());
+        assert!(secret_findings(&format!(
+            "{}token = response.get_token();",
+            "=".repeat(65536)
+        ))
         .is_empty());
     }
     #[test]

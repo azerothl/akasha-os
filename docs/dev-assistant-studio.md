@@ -274,3 +274,7 @@ it does not claim that this new candidate is released.
 The reference now includes `dev-assistant.inspect_continue` for a saved workspace
 inspection. See [bounded pages and verification](dev-assistant-inspection-pages.md)
 for cumulative limits, expiry, cache-policy compatibility and freshness.
+
+The API-5 inspection slice was merged in [#453](https://github.com/azerothl/akasha-os/pull/453).
+See [synthetic filter evaluation](dev-assistant-filter-quality.md) for the next
+policy-3 follow-up, measured misses/false positives and cache invalidation.

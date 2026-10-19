@@ -200,6 +200,8 @@ jobs:
           cargo test -p aos-llama --no-default-features
           cargo test -p aos-model --no-default-features
           cargo test -p aos-platform --no-default-features
+      - name: Check synthetic project filter corpus
+        run: cargo run -p aos-platform --no-default-features --example workspace_policy_quality --locked -- --check
       # Upload sccache stats for visibility
       - name: sccache stats
         if: always() && steps.sccache.outcome == 'success'

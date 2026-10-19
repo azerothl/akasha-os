@@ -1,0 +1,1878 @@
+{
+  "date": "2026-10-19",
+  "issue": 247,
+  "scope": "Synthetic development corpus and real read-only project inspection; not a general scanner-quality benchmark",
+  "baseline_commit": "0f980f27327218f677e83012740b6dbda17e76e9",
+  "implementation_commit": "896eb5c434f2a4e004221b3d571c8021b5589c23",
+  "merged_pr": {
+    "number": 453,
+    "merge_commit": "0f980f27327218f677e83012740b6dbda17e76e9",
+    "merged_at": "2026-10-19T11:38:41Z",
+    "successful_checks": 18,
+    "manual_cuda": "skipped"
+  },
+  "policy_version": 3,
+  "cache_compatibility": "Policies 1 and 2 require a fresh inspection; cannot inventory or resume",
+  "corpus": {
+    "path": "fixtures/workspace-policy-quality.json",
+    "sha256": "4f297d914ba758f8161e51715f4e8b03291295d3e7df593d77037cb3423f2fdb",
+    "synthetic_only": true,
+    "independent_holdout": false,
+    "sensitive_cases": 47,
+    "benign_cases": 27
+  },
+  "baseline": {
+    "cases": 74,
+    "corpus_sha256": "4f297d914ba758f8161e51715f4e8b03291295d3e7df593d77037cb3423f2fdb",
+    "false_negative": 28,
+    "false_positive": 2,
+    "precision": 0.9047619047619048,
+    "recall": 0.40425531914893614,
+    "regressions": [
+      "json-password",
+      "second-password",
+      "json-passwd",
+      "second-passwd",
+      "json-token",
+      "second-token",
+      "json-api_key",
+      "second-api_key",
+      "json-apikey",
+      "second-apikey",
+      "json-secret",
+      "second-secret",
+      "json-access_token",
+      "second-access_token",
+      "json-client_secret",
+      "second-client_secret",
+      "json-authorization",
+      "second-authorization",
+      "http-bearer",
+      "json-bearer",
+      "http-basic"
+    ],
+    "results": [
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-password",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-password",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-password",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-passwd",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-passwd",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-passwd",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-token",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-api_key",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-api_key",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-api_key",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-apikey",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-apikey",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-apikey",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-secret",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-access_token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-access_token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-access_token",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-client_secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-client_secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-client_secret",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-authorization",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "json-authorization",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": false,
+        "findings": [],
+        "id": "second-authorization",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-0",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-1",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-2",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-3",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-4",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "prefix-0",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "prefix-1",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "prefix-2",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "access_key_id"
+          }
+        ],
+        "id": "access-AKIA",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "access_key_id"
+          }
+        ],
+        "id": "access-ASIA",
+        "sensitive": true
+      },
+      {
+        "category": "authorization",
+        "detected": false,
+        "findings": [],
+        "id": "http-bearer",
+        "sensitive": true
+      },
+      {
+        "category": "authorization",
+        "detected": false,
+        "findings": [],
+        "id": "json-bearer",
+        "sensitive": true
+      },
+      {
+        "category": "authorization",
+        "detected": false,
+        "findings": [],
+        "id": "http-basic",
+        "sensitive": true
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-0",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-1",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-2",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-3",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-4",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-5",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-6",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-7",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-8",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-9",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-10",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-0",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-1",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-2",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-3",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-4",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-5",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-6",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-7",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-8",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-9",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-10",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-11",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-12",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-13",
+        "sensitive": false
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-0",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-1",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-2",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-3",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-4",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-5",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-6",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-benign",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "known-fp-identifier",
+        "sensitive": false
+      },
+      {
+        "category": "unsupported-benign",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "known-fp-prefix-prose",
+        "sensitive": false
+      }
+    ],
+    "synthetic_only": true,
+    "true_negative": 25,
+    "true_positive": 19
+  },
+  "final": {
+    "cases": 74,
+    "corpus_sha256": "4f297d914ba758f8161e51715f4e8b03291295d3e7df593d77037cb3423f2fdb",
+    "false_negative": 7,
+    "false_positive": 2,
+    "precision": 0.9523809523809523,
+    "recall": 0.851063829787234,
+    "regressions": [],
+    "results": [
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-password",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-password",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-password",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-passwd",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-passwd",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-passwd",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-token",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-api_key",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-api_key",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-api_key",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-apikey",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-apikey",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-apikey",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-secret",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-access_token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-access_token",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-access_token",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-client_secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-client_secret",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-client_secret",
+        "sensitive": true
+      },
+      {
+        "category": "literal",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "quoted-authorization",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-authorization",
+        "sensitive": true
+      },
+      {
+        "category": "structured",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "second-authorization",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-0",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-1",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-2",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-3",
+        "sensitive": true
+      },
+      {
+        "category": "private-key",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "private_key"
+          }
+        ],
+        "id": "key-4",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "prefix-0",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "prefix-1",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "prefix-2",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "access_key_id"
+          }
+        ],
+        "id": "access-AKIA",
+        "sensitive": true
+      },
+      {
+        "category": "token-shape",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "access_key_id"
+          }
+        ],
+        "id": "access-ASIA",
+        "sensitive": true
+      },
+      {
+        "category": "authorization",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "http-bearer",
+        "sensitive": true
+      },
+      {
+        "category": "authorization",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "json-bearer",
+        "sensitive": true
+      },
+      {
+        "category": "authorization",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "http-basic",
+        "sensitive": true
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-0",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-1",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-2",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-3",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-4",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-5",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-6",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-7",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-8",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-9",
+        "sensitive": false
+      },
+      {
+        "category": "placeholder",
+        "detected": false,
+        "findings": [],
+        "id": "placeholder-10",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-0",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-1",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-2",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-3",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-4",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-5",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-6",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-7",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-8",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-9",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-10",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-11",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-12",
+        "sensitive": false
+      },
+      {
+        "category": "benign-code",
+        "detected": false,
+        "findings": [],
+        "id": "benign-13",
+        "sensitive": false
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-0",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-1",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-2",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-3",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-4",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-5",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-sensitive",
+        "detected": false,
+        "findings": [],
+        "id": "known-miss-6",
+        "sensitive": true
+      },
+      {
+        "category": "unsupported-benign",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_assignment"
+          }
+        ],
+        "id": "known-fp-identifier",
+        "sensitive": false
+      },
+      {
+        "category": "unsupported-benign",
+        "detected": true,
+        "findings": [
+          {
+            "line": 1,
+            "rule": "credential_token"
+          }
+        ],
+        "id": "known-fp-prefix-prose",
+        "sensitive": false
+      }
+    ],
+    "synthetic_only": true,
+    "true_negative": 25,
+    "true_positive": 40
+  },
+  "real_repository_paged": {
+    "ok": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-x8coe15y",
+    "source_revision": "0f980f27327218f677e83012740b6dbda17e76e9",
+    "page_entries": 64,
+    "archive_files": 1352,
+    "archive_sha256": "2cdc7ce1d42c19198452bebfa0702c172926bc2be969c1b33ed80bff91a91705",
+    "probe_sha256": "c752abf8328b5fccfd04653889f9b5f4181908d10e4f9ecb807369cf1bf0f247",
+    "native": {
+      "cache_survived_host_restart": true,
+      "content_version": "78944ed6724e8ce4b48212bba2e3ca7bea6b3745171da1495df05f77437ca708",
+      "continuation": {
+        "available": false,
+        "expires_at_ms": 1792414040913,
+        "pages": 26,
+        "reason": "walk_complete",
+        "scan_id": "scan-fc780801bb7d1c6f4d8df01c2871e92e",
+        "started_at_ms": 1792410440913
+      },
+      "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-x8coe15y\\host",
+      "host_restarted_between_pages": true,
+      "host_restarts_between_pages": 25,
+      "inspection_ms": 9814,
+      "ok": true,
+      "pages": [
+        {
+          "complete": false,
+          "elapsed_ms": 385,
+          "files_read": 52,
+          "visited_entries": 64
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 482,
+          "files_read": 104,
+          "visited_entries": 128
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 643,
+          "files_read": 161,
+          "visited_entries": 192
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 305,
+          "files_read": 215,
+          "visited_entries": 256
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 318,
+          "files_read": 269,
+          "visited_entries": 320
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 488,
+          "files_read": 325,
+          "visited_entries": 384
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 270,
+          "files_read": 376,
+          "visited_entries": 448
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 250,
+          "files_read": 424,
+          "visited_entries": 512
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 339,
+          "files_read": 475,
+          "visited_entries": 576
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 346,
+          "files_read": 522,
+          "visited_entries": 640
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 425,
+          "files_read": 579,
+          "visited_entries": 704
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 442,
+          "files_read": 641,
+          "visited_entries": 768
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 364,
+          "files_read": 698,
+          "visited_entries": 832
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 280,
+          "files_read": 742,
+          "visited_entries": 896
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 427,
+          "files_read": 801,
+          "visited_entries": 960
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 463,
+          "files_read": 865,
+          "visited_entries": 1024
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 374,
+          "files_read": 920,
+          "visited_entries": 1088
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 382,
+          "files_read": 981,
+          "visited_entries": 1152
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 321,
+          "files_read": 1037,
+          "visited_entries": 1216
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 333,
+          "files_read": 1093,
+          "visited_entries": 1280
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 374,
+          "files_read": 1140,
+          "visited_entries": 1344
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 320,
+          "files_read": 1186,
+          "visited_entries": 1408
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 282,
+          "files_read": 1227,
+          "visited_entries": 1472
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 348,
+          "files_read": 1276,
+          "visited_entries": 1536
+        },
+        {
+          "complete": false,
+          "elapsed_ms": 416,
+          "files_read": 1329,
+          "visited_entries": 1600
+        },
+        {
+          "complete": true,
+          "elapsed_ms": 133,
+          "files_read": 1331,
+          "visited_entries": 1603
+        }
+      ],
+      "scan": {
+        "bytes_read": 33747824,
+        "complete": true,
+        "eligible_files": 1260,
+        "files_read": 1331,
+        "finding_files": 6,
+        "findings": [
+          {
+            "findings": [
+              {
+                "line": 354,
+                "rule": "credential_token"
+              },
+              {
+                "line": 355,
+                "rule": "credential_token"
+              },
+              {
+                "line": 357,
+                "rule": "private_key"
+              },
+              {
+                "line": 373,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "crates/aos-platform/src/extract.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 690,
+                "rule": "private_key"
+              }
+            ],
+            "path": "crates/aos-platform/src/workspace_policy.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 720,
+                "rule": "private_key"
+              }
+            ],
+            "path": "crates/aos-platform/src/workspace_refactor.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 172,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 170,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/fr/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 257,
+                "rule": "credential_assignment"
+              },
+              {
+                "line": 301,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "python/aos_gate/tests/test_outcomes_trust_hitl.py"
+          }
+        ],
+        "findings_truncated": false,
+        "skipped": {
+          "binary": 65,
+          "file_size": 2,
+          "ignored": 3,
+          "page_boundary": 25
+        },
+        "visited_entries": 1603
+      },
+      "scope": "actual read-only repository; no source writes or embeddings quality claim",
+      "search_hits": 20,
+      "search_truncated": true,
+      "source_files": 1260,
+      "ungranted_inspection_denied": true
+    },
+    "scope": "read-only native inspection of a real repository's committed snapshot; no generated source corpus or semantic retrieval benchmark"
+  },
+  "verification": [
+    {
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1",
+      "result": "318 passed, 0 failed",
+      "log": "policy-quality-platform.log"
+    },
+    {
+      "command": "cargo clippy -p aos-platform --no-default-features --all-targets --locked -- -D warnings",
+      "result": "passed",
+      "log": "policy-quality-clippy.log"
+    },
+    {
+      "command": "cargo run -p aos-platform --no-default-features --example workspace_policy_quality --locked -- --check",
+      "result": "passed; no recorded-behaviour regressions; known misses/false positives remain in metrics"
+    },
+    {
+      "command": "python scripts/verify-project-inventory.py --repo <checkout> --revision 0f980f27327218f677e83012740b6dbda17e76e9 --page-entries 64 --probe <built workspace_inspect_probe.exe>",
+      "result": "passed; 26 pages; 25 host restarts"
+    },
+    {
+      "command": "python scripts/verify-project-inventory.py --repo <checkout> --revision 0f980f27327218f677e83012740b6dbda17e76e9 --probe <built workspace_inspect_probe.exe>",
+      "result": "passed; same source-map fingerprint as paged traversal"
+    }
+  ],
+  "local_log_hashes": {
+    "policy-quality-baseline.json": "3ae71348462d0d6b735aa160d7ed8c664ef8d1773689bed6fea7ae9316bcde70",
+    "policy-quality-clippy.log": "3db34c195b83b204af4ee33c70170e986b285bceb8c033f0031e52d1435f2bb0",
+    "policy-quality-default-corpus.log": "10f0297f0bae96dbcb6850e25e65e0c1d92af8f136702ee634aca3b7154aa746",
+    "policy-quality-final.json": "5e1282568b386a5cab114d371d16db09f2f25a54ef58b927ab9f8269f26a9115",
+    "policy-quality-platform.log": "674f9947e6ac9c072e98adcbd6d306b35ff6d6fc92b8d03613c13c0085d67a48",
+    "policy-quality-probe-build.log": "bd794b3bc0010031d42dba38ab0952202481dbc5dbcd86914af99809ed6e0ab7",
+    "policy-quality-real-corpus.log": "39d630b987b616a730e96f127384245cefc31248d53a78092eb7c7916b281302",
+    "policy-quality-tests.log": "b8ec3a8666405dcea2e020e125a48256ae5da59f310650f59c5975fb2bf56e47"
+  },
+  "quality_limitations": [
+    "Authored regression corpus used in developing the fix; no held-out or independently annotated data",
+    "Seven intentionally recorded unsupported sensitive cases remain undetected",
+    "Two intentionally recorded benign cases remain withheld",
+    "No real credentials, external detector, or model run"
+  ],
+  "remaining": [
+    "Human native fresh-install/confirmation validation deferred by explicit user choice",
+    "Separate Studio LSP delivery: Akasha PR #169 still open",
+    "Autonomous agent runtime and representative refactor/retrieval/scanner quality",
+    "CI of current candidate requires publication",
+    "Issue #434 extra-machine evidence and #435 two-GPU evidence unavailable"
+  ],
+  "delivery": "local commits only; no push or new PR authorized in this turn",
+  "real_repository_default": {
+    "ok": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-rzqwjnli",
+    "source_revision": "0f980f27327218f677e83012740b6dbda17e76e9",
+    "page_entries": null,
+    "archive_files": 1352,
+    "archive_sha256": "2cdc7ce1d42c19198452bebfa0702c172926bc2be969c1b33ed80bff91a91705",
+    "probe_sha256": "c752abf8328b5fccfd04653889f9b5f4181908d10e4f9ecb807369cf1bf0f247",
+    "native": {
+      "cache_survived_host_restart": true,
+      "content_version": "78944ed6724e8ce4b48212bba2e3ca7bea6b3745171da1495df05f77437ca708",
+      "continuation": {
+        "available": false,
+        "expires_at_ms": 1792414081518,
+        "pages": 1,
+        "reason": "walk_complete",
+        "scan_id": "scan-3be2dff35db13015ac06a0d3babb47b4",
+        "started_at_ms": 1792410481518
+      },
+      "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-rzqwjnli\\host",
+      "host_restarted_between_pages": false,
+      "host_restarts_between_pages": 0,
+      "inspection_ms": 6882,
+      "ok": true,
+      "pages": [
+        {
+          "complete": true,
+          "elapsed_ms": 6882,
+          "files_read": 1331,
+          "visited_entries": 1603
+        }
+      ],
+      "scan": {
+        "bytes_read": 33747824,
+        "complete": true,
+        "eligible_files": 1260,
+        "files_read": 1331,
+        "finding_files": 6,
+        "findings": [
+          {
+            "findings": [
+              {
+                "line": 354,
+                "rule": "credential_token"
+              },
+              {
+                "line": 355,
+                "rule": "credential_token"
+              },
+              {
+                "line": 357,
+                "rule": "private_key"
+              },
+              {
+                "line": 373,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "crates/aos-platform/src/extract.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 690,
+                "rule": "private_key"
+              }
+            ],
+            "path": "crates/aos-platform/src/workspace_policy.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 720,
+                "rule": "private_key"
+              }
+            ],
+            "path": "crates/aos-platform/src/workspace_refactor.rs"
+          },
+          {
+            "findings": [
+              {
+                "line": 172,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 170,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "docs/fr/TESTER.md"
+          },
+          {
+            "findings": [
+              {
+                "line": 257,
+                "rule": "credential_assignment"
+              },
+              {
+                "line": 301,
+                "rule": "credential_token"
+              }
+            ],
+            "path": "python/aos_gate/tests/test_outcomes_trust_hitl.py"
+          }
+        ],
+        "findings_truncated": false,
+        "skipped": {
+          "binary": 65,
+          "file_size": 2,
+          "ignored": 3
+        },
+        "visited_entries": 1603
+      },
+      "scope": "actual read-only repository; no source writes or embeddings quality claim",
+      "search_hits": 20,
+      "search_truncated": true,
+      "source_files": 1260,
+      "ungranted_inspection_denied": true
+    },
+    "scope": "read-only native inspection of a real repository's committed snapshot; no generated source corpus or semantic retrieval benchmark"
+  },
+  "evaluator_sha256": "8ce191788b416444a4f3e79a0b6ddab2bd230681d7fcef90111581d9afafe215",
+  "production_policy_sha256": "f3117358b80896a5ec888341a01a70122173af580d25d81108978a7edf32fbb1"
+}
