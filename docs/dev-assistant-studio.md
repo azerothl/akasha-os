@@ -278,3 +278,11 @@ for cumulative limits, expiry, cache-policy compatibility and freshness.
 The API-5 inspection slice was merged in [#453](https://github.com/azerothl/akasha-os/pull/453).
 See [synthetic filter evaluation](dev-assistant-filter-quality.md) for the next
 policy-3 follow-up, measured misses/false positives and cache invalidation.
+
+## Native worker context
+
+The next [native agent context follow-up](dev-assistant-agent-context.md) connects
+filtered inspection, cached maps and source reads to an explicitly selected
+native worker tool kit, with paginated metadata and existing workspace grants.
+Its actual-process acceptance fixture uses scripted model replies; real-model
+autonomy and human native confirmation validation remain open.

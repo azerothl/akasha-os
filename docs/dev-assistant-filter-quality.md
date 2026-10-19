@@ -90,3 +90,7 @@ autonomous model run, retrieval benchmark or release is claimed.
 refactor/retrieval/scanner quality. Studio LSP delivery still depends on the
 separate open [Akasha PR #169](https://github.com/azerothl/Akasha/pull/169).
 #434 and #435 remain open for unavailable additional-machine/two-GPU evidence.
+
+Later source work: [native worker context](dev-assistant-agent-context.md) adds
+explicit native agent routing to this policy, with an actual-process scripted
+acceptance fixture. The scanner measurements above remain a dated record.
