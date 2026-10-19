@@ -653,6 +653,8 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
         },
     ];
 
+    v.extend(crate::workspace_context::catalog());
+
     // Module notes (toujours listé ; filtré par sélection)
     let notes_tools = [
         (
@@ -1983,7 +1985,7 @@ pub fn canonicalize_illust_alias(name: &str) -> String {
 pub fn reserved_tool_prefix(prefix: &str) -> bool {
     matches!(
         prefix,
-        "fs" | "media"
+        "fs" | "workspace" | "media"
             | "mem"
             | "web"
             | "net"

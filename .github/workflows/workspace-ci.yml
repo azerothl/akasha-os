@@ -202,6 +202,10 @@ jobs:
           cargo test -p aos-platform --no-default-features
       - name: Check synthetic project filter corpus
         run: cargo run -p aos-platform --no-default-features --example workspace_policy_quality --locked -- --check
+      - name: Exercise native worker project context (scripted model fixture)
+        run: |
+          cargo build -p aos-agent --bin aos-agent-worker --locked
+          cargo run -p aos-platform --no-default-features --example workspace_agent_context_probe --locked -- "$GITHUB_WORKSPACE/target/debug/aos-agent-worker"
       # Upload sccache stats for visibility
       - name: sccache stats
         if: always() && steps.sccache.outcome == 'success'
