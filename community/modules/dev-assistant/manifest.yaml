@@ -1,5 +1,5 @@
 name: dev-assistant
-version: 0.4.0
+version: 0.5.0
 hash: "ci"
 permissions:
   # Bind first. Declare chosen /host/<id>/** caps in the local source manifest,
@@ -316,6 +316,10 @@ tools:
           type: integer
           minimum: 1
           maximum: 67108864
+        page_entries:
+          type: integer
+          minimum: 1
+          maximum: 5000
       required:
       - root
   - name: dev-assistant.inventory
@@ -342,9 +346,19 @@ tools:
       required:
       - root
       - path
+  - name: dev-assistant.inspect_continue
+    description: Continue the latest saved inspection for this workspace; rechecks read grants and preserves total budgets
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        root:
+          type: string
+      required:
+      - root
 
 ui:
   entry: ui/index.html
   mode: declarative_ui
   contract: 2
-min_os_api: 4
+min_os_api: 5

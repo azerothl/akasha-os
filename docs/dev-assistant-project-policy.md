@@ -1,6 +1,9 @@
 # Project context policy and acceptance (#247)
 
-**19 October 2026 — source candidate on `codex/dev-assistant-project-acceptance`.**
+**19 October 2026 — baseline merged through [PR #452](https://github.com/azerothl/akasha-os/pull/452).**
+The measurements below are the dated API-4 record. The [resumable inspection
+follow-up](dev-assistant-inspection-pages.md) defines API 5 / reference 0.5.0;
+it does not overwrite those earlier observations.
 The previous DAP/Studio/subtree slice was merged through
 [PR #451](https://github.com/azerothl/akasha-os/pull/451), commit
 `1c525d29b8a94c5d032d72d85c7a7daec929c253`, at 03:27:47 UTC, with 18 successful

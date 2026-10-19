@@ -1593,7 +1593,7 @@ min_os_api: 1
         let pkg=author.package_script("dev-assistant").unwrap();
         let mut runtime=ModuleRuntime::open(base.join("installed"),Arc::new(AdapterHost)).unwrap();
         let info=runtime.install(Path::new(&pkg.package_dir),Some(vec![])).unwrap();
-        assert_eq!(info.version,"0.4.0");assert_eq!(info.tools.len(),25);
+        assert_eq!(info.version,"0.5.0");assert_eq!(info.tools.len(),26);
         let args=serde_json::json!({"root":"demo","session_id":"example","command":"setBreakpoints","lines":[1,3],"path":"main.rs"});
         let response=runtime.invoke("dev-assistant","dev-assistant.debug_request",&args,"human:ui",&[],"typed-debug").unwrap();
         assert_eq!(response["service"],"debug.request");assert_eq!(response["args"],args);

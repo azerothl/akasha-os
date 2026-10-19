@@ -1,0 +1,540 @@
+{
+  "observed_at_utc": "2026-10-19T10:50:42.224827+00:00",
+  "implementation_commit": "0617a75fa324b23226a144603173c479c69c293b",
+  "branch": "codex/dev-assistant-resumable-inspection",
+  "scope": "local source candidate; no new release; candidate CI pending publication",
+  "merged_pr": {
+    "number": 452,
+    "url": "https://github.com/azerothl/akasha-os/pull/452",
+    "merge_commit": "7cdf6ba47d39f17717034663e7e6dab08ee4d24f",
+    "merged_at_utc": "2026-10-19T10:21:43Z",
+    "successful_checks": 18,
+    "expected_manual_cuda_skipped": true
+  },
+  "contracts": {
+    "host_api": 5,
+    "reference_version": "0.5.0",
+    "reference_tools": 26,
+    "declui": 2,
+    "ext_rt": "1.1.0",
+    "cache_policy_version": 2,
+    "compatible_prior_module_apis": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "checks_windows": {
+    "platform": {
+      "passed": 315,
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "agent": {
+      "passed": 376,
+      "command": "cargo test -p aos-agent --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "protocol": {
+      "passed": 194,
+      "command": "cargo test -p aos-proto --no-default-features --lib --locked -- --test-threads=1"
+    },
+    "ui": {
+      "passed": 543,
+      "ignored": 1,
+      "command": "cargo test -p aos-ui-egui --no-default-features --bin aos-ui-egui --locked -- --test-threads=1"
+    },
+    "strict_clippy": {
+      "result": "passed",
+      "command": "cargo clippy -p aos-platform -p aos-agent -p aos-proto -p aos-ui-egui --no-default-features --all-targets --locked -- -D warnings"
+    },
+    "python_validator": {
+      "passed": 4,
+      "command": "python -m unittest discover -s scripts -p test_project_model_fixture.py -v"
+    },
+    "signed_packs": {
+      "passed": 9,
+      "command": "python -m unittest discover -s packaging/tests -v"
+    },
+    "reference_package_rerun": {
+      "passed": 1,
+      "included_in_platform_suite": true,
+      "scope": "after removing an argumentless inventory refresh from the continuation form"
+    },
+    "wasm_host_rerun": {
+      "passed": 1,
+      "included_in_platform_suite": true,
+      "scope": "typed start/continue calls through reference module and real production host"
+    },
+    "release_consistency": {
+      "result": "passed",
+      "command": "./packaging/check-version.ps1"
+    },
+    "site_docs": {
+      "result": "passed",
+      "command": "./packaging/check-site-docs.ps1"
+    }
+  },
+  "logs": [
+    {
+      "name": "resumable-core-tests.log",
+      "sha256": "14992b638a11c03cb895fd546d2fe0d11a9443cff7956fe01a4722d397fba76a"
+    },
+    {
+      "name": "resumable-ui-tests.log",
+      "sha256": "dc524e97cd39f7bcc8d2b23b7097570813eba01e6a5ab0e3527d573e2522e269"
+    },
+    {
+      "name": "resumable-clippy.log",
+      "sha256": "5a396388b44abcfc3ec58db716f4ab26073a5b4017616a45e83405aee6f0425c"
+    },
+    {
+      "name": "resumable-reference-tests.log",
+      "sha256": "494efa023fe02142ac3f5bd59bb0c1d098049917d02d51fb71c4bfb027803456"
+    },
+    {
+      "name": "resumable-wasm-host-tests.log",
+      "sha256": "21762ef94333620a1c66b4ef565eaf54711f32c55abd4fce142c047fef8b867b"
+    },
+    {
+      "name": "resumable-python-validator-tests.log",
+      "sha256": "21ce4c2718b787c047d763fcb08c9f04b18927036a019b7991b9ecc01b8ce7e0"
+    },
+    {
+      "name": "resumable-pack-tests.log",
+      "sha256": "a8997b6c831098400bf655dfd24b568d39907c8cacf42b6b68eb508b5fca6d65"
+    }
+  ],
+  "repository_observations": {
+    "forced_entry_boundaries": {
+      "invocation_page_entries": 64,
+      "report": {
+        "ok": true,
+        "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-dbymiego",
+        "source_revision": "7cdf6ba47d39f17717034663e7e6dab08ee4d24f",
+        "archive_files": 1350,
+        "archive_sha256": "f0740308d270f5187eed27e10dad873589c4aac39542e78f7e47dfbf95cd7cf0",
+        "probe_sha256": "b62fb05f0fd1c10017065b5a3582c85d5b9c8a975934b2933cf0bef0c31f72cf",
+        "native": {
+          "cache_survived_host_restart": true,
+          "content_version": "c223a04d634bcd4bf801938e302a9d91184a49bc4c4d33c0a7eb1b328adab42c",
+          "continuation": {
+            "available": false,
+            "expires_at_ms": 1792410110002,
+            "pages": 26,
+            "reason": "walk_complete",
+            "scan_id": "scan-61066168d1112d9bff5964896bd8dfd3",
+            "started_at_ms": 1792406510002
+          },
+          "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-dbymiego\\host",
+          "host_restarted_between_pages": true,
+          "host_restarts_between_pages": 25,
+          "inspection_ms": 9047,
+          "ok": true,
+          "pages": [
+            {
+              "complete": false,
+              "elapsed_ms": 385,
+              "files_read": 52,
+              "visited_entries": 64
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 410,
+              "files_read": 104,
+              "visited_entries": 128
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 579,
+              "files_read": 161,
+              "visited_entries": 192
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 288,
+              "files_read": 215,
+              "visited_entries": 256
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 274,
+              "files_read": 269,
+              "visited_entries": 320
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 473,
+              "files_read": 325,
+              "visited_entries": 384
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 266,
+              "files_read": 376,
+              "visited_entries": 448
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 242,
+              "files_read": 424,
+              "visited_entries": 512
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 325,
+              "files_read": 475,
+              "visited_entries": 576
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 308,
+              "files_read": 522,
+              "visited_entries": 640
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 394,
+              "files_read": 579,
+              "visited_entries": 704
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 463,
+              "files_read": 641,
+              "visited_entries": 768
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 370,
+              "files_read": 698,
+              "visited_entries": 832
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 289,
+              "files_read": 742,
+              "visited_entries": 896
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 438,
+              "files_read": 801,
+              "visited_entries": 960
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 489,
+              "files_read": 865,
+              "visited_entries": 1024
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 410,
+              "files_read": 920,
+              "visited_entries": 1088
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 338,
+              "files_read": 980,
+              "visited_entries": 1152
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 265,
+              "files_read": 1037,
+              "visited_entries": 1216
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 278,
+              "files_read": 1092,
+              "visited_entries": 1280
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 290,
+              "files_read": 1140,
+              "visited_entries": 1344
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 276,
+              "files_read": 1185,
+              "visited_entries": 1408
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 225,
+              "files_read": 1226,
+              "visited_entries": 1472
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 272,
+              "files_read": 1276,
+              "visited_entries": 1536
+            },
+            {
+              "complete": false,
+              "elapsed_ms": 365,
+              "files_read": 1328,
+              "visited_entries": 1600
+            },
+            {
+              "complete": true,
+              "elapsed_ms": 49,
+              "files_read": 1329,
+              "visited_entries": 1601
+            }
+          ],
+          "scan": {
+            "bytes_read": 33685458,
+            "complete": true,
+            "eligible_files": 1258,
+            "files_read": 1329,
+            "finding_files": 6,
+            "findings": [
+              {
+                "findings": [
+                  {
+                    "line": 354,
+                    "rule": "credential_token"
+                  },
+                  {
+                    "line": 355,
+                    "rule": "credential_token"
+                  },
+                  {
+                    "line": 357,
+                    "rule": "private_key"
+                  },
+                  {
+                    "line": 373,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "crates/aos-platform/src/extract.rs"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 578,
+                    "rule": "private_key"
+                  }
+                ],
+                "path": "crates/aos-platform/src/workspace_policy.rs"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 720,
+                    "rule": "private_key"
+                  }
+                ],
+                "path": "crates/aos-platform/src/workspace_refactor.rs"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 172,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "docs/TESTER.md"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 170,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "docs/fr/TESTER.md"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 301,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "python/aos_gate/tests/test_outcomes_trust_hitl.py"
+              }
+            ],
+            "findings_truncated": false,
+            "skipped": {
+              "binary": 65,
+              "file_size": 2,
+              "ignored": 3,
+              "page_boundary": 25
+            },
+            "visited_entries": 1601
+          },
+          "scope": "actual read-only repository; no source writes or embeddings quality claim",
+          "search_hits": 20,
+          "search_truncated": true,
+          "source_files": 1258,
+          "ungranted_inspection_denied": true
+        },
+        "scope": "read-only native inspection of a real repository's committed snapshot; no generated source corpus or semantic retrieval benchmark"
+      }
+    },
+    "default_boundaries": {
+      "invocation_page_entries": null,
+      "report": {
+        "ok": true,
+        "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-o48v9u99",
+        "source_revision": "7cdf6ba47d39f17717034663e7e6dab08ee4d24f",
+        "page_entries": null,
+        "archive_files": 1350,
+        "archive_sha256": "f0740308d270f5187eed27e10dad873589c4aac39542e78f7e47dfbf95cd7cf0",
+        "probe_sha256": "b62fb05f0fd1c10017065b5a3582c85d5b9c8a975934b2933cf0bef0c31f72cf",
+        "native": {
+          "cache_survived_host_restart": true,
+          "content_version": "c223a04d634bcd4bf801938e302a9d91184a49bc4c4d33c0a7eb1b328adab42c",
+          "continuation": {
+            "available": false,
+            "expires_at_ms": 1792410179890,
+            "pages": 1,
+            "reason": "walk_complete",
+            "scan_id": "scan-f531b1a0451c31b79f27d6ce3d0ee346",
+            "started_at_ms": 1792406579890
+          },
+          "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-corpus-o48v9u99\\host",
+          "host_restarted_between_pages": false,
+          "host_restarts_between_pages": 0,
+          "inspection_ms": 6811,
+          "ok": true,
+          "pages": [
+            {
+              "complete": true,
+              "elapsed_ms": 6811,
+              "files_read": 1329,
+              "visited_entries": 1601
+            }
+          ],
+          "scan": {
+            "bytes_read": 33685458,
+            "complete": true,
+            "eligible_files": 1258,
+            "files_read": 1329,
+            "finding_files": 6,
+            "findings": [
+              {
+                "findings": [
+                  {
+                    "line": 354,
+                    "rule": "credential_token"
+                  },
+                  {
+                    "line": 355,
+                    "rule": "credential_token"
+                  },
+                  {
+                    "line": 357,
+                    "rule": "private_key"
+                  },
+                  {
+                    "line": 373,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "crates/aos-platform/src/extract.rs"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 578,
+                    "rule": "private_key"
+                  }
+                ],
+                "path": "crates/aos-platform/src/workspace_policy.rs"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 720,
+                    "rule": "private_key"
+                  }
+                ],
+                "path": "crates/aos-platform/src/workspace_refactor.rs"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 172,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "docs/TESTER.md"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 170,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "docs/fr/TESTER.md"
+              },
+              {
+                "findings": [
+                  {
+                    "line": 301,
+                    "rule": "credential_token"
+                  }
+                ],
+                "path": "python/aos_gate/tests/test_outcomes_trust_hitl.py"
+              }
+            ],
+            "findings_truncated": false,
+            "skipped": {
+              "binary": 65,
+              "file_size": 2,
+              "ignored": 3
+            },
+            "visited_entries": 1601
+          },
+          "scope": "actual read-only repository; no source writes or embeddings quality claim",
+          "search_hits": 20,
+          "search_truncated": true,
+          "source_files": 1258,
+          "ungranted_inspection_denied": true
+        },
+        "scope": "read-only native inspection of a real repository's committed snapshot; no generated source corpus or semantic retrieval benchmark"
+      }
+    },
+    "same_content_version": true,
+    "same_archive": true
+  },
+  "regressions": [
+    "same final file map and hash as one pass on an unchanged fixture",
+    "read capabilities checked before every continuation",
+    "cumulative file/byte/entry ceilings, including failed reads and partial input bytes",
+    "expired, rebound and corrupt continuations refused",
+    "credential content and credential-shaped filenames withheld from public and private metadata",
+    "time-boundary fixture retains unvisited entry",
+    "simultaneous callers advance each page once within one host process",
+    "interruption claim and actual ignore-policy page failure require explicit restart",
+    "Windows junction path cannot enter a resumed traversal",
+    "context audit errors withhold malformed field names"
+  ],
+  "interruption_scope": "unit fault injection and actual failing policy page; no physical process kill during a page or power-loss durability measurement",
+  "time_limit_scope": "zero-duration unit boundary and real fixed-entry pages; the default real-corpus run finished in one page without hitting its ten-second deadline",
+  "freshness": "completed pages are not re-read during continuation; map is observed across pages, not an atomic snapshot or symbol index; resumed delta is unavailable",
+  "remaining": {
+    "247": [
+      "human native fresh-install flow and confirmations (explicitly left open by user)",
+      "separate compatible Studio LSP delivery; Akasha PR 169 remained OPEN",
+      "autonomous agent-runtime and representative refactor/retrieval quality",
+      "broader secret-scanner recall/false-positive evaluation",
+      "CI of this source candidate"
+    ],
+    "434": "OPEN; no extra-machine evidence",
+    "435": "OPEN; no two-GPU evidence"
+  },
+  "no_new_model_benchmark": true,
+  "user_source_modified_by_probes": false,
+  "evidence_retention": "Native fixtures and full local logs remain at the reported local paths; source bodies and live credential values are not copied into this record."
+}

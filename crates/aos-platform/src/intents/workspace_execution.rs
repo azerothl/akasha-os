@@ -432,7 +432,17 @@ mod tests {
             )
             .unwrap();
             assert_eq!(source["content"], "before");
-            let inventory = invoke("inspect", json!({"root":"demo"}), "human:ui").unwrap();
+            let mut inventory = invoke(
+                "inspect",
+                json!({"root":"demo","page_entries":1}),
+                "human:ui",
+            )
+            .unwrap();
+            assert_eq!(inventory["continuation"]["available"], true);
+            while inventory["continuation"]["available"] == true {
+                inventory = invoke("inspect_continue", json!({"root":"demo"}), "human:ui").unwrap();
+            }
+            assert_eq!(inventory["scan"]["complete"], true);
             assert_eq!(inventory["scan"]["eligible_files"], 2);
             let cached = invoke("inventory", json!({"root":"demo"}), "human:ui").unwrap();
             assert_eq!(cached["content_version"], inventory["content_version"]);
@@ -493,6 +503,18 @@ mod tests {
             .call(&ctx, "fs.search", json!({"root":"demo","query":secret}))
             .unwrap();
         assert_eq!(response["ok"], true);
+        let mut malformed = json!({"root":"demo"});
+        malformed[&secret] = json!(true);
+        assert!(dispatch(
+            &f.sub,
+            "workspace.inspect",
+            malformed,
+            "agent:reader",
+            &f.caps,
+            "private-context-field"
+        )
+        .await
+        .is_err());
         let audit = std::fs::read_to_string(f.home.join("audit/audit.jsonl")).unwrap();
         assert!(!audit.contains(&secret));
         assert!(audit.contains("query_redacted"));

@@ -37,6 +37,6 @@ pub async fn dispatch(
     }
     .await;
     sub.audit(AuditAppendRequest{trace_id:trace.into(),actor:actor.into(),action:intent.into(),target,
-        detail:json!({"ok":result.is_ok(),"error":result.as_ref().err(),"eligible_files":result.as_ref().ok().and_then(|v|v["scan"]["eligible_files"].as_u64()),"complete":result.as_ref().ok().and_then(|v|v["scan"]["complete"].as_bool())})});
+        detail:json!({"ok":result.is_ok(),"error":result.as_ref().err().map(|_|"project_context_refused"),"eligible_files":result.as_ref().ok().and_then(|v|v["scan"]["eligible_files"].as_u64()),"complete":result.as_ref().ok().and_then(|v|v["scan"]["complete"].as_bool())})});
     result
 }

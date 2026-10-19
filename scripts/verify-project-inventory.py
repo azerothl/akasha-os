@@ -20,6 +20,9 @@ def main():
     parser.add_argument("--repo", required=True, type=Path)
     parser.add_argument("--revision", default="HEAD")
     parser.add_argument("--probe", required=True, type=Path)
+    parser.add_argument(
+        "--page-entries", type=int, choices=range(1, 5001), metavar="1..5000"
+    )
     args = parser.parse_args()
     if (
         not args.repo.is_absolute()
@@ -75,11 +78,12 @@ def main():
             source.extract(entry, corpus)
             files += not entry.is_dir()
     completed = subprocess.run(
-        [str(args.probe), str(corpus), str(fixture / "host")],
+        [str(args.probe), str(corpus), str(fixture / "host")]
+        + ([str(args.page_entries)] if args.page_entries else []),
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=90,
+        timeout=150,
     )
     (fixture / "probe.log").write_text(
         completed.stdout + completed.stderr, encoding="utf-8"
@@ -90,6 +94,7 @@ def main():
         "ok": bool(native["ok"] and native["scan"]["complete"]),
         "fixture": str(fixture),
         "source_revision": revision,
+        "page_entries": args.page_entries,
         "archive_files": files,
         "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
         "probe_sha256": hashlib.sha256(args.probe.read_bytes()).hexdigest(),

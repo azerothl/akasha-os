@@ -97,8 +97,8 @@ Loopback routing does not provide a network sandbox for that separate process.
 [`community/modules/dev-assistant`](../community/modules/dev-assistant/) is a
 source reference, not automatically installed in Preview. Package/install it
 with [write-a-module.md](write-a-module.md) after building this host candidate.
-Version 0.4.0 requires **host API 4**, **DeclUI contract 2**, and the rebuilt
-ext-rt 1.1.0 WASM. API 1/2/3 and UI 1 modules remain supported.
+Version 0.5.0 requires **host API 5**, **DeclUI contract 2**, and the rebuilt
+ext-rt 1.1.0 WASM. API 1/2/3/4 and UI 1 modules remain supported.
 The new handlers use explicit typed `{$arg: field}` references so optional
 fields are omitted and JSON arrays/objects keep their types; template-looking
 file contents are passed literally.
@@ -268,3 +268,9 @@ maps and explicit source reads. See [project policy and measured acceptance](dev
 for scopes, bounds, source-map persistence, real-repository inspection and the
 real-model proposal exercise. The earlier evidence above remains a dated record;
 it does not claim that this new candidate is released.
+
+## Resumable inspection (API 5)
+
+The reference now includes `dev-assistant.inspect_continue` for a saved workspace
+inspection. See [bounded pages and verification](dev-assistant-inspection-pages.md)
+for cumulative limits, expiry, cache-policy compatibility and freshness.

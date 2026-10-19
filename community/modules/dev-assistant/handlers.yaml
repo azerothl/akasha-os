@@ -199,6 +199,8 @@ tools:
           $arg: max_files
         max_bytes:
           $arg: max_bytes
+        page_entries:
+          $arg: page_entries
 
   dev-assistant.inventory:
     steps:
@@ -215,3 +217,11 @@ tools:
           $arg: root
         path:
           $arg: path
+
+  dev-assistant.inspect_continue:
+    steps:
+    - service: workspace.inspect
+      args:
+        root:
+          $arg: root
+        resume: true

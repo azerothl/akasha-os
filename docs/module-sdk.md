@@ -231,3 +231,11 @@ reads on a capability-granted bound workspace. They do not provide ambient
 host access or a semantic symbol index. See
 [project context policy](dev-assistant-project-policy.md) for capabilities,
 ignore/credential filters, limits, cache freshness and observed acceptance.
+
+## Host API 5: resumable source-file inspection
+
+Dev Assistant 0.5.0 requires host API 5 for `workspace.inspect` continuation
+(`resume:true`), cumulative job budgets and the optional `page_entries` boundary.
+Existing API 1–4 modules remain supported; UI contract 2 / ext-rt 1.1.0 are unchanged.
+See [inspection pages](dev-assistant-inspection-pages.md) for cache-policy version 2,
+whole-workspace read grants, expiry and non-atomic source-map freshness.
