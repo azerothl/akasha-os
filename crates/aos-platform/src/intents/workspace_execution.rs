@@ -10,6 +10,9 @@ use std::sync::Arc;
 
 pub fn register(svc: &mut BusService, sub: Arc<PlatformSubsystem>) {
     for intent in [
+        "workspace.inspect",
+        "workspace.inventory",
+        "workspace.read",
         "refactor.create",
         "refactor.submit",
         "refactor.review",
@@ -95,6 +98,15 @@ pub async fn dispatch(
     caps: &[String],
     trace: &str,
 ) -> Result<Value, String> {
+    if matches!(
+        intent,
+        "workspace.inspect" | "workspace.inventory" | "workspace.read"
+    ) {
+        return crate::intents::workspace_inventory::dispatch(
+            sub, intent, args, actor, caps, trace,
+        )
+        .await;
+    }
     if intent.starts_with("refactor.") {
         return crate::intents::workspace_refactor::dispatch(sub, intent, args, actor, caps, trace)
             .await;
@@ -413,6 +425,17 @@ mod tests {
                     "wasm-host-proof",
                 )
             };
+            let source = invoke(
+                "read_safe",
+                json!({"root":"demo","path":"one/test.txt"}),
+                "human:ui",
+            )
+            .unwrap();
+            assert_eq!(source["content"], "before");
+            let inventory = invoke("inspect", json!({"root":"demo"}), "human:ui").unwrap();
+            assert_eq!(inventory["scan"]["eligible_files"], 2);
+            let cached = invoke("inventory", json!({"root":"demo"}), "human:ui").unwrap();
+            assert_eq!(cached["content_version"], inventory["content_version"]);
             let plan=invoke("refactor_create",json!({"root":"demo","assignments":[{"part_id":"one","actor":"agent:one","subtree":"one"},{"part_id":"two","actor":"agent:two","subtree":"two"}]}),"human:ui").unwrap()["plan_id"].clone();
             for part in ["one", "two"] {
                 invoke("refactor_submit",json!({"root":"demo","plan_id":plan,"part_id":part,"changes":[{"path":format!("{part}/test.txt"),"base_sha256":crate::workspace_refactor::hash("before"),"content":format!("after {part}")}]}),&format!("agent:{part}")).unwrap();
@@ -451,6 +474,29 @@ mod tests {
             std::fs::read_to_string(f.home.join("project/one/test.txt")).unwrap(),
             "after one"
         );
+    }
+
+    #[tokio::test]
+    async fn source_search_audit_keeps_query_metadata_without_credential_values() {
+        use crate::module_rt::{HostCallCtx, HostServices};
+        let f = Fixture::new();
+        let secret = format!("ghp_{}", "Z".repeat(36));
+        let ctx = HostCallCtx {
+            module: "dev-assistant".into(),
+            module_dir: f.home.join("unused-module"),
+            granted_caps: f.caps.clone(),
+            actor: "agent:reader".into(),
+            trace_id: "private-query".into(),
+        };
+        let response = f
+            .sub
+            .call(&ctx, "fs.search", json!({"root":"demo","query":secret}))
+            .unwrap();
+        assert_eq!(response["ok"], true);
+        let audit = std::fs::read_to_string(f.home.join("audit/audit.jsonl")).unwrap();
+        assert!(!audit.contains(&secret));
+        assert!(audit.contains("query_redacted"));
+        f.sub.audit.lock().unwrap().verify().unwrap();
     }
 
     #[tokio::test]

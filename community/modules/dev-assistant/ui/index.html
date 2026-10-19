@@ -15,7 +15,7 @@
       "search_root_hint": "workspace id or /host/<id>",
       "search_query_hint": "text to find",
       "search_submit": "Search",
-      "search_empty": "No hits (grant fs.read:/host/<id>/** after bind).",
+      "search_empty": "No eligible matches. Inspect the project for exclusions and limits.",
       "patch_heading": "Apply replace (cap-gated)",
       "patch_path_hint": "/host/<id>/path/to/file",
       "patch_content_hint": "full file replacement",
@@ -63,7 +63,12 @@
       "plan_id": "Plan ID",
       "review_sha256": "Review fingerprint",
       "field": "Memory field",
-      "text": "Project context"
+      "text": "Project context",
+      "inspect_heading": "Project sources",
+      "inspect_help": "Inspection follows project exclusions and withholds files containing detected secrets. It stores paths and hashes without source text. Results show limits and refusals.",
+      "inspect_submit": "Inspect project sources",
+      "inventory_submit": "Read stored source map",
+      "read_safe_submit": "Read filtered source"
     },
     "fr": {
       "tab_dev_assistant": "Assistant dev",
@@ -76,7 +81,7 @@
       "search_root_hint": "id workspace ou /host/<id>",
       "search_query_hint": "texte à trouver",
       "search_submit": "Rechercher",
-      "search_empty": "Aucun résultat (accordez fs.read:/host/<id>/** après le bind).",
+      "search_empty": "Aucun résultat parmi les sources autorisées. Analysez le projet pour voir les exclusions et limites.",
       "patch_heading": "Remplacement (sous caps)",
       "patch_path_hint": "/host/<id>/chemin/fichier",
       "patch_content_hint": "contenu complet de remplacement",
@@ -124,7 +129,12 @@
       "plan_id": "Identifiant du plan",
       "review_sha256": "Empreinte de la revue",
       "field": "Champ mémoire",
-      "text": "Contexte du projet"
+      "text": "Contexte du projet",
+      "inspect_heading": "Sources du projet",
+      "inspect_help": "L’analyse respecte les exclusions du projet et retire les fichiers contenant un secret détecté. Elle garde les chemins et empreintes, sans enregistrer le code. Les limites et refus figurent dans le résultat.",
+      "inspect_submit": "Analyser les sources",
+      "inventory_submit": "Relire la carte enregistrée",
+      "read_safe_submit": "Lire une source filtrée"
     }
   },
   "root": {
@@ -181,6 +191,126 @@
       },
       {
         "kind": "heading",
+        "label_key": "inspect_heading"
+      },
+      {
+        "kind": "text",
+        "label_key": "inspect_help"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.inspect",
+        "label_key": "inspect_submit",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string"
+            },
+            "max_files": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864
+            }
+          },
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.inspect",
+        "items": [
+          "namespace",
+          "content_version",
+          "scan",
+          "freshness"
+        ]
+      },
+      {
+        "kind": "file_tree",
+        "bind": "dev-assistant.inspect",
+        "source": "files",
+        "selected_key": "selected_path"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.inventory",
+        "label_key": "inventory_submit",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.inventory",
+        "items": [
+          "namespace",
+          "content_version",
+          "scan",
+          "freshness"
+        ]
+      },
+      {
+        "kind": "file_tree",
+        "bind": "dev-assistant.inventory",
+        "source": "files",
+        "selected_key": "selected_path"
+      },
+      {
+        "kind": "form",
+        "tool": "dev-assistant.read_safe",
+        "label_key": "read_safe_submit",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "root",
+            "path"
+          ]
+        }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.read_safe",
+        "items": [
+          "path",
+          "sha256"
+        ]
+      },
+      {
+        "kind": "code_editor",
+        "bind": "dev-assistant.read_safe",
+        "source": "content",
+        "label": "source_read_preview",
+        "read_only": true
+      },
+      {
+        "kind": "heading",
         "label_key": "search_heading"
       },
       {
@@ -207,6 +337,14 @@
             "query"
           ]
         }
+      },
+      {
+        "kind": "stat_row",
+        "bind": "dev-assistant.search",
+        "items": [
+          "message",
+          "truncated"
+        ]
       },
       {
         "kind": "empty_state",

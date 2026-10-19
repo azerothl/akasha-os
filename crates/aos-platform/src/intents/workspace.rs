@@ -426,7 +426,8 @@ fn register_search(svc: &mut BusService, sub: Arc<PlatformSubsystem>, intent: &'
                     action: intent.into(),
                     target: req.root.clone(),
                     detail: serde_json::json!({
-                        "query": req.query,
+                        "query_bytes": req.query.len(),
+                            "query_redacted": true,
                         "hits": resp.hits.len(),
                         "truncated": resp.truncated,
                     }),

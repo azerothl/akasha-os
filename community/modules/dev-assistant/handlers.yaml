@@ -188,3 +188,30 @@ tools:
           $arg: plan_id
         review_sha256:
           $arg: review_sha256
+
+  dev-assistant.inspect:
+    steps:
+    - service: workspace.inspect
+      args:
+        root:
+          $arg: root
+        max_files:
+          $arg: max_files
+        max_bytes:
+          $arg: max_bytes
+
+  dev-assistant.inventory:
+    steps:
+    - service: workspace.inventory
+      args:
+        root:
+          $arg: root
+
+  dev-assistant.read_safe:
+    steps:
+    - service: workspace.read
+      args:
+        root:
+          $arg: root
+        path:
+          $arg: path

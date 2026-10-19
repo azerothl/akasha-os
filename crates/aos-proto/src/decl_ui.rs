@@ -938,7 +938,7 @@ mod tests {
             assert!(kinds.contains(&kind.to_owned()), "missing {kind}");
             assert!(!crate::rich_decl_ui::is_widget_kind_valid(kind, 1));
         }
-        for name in ["studio_project", "studio_memory_update", "debug_start", "debug_request", "debug_stop", "refactor_review", "refactor_apply", "refactor_undo"] {
+        for name in ["studio_project", "studio_memory_update", "inspect", "inventory", "read_safe", "debug_start", "debug_request", "debug_stop", "refactor_review", "refactor_apply", "refactor_undo"] {
             assert!(doc.referenced_tools().contains(&format!("dev-assistant.{name}")));
         }
     }

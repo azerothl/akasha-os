@@ -3678,7 +3678,7 @@ mod preview_prompt_tests {
 // ---------------------------------------------------------------------------
 
 /// Host module API level (`manifest.min_os_api` must be ≤ this value).
-pub const OS_API_VERSION: u32 = 3;
+pub const OS_API_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleManifest {

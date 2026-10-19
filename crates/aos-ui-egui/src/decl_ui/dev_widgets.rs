@@ -27,7 +27,9 @@ pub(super) fn render(
                 .as_str()
                 .or_else(|| value.get("content").and_then(Value::as_str))
                 .unwrap_or("");
-            let mut text = if w.state_key.is_some() {
+            let mut text = if w.read_only.unwrap_or(false) {
+                initial.to_string()
+            } else if w.state_key.is_some() {
                 local
                     .get(key)
                     .and_then(Value::as_str)
@@ -68,7 +70,13 @@ pub(super) fn render(
                         }
                     });
             });
-            ui.small(if french {
+            ui.small(if readonly {
+                if french {
+                    "Lecture seule. Relisez le fichier pour actualiser cet aperçu."
+                } else {
+                    "Read only. Read the file again to refresh this preview."
+                }
+            } else if french {
                 "Les modifications sont locales jusqu'à l'action Appliquer."
             } else {
                 "Changes stay local until Apply is invoked."
@@ -251,5 +259,48 @@ mod tests {
                 }
             });
         });
+    }
+    #[test]
+    fn readonly_source_preview_uses_latest_tool_response_not_stale_form_text() {
+        let ctx = egui::Context::default();
+        let mut fields = HashMap::from([("preview".into(), "stale_source_value".into())]);
+        let w: DeclUiWidget = serde_json::from_value(
+            serde_json::json!({"kind":"code_editor","label":"preview","read_only":true}),
+        )
+        .unwrap();
+        let output = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                render(
+                    ui,
+                    &w,
+                    &Value::String("fresh_source_value".into()),
+                    &HashMap::new(),
+                    &mut fields,
+                    true,
+                    "fr",
+                );
+            });
+        });
+        fn texts(shape: &egui::epaint::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::epaint::Shape::Text(text) => out.push(text.galley.job.text.clone()),
+                egui::epaint::Shape::Vec(children) => {
+                    for child in children {
+                        texts(child, out)
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut rendered = Vec::new();
+        for shape in output.shapes {
+            texts(&shape.shape, &mut rendered);
+        }
+        assert!(rendered
+            .iter()
+            .any(|text| text.contains("fresh_source_value")));
+        assert!(!rendered
+            .iter()
+            .any(|text| text.contains("stale_source_value")));
     }
 }

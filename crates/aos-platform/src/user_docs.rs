@@ -579,12 +579,9 @@ mod tests {
     }
 
     fn temp_memory_dir() -> PathBuf {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static N: AtomicU64 = AtomicU64::new(0);
-        let n = N.fetch_add(1, Ordering::Relaxed);
-        let mut p = std::env::temp_dir();
-        p.push(format!("aos-user-lib-{}-{}", std::process::id(), n));
-        let _ = std::fs::create_dir_all(&p);
+        // PIDs are reused between test runs; stale stores must never be reopened.
+        let p = std::env::temp_dir().join(format!("aos-user-lib-{:032x}", rand::random::<u128>()));
+        std::fs::create_dir(&p).unwrap();
         p
     }
 
@@ -639,7 +636,9 @@ mod tests {
         let listed = list_docs(&mem);
         assert!(listed.iter().any(|d| d.label == "report.md"));
         assert!(listed.iter().any(|d| d.kind == "document"));
-        assert!(listed.iter().any(|d| d.source_path == "/downloads/report.md"));
+        assert!(listed
+            .iter()
+            .any(|d| d.source_path == "/downloads/report.md"));
         // Idempotent: same path/content → same id, still one entry.
         let ok2 = rt.block_on(async {
             let sub = crate::subsystem::PlatformSubsystem::open(&cfg).expect("open");

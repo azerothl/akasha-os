@@ -93,84 +93,8 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     }
     result
 }
-fn forbidden(path: &Path) -> bool {
-    path.components().any(|c| {
-        let name = c.as_os_str().to_string_lossy().to_ascii_lowercase();
-        matches!(
-            name.as_str(),
-            ".git"
-                | "node_modules"
-                | "target"
-                | "dist"
-                | ".env"
-                | "credentials.json"
-                | "id_rsa"
-                | "id_ed25519"
-        ) || name.starts_with(".env.")
-            || [".pem", ".key", ".p12", ".pfx"]
-                .iter()
-                .any(|suffix| name.ends_with(suffix))
-    })
-}
 fn checked(root: &Path, raw: &str, directory: bool) -> Result<PathBuf, String> {
-    let relative = Path::new(raw);
-    if raw.is_empty()
-        || raw.contains(['\\', ':', '\0'])
-        || raw.chars().any(char::is_control)
-        || relative
-            .components()
-            .any(|c| !matches!(c, std::path::Component::Normal(_)))
-        || forbidden(relative)
-    {
-        return Err("refactor path is invalid or contains excluded/credential components".into());
-    }
-    let path = root
-        .join(relative)
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
-    if !path.starts_with(root)
-        || path == root
-        || directory != path.is_dir()
-        || forbidden(path.strip_prefix(root).unwrap())
-    {
-        return Err("refactor path escapes its workspace or has the wrong type".into());
-    }
-    let mut builder = ignore::gitignore::GitignoreBuilder::new(root);
-    let mut directories = path
-        .parent()
-        .unwrap_or(root)
-        .ancestors()
-        .take_while(|p| p.starts_with(root))
-        .collect::<Vec<_>>();
-    directories.reverse();
-    for directory in directories {
-        for name in [".gitignore", ".ignore"] {
-            let file = directory.join(name);
-            if file.exists() {
-                if file
-                    .symlink_metadata()
-                    .map_err(|e| e.to_string())?
-                    .file_type()
-                    .is_symlink()
-                    || file.metadata().map_err(|e| e.to_string())?.len() > 64 * 1024
-                {
-                    return Err("ignore rules are symlinked or too large".into());
-                }
-                if let Some(error) = builder.add(file) {
-                    return Err(format!("invalid project ignore rules: {error}"));
-                }
-            }
-        }
-    }
-    if builder
-        .build()
-        .map_err(|e| e.to_string())?
-        .matched_path_or_any_parents(&path, directory)
-        .is_ignore()
-    {
-        return Err("refactor path is ignored by project rules".into());
-    }
-    Ok(path)
+    crate::workspace_policy::WorkspacePolicy::new(root)?.checked(raw, directory)
 }
 fn read_text(path: &Path) -> Result<String, String> {
     let mut bytes = Vec::new();
@@ -363,9 +287,9 @@ impl RefactorStore {
             if change.content.len() > 65536
                 || [&before, &change.content]
                     .iter()
-                    .any(|text| text.contains("-----BEGIN") && text.contains("PRIVATE KEY-----"))
+                    .any(|text| !crate::workspace_policy::secret_findings(text).is_empty())
             {
-                return Err("proposal contains an oversized file or private key".into());
+                return Err("proposal contains an oversized file or credential/private key".into());
             }
             snapshots.push(Snapshot {
                 path: change.path.clone(),
