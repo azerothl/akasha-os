@@ -3867,6 +3867,9 @@ async fn invoke_native(
     args: &serde_json::Value,
     session_id: Option<&str>,
 ) -> String {
+    if aos_agent::workspace_context::is_context_tool(tool) {
+        return aos_agent::workspace_context::invoke(bus, agent_id, caps, tool, args).await;
+    }
     let actor = format!("agent:{agent_id}");
     match tool {
         "fs.read" => {

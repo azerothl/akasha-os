@@ -1,0 +1,132 @@
+{
+  "date": "2026-10-19",
+  "issue": 247,
+  "scope": "Opt-in native read-only project context, real bus/host policy, and actual worker loop with scripted model replies",
+  "merged_pr": {
+    "number": 454,
+    "merge_commit": "943c16ad345630a2c931ed421c83920ab25a8607",
+    "merged_at": "2026-10-19T12:58:33Z",
+    "successful_checks": 18,
+    "manual_cuda": "skipped"
+  },
+  "implementation_commit": "808700e78b18ef0e8f246123cb0afb617cabb66c",
+  "contract": {
+    "tools": [
+      "workspace.inspect",
+      "workspace.inventory",
+      "workspace.read"
+    ],
+    "explicit_selection": true,
+    "automatic_fs_grants": false,
+    "requires_actor_bound_logical_bus_identity": true,
+    "host_api": 5,
+    "reference_module": "0.5.0 unchanged; not required for native tools",
+    "cache_policy": 3,
+    "file_page_max_entries": 64,
+    "file_page_max_serialized_entry_bytes": 32768,
+    "max_serialized_reply_bytes": 524288,
+    "transport_timeout_seconds": 20,
+    "inventory_later_pages_require_content_version": true,
+    "generic_host_path_or_module_fallback": false
+  },
+  "verification": [
+    {
+      "command": "cargo test -p aos-agent --all-targets --locked -- --test-threads=1",
+      "result": {
+        "library_passed": 380,
+        "binary_passed": 20,
+        "total_passed": 400,
+        "failed": 0
+      },
+      "log": "agent-context-agent-tests.log"
+    },
+    {
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1",
+      "result": {
+        "passed": 319,
+        "failed": 0
+      },
+      "log": "agent-context-platform-tests.log"
+    },
+    {
+      "command": "cargo clippy -p aos-agent -p aos-platform --no-default-features --all-targets --locked -- -D warnings",
+      "result": "passed",
+      "log": "agent-context-clippy.log"
+    },
+    {
+      "command": "workspace_agent_context_probe ABSOLUTE_WORKER_EXE",
+      "result": "passed; actual process, broker and production host; deterministic model fixture",
+      "log": "agent-context-worker.log"
+    }
+  ],
+  "bus_test": {
+    "real_tcp_broker": true,
+    "real_platform_service": true,
+    "eligible_files": 102,
+    "metadata_page_sizes": [
+      64,
+      38
+    ],
+    "resumable_scan": true,
+    "source_read": true,
+    "withheld_synthetic_secret": true,
+    "traversal_refused": true,
+    "missing_grant_refused": true,
+    "mismatched_logical_actor_refused": true,
+    "signed_audit_verified": true
+  },
+  "worker_process": {
+    "audit_verified": true,
+    "complete_scan": true,
+    "eligible_files": 2,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-agent-context-94530eec0dfa2dd5302f2ea07fd3f745",
+    "model_gate": "off in fixture only; explicit LEGACY_UNGATED_TOOL_PATH verified",
+    "ok": true,
+    "planner": "deterministic scripted model.infer service; no model weights",
+    "planner_turns": 6,
+    "reported_steps": 8,
+    "scan_pages": 4,
+    "scope": "Actual worker process, IPC broker and production platform; not agentd lifecycle, real-model autonomy, native UI or representative refactor evidence",
+    "source_unchanged": true,
+    "withheld_fixture_files": 1,
+    "worker_exit": 0,
+    "worker_state": "Done"
+  },
+  "binary_sha256": {
+    "aos-agent-worker.exe": "02f305b9d1eb098531aced2e934e6b8364922c0eb4ea61918199fecd783b6d31",
+    "workspace_agent_context_probe.exe": "efd32731e9a5cf0bfc271052bbf84fe472d9fe052b1c569b78886fe80f712aa5"
+  },
+  "source_sha256": {
+    "crates/aos-agent/src/workspace_context.rs": "daa0dfdf14a0555c67b1cc99167ff82e8853ea764f5e86dd6b8a2ad97210d1ca",
+    "crates/aos-platform/examples/workspace_agent_context_probe.rs": "44baf3e19807527c5d57a1375d479e0112efc328b86d089d192a8cd0ea663c3f"
+  },
+  "local_log_sha256": {
+    "agent-context-agent-tests.log": "09fab8f5a6e4f5e894b129c40fb9c5f54d584ff1f281f44f6d342d66a7d177fc",
+    "agent-context-bus.log": "151df9aa0f25330a320059af40e9f0769600a338dcdd8179b259a31fff7e066c",
+    "agent-context-clippy.log": "7d7e7082f7bfe9507fee325309c2b3f002d8fe06bcaeabcfadb90a9e4e1638b1",
+    "agent-context-platform-tests.log": "20fb242af7f06e77de74e0cff242a738489629971bd4e9732d7d6dcf67ce460d",
+    "agent-context-probe-build.log": "a567ccf05a77ef5e25b3e2ed99f77901f5b88a1b055243eb4f57277f3e968093",
+    "agent-context-unit.log": "e825053f38cae0750080d65d4360e42777b0379335680b81563e5bffe1009828",
+    "agent-context-worker-build.log": "5f8c9351c98c9a156791ecbcaba0b7783b49374448d21b534a799efe2bfe54f8",
+    "agent-context-worker.log": "ce036e8bf1db27906136ba51f22c4ca6b228c7beded7c87e4d81885f868e77ae"
+  },
+  "ci": "Linux Rust job now includes the actual-worker fixture; candidate CI pending publication",
+  "limits": [
+    "Logical identity consistency is not new bus authentication or an OS sandbox",
+    "Shared daemon salon bus clients are refused; per-member salon transport remains separate",
+    "Actual worker fixture uses scripted model.infer replies without weights",
+    "Fixture alone sets AOS_MODEL_GATE=off; explicit LEGACY_UNGATED_TOOL_PATH marker asserted",
+    "No agentd lifecycle/registry validation in process fixture",
+    "Fixture has no retrieval service; normal unavailable startup-memory replies are retained",
+    "No actual human freshly installed native-module validation",
+    "No new real-model autonomous refactor, retrieval, scanner-quality or hardware claim"
+  ],
+  "remaining": [
+    "Human native validation explicitly deferred",
+    "Real-model autonomous project/refactor workflows and representative retrieval/refactor/scanner quality",
+    "Per-member salon transport",
+    "Separate Studio LSP delivery: Akasha PR #169 remains open",
+    "Issue #434 extra-machine and #435 two-GPU evidence unavailable"
+  ],
+  "delivery_at_recording": "local source and docs commits; no push/new PR yet authorized"
+}

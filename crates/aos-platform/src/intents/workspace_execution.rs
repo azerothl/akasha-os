@@ -152,7 +152,7 @@ pub async fn dispatch(
             return Err(error);
         }
     };
-    let reason=format!("Autoriser {} {:?} dans /host/{} ? Cette commande utilise les droits de votre compte sur l'hôte.",
+    let reason=format!("Autoriser {} {:?} dans /host/{} ? Cette commande utilise les droits de votre compte sur l'hÃƒÂ´te.",
         command.program.file_name().unwrap_or_default().to_string_lossy(),command.args,command.workspace_id);
     let (_, answer) = sub
         .confirm
@@ -519,6 +519,122 @@ mod tests {
         assert!(!audit.contains(&secret));
         assert!(audit.contains("query_redacted"));
         f.sub.audit.lock().unwrap().verify().unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_agent_context_reaches_real_bus_policy_and_audit() {
+        let f = Fixture::new();
+        for i in 0..100 {
+            std::fs::write(
+                f.home.join("project").join(format!("source-{i}.rs")),
+                "fn sample() {}\n",
+            )
+            .unwrap();
+        }
+        std::fs::write(
+            f.home.join("project/hidden.rs"),
+            "password = 'SyntheticOnlyValue438927'",
+        )
+        .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let broker = tokio::spawn(aos_ipc::broker::serve(listener));
+        let mut svc = aos_ipc::BusService::new("context-fixture");
+        register(&mut svc, f.sub.clone());
+        let service_addr = addr.clone();
+        let service = tokio::spawn(async move { svc.serve(&service_addr).await });
+        let bus = aos_ipc::BusClient::connect(&addr, "agent:context-test")
+            .await
+            .unwrap();
+        for _ in 0..100 {
+            if bus
+                .call::<(), bool>("bus.lookup:workspace.inspect", &(), vec![])
+                .await
+                .unwrap_or(false)
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let caps = vec!["fs.read:/host/demo/**".into()];
+        let invoke = |tool: &'static str, args: Value| {
+            let bus = &bus;
+            let caps = &caps;
+            async move {
+                aos_agent::workspace_context::invoke(bus, "context-test", caps, tool, &args).await
+            }
+        };
+        let mut result: Value = serde_json::from_str(
+            &invoke(
+                "workspace.inspect",
+                json!({"root":"demo","page_entries":32}),
+            )
+            .await,
+        )
+        .unwrap();
+        assert_eq!(result["ok"], true);
+        while result["continuation"]["available"] == true {
+            result = serde_json::from_str(
+                &invoke("workspace.inspect", json!({"root":"demo","resume":true})).await,
+            )
+            .unwrap();
+            assert_eq!(result["ok"], true);
+        }
+        assert_eq!(result["scan"]["complete"], true);
+        assert_eq!(result["agent_files_page"]["total"], 102);
+        assert_eq!(result["files"].as_array().unwrap().len(), 64);
+        let version = result["content_version"].clone();
+        let page: Value = serde_json::from_str(
+            &invoke(
+                "workspace.inventory",
+                json!({"root":"demo","files_offset":64,"content_version":version}),
+            )
+            .await,
+        )
+        .unwrap();
+        assert_eq!(page["files"].as_array().unwrap().len(), 38);
+        assert!(page["freshness"]
+            .as_str()
+            .unwrap()
+            .starts_with("not_rechecked"));
+        let read = invoke(
+            "workspace.read",
+            json!({"root":"demo","path":"source-0.rs"}),
+        )
+        .await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&read).unwrap()["content"],
+            "fn sample() {}\n"
+        );
+        for path in ["hidden.rs", "../outside.rs", ".env"] {
+            let denied = invoke("workspace.read", json!({"root":"demo","path":path})).await;
+            assert_eq!(serde_json::from_str::<Value>(&denied).unwrap()["ok"], false);
+            assert!(!denied.contains("SyntheticOnlyValue"));
+        }
+        let denied = aos_agent::workspace_context::invoke(
+            &bus,
+            "context-test",
+            &[],
+            "workspace.inventory",
+            &json!({"root":"demo"}),
+        )
+        .await;
+        assert_eq!(serde_json::from_str::<Value>(&denied).unwrap()["ok"], false);
+        let wrong = aos_agent::workspace_context::invoke(
+            &bus,
+            "other",
+            &caps,
+            "workspace.inventory",
+            &json!({"root":"demo"}),
+        )
+        .await;
+        assert!(wrong.contains("requires_actor_bound_bus"));
+        let audit = std::fs::read_to_string(f.home.join("audit/audit.jsonl")).unwrap();
+        assert!(audit.contains("agent:context-test"));
+        assert!(!audit.contains("SyntheticOnlyValue"));
+        f.sub.audit.lock().unwrap().verify().unwrap();
+        service.abort();
+        broker.abort();
     }
 
     #[tokio::test]
