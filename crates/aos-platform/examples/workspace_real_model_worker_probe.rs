@@ -1,5 +1,7 @@
 //! Real modeld + worker + broker + host, confined to a new generated fixture.
 //! The model chooses its actions. No scripted model responses or source edits.
+#[path = "support/agent_lifecycle.rs"]
+mod agent_lifecycle;
 use aos_ipc::{msg::Status, BusClient, BusService};
 use aos_platform::{intents::workspace_execution, subsystem::PlatformConfig, PlatformSubsystem};
 use aos_proto::{AgentOutputEvent, AgentSpec};
@@ -28,9 +30,20 @@ fn sha(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let argv = std::env::args().skip(1).collect::<Vec<_>>();
-    let require_gate = argv.len() == 4 && argv[3] == "--require-gate";
-    if argv.len() != 3 && !require_gate {
+    let require_gate = argv.iter().any(|a| a == "--require-gate");
+    let agentd = argv
+        .iter()
+        .position(|a| a == "--agentd")
+        .and_then(|i| argv.get(i + 1))
+        .map(PathBuf::from);
+    let expected = 3 + usize::from(require_gate) + if agentd.is_some() { 2 } else { 0 };
+    if argv.len() != expected || argv.len() < 3 {
         return Err("usage: workspace_real_model_worker_probe ABSOLUTE_WORKER_EXE ABSOLUTE_MODELD_EXE ABSOLUTE_GGUF [--require-gate]".into());
+    }
+    if let Some(exe) = &agentd {
+        if !exe.is_absolute() || !exe.is_file() || exe.parent() != Path::new(&argv[0]).parent() {
+            return Err("agentd must be absolute and beside the supplied worker".into());
+        }
     }
     let args = argv[..3].iter().map(PathBuf::from).collect::<Vec<_>>();
     if args.iter().any(|p| !p.is_absolute() || !p.is_file()) {
@@ -92,15 +105,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await;
     });
     let sink = reports.clone();
-    svc.on("agent.report", move |ctx| {
-        let sink = sink.clone();
-        async move {
-            if let Ok(report) = ctx.payload::<aos_agent::ReportPayload>() {
-                sink.lock().unwrap().push(report.event);
+    if agentd.is_none() {
+        svc.on("agent.report", move |ctx| {
+            let sink = sink.clone();
+            async move {
+                if let Ok(report) = ctx.payload::<aos_agent::ReportPayload>() {
+                    sink.lock().unwrap().push(report.event);
+                }
+                let _ = ctx.respond(Status::Ok, &true).await;
             }
-            let _ = ctx.respond(Status::Ok, &true).await;
-        }
-    });
+        });
+    }
     let service_addr = addr.clone();
     let service = tokio::spawn(async move { svc.serve(&service_addr).await });
     let model_id = "local:workspace-proof";
@@ -163,42 +178,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !ready {
         return Err(format!("real modeld did not register; see {}", home.display()).into());
     }
-    let goal="Dans le projet dÃƒÂ©jÃƒÂ  liÃƒÂ© demo, inspecte les sources avec workspace.inspect, puis lis première.txt avec workspace.read. Termine par goal.complete avec le code de preuve exact trouvÃƒÂ© dans ce fichier dans args.summary. N'invente pas le code. Travail en lecture seule.";
+    let goal="Dans le projet déjà lié demo, inspecte les sources avec workspace.inspect, puis lis première.txt avec workspace.read. Termine par goal.complete avec le code de preuve exact trouvé dans ce fichier dans args.summary. N'invente pas le code. Travail en lecture seule.";
     let spec: AgentSpec = serde_json::from_value(json!({"agent_id":"real-context-fixture",
         "goal":{"statement":goal,"max_steps":12,"timeout_secs":480},
         "tools":["workspace.inspect","workspace.inventory","workspace.read"],
         "caps":["fs.read:/host/demo/**"],"gate_mode":"autonomous","model_id":model_id,
-        "system_prompt":"Pour cette tÃƒÂ¢che, utilise uniquement workspace.inspect, workspace.inventory, workspace.read, plan.update, goal.complete et goal.fail. Les autres outils ne sont pas nÃƒÂ©cessaires. Le projet demo est dÃƒÂ©jÃƒÂ  liÃƒÂ© et son accÃƒÂ¨s est accordÃƒÂ©.",
+        "system_prompt":"Pour cette tâche, utilise uniquement workspace.inspect, workspace.inventory, workspace.read, plan.update, goal.complete et goal.fail. Les autres outils ne sont pas nécessaires. Le projet demo est déjà lié et son accès est accordé.",
         "policy":{"fs_write":false,"net":"deny","tool_allowlist":["workspace.inspect","workspace.inventory","workspace.read","plan.update","goal.complete","goal.fail"]}}))?;
     let spec_path = home.join("spec.json");
     std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec)?)?;
     let log = std::fs::File::create(home.join("worker.log"))?;
     let begun = std::time::Instant::now();
-    let mut worker = tokio::process::Command::new(&args[0])
-        .args([
-            "--agent-id",
-            "real-context-fixture",
-            "--bus",
+    let mut lifecycle = Value::Null;
+    let mut actor_id = spec.agent_id.clone();
+    let (exit, timed_out) = if let Some(exe) = &agentd {
+        let (events, report, id) = agent_lifecycle::run(
+            exe,
+            &home,
             &addr,
-            "--spec-path",
-        ])
-        .arg(&spec_path)
-        .current_dir(&home)
-        .env("AOS_HOME", &home)
-        .env(
-            "AOS_MODEL_GATE",
+            &spec,
             if require_gate { "require" } else { "auto" },
         )
-        .stdout(log.try_clone()?)
-        .stderr(log)
-        .kill_on_drop(true)
-        .spawn()?;
-    let wait = tokio::time::timeout(Duration::from_secs(510), worker.wait()).await;
-    let (exit, timed_out) = match wait {
-        Ok(status) => (status?.code(), false),
-        Err(_) => {
-            worker.kill().await?;
-            (None, true)
+        .await?;
+        *reports.lock().unwrap() = events;
+        actor_id = id;
+        lifecycle = report;
+        // agentd exposes reaped/terminal state, not the child's OS exit code.
+        (None, false)
+    } else {
+        let mut worker = tokio::process::Command::new(&args[0])
+            .args([
+                "--agent-id",
+                "real-context-fixture",
+                "--bus",
+                &addr,
+                "--spec-path",
+            ])
+            .arg(&spec_path)
+            .current_dir(&home)
+            .env("AOS_HOME", &home)
+            .env(
+                "AOS_MODEL_GATE",
+                if require_gate { "require" } else { "auto" },
+            )
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .kill_on_drop(true)
+            .spawn()?;
+        let wait = tokio::time::timeout(Duration::from_secs(510), worker.wait()).await;
+        match wait {
+            Ok(status) => (status?.code(), false),
+            Err(_) => {
+                worker.kill().await?;
+                (None, true)
+            }
         }
     };
     let model_state = tokio::time::timeout(
@@ -252,14 +285,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(Value::Null);
     let complete = cache["scan"]["complete"] == true;
     let filtered_map = cache["scan"]["eligible_files"] == 2 && cache["scan"]["finding_files"] == 1;
-    let unchanged = originals
-        .iter()
-        .all(|(name, before)| sha(&project.join(name)).is_ok_and(|after| &after == before));
+    let exact_file_set = std::fs::read_dir(&project)?.count() == originals.len();
+    let unchanged = exact_file_set
+        && originals
+            .iter()
+            .all(|(name, before)| sha(&project.join(name)).is_ok_and(|after| &after == before));
     let trace = serde_json::to_string(&steps)?;
     let audit = std::fs::read_to_string(home.join("audit/audit.jsonl")).unwrap_or_default();
     let no_secret = !trace.contains("SyntheticOnlyValue") && !audit.contains("SyntheticOnlyValue");
     let audit_verified = sub.audit.lock().unwrap().verify().is_ok();
-    let actor_audited = audit.contains("agent:real-context-fixture")
+    let actor_audited = audit.contains(&format!("agent:{actor_id}"))
         && audit.contains("workspace.inspect")
         && audit.contains("workspace.read");
     let legacy_steps = steps
@@ -274,7 +309,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .count();
     let gate_verified = !require_gate || (legacy_steps == 0 && gated_steps >= 2);
-    let ok = exit == Some(0)
+    let execution_ok = if agentd.is_some() {
+        lifecycle["ok"] == true
+    } else {
+        exit == Some(0)
+    };
+    let ok = execution_ok
         && !timed_out
         && final_state == Some(&aos_proto::AgentState::Done)
         && summary.contains(&marker)
@@ -288,18 +328,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         && modeld_stopped
         && gate_verified;
     let report = json!({"ok":ok,"fixture":home,"planner":"real aos-modeld with local GGUF; no scripted model responses",
-        "worker_exit":exit,"worker_timed_out":timed_out,"worker_state":final_state,"elapsed_ms":begun.elapsed().as_millis(),
+        "worker_exit":exit,"lifecycle":lifecycle,"worker_timed_out":timed_out,"worker_state":final_state,"elapsed_ms":begun.elapsed().as_millis(),
         "model_file":args[2].file_name().and_then(|n|n.to_str()),"model_sha256":model_sha,"modeld_sha256":sha(&args[1])?,
         "worker_sha256":sha(&args[0])?,"probe_sha256":sha(&std::env::current_exe()?)?,"model_state":model_state,
         "events_sha256":sha(&home.join("events.json"))?,
         "reported_steps":steps.len(),"actions":steps.iter().map(|s|&s.action).collect::<Vec<_>>(),
         "complete_scan":complete,"source_read_verified":read_done,"summary_matches_unprompted_marker":summary.contains(&marker),
         "synthetic_secret_withheld_by_scan":filtered_map,
-        "source_unchanged":unchanged,"synthetic_secret_not_exposed":no_secret,"audit_verified":audit_verified,
+        "source_unchanged":unchanged,"exact_file_set_preserved":exact_file_set,"synthetic_secret_not_exposed":no_secret,"audit_verified":audit_verified,
         "actor_audited":actor_audited,"owned_modeld_stopped":modeld_stopped,
         "gate_mode":if require_gate {"require"} else {"auto"},"required_gate_verified":gate_verified,
         "legacy_ungated_steps":legacy_steps,"gated_executed_steps":gated_steps,
-        "scope":"Real worker, modeld, IPC and host over a generated three-file project; not agentd lifecycle, representative refactor/retrieval, native UI or extra-machine/two-GPU evidence"});
+        "scope":"Real worker, modeld, IPC and host over a generated three-file project; optional agentd lifecycle; not representative refactor/retrieval, native UI or extra-machine/two-GPU evidence"});
     std::fs::write(
         home.join("report.json"),
         serde_json::to_vec_pretty(&report)?,

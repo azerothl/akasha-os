@@ -1745,7 +1745,18 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
     } else {
         always.push("plan.update");
     }
+    let context_selected = selected
+        .iter()
+        .any(|name| crate::workspace_context::is_context_tool(name));
     for t in catalog.iter() {
+        // A project-context kit must not acquire module mutation permissions
+        // just because those tools are normally part of the always-on kit.
+        // An explicitly selected module tool is still handled below.
+        let implicit_module_mutation = context_selected
+            && matches!(t.name.as_str(),
+                "module.scaffold" | "module.package" | "module.compile"
+                | "module.install" | "module.uninstall"
+            );
         // Hors mode deep : ne pas exposer les outils plan.* deep
         if !deep && deep_always.contains(&t.name.as_str()) {
             continue;
@@ -1774,7 +1785,7 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
         } else {
             // Mode restreint : always + ids / préfixes explicitement demandés
             let device_selected = selected.iter().any(|s| s.starts_with("device."));
-            always.contains(&t.name.as_str())
+            (always.contains(&t.name.as_str()) && !implicit_module_mutation)
                 || selected
                     .iter()
                     .any(|s| s == &t.name || t.name.starts_with(&format!("{s}.")))
@@ -2930,6 +2941,22 @@ mod tests {
                 .unwrap_or_else(|| panic!("discovered catalog missing {id}"));
             assert_eq!(tool.required_caps, vec![INVOKE_CAP.to_string()]);
         }
+    }
+
+    #[test]
+    fn workspace_context_does_not_implicitly_select_module_mutations() {
+        let tools = select_tools(&["workspace.inspect".into(), "workspace.read".into()], &[]);
+        assert!(caps_for_tools(&tools, &[]).is_empty());
+        for name in [
+            "module.scaffold", "module.package", "module.compile",
+            "module.install", "module.uninstall",
+        ] {
+            assert!(!tools.iter().any(|tool| tool.name == name));
+        }
+        let explicit = select_tools(&["workspace.read".into(), "module.compile".into()], &[]);
+        assert!(caps_for_tools(&explicit, &[]).contains(&"module.compile".into()));
+        let ordinary = select_tools(&["notes.list".into()], &[]);
+        assert!(ordinary.iter().any(|tool| tool.name == "module.compile"));
     }
 
     #[test]

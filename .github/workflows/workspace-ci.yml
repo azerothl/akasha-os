@@ -206,6 +206,11 @@ jobs:
         run: |
           cargo build -p aos-agent --bin aos-agent-worker --locked
           cargo run -p aos-platform --no-default-features --example workspace_agent_context_probe --locked -- "$GITHUB_WORKSPACE/target/debug/aos-agent-worker"
+      - name: Exercise agentd creation and persisted project context
+        run: |
+          cargo build -p aos-agent --bin aos-agentd --locked
+          cargo test -p aos-platform --no-default-features --example workspace_agent_context_probe --example workspace_real_model_worker_probe --locked
+          cargo run -p aos-platform --no-default-features --example workspace_agent_context_probe --locked -- "$GITHUB_WORKSPACE/target/debug/aos-agent-worker" "$GITHUB_WORKSPACE/target/debug/aos-agentd"
       # Upload sccache stats for visibility
       - name: sccache stats
         if: always() && steps.sccache.outcome == 'success'

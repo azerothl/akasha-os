@@ -386,7 +386,12 @@ fn build_spec_with_module_tools(
         }
     }
     // Default notes cap for simple /agent flows with empty tools
-    if caps.is_empty() && req.spawns_worker() {
+    if caps.is_empty()
+        && req.spawns_worker()
+        && !tool_ids
+            .iter()
+            .any(|name| aos_agent::workspace_context::is_context_tool(name))
+    {
         caps.push("tool.invoke:notes".into());
     }
     if req.cognitive_mode.is_deep_thinking() {
@@ -1914,13 +1919,7 @@ async fn main() {
                                         } else {
                                             entry.info.last_output.clear();
                                         }
-                                        if let Some(existing) =
-                                            entry.trace.iter_mut().find(|s| s.step == rec.step)
-                                        {
-                                            *existing = rec.clone();
-                                        } else {
-                                            entry.trace.push(rec.clone());
-                                        }
+                                        upsert_trace_record(&mut entry.trace, rec);
                                         entry.info.tokens_used = entry
                                             .trace
                                             .iter()
@@ -2847,6 +2846,19 @@ async fn respond_plan(
     }
 }
 
+/// Startup/steer records can share step zero. Use their action and timestamp
+/// as well so live traces retain the same chronology as worker checkpoints.
+fn upsert_trace_record(trace: &mut Vec<AgentStepRecord>, rec: &AgentStepRecord) {
+    if let Some(existing) = trace
+        .iter_mut()
+        .find(|s| s.step == rec.step && s.action == rec.action && s.ts_ms == rec.ts_ms)
+    {
+        *existing = rec.clone();
+    } else {
+        trace.push(rec.clone());
+    }
+}
+
 fn hydrate_persisted_agents(rt: &mut Runtime) {
     for id in persist::list_agent_ids() {
         if rt.agents.contains_key(&id) {
@@ -2931,6 +2943,39 @@ fn kill_pid(pid: u32) {
 mod tests {
     use super::{trim_last_output_bytes, unexpected_child_exit_terminal};
     use aos_proto::AgentState;
+
+    #[test]
+    fn startup_trace_records_survive_and_exact_redelivery_updates() {
+        let mut trace = Vec::new();
+        for (action, timestamp) in [
+            ("task.assess", 10), ("memory.recall", 10), ("memory.recall", 11),
+        ] {
+            super::upsert_trace_record(&mut trace, &aos_proto::AgentStepRecord {
+                step: 0,
+                action: action.into(),
+                ts_ms: timestamp,
+                ..Default::default()
+            });
+        }
+        let mut updated = trace[1].clone();
+        updated.tool_result = "updated result".into();
+        super::upsert_trace_record(&mut trace, &updated);
+        assert_eq!(trace.len(), 3);
+        assert_eq!(trace[0].action, "task.assess");
+        assert_eq!(trace[1].tool_result, "updated result");
+        assert_eq!(trace[2].ts_ms, 11);
+    }
+
+    #[test]
+    fn native_context_spec_preserves_only_explicit_project_grants() {
+        let mut request = aos_proto::AgentCreateRequest::simple("Inspect demo");
+        request.tools = vec!["workspace.inspect".into(), "workspace.read".into()];
+        request.caps = vec!["fs.read:/host/demo/**".into()];
+        let spec = super::build_spec("agent-1", &request);
+        assert_eq!(spec.caps, request.caps);
+        request.caps.clear();
+        assert!(super::build_spec("agent-2", &request).caps.is_empty());
+    }
 
     #[test]
     fn unexpected_child_exit_is_a_failure_not_success() {
