@@ -1,0 +1,858 @@
+{
+  "date": "2026-10-20",
+  "issue": 247,
+  "implementation_commit": "6be8e44ce15508bbc7dd595b86fc213f1adaec3e",
+  "base_merge": {
+    "pr": 458,
+    "commit": "11a5fd940dad7e01f27b6d54dc4990a445388a69",
+    "merged_at": "2026-10-20T08:56:06Z",
+    "checks_succeeded": 18,
+    "cuda_manual": "skipped"
+  },
+  "initial_scripted_failure": {
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-agent-context-72775e10fb52f8c32d3a093fa7c07826",
+    "lifecycle": {
+      "agent_id": "agent-1",
+      "event_sources": "Steps and final state from agentd API; logs/tokens from live subscription (no startup replay guarantee)",
+      "exact_scoped_grants": false,
+      "ok": false,
+      "owned_agentd_processes_stopped": true,
+      "registry_contains_task": true,
+      "restored_exactly_once": true,
+      "restored_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**",
+          "module.compile",
+          "module.install",
+          "module.uninstall"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Read the explicitly bound demo project using workspace context tools.",
+        "display_name": "Read the explicitly bound demo project using workspace c…",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Deterministic worker fixture completed.",
+        "max_steps": 8,
+        "mcp_servers": [],
+        "model_id": "deterministic-fixture",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 6,
+        "title": "Read the explicitly bound demo project using workspace c…",
+        "tokens_used": 180,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "spec_preserved_after_restart": true,
+      "terminal_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**",
+          "module.compile",
+          "module.install",
+          "module.uninstall"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Read the explicitly bound demo project using workspace context tools.",
+        "display_name": "Read the explicitly bound demo project using workspace c…",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Deterministic worker fixture completed.",
+        "max_steps": 8,
+        "mcp_servers": [],
+        "model_id": "deterministic-fixture",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 6,
+        "title": "Read the explicitly bound demo project using workspace c…",
+        "tokens_used": 180,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "terminal_state_preserved": true,
+      "trace_preserved_after_restart": false,
+      "worker_reaped_by_agentd": true
+    },
+    "diagnosis": [
+      "Implicit always-on module mutation capabilities derived for a selected project-context kit",
+      "Startup records share step zero and were overwritten in the live trace"
+    ]
+  },
+  "initial_real_strict_comparison_failure": {
+    "actions": [
+      "task.assess",
+      "memory.recall",
+      "workspace.inspect",
+      "workspace.read",
+      "goal.complete"
+    ],
+    "actor_audited": true,
+    "audit_verified": true,
+    "complete_scan": true,
+    "elapsed_ms": 9773,
+    "events_sha256": "46d4debf8a79061edf3ab736c8d7eaa1cc5687fea1ecd854669d39725b49018c",
+    "exact_file_set_preserved": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-c68059c62a3ab960b70939b50c4ec80e",
+    "gate_mode": "require",
+    "gated_executed_steps": 2,
+    "legacy_ungated_steps": 0,
+    "lifecycle": {
+      "agent_id": "agent-1",
+      "event_sources": "Steps and final state from agentd API; logs/tokens from live subscription (no startup replay guarantee)",
+      "exact_scoped_grants": true,
+      "ok": false,
+      "owned_agentd_processes_stopped": true,
+      "registry_contains_task": true,
+      "restored_exactly_once": true,
+      "restored_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Dans le projet déjà lié demo, inspecte les sources avec workspace.inspect, puis lis première.txt avec workspace.read. Termine par goal.complete avec le code de preuve exact trouvé dans ce fichier dans args.summary. N'invente pas le code. Travail en lecture seule.",
+        "display_name": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Code de preuve trouvé dans première.txt: proof-9b71d7704ec0057c",
+        "max_steps": 12,
+        "mcp_servers": [],
+        "model_id": "local:workspace-proof",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 3,
+        "title": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "tokens_used": 220,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "spec_preserved_after_restart": true,
+      "terminal_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Dans le projet déjà lié demo, inspecte les sources avec workspace.inspect, puis lis première.txt avec workspace.read. Termine par goal.complete avec le code de preuve exact trouvé dans ce fichier dans args.summary. N'invente pas le code. Travail en lecture seule.",
+        "display_name": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Code de preuve trouvé dans première.txt: proof-9b71d7704ec0057c",
+        "max_steps": 12,
+        "mcp_servers": [],
+        "model_id": "local:workspace-proof",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 3,
+        "title": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "tokens_used": 220,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "terminal_state_preserved": true,
+      "trace_preserved_after_restart": false,
+      "worker_reaped_by_agentd": true
+    },
+    "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "model_state": [
+      {
+        "has_vision": false,
+        "id": "local:workspace-proof",
+        "n_layers": 32,
+        "name": "Local project-context acceptance model",
+        "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+        "privacy_class": "local",
+        "profile": "balanced",
+        "state": "Loaded"
+      }
+    ],
+    "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+    "ok": false,
+    "owned_modeld_stopped": true,
+    "planner": "real aos-modeld with local GGUF; no scripted model responses",
+    "probe_sha256": "6edbd137fcacbfe4d1cb449a1482d42c5fd60a0fb59f9ea298ba78d8c665bff8",
+    "reported_steps": 5,
+    "required_gate_verified": true,
+    "scope": "Real worker, modeld, IPC and host over a generated three-file project; optional agentd lifecycle; not representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+    "source_read_verified": true,
+    "source_unchanged": true,
+    "summary_matches_unprompted_marker": true,
+    "synthetic_secret_not_exposed": true,
+    "synthetic_secret_withheld_by_scan": true,
+    "worker_exit": null,
+    "worker_sha256": "0f1eb18967cbae0a2c4b41c0288db8a18473b6f2b8131705e03a80f869acad99",
+    "worker_state": "Done",
+    "worker_timed_out": false
+  },
+  "comparator_test_iteration": {
+    "initial_failure": "JSON number indexed as object in acceptance comparator test; corrected to get_mut",
+    "initial_log": "lifecycle-probe-tests-before.log",
+    "final_tests_passed": 2
+  },
+  "final_scripted_lifecycle": {
+    "audit_verified": true,
+    "complete_scan": true,
+    "eligible_files": 2,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-agent-context-c2b6144a383e7e003661e609c934d813",
+    "lifecycle": {
+      "agent_id": "agent-1",
+      "event_sources": "Steps and final state from agentd API; logs/tokens from live subscription (no startup replay guarantee)",
+      "exact_scoped_grants": true,
+      "ok": true,
+      "owned_agentd_processes_stopped": true,
+      "profile_and_result_preserved": true,
+      "registry_contains_task": true,
+      "restored_exactly_once": true,
+      "restored_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Read the explicitly bound demo project using workspace context tools.",
+        "display_name": "Read the explicitly bound demo project using workspace c…",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Deterministic worker fixture completed.",
+        "max_steps": 8,
+        "mcp_servers": [],
+        "model_id": "deterministic-fixture",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 6,
+        "title": "Read the explicitly bound demo project using workspace c…",
+        "tokens_used": 180,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "spec_preserved_after_restart": true,
+      "terminal_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Read the explicitly bound demo project using workspace context tools.",
+        "display_name": "Read the explicitly bound demo project using workspace c…",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Deterministic worker fixture completed.",
+        "max_steps": 8,
+        "mcp_servers": [],
+        "model_id": "deterministic-fixture",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 6,
+        "title": "Read the explicitly bound demo project using workspace c…",
+        "tokens_used": 180,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "terminal_state_preserved": true,
+      "trace_comparison": "Exact text, integer values, structure and ordering; floating telemetry tolerance 8 * f64::EPSILON * max(abs(a), abs(b), 1)",
+      "trace_preserved_after_restart": true,
+      "worker_reaped_by_agentd": true
+    },
+    "model_gate": "off in fixture only; explicit LEGACY_UNGATED_TOOL_PATH verified",
+    "ok": true,
+    "planner": "deterministic scripted model.infer service; no model weights",
+    "planner_turns": 6,
+    "reported_steps": 8,
+    "scan_pages": 4,
+    "scope": "Actual worker process, IPC broker and production platform; optional agentd lifecycle; not real-model autonomy, native UI or representative refactor evidence",
+    "source_unchanged": true,
+    "withheld_fixture_files": 1,
+    "worker_exit": null,
+    "worker_state": "Done"
+  },
+  "direct_scripted_regression": {
+    "audit_verified": true,
+    "complete_scan": true,
+    "eligible_files": 2,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-agent-context-121add7f650eddd59128b92764368c2a",
+    "lifecycle": null,
+    "model_gate": "off in fixture only; explicit LEGACY_UNGATED_TOOL_PATH verified",
+    "ok": true,
+    "planner": "deterministic scripted model.infer service; no model weights",
+    "planner_turns": 6,
+    "reported_steps": 8,
+    "scan_pages": 4,
+    "scope": "Actual worker process, IPC broker and production platform; optional agentd lifecycle; not real-model autonomy, native UI or representative refactor evidence",
+    "source_unchanged": true,
+    "withheld_fixture_files": 1,
+    "worker_exit": 0,
+    "worker_state": "Done"
+  },
+  "final_real_lifecycle": {
+    "actions": [
+      "task.assess",
+      "memory.recall",
+      "workspace.inspect",
+      "workspace.read",
+      "goal.complete"
+    ],
+    "actor_audited": true,
+    "audit_verified": true,
+    "complete_scan": true,
+    "elapsed_ms": 14227,
+    "events_sha256": "18a91e4dc5e8a43cd744fafc50a5759d4fb6de1f1519ea0f16b343c3cf7d06b9",
+    "exact_file_set_preserved": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-2378190aa5a06325e7f0b901e9563188",
+    "gate_mode": "require",
+    "gated_executed_steps": 2,
+    "legacy_ungated_steps": 0,
+    "lifecycle": {
+      "agent_id": "agent-1",
+      "event_sources": "Steps and final state from agentd API; logs/tokens from live subscription (no startup replay guarantee)",
+      "exact_scoped_grants": true,
+      "ok": true,
+      "owned_agentd_processes_stopped": true,
+      "profile_and_result_preserved": true,
+      "registry_contains_task": true,
+      "restored_exactly_once": true,
+      "restored_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Dans le projet déjà lié demo, inspecte les sources avec workspace.inspect, puis lis première.txt avec workspace.read. Termine par goal.complete avec le code de preuve exact trouvé dans ce fichier dans args.summary. N'invente pas le code. Travail en lecture seule.",
+        "display_name": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Code de preuve trouvé dans première.txt: proof-95ce83b38147536f",
+        "max_steps": 12,
+        "mcp_servers": [],
+        "model_id": "local:workspace-proof",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 3,
+        "title": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "tokens_used": 251,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "spec_preserved_after_restart": true,
+      "terminal_info": {
+        "agent_id": "agent-1",
+        "avatar": null,
+        "caps": [
+          "fs.read:/host/demo/**"
+        ],
+        "children": [],
+        "cognitive_mode": "normal",
+        "color": null,
+        "current_task": null,
+        "deep_plan": null,
+        "directive": "Dans le projet déjà lié demo, inspecte les sources avec workspace.inspect, puis lis première.txt avec workspace.read. Termine par goal.complete avec le code de preuve exact trouvé dans ce fichier dans args.summary. N'invente pas le code. Travail en lecture seule.",
+        "display_name": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "execution_backend": {
+          "kind": "native"
+        },
+        "fail_reason": null,
+        "kind": "task",
+        "last_output": "Code de preuve trouvé dans première.txt: proof-95ce83b38147536f",
+        "max_steps": 12,
+        "mcp_servers": [],
+        "model_id": "local:workspace-proof",
+        "origin": null,
+        "parent_id": null,
+        "persona_id": null,
+        "pid": null,
+        "session_id": null,
+        "skills": [],
+        "source_roster_id": null,
+        "state": "Done",
+        "step": 3,
+        "title": "Dans le projet déjà lié demo, inspecte les sources avec …",
+        "tokens_used": 251,
+        "tools": [
+          "workspace.inspect",
+          "workspace.inventory",
+          "workspace.read"
+        ]
+      },
+      "terminal_state_preserved": true,
+      "trace_comparison": "Exact text, integer values, structure and ordering; floating telemetry tolerance 8 * f64::EPSILON * max(abs(a), abs(b), 1)",
+      "trace_preserved_after_restart": true,
+      "worker_reaped_by_agentd": true
+    },
+    "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "model_state": [
+      {
+        "has_vision": false,
+        "id": "local:workspace-proof",
+        "n_layers": 32,
+        "name": "Local project-context acceptance model",
+        "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+        "privacy_class": "local",
+        "profile": "balanced",
+        "state": "Loaded"
+      }
+    ],
+    "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+    "ok": true,
+    "owned_modeld_stopped": true,
+    "planner": "real aos-modeld with local GGUF; no scripted model responses",
+    "probe_sha256": "d163daa74215996eb7cce7d795a8fa8149503661ddf3f4bce847f44a1dc2441b",
+    "reported_steps": 5,
+    "required_gate_verified": true,
+    "scope": "Real worker, modeld, IPC and host over a generated three-file project; optional agentd lifecycle; not representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+    "source_read_verified": true,
+    "source_unchanged": true,
+    "summary_matches_unprompted_marker": true,
+    "synthetic_secret_not_exposed": true,
+    "synthetic_secret_withheld_by_scan": true,
+    "worker_exit": null,
+    "worker_sha256": "0f1eb18967cbae0a2c4b41c0288db8a18473b6f2b8131705e03a80f869acad99",
+    "worker_state": "Done",
+    "worker_timed_out": false
+  },
+  "final_trace_difference": [
+    {
+      "path": "steps[3].ttft_ms",
+      "before": 37.396499999999996,
+      "after": 37.3965,
+      "classification": "floating timing telemetry only; within 8 epsilon relative tolerance"
+    }
+  ],
+  "final_trace_hashes": {
+    "trace-before-restart.json": "5b2f4326c49d6abefad5103753ab0ef2d782e5dfcaa909d00927a63334fe13a3",
+    "trace-after-restart.json": "925766a5a01c2f87866fd955f16ef568f3256a598ed2d0ebee393333cc212ff3",
+    "events.json": "18a91e4dc5e8a43cd744fafc50a5759d4fb6de1f1519ea0f16b343c3cf7d06b9",
+    "agent-live-events.json": "dc7864383017177dce2aaf21f6b49039668d330fc3fdac2c7a8b4a905b42a78b",
+    "lifecycle.json": "d62438601b1275826fbdca2e50da322b218f11bc15297902456544b10550e9bb"
+  },
+  "checks": [
+    {
+      "command": "cargo test -p aos-agent --all-targets --locked -- --test-threads=1",
+      "passed": 406,
+      "breakdown": {
+        "library": 384,
+        "agentd": 18,
+        "worker": 4
+      },
+      "log": "lifecycle-agent-tests.log"
+    },
+    {
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1",
+      "passed": 319,
+      "log": "lifecycle-platform-tests.log"
+    },
+    {
+      "command": "cargo test -p aos-platform --no-default-features --example workspace_agent_context_probe --example workspace_real_model_worker_probe --locked",
+      "passed": 2,
+      "log": "lifecycle-probe-tests.log"
+    },
+    {
+      "command": "cargo clippy -p aos-agent -p aos-platform --no-default-features --all-targets --locked -- -D warnings",
+      "status": "passed",
+      "log": "lifecycle-clippy-final.log"
+    }
+  ],
+  "total_rust_tests_passed": 727,
+  "artifacts": {
+    "aos-agentd.exe": {
+      "path": "C:\\Users\\azero\\.codex\\worktrees\\open-tickets\\target-mcp\\debug\\aos-agentd.exe",
+      "sha256": "9ec1f9d80455e89693e3aca84ea45629a9e888b12ee02d42bbc5342bf254a015"
+    },
+    "aos-agent-worker.exe": {
+      "path": "C:\\Users\\azero\\.codex\\worktrees\\open-tickets\\target-mcp\\debug\\aos-agent-worker.exe",
+      "sha256": "0f1eb18967cbae0a2c4b41c0288db8a18473b6f2b8131705e03a80f869acad99"
+    },
+    "examples/workspace_agent_context_probe.exe": {
+      "path": "C:\\Users\\azero\\.codex\\worktrees\\open-tickets\\target-mcp\\debug\\examples\\workspace_agent_context_probe.exe",
+      "sha256": "4885eb5a4edc84e783924ed01d6a2e2dcb112b263d92e5d9a17fcd1207119a7f"
+    },
+    "examples/workspace_real_model_worker_probe.exe": {
+      "path": "C:\\Users\\azero\\.codex\\worktrees\\open-tickets\\target-mcp\\debug\\examples\\workspace_real_model_worker_probe.exe",
+      "sha256": "d163daa74215996eb7cce7d795a8fa8149503661ddf3f4bce847f44a1dc2441b"
+    }
+  },
+  "local_dependency_context": {
+    "python": "C:/Users/azero/anaconda3/python.exe",
+    "python_version": "3.12.7",
+    "gate_mode": "require",
+    "AOS_GATE_PYTHON": "unset; PATH interpreter discovery exercised",
+    "PYTHONPATH": [
+      "python/aos_gate/src",
+      "E:/rlcd_model"
+    ],
+    "akasha_model_revision": "a18b4f734b12f20d3ae5a30d47feb90ffee2a69f",
+    "akasha_model_package_worktree": "clean; verified 20 October",
+    "no_dependency_or_model_downloads": true
+  },
+  "backend_observations": {
+    "cuda_devices": 1,
+    "device": "NVIDIA GeForce RTX 4080 SUPER",
+    "compute_capability": "8.9",
+    "layers_offloaded": "32/33",
+    "placement_strings": "configuration/service reports, not independently measured VRAM"
+  },
+  "final_fixture_files": {
+    "agent-live-events.json": {
+      "sha256": "dc7864383017177dce2aaf21f6b49039668d330fc3fdac2c7a8b4a905b42a78b",
+      "bytes": 12162
+    },
+    "agentd-restarted.log": {
+      "sha256": "eb1165e80b40e70575e0b5bbde6490ebc9523935e9521a5a5b644609831496d3",
+      "bytes": 75
+    },
+    "agentd.log": {
+      "sha256": "e9bed84257caa4a2e651d9ac57e90ee559bbb7c1266754f0377a5682dc0994c6",
+      "bytes": 447
+    },
+    "audit\\audit.jsonl": {
+      "sha256": "2b061792b058938a0a2a3c7b4deb70c48a739f65c811e703a2200beb2cc14657",
+      "bytes": 1246
+    },
+    "audit\\secret.key": {
+      "sha256": "6f8a2743257edf8c19769127e4ec99adb2665756638273c565c20e53e235f3aa",
+      "bytes": 32
+    },
+    "data\\models\\catalog.yaml": {
+      "sha256": "716aaac57cfe2a1a40018cdb83baaab8cb229a58f7125f82f29b56469847784f",
+      "bytes": 868
+    },
+    "events.json": {
+      "sha256": "18a91e4dc5e8a43cd744fafc50a5759d4fb6de1f1519ea0f16b343c3cf7d06b9",
+      "bytes": 12100
+    },
+    "lifecycle.json": {
+      "sha256": "d62438601b1275826fbdca2e50da322b218f11bc15297902456544b10550e9bb",
+      "bytes": 3225
+    },
+    "modeld.log": {
+      "sha256": "d9f52a4c56ec5a662a225d0c58aee35cfec5d1ccd7350caecf7dac30b2b5a074",
+      "bytes": 89321
+    },
+    "modeld.yaml": {
+      "sha256": "0a8bfe45ab6ab90b7e9f3edc8bede385885ca0935f52614265993e0615b72547",
+      "bytes": 609
+    },
+    "project\\hidden.txt": {
+      "sha256": "5113893ca102bd1fcdc4364b31b9842a7c70aba140849d18a3619899c61dbf5c",
+      "bytes": 37
+    },
+    "project\\première.txt": {
+      "sha256": "a6f987e746f871cc1af2314544a1375a596423bc1ee78deb6ded48699dfdf8e9",
+      "bytes": 62
+    },
+    "project\\second.txt": {
+      "sha256": "93dd881d79e73dd81468a7c6f51f76f003a293aadaef1b5c4528cbfed6648a2c",
+      "bytes": 24
+    },
+    "report.json": {
+      "sha256": "9bedcda97a9e6874a6f5d9b01530122af6c5cd30e3e9d88c2e1dfb84fff50263",
+      "bytes": 5354
+    },
+    "secrets\\store\\master.backend": {
+      "sha256": "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+      "bytes": 4
+    },
+    "secrets\\store\\master.key": {
+      "sha256": "33988d64248b9b53154a86a13938c971a8b480074c199305d5f0f85d3cfc711f",
+      "bytes": 266
+    },
+    "secrets\\store\\master.keyring-user": {
+      "sha256": "b1350422a28ad427cabb17928bc3e2670bcfbf054d40cd019aaedee3ab601bbb",
+      "bytes": 29
+    },
+    "sessions\\workspace-bindings.json": {
+      "sha256": "27efaee8beabb39cdff8c02fab7202eed67ccedf2c90b1d70e1b8f856e753639",
+      "bytes": 208
+    },
+    "sessions\\workspace-inventory-demo.json": {
+      "sha256": "a79b62f7504d27c0661ccbae90daac6d39b58e8c97ed0b2a1f60dd7f07161fd6",
+      "bytes": 1133
+    },
+    "spec.json": {
+      "sha256": "ab0997e084152e07b0861abf6a087daa88202f7d571696265917b36ca325cf07",
+      "bytes": 1558
+    },
+    "trace-after-restart.json": {
+      "sha256": "925766a5a01c2f87866fd955f16ef568f3256a598ed2d0ebee393333cc212ff3",
+      "bytes": 25466
+    },
+    "trace-before-restart.json": {
+      "sha256": "5b2f4326c49d6abefad5103753ab0ef2d782e5dfcaa909d00927a63334fe13a3",
+      "bytes": 25477
+    },
+    "var\\agents\\agent-1\\info.json": {
+      "sha256": "1369d2601c8ca7a4ff071346c51ffa149e7df62e5ba2e760b8a5a186cc481f99",
+      "bytes": 1192
+    },
+    "var\\agents\\agent-1\\spec.json": {
+      "sha256": "32bbfb62493a5d2d33c7616774667d9e97c6b9b9e6603c7289f1210dc81024d6",
+      "bytes": 1605
+    },
+    "var\\agents\\agent-1\\state.json": {
+      "sha256": "844f2b02363afe4d68bdfc6db50e23a66ea032cd3a21d6192b5d033ed64c0180",
+      "bytes": 26158
+    },
+    "var\\agents\\persona-coder\\info.json": {
+      "sha256": "71186f1308f1d1cbcf067a66f18ed495715c135145158bda1dd77c67733e0bdf",
+      "bytes": 966
+    },
+    "var\\agents\\persona-coder\\spec.json": {
+      "sha256": "20de303d0f353868d0a47176edd850a4c6f37900874611d1f15eefd3d195437a",
+      "bytes": 1123
+    },
+    "var\\agents\\persona-critic\\info.json": {
+      "sha256": "7d8d2891305a8e61bbc85a314d08325a0208d75bd041799e93d31d9c32665ed3",
+      "bytes": 966
+    },
+    "var\\agents\\persona-critic\\spec.json": {
+      "sha256": "0f5917a952d8e15fde0228797778f80b16dc85b346116bd6e9b238bf36804a1b",
+      "bytes": 1124
+    },
+    "var\\agents\\persona-planner\\info.json": {
+      "sha256": "00e803ac674adb6ec600b7f7ea198b984130521ce3b2dd73e2fbe79d484d6664",
+      "bytes": 969
+    },
+    "var\\agents\\persona-planner\\spec.json": {
+      "sha256": "ac838701fd2f7b9b44e454cdacaeb30d9c0ccd367040538bbbbf3686165f1c8d",
+      "bytes": 1124
+    },
+    "var\\agents\\persona-researcher\\info.json": {
+      "sha256": "73de66b0be07384df93fc82b0f7e4ee904e45d3d504b46483130493dc1e221fe",
+      "bytes": 986
+    },
+    "var\\agents\\persona-researcher\\spec.json": {
+      "sha256": "1180ea3e765744b43a711bb48654b9dc1eef722608d551ead57f0ec7702be500",
+      "bytes": 1131
+    },
+    "var\\agents\\registry.json": {
+      "sha256": "31096a58c59b41df0cb913af67b4f52601b6e0e5fdcc4b6fad8ae4a49540760c",
+      "bytes": 143
+    },
+    "var\\gate\\outcomes.jsonl": {
+      "sha256": "782c664810e344bca7f4520f2fb857bc8a6abea2363339386b93cb650f030be4",
+      "bytes": 662
+    },
+    "var\\run\\lan-pairing.json": {
+      "sha256": "54de6b88a628545d2e0f4c10900b145d7722775d6c389740a1b75e9c1c0c301a",
+      "bytes": 17
+    },
+    "worker.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "local_logs": {
+    "lifecycle-agent-build-final.log": {
+      "sha256": "de67e5e6189073a38be5f339a059af7a2ffa66f542d64c896d68f337b774f81c",
+      "bytes": 179
+    },
+    "lifecycle-agent-build.log": {
+      "sha256": "bdd67b5c48aaae8746c5a1f52871dde3eff9a7da6725c72efdd743f13ad318e9",
+      "bytes": 286
+    },
+    "lifecycle-agent-tests.log": {
+      "sha256": "64de57a2e126a8e58a3d8a1bcd65a1f1a28044f8753217f2bb4ae09381cf4764",
+      "bytes": 31821
+    },
+    "lifecycle-clippy-final.log": {
+      "sha256": "c985b32301740a294941c44ed73ca8c61d94f530a00329081d4d33b3a3f1f5a1",
+      "bytes": 291
+    },
+    "lifecycle-clippy.log": {
+      "sha256": "808910cefa1e455b7c8db04a32b5dbf8a188301f8128ea0a12b4d68ad8698948",
+      "bytes": 773
+    },
+    "lifecycle-direct-regression.log": {
+      "sha256": "d04c89b1c417a72d0679afb26a8860ecef0ecdecf175a8b5d727fe8ed5eb0f5b",
+      "bytes": 655
+    },
+    "lifecycle-direct-verified.log": {
+      "sha256": "0934a80d8789baa69c183a4605ef9ca79d7d66ead3e95b90bc7f4fce2f7d7096",
+      "bytes": 655
+    },
+    "lifecycle-platform-tests.log": {
+      "sha256": "526f4986a5433b6905f4c1388dc246c89051f027747365d76318dabc2500e547",
+      "bytes": 24139
+    },
+    "lifecycle-probe-build-final.log": {
+      "sha256": "1d9e8a3dd55474208fcd4beffd0f027673de2601f557605599d2036d91b7431d",
+      "bytes": 186
+    },
+    "lifecycle-probe-build.log": {
+      "sha256": "0e124c97db5aba7fa4554db91968bf5ffef068198379150a30f68a0cb86fd3fe",
+      "bytes": 718
+    },
+    "lifecycle-probe-tests-before.log": {
+      "sha256": "df032ee146c4c3188a8c7effb83a8b8c3e479d545d5d24dca3d0e3936ad39649",
+      "bytes": 1292
+    },
+    "lifecycle-probe-tests.log": {
+      "sha256": "d0fbd34bc1986fcb6cde62f56731226b882eb382f64e442dd31b24facf9489e6",
+      "bytes": 1017
+    },
+    "lifecycle-real-model-verified.log": {
+      "sha256": "bd48652c46c6dc61e099874fb96f42a1b7bd92e16cbd2c526a87aea7264724ea",
+      "bytes": 4525
+    },
+    "lifecycle-real-model.log": {
+      "sha256": "b951075501fd6fdaf8ea21d8a0f093772d7eec9cfc794d8df2bd8142aad7f03a",
+      "bytes": 4498
+    },
+    "lifecycle-scripted-final.log": {
+      "sha256": "b08f21187ac5a60d1e1df58e588c9fe2a470a3408ba1c958bf875326979f46a4",
+      "bytes": 2718
+    },
+    "lifecycle-scripted-verified.log": {
+      "sha256": "f8909e6f714af9d8aea8e56c15524e0f9cb92ed4b6f59c11a5bf0053218c2d31",
+      "bytes": 2898
+    },
+    "lifecycle-scripted.log": {
+      "sha256": "a892b9841a3951037a0d17a09bf864d388f2f59b523db284cebc31492214e4eb",
+      "bytes": 2458
+    }
+  },
+  "studio_followup": {
+    "repository": "azerothl/Akasha",
+    "pr": 169,
+    "state": "MERGED",
+    "merged_at": "2026-10-20T00:00:40Z",
+    "scope": "Separate LSP diagnostics/rename-plan implementation; not installed native/cross-product acceptance here"
+  },
+  "remaining": [
+    "Human installed native/fresh-install confirmation validation explicitly open",
+    "In-flight daemon crash/recovery and pause/cancel races not exercised",
+    "Full capkd deployment not supplied; creation/registry/state/trace lifecycle only",
+    "Autonomous edit/refactor integration and representative retrieval/scanner quality",
+    "Per-member salon transport",
+    "Installed cross-product Studio LSP acceptance",
+    "434 additional-machine cohort",
+    "435 two-GPU evidence"
+  ],
+  "issue_states_verified": {
+    "247": "OPEN",
+    "434": "OPEN",
+    "435": "OPEN"
+  },
+  "candidate_ci": "not yet published; no new PR or push authorized",
+  "release": "none"
+}
