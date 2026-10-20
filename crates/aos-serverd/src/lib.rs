@@ -252,6 +252,10 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // Rust test cases share process environment variables. Handoff tests both
+    // change this override, so guard the pair against parallel-test races.
+    static HANDOFF_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn boot_order_matches_session_contract() {
         assert_eq!(
@@ -314,22 +318,38 @@ mod tests {
 
     #[test]
     fn handoff_defaults_to_legacy_without_endpoint() {
+        let _guard = HANDOFF_ENV_LOCK.lock().unwrap();
         let home = PathBuf::from("/tmp/aos-handoff-no-serverd-xyz");
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join("var/run")).unwrap();
-        // Clear override if present in test process.
+        let previous_handoff = std::env::var_os("AOS_SESSION_HANDOFF");
+        let previous_bootstrap = std::env::var_os("AOS_SESSION_BOOTSTRAP_SERVERD");
         std::env::remove_var("AOS_SESSION_HANDOFF");
         std::env::remove_var("AOS_SESSION_BOOTSTRAP_SERVERD");
-        assert_eq!(resolve_handoff(&home), SessionHandoff::LegacySpawn);
+        let result = resolve_handoff(&home);
+        if let Some(value) = previous_handoff {
+            std::env::set_var("AOS_SESSION_HANDOFF", value);
+        }
+        if let Some(value) = previous_bootstrap {
+            std::env::set_var("AOS_SESSION_BOOTSTRAP_SERVERD", value);
+        }
         let _ = std::fs::remove_dir_all(&home);
+        assert_eq!(result, SessionHandoff::LegacySpawn);
     }
 
     #[test]
     fn handoff_env_override_attach() {
+        let _guard = HANDOFF_ENV_LOCK.lock().unwrap();
+        let previous = std::env::var_os("AOS_SESSION_HANDOFF");
         std::env::set_var("AOS_SESSION_HANDOFF", "attach");
         let home = PathBuf::from("/tmp/aos-handoff-env-xyz");
-        assert_eq!(resolve_handoff(&home), SessionHandoff::AttachUiOnly);
-        std::env::remove_var("AOS_SESSION_HANDOFF");
+        let result = resolve_handoff(&home);
+        if let Some(value) = previous {
+            std::env::set_var("AOS_SESSION_HANDOFF", value);
+        } else {
+            std::env::remove_var("AOS_SESSION_HANDOFF");
+        }
+        assert_eq!(result, SessionHandoff::AttachUiOnly);
     }
 
     #[test]
