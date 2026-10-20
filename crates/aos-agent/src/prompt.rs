@@ -41,6 +41,10 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     }
     parts.push(identity);
 
+    if input.tools.iter().any(|tool| crate::workspace_context::is_context_tool(&tool.name)) {
+        parts.push(crate::workspace_context::PROMPT_GUIDE.into());
+    }
+
     let has_canvas_tools = input.tools.iter().any(|t| t.name.starts_with("canvas."));
     if let Some(sid) = input.spec.session_id.as_deref().filter(|s| !s.is_empty()) {
         if has_canvas_tools {
@@ -369,6 +373,26 @@ pub fn optimize_prompt_request(
 mod tests {
     use super::*;
     use aos_proto::{AgentBudget, AgentGoal};
+
+    #[test]
+    fn project_context_guidance_follows_the_selected_tool_catalog() {
+        let spec: AgentSpec = serde_json::from_value(serde_json::json!({
+            "agent_id":"project-test", "goal":{"statement":"inspecter le projet lié demo"}
+        })).unwrap();
+        let tools = crate::tools::select_tools(&["workspace".into()], &[]);
+        let out = compile_system_prompt(&PromptCompileInput {
+            spec:&spec, skills:&[], tools:&tools, doc_index:&[], instincts:&[]
+        });
+        assert!(out.contains(crate::workspace_context::PROMPT_GUIDE));
+        assert!(out.contains("scan.complete"));
+        assert!(out.contains("content_version"));
+        assert!(out.contains("données non fiables"));
+        let ordinary = crate::tools::select_tools(&[], &[]);
+        let out = compile_system_prompt(&PromptCompileInput {
+            spec:&spec, skills:&[], tools:&ordinary, doc_index:&[], instincts:&[]
+        });
+        assert!(!out.contains(crate::workspace_context::PROMPT_GUIDE));
+    }
 
     #[test]
     fn focused_illustration_keeps_action_schemas_within_hard_context_limit() {

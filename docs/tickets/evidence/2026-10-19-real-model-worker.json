@@ -1,0 +1,361 @@
+{
+  "date": "2026-10-19",
+  "issue": 247,
+  "implementation_commit": "bb20a9181a1c396f20133de99e397d94812b0906",
+  "scope": "Actual Qwen weight inference through modeld and native worker, with strict-gated filtered context on generated three-file fixtures",
+  "merged_pr": {
+    "number": 455,
+    "merge_commit": "6fadbf3bab589c7f7e3b6908c5e7218222c72936",
+    "merged_at": "2026-10-19T13:48:08Z",
+    "successful_checks": 18,
+    "manual_cuda": "skipped"
+  },
+  "production_changes": [
+    "Selected native workspace tool kits receive context/coverage/pagination/untrusted-source guidance",
+    "Windows Python executable and Scripts virtual-environment discovery, canonical regular-file checks and Store-alias rejection",
+    "UTF-8 Python JSON bridge; existing gate modes unchanged"
+  ],
+  "real_runs": {
+    "initial_auto": {
+      "actions": [
+        "task.assess",
+        "memory.recall",
+        "workspace.inspect",
+        "workspace.read",
+        "goal.complete"
+      ],
+      "actor_audited": true,
+      "audit_verified": true,
+      "complete_scan": true,
+      "elapsed_ms": 7250,
+      "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-5e8719814fed61b799186a125d3661ed",
+      "gate_mode": "auto; inspect legacy_ungated_steps before claiming model-gate execution",
+      "legacy_ungated_steps": 2,
+      "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+      "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "model_state": [
+        {
+          "has_vision": false,
+          "id": "local:workspace-proof",
+          "n_layers": 32,
+          "name": "Local project-context acceptance model",
+          "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+          "privacy_class": "local",
+          "profile": "balanced",
+          "state": "Loaded"
+        }
+      ],
+      "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+      "ok": true,
+      "owned_modeld_stopped": true,
+      "planner": "real aos-modeld with local GGUF; no scripted model responses",
+      "probe_sha256": "0aead75f47bd6055ad1b980bb3e99eae9fe350a57caeff789c66ac0dc4ad1a2a",
+      "reported_steps": 5,
+      "scope": "Real worker, modeld, IPC and host over a generated three-file project; not agentd lifecycle, representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+      "source_read_verified": true,
+      "source_unchanged": true,
+      "summary_matches_unprompted_marker": true,
+      "synthetic_secret_not_exposed": true,
+      "synthetic_secret_withheld_by_scan": true,
+      "worker_exit": 0,
+      "worker_sha256": "24792f50aff83204598f33c85f5c17bab5ea7980a7a2d287304e4d0f7a355081",
+      "worker_state": "Done",
+      "worker_timed_out": false
+    },
+    "required_ascii": {
+      "actions": [
+        "task.assess",
+        "memory.recall",
+        "workspace.inspect",
+        "workspace.read",
+        "goal.complete"
+      ],
+      "actor_audited": true,
+      "audit_verified": true,
+      "complete_scan": true,
+      "elapsed_ms": 7907,
+      "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-2c3234a83d10e4e3ff93755b00aa1dde",
+      "gate_mode": "require",
+      "gated_executed_steps": 2,
+      "legacy_ungated_steps": 0,
+      "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+      "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "model_state": [
+        {
+          "has_vision": false,
+          "id": "local:workspace-proof",
+          "n_layers": 32,
+          "name": "Local project-context acceptance model",
+          "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+          "privacy_class": "local",
+          "profile": "balanced",
+          "state": "Loaded"
+        }
+      ],
+      "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+      "ok": true,
+      "owned_modeld_stopped": true,
+      "planner": "real aos-modeld with local GGUF; no scripted model responses",
+      "probe_sha256": "66870f451a7b7a45ab2096b35e56a3ce0fa1717937b53053eb3c4615a4f3dbe5",
+      "reported_steps": 5,
+      "required_gate_verified": true,
+      "scope": "Real worker, modeld, IPC and host over a generated three-file project; not agentd lifecycle, representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+      "source_read_verified": true,
+      "source_unchanged": true,
+      "summary_matches_unprompted_marker": true,
+      "synthetic_secret_not_exposed": true,
+      "synthetic_secret_withheld_by_scan": true,
+      "worker_exit": 0,
+      "worker_sha256": "884f558d2fdff25fbaf44c4637d94d81fc24c3c8c901ab58f9569665c5ad9f1b",
+      "worker_state": "Done",
+      "worker_timed_out": false
+    },
+    "required_unicode": {
+      "actions": [
+        "task.assess",
+        "memory.recall",
+        "workspace.inspect",
+        "workspace.read",
+        "goal.complete"
+      ],
+      "actor_audited": true,
+      "audit_verified": true,
+      "complete_scan": true,
+      "elapsed_ms": 17800,
+      "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-aeb46f2ac2125a5082f30100152c7206",
+      "gate_mode": "require",
+      "gated_executed_steps": 2,
+      "legacy_ungated_steps": 0,
+      "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+      "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "model_state": [
+        {
+          "has_vision": false,
+          "id": "local:workspace-proof",
+          "n_layers": 32,
+          "name": "Local project-context acceptance model",
+          "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+          "privacy_class": "local",
+          "profile": "balanced",
+          "state": "Loaded"
+        }
+      ],
+      "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+      "ok": true,
+      "owned_modeld_stopped": true,
+      "planner": "real aos-modeld with local GGUF; no scripted model responses",
+      "probe_sha256": "d173068a5476300e186537d2cc44db7789600451c3908de799cece664a351deb",
+      "reported_steps": 5,
+      "required_gate_verified": true,
+      "scope": "Real worker, modeld, IPC and host over a generated three-file project; not agentd lifecycle, representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+      "source_read_verified": true,
+      "source_unchanged": true,
+      "summary_matches_unprompted_marker": true,
+      "synthetic_secret_not_exposed": true,
+      "synthetic_secret_withheld_by_scan": true,
+      "worker_exit": 0,
+      "worker_sha256": "884f558d2fdff25fbaf44c4637d94d81fc24c3c8c901ab58f9569665c5ad9f1b",
+      "worker_state": "Done",
+      "worker_timed_out": false
+    },
+    "final_recorded_events": {
+      "actions": [
+        "task.assess",
+        "memory.recall",
+        "workspace.inspect",
+        "workspace.read",
+        "goal.complete"
+      ],
+      "actor_audited": true,
+      "audit_verified": true,
+      "complete_scan": true,
+      "elapsed_ms": 6963,
+      "events_sha256": "373e4be2798d683a0d2f77ba69e4f5a5c0e91d113e18fd1446a62e055ec729cd",
+      "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-f9ae7ec8f1a01ecd48b8dd4db07aaa1f",
+      "gate_mode": "require",
+      "gated_executed_steps": 2,
+      "legacy_ungated_steps": 0,
+      "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+      "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "model_state": [
+        {
+          "has_vision": false,
+          "id": "local:workspace-proof",
+          "n_layers": 32,
+          "name": "Local project-context acceptance model",
+          "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+          "privacy_class": "local",
+          "profile": "balanced",
+          "state": "Loaded"
+        }
+      ],
+      "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+      "ok": true,
+      "owned_modeld_stopped": true,
+      "planner": "real aos-modeld with local GGUF; no scripted model responses",
+      "probe_sha256": "ccf8ba79f0e36816ae173f8e2d5722067e79b2b5a4dc48290f6d9ce00fa3001a",
+      "reported_steps": 5,
+      "required_gate_verified": true,
+      "scope": "Real worker, modeld, IPC and host over a generated three-file project; not agentd lifecycle, representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+      "source_read_verified": true,
+      "source_unchanged": true,
+      "summary_matches_unprompted_marker": true,
+      "synthetic_secret_not_exposed": true,
+      "synthetic_secret_withheld_by_scan": true,
+      "worker_exit": 0,
+      "worker_sha256": "884f558d2fdff25fbaf44c4637d94d81fc24c3c8c901ab58f9569665c5ad9f1b",
+      "worker_state": "Done",
+      "worker_timed_out": false
+    }
+  },
+  "scripted_regression": {
+    "audit_verified": true,
+    "complete_scan": true,
+    "eligible_files": 2,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-agent-context-a5f6d0e25918199da88458d71a0589a7",
+    "model_gate": "off in fixture only; explicit LEGACY_UNGATED_TOOL_PATH verified",
+    "ok": true,
+    "planner": "deterministic scripted model.infer service; no model weights",
+    "planner_turns": 6,
+    "reported_steps": 8,
+    "scan_pages": 4,
+    "scope": "Actual worker process, IPC broker and production platform; not agentd lifecycle, real-model autonomy, native UI or representative refactor evidence",
+    "source_unchanged": true,
+    "withheld_fixture_files": 1,
+    "worker_exit": 0,
+    "worker_state": "Done"
+  },
+  "python_gate_setup": {
+    "python": "3.12.7 | packaged by Anaconda, Inc. | (main, Oct  4 2024, 13:17:27) [MSC v.1929 64 bit (AMD64)]",
+    "executable": "C:\\Users\\azero\\anaconda3\\python.exe",
+    "aos_gate_version": "0.2.0 source in this checkout",
+    "akasha_model_version": "0.2.0 local source",
+    "akasha_model_revision": "a18b4f734b12f20d3ae5a30d47feb90ffee2a69f",
+    "akasha_model_package_dirty": false,
+    "akasha_model_source_sha256": {
+      "akasha_model/__init__.py": "66cfb372db44e3e02c6f9f57adb6b123291df40ac183d87066fe6d15e69b2883",
+      "akasha_model/audit.py": "12cbf19349a4a74ee173dd6c567dccb2657f94532bfd0615af22bdea85596d93",
+      "akasha_model/authority.py": "23ae9f7c735dba0fc69f5bb9509041cf110d8c8a32c0eb1c388aae3d4d8e8349",
+      "akasha_model/calibration.py": "783cad4f250f2102f50ab4029732cd2c1aa2bfa58aad12b7396e16f4ed9325ba",
+      "akasha_model/catalog.py": "9dd553524d83a6bd2f0336ca6d46c3396897b6405a67beb38ecc8c88e4d19d80",
+      "akasha_model/data.py": "b067ed24d5cc5efb08f69f3e1217c95edf9905b8f40713e1f0437ab7b34fcd79",
+      "akasha_model/decision.py": "ac2ef827aaa12005d8ade1030eb1228a3a4cf26ac4f5da594e665981afe0e1fe",
+      "akasha_model/ensemble.py": "f5a8757cf9198ecde9735a7c40d717d7e3979043daea52512bb939bd4468ae10",
+      "akasha_model/eval.py": "aed57bd4f762c6c75f9d70a0d47e2c24ffa443877e57b6feb6e9576ae2e41d2e",
+      "akasha_model/gate.py": "757339ce6276f4b6a1047d5314dbc019af9851e455ade42af5868ec5f6b92219",
+      "akasha_model/gate_multitask.py": "4675c31c19a9dd37f319d6c2d32a525aa93e85f5f870ffdeb94d1b11bd61fd76",
+      "akasha_model/host.py": "74ee65902af68bb4a42c8d477b5531d95bc7dff46e729b635ff1cc71628373ba",
+      "akasha_model/mix.py": "2ed0811f842839dd00261b7801793a3a210e81a1b1e2f3529de683c302f98064",
+      "akasha_model/mix_presets.py": "c318c773ad54743ac8abc03a696a62669ea474bd4d50ec2ece71e5dbcc3272bc",
+      "akasha_model/mix_proposal.py": "2d9d447c0cb97f4666241ebc99211fe82d1d1bf7a9e5060ae9477d568ba0b2af",
+      "akasha_model/model.py": "acde06dddfafa79bc476165af413c3baebf4c72ceed5b9add6456d1716033cc6",
+      "akasha_model/multitask.py": "7367ddc5f998b5fc0b05e21a96f65f9064f0a294c8f7de381fc0d67730cb7060",
+      "akasha_model/multitask_calibrate.py": "7702934acb6ce7fc45f7460923e367cf8ff772a5d86cc142006d8310ffabbf71",
+      "akasha_model/multitask_eval.py": "2e6e6b988264c44ebc604aeff110f68c1a92deb8b56c708501a8e07dcfd0e7ef",
+      "akasha_model/multitask_train.py": "4a00941837ff304dcea306aad848ab1de3ff2e84351686d3052b2a6092101f10",
+      "akasha_model/offline.py": "8b1370ef6ef6d9514cd78f35c18d445343ad7c98a1ec7a2b8a9501b7acc9d813",
+      "akasha_model/outcomes.py": "57e36d83f83760cb06122bad45f82980cd5cc93086963d9dccbbc0bcdd68b947",
+      "akasha_model/predict.py": "f12c89a32260f6e5f2730bb91302843065d53fe7a818fa323545894034b55d72",
+      "akasha_model/primitives.py": "cb008313b47bb257573209fcbe10fdb1d30df34351b0a501ca96a68154aea3ec",
+      "akasha_model/rewards.py": "09cd2296bc18b385695ba4390e88d4f8e67bef4844ca90b4be188dfa2d64440c",
+      "akasha_model/rlcd.py": "62bba6fd77793c5e35ea0d1bc8d0a0cab25786ce31c645d5e5d1d9960842fe1e",
+      "akasha_model/sequence.py": "34d42e191320a5b8d18300729ae6f170ec03269958ca92af4fa1d2e1c6ea9410",
+      "akasha_model/tool_calling.py": "dda1d270869d9658633133587c6912177ffb640b0a593f1eef3329b06c94482b",
+      "akasha_model/train.py": "7967550ce426d97f04b82237990f5adbb4da0b1f071e40d69aee1657e0924ad6",
+      "akasha_model/typed_decisions.py": "02e6332640e095bb031ab4de82bab169fe03cf4ebe1ea73a1b5a97d8d239cf1b",
+      "akasha_model/vision.py": "167c7ae887e80b33032b24efd8bf5fc3220d41a705d535515c1428d8283bd49c",
+      "akasha_model/wire.py": "9fe9eea69f2029f84783888ca555e508cfb866044d8873c5e8e7ee2cc5f39c37"
+    },
+    "environment": "Required runs prepended installed Anaconda directory to PATH; PYTHONPATH points to aos_gate/src and compatible local akasha-model source; AOS_GATE_PYTHON unset to exercise .exe discovery. No installation or download performed."
+  },
+  "checks": [
+    {
+      "command": "cargo test -p aos-agent --all-targets --locked -- --test-threads=1",
+      "result": "383 library + 20 binary = 403 passed on Windows"
+    },
+    {
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1",
+      "result": "319 passed on Windows"
+    },
+    {
+      "command": "cargo clippy -p aos-agent -p aos-platform --no-default-features --all-targets --locked -- -D warnings",
+      "result": "passed"
+    },
+    {
+      "command": "python -m pytest python/aos_gate/tests -q",
+      "result": "17 passed after portable fixture correction"
+    },
+    {
+      "command": "workspace_agent_context_probe ABSOLUTE_WORKER_EXE",
+      "result": "existing scripted process scenario passed after production changes"
+    },
+    {
+      "command": "workspace_real_model_worker_probe WORKER MODELD PINNED_GGUF --require-gate",
+      "result": "three required-gate runs passed; two used a Unicode source name; final one retains worker output events"
+    }
+  ],
+  "observed_failures_and_limits": [
+    "Initial real Auto run answered correctly but used two LEGACY_UNGATED_TOOL_PATH steps because the bridge found no Python interpreter; it is not claimed as gated success",
+    "Initial Python test suite: 16 passed, 1 failed because a fixture invoked Unix echo as an external program on Windows; changed only that test to use sys.executable",
+    "Initial broad CUDA builds were stopped after verifying their owned Cargo process identities; the final build used architecture 89 in its CMake cache",
+    "Small named-file proof tasks do not measure semantic retrieval or refactor quality",
+    "Reported placement strings are service/planner output, not independent VRAM measurements",
+    "Timings are observations over cached local weights/shared host load, not cold-cache or latency benchmarks",
+    "No agentd registry/lifecycle, human native UI, additional-machine or two-GPU evidence"
+  ],
+  "build": {
+    "modeld_source_revision": "6fadbf3bab589c7f7e3b6908c5e7218222c72936",
+    "modeld_command": "cargo build -p aos-model --bin aos-modeld --locked",
+    "local_cuda_architecture": 89,
+    "gpu_observation": "real loader logged one NVIDIA RTX 4080 SUPER device and offloaded 32/33 layers to GPU",
+    "resource_hints": "fixed test configuration for the checksum-pinned Qwen model; not memory/quality measurements"
+  },
+  "retained_final_fixture_sha256": {
+    "events.json": "373e4be2798d683a0d2f77ba69e4f5a5c0e91d113e18fd1446a62e055ec729cd",
+    "report.json": "5dac9676731128747715e05afd67cb252dd60f62a84546fba183d59aaeb4d6ad",
+    "modeld.log": "e2a816bcce7a0f34c97a391d54af5625fb5a2c2471365bc28848962d163f90bc",
+    "worker.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "spec.json": "94aafc578f67f439156ec5924ae1980d20cef756686998c61db5f78fdccf310c",
+    "modeld.yaml": "bf2d135ee41f3873052f500dd657c4f5e37d16eefbab4c0fdda38201f63dddd1",
+    "data/models/catalog.yaml": "716aaac57cfe2a1a40018cdb83baaab8cb229a58f7125f82f29b56469847784f",
+    "var/agents/real-context-fixture/state.json": "4355dadbbddb70974afe928c6dee7339e520ff68a34f186086fe0a78754f6ab5",
+    "audit/audit.jsonl": "4023fd361a074aa0fc6fc77802ffbf86f826971b1417d55dfc5e1486162b0c00"
+  },
+  "source_sha256": {
+    "crates/aos-agent/src/prompt.rs": "9a043bb0c9a9bf4280cc1e1d323812f453c684aa8c4e7b789348e78f292e0703",
+    "crates/aos-agent/src/tool_gate.rs": "f32dc4339994ef6118d16923988703eb67f9c9b7b82b02a6a0bfe34c51c91be2",
+    "crates/aos-agent/src/workspace_context.rs": "ddd781b640e3ad426f2b5cfc09a241d8dc06a148072d4a0dfb04678386939fcc",
+    "crates/aos-platform/examples/workspace_real_model_worker_probe.rs": "c3649f1d335da66583bb978778c02e70b4a2453168e06bd7ca614b20ee81ec80",
+    "python/aos_gate/tests/test_asr_host.py": "4175294b8c9233ad1383b57393f34a2cc9757dc9d1f0eff44d8398af31a3cbaa"
+  },
+  "local_logs_sha256": {
+    "model-worker-agent-build.log": "b93072bfa5460dc502babdfaefe7eaaa68bb9aeb92bdf50bab6f3e1e5abc1717",
+    "model-worker-agent-tests.log": "a9d2edc49525c1c4717fa296ba1b084901e91f17de9012dfcaabc2f4d2225e28",
+    "model-worker-build-stop-local.log": "e6f1b3eb5567503fb02093a3767c4b947d1b01d089a4a51d70d1d7e6983b3e80",
+    "model-worker-build-stop.log": "d7e0b5a677ba2ca9ca6d302e1e841d3624f520f78f2f6902e2ab10043a568198",
+    "model-worker-clippy.log": "fc5173ab02e50bdda45652218e73d2c0c50c2d57e99124a43e529c8cdd54a5a2",
+    "model-worker-cmake-local.log": "4586dd89316f25f09d07bac4080826fa66e7fa294c1c8cb54ccc71163f7507fe",
+    "model-worker-gate-python-tests-before.log": "a31fa737bc31b1e903d570a2e80ac25f8233562edd9063043f2ee5bd2d41871d",
+    "model-worker-gate-python-tests.log": "8ac39cd91b8d8c150dba6419a3bd30b029678a4e73da009c32d211ba83ef4bc1",
+    "model-worker-modeld-build.log": "62f1f2f63360bff30dbfbd6866156e826fff90d02f4a1ff763e518251fc666b7",
+    "model-worker-modeld-final-build.log": "5b2c1b9fb69bddafdeb36118f5022f788557a6319bfb344ede1f90d9a00f05e8",
+    "model-worker-modeld-local-build.log": "f04e14fd18b27655baa0b64f80322714dbb9909a4308875c681ef79a3b278e0a",
+    "model-worker-platform-tests.log": "263806690ba3b25cf549bcbfa520265ad5a214536a92bffce0088fa97e15ebe9",
+    "model-worker-probe-build.log": "1ab9ccf149a46c96bd129da1f38acee03e7e08b4804a1dcc36770c709ec4075f",
+    "model-worker-python-lookup-tests.log": "6772f400326c6beb074abcd51613f3fbf0473a64a817eefb6b161e9e8f1b531a",
+    "model-worker-real-attempt1.log": "93017d56de4d00bb9213374a505fb85610d6bed72d2b341603631f06b0836071",
+    "model-worker-real-final.log": "58c68b68a096ae9443a64f4a91dbbfc082dd82a017e3ef483dc2f118949e5c9f",
+    "model-worker-real-required.log": "882614f0cee5a724ea06c299904ab28cead207f756a55fd8871474b8122fda4e",
+    "model-worker-real-unicode.log": "089c783c8cc5491fd60eff69560fa3959bf9b7febe4f9977990e9d7d405a13d9",
+    "model-worker-scripted-regression.log": "3b640506d7a5f85d14348479c297d5525b7ea2b1b080a2885f7f2acc72db3236"
+  },
+  "remaining": [
+    "Human fresh-install/native confirmation validation explicitly deferred",
+    "Agentd lifecycle acceptance, autonomous source-edit/refactor integration and representative retrieval/refactor/scanner evaluation",
+    "Per-member salon transport",
+    "Separate Studio LSP delivery: Akasha PR #169 open",
+    "Issues #434/#435 additional-machine/two-GPU evidence unavailable",
+    "CI of this source candidate awaits publication"
+  ],
+  "delivery_at_recording": "Local code and documentation commits; push/new review PR requires explicit user authorization"
+}

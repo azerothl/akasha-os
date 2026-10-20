@@ -172,32 +172,61 @@ fn resolve_python() -> Option<PathBuf> {
     CACHED
         .get_or_init(|| {
             if let Ok(p) = std::env::var("AOS_GATE_PYTHON") {
-                let path = PathBuf::from(p);
-                if path.is_file() {
+                if let Some(path) = interpreter_file(Path::new(&p)) {
                     return Some(path);
                 }
             }
             // Dev layout: repo `.venv-aos-gate`
+            #[cfg(windows)]
+            if let Some(path) = interpreter_file(Path::new(".venv-aos-gate/Scripts/python.exe")) {
+                return Some(path);
+            }
             for candidate in [
                 Path::new(".venv-aos-gate/bin/python"),
                 Path::new("/workspace/.venv-aos-gate/bin/python"),
             ] {
-                if candidate.is_file() {
-                    return Some(candidate.to_path_buf());
+                if let Some(path) = interpreter_file(candidate) {
+                    return Some(path);
                 }
             }
-            which("python3").or_else(|| which("python"))
+            let paths = std::env::var_os("PATH")?;
+            find_interpreter(&std::env::split_paths(&paths).collect::<Vec<_>>())
         })
         .clone()
 }
 
-fn which(bin: &str) -> Option<PathBuf> {
-    std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths).find_map(|dir| {
-            let p = dir.join(bin);
-            p.is_file().then_some(p)
-        })
-    })
+fn interpreter_file(path: &Path) -> Option<PathBuf> {
+    let path = path.canonicalize().ok()?;
+    let metadata = path.metadata().ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // Store execution aliases are reparse points, not a directly executable
+        // interpreter. Normal symlinks are already resolved by canonicalize.
+        if metadata.file_attributes() & 0x400 != 0 {
+            return None;
+        }
+    }
+    Some(path)
+}
+
+fn find_interpreter(paths: &[PathBuf]) -> Option<PathBuf> {
+    #[cfg(windows)]
+    let names = ["python3.exe", "python.exe"];
+    #[cfg(not(windows))]
+    let names = ["python3", "python"];
+    for name in names {
+        if let Some(found) = paths
+            .iter()
+            .find_map(|dir| interpreter_file(&dir.join(name)))
+        {
+            return Some(found);
+        }
+    }
+    None
 }
 
 fn run_cli(command: &str, request: &Value) -> Result<Value, GateBridgeError> {
@@ -208,6 +237,8 @@ fn run_cli(command: &str, request: &Value) -> Result<Value, GateBridgeError> {
     let started = Instant::now();
     let mut child = Command::new(&python)
         .args(["-m", "aos_gate.cli", command, "--request", "-"])
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -764,6 +795,53 @@ mod tests {
     use super::*;
     use crate::tools::{ToolBackend, ToolDesc};
     use aos_proto::{AgentNetPolicy, AgentPolicy};
+
+    #[test]
+    fn python_lookup_uses_platform_names_and_skips_directories() {
+        let root = std::env::temp_dir().join(format!(
+            "aos-gate-python-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let first = root.join("first");
+        let later = root.join("later with spaces");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&later).unwrap();
+        let name = if cfg!(windows) {
+            "python.exe"
+        } else {
+            "python"
+        };
+        std::fs::create_dir(first.join(name)).unwrap();
+        std::fs::write(later.join(name), b"fixture; not executed").unwrap();
+        assert_eq!(
+            find_interpreter(&[first, later.clone()]),
+            Some(later.join(name).canonicalize().unwrap())
+        );
+        assert!(interpreter_file(&root).is_none());
+        assert!(interpreter_file(&root.join("missing")).is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn python_store_alias_is_not_a_direct_interpreter() {
+        let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+            return;
+        };
+        let alias = PathBuf::from(local).join("Microsoft/WindowsApps/python.exe");
+        use std::os::windows::fs::MetadataExt;
+        if alias
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_attributes() & 0x400 != 0)
+        {
+            assert!(interpreter_file(&alias).is_none());
+        }
+    }
 
     fn sample_tools() -> Vec<ToolDesc> {
         vec![
