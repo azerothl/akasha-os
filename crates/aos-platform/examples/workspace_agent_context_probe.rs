@@ -1,5 +1,7 @@
 //! Actual worker/broker/platform loop with a deterministic model fixture.
-//! No model weights, agentd registry, human UI or semantic-quality claim.
+//! Optional agentd creation/restart; no weights, human UI or quality claim.
+#[path = "support/agent_lifecycle.rs"]
+mod agent_lifecycle;
 use aos_ipc::{msg::Status, BusClient, BusService};
 use aos_platform::{intents::workspace_execution, subsystem::PlatformConfig, PlatformSubsystem};
 use aos_proto::{AgentOutputEvent, AgentSpec, InferRequest, TokenEvent};
@@ -22,6 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     if !worker.is_absolute() || !worker.is_file() {
         return Err("worker must be an existing absolute executable".into());
+    }
+    let agentd = std::env::args().nth(2).map(PathBuf::from);
+    if let Some(exe) = &agentd {
+        if !exe.is_absolute() || !exe.is_file() || exe.parent() != worker.parent() {
+            return Err("optional agentd must be absolute and beside worker".into());
+        }
     }
     let home =
         std::env::temp_dir().join(format!("aos-agent-context-{:032x}", rand::random::<u128>()));
@@ -74,15 +82,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await;
     });
     let report_sink = reports.clone();
-    svc.on("agent.report", move |ctx| {
-        let sink = report_sink.clone();
-        async move {
-            if let Ok(report) = ctx.payload::<aos_agent::ReportPayload>() {
-                sink.lock().unwrap().push(report.event);
+    if agentd.is_none() {
+        svc.on("agent.report", move |ctx| {
+            let sink = report_sink.clone();
+            async move {
+                if let Ok(report) = ctx.payload::<aos_agent::ReportPayload>() {
+                    sink.lock().unwrap().push(report.event);
+                }
+                let _ = ctx.respond(Status::Ok, &true).await;
             }
-            let _ = ctx.respond(Status::Ok, &true).await;
-        }
-    });
+        });
+    }
     let model_turns = turns.clone();
     svc.on("model.infer",move |ctx| {
         let turns=model_turns.clone();
@@ -136,31 +146,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let spec_path = home.join("spec.json");
     std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec)?)?;
     let log = std::fs::File::create(home.join("worker.log"))?;
-    let mut child = tokio::process::Command::new(&worker)
-        .args([
-            "--agent-id",
-            "context-fixture",
-            "--bus",
-            &addr,
-            "--spec-path",
-        ])
-        .arg(&spec_path)
-        .current_dir(&home)
-        .env("AOS_MODEL_GATE", "off") // Fixture-only: explicit legacy marker remains in trace.
-        .stdout(log.try_clone()?)
-        .stderr(log)
-        .kill_on_drop(true)
-        .spawn()?;
-    let status = tokio::time::timeout(Duration::from_secs(120), child.wait()).await;
-    let status = match status {
-        Ok(status) => status?,
-        Err(_) => {
-            child.kill().await?;
-            return Err(format!("worker timeout; fixture retained at {}", home.display()).into());
-        }
+    let mut lifecycle = Value::Null;
+    let mut actor_id = spec.agent_id.clone();
+    let worker_exit = if let Some(exe) = &agentd {
+        let (events, report, id) = agent_lifecycle::run(exe, &home, &addr, &spec, "off").await?;
+        *reports.lock().unwrap() = events;
+        assert_eq!(report["ok"], true, "lifecycle acceptance failed: {report}");
+        lifecycle = report;
+        actor_id = id;
+        None
+    } else {
+        let mut child = tokio::process::Command::new(&worker)
+            .args([
+                "--agent-id",
+                "context-fixture",
+                "--bus",
+                &addr,
+                "--spec-path",
+            ])
+            .arg(&spec_path)
+            .current_dir(&home)
+            .env("AOS_MODEL_GATE", "off") // Fixture-only: explicit legacy marker remains in trace.
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .kill_on_drop(true)
+            .spawn()?;
+        let status = tokio::time::timeout(Duration::from_secs(120), child.wait()).await;
+        let status = match status {
+            Ok(status) => status?,
+            Err(_) => {
+                child.kill().await?;
+                return Err(
+                    format!("worker timeout; fixture retained at {}", home.display()).into(),
+                );
+            }
+        };
+        assert!(status.success(), "worker failed; see {}", home.display());
+        status.code()
     };
     let state: Value = serde_json::from_slice(&std::fs::read(
-        home.join("var/agents/context-fixture/state.json"),
+        home.join("var/agents").join(&actor_id).join("state.json"),
     )?)?;
     let steps = reports
         .lock()
@@ -195,7 +220,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let reply: Value = serde_json::from_str(&step.tool_result[start..])?;
         assert_eq!(reply["ok"], true);
     }
-    assert!(status.success(), "worker failed; see {}", home.display());
     assert_eq!(turns.load(Ordering::SeqCst), 6);
     assert!(joined.contains("fixture source from the real platform"));
     assert!(joined.contains("LEGACY_UNGATED_TOOL_PATH"));
@@ -209,7 +233,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(cache["scan"]["finding_files"], 1);
     sub.audit.lock().unwrap().verify()?;
     let audit = std::fs::read_to_string(home.join("audit/audit.jsonl"))?;
-    assert!(audit.contains("agent:context-fixture"));
+    assert!(audit.contains(&format!("agent:{actor_id}")));
     assert!(!audit.contains("SyntheticOnlyValue"));
     assert_eq!(
         std::fs::read_to_string(project.join("first.txt"))?,
@@ -223,12 +247,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::fs::read_to_string(project.join("hidden.txt"))?,
         "password = 'SyntheticOnlyValue438927'"
     );
+    assert_eq!(std::fs::read_dir(&project)?.count(), 3);
     let report = json!({"ok":true,"fixture":home,"planner":"deterministic scripted model.infer service; no model weights",
-        "worker_exit":status.code(),"planner_turns":turns.load(Ordering::SeqCst),"reported_steps":steps.len(),
+        "worker_exit":worker_exit,"lifecycle":lifecycle,"planner_turns":turns.load(Ordering::SeqCst),"reported_steps":steps.len(),
         "worker_state":final_state,"complete_scan":cache["scan"]["complete"],"scan_pages":cache["continuation"]["pages"],
         "eligible_files":2,"withheld_fixture_files":1,"audit_verified":true,"source_unchanged":true,
         "model_gate":"off in fixture only; explicit LEGACY_UNGATED_TOOL_PATH verified",
-        "scope":"Actual worker process, IPC broker and production platform; not agentd lifecycle, real-model autonomy, native UI or representative refactor evidence"});
+        "scope":"Actual worker process, IPC broker and production platform; optional agentd lifecycle; not real-model autonomy, native UI or representative refactor evidence"});
     std::fs::write(
         home.join("report.json"),
         serde_json::to_vec_pretty(&report)?,

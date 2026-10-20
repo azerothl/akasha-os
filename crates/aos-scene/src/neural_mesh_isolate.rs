@@ -1190,6 +1190,7 @@ mod tests {
         assert!(!picked.contains(';'));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn linux_child_env_uses_unix_path() {
         let env = minimal_neural_mesh_child_env(

@@ -146,3 +146,12 @@ representative retrieval/refactor/scanner evaluation and per-member salon
 transport still need work. Studio LSP delivery remains tied to the separate
 open [Akasha PR #169](https://github.com/azerothl/Akasha/pull/169).
 #434 and #435 remain open for additional-machine and two-GPU evidence.
+
+### Follow-up, 20 October 2026
+
+PR #458 was merged after 18 successful checks (manual CUDA skipped).
+The [managed lifecycle follow-up](dev-assistant-agent-lifecycle.md) adds actual
+agentd creation and terminal-task restoration, with exact scoped grants and
+trace checks. It also records defects found on that path. Akasha PR #169 has
+since been merged; installed native and cross-product acceptance remain open.
+The earlier observations and limitations above describe the 19 October runs.
