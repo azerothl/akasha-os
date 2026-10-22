@@ -1,0 +1,405 @@
+{
+  "date": "2026-10-22",
+  "issue": 460,
+  "implementation_commit": "c682f9703f061f0a11385bd17b626cdbfa259639",
+  "base_commit": "1274b9f5b1cac78e768d61551cc86c58a967317c",
+  "checks": {
+    "platform": {
+      "command": "cargo test -p aos-platform --no-default-features --lib --locked -- --test-threads=1",
+      "passed": 334
+    },
+    "agent": {
+      "command": "cargo test -p aos-agent --no-default-features --locked",
+      "library": 384,
+      "worker": 19,
+      "daemon": 4,
+      "passed": 407
+    },
+    "protocol": {
+      "command": "cargo test -p aos-proto --locked",
+      "passed": 194
+    },
+    "unique_package_tests_passed": 935,
+    "new_tests": {
+      "platform": [
+        "memory::semantic::tests::bounded_batches_resume_without_starving_old_observations",
+        "memory::semantic::tests::changed_sources_reject_inflight_inference_and_erase_derived_copies",
+        "memory::semantic::tests::concepts_survive_restart_but_need_confirmation_for_context",
+        "memory::semantic::tests::contradictions_lower_confidence_and_revisions_account_for_old_sources",
+        "memory::semantic::tests::erasing_an_episodic_source_invalidates_concepts_after_restart",
+        "memory::semantic::tests::invalid_batch_is_atomic_and_sources_cannot_cross_namespaces",
+        "memory::semantic::tests::mature_concepts_can_revise_in_bounded_windows_with_historical_erasure",
+        "memory::semantic::tests::rejected_concept_is_not_resurrected_by_a_new_observation",
+        "memory::semantic::tests::repeats_from_one_conversation_and_duplicates_do_not_inflate_confidence",
+        "memory::semantic::tests::secret_rejected_and_expired_sources_are_not_consolidated",
+        "memory::semantic::tests::settings_changes_invalidate_inflight_batches_and_wipe_does_not_reuse_ids",
+        "memory::semantic::tests::strict_model_output_rejects_unproven_confidence_and_extra_fields",
+        "memory::semantic::tests::unreadable_semantic_state_is_reported_before_user_wipe",
+        "semantic_consolidation::tests::semantic_bus_consolidates_locally_and_retries_failure_without_consuming_sources",
+        "semantic_consolidation::tests::semantic_permissions_are_scoped_and_review_is_human_only"
+      ],
+      "agent_worker": "tests::semantic_recall_forwards_grants_and_excludes_unreviewed_profile_items"
+    },
+    "strict_clippy": {
+      "command": "cargo clippy -p aos-platform -p aos-ui-egui -p aos-agent -p aos-proto --no-default-features --all-targets --locked -- -D warnings",
+      "ok": true
+    }
+  },
+  "real_model": {
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-semantic-real-c1ffb231eee888df03e63f908b4646c4",
+    "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+    "ok": true,
+    "owned_modeld_stopped": true,
+    "results": [
+      {
+        "confirmed_context": true,
+        "disputed_confirmation_blocked": false,
+        "namespace": "user:default",
+        "no_unconfirmed_context": true,
+        "response": {
+          "concepts": [
+            {
+              "confidence": 0.6000000238418579,
+              "contradicting": [],
+              "created_at": 1792703776636,
+              "disputed": false,
+              "history": [],
+              "id": 1,
+              "key": "language_preference",
+              "kind": "preference",
+              "namespace": "user:default",
+              "revision": 1,
+              "source_count": 3,
+              "status": "candidate",
+              "summary": "User prioritizes native execution speed and minimal runtime overhead, favoring Rust and Zig while avoiding Electron due to memory concerns.",
+              "supporting": [
+                {
+                  "excerpt": "The user prefers Rust because they value native execution speed.",
+                  "fingerprint": "7af8ba97e56ac8c971e9d51750aaadab73dad60deda85d91e84dd0e9e261cfaf",
+                  "independence_key": "fixture_observation:user:default-0",
+                  "memory_id": 1,
+                  "source_refs": [
+                    {
+                      "source_id": "user:default-0",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                },
+                {
+                  "excerpt": "The user chose Zig to avoid runtime overhead.",
+                  "fingerprint": "ca4f22c3eef95859a174964d61d5c30ebbe1d195d364d81baeb576f5d389854f",
+                  "independence_key": "fixture_observation:user:default-1",
+                  "memory_id": 2,
+                  "source_refs": [
+                    {
+                      "source_id": "user:default-1",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                },
+                {
+                  "excerpt": "The user dislikes Electron because of memory consumption.",
+                  "fingerprint": "597cc92c62d91a1c34c58d01256b2ac80f4327a850b79639937b7d2012acaf37",
+                  "independence_key": "fixture_observation:user:default-2",
+                  "memory_id": 3,
+                  "source_refs": [
+                    {
+                      "source_id": "user:default-2",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                }
+              ],
+              "updated_at": 1792703776636
+            }
+          ],
+          "enabled": false,
+          "excluded_sources": 0,
+          "namespace": "user:default",
+          "pending_sources": 0,
+          "processed_sources": 4,
+          "updated_at": 1792703776636
+        },
+        "survived_restart": true
+      },
+      {
+        "confirmed_context": false,
+        "disputed_confirmation_blocked": true,
+        "namespace": "agent:builder",
+        "no_unconfirmed_context": true,
+        "response": {
+          "concepts": [
+            {
+              "confidence": 0.25,
+              "contradicting": [
+                {
+                  "excerpt": "In task C, the builder agent failed when it ignored the compiler diagnostics and guessed a fix.",
+                  "fingerprint": "b308625d36a91ac0b10221c8a0293c430b5408bce5ea7dffa816b1716f01eeb2",
+                  "independence_key": "fixture_observation:agent:builder-2",
+                  "memory_id": 7,
+                  "source_refs": [
+                    {
+                      "source_id": "agent:builder-2",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                },
+                {
+                  "excerpt": "In task D, the builder agent repeated the failure after guessing a fix without reading compiler diagnostics.",
+                  "fingerprint": "0459b52d79939bea3bc1fdb24490f249002902048d5c4468edc6b15bec6cbf20",
+                  "independence_key": "fixture_observation:agent:builder-3",
+                  "memory_id": 8,
+                  "source_refs": [
+                    {
+                      "source_id": "agent:builder-3",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                }
+              ],
+              "created_at": 1792703777229,
+              "disputed": true,
+              "history": [],
+              "id": 2,
+              "key": "compiler_diagnostic_reliance",
+              "kind": "pattern",
+              "namespace": "agent:builder",
+              "revision": 1,
+              "source_count": 2,
+              "status": "candidate",
+              "summary": "Successful Rust compilation fixes consistently follow reading compiler diagnostics; failures occur when guessing without diagnostics.",
+              "supporting": [
+                {
+                  "excerpt": "In task A, the builder agent fixed the Rust compilation error successfully after reading the compiler diagnostic.",
+                  "fingerprint": "3686bc48427e36615d9aa9cbee113f8ce4ff402fa08d3697ee53b00427905f8d",
+                  "independence_key": "fixture_observation:agent:builder-0",
+                  "memory_id": 5,
+                  "source_refs": [
+                    {
+                      "source_id": "agent:builder-0",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                },
+                {
+                  "excerpt": "In task B, the builder agent succeeded by reading compiler diagnostics before changing the code.",
+                  "fingerprint": "38d96f49d0e09191145d67b11b004cbe63b74fe34383152ddd43863967bc74a1",
+                  "independence_key": "fixture_observation:agent:builder-1",
+                  "memory_id": 6,
+                  "source_refs": [
+                    {
+                      "source_id": "agent:builder-1",
+                      "source_type": "fixture_observation"
+                    }
+                  ]
+                }
+              ],
+              "updated_at": 1792703777229
+            }
+          ],
+          "enabled": false,
+          "excluded_sources": 0,
+          "namespace": "agent:builder",
+          "pending_sources": 0,
+          "processed_sources": 4,
+          "updated_at": 1792703777229
+        },
+        "survived_restart": true
+      }
+    ],
+    "scope": "real Qwen through modeld and IPC over eight synthetic observations; automated confirmation; no installed UI or representative semantic-quality benchmark"
+  },
+  "initial_probe": {
+    "report": {
+      "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-semantic-real-077f8da75c2b41566efdc56d0e522125",
+      "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+      "ok": false,
+      "owned_modeld_stopped": true,
+      "results": [
+        {
+          "confirmed_context": true,
+          "namespace": "user:default",
+          "no_unconfirmed_context": true,
+          "response": {
+            "concepts": [
+              {
+                "confidence": 0.6000000238418579,
+                "contradicting": [],
+                "created_at": 1792702927570,
+                "disputed": false,
+                "history": [],
+                "id": 1,
+                "key": "language_preference",
+                "kind": "preference",
+                "namespace": "user:default",
+                "revision": 1,
+                "source_count": 3,
+                "status": "candidate",
+                "summary": "User prioritizes native execution speed and minimal runtime overhead, favoring Rust and Zig while avoiding Electron due to memory concerns.",
+                "supporting": [
+                  {
+                    "excerpt": "The user prefers Rust because they value native execution speed.",
+                    "fingerprint": "7ca55ff8bdfd5af03cf271b6c243f142c5636940c943d8782ce801e129bd2617",
+                    "independence_key": "fixture_observation:user:default-0",
+                    "memory_id": 1,
+                    "source_refs": [
+                      {
+                        "source_id": "user:default-0",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  },
+                  {
+                    "excerpt": "The user chose Zig to avoid runtime overhead.",
+                    "fingerprint": "ea6fcc39d59d7748013d4f0fc5cb99d60c285de45622b1bcbffb2acd904397c1",
+                    "independence_key": "fixture_observation:user:default-1",
+                    "memory_id": 2,
+                    "source_refs": [
+                      {
+                        "source_id": "user:default-1",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  },
+                  {
+                    "excerpt": "The user dislikes Electron because of memory consumption.",
+                    "fingerprint": "654238081ebd613097a13fa9950671b6643873652aa98534946df4bf3b080349",
+                    "independence_key": "fixture_observation:user:default-2",
+                    "memory_id": 3,
+                    "source_refs": [
+                      {
+                        "source_id": "user:default-2",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  }
+                ],
+                "updated_at": 1792702927570
+              }
+            ],
+            "enabled": false,
+            "excluded_sources": 0,
+            "namespace": "user:default",
+            "pending_sources": 0,
+            "processed_sources": 4,
+            "updated_at": 1792702927570
+          },
+          "survived_restart": true
+        },
+        {
+          "confirmed_context": false,
+          "namespace": "agent:builder",
+          "no_unconfirmed_context": true,
+          "response": {
+            "concepts": [
+              {
+                "confidence": 0.25,
+                "contradicting": [
+                  {
+                    "excerpt": "In task C, the builder agent failed when it ignored the compiler diagnostics and guessed a fix.",
+                    "fingerprint": "95315efabc6c837710546f890ddd322858ad00cee66425b0f1c0e8b537efb1b5",
+                    "independence_key": "fixture_observation:agent:builder-2",
+                    "memory_id": 7,
+                    "source_refs": [
+                      {
+                        "source_id": "agent:builder-2",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  },
+                  {
+                    "excerpt": "In task D, the builder agent repeated the failure after guessing a fix without reading compiler diagnostics.",
+                    "fingerprint": "5277f9c341ce78aedd53d6c072828daff8d5e583ef72b499ef0dd7448b038c1f",
+                    "independence_key": "fixture_observation:agent:builder-3",
+                    "memory_id": 8,
+                    "source_refs": [
+                      {
+                        "source_id": "agent:builder-3",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  }
+                ],
+                "created_at": 1792702928785,
+                "disputed": true,
+                "history": [],
+                "id": 2,
+                "key": "compiler_diagnostic_reliance",
+                "kind": "preference",
+                "namespace": "agent:builder",
+                "revision": 1,
+                "source_count": 2,
+                "status": "candidate",
+                "summary": "The agent consistently succeeds when reading compiler diagnostics before modifying code, but fails when guessing fixes without this step.",
+                "supporting": [
+                  {
+                    "excerpt": "In task A, the builder agent fixed the Rust compilation error successfully after reading the compiler diagnostic.",
+                    "fingerprint": "8880208d1d0042fc4f3d76abf76783169b1ab800b2e725b830c15c2c37b53622",
+                    "independence_key": "fixture_observation:agent:builder-0",
+                    "memory_id": 5,
+                    "source_refs": [
+                      {
+                        "source_id": "agent:builder-0",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  },
+                  {
+                    "excerpt": "In task B, the builder agent succeeded by reading compiler diagnostics before changing the code.",
+                    "fingerprint": "34f1452c7d1644c40d6e509bd7022a62bc0a963c7d01e22ec1dc19d2de14d12b",
+                    "independence_key": "fixture_observation:agent:builder-1",
+                    "memory_id": 6,
+                    "source_refs": [
+                      {
+                        "source_id": "agent:builder-1",
+                        "source_type": "fixture_observation"
+                      }
+                    ]
+                  }
+                ],
+                "updated_at": 1792702928785
+              }
+            ],
+            "enabled": false,
+            "excluded_sources": 0,
+            "namespace": "agent:builder",
+            "pending_sources": 0,
+            "processed_sources": 4,
+            "updated_at": 1792702928785
+          },
+          "survived_restart": true
+        }
+      ],
+      "scope": "real Qwen through modeld and IPC over eight synthetic observations; automated confirmation; no installed UI or representative semantic-quality benchmark"
+    },
+    "interpretation": "Initial probe incorrectly required an undisputed agent concept. Real Qwen supplied opposing observations; production withheld context. The final probe also verifies explicit refusal of confirmation for a disputed concept."
+  },
+  "known_parallel_failure": {
+    "issue": 456,
+    "test": "intents::workspace_execution::tests::packaged_reference_reaches_real_host_confirmation_through_wasm",
+    "observed": "Existing 30-second Elapsed timeout followed by fixture teardown during a parallel development run: 332 passed, 1 failed.",
+    "standalone_rerun": "1 passed in 1.71s",
+    "final_serial_suite": "All 334 passed in 55.76s; the flaky test is included, not disabled.",
+    "production_fix_in_this_ticket": false
+  },
+  "log_sha256": {
+    "issue460-platform-serial.log": "2ef40d1c2fcffad466a8526a099b819f632215ee7500ce189e5bf4bd30ea4826",
+    "issue460-agent-final.log": "e42e9a01692661b8b7fc82dde5ff53c836b001aa99ce88f67f04db960fb111bf",
+    "issue460-proto-tests.log": "8357f9dffb161c7a9e5ea4e82c5f7a88a4cfbbc461f2dbed8cf96f443ba09dc3",
+    "issue460-clippy-complete.log": "268d165e8e03f17b6c250079f77eb861492338599d23a2cf32de956fb82b8b41",
+    "issue460-semantic-complete.log": "a8bee3bf004173a943c3da8cd5cfa66c950b9c7eb5351255ccb2b210e69c357b",
+    "issue460-real-model-complete.log": "ee90b470a77ddbcfda821dc6e86a2b105aef790aa87a9d863d1a73dc6c30424d",
+    "issue460-platform-tests-final.log": "7b2b6252dab7ff7a3e71a3c4a369c1941750203c1050cc736ea261335c23d176",
+    "issue460-known456-rerun.log": "07d3cae707ce8e603f92cd7e01ecbc9b18d959ef62a2c453dc6cca65a24375cd"
+  },
+  "probe_executable_sha256": "c844049938f8721084aece6553dc579e88644f49a7e025e36dc488ea39803826",
+  "limitations": [
+    "No installed native UI interaction was observed.",
+    "Eight synthetic observations are not a representative longitudinal semantic-quality benchmark.",
+    "No cloud inference, model download, release publication or remote CI run was performed.",
+    "Background consolidation is opt-in; concept use additionally requires explicit review and scoped read access.",
+    "Automatic aging, inter-concept merging and shared multi-agent models remain the future extensions listed by the issue."
+  ]
+}
