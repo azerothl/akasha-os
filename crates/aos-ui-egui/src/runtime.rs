@@ -1036,6 +1036,12 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
         }
+        Cmd::MemSemantic { intent, payload } => {
+            let result = bus.call::<serde_json::Value, aos_proto::semantic_memory::MemSemanticResponse>(
+                intent, &payload, vec![],
+            ).await.map_err(|e| e.to_string());
+            let _ = evt_tx.send(Evt::MemSemanticResult(result));
+        }
         Cmd::MemList { include_superseded } => {
             match bus
                 .call::<MemListRequest, Vec<MemHit>>(

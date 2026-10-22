@@ -86,6 +86,22 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
             backend: ToolBackend::Native,
             required_caps: vec![],
         },
+        // Namespace-dependent permissions are enforced by the shared platform
+        // dispatcher, using the worker's envelope caps rather than model arguments.
+        ToolDesc {
+            name: "mem.semantic.list".into(),
+            description: "Consulter les concepts sourcés et le profil d'un espace mémoire autorisé".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{"namespace":{"type":"string"}},"required":["namespace"]}),
+            backend: ToolBackend::Native,
+            required_caps: vec![],
+        },
+        ToolDesc {
+            name: "mem.semantic.consolidate".into(),
+            description: "Proposer des concepts à partir d'observations autorisées, sans les confirmer".into(),
+            input_schema: serde_json::json!({"type":"object","properties":{"namespace":{"type":"string"},"model_id":{"type":"string"}},"required":["namespace"]}),
+            backend: ToolBackend::Native,
+            required_caps: vec![],
+        },
         ToolDesc {
             name: "mem.object.create".into(),
             description: "Créer un objet de mémoire cognitive typé".into(),

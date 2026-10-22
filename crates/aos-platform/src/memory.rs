@@ -28,6 +28,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+#[path = "semantic_memory.rs"]
+pub mod semantic;
+
 /// Kind optionnel d'une entrée.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -1506,6 +1509,7 @@ impl MemoryStore {
         self.compact_objects();
         self.compact_relations();
         self.compact_relations_v2();
+        let _ = self.semantic_prune();
         true
     }
 
@@ -1537,6 +1541,7 @@ impl MemoryStore {
             self.compact_objects();
             self.compact_relations();
             self.compact_relations_v2();
+            let _ = self.semantic_prune();
         }
         n
     }
@@ -1584,6 +1589,13 @@ impl MemoryStore {
             .collect()
     }
 
+    /// User-facing erasure must report semantic persistence failures instead of
+    /// claiming that derived copies were removed when their snapshot is unreadable.
+    pub fn wipe_checked(&mut self, namespace: &str) -> Result<usize, String> {
+        self.semantic_forget(namespace)?;
+        Ok(self.wipe(namespace))
+    }
+
     pub fn wipe(&mut self, namespace: &str) -> usize {
         let ids: Vec<u64> = self
             .episodic
@@ -1599,6 +1611,11 @@ impl MemoryStore {
             self.relations_v2.retain(|r| r.from != *id && r.to != *id);
             self.relations.retain(|r| r.from != *id && r.to != *id);
         }
+        let object_ids: HashSet<_> = self.objects.values().filter(|o| o.namespace == namespace).map(|o| o.id).collect();
+        let n = n + object_ids.len();
+        for id in &object_ids { self.objects.remove(id); self.index.remove(*id); }
+        self.relations_v2.retain(|r| !object_ids.contains(&r.from) && !object_ids.contains(&r.to));
+        let _ = self.semantic_forget(namespace);
         self.working.remove(namespace);
         self.compact_journal();
         self.compact_objects();

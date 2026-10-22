@@ -122,6 +122,7 @@ mod ui_files;
 mod ui_format;
 mod ui_illustration;
 mod ui_memory;
+mod ui_semantic_memory;
 mod ui_models;
 mod ui_primitives;
 mod ui_providers;
@@ -3268,6 +3269,13 @@ impl eframe::App for UiApp {
                 }
                 Evt::MemHits(h) => self.on_mem_hits(h),
                 Evt::MemObjects(objects) => self.on_mem_objects(objects),
+                Evt::MemSemanticResult(result) => {
+                    self.memory_ui.semantic_busy = false;
+                    match result {
+                        Ok(response) => self.memory_ui.semantic = Some(response),
+                        Err(error) => self.status = error,
+                    }
+                }
                 Evt::MemPalace(palace) => self.on_mem_palace(palace),
                 Evt::SecretList { names, encrypted } => {
                     self.on_secret_list(names, encrypted);

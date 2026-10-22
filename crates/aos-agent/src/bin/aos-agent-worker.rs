@@ -2606,7 +2606,7 @@ async fn execute_action(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let block = recall_memory_bundle(bus, &agent_id, &query, 5).await;
+            let block = recall_memory_bundle(bus, &agent_id, &query, 5, &spec.caps).await;
             ActResult::Continue(block)
         }
         "agent.spawn" => {
@@ -3996,7 +3996,7 @@ async fn invoke_native(
                         product_k: 4,
                         user_doc_k: 0,
                     },
-                    vec![],
+                    caps.to_vec(),
                 )
                 .await
             {
@@ -4007,7 +4007,9 @@ async fn invoke_native(
         service
             if matches!(
                 service,
-                "mem.object.create"
+                "mem.semantic.list"
+                    | "mem.semantic.consolidate"
+                    | "mem.object.create"
                     | "mem.object.get"
                     | "mem.object.list"
                     | "mem.object.update"
@@ -4024,7 +4026,8 @@ async fn invoke_native(
             ) =>
         {
             match bus
-                .call::<serde_json::Value, serde_json::Value>(service, args, vec![])
+                .call::<serde_json::Value, serde_json::Value>(service, args,
+                    if service.starts_with("mem.semantic.") { caps.to_vec() } else { vec![] })
                 .await
             {
                 Ok(value) => serde_json::to_string(&value).unwrap_or_default(),
@@ -5134,7 +5137,7 @@ fn require_canvas_plan(assess: AssessResult, spec: &AgentSpec) -> AssessResult {
     )
 }
 
-async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: usize) -> String {
+async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: usize, caps: &[String]) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     for (label, ns) in [
@@ -5189,7 +5192,7 @@ async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: u
                 product_k: 4,
                 user_doc_k: 0,
             },
-            vec![],
+            caps.to_vec(),
         )
         .await
     {
@@ -5200,6 +5203,14 @@ async fn recall_memory_bundle(bus: &BusClient, agent_id: &str, query: &str, k: u
         Err(e) => parts.push(format!("(mémoire utilisateur: err {e})")),
     }
 
+    if let Ok(profile) = bus.call::<_, aos_proto::semantic_memory::MemSemanticResponse>(
+        "mem.semantic.list",
+        &aos_proto::semantic_memory::MemSemanticRequest { namespace: format!("agent:{agent_id}"), model_id: None },
+        caps.to_vec(),
+    ).await {
+        let block = aos_proto::semantic_memory::format_confirmed_context(&profile.concepts, query);
+        if !block.is_empty() { parts.push(block); }
+    }
     let joined = if parts.is_empty() {
         format!(
             "(aucune information mémorisée trouvée pour « {} »)",
@@ -5239,7 +5250,8 @@ fn filter_canvas_noise_from_recall(block: &str, query: &str) -> String {
 }
 
 async fn inject_mem_context(bus: &BusClient, shared: &Shared, agent_id: &str, query: &str) {
-    let block = recall_memory_bundle(bus, agent_id, query, 3).await;
+    let caps = shared.state.lock().await.cap_set_snapshot.clone();
+    let block = recall_memory_bundle(bus, agent_id, query, 3, &caps).await;
     if block.starts_with("(aucune information") {
         return;
     }
@@ -5260,7 +5272,8 @@ async fn bootstrap_memory_recall(
     reason: &str,
 ) {
     let t0 = Instant::now();
-    let block = recall_memory_bundle(bus, agent_id, query, 5).await;
+    let caps = shared.state.lock().await.cap_set_snapshot.clone();
+    let block = recall_memory_bundle(bus, agent_id, query, 5, &caps).await;
     let tool_ms = t0.elapsed().as_millis() as u64;
 
     shared.state.lock().await.working_memory.push((
@@ -6103,5 +6116,54 @@ mod tests {
     #[test]
     fn missing_cap_hint_for_usb_uses_device_usb_io() {
         assert_eq!(super::missing_cap_hint("device.usb.open"), "device.usb.io");
+    }
+
+    #[tokio::test]
+    async fn semantic_recall_forwards_grants_and_excludes_unreviewed_profile_items() {
+        use aos_ipc::{broker, msg::Status, BusService};
+        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr=listener.local_addr().unwrap().to_string();
+        let broker=tokio::spawn(async move {broker::serve(listener).await.unwrap()});
+        let caps=vec!["mem.query:user:default".to_string(),"mem.read:agent:fixture".to_string()];
+        let checked=Arc::new(AtomicUsize::new(0));
+        let mut svc=BusService::new("semantic-worker-fixture");
+        svc.on("mem.episodic_query",|ctx|async move {ctx.respond(Status::Ok,&Vec::<aos_proto::MemHit>::new()).await.unwrap();});
+        let (expected,count)=(caps.clone(),checked.clone());
+        svc.on("mem.context",move |ctx| {
+            let (expected,count)=(expected.clone(),count.clone());
+            async move {
+                assert_eq!(ctx.intent.caps,expected);
+                count.fetch_add(1,Ordering::SeqCst);
+                ctx.respond(Status::Ok,&serde_json::json!({"session_hits":[],"user_hits":[],"prompt_block":"legacy context"})).await.unwrap();
+            }
+        });
+        let (expected,count)=(caps.clone(),checked.clone());
+        svc.on("mem.semantic.list",move |ctx| {
+            let (expected,count)=(expected.clone(),count.clone());
+            async move {
+                assert_eq!(ctx.intent.caps,expected);
+                let req: aos_proto::semantic_memory::MemSemanticRequest=ctx.payload().unwrap();
+                assert_eq!(req.namespace,"agent:fixture");
+                count.fetch_add(1,Ordering::SeqCst);
+                let evidence:Vec<_>=(11..13).map(|id|serde_json::json!({"memory_id":id,"excerpt":"Synthetic task succeeded after diagnostics.","source_refs":[],"fingerprint":format!("fixture-{id}"),"independence_key":format!("task-{id}")})).collect();
+                let concept=serde_json::json!({"id":1,"namespace":"agent:fixture","key":"diagnostics_first","kind":"successful_workflow",
+                    "summary":"confirmed diagnostics workflow","status":"accepted","confidence":0.5,"source_count":2,"disputed":false,"supporting":evidence,
+                    "contradicting":[],"created_at":1,"updated_at":1,"revision":1,"history":[]});
+                let mut candidate=concept.clone();candidate["id"]=serde_json::json!(2);candidate["summary"]=serde_json::json!("unreviewed inference");candidate["status"]=serde_json::json!("candidate");
+                ctx.respond(Status::Ok,&serde_json::json!({"namespace":req.namespace,"enabled":true,"concepts":[concept,candidate],"pending_sources":0,"excluded_sources":0,"processed_sources":2,"updated_at":1})).await.unwrap();
+            }
+        });
+        let service_addr=addr.clone();
+        let service=tokio::spawn(async move {svc.serve(&service_addr).await.unwrap()});
+        let bus=aos_ipc::BusClient::connect(&addr,"agent:fixture").await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3),async {
+            while !bus.lookup("mem.semantic.list").await.unwrap() {tokio::task::yield_now().await;}
+        }).await.unwrap();
+        let block=super::recall_memory_bundle(&bus,"fixture","compiler",3,&caps).await;
+        assert!(block.contains("legacy context") && block.contains("confirmed diagnostics workflow"));
+        assert!(!block.contains("unreviewed inference"));
+        assert_eq!(checked.load(Ordering::SeqCst),2);
+        service.abort();broker.abort();
     }
 }

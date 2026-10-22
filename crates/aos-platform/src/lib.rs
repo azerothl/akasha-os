@@ -36,6 +36,7 @@ pub mod maintenance;
 pub mod mem_sweep;
 pub mod memory;
 pub mod memory_narrative;
+pub mod semantic_consolidation;
 pub mod mix;
 pub mod module_compile;
 pub mod module_rt;

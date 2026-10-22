@@ -85,6 +85,7 @@ impl UiApp {
                 }
             });
         }
+        self.ui_semantic_memory(ui);
         if self.memory_ui.v2_available {
             ui.separator();
             ui.heading(t.memory_decision_log);
@@ -180,6 +181,19 @@ impl UiApp {
                                     object.source_refs.len()
                                 ));
                             });
+                            for source in &object.source_refs {
+                                ui.weak(format!("{}: {}", source.source_type, source.source_id));
+                                if source.source_type == "chat_session" && ui.small_button(if self.prefs.language.starts_with("fr") { "Ouvrir la conversation" } else { "Open conversation" }).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::SessionSelect { id: source.source_id.clone() });
+                                }
+                                if let Some(uri) = &source.uri { ui.label(uri); }
+                            }
+                            if let Some(session) = object.metadata.get("session_id").and_then(|v| v.as_str()).filter(|id| !id.is_empty()) {
+                                if !object.source_refs.iter().any(|r| r.source_type == "chat_session")
+                                    && ui.small_button(if self.prefs.language.starts_with("fr") { "Ouvrir la conversation" } else { "Open conversation" }).clicked() {
+                                    let _ = self.cmd_tx.send(Cmd::SessionSelect { id: session.into() });
+                                }
+                            }
                         }
                     });
                 }

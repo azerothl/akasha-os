@@ -4,6 +4,9 @@ use aos_proto::{MemHit, MemMindPalaceResponse, MemoryObject};
 
 #[derive(Debug)]
 pub(crate) struct MemoryUiState {
+    pub(crate) semantic_namespace: String,
+    pub(crate) semantic: Option<aos_proto::semantic_memory::MemSemanticResponse>,
+    pub(crate) semantic_busy: bool,
     pub(crate) query: String,
     pub(crate) note: String,
     pub(crate) hits: Vec<MemHit>,
@@ -22,6 +25,9 @@ pub(crate) struct MemoryUiState {
 impl Default for MemoryUiState {
     fn default() -> Self {
         Self {
+            semantic_namespace: "user:default".into(),
+            semantic: None,
+            semantic_busy: false,
             query: String::new(),
             note: String::new(),
             hits: Vec::new(),

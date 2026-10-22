@@ -884,6 +884,11 @@ impl HostServices for PlatformSubsystem {
                 for h in &hits {
                     prompt_block.push_str(&format!("- {}\n", h.text));
                 }
+                if Self::require_cap(ctx, "mem.query", namespace.unwrap_or("user:default")).is_ok() {
+                    prompt_block.push_str(&self.mem.lock().unwrap().semantic_prompt(
+                        namespace.unwrap_or("user:default"), query,
+                    ));
+                }
                 Ok(serde_json::json!({
                     "prompt_block": prompt_block,
                     "hits": hits,
@@ -893,6 +898,13 @@ impl HostServices for PlatformSubsystem {
                     "object_relations": object_relations,
                     "shadow": shadow,
                 }))
+            }
+            "mem.semantic.list" | "mem.semantic.consolidate" | "mem.semantic.settings" | "mem.semantic.review" => {
+                let runtime = tokio::runtime::Handle::try_current()
+                    .map_err(|_| "semantic memory requires the running host".to_string())?;
+                runtime.block_on(crate::semantic_consolidation::dispatch(
+                    self, service, args, &format!("module:{}", ctx.module), &ctx.granted_caps, &ctx.trace_id,
+                ))
             }
             "mem.object.create" => {
                 if !self.mem.lock().unwrap().memory_v2_enabled() {

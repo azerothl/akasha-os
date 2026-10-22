@@ -83,6 +83,7 @@ pub(crate) enum Cmd {
         project: Option<String>,
         root_id: Option<u64>,
     },
+    MemSemantic { intent: &'static str, payload: serde_json::Value },
     MemSweepStatus,
     MemDelete {
         id: u64,
@@ -757,6 +758,7 @@ pub(crate) enum Evt {
     },
     MemHits(Vec<MemHit>),
     MemObjects(Vec<aos_proto::MemoryObject>),
+    MemSemanticResult(Result<aos_proto::semantic_memory::MemSemanticResponse, String>),
     MemPalace(aos_proto::MemMindPalaceResponse),
     MemExtracted {
         n: usize,

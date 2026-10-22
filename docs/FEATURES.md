@@ -9,6 +9,12 @@ This is **not** the bootable OS. Target v1 requirements live in
 
 > Date: 28/09/2026 · Preview **0.19.0**
 
+### Source candidate — 22 October 2026
+
+- Opt-in local semantic consolidation above Memory V2, with sourced user/agent
+  concepts, contradiction tracking, explicit review and erasure:
+  [contract, activation and validation limits](semantic-memory-layer.md).
+
 ### Source candidate under verification — 18 October 2026
 
 These additions are local source changes, not a published Preview release:
