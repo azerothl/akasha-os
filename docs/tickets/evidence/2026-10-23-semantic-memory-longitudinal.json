@@ -1,0 +1,491 @@
+{
+  "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-semantic-real-86d88c2b1c150aef1437bdad3efd1af0",
+  "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+  "modeld_sha256": "a91659753e4c2e720f9f49042e539f91d19f42b739343690bab27ab9c62ba0bd",
+  "ok": true,
+  "owned_modeld_stopped": true,
+  "results": [
+    {
+      "confirmed_context": true,
+      "disputed_confirmation_blocked": false,
+      "initial_response": {
+        "concepts": [
+          {
+            "confidence": 0.6666666865348816,
+            "contradicting": [],
+            "created_at": 1792708563492,
+            "disputed": false,
+            "history": [],
+            "id": 1,
+            "key": "local_inference_preference",
+            "kind": "preference",
+            "namespace": "user:default",
+            "revision": 1,
+            "source_count": 4,
+            "status": "candidate",
+            "summary": "The user consistently prioritizes self-hosted, offline AI execution to maintain data privacy and control over project information.",
+            "supporting": [
+              {
+                "excerpt": "The user prefers self-hosted AI models over cloud-hosted inference.",
+                "fingerprint": "3a9b4549bf1b2e4e9ec1c939744b7c182ffe6729df54e7c7e0ed434a7d21b587",
+                "independence_key": "fixture_observation:user:default-0",
+                "memory_id": 1,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-0",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "The user keeps model inference offline to avoid sending project data to providers.",
+                "fingerprint": "ba722d50caa4c1779fb232a7d115e5a7730446690dacb82583535e59e93ee215",
+                "independence_key": "fixture_observation:user:default-1",
+                "memory_id": 2,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-1",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "The user runs model weights on a personal computer instead of managed cloud servers.",
+                "fingerprint": "83f9bee93b574631539b2de0380216664788575dd5f512f44703913fe1dddeb0",
+                "independence_key": "fixture_observation:user:default-2",
+                "memory_id": 3,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-2",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "For AI tools, the user repeatedly asks for local execution without an internet connection.",
+                "fingerprint": "4c8a369abb641865fae2dc7048b9b6d2614ac0e02565f381b8b8c49dc1dfd081",
+                "independence_key": "fixture_observation:user:default-3",
+                "memory_id": 4,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-3",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "updated_at": 1792708563492
+          }
+        ],
+        "enabled": false,
+        "excluded_sources": 0,
+        "namespace": "user:default",
+        "pending_sources": 0,
+        "processed_sources": 4,
+        "updated_at": 1792708563492
+      },
+      "longitudinal": {
+        "concepts": [
+          {
+            "confidence": 0.3333333432674408,
+            "contradicting": [
+              {
+                "excerpt": "The user prefers self-hosted AI models over cloud-hosted inference.",
+                "fingerprint": "3a9b4549bf1b2e4e9ec1c939744b7c182ffe6729df54e7c7e0ed434a7d21b587",
+                "independence_key": "fixture_observation:user:default-0",
+                "memory_id": 1,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-0",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "The user keeps model inference offline to avoid sending project data to providers.",
+                "fingerprint": "ba722d50caa4c1779fb232a7d115e5a7730446690dacb82583535e59e93ee215",
+                "independence_key": "fixture_observation:user:default-1",
+                "memory_id": 2,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-1",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "The user runs model weights on a personal computer instead of managed cloud servers.",
+                "fingerprint": "83f9bee93b574631539b2de0380216664788575dd5f512f44703913fe1dddeb0",
+                "independence_key": "fixture_observation:user:default-2",
+                "memory_id": 3,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-2",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "For AI tools, the user repeatedly asks for local execution without an internet connection.",
+                "fingerprint": "4c8a369abb641865fae2dc7048b9b6d2614ac0e02565f381b8b8c49dc1dfd081",
+                "independence_key": "fixture_observation:user:default-3",
+                "memory_id": 4,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-3",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "created_at": 1792708563492,
+            "disputed": true,
+            "history": [
+              {
+                "contradicting_ids": [],
+                "revision": 1,
+                "source_fingerprints": {
+                  "1": "3a9b4549bf1b2e4e9ec1c939744b7c182ffe6729df54e7c7e0ed434a7d21b587",
+                  "2": "ba722d50caa4c1779fb232a7d115e5a7730446690dacb82583535e59e93ee215",
+                  "3": "83f9bee93b574631539b2de0380216664788575dd5f512f44703913fe1dddeb0",
+                  "4": "4c8a369abb641865fae2dc7048b9b6d2614ac0e02565f381b8b8c49dc1dfd081"
+                },
+                "summary": "The user consistently prioritizes self-hosted, offline AI execution to maintain data privacy and control over project information.",
+                "supporting_ids": [
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "updated_at": 1792708563505
+              }
+            ],
+            "id": 1,
+            "key": "local_inference_preference",
+            "kind": "preference",
+            "namespace": "user:default",
+            "revision": 2,
+            "source_count": 4,
+            "status": "candidate",
+            "summary": "The user's infrastructure preference has shifted from self-hosted local execution to managed cloud services to reduce maintenance overhead and leverage cloud provider capabilities.",
+            "supporting": [
+              {
+                "excerpt": "The user has changed their infrastructure preference: managed cloud is now preferred over local self-hosting.",
+                "fingerprint": "30877b2ca3988dd5b01e0b5e730f2a74d01307dbe0ef25b24c2a3aa10603e4e9",
+                "independence_key": "fixture_observation:user:default-followup-0",
+                "memory_id": 9,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-followup-0",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "For the current production deployment, the user chose managed cloud services instead of the previously self-hosted service.",
+                "fingerprint": "d27aa9f103442e2bc029b46ba366c962c20a0072e3ca14071568306c6946a254",
+                "independence_key": "fixture_observation:user:default-followup-1",
+                "memory_id": 10,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-followup-1",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "The user now wants inference and monitoring workloads hosted by a cloud provider.",
+                "fingerprint": "9d6ca268de7d07bf2c56a47ae1e3bffa29e0f6b9f027033d7292479b43659dae",
+                "independence_key": "fixture_observation:user:default-followup-2",
+                "memory_id": 11,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-followup-2",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "The user no longer wants to maintain local inference servers and selected managed cloud operations.",
+                "fingerprint": "74cb680519f0984997899c6bae059a1052c76a9d5139766758e99dc77c587f0c",
+                "independence_key": "fixture_observation:user:default-followup-3",
+                "memory_id": 12,
+                "source_refs": [
+                  {
+                    "source_id": "user:default-followup-3",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "updated_at": 1792708565421
+          }
+        ],
+        "confirmed_context": "",
+        "new_concepts": [],
+        "new_observations": 4,
+        "pending_sources_after_consolidation": 0,
+        "revisions": [
+          {
+            "disputed": true,
+            "history_entries": 1,
+            "id": 1,
+            "key": "local_inference_preference",
+            "revision": 2,
+            "status": "candidate"
+          }
+        ],
+        "survived_restart": true,
+        "unconfirmed_withheld": true
+      },
+      "namespace": "user:default",
+      "no_unconfirmed_context": true,
+      "survived_restart": true
+    },
+    {
+      "confirmed_context": false,
+      "disputed_confirmation_blocked": true,
+      "initial_response": {
+        "concepts": [
+          {
+            "confidence": 0.25,
+            "contradicting": [
+              {
+                "excerpt": "In task C, the builder agent failed when it ignored the compiler diagnostics and guessed a fix.",
+                "fingerprint": "993d1825b9dd319c81128bf44f2eb4f00d655e4a902e52b5266fe6be298acc22",
+                "independence_key": "fixture_observation:agent:builder-2",
+                "memory_id": 7,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-2",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task D, the builder agent repeated the failure after guessing a fix without reading compiler diagnostics.",
+                "fingerprint": "f5e6eb38ad239ee76852aa2b220eaeeb9dcb580178386b774c2798236800be18",
+                "independence_key": "fixture_observation:agent:builder-3",
+                "memory_id": 8,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-3",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "created_at": 1792708564275,
+            "disputed": true,
+            "history": [],
+            "id": 2,
+            "key": "compiler_diagnostic_reliance",
+            "kind": "pattern",
+            "namespace": "agent:builder",
+            "revision": 1,
+            "source_count": 2,
+            "status": "candidate",
+            "summary": "The builder agent succeeds when reading compiler diagnostics and fails when guessing fixes without them.",
+            "supporting": [
+              {
+                "excerpt": "In task A, the builder agent fixed the Rust compilation error successfully after reading the compiler diagnostic.",
+                "fingerprint": "366018a11aa81acac2f1097461d87af0aea1b8e9092a6b739f10b987aef56358",
+                "independence_key": "fixture_observation:agent:builder-0",
+                "memory_id": 5,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-0",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task B, the builder agent succeeded by reading compiler diagnostics before changing the code.",
+                "fingerprint": "98df5ee5fc4bbeeeaa5a9daec16af2a6cb68cbf0659c4aabe982e35752a0567d",
+                "independence_key": "fixture_observation:agent:builder-1",
+                "memory_id": 6,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-1",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "updated_at": 1792708564275
+          }
+        ],
+        "enabled": false,
+        "excluded_sources": 0,
+        "namespace": "agent:builder",
+        "pending_sources": 0,
+        "processed_sources": 4,
+        "updated_at": 1792708564275
+      },
+      "longitudinal": {
+        "concepts": [
+          {
+            "confidence": 0.5625,
+            "contradicting": [
+              {
+                "excerpt": "In task C, the builder agent failed when it ignored the compiler diagnostics and guessed a fix.",
+                "fingerprint": "993d1825b9dd319c81128bf44f2eb4f00d655e4a902e52b5266fe6be298acc22",
+                "independence_key": "fixture_observation:agent:builder-2",
+                "memory_id": 7,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-2",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task D, the builder agent repeated the failure after guessing a fix without reading compiler diagnostics.",
+                "fingerprint": "f5e6eb38ad239ee76852aa2b220eaeeb9dcb580178386b774c2798236800be18",
+                "independence_key": "fixture_observation:agent:builder-3",
+                "memory_id": 8,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-3",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "created_at": 1792708564275,
+            "disputed": true,
+            "history": [
+              {
+                "contradicting_ids": [
+                  7,
+                  8
+                ],
+                "revision": 1,
+                "source_fingerprints": {
+                  "5": "366018a11aa81acac2f1097461d87af0aea1b8e9092a6b739f10b987aef56358",
+                  "6": "98df5ee5fc4bbeeeaa5a9daec16af2a6cb68cbf0659c4aabe982e35752a0567d",
+                  "7": "993d1825b9dd319c81128bf44f2eb4f00d655e4a902e52b5266fe6be298acc22",
+                  "8": "f5e6eb38ad239ee76852aa2b220eaeeb9dcb580178386b774c2798236800be18"
+                },
+                "summary": "The builder agent succeeds when reading compiler diagnostics and fails when guessing fixes without them.",
+                "supporting_ids": [
+                  5,
+                  6
+                ],
+                "updated_at": 1792708564275
+              }
+            ],
+            "id": 2,
+            "key": "compiler_diagnostic_reliance",
+            "kind": "pattern",
+            "namespace": "agent:builder",
+            "revision": 2,
+            "source_count": 6,
+            "status": "candidate",
+            "summary": "The builder agent consistently succeeds when reading compiler diagnostics before editing and fails when guessing fixes without them.",
+            "supporting": [
+              {
+                "excerpt": "In task A, the builder agent fixed the Rust compilation error successfully after reading the compiler diagnostic.",
+                "fingerprint": "366018a11aa81acac2f1097461d87af0aea1b8e9092a6b739f10b987aef56358",
+                "independence_key": "fixture_observation:agent:builder-0",
+                "memory_id": 5,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-0",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task B, the builder agent succeeded by reading compiler diagnostics before changing the code.",
+                "fingerprint": "98df5ee5fc4bbeeeaa5a9daec16af2a6cb68cbf0659c4aabe982e35752a0567d",
+                "independence_key": "fixture_observation:agent:builder-1",
+                "memory_id": 6,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-1",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task E, the builder agent read compiler diagnostics before editing and produced a passing build.",
+                "fingerprint": "1541603d6d637c3b4958434388c07ac6aea81ff75e1d5f803c12efd31344daa0",
+                "independence_key": "fixture_observation:agent:builder-followup-0",
+                "memory_id": 13,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-followup-0",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task F, the builder agent checked the diagnostic and focused test before changing the code.",
+                "fingerprint": "c140039259076a41b5d485049347b62962255a18872559dc4f5990b2b6868daf",
+                "independence_key": "fixture_observation:agent:builder-followup-1",
+                "memory_id": 14,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-followup-1",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task G, the builder agent repeated the diagnostics-first workflow and completed successfully.",
+                "fingerprint": "6be37d1f26bbf9858b4089d988de066a288178452f26c4886623589b70786217",
+                "independence_key": "fixture_observation:agent:builder-followup-2",
+                "memory_id": 15,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-followup-2",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              },
+              {
+                "excerpt": "In task H, the builder agent read the error, fixed its cause, and verified the result.",
+                "fingerprint": "bf064bb808f52a02ac8795cc6ccb2ce91a5129793bfb3d5068d79fb50a4b5d00",
+                "independence_key": "fixture_observation:agent:builder-followup-3",
+                "memory_id": 16,
+                "source_refs": [
+                  {
+                    "source_id": "agent:builder-followup-3",
+                    "source_type": "fixture_observation"
+                  }
+                ]
+              }
+            ],
+            "updated_at": 1792708566475
+          }
+        ],
+        "confirmed_context": "",
+        "new_concepts": [],
+        "new_observations": 4,
+        "pending_sources_after_consolidation": 0,
+        "revisions": [
+          {
+            "disputed": true,
+            "history_entries": 1,
+            "id": 2,
+            "key": "compiler_diagnostic_reliance",
+            "revision": 2,
+            "status": "candidate"
+          }
+        ],
+        "survived_restart": true,
+        "unconfirmed_withheld": true
+      },
+      "namespace": "agent:builder",
+      "no_unconfirmed_context": true,
+      "survived_restart": true
+    }
+  ],
+  "scope": "Real local Qwen through aos-modeld and IPC; two sequential batches across synthetic user and agent observations; initial acceptance automated; follow-up concepts were not accepted; exploratory evidence, not a representative quality benchmark or native UI validation.",
+  "date": "2026-10-23",
+  "issue": 460,
+  "modeld_log_sha256": "ef720f8646d4840514d2ed1797620648ba47a5591910b9ec2dad0d06293b8ced",
+  "source_tree_base_commit": "c4b5ef4dfc0d72081510df2e78fa9e6dde97f95b",
+  "source_tree_status": "Locally verified follow-up changes based on the merged PR; not committed at probe time."
+}

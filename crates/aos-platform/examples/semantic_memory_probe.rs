@@ -51,16 +51,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }))?;
     let sub = PlatformSubsystem::open(&config)?;
     let subjects=[("user:default",vec![
-        "The user prefers Rust because they value native execution speed.",
-        "The user chose Zig to avoid runtime overhead.",
-        "The user dislikes Electron because of memory consumption.",
-        "The user prefers self-hosted models that run offline.",
+        "The user prefers self-hosted AI models over cloud-hosted inference.",
+        "The user keeps model inference offline to avoid sending project data to providers.",
+        "The user runs model weights on a personal computer instead of managed cloud servers.",
+        "For AI tools, the user repeatedly asks for local execution without an internet connection.",
     ]),("agent:builder",vec![
         "In task A, the builder agent fixed the Rust compilation error successfully after reading the compiler diagnostic.",
         "In task B, the builder agent succeeded by reading compiler diagnostics before changing the code.",
         "In task C, the builder agent failed when it ignored the compiler diagnostics and guessed a fix.",
         "In task D, the builder agent repeated the failure after guessing a fix without reading compiler diagnostics.",
     ])];
+    let follow_up_subjects = [
+        (
+            "user:default",
+            vec![
+                "The user has changed their infrastructure preference: managed cloud is now preferred over local self-hosting.",
+                "For the current production deployment, the user chose managed cloud services instead of the previously self-hosted service.",
+                "The user now wants inference and monitoring workloads hosted by a cloud provider.",
+                "The user no longer wants to maintain local inference servers and selected managed cloud operations.",
+            ],
+        ),
+        (
+            "agent:builder",
+            vec![
+                "In task E, the builder agent read compiler diagnostics before editing and produced a passing build.",
+                "In task F, the builder agent checked the diagnostic and focused test before changing the code.",
+                "In task G, the builder agent repeated the diagnostics-first workflow and completed successfully.",
+                "In task H, the builder agent read the error, fixed its cause, and verified the result.",
+            ],
+        ),
+    ];
     for (namespace, texts) in &subjects {
         for (i, text) in texts.iter().enumerate() {
             let req = serde_json::from_value(
@@ -193,12 +213,97 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let reopened = MemoryStore::open_with_v2(home.join("memory"), true)?;
                     let persisted = reopened.semantic_list(namespace)?.concepts.len()
                         == response.concepts.len();
-                    results.push(json!({"namespace":namespace,"response":response,"no_unconfirmed_context":no_unconfirmed_context,"confirmed_context":confirmed,"disputed_confirmation_blocked":disputed_confirmation_blocked,"survived_restart":persisted}));
+                    results.push(json!({"namespace":namespace,"initial_response":response,"no_unconfirmed_context":no_unconfirmed_context,"confirmed_context":confirmed,"disputed_confirmation_blocked":disputed_confirmation_blocked,"survived_restart":persisted}));
                 }
                 Err(error) => {
                     results.push(json!({"namespace":namespace,"error":error.to_string()}))
                 }
             }
+        }
+    }
+    // A second, chronological evidence window checks whether the same local
+    // store can account for changed user preferences and repeated agent results.
+    for (namespace, texts) in follow_up_subjects {
+        for (i, text) in texts.iter().enumerate() {
+            let req = serde_json::from_value(json!({
+                "namespace":namespace,"kind":"event","content":text,"status":"accepted",
+                "source_refs":[{"source_type":"fixture_observation","source_id":format!("{namespace}-followup-{i}")}]
+            }))?;
+            sub.mem.lock().unwrap().object_create(req, vec![])?;
+        }
+        let request = MemSemanticRequest {
+            namespace: namespace.into(),
+            model_id: Some(id.into()),
+        };
+        let response = bus
+            .call::<_, MemSemanticResponse>("mem.semantic.consolidate", &request, vec![])
+            .await;
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                let pending = sub.mem.lock().unwrap().semantic_list(namespace)?;
+                if let Some(result) = results.iter_mut().find(|r| r["namespace"] == namespace) {
+                    result["longitudinal"] = json!({
+                        "new_observations":texts.len(),
+                        "pending_sources_after_consolidation":pending.pending_sources,
+                        "error":error.to_string(),
+                        "survived_restart":false
+                    });
+                }
+                continue;
+            }
+        };
+        let initial_concepts = results
+            .iter()
+            .find(|r| r["namespace"] == namespace)
+            .and_then(|r| r["initial_response"]["concepts"].as_array())
+            .cloned()
+            .unwrap_or_default();
+        let new_revisions: Vec<_> = response
+            .concepts
+            .iter()
+            .filter(|concept| {
+                initial_concepts.iter().any(|initial| {
+                    initial["id"] == concept.id
+                        && initial["revision"].as_u64().unwrap_or(0) < u64::from(concept.revision)
+                })
+            })
+            .map(|concept| json!({"id":concept.id,"key":concept.key,"revision":concept.revision,"status":concept.status,"disputed":concept.disputed,"history_entries":concept.history.len()}))
+            .collect();
+        let newly_created: Vec<_> = response
+            .concepts
+            .iter()
+            .filter(|concept| {
+                !initial_concepts
+                    .iter()
+                    .any(|initial| initial["id"] == concept.id)
+            })
+            .map(|concept| json!({"id":concept.id,"key":concept.key,"status":concept.status,"disputed":concept.disputed}))
+            .collect();
+        let context = sub
+            .mem
+            .lock()
+            .unwrap()
+            .semantic_prompt(namespace, "preferences and task outcomes");
+        let response_concepts = serde_json::to_value(&response.concepts)?;
+        let unconfirmed_withheld = response.concepts.iter().all(|concept| {
+            concept.status == aos_proto::MemoryObjectStatus::Accepted && !concept.disputed
+                || !context.contains(&concept.summary)
+        });
+        let reopened = MemoryStore::open_with_v2(home.join("memory"), true)?;
+        let persisted =
+            serde_json::to_value(reopened.semantic_list(namespace)?.concepts)? == response_concepts;
+        if let Some(result) = results.iter_mut().find(|r| r["namespace"] == namespace) {
+            result["longitudinal"] = json!({
+                "new_observations":texts.len(),
+                "pending_sources_after_consolidation":response.pending_sources,
+                "concepts":response.concepts,
+                "revisions":new_revisions,
+                "new_concepts":newly_created,
+                "confirmed_context":context,
+                "unconfirmed_withheld":unconfirmed_withheld,
+                "survived_restart":persisted
+            });
         }
     }
     let stopped = if modeld.try_wait()?.is_some() {
@@ -213,10 +318,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             r["no_unconfirmed_context"] == true
                 && (r["confirmed_context"] == true || r["disputed_confirmation_blocked"] == true)
                 && r["survived_restart"] == true
+                && r["longitudinal"]["pending_sources_after_consolidation"] == 0
+                && r["longitudinal"]["unconfirmed_withheld"] == true
+                && r["longitudinal"]["survived_restart"] == true
         })
         && stopped;
     let report = json!({"ok":ok,"fixture":home,"model_sha256":model_sha,"modeld_sha256":hash(&args[0])?,"owned_modeld_stopped":stopped,"results":results,
-        "scope":"real Qwen through modeld and IPC over eight synthetic observations; automated confirmation; no installed UI or representative semantic-quality benchmark"});
+        "scope":"real Qwen through modeld and IPC over two sequential batches of synthetic user and agent observations; automated confirmation; exploratory longitudinal smoke, not a representative semantic-quality benchmark; no installed UI"});
     std::fs::write(
         home.join("report.json"),
         serde_json::to_vec_pretty(&report)?,
