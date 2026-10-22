@@ -2,7 +2,7 @@
 version: 1
 slug: "website-index-html"
 primary_target: "website/index.html"
-related_targets: ["website/styles.css","website/app.js","website/about.html","website/community.html","website/install.html","website/docs/whats-new.html"]
+related_targets: ["website/styles.css","website/app.js","website/field.js","website/experience.js","website/install.html"]
 ---
 
 # Surface brief — website landing
@@ -10,8 +10,8 @@ related_targets: ["website/styles.css","website/app.js","website/about.html","we
 - **Scope / mode:** `website/index.html` (+ shared chrome). Persuade on landing; Read on docs.
 - **Audience / job:** Preview cohort tester. Understand agent-native OS vs chat wrapper, then install.
 - **Action:** Download Preview; follow 15-minute path.
-- **Proof / content:** Real Preview UI screenshots from repo QA passes; Preview host app facts; caps/offline; no fabricated testimonials.
-- **Constraints:** EN/FR equivalent; never imply bootable OS; news/community/about kept in primary nav; hydrogen only on Install.
-- **Direction:** Product chamber (approved). Cloud chamber tokens aligned to PRODUCT.md; orrery demoted from hero.
-- **Memorable moment:** Full-bleed Create Preview plane beside brand-led Install CTA; Create section echoes catalogue defaults + incomplete annexes + sticky jobs.
-- **Unresolved:** WCAG audit pass; optional orrery accent on about.
+- **Proof / content:** Preview host app facts; caps/offline/local GGUF; no fabricated testimonials. Hero is the live field, not a UI screenshot collage.
+- **Constraints:** EN/FR equivalent; never imply bootable OS; docs/community/about reachable from chrome + footer; hydrogen reserved for alarm/CTA accents in field presets.
+- **Direction:** Abyssal scroll-chamber (user-pinned inspiration) fused to Akasha cloud-chamber tokens — sticky pin beats, force-field WebGL, live `--accent` chrome.
+- **Memorable moment:** Particle field reforms each beat while set display type reveals; Trace readout + progress rail; closer cross-fades into Get Preview.
+- **Unresolved:** Full DESIGN.md rewrite from built world; WCAG audit; plate-page chrome still uses prior axis/lanes.
