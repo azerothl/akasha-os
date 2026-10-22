@@ -385,12 +385,16 @@ mod tests {
 
     #[tokio::test]
     async fn packaged_reference_reaches_real_host_confirmation_through_wasm() {
-        let f = Fixture::new();
+        let f = Arc::new(Fixture::new());
         let mut notifications = f.sub.confirm.subscribe().await;
         let sub = f.sub.clone();
         let home = f.home.clone();
         let caps = f.caps.clone();
-        let job = tokio::task::spawn_blocking(move || {
+        let worker_fixture = f.clone();
+        let mut job = tokio::task::spawn_blocking(move || {
+            // spawn_blocking cannot be cancelled after it starts. Keep its files
+            // alive even if the async test hits its watchdog or an assertion.
+            let _fixture = worker_fixture;
             let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
             let mut author = crate::ModuleAuthor::open(home.join("author")).unwrap();
             author.ext_rt_wasm = repo.join("share/modules/ext-rt.aospkg/module.wasm");
@@ -465,12 +469,21 @@ mod tests {
                 assert_eq!(result.is_ok(), expected, "{result:?}");
             }
         });
+        // Packaging and debug WASM execution share loaded CI CPUs with other
+        // tests. Bound the whole scenario, not just the first notification, and
+        // surface worker failures immediately instead of masking them as timeout.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(180);
         for approved in [false, true] {
-            let pending =
-                tokio::time::timeout(std::time::Duration::from_secs(30), notifications.recv())
-                    .await
-                    .unwrap()
-                    .unwrap();
+            let pending = tokio::select! {
+                result = &mut job => {
+                    result.expect("packaged reference worker failed before confirmation");
+                    panic!("packaged reference completed before both confirmations");
+                }
+                pending = notifications.recv() => pending.expect("confirmation stream closed"),
+                _ = tokio::time::sleep_until(deadline) => {
+                    panic!("packaged reference exceeded its 180-second scenario deadline");
+                }
+            };
             assert_eq!(pending.action, "refactor.apply");
             assert_eq!(pending.actor, "human:ui");
             assert_eq!(
@@ -479,7 +492,10 @@ mod tests {
             );
             f.sub.confirm.respond(&pending.id, approved, false).await;
         }
-        job.await.unwrap();
+        tokio::time::timeout_at(deadline, job)
+            .await
+            .expect("packaged reference did not complete within its scenario deadline")
+            .expect("packaged reference worker failed after confirmation");
         assert_eq!(
             std::fs::read_to_string(f.home.join("project/one/test.txt")).unwrap(),
             "after one"

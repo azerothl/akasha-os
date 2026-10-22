@@ -71,15 +71,22 @@ attendu ; les deux rapports sont conservés dans la preuve.
 Un passage parallèle en développement a rencontré le timeout de 30 secondes
 déjà suivi dans [#456](https://github.com/azerothl/akasha-os/issues/456)
 (332 réussis, 1 échec). Le test a ensuite réussi seul, puis dans les 334 tests
-en série. Il n'a pas été désactivé ni corrigé par ce ticket.
+en série. Le premier passage CI de la PR #461 a reproduit cet échec
+(341 réussis, 1 échec sous Linux). Le correctif de CI conserve le test et
+surveille désormais le worker WASM en même temps que les confirmations, avec
+un délai global de 180 secondes pour le scénario. Le worker conserve la fixture
+jusqu'à sa sortie : un échec asynchrone ne supprime plus ses fichiers en cours
+d'utilisation. Les erreurs du worker remontent immédiatement. Après correction,
+les 334 tests plateforme locaux passent en parallèle et Clippy strict passe
+pour toutes les cibles de la plateforme.
 
 Preuves, empreintes des journaux et rapports initiaux/finals :
 [2026-10-22-semantic-memory.json](evidence/2026-10-22-semantic-memory.json).
 
 ## Acceptation restante
 
-Le code et les preuves sont locaux : pas de push, de PR, de CI distante ou de
-nouvelle release dans ce traitement. Le parcours dans l'interface native installée
+Le code est publié pour revue dans la PR #461, sans nouvelle release.
+Le parcours dans l'interface native installée
 n'a pas été observé. La qualité sur des historiques représentatifs et évolutifs
 reste à évaluer ; huit observations synthétiques ne prouvent pas un gain de
 personnalisation, de raisonnement ou de performance.
