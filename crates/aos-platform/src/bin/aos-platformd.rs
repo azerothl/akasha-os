@@ -25,6 +25,7 @@ async fn main() {
 
     // Note P4.4 : `audit.append` is served by `aos-auditd`.
     aos_platform::intents::register_audit_and_fs(&mut svc, &sub);
+    aos_platform::semantic_consolidation::register(&mut svc, sub.clone());
 
     // --- mem.* ---
     {
@@ -260,8 +261,11 @@ async fn main() {
             async move {
                 match ctx.payload::<MemWorkingRequest>() {
                     Ok(req) => {
-                        let n = s.mem.lock().unwrap().wipe(&req.agent_id);
-                        let _ = ctx.respond(aos_ipc::msg::Status::Ok, &n).await;
+                        let result = s.mem.lock().unwrap().wipe_checked(&req.agent_id);
+                        match result {
+                            Ok(n) => { let _ = ctx.respond(aos_ipc::msg::Status::Ok, &n).await; }
+                            Err(error) => { let _ = ctx.respond_error(aos_ipc::msg::Status::InternalError, &error).await; }
+                        }
                     }
                     Err(_) => {
                         let _ = ctx
@@ -496,6 +500,10 @@ async fn main() {
                                 &objects,
                             ));
                         }
+                        if let Ok(semantic) = aos_platform::semantic_consolidation::context(
+                            &s, req.namespace.as_deref().unwrap_or("user:default"), &req.query,
+                            &ctx.intent.from, &ctx.intent.caps,
+                        ).await { prompt_block.push_str(&semantic); }
                         let _ = ctx
                             .respond(
                                 aos_ipc::msg::Status::Ok,
@@ -5290,6 +5298,20 @@ async fn main() {
                         ),
                         Err(e) => eprintln!("[aos-platformd] mem sweep erreur : {e}"),
                     }
+                }
+                let semantic_namespaces = s.mem.lock().unwrap().semantic_enabled_namespaces();
+                match semantic_namespaces {
+                    Ok(namespaces) => for namespace in namespaces {
+                        let req = aos_proto::semantic_memory::MemSemanticRequest { namespace: namespace.clone(), model_id: None };
+                        let result = aos_platform::semantic_consolidation::run_background(&s, req).await;
+                        s.audit(AuditAppendRequest {
+                            trace_id: format!("semantic-maintenance-{now}"), actor: "service:platformd".into(),
+                            action: "mem.semantic.consolidate".into(), target: namespace,
+                            detail: serde_json::json!({"background":true,"ok":result.is_ok()}),
+                        });
+                        if let Err(error) = result { eprintln!("[aos-platformd] semantic memory: {error}"); }
+                    },
+                    Err(error) => eprintln!("[aos-platformd] semantic memory state: {error}"),
                 }
                 let scheduled_narratives = {
                     let mut mem = s.mem.lock().unwrap();

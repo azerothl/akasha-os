@@ -23,6 +23,7 @@ pub mod workspace;
 mod illustration;
 mod illustration_action;
 pub mod mem_extract;
+pub mod semantic_memory;
 pub mod rich_app_contract;
 pub mod rich_composition;
 pub mod rich_decl_ui;

@@ -9,6 +9,13 @@ Ce n'est **pas** l'OS bootable. Les exigences v1 sont dans
 
 > Date : 28/09/2026 · Preview **0.19.0**
 
+### Candidat source — 22 octobre 2026
+
+- Consolidation sémantique locale activable dans Mémoire : concepts utilisateur
+  et agent sourcés, contradictions, revue explicite et effacement.
+  [Contrat, activation et limites de validation](../semantic-memory-layer.md).
+  Ce candidat ne constitue pas une nouvelle release publiée.
+
 ### Nouveautés 0.19.0
 
 #### Fonctionnalités
