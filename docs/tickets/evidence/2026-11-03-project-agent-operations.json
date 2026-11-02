@@ -1,0 +1,1416 @@
+{
+  "snapshot_utc": "2026-11-02T23:58:51.994708+00:00",
+  "base_commit": "0c4855b58dd92fb321e7560e6c68c81bc24be0e1",
+  "scope": "Native project edits/tasks and retained user context; generated fixtures, not native UI or representative quality acceptance.",
+  "implementation_commits": [
+    "f486f8a",
+    "95133ce",
+    "2b9b399"
+  ],
+  "source_sha256": {
+    "crates/aos-agent/src/workspace_operations.rs": "30d09bb9f46474eee80096ba572fa8ba83d5c2f39a0b0ea7fce438a0479bfb5a",
+    "crates/aos-agent/src/persist.rs": "9f8812cdabad3e72cb77dc997e834560fdfd716dc41ea4ad931ae2e51cf78a4b",
+    "crates/aos-agent/src/bin/aos-agent-worker.rs": "64010d46267bbe3736db52c280f9bce90334891811e300f1c55a72a13b00c654",
+    "crates/aos-agent/src/policy.rs": "110fe7e7a43eb5ce81d074a7da6441ee0ac3fcb1781c0600335ecf1af35081dd",
+    "crates/aos-platform/tests/native_agent_workspace.rs": "bc3cd014ff05447ef4f11472f43cb1076b282317e583b40a8b1a463e3ec62cbc",
+    "crates/aos-platform/examples/workspace_real_model_edit_probe.rs": "cecf233910270d036f45ece5b4310ae9d304e34edd0b80c4e570375b16847ff5",
+    "scripts/verify-project-agent.py": "6c37e71d533f5053cdcde2984dc12e0f74e2a878ccbaeb69e2dc7acc4c2a2b24"
+  },
+  "rust_tests": [
+    {
+      "log": "2026-11-03-project-agent-tests-final.log",
+      "passed_groups": [
+        406,
+        0,
+        20,
+        4,
+        0,
+        194
+      ],
+      "passed": 624,
+      "log_sha256": "a08cd65a5ed9e6884bcccf657497db96925ab771ed97ba5c8374b106b9c0fa8d"
+    },
+    {
+      "log": "2026-11-03-project-native-host-tests.log",
+      "passed_groups": [
+        2
+      ],
+      "passed": 2,
+      "log_sha256": "618afc4e9e0d3e4e5ed80fcb118e01f026f78e6d766f0b7df62068bb670f936d"
+    }
+  ],
+  "strict_cpu_clippy_log_sha256": "e3db4ee9f8667660917bcc0a7a8c593ffe77b390629a567ec9ae516c381c14cb",
+  "compaction_red_green": {
+    "before_log_sha256": "f146aa6cc456dcddfa8a65b7d1d42787b76d89260e3b90a3354b117df6e4f937",
+    "before": "both new user-retention regressions failed on the original implementation",
+    "after": "both pass with all agent tests and the existing context-budget tests"
+  },
+  "real_qwen_attempts": [
+    {
+      "label": "initial native operations",
+      "report": {
+        "actions": [
+          "task.assess",
+          "memory.recall",
+          "plan.update",
+          "memory.recall",
+          "memory.recall",
+          "memory.recall",
+          "noop",
+          "memory.recall",
+          "memory.recall",
+          "noop",
+          "noop",
+          "workspace.inspect",
+          "workspace.read",
+          "noop",
+          "noop",
+          "workspace.read",
+          "workspace.read",
+          "fs.apply_patch",
+          "noop",
+          "noop",
+          "system.hardware",
+          "workspace.inspect"
+        ],
+        "actor_and_operations_audited": false,
+        "approvals": [],
+        "audit_verified": true,
+        "baseline": {
+          "backend_functions": 2,
+          "cases": 93,
+          "frontend_functions": 1,
+          "ok": true
+        },
+        "both_sources_changed": false,
+        "both_sources_read": true,
+        "elapsed_ms": 36487,
+        "events_sha256": "3ac9cfb9a23d5c4d3fee387dc1d123233eb7a1425fb9aa131b9f14a710892191",
+        "final_validation": null,
+        "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-agent-k1hctptn",
+        "gated_executed_steps": 6,
+        "legacy_ungated_steps": 0,
+        "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "model_state": [
+          {
+            "has_vision": false,
+            "id": "local:workspace-proof",
+            "n_layers": 32,
+            "name": "Local project-context acceptance model",
+            "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+            "privacy_class": "local",
+            "profile": "balanced",
+            "state": "Loaded"
+          }
+        ],
+        "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+        "native_task_result": null,
+        "ok": false,
+        "owned_modeld_stopped": true,
+        "probe_sha256": "522c05d7413fca8a63c19d46f2ea4eb83e62c4810f35dd7ac47f01d56255f33f",
+        "reported_steps": 22,
+        "scope": "Real local Qwen/worker/broker/host on a generated two-file pure-Python project. Automated fixture confirmations, online host with local-only model routing. Not native UI, network sandboxing, representative monorepo quality or multi-GPU acceptance.",
+        "worker_exit": 0,
+        "worker_sha256": "788f56ae8be2c1cb194970886b40802b1c618391a93ed9568c02bcf7baa946c5",
+        "worker_state": "Failed",
+        "worker_timed_out": false
+      },
+      "spec": {
+        "agent_id": "real-edit-fixture",
+        "goal": {
+          "statement": "Dans le projet lié demo, inspecte puis lis frontend/module.py et backend/module.py avec workspace.read. Refactorise ces deux fichiers avec fs.apply_patch (hunks, chemins /host/demo/..., replace_all=true et contenu complet dans diff). Frontend : extrais la normalisation de name dans un helper pur utilisé dans les deux branches de render. Backend : extrais le calcul de ligne arrondi dans un helper pur utilisé par subtotal et total_with_tax, sans changer l'ordre des arrondis. Conserve les signatures et le comportement. Python pur uniquement : pas d'import, I/O, décorateurs, annotations, définitions dupliquées ou exécution au niveau module. Exécute ensuite la tâche administrateur verify avec process.run root=demo task=verify. Termine par goal.complete uniquement si cette tâche réussit. En cas de refus, ne contourne pas la permission.",
+          "success_criteria": [],
+          "max_steps": 24,
+          "max_subagents": 4,
+          "timeout_secs": 840
+        },
+        "kind": "task",
+        "display_name": null,
+        "persona_id": null,
+        "source_roster_id": null,
+        "system_prompt": "Le projet demo est déjà lié. Tu es autorisé à modifier uniquement ses deux fichiers Python et à demander l'exécution de la tâche verify. Utilise les appels d'outils natifs, attends leurs résultats. Aucune commande ou confirmation inventée. Ne recopie pas les anciennes fonctions lorsque tu les remplaces.",
+        "skills": [],
+        "tools": [
+          "workspace.inspect",
+          "workspace.read",
+          "fs.apply_patch",
+          "fs.undo_patch",
+          "process.run",
+          "plan.update",
+          "goal.complete",
+          "goal.fail"
+        ],
+        "mcp_servers": [],
+        "documents": [],
+        "caps": [
+          "fs.read:/host/demo/**",
+          "fs.write:/host/demo/**",
+          "process.run:/host/demo/**"
+        ],
+        "model_id": "local:workspace-proof",
+        "policy": {
+          "net": "allow",
+          "fs_write": true,
+          "tool_allowlist": [
+            "workspace.inspect",
+            "workspace.read",
+            "fs.apply_patch",
+            "fs.undo_patch",
+            "process.run",
+            "plan.update",
+            "goal.complete",
+            "goal.fail"
+          ]
+        },
+        "parent_id": null,
+        "session_id": null,
+        "budget": {
+          "max_tokens": null,
+          "max_steps": null
+        },
+        "optimize_prompt": false,
+        "gate_mode": "autonomous",
+        "origin": null,
+        "avatar": null,
+        "color": null,
+        "cognitive_mode": "normal",
+        "execution_backend": {
+          "kind": "native"
+        }
+      },
+      "modeld_log_sha256": "bf42f80647ff039c8f7cc473c493275894e4b55ec83360159faaa68710aeb487",
+      "no_user_query_template_errors": 1,
+      "audit_sha256": "8450156cf0d444d314c0ee676df856f2f279dedab7ce45bb6f529d5bc5511627",
+      "created_child_ids": [],
+      "critical_steps": [
+        {
+          "step": 5,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 8,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 9,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 12,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 13,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[workspace.read] {\"content\":\"def subtotal(items):\\n    total = sum(item.get(\\\"price\\\", 0) * item.get(\\\"quantity\\\", 1) for item in items)\\n    return round(total, 2)\\n\\ndef total_with_tax(items, tax_rate):\\n    subtotal = subtotal(items)\\n    tax = subtotal * tax_rate / 100\\n    total = subtotal + tax\\n    return round(total, 2), round(tax, 2)\\n\",\"ok\":true,\"path\":\"/host/demo/backend/module.py\",\"policy_version\":3,\"sha256\":\"7b55032e24907c4fe4b44a77957e680510ff54bcc1e243bee7fd6482f59050b5\"}",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 16,
+          "action": "fs.apply_patch",
+          "args": {
+            "hunks": [
+              {
+                "diff": "def normalize_name(name):\n    return str(name, \"utf-8\").strip().lower()\n\ndef render(records):\n    result = []\n    for record in records:\n        if record.get(\"admin\", False):\n            result.append(\"ADMIN:\" + normalize_name(record.get(\"name\", \"\")))\n        else:\n            result.append(\"USER:\" + normalize_name(record.get(\"name\", \"\")))\n    return result",
+                "path": "/host/demo/frontend/module.py",
+                "replace_all": true
+              }
+            ]
+          },
+          "response": "<tool_call>\n<function=fs.apply_patch>\n<parameter=hunks>\n[{\"path\": \"/host/demo/frontend/module.py\", \"diff\": \"def normalize_name(name):\\n    return str(name, \\\"utf-8\\\").strip().lower()\\n\\ndef render(records):\\n    result = []\\n    for record in records:\\n        if record.get(\\\"admin\\\", False):\\n            result.append(\\\"ADMIN:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n        else:\\n            result.append(\\\"USER:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n    return result\", \"replace_all\": true}]\n</parameter>\n</function>\n</tool_call>",
+          "tool_result": "{\"applied\":[\"/host/demo/frontend/module.py\"],\"message\":null,\"ok\":true,\"undo_group_id\":\"undo-1793662928847-74284\"}",
+          "fail_reason": null
+        },
+        {
+          "step": 17,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 18,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        }
+      ]
+    },
+    {
+      "label": "agent-bound bridge and focused fixture instructions",
+      "report": {
+        "actions": [
+          "task.assess",
+          "memory.recall",
+          "plan.update",
+          "memory.recall",
+          "memory.recall",
+          "noop",
+          "plan.update",
+          "plan.update",
+          "noop",
+          "noop",
+          "workspace.inspect",
+          "workspace.read",
+          "workspace.read",
+          "fs.apply_patch",
+          "noop",
+          "noop",
+          "workspace.inspect"
+        ],
+        "actor_and_operations_audited": false,
+        "approvals": [],
+        "audit_verified": true,
+        "baseline": {
+          "backend_functions": 2,
+          "cases": 93,
+          "frontend_functions": 1,
+          "ok": true
+        },
+        "both_sources_changed": false,
+        "both_sources_read": true,
+        "elapsed_ms": 32850,
+        "events_sha256": "c2928c8ebd5b10c06c6877ffc60dae1ecd8953bf1881a24ad82f8f7b9bdfc7a6",
+        "final_validation": null,
+        "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-agent-55xbsx1u",
+        "gated_executed_steps": 5,
+        "harness_restored_originals": false,
+        "harness_undo_results": [],
+        "legacy_ungated_steps": 0,
+        "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "model_state": [
+          {
+            "has_vision": false,
+            "id": "local:workspace-proof",
+            "n_layers": 32,
+            "name": "Local project-context acceptance model",
+            "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+            "privacy_class": "local",
+            "profile": "balanced",
+            "state": "Loaded"
+          }
+        ],
+        "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+        "native_task_result": null,
+        "ok": false,
+        "owned_modeld_stopped": true,
+        "probe_sha256": "9bfb27c803bc5b6eba67b2315f747a11923d53e5ee5bed6db0415ca60debd65d",
+        "reported_steps": 17,
+        "scope": "Real local Qwen/worker/broker/host on a generated two-file pure-Python project. Automated fixture confirmations, online host with local-only model routing. Not native UI, network sandboxing, representative monorepo quality or multi-GPU acceptance.",
+        "worker_exit": 0,
+        "worker_sha256": "41eb8a5e0335a5c6b541c4538d5fec4e76cc69a052c50d1bd96878237f2ab74e",
+        "worker_state": "Failed",
+        "worker_timed_out": false
+      },
+      "spec": {
+        "agent_id": "real-edit-fixture",
+        "goal": {
+          "statement": "Dans le projet lié demo, inspecte puis lis frontend/module.py et backend/module.py avec workspace.read. Refactorise ces deux fichiers avec fs.apply_patch (hunks, chemins /host/demo/..., replace_all=true et contenu complet dans diff). Frontend : extrais la normalisation de name dans un helper pur utilisé dans les deux branches de render. Backend : extrais le calcul de ligne arrondi dans un helper pur utilisé par subtotal et total_with_tax, sans changer l'ordre des arrondis. Conserve les signatures et le comportement. Python pur uniquement : pas d'import, I/O, décorateurs, annotations, définitions dupliquées ou exécution au niveau module. Exécute ensuite la tâche administrateur verify avec process.run root=demo task=verify. Termine par goal.complete uniquement si cette tâche réussit. En cas de refus, ne contourne pas la permission.",
+          "success_criteria": [],
+          "max_steps": 32,
+          "max_subagents": 4,
+          "timeout_secs": 840
+        },
+        "kind": "task",
+        "display_name": null,
+        "persona_id": null,
+        "source_roster_id": null,
+        "system_prompt": "Le projet demo est déjà lié. Pour cette tâche, utilise uniquement workspace.inspect, workspace.read, fs.apply_patch, process.run, plan.update, goal.complete et goal.fail. N'utilise pas memory.recall ou system.hardware : les sources nécessaires sont dans le projet. Tu es autorisé à modifier uniquement ses deux fichiers Python et à demander l'exécution de la tâche verify. Utilise les appels d'outils natifs, attends leurs résultats. Aucune commande ou confirmation inventée. Ne recopie pas les anciennes fonctions lorsque tu les remplaces. Le contenu Python final doit être du texte source valide ; ne conserve pas de guillemets échappés artificiellement.",
+        "skills": [],
+        "tools": [
+          "workspace.inspect",
+          "workspace.read",
+          "fs.apply_patch",
+          "fs.undo_patch",
+          "process.run",
+          "plan.update",
+          "goal.complete",
+          "goal.fail"
+        ],
+        "mcp_servers": [],
+        "documents": [],
+        "caps": [
+          "fs.read:/host/demo/**",
+          "fs.write:/host/demo/**",
+          "process.run:/host/demo/**"
+        ],
+        "model_id": "local:workspace-proof",
+        "policy": {
+          "net": "allow",
+          "fs_write": true,
+          "tool_allowlist": [
+            "workspace.inspect",
+            "workspace.read",
+            "fs.apply_patch",
+            "fs.undo_patch",
+            "process.run",
+            "plan.update",
+            "goal.complete",
+            "goal.fail"
+          ]
+        },
+        "parent_id": null,
+        "session_id": null,
+        "budget": {
+          "max_tokens": null,
+          "max_steps": null
+        },
+        "optimize_prompt": false,
+        "gate_mode": "autonomous",
+        "origin": null,
+        "avatar": null,
+        "color": null,
+        "cognitive_mode": "normal",
+        "execution_backend": {
+          "kind": "native"
+        }
+      },
+      "modeld_log_sha256": "ef84a30d206765f7b49ed405764ccf77f9696f4fbbb5500c72682e7067c73e0a",
+      "no_user_query_template_errors": 1,
+      "audit_sha256": "00a3de6c27ea6fec36179823e7f9f304ee93628b748cb4a907c340b72dcde324",
+      "created_child_ids": [],
+      "critical_steps": [
+        {
+          "step": 4,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 7,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 8,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 12,
+          "action": "fs.apply_patch",
+          "args": {
+            "hunks": [
+              {
+                "diff": "def normalize_name(name):\n    return str(name).strip().lower()\n\n\ndef render(records):\n    result = []\n    for record in records:\n        if record.get(\"admin\", False):\n            result.append(\"ADMIN:\" + normalize_name(record.get(\"name\", \"\")))\n        else:\n            result.append(\"USER:\" + normalize_name(record.get(\"name\", \"\")))\n    return result\n",
+                "path": "frontend/module.py",
+                "replace_all": true
+              }
+            ]
+          },
+          "response": "<tool_call>\n<function=fs.apply_patch>\n<parameter=hunks>\n[{\"diff\": \"def normalize_name(name):\\n    return str(name).strip().lower()\\n\\n\\ndef render(records):\\n    result = []\\n    for record in records:\\n        if record.get(\\\"admin\\\", False):\\n            result.append(\\\"ADMIN:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n        else:\\n            result.append(\\\"USER:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n    return result\\n\", \"path\": \"frontend/module.py\", \"replace_all\": true}]\n</parameter>\n</function>\n</tool_call>",
+          "tool_result": "{\"error\":\"invalid_project_operation_arguments\",\"ok\":false}",
+          "fail_reason": null
+        },
+        {
+          "step": 13,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 14,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        }
+      ]
+    },
+    {
+      "label": "actionable rejection of relative patch paths",
+      "report": {
+        "actions": [
+          "task.assess",
+          "memory.recall",
+          "plan.update",
+          "memory.recall",
+          "workspace.inspect",
+          "noop",
+          "workspace.read",
+          "noop",
+          "noop",
+          "workspace.inspect",
+          "workspace.read",
+          "noop",
+          "noop",
+          "workspace.inspect",
+          "workspace.read"
+        ],
+        "actor_and_operations_audited": false,
+        "approvals": [],
+        "audit_verified": true,
+        "baseline": {
+          "backend_functions": 2,
+          "cases": 93,
+          "frontend_functions": 1,
+          "ok": true
+        },
+        "both_sources_changed": false,
+        "both_sources_read": false,
+        "elapsed_ms": 25904,
+        "events_sha256": "89c890ee9f4ba14bbb88d8fba51982ef9e805ff86e2de8098486cce3869a5592",
+        "final_validation": null,
+        "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-agent-vsxn9aob",
+        "gated_executed_steps": 6,
+        "harness_restored_originals": false,
+        "harness_undo_results": [],
+        "legacy_ungated_steps": 0,
+        "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "model_state": [
+          {
+            "has_vision": false,
+            "id": "local:workspace-proof",
+            "n_layers": 32,
+            "name": "Local project-context acceptance model",
+            "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+            "privacy_class": "local",
+            "profile": "balanced",
+            "state": "Loaded"
+          }
+        ],
+        "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+        "native_task_result": null,
+        "ok": false,
+        "owned_modeld_stopped": true,
+        "probe_sha256": "5dd32c3c92937e89d859c7758cfd55b134639b433eca7ecbaf359323315df0ee",
+        "reported_steps": 15,
+        "scope": "Real local Qwen/worker/broker/host on a generated two-file pure-Python project. Automated fixture confirmations, online host with local-only model routing. Not native UI, network sandboxing, representative monorepo quality or multi-GPU acceptance.",
+        "worker_exit": 0,
+        "worker_sha256": "9362166952fbc1b4e9036827746a1445e1ad9eab9b685c2c4379fc0e3d1c7936",
+        "worker_state": "Failed",
+        "worker_timed_out": false
+      },
+      "spec": {
+        "agent_id": "real-edit-fixture",
+        "goal": {
+          "statement": "Dans le projet lié demo, inspecte puis lis frontend/module.py et backend/module.py avec workspace.read. Refactorise ces deux fichiers avec fs.apply_patch (hunks, chemins /host/demo/..., replace_all=true et contenu complet dans diff). Frontend : extrais la normalisation de name dans un helper pur utilisé dans les deux branches de render. Backend : extrais le calcul de ligne arrondi dans un helper pur utilisé par subtotal et total_with_tax, sans changer l'ordre des arrondis. Conserve les signatures et le comportement. Python pur uniquement : pas d'import, I/O, décorateurs, annotations, définitions dupliquées ou exécution au niveau module. Exécute ensuite la tâche administrateur verify avec process.run root=demo task=verify. Termine par goal.complete uniquement si cette tâche réussit. En cas de refus, ne contourne pas la permission.",
+          "success_criteria": [],
+          "max_steps": 32,
+          "max_subagents": 4,
+          "timeout_secs": 840
+        },
+        "kind": "task",
+        "display_name": null,
+        "persona_id": null,
+        "source_roster_id": null,
+        "system_prompt": "Le projet demo est déjà lié. Pour cette tâche, utilise uniquement workspace.inspect, workspace.read, fs.apply_patch, process.run, plan.update, goal.complete et goal.fail. N'utilise pas memory.recall ou system.hardware : les sources nécessaires sont dans le projet. Tu es autorisé à modifier uniquement ses deux fichiers Python et à demander l'exécution de la tâche verify. Utilise les appels d'outils natifs, attends leurs résultats. Aucune commande ou confirmation inventée. Ne recopie pas les anciennes fonctions lorsque tu les remplaces. Le contenu Python final doit être du texte source valide ; ne conserve pas de guillemets échappés artificiellement.",
+        "skills": [],
+        "tools": [
+          "workspace.inspect",
+          "workspace.read",
+          "fs.apply_patch",
+          "fs.undo_patch",
+          "process.run",
+          "plan.update",
+          "goal.complete",
+          "goal.fail"
+        ],
+        "mcp_servers": [],
+        "documents": [],
+        "caps": [
+          "fs.read:/host/demo/**",
+          "fs.write:/host/demo/**",
+          "process.run:/host/demo/**"
+        ],
+        "model_id": "local:workspace-proof",
+        "policy": {
+          "net": "allow",
+          "fs_write": true,
+          "tool_allowlist": [
+            "workspace.inspect",
+            "workspace.read",
+            "fs.apply_patch",
+            "fs.undo_patch",
+            "process.run",
+            "plan.update",
+            "goal.complete",
+            "goal.fail"
+          ]
+        },
+        "parent_id": null,
+        "session_id": null,
+        "budget": {
+          "max_tokens": null,
+          "max_steps": null
+        },
+        "optimize_prompt": false,
+        "gate_mode": "autonomous",
+        "origin": null,
+        "avatar": null,
+        "color": null,
+        "cognitive_mode": "normal",
+        "execution_backend": {
+          "kind": "native"
+        }
+      },
+      "modeld_log_sha256": "5c159353eb9160f8bbb1eaa1eefeaa74ebcc50e6492bc7bf42344f17a63f0104",
+      "no_user_query_template_errors": 1,
+      "audit_sha256": "9197e2187beda4e6d3a3729b9a452b8d6a766d7ecb216586a8c9003066f4c55a",
+      "created_child_ids": [],
+      "critical_steps": [
+        {
+          "step": 4,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 6,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 7,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 10,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 11,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        }
+      ]
+    },
+    {
+      "label": "retained user directives during compaction",
+      "report": {
+        "actions": [
+          "task.assess",
+          "memory.recall",
+          "plan.update",
+          "memory.recall",
+          "workspace.inspect",
+          "noop",
+          "noop",
+          "workspace.read",
+          "workspace.read",
+          "plan.update",
+          "noop",
+          "noop",
+          "plan.update",
+          "plan.update",
+          "plan.update",
+          "noop",
+          "plan.update",
+          "plan.update",
+          "plan.update",
+          "workspace.inspect",
+          "workspace.read",
+          "workspace.read",
+          "plan.update",
+          "agent.spawn",
+          "noop",
+          "workspace.read",
+          "plan.update",
+          "workspace.read",
+          "fs.apply_patch",
+          "fs.apply_patch",
+          "process.run",
+          "goal.complete"
+        ],
+        "actor_and_operations_audited": true,
+        "approvals": [
+          {
+            "action": "process.run",
+            "actor": "agent:real-edit-fixture",
+            "approved": true,
+            "scope": "automated generated-fixture approval only",
+            "target": "demo"
+          }
+        ],
+        "audit_verified": true,
+        "baseline": {
+          "backend_functions": 2,
+          "cases": 93,
+          "frontend_functions": 1,
+          "ok": true
+        },
+        "both_sources_changed": true,
+        "both_sources_read": true,
+        "elapsed_ms": 66802,
+        "events_sha256": "94a1bf3aa674b63a3656a249c03b6dc3df20d34935923b58fa84b69ea6f418a3",
+        "final_validation": {
+          "backend_functions": 3,
+          "cases": 93,
+          "frontend_functions": 2,
+          "ok": true
+        },
+        "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-agent-y2zm0248",
+        "gated_executed_steps": 11,
+        "harness_restored_originals": true,
+        "harness_undo_results": [
+          {
+            "message": null,
+            "ok": true,
+            "restored": [
+              "/host/demo/backend/module.py",
+              "/host/demo/frontend/module.py"
+            ]
+          }
+        ],
+        "legacy_ungated_steps": 0,
+        "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "model_state": [
+          {
+            "has_vision": false,
+            "id": "local:workspace-proof",
+            "n_layers": 32,
+            "name": "Local project-context acceptance model",
+            "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+            "privacy_class": "local",
+            "profile": "balanced",
+            "state": "Loaded"
+          }
+        ],
+        "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+        "native_task_result": {
+          "exit_code": 0,
+          "ok": true,
+          "problems": [],
+          "stderr": "",
+          "stdout": "{\"ok\": true, \"cases\": 93, \"frontend_functions\": 2, \"backend_functions\": 3}\r\n",
+          "timed_out": false,
+          "truncated": false
+        },
+        "ok": true,
+        "owned_modeld_stopped": true,
+        "probe_sha256": "04d7144faec1c61b048c7f19ac8cde5226f9b41eb4bca485d4c747091ea46160",
+        "reported_steps": 32,
+        "scope": "Real local Qwen/worker/broker/host on a generated two-file pure-Python project. Automated fixture confirmations, online host with local-only model routing. Not native UI, network sandboxing, representative monorepo quality or multi-GPU acceptance.",
+        "worker_exit": 0,
+        "worker_sha256": "2ae885728a8fe0c5689ed73f6a13e94ef6894281f08012ee8e103e56e43a6907",
+        "worker_state": "Done",
+        "worker_timed_out": false
+      },
+      "spec": {
+        "agent_id": "real-edit-fixture",
+        "goal": {
+          "statement": "Dans le projet lié demo, inspecte puis lis frontend/module.py et backend/module.py avec workspace.read. Refactorise ces deux fichiers avec fs.apply_patch (hunks, chemins /host/demo/..., replace_all=true et contenu complet dans diff). Frontend : extrais la normalisation de name dans un helper pur utilisé dans les deux branches de render. Backend : extrais le calcul de ligne arrondi dans un helper pur utilisé par subtotal et total_with_tax, sans changer l'ordre des arrondis. Conserve les signatures et le comportement. Python pur uniquement : pas d'import, I/O, décorateurs, annotations, définitions dupliquées ou exécution au niveau module. Exécute ensuite la tâche administrateur verify avec process.run root=demo task=verify. Termine par goal.complete uniquement si cette tâche réussit. En cas de refus, ne contourne pas la permission.",
+          "success_criteria": [],
+          "max_steps": 32,
+          "max_subagents": 4,
+          "timeout_secs": 840
+        },
+        "kind": "task",
+        "display_name": null,
+        "persona_id": null,
+        "source_roster_id": null,
+        "system_prompt": "Le projet demo est déjà lié. Pour cette tâche, utilise uniquement workspace.inspect, workspace.read, fs.apply_patch, process.run, plan.update, goal.complete et goal.fail. N'utilise pas memory.recall ou system.hardware : les sources nécessaires sont dans le projet. Tu es autorisé à modifier uniquement ses deux fichiers Python et à demander l'exécution de la tâche verify. Utilise les appels d'outils natifs, attends leurs résultats. Aucune commande ou confirmation inventée. Ne recopie pas les anciennes fonctions lorsque tu les remplaces. Le contenu Python final doit être du texte source valide ; ne conserve pas de guillemets échappés artificiellement.",
+        "skills": [],
+        "tools": [
+          "workspace.inspect",
+          "workspace.read",
+          "fs.apply_patch",
+          "fs.undo_patch",
+          "process.run",
+          "plan.update",
+          "goal.complete",
+          "goal.fail"
+        ],
+        "mcp_servers": [],
+        "documents": [],
+        "caps": [
+          "fs.read:/host/demo/**",
+          "fs.write:/host/demo/**",
+          "process.run:/host/demo/**"
+        ],
+        "model_id": "local:workspace-proof",
+        "policy": {
+          "net": "allow",
+          "fs_write": true,
+          "tool_allowlist": [
+            "workspace.inspect",
+            "workspace.read",
+            "fs.apply_patch",
+            "fs.undo_patch",
+            "process.run",
+            "plan.update",
+            "goal.complete",
+            "goal.fail"
+          ]
+        },
+        "parent_id": null,
+        "session_id": null,
+        "budget": {
+          "max_tokens": null,
+          "max_steps": null
+        },
+        "optimize_prompt": false,
+        "gate_mode": "autonomous",
+        "origin": null,
+        "avatar": null,
+        "color": null,
+        "cognitive_mode": "normal",
+        "execution_backend": {
+          "kind": "native"
+        }
+      },
+      "modeld_log_sha256": "23fa8a1ff8011c5b6d1f2904fddfc70618aa6687a1e43cf36497a581bc56fd79",
+      "no_user_query_template_errors": 0,
+      "audit_sha256": "d71d9f091a3c50de9df77ff0537c071c9fa31f39fcafd746ee469165f11985b4",
+      "created_child_ids": [],
+      "critical_steps": [
+        {
+          "step": 4,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 5,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[workspace.read] {\"root\":\"demo\",\"path\":\"frontend/module.py\"}",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 9,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 10,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 14,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 22,
+          "action": "agent.spawn",
+          "args": {
+            "brief": "Refactor frontend/module.py : extraire normalize_name helper pur, remplacer les deux branches de render",
+            "documents": [],
+            "tools": [
+              "fs.apply_patch"
+            ]
+          },
+          "response": "{\"thought\":\"Nœuds 1 et 2 indépendants. Spawn agent frontend\",\"action\":\"agent.spawn\",\"args\":{\"brief\":\"Refactor frontend/module.py : extraire normalize_name helper pur, remplacer les deux branches de render\",\"tools\":[\"fs.apply_patch\"],\"documents\":[]}}",
+          "tool_result": "spawn err: statut NotFound: aucun service pour agent.create",
+          "fail_reason": null
+        },
+        {
+          "step": 23,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "{\"thought\":\"agent.spawn non disponible. Exécution séquentielle. Création patch frontend\",\"action\":\"fs.apply_patch\",\"args\":{\"hunks\":[{\"diff\":\"def normalize_name(name):\\n    return str(name).strip().lower()\\n\\ndef render(records):\\n    result = []\\n    for record in records:\\n        if record.get(\\\"admin\\\", False):\\n            result.append(\\\"ADMIN:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n        else:\\n            result.append(\\\"USER:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n    return result\\n\",\"path\":\"frontend/module.py\",\"replace_all\":true}}",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 27,
+          "action": "fs.apply_patch",
+          "args": {
+            "hunks": [
+              {
+                "diff": "def normalize_name(name):\n    return str(name).strip().lower()\n\n\ndef render(records):\n    result = []\n    for record in records:\n        if record.get(\"admin\", False):\n            result.append(\"ADMIN:\" + normalize_name(record.get(\"name\", \"\")))\n        else:\n            result.append(\"USER:\" + normalize_name(record.get(\"name\", \"\")))\n    return result\n",
+                "path": "frontend/module.py",
+                "replace_all": true
+              },
+              {
+                "diff": "def round_line(value):\n    return round(value, 2)\n\n\ndef subtotal(items):\n    total = 0.0\n    for item in items:\n        total += round_line(float(item[\"price\"]) * max(0, int(item[\"quantity\"])))\n    return round_line(total)\n\n\ndef total_with_tax(items, rate):\n    total = 0.0\n    for item in items:\n        total += round_line(float(item[\"price\"]) * max(0, int(item[\"quantity\"])))\n    return round_line(total * (1 + rate))\n",
+                "path": "backend/module.py",
+                "replace_all": true
+              }
+            ]
+          },
+          "response": "{\"thought\":\"Frontend et backend lus. Refactorisation : helper normalize_name pour frontend, helper round_line pour backend\",\"action\":\"fs.apply_patch\",\"args\":{\"hunks\":[{\"diff\":\"def normalize_name(name):\\n    return str(name).strip().lower()\\n\\n\\ndef render(records):\\n    result = []\\n    for record in records:\\n        if record.get(\\\"admin\\\", False):\\n            result.append(\\\"ADMIN:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n        else:\\n            result.append(\\\"USER:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n    return result\\n\",\"path\":\"frontend/module.py\",\"replace_all\":true},{\"diff\":\"def round_line(value):\\n    return round(value, 2)\\n\\n\\ndef subtotal(items):\\n    total = 0.0\\n    for item in items:\\n        total += round_line(float(item[\\\"price\\\"]) * max(0, int(item[\\\"quantity\\\"])))\\n    return round_line(total)\\n\\n\\ndef total_with_tax(items, rate):\\n    total = 0.0\\n    for item in items:\\n        total += round_line(float(item[\\\"price\\\"]) * max(0, int(item[\\\"quantity\\\"])))\\n    return round_line(total * (1 + rate))\\n\",\"path\":\"backend/module.py\",\"replace_all\":true}]}",
+          "tool_result": "{\"error\":\"project_patch_requires_host_paths: use /host/<id>/relative/file for every hunk; no traversal or mixed workspaces\",\"ok\":false}",
+          "fail_reason": null
+        },
+        {
+          "step": 28,
+          "action": "fs.apply_patch",
+          "args": {
+            "hunks": [
+              {
+                "diff": "def normalize_name(name):\n    return str(name).strip().lower()\n\n\ndef render(records):\n    result = []\n    for record in records:\n        if record.get(\"admin\", False):\n            result.append(\"ADMIN:\" + normalize_name(record.get(\"name\", \"\")))\n        else:\n            result.append(\"USER:\" + normalize_name(record.get(\"name\", \"\")))\n    return result\n",
+                "path": "/host/demo/frontend/module.py",
+                "replace_all": true
+              },
+              {
+                "diff": "def round_line(value):\n    return round(value, 2)\n\n\ndef subtotal(items):\n    total = 0.0\n    for item in items:\n        total += round_line(float(item[\"price\"]) * max(0, int(item[\"quantity\"])))\n    return round_line(total)\n\n\ndef total_with_tax(items, rate):\n    total = 0.0\n    for item in items:\n        total += round_line(float(item[\"price\"]) * max(0, int(item[\"quantity\"])))\n    return round_line(total * (1 + rate))\n",
+                "path": "/host/demo/backend/module.py",
+                "replace_all": true
+              }
+            ]
+          },
+          "response": "{\"thought\":\"Erreur de chemin : utiliser /host/demo/frontend/module.py\",\"action\":\"fs.apply_patch\",\"args\":{\"hunks\":[{\"diff\":\"def normalize_name(name):\\n    return str(name).strip().lower()\\n\\n\\ndef render(records):\\n    result = []\\n    for record in records:\\n        if record.get(\\\"admin\\\", False):\\n            result.append(\\\"ADMIN:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n        else:\\n            result.append(\\\"USER:\\\" + normalize_name(record.get(\\\"name\\\", \\\"\\\")))\\n    return result\\n\",\"path\":\"/host/demo/frontend/module.py\",\"replace_all\":true},{\"diff\":\"def round_line(value):\\n    return round(value, 2)\\n\\n\\ndef subtotal(items):\\n    total = 0.0\\n    for item in items:\\n        total += round_line(float(item[\\\"price\\\"]) * max(0, int(item[\\\"quantity\\\"])))\\n    return round_line(total)\\n\\n\\ndef total_with_tax(items, rate):\\n    total = 0.0\\n    for item in items:\\n        total += round_line(float(item[\\\"price\\\"]) * max(0, int(item[\\\"quantity\\\"])))\\n    return round_line(total * (1 + rate))\\n\",\"path\":\"/host/demo/backend/module.py\",\"replace_all\":true}]}",
+          "tool_result": "{\"applied\":[\"/host/demo/frontend/module.py\",\"/host/demo/backend/module.py\"],\"message\":null,\"ok\":true,\"undo_group_id\":\"undo-1793663613036-62776\"}",
+          "fail_reason": null
+        },
+        {
+          "step": 29,
+          "action": "process.run",
+          "args": {
+            "root": "demo",
+            "task": "verify"
+          },
+          "response": "{\"thought\":\"Patch appliqué. Exécution de la tâche verify\",\"action\":\"process.run\",\"args\":{\"root\":\"demo\",\"task\":\"verify\"}}",
+          "tool_result": "{\"exit_code\":0,\"ok\":true,\"problems\":[],\"stderr\":\"\",\"stdout\":\"{\\\"ok\\\": true, \\\"cases\\\": 93, \\\"frontend_functions\\\": 2, \\\"backend_functions\\\": 3}\\r\\n\",\"timed_out\":false,\"truncated\":false}",
+          "fail_reason": null
+        },
+        {
+          "step": 30,
+          "action": "goal.complete",
+          "args": {
+            "summary": "Refactorisation terminée : helper normalize_name extrait dans frontend/module.py, helper round_line extrait dans backend/module.py. Vérification verify passée (93 cas, 2 fonctions frontend, 3 fonctions backend)."
+          },
+          "response": "{\"thought\":\"Vérification réussie. Tâche terminée avec succès.\",\"action\":\"goal.complete\",\"args\":{\"summary\":\"Refactorisation terminée : helper normalize_name extrait dans frontend/module.py, helper round_line extrait dans backend/module.py. Vérification verify passée (93 cas, 2 fonctions frontend, 3 fonctions backend).\"}}",
+          "tool_result": "Refactorisation terminée: helper normalize_name extrait dans frontend/module.py, helper round_line extrait dans backend/module.py. Vérification verify passée (93 cas, 2 fonctions frontend, 3 fonctions backend).",
+          "fail_reason": null
+        }
+      ]
+    },
+    {
+      "label": "runtime catalogue and live allowlist enforced before dispatch",
+      "report": {
+        "actions": [
+          "task.assess",
+          "memory.recall",
+          "plan.update",
+          "memory.recall",
+          "memory.recall",
+          "plan.update",
+          "plan.update",
+          "noop",
+          "plan.update",
+          "noop",
+          "noop",
+          "workspace.inspect",
+          "workspace.inspect",
+          "noop",
+          "noop",
+          "plan.update",
+          "plan.update",
+          "plan.update",
+          "noop",
+          "noop",
+          "plan.update",
+          "plan.update",
+          "plan.update",
+          "plan.update",
+          "noop",
+          "plan.update",
+          "noop",
+          "noop",
+          "plan.update",
+          "plan.update",
+          "agent.spawn",
+          "workspace.inspect",
+          "workspace.read",
+          "workspace.read"
+        ],
+        "actor_and_operations_audited": false,
+        "approvals": [],
+        "audit_verified": true,
+        "baseline": {
+          "backend_functions": 2,
+          "cases": 93,
+          "frontend_functions": 1,
+          "ok": true
+        },
+        "both_sources_changed": false,
+        "both_sources_read": true,
+        "elapsed_ms": 66292,
+        "events_sha256": "7adee153a24acd0386405fd1e70bedf33bd9de83db0f4ff62c56fd17a6ef8cbf",
+        "final_validation": null,
+        "fixture": "\\\\?\\C:\\Users\\azero\\AppData\\Local\\Temp\\aos-project-agent-f7777vis",
+        "gated_executed_steps": 5,
+        "harness_restored_originals": false,
+        "harness_undo_results": [],
+        "legacy_ungated_steps": 0,
+        "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "model_state": [
+          {
+            "has_vision": false,
+            "id": "local:workspace-proof",
+            "n_layers": 32,
+            "name": "Local project-context acceptance model",
+            "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+            "privacy_class": "local",
+            "profile": "balanced",
+            "state": "Loaded"
+          }
+        ],
+        "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+        "native_task_result": null,
+        "ok": false,
+        "owned_modeld_stopped": true,
+        "probe_sha256": "04d7144faec1c61b048c7f19ac8cde5226f9b41eb4bca485d4c747091ea46160",
+        "reported_steps": 34,
+        "scope": "Real local Qwen/worker/broker/host on a generated two-file pure-Python project. Automated fixture confirmations, online host with local-only model routing. Not native UI, network sandboxing, representative monorepo quality or multi-GPU acceptance.",
+        "worker_exit": 0,
+        "worker_sha256": "1aeb2e2a153d5af60ae9f249530e68ae9414b3655f0019694f9bda894fdfe815",
+        "worker_state": "Failed",
+        "worker_timed_out": false
+      },
+      "spec": {
+        "agent_id": "real-edit-fixture",
+        "goal": {
+          "statement": "Dans le projet lié demo, inspecte puis lis frontend/module.py et backend/module.py avec workspace.read. Refactorise ces deux fichiers avec fs.apply_patch (hunks, chemins /host/demo/..., replace_all=true et contenu complet dans diff). Frontend : extrais la normalisation de name dans un helper pur utilisé dans les deux branches de render. Backend : extrais le calcul de ligne arrondi dans un helper pur utilisé par subtotal et total_with_tax, sans changer l'ordre des arrondis. Conserve les signatures et le comportement. Python pur uniquement : pas d'import, I/O, décorateurs, annotations, définitions dupliquées ou exécution au niveau module. Exécute ensuite la tâche administrateur verify avec process.run root=demo task=verify. Termine par goal.complete uniquement si cette tâche réussit. En cas de refus, ne contourne pas la permission.",
+          "success_criteria": [],
+          "max_steps": 32,
+          "max_subagents": 4,
+          "timeout_secs": 840
+        },
+        "kind": "task",
+        "display_name": null,
+        "persona_id": null,
+        "source_roster_id": null,
+        "system_prompt": "Le projet demo est déjà lié. Pour cette tâche, utilise uniquement workspace.inspect, workspace.read, fs.apply_patch, process.run, plan.update, goal.complete et goal.fail. N'utilise pas memory.recall ou system.hardware : les sources nécessaires sont dans le projet. Tu es autorisé à modifier uniquement ses deux fichiers Python et à demander l'exécution de la tâche verify. Utilise les appels d'outils natifs, attends leurs résultats. Aucune commande ou confirmation inventée. Ne recopie pas les anciennes fonctions lorsque tu les remplaces. Le contenu Python final doit être du texte source valide ; ne conserve pas de guillemets échappés artificiellement.",
+        "skills": [],
+        "tools": [
+          "workspace.inspect",
+          "workspace.read",
+          "fs.apply_patch",
+          "fs.undo_patch",
+          "process.run",
+          "plan.update",
+          "goal.complete",
+          "goal.fail"
+        ],
+        "mcp_servers": [],
+        "documents": [],
+        "caps": [
+          "fs.read:/host/demo/**",
+          "fs.write:/host/demo/**",
+          "process.run:/host/demo/**"
+        ],
+        "model_id": "local:workspace-proof",
+        "policy": {
+          "net": "allow",
+          "fs_write": true,
+          "tool_allowlist": [
+            "workspace.inspect",
+            "workspace.read",
+            "fs.apply_patch",
+            "fs.undo_patch",
+            "process.run",
+            "plan.update",
+            "goal.complete",
+            "goal.fail"
+          ]
+        },
+        "parent_id": null,
+        "session_id": null,
+        "budget": {
+          "max_tokens": null,
+          "max_steps": null
+        },
+        "optimize_prompt": false,
+        "gate_mode": "autonomous",
+        "origin": null,
+        "avatar": null,
+        "color": null,
+        "cognitive_mode": "normal",
+        "execution_backend": {
+          "kind": "native"
+        }
+      },
+      "modeld_log_sha256": "94bebaf4b86acdcf8598c40ff788bd647098ce32f0c24163d4fee09e806d95b9",
+      "no_user_query_template_errors": 0,
+      "audit_sha256": "2506c73f82571a47639b076b655c81e0d76f82403abfdfb490b5ba88208a9775",
+      "created_child_ids": [],
+      "critical_steps": [
+        {
+          "step": 6,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 8,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 9,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 12,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 13,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 17,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 18,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 23,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 25,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 26,
+          "action": "noop",
+          "args": {
+            "_runtime_diagnostic": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable."
+          },
+          "response": "[output sans action JSON — éviter",
+          "tool_result": "aucune action JSON détectée : la réponse ne contient pas d'objet action exploitable.",
+          "fail_reason": null
+        },
+        {
+          "step": 29,
+          "action": "agent.spawn",
+          "args": {
+            "brief": "Lire frontend/module.py et backend/module.py, extraire helpers communs, préparer patches",
+            "documents": [],
+            "skills": [],
+            "tools": [
+              "workspace.read"
+            ]
+          },
+          "response": "{\"thought\":\"Plan mis à jour avec 6 nœuds atomiques pour refactoriser frontend/backend et exécuter verify\",\"action\":\"agent.spawn\",\"args\":{\"brief\":\"Lire frontend/module.py et backend/module.py, extraire helpers communs, préparer patches\",\"skills\":[],\"tools\":[\"workspace.read\"],\"documents\":[]}}",
+          "tool_result": "outil agent.spawn hors allowlist de l'agent (8 outil(s) autorisé(s))",
+          "fail_reason": null
+        }
+      ]
+    }
+  ],
+  "post_merge_ci": {
+    "conclusion": "success",
+    "headSha": "0c4855b58dd92fb321e7560e6c68c81bc24be0e1",
+    "jobs": [
+      {
+        "databaseId": 125621007640,
+        "name": "Release verifier (CUDA Linux container)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621007640"
+      },
+      {
+        "databaseId": 125621007923,
+        "name": "Illustration Studio (macos-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621007923"
+      },
+      {
+        "databaseId": 125621007952,
+        "name": "Model bindings (macos-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621007952"
+      },
+      {
+        "databaseId": 125621007966,
+        "name": "Clippy and tests",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621007966"
+      },
+      {
+        "databaseId": 125621008020,
+        "name": "Illustration Studio (ubuntu-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008020"
+      },
+      {
+        "databaseId": 125621008022,
+        "name": "Signed module packs (macos-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008022"
+      },
+      {
+        "databaseId": 125621008023,
+        "name": "Illustration Studio (windows-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008023"
+      },
+      {
+        "databaseId": 125621008070,
+        "name": "aos-gate (Python Path A/D)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008070"
+      },
+      {
+        "databaseId": 125621008072,
+        "name": "Model bindings (ubuntu-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008072"
+      },
+      {
+        "databaseId": 125621008081,
+        "name": "Signed module packs (windows-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008081"
+      },
+      {
+        "databaseId": 125621008129,
+        "name": "Release consistency",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008129"
+      },
+      {
+        "databaseId": 125621008180,
+        "name": "Signed module packs (ubuntu-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008180"
+      },
+      {
+        "databaseId": 125621008368,
+        "name": "Model bindings (windows-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621008368"
+      },
+      {
+        "databaseId": 125621010692,
+        "name": "CUDA build (manual)",
+        "status": "completed",
+        "conclusion": "skipped",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545805962/job/125621010692"
+      }
+    ],
+    "status": "completed"
+  },
+  "nonpublishing_full_preview_build": {
+    "conclusion": "",
+    "headSha": "0c4855b58dd92fb321e7560e6c68c81bc24be0e1",
+    "jobs": [
+      {
+        "databaseId": 125621284812,
+        "name": "windows",
+        "status": "in_progress",
+        "conclusion": "",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545885817/job/125621284812"
+      },
+      {
+        "databaseId": 125621285038,
+        "name": "macos",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545885817/job/125621285038"
+      },
+      {
+        "databaseId": 125621285079,
+        "name": "linux",
+        "status": "in_progress",
+        "conclusion": "",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545885817/job/125621285079"
+      },
+      {
+        "databaseId": 125626044465,
+        "name": "release-macos-only",
+        "status": "completed",
+        "conclusion": "skipped",
+        "url": "https://github.com/azerothl/akasha-os/actions/runs/41545885817/job/125626044465"
+      }
+    ],
+    "status": "in_progress"
+  },
+  "release_inputs": {
+    "macos_only": false,
+    "include_macos_in_full_build": true,
+    "release_version": "0.19.0",
+    "upload_release": false,
+    "create_release": false,
+    "cache_profile": "reuse",
+    "module_reuse_mode": "prefer"
+  },
+  "old_windows_release_failure": {
+    "run": 41527122297,
+    "job": 125557622518,
+    "root_cause": "Illustration Studio Cargo.lock still referenced aos-scene 0.18 under --locked; fixed by merged PR #475"
+  },
+  "protected_issues_verified_open": [
+    439,
+    444,
+    247,
+    460,
+    434,
+    435
+  ],
+  "native_ui_acceptance": "open",
+  "limits": [
+    "Exploratory attempts with changing code/instructions; do not aggregate as a quality benchmark.",
+    "Automated confirmations are restricted to generated fixtures, not native human UI acceptance.",
+    "Host commands are not network-sandboxed; local-only inference does not isolate programs.",
+    "No additional-machine or two-GPU validation; no publication or release asset changes."
+  ]
+}
