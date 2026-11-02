@@ -398,7 +398,7 @@ pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
             Some(p) => dest.join(p),
             None => continue,
         };
-        if file.name().ends_with('/') {
+        if file.is_dir() {
             fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
         } else {
             if let Some(p) = outpath.parent() {
@@ -461,6 +461,30 @@ mod tests {
         assert!(is_newer("0.10.1", "0.11.0"));
         assert!(!is_newer("0.11.0", "0.11.0"));
         assert!(!is_newer("0.11.0", "0.10.1"));
+    }
+
+    #[test]
+    fn zip_extracts_directories_without_escaping_destination() {
+        use std::io::Write;
+        let root = temp_dir("zip-extract");
+        fs::create_dir_all(&root).unwrap();
+        let archive = root.join("update.zip");
+        let dest = root.join("installed");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        zip.add_directory("bin/", options).unwrap();
+        zip.start_file("bin/aos-session", options).unwrap();
+        zip.write_all(b"fixture binary").unwrap();
+        zip.start_file("../outside", options).unwrap();
+        zip.write_all(b"must not escape").unwrap();
+        zip.finish().unwrap();
+        extract_zip(&archive, &dest).unwrap();
+        assert_eq!(
+            fs::read(dest.join("bin/aos-session")).unwrap(),
+            b"fixture binary"
+        );
+        assert!(!root.join("outside").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
