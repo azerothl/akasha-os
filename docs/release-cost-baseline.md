@@ -133,7 +133,33 @@ Cargo caches; normal tag builds and the default manual profile use `reuse`. The
 report includes observed hit counts so a requested profile is not mistaken for
 proof that a cache hit occurred.
 
-## Reading the baseline
+## Preservation of measurements (2026-11-02)
+
+The original Preview transport artifacts expired after seven days. The console
+reports for all six cold/reuse platform jobs remain available in their CI logs.
+They are now preserved in [the recovered baseline](tickets/evidence/release-cost-2026-10-14-recovered.json),
+with job URLs, source commits, step timestamps and hashes of the retrieved logs.
+Each job's source commit was checked against the commit printed in its report.
+
+This is a recovery of the original Markdown observations, not a reconstruction
+of the expired JSON. Component sizes displayed as KiB/MiB/GiB retain their
+original rounding; exact archive byte counts and hashes are kept where printed.
+The cold Linux timer limitation above remains visible. These are October 14
+measurements, not a new benchmark of the current source.
+
+New runs upload each small `release-cost-<platform>.json` separately with a
+90-day retention request, while large Preview artifacts keep their seven-day
+retention. The JSON is also emitted verbatim between
+`AOS_RELEASE_COST_JSON_BEGIN` / `AOS_RELEASE_COST_JSON_END` markers in CI logs.
+This preserves exact counters and sizes independently of the rounded job summary
+and allows retrieval without downloading a whole Preview archive.
+
+The new retention path still needs observation in a full CI run. No new release
+or benchmark was dispatched for this change, and no build-time savings are
+claimed. #445's installed lifecycle and #446's two-release reuse acceptance
+remain separate.
+
+## Comparing runs
 
 Compare reports only when platform, source scope, cache profile, runner/toolchain
 and release archive format match. Keep build time, CUDA/toolchain setup, module

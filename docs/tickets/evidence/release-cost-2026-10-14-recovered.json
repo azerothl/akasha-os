@@ -1,0 +1,614 @@
+{
+  "schema_version": 1,
+  "recovered_on": "2026-11-02",
+  "measured_on": "2026-10-14",
+  "precision": "Original console formatting retained. Human-readable component sizes are rounded; exact byte counts are only those explicitly printed. The expired original JSON is not reconstructed.",
+  "reports": [
+    {
+      "name": "cold-windows",
+      "run_id": 38602553174,
+      "job_id": 115985176980,
+      "job_url": "https://github.com/azerothl/akasha-os/actions/runs/38602553174/job/115985176980",
+      "full_log_sha256": "ae7a3b70a8985daa3591971308bbff60a6879cf66a59f1bb1cd7995d97eac619",
+      "markdown_report": "## Release cost � windows-x64\n\n- Commit: `a18d910664b531a2f8d8ec9b964d121099090363` � run `38602553174` attempt `1`\n- Cache profile requested: **cold**; actual cache hits below are the observed signal.\n- Release archive: **624.2 MiB** (654,562,992 bytes), SHA-256 `31bcfed803b2c0455d8178a09ba750ab9321c342a39ba33f34f63a4ce77d9ff7`.\n\n| Component | Files | Uncompressed | Standalone ZIP comparison | Compressed in release archive |\n|---|---:|---:|---:|---:|\n| `binaries-and-runtime` | 18 | 1.1 GiB | 613.8 MiB | 623.0 MiB |\n| `module:illustration-studio` | 5 | 1.2 MiB | 336.9 KiB | 338.1 KiB |\n| `other` | 93 | 717.6 KiB | 348.8 KiB | 339.3 KiB |\n| `module:notes` | 3 | 464.5 KiB | 147.5 KiB | 148.6 KiB |\n| `module:create` | 3 | 410.9 KiB | 117.0 KiB | 117.8 KiB |\n| `module:canvas` | 3 | 344.5 KiB | 109.1 KiB | 109.8 KiB |\n| `module:tasks` | 3 | 267.1 KiB | 89.7 KiB | 90.1 KiB |\n| `module:ext-rt` | 7 | 225.7 KiB | 80.4 KiB | 80.1 KiB |\n| `illustration-assets` | 13 | 71.4 KiB | 34.4 KiB | 31.9 KiB |\n| `model-catalogue-and-small-assets` | 3 | 55.3 KiB | 8.5 KiB | 8.0 KiB |\n| `illustration-renderer-pack` | 6 | 42.2 KiB | 14.3 KiB | 13.2 KiB |\n| `skills` | 6 | 7.1 KiB | 4.8 KiB | 4.0 KiB |\n\nThe standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.\n\nComponent measurement overhead: 75.9 s (separate ZIP comparisons).\nFirst-run GGUF models included: none; model downloads stay outside this archive.\n\n| Build phase | Duration |\n|---|---:|\n| `native-build` | 4395.3 s |\n| `wasm-modules` | 563.8 s |\n| `native-cpu-companion` | 46.5 s |\n| `package-assembly` | 52.7 s |\n| `package-build` | 5013.4 s |\n| `archive-compression` | 31.5 s |\n| `package-verification` | 3.7 s |\n\n##[group]Run actions/github-script@v7\nwith:\n  script: const result = await github.rest.actions.listJobsForWorkflowRun({\n  owner: context.repo.owner,\n  repo: context.repo.repo,\n  run_id: context.runId,\n  per_page: 100,\n});\nconst job = result.data.jobs.find((candidate) => candidate.name === process.env.JOB_ID);\nif (!job) throw new Error(`Could not find job ${process.env.JOB_ID}`);\nconst rows = job.steps\n  .filter((step) => step.started_at && step.completed_at)\n  .map((step) => {\n    const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;\n    return `| ${step.name.replaceAll('|', '\\\\|')} | ${seconds.toFixed(1)} s |`;\n  });\nawait core.summary.addHeading('GitHub Actions step durations').addRaw('| Step | Duration |\\n|---|---:|\\n' + rows.join('\\n') + '\\n').write();\n\n  github-token: ***\n  debug: false\n  user-agent: actions/github-script\n  result-encoding: json\n  retries: 0\n  retry-exempt-status-codes: 400,401,403,404,422\nenv:\n  CARGO_TERM_COLOR: always\n  CARGO_INCREMENTAL: 0\n  CARGO_BUILD_JOBS: 4\n  CMAKE_CUDA_ARCHITECTURES: 75-virtual;86;89\n  CMAKE_BUILD_PARALLEL_LEVEL: 4\n  GGML_NATIVE: OFF\n  SCCACHE_GHA_ENABLED: true\n  CARGO_HOME: C:\\Users\\runneradmin\\.cargo\n  CUDA_PATH: C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4\n  CUDA_PATH_V12_4: C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4\n  CUDA_PATH_VX_Y: CUDA_PATH_V12_4\n  JOB_ID: windows\n##[endgroup]",
+      "job_metadata": {
+        "completed_at": "2026-10-14T18:31:01Z",
+        "conclusion": "success",
+        "head_sha": "a18d910664b531a2f8d8ec9b964d121099090363",
+        "id": 115985176980,
+        "name": "windows",
+        "started_at": "2026-10-14T16:57:53Z",
+        "steps": [
+          {
+            "completed_at": "2026-10-14T16:57:56Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "started_at": "2026-10-14T16:57:54Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:03Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "started_at": "2026-10-14T16:57:56Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:11Z",
+            "conclusion": "success",
+            "name": "Install Rust",
+            "started_at": "2026-10-14T16:58:03Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:11Z",
+            "conclusion": "skipped",
+            "name": "Setup sccache",
+            "started_at": "2026-10-14T16:58:11Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:11Z",
+            "conclusion": "skipped",
+            "name": "Cache Cargo",
+            "started_at": "2026-10-14T16:58:11Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:13Z",
+            "conclusion": "success",
+            "name": "Install Ninja",
+            "started_at": "2026-10-14T16:58:11Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:05:19Z",
+            "conclusion": "success",
+            "name": "Install CUDA Toolkit 12.4",
+            "started_at": "2026-10-14T16:58:13Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:05:19Z",
+            "conclusion": "skipped",
+            "name": "Assert VERSION matches tag",
+            "started_at": "2026-10-14T17:05:19Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:30:47Z",
+            "conclusion": "success",
+            "name": "Build Preview package",
+            "started_at": "2026-10-14T17:05:19Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:30:49Z",
+            "conclusion": "success",
+            "name": "Add GitHub Actions step timings",
+            "started_at": "2026-10-14T18:30:47Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:30:57Z",
+            "conclusion": "success",
+            "name": "Run actions/upload-artifact@v4",
+            "started_at": "2026-10-14T18:30:49Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:30:59Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "started_at": "2026-10-14T18:30:57Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:30:59Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "started_at": "2026-10-14T18:30:59Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cold-linux",
+      "run_id": 38602553174,
+      "job_id": 115985177124,
+      "job_url": "https://github.com/azerothl/akasha-os/actions/runs/38602553174/job/115985177124",
+      "full_log_sha256": "898c15cdac77307bfc18f5143abd58229bf352f014ef9dad71c5e613cd320c5d",
+      "markdown_report": "## Release cost · linux-x64\n\n- Commit: `a18d910664b531a2f8d8ec9b964d121099090363` · run `38602553174` attempt `1`\n- Cache profile requested: **cold**; actual cache hits below are the observed signal.\n- Release archive: **898.9 MiB** (942,589,774 bytes), SHA-256 `8b0e0bcce2b6a74806c2d94841bdffe6f0f9d3ecefee1251e232cb74a35f747d`.\n\n| Component | Files | Uncompressed | Standalone ZIP comparison | Compressed in release archive |\n|---|---:|---:|---:|---:|\n| `binaries-and-runtime` | 19 | 1.6 GiB | 897.6 MiB | n/a |\n| `module:illustration-studio` | 5 | 1.2 MiB | 337.8 KiB | n/a |\n| `other` | 95 | 702.5 KiB | 346.2 KiB | n/a |\n| `module:notes` | 3 | 464.4 KiB | 147.5 KiB | n/a |\n| `module:create` | 3 | 409.0 KiB | 116.9 KiB | n/a |\n| `module:canvas` | 3 | 344.2 KiB | 109.1 KiB | n/a |\n| `module:tasks` | 3 | 267.0 KiB | 89.7 KiB | n/a |\n| `module:ext-rt` | 7 | 225.6 KiB | 80.4 KiB | n/a |\n| `illustration-assets` | 13 | 69.8 KiB | 34.3 KiB | n/a |\n| `model-catalogue-and-small-assets` | 3 | 53.5 KiB | 8.5 KiB | n/a |\n| `illustration-renderer-pack` | 6 | 41.3 KiB | 14.2 KiB | n/a |\n| `skills` | 6 | 7.0 KiB | 4.8 KiB | n/a |\n\nThe standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.\n\nComponent measurement overhead: 88.9 s (separate ZIP comparisons).\nFirst-run GGUF models included: none; model downloads stay outside this archive.\n\n| Build phase | Duration |\n|---|---:|\n| `native-build` | 2611.0 s |\n| `wasm-modules` | 170.0 s |\n| `native-cpu-companion` | 129.0 s |\n| `package-assembly` | 138.0 s |\n| `package-build` | 0.0 s |\n| `archive-compression` | 0.0 s |\n| `package-verification` | 0.0 s |\n##[group]Run actions/github-script@v7\nwith:\n  script: const result = await github.rest.actions.listJobsForWorkflowRun({\n  owner: context.repo.owner,\n  repo: context.repo.repo,\n  run_id: context.runId,\n  per_page: 100,\n});\nconst job = result.data.jobs.find((candidate) => candidate.name === process.env.JOB_ID);\nif (!job) throw new Error(`Could not find job ${process.env.JOB_ID}`);\nconst rows = job.steps\n  .filter((step) => step.started_at && step.completed_at)\n  .map((step) => {\n    const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;\n    return `| ${step.name.replaceAll('|', '\\\\|')} | ${seconds.toFixed(1)} s |`;\n  });\nawait core.summary.addHeading('GitHub Actions step durations').addRaw('| Step | Duration |\\n|---|---:|\\n' + rows.join('\\n') + '\\n').write();\n\n  github-token: ***\n  debug: false\n  user-agent: actions/github-script\n  result-encoding: json\n  retries: 0\n  retry-exempt-status-codes: 400,401,403,404,422\nenv:\n  CARGO_TERM_COLOR: always\n  CARGO_INCREMENTAL: 0\n  CARGO_BUILD_JOBS: 4\n  CMAKE_CUDA_ARCHITECTURES: 75-virtual;86;89\n  CMAKE_BUILD_PARALLEL_LEVEL: 4\n  GGML_NATIVE: OFF\n  SCCACHE_GHA_ENABLED: true\n  CARGO_HOME: /github/home/.cargo\n  JOB_ID: linux\n##[endgroup]\n##[command]/usr/bin/docker exec  faa2d69209d160dab423169e0b624ecb360ed32e01ad7a058a4e36fe7c868214 sh -c \"cat /etc/*release | grep ^ID\"",
+      "job_metadata": {
+        "completed_at": "2026-10-14T17:52:14Z",
+        "conclusion": "success",
+        "head_sha": "a18d910664b531a2f8d8ec9b964d121099090363",
+        "id": 115985177124,
+        "name": "linux",
+        "started_at": "2026-10-14T16:57:53Z",
+        "steps": [
+          {
+            "completed_at": "2026-10-14T16:57:55Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "started_at": "2026-10-14T16:57:54Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:11Z",
+            "conclusion": "success",
+            "name": "Initialize containers",
+            "started_at": "2026-10-14T16:57:55Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:14Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "started_at": "2026-10-14T16:59:11Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:44Z",
+            "conclusion": "success",
+            "name": "Install build deps",
+            "started_at": "2026-10-14T16:59:14Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:56Z",
+            "conclusion": "success",
+            "name": "Install Rust",
+            "started_at": "2026-10-14T16:59:44Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:56Z",
+            "conclusion": "skipped",
+            "name": "Setup sccache",
+            "started_at": "2026-10-14T16:59:56Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:56Z",
+            "conclusion": "skipped",
+            "name": "Cache Cargo",
+            "started_at": "2026-10-14T16:59:56Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:59:56Z",
+            "conclusion": "skipped",
+            "name": "Assert VERSION matches tag",
+            "started_at": "2026-10-14T16:59:56Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:51:58Z",
+            "conclusion": "success",
+            "name": "Build Preview package",
+            "started_at": "2026-10-14T16:59:56Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:51:59Z",
+            "conclusion": "success",
+            "name": "Add GitHub Actions step timings",
+            "started_at": "2026-10-14T17:51:58Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:52:09Z",
+            "conclusion": "success",
+            "name": "Run actions/upload-artifact@v4",
+            "started_at": "2026-10-14T17:51:59Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:52:10Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "started_at": "2026-10-14T17:52:09Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:52:12Z",
+            "conclusion": "success",
+            "name": "Stop containers",
+            "started_at": "2026-10-14T17:52:10Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:52:12Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "started_at": "2026-10-14T17:52:12Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cold-macos",
+      "run_id": 38602553174,
+      "job_id": 115985177347,
+      "job_url": "https://github.com/azerothl/akasha-os/actions/runs/38602553174/job/115985177347",
+      "full_log_sha256": "7f384a34c86e3868c58aa3643c2cb3141885ce8719b203f26b5b09b6ef7f067f",
+      "markdown_report": "## Release cost · macos-arm64\n\n- Commit: `a18d910664b531a2f8d8ec9b964d121099090363` · run `38602553174` attempt `1`\n- Cache profile requested: **cold**; actual cache hits below are the observed signal.\n- Release archive: **51.3 MiB** (53,839,654 bytes), SHA-256 `fed0751f57f6c6fa02547d148f4a8713641c33bd117ed68e4790ebde33c21ec8`.\n\n| Component | Files | Uncompressed | Standalone ZIP comparison | Compressed in release archive |\n|---|---:|---:|---:|---:|\n| `binaries-and-runtime` | 13 | 122.0 MiB | 50.1 MiB | 50.1 MiB |\n| `module:illustration-studio` | 5 | 1.2 MiB | 337.8 KiB | 336.8 KiB |\n| `other` | 95 | 702.7 KiB | 346.3 KiB | 334.6 KiB |\n| `module:notes` | 3 | 464.2 KiB | 147.4 KiB | 147.0 KiB |\n| `module:create` | 3 | 408.8 KiB | 116.9 KiB | 116.4 KiB |\n| `module:canvas` | 3 | 344.0 KiB | 109.1 KiB | 108.6 KiB |\n| `module:tasks` | 3 | 266.8 KiB | 89.7 KiB | 89.2 KiB |\n| `module:ext-rt` | 7 | 225.5 KiB | 80.4 KiB | 79.3 KiB |\n| `illustration-assets` | 13 | 69.8 KiB | 34.3 KiB | 31.9 KiB |\n| `model-catalogue-and-small-assets` | 3 | 53.5 KiB | 8.5 KiB | 8.1 KiB |\n| `illustration-renderer-pack` | 6 | 41.3 KiB | 14.2 KiB | 13.1 KiB |\n| `skills` | 6 | 7.0 KiB | 4.8 KiB | 3.9 KiB |\n\nThe standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.\n\nComponent measurement overhead: 5.5 s (separate ZIP comparisons).\nFirst-run GGUF models included: none; model downloads stay outside this archive.\n\n| Build phase | Duration |\n|---|---:|\n| `native-build` | 1575.0 s |\n| `wasm-modules` | 238.0 s |\n| `native-cpu-companion` | 32.0 s |\n| `package-assembly` | 32.0 s |\n| `archive-compression` | 6.0 s |\n| `package-build` | 1851.0 s |\n| `package-verification` | 1.0 s |\n##[group]Run actions/github-script@v7\nwith:\n  script: const result = await github.rest.actions.listJobsForWorkflowRun({\n  owner: context.repo.owner,\n  repo: context.repo.repo,\n  run_id: context.runId,\n  per_page: 100,\n});\nconst job = result.data.jobs.find((candidate) => candidate.name === process.env.JOB_ID);\nif (!job) throw new Error(`Could not find job ${process.env.JOB_ID}`);\nconst rows = job.steps\n  .filter((step) => step.started_at && step.completed_at)\n  .map((step) => {\n    const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;\n    return `| ${step.name.replaceAll('|', '\\\\|')} | ${seconds.toFixed(1)} s |`;\n  });\nawait core.summary.addHeading('GitHub Actions step durations').addRaw('| Step | Duration |\\n|---|---:|\\n' + rows.join('\\n') + '\\n').write();\n\n  github-token: ***\n  debug: false\n  user-agent: actions/github-script\n  result-encoding: json\n  retries: 0\n  retry-exempt-status-codes: 400,401,403,404,422\nenv:\n  CARGO_TERM_COLOR: always\n  CARGO_INCREMENTAL: 0\n  CARGO_BUILD_JOBS: 4\n  CMAKE_CUDA_ARCHITECTURES: 75-virtual;86;89\n  CMAKE_BUILD_PARALLEL_LEVEL: 4\n  GGML_NATIVE: OFF\n  SCCACHE_GHA_ENABLED: true\n  CARGO_HOME: /Users/runner/.cargo\n  JOB_ID: macos\n##[endgroup]",
+      "job_metadata": {
+        "completed_at": "2026-10-14T17:29:44Z",
+        "conclusion": "success",
+        "head_sha": "a18d910664b531a2f8d8ec9b964d121099090363",
+        "id": 115985177347,
+        "name": "macos",
+        "started_at": "2026-10-14T16:57:57Z",
+        "steps": [
+          {
+            "completed_at": "2026-10-14T16:58:01Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "started_at": "2026-10-14T16:57:58Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:04Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "started_at": "2026-10-14T16:58:01Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:04Z",
+            "conclusion": "success",
+            "name": "Resolve release VERSION",
+            "started_at": "2026-10-14T16:58:04Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:13Z",
+            "conclusion": "success",
+            "name": "Install Rust",
+            "started_at": "2026-10-14T16:58:04Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:13Z",
+            "conclusion": "skipped",
+            "name": "Setup sccache",
+            "started_at": "2026-10-14T16:58:13Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:13Z",
+            "conclusion": "skipped",
+            "name": "Cache Cargo",
+            "started_at": "2026-10-14T16:58:13Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:13Z",
+            "conclusion": "skipped",
+            "name": "Assert VERSION matches tag",
+            "started_at": "2026-10-14T16:58:13Z"
+          },
+          {
+            "completed_at": "2026-10-14T16:58:13Z",
+            "conclusion": "success",
+            "name": "Assert Apple Silicon runner",
+            "started_at": "2026-10-14T16:58:13Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:29:11Z",
+            "conclusion": "success",
+            "name": "Build Preview package (Metal)",
+            "started_at": "2026-10-14T16:58:13Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:29:12Z",
+            "conclusion": "success",
+            "name": "Add GitHub Actions step timings",
+            "started_at": "2026-10-14T17:29:11Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:29:14Z",
+            "conclusion": "success",
+            "name": "Run actions/upload-artifact@v4",
+            "started_at": "2026-10-14T17:29:12Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:29:15Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "started_at": "2026-10-14T17:29:14Z"
+          },
+          {
+            "completed_at": "2026-10-14T17:29:17Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "started_at": "2026-10-14T17:29:15Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reuse-windows",
+      "run_id": 38616302662,
+      "job_id": 116032158200,
+      "job_url": "https://github.com/azerothl/akasha-os/actions/runs/38616302662/job/116032158200",
+      "full_log_sha256": "8651502a6f6bec1571078b7916f174f492be9407b9ed6938b3d34985587d8383",
+      "markdown_report": "## Release cost � windows-x64\n\n- Commit: `072dc3b99b7c69afb0d9a435dfd03a29a3ac8a59` � run `38616302662` attempt `1`\n- Cache profile requested: **reuse**; actual cache hits below are the observed signal.\n- Release archive: **624.2 MiB** (654,562,610 bytes), SHA-256 `26b18821df04b6023f9ca55e61ae453e946b03f2c7ec7d894d0e5229535d09c9`.\n\n| Component | Files | Uncompressed | Standalone ZIP comparison | Compressed in release archive |\n|---|---:|---:|---:|---:|\n| `binaries-and-runtime` | 18 | 1.1 GiB | 613.8 MiB | 623.0 MiB |\n| `module:illustration-studio` | 5 | 1.2 MiB | 336.9 KiB | 338.1 KiB |\n| `other` | 93 | 717.6 KiB | 348.8 KiB | 339.3 KiB |\n| `module:notes` | 3 | 464.5 KiB | 147.5 KiB | 148.6 KiB |\n| `module:create` | 3 | 410.9 KiB | 117.0 KiB | 117.8 KiB |\n| `module:canvas` | 3 | 344.5 KiB | 109.1 KiB | 109.8 KiB |\n| `module:tasks` | 3 | 267.1 KiB | 89.7 KiB | 90.1 KiB |\n| `module:ext-rt` | 7 | 225.7 KiB | 80.4 KiB | 80.1 KiB |\n| `illustration-assets` | 13 | 71.4 KiB | 34.4 KiB | 31.9 KiB |\n| `model-catalogue-and-small-assets` | 3 | 55.3 KiB | 8.5 KiB | 8.0 KiB |\n| `illustration-renderer-pack` | 6 | 42.2 KiB | 14.3 KiB | 13.2 KiB |\n| `skills` | 6 | 7.1 KiB | 4.8 KiB | 4.0 KiB |\n\nThe standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.\n\nComponent measurement overhead: 72.9 s (includes separate ZIP comparisons).\nFirst-run GGUF models included: none; model downloads stay outside this archive.\n\n| Build phase | Duration |\n|---|---:|\n| `native-build` | 4878.4 s |\n| `wasm-modules` | 720.6 s |\n| `native-cpu-companion` | 52.6 s |\n| `package-assembly` | 55.5 s |\n| `package-build` | 5655.0 s |\n| `archive-compression` | 30.2 s |\n| `package-verification` | 3.0 s |\n\nsccache:\n```text\nCompile requests                    966\nCompile requests executed           741\nCache hits                            4\nCache hits (Rust)                     4\nCache misses                        727\nCache misses (Rust)                 727\nCache hits rate                    0.55 %\nCache hits rate (Rust)             0.55 %\nCache errors                          0\n```",
+      "job_metadata": {
+        "completed_at": "2026-10-14T20:23:35Z",
+        "conclusion": "success",
+        "head_sha": "072dc3b99b7c69afb0d9a435dfd03a29a3ac8a59",
+        "id": 116032158200,
+        "name": "windows",
+        "started_at": "2026-10-14T18:34:32Z",
+        "steps": [
+          {
+            "completed_at": "2026-10-14T18:34:35Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "started_at": "2026-10-14T18:34:33Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:41Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "started_at": "2026-10-14T18:34:35Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:50Z",
+            "conclusion": "success",
+            "name": "Install Rust",
+            "started_at": "2026-10-14T18:34:41Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:52Z",
+            "conclusion": "success",
+            "name": "Setup sccache",
+            "started_at": "2026-10-14T18:34:50Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:55Z",
+            "conclusion": "success",
+            "name": "Cache Cargo",
+            "started_at": "2026-10-14T18:34:52Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:56Z",
+            "conclusion": "success",
+            "name": "Install Ninja",
+            "started_at": "2026-10-14T18:34:55Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:41:34Z",
+            "conclusion": "success",
+            "name": "Install CUDA Toolkit 12.4",
+            "started_at": "2026-10-14T18:34:56Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:41:34Z",
+            "conclusion": "skipped",
+            "name": "Assert VERSION matches tag",
+            "started_at": "2026-10-14T18:41:34Z"
+          },
+          {
+            "completed_at": "2026-10-14T20:17:41Z",
+            "conclusion": "success",
+            "name": "Build Preview package",
+            "started_at": "2026-10-14T18:41:34Z"
+          },
+          {
+            "completed_at": "2026-10-14T20:17:47Z",
+            "conclusion": "success",
+            "name": "Run actions/upload-artifact@v4",
+            "started_at": "2026-10-14T20:17:41Z"
+          },
+          {
+            "completed_at": "2026-10-14T20:23:31Z",
+            "conclusion": "success",
+            "name": "Post Cache Cargo",
+            "started_at": "2026-10-14T20:17:47Z"
+          },
+          {
+            "completed_at": "2026-10-14T20:23:31Z",
+            "conclusion": "success",
+            "name": "Post Setup sccache",
+            "started_at": "2026-10-14T20:23:31Z"
+          },
+          {
+            "completed_at": "2026-10-14T20:23:33Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "started_at": "2026-10-14T20:23:31Z"
+          },
+          {
+            "completed_at": "2026-10-14T20:23:34Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "started_at": "2026-10-14T20:23:33Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reuse-linux",
+      "run_id": 38616302662,
+      "job_id": 116032158393,
+      "job_url": "https://github.com/azerothl/akasha-os/actions/runs/38616302662/job/116032158393",
+      "full_log_sha256": "3c7bf3ec22889b687718310b9d578f142580ee32009d2d4daa34c6beec89b3e8",
+      "markdown_report": "## Release cost · linux-x64\n\n- Commit: `072dc3b99b7c69afb0d9a435dfd03a29a3ac8a59` · run `38616302662` attempt `1`\n- Cache profile requested: **reuse**; actual cache hits below are the observed signal.\n- Release archive: **898.9 MiB** (942,590,551 bytes), SHA-256 `c93d6ef720d74c011eaababdf555325feb8f04f3f26d47e1461ec87056f1281c`.\n\n| Component | Files | Uncompressed | Standalone ZIP comparison | Compressed in release archive |\n|---|---:|---:|---:|---:|\n| `binaries-and-runtime` | 19 | 1.6 GiB | 897.6 MiB | n/a |\n| `module:illustration-studio` | 5 | 1.2 MiB | 337.8 KiB | n/a |\n| `other` | 95 | 702.5 KiB | 346.2 KiB | n/a |\n| `module:notes` | 3 | 464.4 KiB | 147.5 KiB | n/a |\n| `module:create` | 3 | 409.0 KiB | 116.9 KiB | n/a |\n| `module:canvas` | 3 | 344.2 KiB | 109.1 KiB | n/a |\n| `module:tasks` | 3 | 267.0 KiB | 89.7 KiB | n/a |\n| `module:ext-rt` | 7 | 225.6 KiB | 80.4 KiB | n/a |\n| `illustration-assets` | 13 | 69.8 KiB | 34.3 KiB | n/a |\n| `model-catalogue-and-small-assets` | 3 | 53.5 KiB | 8.5 KiB | n/a |\n| `illustration-renderer-pack` | 6 | 41.3 KiB | 14.2 KiB | n/a |\n| `skills` | 6 | 7.0 KiB | 4.8 KiB | n/a |\n\nThe standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.\n\nComponent measurement overhead: 73.1 s (includes separate ZIP comparisons).\nFirst-run GGUF models included: none; model downloads stay outside this archive.\n\n| Build phase | Duration |\n|---|---:|\n| `native-build` | 2312.0 s |\n| `wasm-modules` | 200.0 s |\n| `native-cpu-companion` | 34.0 s |\n| `package-assembly` | 43.0 s |\n| `package-build` | 2555.1 s |\n| `archive-compression` | 67.2 s |\n| `package-verification` | 18.9 s |\n\nsccache:\n```text\nCompile requests                        2645\nCompile requests executed               3288\nCache hits                               601\nCache hits (C/C++)                       585\nCache hits (CUBIN)                        10\nCache hits (Rust)                          6\nCache misses                            2532\nCache misses (Assembler)                  30\nCache misses (C/C++)                     267\nCache misses (CUBIN)                     274\nCache misses (CUDA)                      142\nCache misses (CUDA (Device code))        142\nCache misses (PTX)                       426\nCache misses (Rust)                     1251\nCache hits rate                        19.18 %\nCache hits rate (Assembler)             0.00 %\nCache hits rate (C/C++)                68.66 %\nCache hits rate (CUBIN)                 3.52 %\nCache hits rate (CUDA)                  0.00 %\nCache hits rate (CUDA (Device code))    0.00 %\nCache hits rate (PTX)                   0.00 %\nCache hits rate (Rust)                  0.48 %\nCache errors                               0\n```",
+      "job_metadata": {
+        "completed_at": "2026-10-14T19:22:43Z",
+        "conclusion": "success",
+        "head_sha": "072dc3b99b7c69afb0d9a435dfd03a29a3ac8a59",
+        "id": 116032158393,
+        "name": "linux",
+        "started_at": "2026-10-14T18:34:32Z",
+        "steps": [
+          {
+            "completed_at": "2026-10-14T18:34:34Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "started_at": "2026-10-14T18:34:33Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:35:44Z",
+            "conclusion": "success",
+            "name": "Initialize containers",
+            "started_at": "2026-10-14T18:34:34Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:35:47Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "started_at": "2026-10-14T18:35:44Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:36:15Z",
+            "conclusion": "success",
+            "name": "Install build deps",
+            "started_at": "2026-10-14T18:35:47Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:36:27Z",
+            "conclusion": "success",
+            "name": "Install Rust",
+            "started_at": "2026-10-14T18:36:15Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:36:27Z",
+            "conclusion": "success",
+            "name": "Setup sccache",
+            "started_at": "2026-10-14T18:36:27Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:36:28Z",
+            "conclusion": "success",
+            "name": "Cache Cargo",
+            "started_at": "2026-10-14T18:36:27Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:36:28Z",
+            "conclusion": "skipped",
+            "name": "Assert VERSION matches tag",
+            "started_at": "2026-10-14T18:36:28Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:21:45Z",
+            "conclusion": "success",
+            "name": "Build Preview package",
+            "started_at": "2026-10-14T18:36:28Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:21:52Z",
+            "conclusion": "success",
+            "name": "Run actions/upload-artifact@v4",
+            "started_at": "2026-10-14T19:21:45Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:22:38Z",
+            "conclusion": "success",
+            "name": "Post Cache Cargo",
+            "started_at": "2026-10-14T19:21:52Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:22:38Z",
+            "conclusion": "success",
+            "name": "Post Setup sccache",
+            "started_at": "2026-10-14T19:22:38Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:22:38Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "started_at": "2026-10-14T19:22:38Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:22:41Z",
+            "conclusion": "success",
+            "name": "Stop containers",
+            "started_at": "2026-10-14T19:22:38Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:22:41Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "started_at": "2026-10-14T19:22:41Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reuse-macos",
+      "run_id": 38616302662,
+      "job_id": 116032157690,
+      "job_url": "https://github.com/azerothl/akasha-os/actions/runs/38616302662/job/116032157690",
+      "full_log_sha256": "aca5419be5cf5add5fd217a5a32d2609371d5fecf5ff4f681eeb70a4406a9875",
+      "markdown_report": "## Release cost · macos-arm64\n\n- Commit: `072dc3b99b7c69afb0d9a435dfd03a29a3ac8a59` · run `38616302662` attempt `1`\n- Cache profile requested: **reuse**; actual cache hits below are the observed signal.\n- Release archive: **51.3 MiB** (53,839,654 bytes), SHA-256 `79f8fca2ba39257a5ce92e9fd026e8f4ef50bc616a880435b253a9f1ad86e92c`.\n\n| Component | Files | Uncompressed | Standalone ZIP comparison | Compressed in release archive |\n|---|---:|---:|---:|---:|\n| `binaries-and-runtime` | 13 | 122.0 MiB | 50.1 MiB | 50.1 MiB |\n| `module:illustration-studio` | 5 | 1.2 MiB | 337.8 KiB | 336.8 KiB |\n| `other` | 95 | 702.7 KiB | 346.3 KiB | 334.6 KiB |\n| `module:notes` | 3 | 464.2 KiB | 147.4 KiB | 147.0 KiB |\n| `module:create` | 3 | 408.8 KiB | 116.9 KiB | 116.4 KiB |\n| `module:canvas` | 3 | 344.0 KiB | 109.1 KiB | 108.6 KiB |\n| `module:tasks` | 3 | 266.8 KiB | 89.7 KiB | 89.2 KiB |\n| `module:ext-rt` | 7 | 225.5 KiB | 80.4 KiB | 79.3 KiB |\n| `illustration-assets` | 13 | 69.8 KiB | 34.3 KiB | 31.9 KiB |\n| `model-catalogue-and-small-assets` | 3 | 53.5 KiB | 8.5 KiB | 8.1 KiB |\n| `illustration-renderer-pack` | 6 | 41.3 KiB | 14.2 KiB | 13.1 KiB |\n| `skills` | 6 | 7.0 KiB | 4.8 KiB | 3.9 KiB |\n\nThe standalone ZIP column measures each component in its own deflated ZIP; it is a comparison for future pack boundaries, not a sum of the release archive. For tar.gz, archive-level compressed size is not available per member.\n\nComponent measurement overhead: 5.6 s (includes separate ZIP comparisons).\nFirst-run GGUF models included: none; model downloads stay outside this archive.\n\n| Build phase | Duration |\n|---|---:|\n| `native-build` | 1658.0 s |\n| `wasm-modules` | 287.0 s |\n| `native-cpu-companion` | 28.0 s |\n| `package-assembly` | 28.0 s |\n| `archive-compression` | 5.0 s |\n| `package-build` | 1978.0 s |\n| `package-verification` | 2.0 s |\n\nsccache:\n```text\nCompile requests                   2072\nCompile requests executed          1767\nCache hits                          260\nCache hits (C/C++)                  256\nCache hits (Rust)                     4\nCache misses                       1496\nCache misses (Assembler)             24\nCache misses (C/C++)                338\nCache misses (Rust)                1134\nCache hits rate                   14.81 %\nCache hits rate (Assembler)        0.00 %\nCache hits rate (C/C++)           43.10 %\nCache hits rate (Rust)             0.35 %\nCache errors                          0\n```",
+      "job_metadata": {
+        "completed_at": "2026-10-14T19:09:02Z",
+        "conclusion": "success",
+        "head_sha": "072dc3b99b7c69afb0d9a435dfd03a29a3ac8a59",
+        "id": 116032157690,
+        "name": "macos",
+        "started_at": "2026-10-14T18:34:36Z",
+        "steps": [
+          {
+            "completed_at": "2026-10-14T18:34:39Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "started_at": "2026-10-14T18:34:37Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:42Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "started_at": "2026-10-14T18:34:39Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:42Z",
+            "conclusion": "success",
+            "name": "Resolve release VERSION",
+            "started_at": "2026-10-14T18:34:42Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:53Z",
+            "conclusion": "success",
+            "name": "Install Rust",
+            "started_at": "2026-10-14T18:34:42Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:54Z",
+            "conclusion": "success",
+            "name": "Setup sccache",
+            "started_at": "2026-10-14T18:34:53Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:55Z",
+            "conclusion": "success",
+            "name": "Cache Cargo",
+            "started_at": "2026-10-14T18:34:54Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:55Z",
+            "conclusion": "skipped",
+            "name": "Assert VERSION matches tag",
+            "started_at": "2026-10-14T18:34:55Z"
+          },
+          {
+            "completed_at": "2026-10-14T18:34:55Z",
+            "conclusion": "success",
+            "name": "Assert Apple Silicon runner",
+            "started_at": "2026-10-14T18:34:55Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:08:01Z",
+            "conclusion": "success",
+            "name": "Build Preview package (Metal)",
+            "started_at": "2026-10-14T18:34:55Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:08:02Z",
+            "conclusion": "success",
+            "name": "Run actions/upload-artifact@v4",
+            "started_at": "2026-10-14T19:08:01Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:08:58Z",
+            "conclusion": "success",
+            "name": "Post Cache Cargo",
+            "started_at": "2026-10-14T19:08:02Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:08:59Z",
+            "conclusion": "success",
+            "name": "Post Setup sccache",
+            "started_at": "2026-10-14T19:08:58Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:08:59Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "started_at": "2026-10-14T19:08:59Z"
+          },
+          {
+            "completed_at": "2026-10-14T19:09:00Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "started_at": "2026-10-14T19:08:59Z"
+          }
+        ]
+      }
+    }
+  ]
+}

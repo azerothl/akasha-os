@@ -247,6 +247,11 @@ def main() -> int:
         with args.summary.open("a", encoding="utf-8") as output:
             output.write(markdown)
     print(markdown, end="")
+    # Keep exact measurements recoverable from CI logs after artifact expiry.
+    # Delimiters let tooling extract JSON without parsing rounded Markdown cells.
+    print("AOS_RELEASE_COST_JSON_BEGIN")
+    print(json.dumps(document, separators=(",", ":")))
+    print("AOS_RELEASE_COST_JSON_END")
     return 0
 
 
