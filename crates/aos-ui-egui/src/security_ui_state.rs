@@ -9,6 +9,19 @@ pub(crate) struct ChatErrorRecord {
     pub(crate) session_id: Option<String>,
     pub(crate) code: String,
     pub(crate) cause: String,
+    /// Bounded diagnostic only; local paths and suspected secrets are omitted.
+    pub(crate) technical_detail: Option<String>,
+}
+
+pub(crate) fn diagnostic_error_detail(raw: &str) -> Option<String> {
+    if raw.len() > 4096
+        || raw.contains(['/', '\\'])
+        || aos_platform::extract::looks_like_secret(raw)
+    {
+        return None;
+    }
+    let detail = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!detail.is_empty()).then(|| detail.chars().take(384).collect())
 }
 
 #[derive(Default)]
@@ -84,6 +97,7 @@ impl SecurityUiState {
         session_id: Option<String>,
         code: &str,
         cause: String,
+        technical_detail: Option<String>,
         at_ms: u64,
     ) {
         self.recent_chat_errors.push(ChatErrorRecord {
@@ -91,6 +105,7 @@ impl SecurityUiState {
             session_id,
             code: code.to_string(),
             cause,
+            technical_detail,
         });
         while self.recent_chat_errors.len() > MAX_RECENT_CHAT_ERRORS {
             self.recent_chat_errors.remove(0);
@@ -101,6 +116,24 @@ impl SecurityUiState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_detail_retains_bounded_technical_cause_without_secrets_or_paths() {
+        assert_eq!(
+            diagnostic_error_detail("provider returned HTTP 429").as_deref(),
+            Some("provider returned HTTP 429")
+        );
+        assert!(diagnostic_error_detail("failed to open C:\\Users\\private\\file.gguf").is_none());
+        assert!(diagnostic_error_detail("error /home/private/file").is_none());
+        assert!(diagnostic_error_detail("Authorization: Bearer sensitive-token").is_none());
+        assert_eq!(
+            diagnostic_error_detail(&"failure ".repeat(100))
+                .unwrap()
+                .chars()
+                .count(),
+            384
+        );
+    }
 
     #[test]
     fn set_caps_keeps_holder_and_payload_together() {

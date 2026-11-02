@@ -23,12 +23,15 @@ fn record_classified_chat_error(
     session_id: Option<String>,
     classified: &chat_error_copy::ChatErrorClassified,
     visible: &str,
+    raw: &str,
 ) {
     let session_for_audit = session_id.clone();
+    let technical_detail = crate::security_ui_state::diagnostic_error_detail(raw);
     app.security_ui.record_chat_error(
         session_id,
         classified.code,
         classified.cause.clone(),
+        technical_detail.clone(),
         now_ms(),
     );
     let _ = app.cmd_tx.send(Cmd::AuditAppend {
@@ -39,6 +42,7 @@ fn record_classified_chat_error(
             "code": classified.code,
             "cause": classified.cause,
             "message": visible,
+            "technical_detail": technical_detail,
         }),
     });
 }
@@ -131,13 +135,13 @@ pub(crate) fn on_error(app: &mut UiApp, message: String) -> bool {
     if classified.code == "room.ask_not_waiting" {
         let toast = chat_error_copy::room_ask_unmatched_toast(&t);
         let session_id = app.chat_state.active_session.clone();
-        record_classified_chat_error(app, session_id, &classified, &toast);
+        record_classified_chat_error(app, session_id, &classified, &toast, &message);
         app.toasts.push_error(toast);
         return false;
     }
     let visible = chat_error_copy::format_chat_error(&t, &classified);
     let session_id = app.chat_state.active_session.clone();
-    record_classified_chat_error(app, session_id.clone(), &classified, &visible);
+    record_classified_chat_error(app, session_id.clone(), &classified, &visible, &message);
     arm_chat_error_recovery(app, &classified, None);
     app.push_status(visible.clone());
     app.toasts.push_error(visible.clone());
@@ -176,7 +180,7 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
         }
         app.status = visible.clone();
         app.toasts.push_error(visible.clone());
-        record_classified_chat_error(app, Some(session_id.clone()), &classified, &visible);
+        record_classified_chat_error(app, Some(session_id.clone()), &classified, &visible, &message);
         // Log historique même quand le transcript porte déjà le message.
         app.status_history.push_back(visible.clone());
         while app.status_history.len() > 20 {
@@ -193,7 +197,7 @@ pub(crate) fn on_chat_error(app: &mut UiApp, session_id: String, message: String
             app.chat_state.runtime.load_fail_retry = None;
         }
         app.chat_state.session_chat.mark_unread(&session_id);
-        record_classified_chat_error(app, Some(session_id.clone()), &classified, &visible);
+        record_classified_chat_error(app, Some(session_id.clone()), &classified, &visible, &message);
     }
 }
 

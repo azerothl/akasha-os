@@ -105,6 +105,7 @@ mod skill_offer;
 mod slash;
 mod theme;
 mod troubleshoot;
+mod troubleshoot_detect;
 mod ui_agents;
 mod ui_audit;
 mod ui_chat;
@@ -3706,9 +3707,7 @@ impl eframe::App for UiApp {
                             let recent_chat_errors = self
                                 .security_ui
                                 .recent_chat_errors
-                                .iter()
-                                .map(|e| (e.code.clone(), e.cause.clone()))
-                                .collect();
+                                .clone();
                             let _ = self.cmd_tx.send(Cmd::Troubleshoot { recent_chat_errors });
                             self.on_tab_open(Tab::Feedback);
                             self.status = t.troubleshooting_status.into();

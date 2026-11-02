@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 
 /// Default bus listen address (matches `aos-session` / `aos-busd`).
 pub fn default_bus_addr() -> String {
@@ -95,7 +96,7 @@ impl ProcessTree {
             cmd.arg(DEFAULT_BUS_PORT.to_string());
             list.push(spawn_one(&home, log_tag, "aos-busd", cmd)?);
         }
-        thread::sleep(Duration::from_millis(800));
+        wait_for_bus_listen(&bus, Duration::from_secs(15))?;
 
         {
             let mut cmd = Command::new(bin_path(&home, "aos-capkd"));
@@ -404,6 +405,22 @@ pub fn healthcheck_bus(bus_addr: &str) -> Result<(), String> {
     })
 }
 
+/// Block until the broker accepts TCP connections (or timeout).
+pub fn wait_for_bus_listen(bus_addr: &str, timeout: Duration) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    let mut last = String::from("unknown");
+    while Instant::now() < deadline {
+        match std::net::TcpStream::connect(bus_addr) {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                last = e.to_string();
+                thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+    Err(format!("bus not accepting connections on {bus_addr}: {last}"))
+}
+
 pub fn kill_by_name(name: &str) {
     #[cfg(windows)]
     {
@@ -515,6 +532,19 @@ mod tests {
     #[test]
     fn default_bus_uses_ipc_port() {
         assert_eq!(default_bus_addr(), format!("127.0.0.1:{DEFAULT_BUS_PORT}"));
+    }
+
+    #[test]
+    fn wait_for_bus_listen_accepts_when_port_open() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = std::thread::spawn(move || {
+            if let Ok((stream, _)) = listener.accept() {
+                drop(stream);
+            }
+        });
+        wait_for_bus_listen(&addr, Duration::from_secs(2)).expect("bus should accept");
+        let _ = server.join();
     }
 
     #[test]

@@ -260,7 +260,7 @@ pub(crate) enum Cmd {
         harness_cwd: String,
     },
     Troubleshoot {
-        recent_chat_errors: Vec<(String, String)>,
+        recent_chat_errors: Vec<crate::security_ui_state::ChatErrorRecord>,
     },
     Audit {
         last: usize,

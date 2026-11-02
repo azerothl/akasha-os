@@ -300,6 +300,9 @@ pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified)
     if classified.code == "chat.error" {
         return t.chat_error_generic.to_string();
     }
+    if classified.code == "chat.bus_unavailable" {
+        return classified.cause.clone();
+    }
     if classified.code == "room.ask_not_waiting" {
         return format!("{}\n{}", t.room_ask_failed_toast, classified.cause);
     }
@@ -327,6 +330,23 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         };
     }
     let lower = raw.to_ascii_lowercase();
+    if lower.contains("llama_decode") {
+        return ChatErrorClassified {
+            code: "model.decode_failed",
+            cause: t.chat_error_internal.to_string(),
+        };
+    }
+    if lower.contains("connectionrefused")
+        || lower.contains("kind: connectionrefused")
+        || (lower.contains("10061") && lower.contains("127.0.0.1"))
+        || lower.contains("bus unavailable")
+        || lower.contains("bus injoignable")
+    {
+        return ChatErrorClassified {
+            code: "chat.bus_unavailable",
+            cause: t.chat_error_bus_unavailable.to_string(),
+        };
+    }
     if lower.contains("indisponible en tour de salon")
         || lower.contains("indisponible en salon")
         || lower.contains("isn't available in the room")
@@ -597,9 +617,7 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
             },
         );
     }
-    if module == "illustration-studio"
-        && is_illustration_install_error_for_module(stripped, true)
-    {
+    if module == "illustration-studio" && is_illustration_install_error_for_module(stripped, true) {
         return user_visible_illustration_install_error(t, raw);
     }
     if is_illustration_install_error(stripped) {
@@ -713,6 +731,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn local_decode_failure_keeps_a_diagnostic_code_without_native_details_in_chrome() {
+        for language in ["fr", "en"] {
+            let t = crate::i18n::strings(language);
+            let error = classify_chat_error(&t, "échec llama_decode (code -1)");
+            assert_eq!(error.code, "model.decode_failed");
+            assert!(!format_chat_error(&t, &error).contains("llama_decode"));
+        }
+    }
+
+    #[test]
     fn host_path_sentinel_copy_names_folder_without_path() {
         let en = crate::i18n::strings("en");
         let named = room_host_path_disallowed_toast(&en, Some("agents"));
@@ -768,6 +796,19 @@ mod tests {
             &en,
         );
         assert!(historical.is_empty());
+    }
+
+    #[test]
+    fn bus_connection_refused_classified_without_badrequest() {
+        let en = crate::i18n::strings("en");
+        let raw = "Io(Os { code: 10061, kind: ConnectionRefused, message: \"…\" })";
+        let classified = classify_chat_error(&en, raw);
+        assert_eq!(classified.code, "chat.bus_unavailable");
+        let visible = user_visible_chat_error(&en, raw);
+        assert!(!visible.contains("BadRequest"));
+        assert!(!visible.contains("10061"));
+        assert!(!visible.contains("127.0.0.1"));
+        assert_eq!(visible, en.chat_error_bus_unavailable);
     }
 
     #[test]
@@ -877,8 +918,7 @@ mod tests {
     fn trellis_test_model_does_not_map_to_illustration_install() {
         let en = crate::i18n::strings("en");
         let fr = crate::i18n::strings("fr");
-        let legacy =
-            "TRELLIS returned a mock asset; install the real runtime and model";
+        let legacy = "TRELLIS returned a mock asset; install the real runtime and model";
         let en_out = user_visible_module_error(&en, "illustration-studio", legacy);
         assert!(en_out.contains(en.chat_error_trellis_test_model));
         assert!(!en_out.contains(en.chat_error_illustration_install));

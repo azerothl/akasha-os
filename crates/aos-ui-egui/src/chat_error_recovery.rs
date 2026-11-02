@@ -26,9 +26,13 @@ pub(crate) fn render_chat_error_recovery(
 ) -> ChatErrorRecoveryAction {
     let mut action = ChatErrorRecoveryAction::None;
     ui.group(|ui| {
-        ui.label(t.chat_error_generic);
-        if recovery.cause != t.chat_error_generic {
+        if recovery.code == "chat.bus_unavailable" {
             ui.label(&recovery.cause);
+        } else {
+            ui.label(t.chat_error_generic);
+            if recovery.cause != t.chat_error_generic {
+                ui.label(&recovery.cause);
+            }
         }
         ui.horizontal(|ui| {
             if recovery.retry_turn.is_some() && ui.button(t.chat_error_retry).clicked() {

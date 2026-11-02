@@ -1,0 +1,309 @@
+{
+  "date": "2026-11-02",
+  "issue": 464,
+  "source_base_commit": "2470aa8b2b9a0f850297266cdc78985acf684dca",
+  "runtime_evidence": {
+    "chat_repetitions_in_same_session": 3,
+    "model_architecture": "qwen35",
+    "historical_failed_agents": {
+      "agent-108": "2026-09-01",
+      "agent-59": "2026-08-24",
+      "agent-309": "2026-09-22",
+      "agent-282": "2026-09-18",
+      "agent-153": "2026-09-05",
+      "agent-10": "2026-08-19"
+    },
+    "old_log_modified_utc": {
+      "agentd-manual.stderr.log": "2026-09-15T14:09:59Z",
+      "session-launch.stderr.log": "2026-09-15T10:31:30Z"
+    },
+    "native_error": "M-RoPE sequence positions inconsistent; X=3675, Y=3664; llama_decode=-1"
+  },
+  "probes": {
+    "qwen_gguf_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "spark_gguf_sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428",
+    "before": {
+      "log_sha256": "30b009a324529e573886232e458317f7fab9467b37f85c1217aadbc990b7f94d",
+      "report": {
+        "ok": false,
+        "gpu_layers": 0,
+        "cases": [
+          {
+            "case": "repeat-a",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 14,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 12,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "repeat-b",
+            "ok": false,
+            "error": "échec llama_decode (code -1)"
+          },
+          {
+            "case": "shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "repeat-shortened",
+            "ok": false,
+            "error": "échec llama_decode (code -1)"
+          }
+        ],
+        "scope": "real GGUF, repeated and shortened text prompts through prefix/lookup generation; synthetic requests; no native UI"
+      }
+    },
+    "after": {
+      "log_sha256": "2ac8284b5684d01571357f6ff1e4c56936ef1f6685e214e44bde45468bc1a2b7",
+      "report": {
+        "ok": true,
+        "gpu_layers": 0,
+        "cases": [
+          {
+            "case": "repeat-a",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 13,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          },
+          {
+            "case": "repeat-b",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 13,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          },
+          {
+            "case": "shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          },
+          {
+            "case": "repeat-shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          }
+        ],
+        "scope": "real GGUF, repeated and shortened text prompts through prefix/lookup generation; synthetic requests; no native UI"
+      }
+    },
+    "spark-cpu": {
+      "log_sha256": "2dd765a03bf124e8d0ffd3d795475c39a39320df316586789aba81cfdad55ec7",
+      "report": {
+        "ok": true,
+        "gpu_layers": 0,
+        "cases": [
+          {
+            "case": "repeat-a",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 14,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 12,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "repeat-b",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 14,
+            "prefix_hit_tokens": 31,
+            "draft_proposed": 12,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "repeat-shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 22,
+            "draft_proposed": 0,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          }
+        ],
+        "scope": "real GGUF, repeated and shortened text prompts through prefix/lookup generation; synthetic requests; no native UI"
+      }
+    },
+    "qwen-cuda": {
+      "report": {
+        "ok": true,
+        "replay_equal": true,
+        "gpu_layers": 999,
+        "gpu_offload_supported": true,
+        "gpu_devices": 1,
+        "cases": [
+          {
+            "case": "repeat-a",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 13,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          },
+          {
+            "case": "repeat-b",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 13,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          },
+          {
+            "case": "shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          },
+          {
+            "case": "repeat-shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": true,
+            "draft_disable_reason": "cache-incompatible"
+          }
+        ],
+        "scope": "real GGUF, repeated and shortened text prompts through prefix/lookup generation; synthetic requests; no native UI"
+      },
+      "report_sha256": "6e7cc56654cd0a89d8f1ae28ff401f51deba4eda3d664ddd688a993e74c37843",
+      "native_log_sha256": "1927ff2ac9c5278f4a1e81c20fdbebaf4e77c251f9aaa003d0b78c31a130f4e8",
+      "native_gpu_evidence": [
+        "  Device 0: NVIDIA GeForce RTX 4080 SUPER, compute capability 8.9, VMM: yes, VRAM: 16375 MiB",
+        "load_tensors: offloaded 33/33 layers to GPU",
+        "load_tensors:        CUDA0 model buffer size =  2603.50 MiB",
+        "llama_kv_cache:      CUDA0 KV buffer size =    64.00 MiB"
+      ]
+    },
+    "spark-cuda": {
+      "report": {
+        "ok": true,
+        "replay_equal": true,
+        "gpu_layers": 999,
+        "gpu_offload_supported": true,
+        "gpu_devices": 1,
+        "cases": [
+          {
+            "case": "repeat-a",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 14,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 12,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "repeat-b",
+            "ok": true,
+            "output": "blue fox walks home blue fox walks home blue fox walks home.",
+            "generated_tokens": 14,
+            "prefix_hit_tokens": 31,
+            "draft_proposed": 12,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 0,
+            "draft_proposed": 0,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          },
+          {
+            "case": "repeat-shortened",
+            "ok": true,
+            "output": "Paris",
+            "generated_tokens": 1,
+            "prefix_hit_tokens": 22,
+            "draft_proposed": 0,
+            "draft_disabled": false,
+            "draft_disable_reason": null
+          }
+        ],
+        "scope": "real GGUF, repeated and shortened text prompts through prefix/lookup generation; synthetic requests; no native UI"
+      },
+      "report_sha256": "4dc24908aa592d3b200df5fe35790e74951f53748984d63dd7ca6188bee9dba3",
+      "native_log_sha256": "8708859579ffa33b9c5556ca96c00fe57c9d4234a1802cbe69861540d1ce0dda",
+      "native_gpu_evidence": [
+        "  Device 0: NVIDIA GeForce RTX 4080 SUPER, compute capability 8.9, VMM: yes, VRAM: 16375 MiB",
+        "load_tensors: offloaded 37/37 layers to GPU",
+        "load_tensors:        CUDA0 model buffer size =  2474.63 MiB",
+        "llama_kv_cache:      CUDA0 KV buffer size =    72.00 MiB",
+        "llama_kv_cache:      CUDA0 KV buffer size =   216.00 MiB"
+      ]
+    }
+  },
+  "checks": {
+    "zip_package_tests": 3,
+    "zip_update_tests": 4,
+    "zip_strict_clippy": true,
+    "ui_tests_passed": 550,
+    "ui_tests_ignored": 1,
+    "llama_tests_passed": 20,
+    "llama_model_ui_strict_clippy": true,
+    "integrated_ui_tests_passed": 556,
+    "integrated_ui_tests_ignored": 1,
+    "ipc_tests_passed": 7,
+    "server_tests_passed": 22,
+    "integrated_zip_update_tests": 5,
+    "integrated_six_crates_strict_clippy": true
+  },
+  "native_ui_validated": false,
+  "release_published": false,
+  "source_changes": "Sources in the commit including this report; based on a1c9753",
+  "integrated_pr_heads": {
+    "467": "85aff42d02f9a0b715f09a332c2dba535b5eeaa9",
+    "468": "cacecd12a0c946dbceeb661654c10648da003699"
+  }
+}
