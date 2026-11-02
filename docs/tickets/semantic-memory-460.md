@@ -104,6 +104,15 @@ d'utilisation. Les erreurs du worker remontent immédiatement. Après correction
 les 334 tests plateforme locaux passent en parallèle et Clippy strict passe
 pour toutes les cibles de la plateforme.
 
+Le 2 novembre, le commit local `9c48704` a été conservé et la branche a intégré
+`main` (`2470aa8`) puis la correction ZIP 9 de #468 et ses tests complémentaires.
+Les 17 tests correspondant au filtre `semantic` passent avec les dépendances
+actuelles (dont Wasmtime 48), ainsi que Clippy strict de la plateforme, toutes
+cibles sans fonctionnalités par défaut. Les cinq tests ciblés de mise à jour
+passent aussi. Le probe Qwen longitudinal cité ci-dessus reste celui du
+23 octobre ; il n'a pas été rejoué le 2 novembre. La validation native et celle
+sur historiques représentatifs restent ouvertes.
+
 Preuves, empreintes des journaux et rapports initiaux/finals :
 [2026-10-22-semantic-memory.json](evidence/2026-10-22-semantic-memory.json).
 
