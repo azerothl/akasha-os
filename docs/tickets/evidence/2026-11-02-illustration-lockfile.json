@@ -1,0 +1,39 @@
+{
+  "scope": "Fix independently reproduced lockfile mismatch from the full non-publishing macOS release validation. Local WASM compilation only, no native UI or Metal runtime claim.",
+  "release_source": "22563860e396e46df5984f5712238e3318ec134d",
+  "run_id": 41527122297,
+  "macos_job_id": 125557622430,
+  "failure": {
+    "exit_code": 101,
+    "message": "cannot update the lock file because --locked was passed",
+    "lockfile_aos_scene": "0.18.0",
+    "manifest_aos_scene": "0.19.0",
+    "remote_log_sha256": "5373e723da7781863d688ee69760a441cfd4b54b7b477a86f9d6da885140163e",
+    "local_log_sha256": "3ad092dfe70b462cdad9a176f0b1ee9089c50eb51815f872038c7c3044f470ad"
+  },
+  "fix": {
+    "command": "cargo update --manifest-path modules/illustration-studio/Cargo.toml --offline -p aos-scene",
+    "changed_package_versions": {
+      "aos-scene": [
+        "0.18.0",
+        "0.19.0"
+      ]
+    },
+    "external_dependency_versions_changed": false,
+    "lockfile_before_git_lf_sha256": "d388107a0500d2d3bd847585897cb4f3b26a2302419f9ca2e13671012e8d95a7",
+    "lockfile_after_local_sha256": "3f26223c58cab2377f862129a9858e832bf5f6857a19f1ffdddf52b930814f47"
+  },
+  "validation": {
+    "host": "Windows",
+    "target": "wasm32-unknown-unknown",
+    "exit_code": 0,
+    "command": "cargo build --manifest-path modules/illustration-studio/Cargo.toml --target wasm32-unknown-unknown --release --locked",
+    "log_sha256": "ee54dbd8870196983fbefbfa0779970e80590f82a0c55e3dfa7b4bda37615b3f",
+    "wasm_bytes": 989178,
+    "wasm_sha256": "8923cb97c47ef85ede35b203f76086602f07271e4fc958c457c2177b46f5ab70",
+    "full_macos_release_validated": false,
+    "native_ui_validated": false,
+    "published": false
+  },
+  "regression": "Add --locked to the existing Linux/Windows/macOS Illustration Studio WASM CI build; it previously silently updated the stale lock."
+}
