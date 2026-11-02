@@ -39,11 +39,17 @@ describe that agent's recorded outcomes. Existing `mem.object.create` can supply
 accepted, sourced observations to either namespace. Arbitrary process logs are
 not silently promoted to observations.
 
-The model must cite only observation IDs included in the current batch. At least
-two independent supporting observations are required. Facts from one conversation
+The model must acknowledge every new observation ID in its strict output exactly
+once, even when it finds no supported abstraction. It may also acknowledge older
+related observations in the batch. A missing, duplicate or foreign acknowledgment
+rejects the atomic batch and leaves its progress pending. The model may cite only
+observation IDs included in the current batch. At least two
+independent supporting observations are required. Facts from one conversation
 count as one independent group; explicit source references are grouped by their
 origin, and observations without an origin use a normalized text fingerprint.
-The model cannot supply its own confidence or review status.
+The model cannot supply its own confidence or review status. A speculative
+`revision_history` field emitted by some local models is ignored; the platform
+rebuilds history only from its saved, source-backed revisions.
 
 Confidence is an evidence heuristic, **not a calibrated probability**. It combines
 the number of independent supporting origins with the proportion of supporting
@@ -77,7 +83,9 @@ background opt-in. IDs are not reused after a wipe.
 
 The model call uses `routing=local_only`, low priority, no tools, at most 2,048
 output tokens, a 32 KiB response bound and a 180-second deadline. A known inference
-is cancelled on failure/timeout. This layer does not tune the model scheduler.
+is cancelled on failure/timeout. Every newly pending source must be acknowledged
+by the model before the atomic batch advances. A missing or unknown acknowledgment
+preserves the whole batch for retry. This layer does not tune the model scheduler.
 
 ## API and permissions
 
@@ -120,9 +128,11 @@ cargo run -p aos-platform --no-default-features --example semantic_memory_probe 
 ```
 
 It starts its own loopback broker, platform handlers and model daemon in a fresh
-temporary directory and stops only the daemon it owns. Its eight observations
-are synthetic. The report distinguishes actual local inference from automated
-confirmation and does not claim a native UI or semantic-quality benchmark.
+temporary directory and stops only the daemon it owns. Its two chronological
+phases contain sixteen synthetic observations across one user and one agent.
+The report distinguishes actual local inference from automated initial review,
+records profile revisions and context withdrawal, and does not claim a native UI
+or representative semantic-quality benchmark.
 
 Representative longitudinal quality evaluation, installed native UI acceptance,
 hierarchical/inter-concept merging, automatic aging and shared multi-agent

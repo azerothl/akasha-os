@@ -112,8 +112,12 @@ async fn run_with_mode(
         .await;
     }
     let output = result?;
-    let proposals = semantic::parse_proposals(&output)?;
-    sub.mem.lock().unwrap().semantic_apply(&batch, proposals)
+    let parsed = semantic::parse_output(&output)?;
+    sub.mem.lock().unwrap().semantic_apply_accounted(
+        &batch,
+        parsed.processed_observation_ids,
+        parsed.concepts,
+    )
 }
 
 pub fn authorize(
@@ -372,7 +376,7 @@ mod tests {
                     stream.send(&TokenEvent::Error{message:"fixture model unavailable".into()}).await.unwrap();
                 } else {
                     let contrad = if mode.load(Ordering::SeqCst)==2 {vec![3]} else {vec![]};
-                    let text=json!({"concepts":[{"key":"local_first","kind":"preference","summary":"The user tends to prefer local-first tools.","supporting_ids":[1,2],"contradicting_ids":contrad}]}).to_string();
+                    let text=json!({"processed_observation_ids":prompt["pending_observation_ids"],"concepts":[{"key":"local_first","kind":"preference","summary":"The user tends to prefer local-first tools.","supporting_ids":[1,2],"contradicting_ids":contrad}]}).to_string();
                     stream.send(&TokenEvent::Delta{text}).await.unwrap();
                     stream.send(&TokenEvent::Done{prompt_tokens:1,generated_tokens:1,ttft_ms:0.0,tok_s:0.0}).await.unwrap();
                 }
