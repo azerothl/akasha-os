@@ -49,7 +49,7 @@ mises à jour de dépendances arrivées sur `main`.
 |---|---|---|
 | #466 | Panne ZIP 9 reproduite ; PR #468 existante intégrée localement et complétée par des tests | Publication des compléments, intégration et CI du nouveau commit |
 | #464 | Diagnostic des faux incidents historiques et reproduction/correction d'un défaut du cache hybride ; voir le [bilan](preview-troubleshooting-464.md) | Intégration et recette dans Preview installé |
-| #460 | Suivi `9c48704` conservé : accusé de traitement exact, reprise d'un lot incomplet, historique modèle ignoré ; preuve Qwen longitudinale synthétique existante | Publication du suivi, validation native explicitement ouverte, qualité sur historiques représentatifs |
+| #460 | Suivi `9c48704` conservé : accusé de traitement exact, reprise d'un lot incomplet, historique modèle ignoré ; preuve Qwen longitudinale synthétique existante ; 17 tests ciblés et Clippy strict revalidés avec les dépendances actuelles | Publication du suivi, validation native explicitement ouverte, qualité sur historiques représentatifs |
 | #456 | Correctif déjà intégré par #461, test maintenu ; ticket fermé | — |
 | #444 | Baseline et comparaison froide/réutilisée documentées, résultats mixtes ; les anciens artefacts de mesure ne sont plus listés par GitHub | Conservation/reprise de mesures complètes comparables pour le suivi des optimisations |
 | #445 | Installation optionnelle signée et transactionnelle déjà intégrée ; la compatibilité ZIP 9 est corrigée localement | Recette install/update/remove et conservation des données sur les trois plateformes, tailles livrées |
@@ -64,3 +64,9 @@ mises à jour de dépendances arrivées sur `main`.
 Les tickets #247, #434 et #435 restent ouverts conformément à la consigne
 utilisateur. Le passage de tests locaux ou la fusion d'une PR n'est pas utilisé
 pour attester ces recettes. Aucun nouveau release Preview n'a été publié.
+
+La lecture GitHub finale recense douze tickets ouverts et trois PR ouvertes
+(#467, #468 et le brouillon #442). Les trois têtes publiées sont fusionnables,
+sans contrôle en échec/en cours ni fil de revue non résolu ; les contrôles de
+#442 datent du 11 octobre. Aucun complément local n'a encore été poussé et
+aucune PR n'a été fusionnée pendant cette reprise.
