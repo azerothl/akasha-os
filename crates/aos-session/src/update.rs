@@ -396,9 +396,11 @@ pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
         let mut file = zip.by_index(i).map_err(|e| e.to_string())?;
         let outpath = match file.enclosed_name() {
             Some(p) => dest.join(p),
-            None => continue,
+            None => {
+                return Err("chemin d'archive refusé (traversée ou absolu)".into());
+            }
         };
-        if file.name().ends_with('/') {
+        if file.is_dir() {
             fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
         } else {
             if let Some(p) = outpath.parent() {
