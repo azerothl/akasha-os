@@ -661,6 +661,18 @@ impl LlamaContext {
         match &model.chat_template {
             Some(tmpl) => {
                 let tmpl_s = tmpl.to_string_lossy();
+                // The native matcher accepts only role/content pairs: it cannot
+                // receive tool definitions, even when it recognizes this template.
+                if !tools.is_empty() {
+                    return jinja_template::apply_jinja_chat_template(
+                        &tmpl_s, messages, true, tools,
+                    )
+                    .map(|rendered| suppress_hybrid_thinking(&rendered, &tmpl_s))
+                    .map_err(|error| {
+                        eprintln!("[llama] tool chat template: {error}");
+                        LlamaError::ChatTemplate
+                    });
+                }
                 let croles: Vec<CString> = messages
                     .iter()
                     .map(|(r, _)| CString::new(r.as_str()).unwrap_or_default())

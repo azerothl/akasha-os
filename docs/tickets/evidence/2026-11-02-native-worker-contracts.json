@@ -1,0 +1,124 @@
+{
+  "scope": "Real Qwen worker, native function/parameter responses, isolated read-only project and required permission gate. No installed UI acceptance.",
+  "base_commit": "fb395a3915cebe00f0d6b28de9b76861a4d627b3",
+  "before_system_role_normalization": {
+    "ok": false,
+    "worker_state": "Failed",
+    "modeld_sha256": "cac9d150dcce1c2fa722ae2e0d507107c4a56755a14e2bb7d70f3e11dc6c3fa0",
+    "terminal_error": "échec d'application du chat template",
+    "message_roles": [
+      "system",
+      "user",
+      "system"
+    ]
+  },
+  "after": {
+    "actions": [
+      "task.assess",
+      "memory.recall",
+      "workspace.inspect",
+      "workspace.read",
+      "goal.complete"
+    ],
+    "actor_audited": true,
+    "audit_verified": true,
+    "complete_scan": true,
+    "elapsed_ms": 7816,
+    "events_sha256": "ebea1f9c1813ff8eb3635c4b19e31d440e15645bd16b0095489a381c7143880c",
+    "exact_file_set_preserved": true,
+    "fixture": "C:\\Users\\azero\\AppData\\Local\\Temp\\aos-real-worker-f8f3d6baca600a9be4a1a04ed83e27e8",
+    "gate_mode": "require",
+    "gated_executed_steps": 2,
+    "legacy_ungated_steps": 0,
+    "lifecycle": null,
+    "model_file": "Qwen3.5-4B-Q4_K_M.gguf",
+    "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    "model_state": [
+      {
+        "has_vision": false,
+        "id": "local:workspace-proof",
+        "n_layers": 32,
+        "name": "Local project-context acceptance model",
+        "placement": "VRAM  3.05 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+        "privacy_class": "local",
+        "profile": "balanced",
+        "state": "Loaded"
+      }
+    ],
+    "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+    "ok": true,
+    "owned_modeld_stopped": true,
+    "planner": "real aos-modeld with local GGUF; no scripted model responses",
+    "probe_sha256": "a536d4164c2270cac2323f9434129adf319c91c83c459136cbd1549b414f0c57",
+    "reported_steps": 5,
+    "required_gate_verified": true,
+    "scope": "Real worker, modeld, IPC and host over a generated three-file project; optional agentd lifecycle; not representative refactor/retrieval, native UI or extra-machine/two-GPU evidence",
+    "source_read_verified": true,
+    "source_unchanged": true,
+    "summary_matches_unprompted_marker": true,
+    "synthetic_secret_not_exposed": true,
+    "synthetic_secret_withheld_by_scan": true,
+    "worker_exit": 0,
+    "worker_sha256": "01cb53c25781fd091b10bd44e354443d3a3e013573489af0700bb5b7edfadd65",
+    "worker_state": "Done",
+    "worker_timed_out": false
+  },
+  "native_steps": [
+    {
+      "action": "workspace.inspect",
+      "args": {
+        "max_bytes": 1048576,
+        "max_files": 100,
+        "page_entries": 100,
+        "resume": false,
+        "root": "demo"
+      },
+      "response": "<tool_call>\n<function=workspace.inspect>\n<parameter=root>\ndemo\n</parameter>\n<parameter=max_bytes>\n1048576\n</parameter>\n<parameter=max_files>\n100\n</parameter>\n<parameter=page_entries>\n100\n</parameter>\n<parameter=resume>\nFalse\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "action": "workspace.read",
+      "args": {
+        "path": "première.txt",
+        "root": "demo"
+      },
+      "response": "<tool_call>\n<function=workspace.read>\n<parameter=path>\npremière.txt\n</parameter>\n<parameter=root>\ndemo\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "action": "goal.complete",
+      "args": {
+        "summary": "Code de preuve trouvé dans première.txt : proof-c68f4a5953e6a029"
+      },
+      "response": "<tool_call>\n<function=goal.complete>\n<parameter=summary>\nCode de preuve trouvé dans première.txt : proof-c68f4a5953e6a029\n</parameter>\n</function>\n</tool_call>"
+    }
+  ],
+  "modeld_log_sha256": "c6db15dbf843a0ebc2fbedd217fee4a2cd6738520802ce3bcfb703e05229fe46",
+  "permission_bridge": {
+    "python": "C:/Users/azero/anaconda3/python.exe",
+    "AOS_MODEL_GATE": "require",
+    "akasha_model_source_commit": "a18b4f734b12f20d3ae5a30d47feb90ffee2a69f",
+    "source_package_dirty": false,
+    "PYTHONPATH": [
+      "python/aos_gate/src in this checkout",
+      "E:/rlcd_model"
+    ],
+    "PYTHONUTF8": "1",
+    "PYTHONIOENCODING": "utf-8"
+  },
+  "source_sha256": {
+    "crates/aos-agent/src/actions.rs": "d8298e17f4b4d8bd260a36d5e99416482d15811da41fa45d562154d03942967e",
+    "crates/aos-agent/src/actions/qwen_xml.rs": "990aa558edd7ffb0bf02ab3f05ab62b9b471c331585c75b6700d35c859046714",
+    "crates/aos-agent/src/bin/aos-agent-worker.rs": "1ab297c49f72152f8df1bbd23bf620b9b28ea8c9f62ac31e5aaff2f067c19ff5",
+    "crates/aos-agent/src/room_runtime.rs": "08dd0b5d04e93b33a2cd1cee950cb4b45f7a8149b961a1f9cca8ff94d6b15ef4",
+    "crates/aos-llama/src/lib.rs": "d4d220c02a26f51a0a296e1b988d83bea1d0c1d8392b62fee6951b9299064002",
+    "crates/aos-llama/src/jinja_template.rs": "7db0701851cee01729c5640dc99a2efc27d6b60cc7727ea05486fd471fb5c153"
+  },
+  "checks": {
+    "agent_tests": 419,
+    "llama_cpu_tests": 25,
+    "llama_cuda_mtmd_tests": 25,
+    "conversation_grader_tests": 2,
+    "strict_cpu_clippy": true,
+    "native_ui_validated": false,
+    "metal_inference_validated": false
+  }
+}

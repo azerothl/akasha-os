@@ -1,7 +1,7 @@
 //! Runtime bus pour tours de salon (`agent.room_turn` / `agent.room_conduct`).
 
 use crate::actions::{
-    parse_actions, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
+    parse_actions_with_tools, strip_tool_markup, AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use crate::artifact_card::{
     attachments_from_artifacts, detect_from_tool, strip_paths_from_prose, ProducedArtifact,
@@ -821,6 +821,9 @@ fn room_reply_from_model(
 
 /// Repair truncated trailing agent JSON so `parse_actions` can still run user.ask / tools.
 fn repair_room_tool_json(raw: &str) -> String {
+    if raw.to_ascii_lowercase().contains("<function=") {
+        return raw.to_string(); // Incomplete native calls must never be repaired into actions.
+    }
     let Some(start) = raw.rfind('{') else {
         return raw.to_string();
     };
@@ -969,7 +972,7 @@ async fn run_room_tool_loop(
         }
 
         let raw_for_parse = repair_room_tool_json(&raw);
-        let mut parsed_actions = parse_actions(&raw_for_parse);
+        let mut parsed_actions = parse_actions_with_tools(&raw_for_parse, &tool_descs);
         if agent_has_illust_tools(tool_ids) {
             for action in &mut parsed_actions {
                 action.action = canonicalize_illust_alias(&action.action);
@@ -1455,6 +1458,11 @@ pub async fn execute_room_conduct(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_parameter_text_is_never_repaired_as_action_json() {
+        let raw = "<tool_call><function=test.call><parameter=text>{\"action\":\"draft\"</parameter></function></tool_call>";
+        assert_eq!(repair_room_tool_json(raw), raw);
+    }
     use aos_proto::{
         AgentGoal, AgentSpec, ChatRoomConductorPolicy, ChatRoomMember, ChatSessionMessage,
         ChatSessionMeta, ChatSessionMode,

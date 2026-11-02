@@ -1,5 +1,5 @@
-//! Fallback Jinja renderer for GGUF chat templates that `llama_chat_apply_template`
-//! cannot match (heuristic substring detection only — no real Jinja parser).
+//! Jinja renderer for tool-aware GGUF prompts and templates that the native
+//! heuristic matcher cannot recognize.
 //!
 //! Gemma 4 ships a large tool-calling Jinja template in GGUF metadata; native
 //! apply returns `-1` (UNKNOWN). This module renders the embedded template with
@@ -20,10 +20,20 @@ pub fn apply_jinja_chat_template(
     tools: &[Json],
 ) -> Result<String, hf_chat_template::Error> {
     let tmpl = ChatTemplate::from_str(template_src)?;
-    let msgs: Vec<Message> = messages
+    // Agent runtimes append trusted context as later system messages. Qwen's
+    // embedded template accepts system content only before the first user turn.
+    // Preserve system-message order and every non-system turn while presenting
+    // the instruction layer as a single initial message.
+    let systems: Vec<_> = messages.iter().filter(|(role, _)| role == "system").map(|(_, content)| content.as_str()).collect();
+    let mut msgs: Vec<Message> = Vec::with_capacity(messages.len());
+    if !systems.is_empty() {
+        msgs.push(Message::new("system", systems.join("\n\n")));
+    }
+    msgs.extend(messages
         .iter()
+        .filter(|(role, _)| role != "system")
         .map(|(role, content)| Message::new(role.clone(), content.clone()))
-        .collect();
+    );
     let mut extra = Map::new();
     extra.insert("enable_thinking".into(), Json::Bool(false));
     let input = RenderInput {
@@ -40,6 +50,52 @@ pub fn apply_jinja_chat_template(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn later_system_context_is_preserved_before_user_turns() {
+        let template = "{% for message in messages %}{% if message.role == 'system' and not loop.first %}{{ raise_exception('Unexpected message role') }}{% endif %}{{ message.role }}:{{ message.content }}|{% endfor %}";
+        let messages = vec![("system".into(), "Initial rules".into()), ("user".into(), "Question".into()), ("assistant".into(), "Earlier answer".into()), ("system".into(), "Project context".into()), ("user".into(), "Follow-up".into())];
+        let rendered = apply_jinja_chat_template(template, &messages, true, &[]).unwrap();
+        assert_eq!(rendered, "system:Initial rules\n\nProject context|user:Question|assistant:Earlier answer|user:Follow-up|");
+    }
+
+    #[test]
+    fn native_chatml_matcher_cannot_replace_tool_aware_rendering() {
+        use llama_cpp_sys_2 as sys;
+        use std::ffi::CString;
+
+        let template = "{% if tools %}<|im_start|>system\n{{ tools|tojson }}<|im_end|>\n{% endif %}{% for message in messages %}<|im_start|>{{ message.role }}\n{{ message.content }}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}";
+        let ctemplate = CString::new(template).unwrap();
+        let role = CString::new("user").unwrap();
+        let content = CString::new("List my notes.").unwrap();
+        let raw = sys::llama_chat_message {
+            role: role.as_ptr(),
+            content: content.as_ptr(),
+        };
+        let mut buffer = [0_i8; 8192];
+        let n = unsafe {
+            sys::llama_chat_apply_template(
+                ctemplate.as_ptr(),
+                &raw,
+                1,
+                true,
+                buffer.as_mut_ptr(),
+                buffer.len() as i32,
+            )
+        };
+        assert!(
+            n > 0 && (n as usize) <= buffer.len(),
+            "native matcher recognizes ChatML"
+        );
+        let native: Vec<u8> = buffer[..n as usize].iter().map(|b| *b as u8).collect();
+        assert!(!String::from_utf8(native).unwrap().contains("notes.list"));
+
+        let messages = vec![("user".into(), "List my notes.".into())];
+        let tools = vec![serde_json::json!({"type":"function","function":{"name":"notes.list","parameters":{"type":"object","properties":{}}}})];
+        let rendered = apply_jinja_chat_template(template, &messages, true, &tools).unwrap();
+        assert!(rendered.contains("notes.list"));
+        assert!(rendered.contains("parameters"));
+    }
 
     fn gemma4_fixture() -> String {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
