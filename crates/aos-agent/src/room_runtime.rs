@@ -850,6 +850,7 @@ async fn run_room_tool_loop(
     agent_id: &str,
     display_name: &str,
     session_id: &str,
+    user_goal: &str,
     model_id: Option<String>,
     mut messages: Vec<ChatMessage>,
     tool_ids: &[String],
@@ -1031,7 +1032,9 @@ async fn run_room_tool_loop(
 
         for action in parsed_actions {
             let trace_id = format!("{trace_base}-{step}");
-            let outcome = if canonicalize_tool_name(&action.action) == "user.ask" {
+            let outcome = if let Some(reason) = crate::workspace_operations::advisory_refusal(user_goal, &canonicalize_tool_name(&action.action)) {
+                reason.to_string()
+            } else if canonicalize_tool_name(&action.action) == "user.ask" {
                 round.set_phase("waiting_user").await;
                 handle_room_user_ask(bus, round, session_id, agent_id, display_name, &action.args)
                     .await?
@@ -1280,6 +1283,7 @@ pub async fn execute_room_turn(
             &req.agent_id,
             display_name,
             &req.session_id,
+            user_message,
             model_id,
             messages,
             &tool_ids,

@@ -3518,6 +3518,9 @@ fn duplicate_deep_plan_message(existing_id: &str) -> String {
 }
 
 fn advisory_construction_refusal(goal: &str, tool_name: &str) -> Option<&'static str> {
+    if let Some(reason) = aos_agent::workspace_operations::advisory_refusal(goal, tool_name) {
+        return Some(reason);
+    }
     if !aos_proto::chat_user_wants_advisory(goal) {
         return None;
     }
@@ -3877,6 +3880,9 @@ async fn invoke_native(
     args: &serde_json::Value,
     session_id: Option<&str>,
 ) -> String {
+    if aos_agent::workspace_operations::is_operation_tool(tool) {
+        return aos_agent::workspace_operations::invoke(bus, agent_id, caps, tool, args).await;
+    }
     if aos_agent::workspace_context::is_context_tool(tool) {
         return aos_agent::workspace_context::invoke(bus, agent_id, caps, tool, args).await;
     }

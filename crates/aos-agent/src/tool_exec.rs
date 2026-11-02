@@ -106,6 +106,9 @@ pub async fn invoke_native_tool(
     args: &serde_json::Value,
     session_id: Option<&str>,
 ) -> String {
+    if crate::workspace_operations::is_operation_tool(tool) {
+        return crate::workspace_operations::invoke(bus, agent_id, caps, tool, args).await;
+    }
     if crate::workspace_context::is_context_tool(tool) {
         return crate::workspace_context::invoke(bus, agent_id, caps, tool, args).await;
     }

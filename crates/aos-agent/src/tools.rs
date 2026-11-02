@@ -670,6 +670,7 @@ pub fn builtin_catalog() -> Vec<ToolDesc> {
     ];
 
     v.extend(crate::workspace_context::catalog());
+    v.extend(crate::workspace_operations::catalog());
 
     // Module notes (toujours listé ; filtré par sélection)
     let notes_tools = [
@@ -1761,9 +1762,10 @@ pub fn select_tools_mode(selected: &[String], extra: &[ToolDesc], deep: bool) ->
     } else {
         always.push("plan.update");
     }
-    let context_selected = selected
-        .iter()
-        .any(|name| crate::workspace_context::is_context_tool(name));
+    let context_selected = catalog.iter().any(|tool| {
+        (crate::workspace_context::is_context_tool(&tool.name) || crate::workspace_operations::is_operation_tool(&tool.name))
+            && selected.iter().any(|name| name == &tool.name || tool.name.starts_with(&format!("{name}.")))
+    });
     for t in catalog.iter() {
         // A project-context kit must not acquire module mutation permissions
         // just because those tools are normally part of the always-on kit.
@@ -2973,6 +2975,20 @@ mod tests {
         assert!(caps_for_tools(&explicit, &[]).contains(&"module.compile".into()));
         let ordinary = select_tools(&["notes.list".into()], &[]);
         assert!(ordinary.iter().any(|tool| tool.name == "module.compile"));
+    }
+
+    #[test]
+    fn project_operations_require_selection_without_implicit_permissions() {
+        for selected in [vec![], default_agent_tools(), vec!["workspace.read".into()]] {
+            let tools = select_tools(&selected, &[]);
+            assert!(!tools.iter().any(|t| crate::workspace_operations::is_operation_tool(&t.name)));
+        }
+        for selected in [vec!["fs.apply_patch".into()], vec!["process".into()], vec!["fs".into()]] {
+            let tools = select_tools(&selected, &[]);
+            assert!(tools.iter().any(|t| crate::workspace_operations::is_operation_tool(&t.name)));
+            assert!(!tools.iter().any(|t| t.name == "module.compile"));
+            assert!(!caps_for_tools(&tools, &[]).iter().any(|c| c.starts_with("process.run") || c.starts_with("fs.write:/host/") || c == "module.compile"));
+        }
     }
 
     #[test]

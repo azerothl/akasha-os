@@ -44,6 +44,9 @@ pub fn compile_system_prompt(input: &PromptCompileInput<'_>) -> String {
     if input.tools.iter().any(|tool| crate::workspace_context::is_context_tool(&tool.name)) {
         parts.push(crate::workspace_context::PROMPT_GUIDE.into());
     }
+    if input.tools.iter().any(|tool| crate::workspace_operations::is_operation_tool(&tool.name)) {
+        parts.push(crate::workspace_operations::PROMPT_GUIDE.into());
+    }
 
     let has_canvas_tools = input.tools.iter().any(|t| t.name.starts_with("canvas."));
     if let Some(sid) = input.spec.session_id.as_deref().filter(|s| !s.is_empty()) {
