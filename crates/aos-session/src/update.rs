@@ -396,7 +396,9 @@ pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
         let mut file = zip.by_index(i).map_err(|e| e.to_string())?;
         let outpath = match file.enclosed_name() {
             Some(p) => dest.join(p),
-            None => continue,
+            None => {
+                return Err("chemin d'archive refusé (traversée ou absolu)".into());
+            }
         };
         if file.is_dir() {
             fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
@@ -464,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn zip_extracts_directories_without_escaping_destination() {
+    fn zip_extracts_nested_directories() {
         use std::io::Write;
         let root = temp_dir("zip-extract");
         fs::create_dir_all(&root).unwrap();
@@ -475,14 +477,28 @@ mod tests {
         zip.add_directory("bin/", options).unwrap();
         zip.start_file("bin/aos-session", options).unwrap();
         zip.write_all(b"fixture binary").unwrap();
-        zip.start_file("../outside", options).unwrap();
-        zip.write_all(b"must not escape").unwrap();
         zip.finish().unwrap();
         extract_zip(&archive, &dest).unwrap();
         assert_eq!(
             fs::read(dest.join("bin/aos-session")).unwrap(),
             b"fixture binary"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn zip_rejects_traversal_without_writing_outside_destination() {
+        use std::io::Write;
+        let root = temp_dir("zip-traversal");
+        fs::create_dir_all(&root).unwrap();
+        let archive = root.join("update.zip");
+        let dest = root.join("installed");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+        zip.start_file("../outside", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"must not escape").unwrap();
+        zip.finish().unwrap();
+        assert!(extract_zip(&archive, &dest).is_err());
         assert!(!root.join("outside").exists());
         fs::remove_dir_all(root).unwrap();
     }
