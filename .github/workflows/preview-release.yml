@@ -250,7 +250,7 @@ jobs:
           apt-get install -y -qq \
             build-essential pkg-config curl ca-certificates git cmake ninja-build \
             findutils zstd clang libclang-dev libssl-dev \
-            python3 \
+            python3 python3-venv \
             libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libwayland-dev \
@@ -286,7 +286,8 @@ jobs:
           fi
 
       - name: Install module index verifier
-        run: python -m pip install "cryptography>=46,<50"
+        shell: bash
+        run: bash packaging/bootstrap-module-verifier.sh
 
       - name: Build Preview package
         env:

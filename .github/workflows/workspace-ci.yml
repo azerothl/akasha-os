@@ -68,6 +68,24 @@ jobs:
       - name: Check generated-project validator (no model required)
         run: python -m unittest discover -s scripts -p test_project_model_fixture.py -v
 
+  release-verifier-container:
+    name: Release verifier (CUDA Linux container)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    container:
+      image: nvidia/cuda:12.4.1-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python without relying on a python alias
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-venv
+      - name: Bootstrap the release verifier
+        shell: bash
+        run: bash packaging/bootstrap-module-verifier.sh
+      - name: Exercise signed packages using the exported interpreter
+        run: python -m unittest discover -s packaging/tests -v
+
   illustration-platforms:
     name: Illustration Studio (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

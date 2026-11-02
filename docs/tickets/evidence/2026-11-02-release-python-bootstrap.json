@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-02",
+  "run_id": 41527122297,
+  "source_commit": "22563860e396e46df5984f5712238e3318ec134d",
+  "job_id": 125557622189,
+  "failed_step": "Install module index verifier",
+  "observed_error": "python: not found",
+  "exit_code": 127,
+  "failed_log_sha256": "c446c6ce5442569fef27811914b3b78f30517c78e3ef34841f0fb626a4ca666d",
+  "local_validation": {
+    "temporary_environment_removed": true,
+    "platform": "WSL Ubuntu 24.04.1 LTS on the Windows test PC",
+    "exact_workflow_step_extracted": true,
+    "python": "3.12.3",
+    "packaging_tests_passed": 10,
+    "validation_log_sha256": "4ec2f172e93092366288661a2127a1e14f5d9977d7abca571b00ee737528f184",
+    "exported_venv_path_checked": true,
+    "shared_bootstrap_sha256": "2e499433b1f90e30fc434bf3a4a84abc17776f11e03123ae5594b3d1f1864fd3"
+  },
+  "ci_container_validation": false,
+  "native_ui_validation": false,
+  "release_published": false,
+  "container_regression_job": "Release verifier (CUDA Linux container)"
+}
