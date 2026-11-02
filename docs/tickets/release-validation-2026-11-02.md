@@ -45,6 +45,12 @@ exporté a été vérifié et les dix tests de packaging ont réussi. Le répert
 temporaire de test a été supprimé par son propriétaire. Ce test ne constitue
 ni une exécution dans l'image CUDA Ubuntu 22.04, ni une recette de cohorte.
 
+La préparation est partagée dans `packaging/bootstrap-module-verifier.sh`.
+Un nouveau contrôle `Release verifier (CUDA Linux container)` l'exécute dans
+l'image CUDA exacte de la release, puis lance les tests de packaging avec le
+Python exporté. Il permet d'observer ce contrat en CI de PR sans répéter les
+compilations CUDA complètes. Ce contrôle attend la publication de la branche.
+
 La relance du job Linux corrigé reste nécessaire après publication de la
 branche de revue. Les builds Windows/macOS du run initial peuvent continuer à
 fournir leurs mesures ; aucun rapport Linux de build complet n'est revendiqué

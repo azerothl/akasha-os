@@ -13,10 +13,12 @@
     "exact_workflow_step_extracted": true,
     "python": "3.12.3",
     "packaging_tests_passed": 10,
-    "validation_log_sha256": "994615e55057e690cd350dac316fb8518bb6cc8fc06f5a5795c254123acbc171",
-    "exported_venv_path_checked": true
+    "validation_log_sha256": "4ec2f172e93092366288661a2127a1e14f5d9977d7abca571b00ee737528f184",
+    "exported_venv_path_checked": true,
+    "shared_bootstrap_sha256": "2e499433b1f90e30fc434bf3a4a84abc17776f11e03123ae5594b3d1f1864fd3"
   },
   "ci_container_validation": false,
   "native_ui_validation": false,
-  "release_published": false
+  "release_published": false,
+  "container_regression_job": "Release verifier (CUDA Linux container)"
 }

@@ -287,10 +287,7 @@ jobs:
 
       - name: Install module index verifier
         shell: bash
-        run: |
-          python3 -m venv "$RUNNER_TEMP/module-verifier-venv"
-          "$RUNNER_TEMP/module-verifier-venv/bin/python" -m pip install "cryptography>=46,<50"
-          echo "$RUNNER_TEMP/module-verifier-venv/bin" >> "$GITHUB_PATH"
+        run: bash packaging/bootstrap-module-verifier.sh
 
       - name: Build Preview package
         env:
