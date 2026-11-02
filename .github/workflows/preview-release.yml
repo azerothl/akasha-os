@@ -222,6 +222,15 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+      - name: Preserve Windows release measurements
+        if: always() && hashFiles('dist/release-cost-windows-x64.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cost-windows-x64
+          path: dist/release-cost-windows-x64.json
+          if-no-files-found: error
+          retention-days: 90
+
   linux:
     if: github.event_name != 'workflow_dispatch' || !inputs.macos_only
     runs-on: ubuntu-22.04
@@ -388,6 +397,15 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+      - name: Preserve Linux release measurements
+        if: always() && hashFiles('dist/release-cost-linux-x64.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cost-linux-x64
+          path: dist/release-cost-linux-x64.json
+          if-no-files-found: error
+          retention-days: 90
+
   macos:
     if: github.event_name != 'workflow_dispatch' || inputs.macos_only || inputs.create_release || inputs.include_macos_in_full_build
     runs-on: macos-14
@@ -546,6 +564,15 @@ jobs:
             dist/release-cost-macos-arm64.json
           compression-level: 0
           retention-days: 7
+
+      - name: Preserve macOS release measurements
+        if: always() && hashFiles('dist/release-cost-macos-arm64.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cost-macos-arm64
+          path: dist/release-cost-macos-arm64.json
+          if-no-files-found: error
+          retention-days: 90
 
   release-cost-summary:
     if: always()
