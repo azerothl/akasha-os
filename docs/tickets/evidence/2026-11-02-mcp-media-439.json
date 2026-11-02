@@ -1,0 +1,116 @@
+{
+  "akasha_image_generate": {
+    "ok": true,
+    "response": {
+      "bytes": 31572,
+      "engine": "sdcpp",
+      "model_id": "local:sd-v1-5",
+      "path": "/downloads/images/mcp-proof.png"
+    },
+    "sha256": "224b5c612e5def62022d5dac551325435803ac80c75fb86960c749189afa2f1a",
+    "verified": {
+      "height": 128,
+      "width": 128
+    }
+  },
+  "akasha_video_generate": {
+    "ok": true,
+    "response": {
+      "bytes": 227179,
+      "engine": "sdcpp",
+      "model_id": "local:ltx2.3-dev",
+      "path": "/downloads/video/mcp-proof.webm"
+    },
+    "sha256": "9903ffc99fc8254d8257889824d18dbc88417ef5597fcc960b6a539dba70c238",
+    "verified": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "vp8",
+          "height": 128,
+          "nb_read_frames": "9",
+          "r_frame_rate": "8/1",
+          "width": 128
+        }
+      ]
+    }
+  },
+  "assets": [
+    {
+      "bytes": 7432229248,
+      "filename": "gemma-3-12b-it-qat-UD-Q4_K_XL.gguf",
+      "sha256": "da98f81c86916ed1c76b3eeda56b25cb7b8352b01093e2edb8028110fe2cb53b"
+    },
+    {
+      "bytes": 14326856736,
+      "filename": "ltx-2.3-22b-dev-Q4_K_M.gguf",
+      "sha256": "e053e3d7827f3a69ecd00e55395d3a8f8616ab10d3a394e8d2b65ae204d490e0"
+    },
+    {
+      "bytes": 364853140,
+      "filename": "ltx-2.3-22b-dev_audio_vae.safetensors",
+      "sha256": "d7711812d9387ce940c2cd5d65a4f5a1e57bf6087cf618d89b56dd3c722c4dea"
+    },
+    {
+      "bytes": 2312144712,
+      "filename": "ltx-2.3-22b-dev_embeddings_connectors.safetensors",
+      "sha256": "a5c5148788d8d9d5d1e650e4cbf3502a46a2f7f975ce70c59082732c8905a8ae"
+    },
+    {
+      "bytes": 1452256522,
+      "filename": "ltx-2.3-22b-dev_video_vae.safetensors",
+      "sha256": "8732bb70cf4343541815f45c9f90f5ff0519d679bd63483afc27bf79a08d3f4e"
+    },
+    {
+      "bytes": 4265146304,
+      "filename": "v1-5-pruned-emaonly.safetensors",
+      "sha256": "6ce0161689b3853acaa03779ec93eafe75a02f4ced659bee03f50797806fa2fa"
+    }
+  ],
+  "audit": {
+    "actor_preserved": true,
+    "chain_verified": true,
+    "records": 9,
+    "refused": 6
+  },
+  "denials": {
+    "missing_caps": 3,
+    "ok": true,
+    "spoofing_path_unknown_option": 3
+  },
+  "issue": 439,
+  "module_read": {
+    "fixture_found": true,
+    "module": "notes",
+    "ok": true
+  },
+  "ok": true,
+  "owned_processes_stopped": true,
+  "owned_weight_links_released": 6,
+  "scope": "real stdio MCP and native daemons with existing sd.cpp/model assets; synthetic requests; no installed UI validation",
+  "sd_sha256": "24edb7f7050259eb7f76b4b9db17b62554c0df5ba90f69a040882e19042092a4",
+  "date": "2026-11-02",
+  "source_base_commit": "301da1f31a2f0efb193bdd02b10c16e501282532",
+  "source_changes": "MCP audit response fix and probe in the commit including this report",
+  "probe_source_sha256": "81c6a1d82486302617bcbfa0ac98d02100793e6957038a78521fc6e9a1eb32de",
+  "checks": {
+    "mcp_unit_tests": 8,
+    "native_ui_validated": false,
+    "strict_clippy_mcp_platform_all_targets": true,
+    "mcp_integration_tests": 1
+  },
+  "hardware": {
+    "os": "Windows",
+    "media_backend": "Vulkan0 (sd.cpp --list-devices)",
+    "physical_gpu_count": 1,
+    "gpu": "NVIDIA GeForce RTX 4080 SUPER"
+  },
+  "native_binaries_sha256": {
+    "aos-auditd": "a882500fa660e8b2bd397ca3f1085f0cdf46e4539a1f1d9d04c0f62d12cd96f5",
+    "aos-busd": "0c0924562fa0bb2e793c424a9be821eb856fadc4fbf149c23e51ad31420d6a20",
+    "aos-mcpd": "642a7bc0ce36b86e3a0d29cd143debfcf76df0c536892180546de3d7fa9dfed6",
+    "aos-platformd": "ce6e94097eb99de5e1172e422bb5da58188237f68971dc3b890203f0c7d4b9de",
+    "aos-modeld": "944757cab57af2c1cfb64fea1d008efc0c9fdd83560e9b3207e28a0e415f5547"
+  }
+}

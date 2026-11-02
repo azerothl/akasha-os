@@ -86,6 +86,9 @@ Voir aussi [`share/mcp/akasha-mcp.example.json`](../../share/mcp/akasha-mcp.exam
 
 ## Lié
 
+- Recette MCP et médias réels : [probe du ticket #439](../tickets/mcp-os-tools-439.md),
+  avec services isolés, modèles déjà disponibles et refus de permissions.
+
 - Bridge HTTP mem/secrets : [sibling-bridge.md](sibling-bridge.md) (`aos-bridged`)
 - Akasha client MCP : `share/mcp/servers.yaml.example`
 - CLI externes *dans* Akasha : Agents → `harness.run` / Runtime
