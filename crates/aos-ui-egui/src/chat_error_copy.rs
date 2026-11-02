@@ -333,6 +333,17 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
             cause: t.chat_error_internal.to_string(),
         };
     }
+    if lower.contains("connectionrefused")
+        || lower.contains("kind: connectionrefused")
+        || (lower.contains("10061") && lower.contains("127.0.0.1"))
+        || lower.contains("bus unavailable")
+        || lower.contains("bus injoignable")
+    {
+        return ChatErrorClassified {
+            code: "chat.bus_unavailable",
+            cause: t.chat_error_bus_unavailable.to_string(),
+        };
+    }
     if lower.contains("indisponible en tour de salon")
         || lower.contains("indisponible en salon")
         || lower.contains("isn't available in the room")
@@ -603,9 +614,7 @@ pub(crate) fn user_visible_module_error(t: &UiStrings, module: &str, raw: &str) 
             },
         );
     }
-    if module == "illustration-studio"
-        && is_illustration_install_error_for_module(stripped, true)
-    {
+    if module == "illustration-studio" && is_illustration_install_error_for_module(stripped, true) {
         return user_visible_illustration_install_error(t, raw);
     }
     if is_illustration_install_error(stripped) {
@@ -787,6 +796,18 @@ mod tests {
     }
 
     #[test]
+    fn bus_connection_refused_classified_without_badrequest() {
+        let en = crate::i18n::strings("en");
+        let raw = "Io(Os { code: 10061, kind: ConnectionRefused, message: \"…\" })";
+        let classified = classify_chat_error(&en, raw);
+        assert_eq!(classified.code, "chat.bus_unavailable");
+        let visible = user_visible_chat_error(&en, raw);
+        assert!(!visible.contains("BadRequest"));
+        assert!(!visible.contains("10061"));
+        assert!(visible.contains(en.chat_error_bus_unavailable));
+    }
+
+    #[test]
     fn room_action_unavailable_maps_to_locked_copy() {
         let en = crate::i18n::strings("en");
         let fr = crate::i18n::strings("fr");
@@ -893,8 +914,7 @@ mod tests {
     fn trellis_test_model_does_not_map_to_illustration_install() {
         let en = crate::i18n::strings("en");
         let fr = crate::i18n::strings("fr");
-        let legacy =
-            "TRELLIS returned a mock asset; install the real runtime and model";
+        let legacy = "TRELLIS returned a mock asset; install the real runtime and model";
         let en_out = user_visible_module_error(&en, "illustration-studio", legacy);
         assert!(en_out.contains(en.chat_error_trellis_test_model));
         assert!(!en_out.contains(en.chat_error_illustration_install));

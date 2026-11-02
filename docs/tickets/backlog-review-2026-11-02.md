@@ -30,11 +30,24 @@ mises à jour de dépendances arrivées sur `main`.
   revue non résolu. Son audit WCAG mentionné en suivi reste à réaliser ; son état
   de brouillon est conservé. Aucun nouveau contrôle de release n'est déduit de
   ces anciens résultats CI.
+- Deux PR ont été publiées pendant cette reprise : la [#468](https://github.com/azerothl/akasha-os/pull/468)
+  corrige déjà le ticket #466 / ZIP 9, et la [#467](https://github.com/azerothl/akasha-os/pull/467)
+  ajoute la reprise de connexion au bus et des filtres de dépannage pour #464.
+  Leurs commits ont été intégrés aux branches locales correspondantes pour
+  préparer des compléments à ces PR, sans PR concurrente. Le complément #468
+  vérifie l'extraction imbriquée et le refus d'une traversée (cinq tests de mise
+  à jour réussis). Le complément #467 conserve la reprise du bus, ajoute le
+  correctif du cache hybride et date les incidents. Un canari sain ne suffit
+  pas à ignorer un agent qui vient réellement d'échouer.
+  Les deux têtes distantes ont une CI réussie, sans fil de revue non résolu.
+  Les nouveaux compléments locaux passent 556 tests d'interface, sept tests IPC,
+  22 tests serveur et Clippy strict ; leur CI attend leur publication.
 
 ## Tickets
 
 | Ticket | Résultat de la reprise | Acceptation restante |
 |---|---|---|
+| #466 | Panne ZIP 9 reproduite ; PR #468 existante intégrée localement et complétée par des tests | Publication des compléments, intégration et CI du nouveau commit |
 | #464 | Diagnostic des faux incidents historiques et reproduction/correction d'un défaut du cache hybride ; voir le [bilan](preview-troubleshooting-464.md) | Intégration et recette dans Preview installé |
 | #460 | Suivi `9c48704` conservé : accusé de traitement exact, reprise d'un lot incomplet, historique modèle ignoré ; preuve Qwen longitudinale synthétique existante | Publication du suivi, validation native explicitement ouverte, qualité sur historiques représentatifs |
 | #456 | Correctif déjà intégré par #461, test maintenu ; ticket fermé | — |

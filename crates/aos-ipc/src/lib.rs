@@ -23,7 +23,7 @@ pub mod codec;
 pub mod msg;
 pub mod service;
 
-pub use client::{BusClient, CallError};
+pub use client::{BusClient, CallError, ConnectRetry};
 pub use msg::{Frame, Intent, Status, StreamItem, CAP_SCHEME};
 pub use service::{BusService, IntentCtx, ServiceError, StreamHandle};
 

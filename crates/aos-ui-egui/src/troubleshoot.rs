@@ -64,6 +64,7 @@ struct LogSummary {
     errors: usize,
     historical: usize,
     unreadable: usize,
+    critical_findings: Vec<String>,
 }
 
 fn summarize_logs(run_dir: &Path, now_ms: u64) -> std::io::Result<LogSummary> {
@@ -106,13 +107,13 @@ fn summarize_logs(run_dir: &Path, now_ms: u64) -> std::io::Result<LogSummary> {
             Ok(tail) if !tail.trim().is_empty() => {
                 report.errors += tail
                     .lines()
-                    .filter(|line| {
-                        let lower = line.to_lowercase();
-                        ["error", "panic", "fatal", "échec", "failed"]
-                            .iter()
-                            .any(|word| lower.contains(word))
-                    })
+                    .filter(|line| crate::troubleshoot_detect::log_line_is_incident(line))
                     .count();
+                if name == "daemon_restarts.log" {
+                    report.critical_findings.extend(
+                        crate::troubleshoot_detect::daemon_restart_loop_findings(&tail, now_ms),
+                    );
+                }
                 report.text.push_str(&format!(
                     "### {name} — modifié {date} UTC\n```\n{tail}\n```\n"
                 ));
@@ -315,6 +316,7 @@ pub(crate) async fn run_troubleshoot(
                     report.unreadable
                 ));
             }
+            findings.extend(report.critical_findings);
             sections.push(report.text);
         }
         Err(error) => {

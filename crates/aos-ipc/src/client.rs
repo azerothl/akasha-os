@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, Mutex};
 
@@ -28,6 +29,29 @@ pub enum CallError {
 enum Pending {
     Unary(oneshot::Sender<Result<(Status, Vec<u8>), CallError>>),
     Stream(mpsc::Sender<Result<StreamItem, CallError>>),
+}
+
+/// Backoff policy for [`BusClient::connect_with_retry`] (Preview daemon boot races).
+#[derive(Debug, Clone, Copy)]
+pub struct ConnectRetry {
+    pub interval: Duration,
+    pub max_attempts: u32,
+}
+
+impl ConnectRetry {
+    /// Default for daemons starting right after `aos-busd` (≈60s total).
+    pub fn daemon_boot() -> Self {
+        Self {
+            interval: Duration::from_millis(500),
+            max_attempts: 120,
+        }
+    }
+}
+
+impl Default for ConnectRetry {
+    fn default() -> Self {
+        Self::daemon_boot()
+    }
 }
 
 /// Client du Semantic IPC Bus.
@@ -53,6 +77,29 @@ impl BusClient {
         let c = client.clone();
         tokio::spawn(async move { c.read_loop(&mut source).await });
         Ok(client)
+    }
+
+    /// Retry transient TCP failures until the broker accepts connections.
+    pub async fn connect_with_retry(
+        addr: &str,
+        from: impl Into<String>,
+        policy: ConnectRetry,
+    ) -> Result<Arc<Self>, CallError> {
+        let from = from.into();
+        let mut last: Option<CallError> = None;
+        for attempt in 1..=policy.max_attempts {
+            match Self::connect(addr, from.clone()).await {
+                Ok(client) => return Ok(client),
+                Err(e @ CallError::Io(_)) => {
+                    last = Some(e);
+                    if attempt < policy.max_attempts {
+                        tokio::time::sleep(policy.interval).await;
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last.unwrap_or(CallError::Closed))
     }
 
     async fn read_loop(&self, source: &mut futures::stream::SplitStream<Transport>) {

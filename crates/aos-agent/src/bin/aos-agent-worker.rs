@@ -48,7 +48,7 @@ use aos_agent::tools::{
     strip_canvas_blocked_runtime_tools, strip_illust_blocked_runtime_tools, ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
-use aos_ipc::{BusClient, BusService};
+use aos_ipc::{BusClient, BusService, ConnectRetry};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSource,
     AgentSpec, AgentState, AgentStepRecord, CancelRequest, ChatAttachment, ChatMessage,
@@ -303,9 +303,19 @@ async fn main() {
             .expect("parse spec.json");
     spec.agent_id = agent_id.clone();
 
-    let bus = BusClient::connect(&bus_addr, format!("agent:{agent_id}"))
-        .await
-        .expect("connexion au bus");
+    let bus = match BusClient::connect_with_retry(
+        &bus_addr,
+        format!("agent:{agent_id}"),
+        ConnectRetry::daemon_boot(),
+    )
+    .await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[aos-agent-worker] bus unavailable at {bus_addr}: {e}");
+            std::process::exit(1);
+        }
+    };
 
     if spec.execution_backend.is_external_harness() {
         aos_agent::harness_backend::ensure_harness_caps(&mut spec);

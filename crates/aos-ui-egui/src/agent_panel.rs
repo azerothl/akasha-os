@@ -989,6 +989,22 @@ pub fn chat_agent_card(
                 if !visible.is_empty() {
                     ui.colored_label(theme::HYDROGEN, truncate(&visible, 100));
                 }
+                if matches!(state, AgentState::Failed) && !canvas_muted {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(egui::Button::new(t.agent_retry).small())
+                            .clicked()
+                        {
+                            action = ChatCardAction::Retry;
+                        }
+                        if ui
+                            .add(egui::Button::new(t.chat_error_activity).small())
+                            .clicked()
+                        {
+                            action = ChatCardAction::OpenDetail;
+                        }
+                    });
+                }
             }
         });
     action

@@ -2,7 +2,7 @@
 //!
 //! Usage : `aos-modeld [config.yaml]` (défaut `demo/modeld.dev.yaml`).
 
-use aos_ipc::{BusClient, BusService, StreamHandle};
+use aos_ipc::{BusClient, BusService, ConnectRetry, StreamHandle};
 use aos_model::{lan_status, media, providers, ModelSubsystem, ModeldConfig};
 use aos_placement::{
     reachable_lan_address, worker_bind_address, AdapterExecutionPhase, BackendKind,
@@ -2554,9 +2554,14 @@ async fn main() {
     );
 
     // Client bus pour appels sortants (platformd : fs.class, net.check, audit).
-    let bus = BusClient::connect(&config.bus, "modeld")
-        .await
-        .expect("connexion au bus — lancer aos-busd d'abord");
+    let bus = match BusClient::connect_with_retry(&config.bus, "modeld", ConnectRetry::daemon_boot()).await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[aos-modeld] bus unavailable at {}: {e}", config.bus);
+            std::process::exit(1);
+        }
+    };
 
     // The worker listener is opt-in and only starts when the LAN session key
     // is available from the secret service. Discovery alone never opens this

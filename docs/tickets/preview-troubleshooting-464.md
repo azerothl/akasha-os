@@ -50,7 +50,8 @@ Le rapport de dépannage :
 - montre les fichiers anciens comme un historique, sans les compter comme
   panne actuelle ; une date absente ou future ne prouve pas un incident récent ;
 - lit au maximum 64 Kio et quarante lignes par journal, sur trente-deux fichiers,
-  avec priorité aux fichiers les plus récents et un plafond global du rapport ;
+  avec priorité aux fichiers les plus récents ; aucun autre journal n'est ajouté
+  lorsque le bloc des journaux a déjà atteint 128 Kio ;
 - conserve l'heure et la session des erreurs de chat, regroupe les répétitions
   identiques dans la même session et ajoute un détail technique borné lorsqu'il
   ne contient pas de chemin ou de secret détecté ;
@@ -61,6 +62,15 @@ La date d'un fichier n'est pas l'horodatage de chacune de ses lignes. Le rapport
 le dit explicitement. Les causes historiques n'ont pas été supprimées, et une
 erreur générique déjà enregistrée ne permet pas de reconstruire son message brut.
 La détection de secrets du détail technique reste une heuristique conservatrice.
+
+La PR #467 publiée pendant cette reprise ajoute aussi une attente du bus au
+démarrage, des tentatives de connexion bornées et des actions de reprise sur les
+cartes d'agents. Ses changements sont conservés dans la branche locale. Son
+classement des journaux est combiné aux dates et aux limites de lecture ; la
+détection des boucles de redémarrage ignore les dates futures. Les erreurs
+natives et les erreurs fatales restent signalées même sur une ligne comportant
+un marqueur de statut habituellement bénin. Les anciens journaux du 15 septembre
+ne prouvent pas que le bus était la cause des erreurs de chat du 2 novembre.
 
 ## Vérification reproductible
 
@@ -93,6 +103,12 @@ Les vérifications locales passent :
 - `cargo test -p aos-ui-egui --locked` : 550 succès, un test ignoré ;
 - `cargo test -p aos-llama --no-default-features --lib --locked` : 20 succès ;
 - `cargo clippy -p aos-llama -p aos-model -p aos-ui-egui --no-default-features --all-targets --locked -- -D warnings` : succès.
+
+Après intégration locale de #467/#468 : 556 tests d'interface réussis et un
+ignoré, sept tests IPC et 22 tests serveur réussis. Clippy strict passe pour les
+six crates IPC, serveur, agent, moteur, modèle et interface, toutes cibles et
+sans fonctionnalités par défaut. Les cinq tests ciblés de mise à jour passent
+avec la politique de refus des chemins de #468.
 
 Les tests du dépannage couvrent notamment les dates anciennes/futures, la lecture
 bornée, la priorité aux journaux récents, l'échec récent situé après douze agents

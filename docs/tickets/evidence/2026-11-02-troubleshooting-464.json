@@ -291,9 +291,19 @@
     "ui_tests_passed": 550,
     "ui_tests_ignored": 1,
     "llama_tests_passed": 20,
-    "llama_model_ui_strict_clippy": true
+    "llama_model_ui_strict_clippy": true,
+    "integrated_ui_tests_passed": 556,
+    "integrated_ui_tests_ignored": 1,
+    "ipc_tests_passed": 7,
+    "server_tests_passed": 22,
+    "integrated_zip_update_tests": 5,
+    "integrated_six_crates_strict_clippy": true
   },
   "native_ui_validated": false,
   "release_published": false,
-  "source_changes": "Sources in the commit including this report; based on a1c9753"
+  "source_changes": "Sources in the commit including this report; based on a1c9753",
+  "integrated_pr_heads": {
+    "467": "85aff42d02f9a0b715f09a332c2dba535b5eeaa9",
+    "468": "cacecd12a0c946dbceeb661654c10648da003699"
+  }
 }

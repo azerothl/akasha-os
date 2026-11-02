@@ -105,6 +105,7 @@ mod skill_offer;
 mod slash;
 mod theme;
 mod troubleshoot;
+mod troubleshoot_detect;
 mod ui_agents;
 mod ui_audit;
 mod ui_chat;
