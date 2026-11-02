@@ -2405,6 +2405,19 @@ async fn execute_action(
         }
     }
 
+    // Runtime actions (notably agent.spawn and cap.request) must obey the same
+    // explicit selection and live allowlist as native/module calls. A legacy
+    // JSON response may name a tool that was never offered to the model.
+    // noop is a parser diagnostic, not an executable tool.
+    if name != "noop" {
+        if let Some(denial) = aos_agent::policy::policy_deny(&*shared.policy.lock().await, name) {
+            return ActResult::Continue(denial);
+        }
+        if !tool_in_catalog(name, tools) {
+            return ActResult::Continue(tool_unavailable_message(name, "absent du catalogue actif"));
+        }
+    }
+
     // Gate : plan obligatoire tant que task_graph / deep plan vide
     {
         let st = shared.state.lock().await;
@@ -6132,6 +6145,73 @@ mod tests {
     #[test]
     fn missing_cap_hint_for_usb_uses_device_usb_io() {
         assert_eq!(super::missing_cap_hint("device.usb.open"), "device.usb.io");
+    }
+
+    #[tokio::test]
+    async fn runtime_actions_cannot_bypass_catalog_or_live_allowlist() {
+        use super::*;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let broker = tokio::spawn(aos_ipc::broker::serve(listener));
+        let bus = BusClient::connect(&addr, "agent:runtime-policy-fixture")
+            .await
+            .unwrap();
+        let (cmd_tx, _rx) = mpsc::channel(1);
+        let shared = Shared {
+            state: Mutex::new(CognitiveState::new("runtime-policy-fixture", vec![])),
+            paused: AtomicBool::new(false),
+            current_inference: Mutex::new(None),
+            cmd_tx,
+            child_results: Mutex::new(HashMap::new()),
+            consumed_child_results: Mutex::new(HashSet::new()),
+            policy: Mutex::new(aos_proto::AgentPolicy::default()),
+        };
+        let mut spec: AgentSpec = serde_json::from_value(serde_json::json!({"agent_id":"runtime-policy-fixture", "goal":{"statement":"Corrige les fichiers du projet"}})).unwrap();
+        let action = AgentAction {
+            thought: String::new(),
+            action: "agent.spawn".into(),
+            args: serde_json::json!({"brief":"unauthorized child", "tools":["fs.apply_patch"]}),
+        };
+        let tools = select_tools(&["workspace.read".into()], &[]);
+        let result = execute_action(
+            &bus,
+            &shared,
+            &mut spec,
+            &tools,
+            &[],
+            &mut HashMap::new(),
+            &action,
+        )
+        .await;
+        assert!(
+            matches!(result, ActResult::Continue(ref message) if message.contains("absent du catalogue"))
+        );
+        let tools = select_tools(&["agent.spawn".into()], &[]);
+        *shared.policy.lock().await = aos_proto::AgentPolicy {
+            tool_allowlist: Some(vec!["workspace.read".into()]),
+            ..Default::default()
+        };
+        for name in ["agent.spawn", "cap.request", "plan.update"] {
+            let action = AgentAction {
+                action: name.into(),
+                ..action.clone()
+            };
+            let result = execute_action(
+                &bus,
+                &shared,
+                &mut spec,
+                &tools,
+                &[],
+                &mut HashMap::new(),
+                &action,
+            )
+            .await;
+            assert!(
+                matches!(result, ActResult::Continue(ref message) if message.contains("hors allowlist"))
+            );
+        }
+        assert!(shared.state.lock().await.children.is_empty());
+        broker.abort();
     }
 
     #[tokio::test]
