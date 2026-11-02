@@ -2202,6 +2202,53 @@ Je vais répondre de manière naturelle"#;
     }
 
     #[test]
+    fn failed_card_visible_reason_hides_bus_technical_ids() {
+        let t_en = crate::i18n::strings("en");
+        let t_fr = crate::i18n::strings("fr");
+        let info = AgentInfo {
+            agent_id: "agent-309".into(),
+            state: AgentState::Failed,
+            directive: "research".into(),
+            pid: None,
+            caps: vec![],
+            last_output: String::new(),
+            step: 33,
+            max_steps: 64,
+            current_task: None,
+            parent_id: None,
+            children: vec![],
+            tokens_used: 0,
+            skills: vec![],
+            tools: vec![],
+            mcp_servers: vec![],
+            fail_reason: Some(
+                "Io(Os { code: 10061, kind: ConnectionRefused }) 127.0.0.1:24701".into(),
+            ),
+            session_id: None,
+            model_id: None,
+            title: "Research".into(),
+            kind: AgentKind::Task,
+            display_name: None,
+            persona_id: None,
+            source_roster_id: None,
+            origin: None,
+            deep_plan: None,
+            cognitive_mode: aos_proto::CognitiveMode::Normal,
+            execution_backend: Default::default(),
+            avatar: None,
+            color: None,
+        };
+        let raw_fail = info.fail_reason.as_deref().unwrap();
+        let visible_en = resolve_visible_fail_reason(&t_en, Some(&info), raw_fail, None, None);
+        let visible_fr = resolve_visible_fail_reason(&t_fr, Some(&info), raw_fail, None, None);
+        assert_eq!(visible_en, t_en.chat_error_bus_unavailable);
+        assert_eq!(visible_fr, t_fr.chat_error_bus_unavailable);
+        assert!(!visible_en.contains("10061"));
+        assert!(!visible_en.contains("agent-309"));
+        assert!(!visible_en.contains("ConnectionRefused"));
+    }
+
+    #[test]
     fn resolve_visible_fail_reason_hides_max_steps_for_other_agents() {
         let t_en = crate::i18n::strings("en");
         let info = AgentInfo {

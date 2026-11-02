@@ -300,6 +300,9 @@ pub(crate) fn format_chat_error(t: &UiStrings, classified: &ChatErrorClassified)
     if classified.code == "chat.error" {
         return t.chat_error_generic.to_string();
     }
+    if classified.code == "chat.bus_unavailable" {
+        return classified.cause.clone();
+    }
     if classified.code == "room.ask_not_waiting" {
         return format!("{}\n{}", t.room_ask_failed_toast, classified.cause);
     }
@@ -804,7 +807,8 @@ mod tests {
         let visible = user_visible_chat_error(&en, raw);
         assert!(!visible.contains("BadRequest"));
         assert!(!visible.contains("10061"));
-        assert!(visible.contains(en.chat_error_bus_unavailable));
+        assert!(!visible.contains("127.0.0.1"));
+        assert_eq!(visible, en.chat_error_bus_unavailable);
     }
 
     #[test]

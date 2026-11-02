@@ -1915,7 +1915,7 @@ const EN: UiStrings = UiStrings {
     chat_previous_in_progress: "The previous reply is still in progress.",
     chat_history_reloaded: "History reloaded.",
     chat_error_generic: "Something went wrong. Try again.",
-    chat_error_bus_unavailable: "Preview services aren't ready yet. Wait a moment and try again.",
+    chat_error_bus_unavailable: "Still starting up. Wait a moment and try again.",
     chat_error_retry: "Retry",
     chat_error_activity: "Activity",
     chat_error_timeout: "The reply timed out.",
@@ -2271,7 +2271,7 @@ const EN: UiStrings = UiStrings {
     agent_click_for_detail: "Click an agent to open the detail panel (tabs).",
     agent_reply_here: "reply here",
     agent_failure: "Failed",
-    agent_fail_unknown: "reason not recorded",
+    agent_fail_unknown: "This agent stopped on an error. Try again or check Activity.",
     agent_could_not_act: "The agent could not act.",
     agent_could_not_continue: "Couldn't keep going.",
     agent_stopped_on_restart: "Stopped on restart.",
@@ -3282,7 +3282,7 @@ const FR: UiStrings = UiStrings {
     chat_history_reloaded: "Historique rechargé.",
     chat_error_generic: "Un problème est survenu. Réessayez.",
     chat_error_bus_unavailable:
-        "Les services Preview ne sont pas prêts. Patientez un instant, puis réessayez.",
+        "Démarrage en cours. Patientez un instant, puis réessayez.",
     chat_error_retry: "Réessayer",
     chat_error_activity: "Activité",
     chat_error_timeout: "Délai de réponse dépassé.",
@@ -3630,7 +3630,7 @@ const FR: UiStrings = UiStrings {
     agent_resume: "Débloquer",
     agent_reply: "Répondre",
     agent_retry_step: "Relancer l'étape",
-    agent_retry: "Relancer",
+    agent_retry: "Réessayer",
     agent_export: "Exporter",
     agent_export_toast: "Exporté vers {path}",
     agent_close_all: "Fermer tous les onglets",
@@ -3638,7 +3638,7 @@ const FR: UiStrings = UiStrings {
     agent_click_for_detail: "Cliquez un agent pour ouvrir le panneau détail (onglets).",
     agent_reply_here: "répondre ici",
     agent_failure: "Échec",
-    agent_fail_unknown: "motif non renseigné",
+    agent_fail_unknown: "Cet agent s'est arrêté sur une erreur. Réessayez ou consultez l'Activité.",
     agent_could_not_act: "L'agent n'a pas pu agir.",
     agent_could_not_continue: "Impossible de continuer.",
     agent_stopped_on_restart: "Arrêté au redémarrage.",
@@ -4280,6 +4280,20 @@ pub fn format_related_note_label(
         .replace("{relevance}", &format_note_relevance(t, score))
 }
 
+/// True when an agent fail_reason or runtime error indicates the IPC bus was unreachable.
+pub fn fail_reason_looks_like_bus_error(reason: &str) -> bool {
+    let lower = reason.to_ascii_lowercase();
+    lower.contains("connectionrefused")
+        || lower.contains("kind: connectionrefused")
+        || lower.contains("10061")
+        || lower.contains("127.0.0.1")
+        || lower.contains(":24701")
+        || lower.contains("bus unavailable")
+        || lower.contains("bus injoignable")
+        || lower.contains("connexion au bus")
+        || lower.contains("lancer aos-busd")
+}
+
 /// Map agent `fail_reason` sentinels to localized thread copy.
 pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String {
     match reason {
@@ -4304,8 +4318,11 @@ pub fn resolve_agent_fail_reason(t: &UiStrings, reason: Option<&str>) -> String 
         Some(other) if aos_agent::context_budget::is_technical_max_steps_fail_reason(other) => {
             t.agent_could_not_continue.to_string()
         }
-        Some(other) if !other.trim().is_empty() => other.to_string(),
-        _ => t.agent_fail_unknown.to_string(),
+        Some(other) if fail_reason_looks_like_bus_error(other) => {
+            t.chat_error_bus_unavailable.to_string()
+        }
+        Some(_other) => t.agent_fail_unknown.to_string(),
+        None => t.agent_fail_unknown.to_string(),
     }
 }
 
@@ -4821,15 +4838,24 @@ mod tests {
         assert_eq!(fr.chat_error_generic, "Un problème est survenu. Réessayez.");
         assert_eq!(en.chat_error_retry, "Retry");
         assert_eq!(fr.chat_error_retry, "Réessayer");
+        assert_eq!(fr.agent_retry, "Réessayer");
         assert_eq!(en.chat_error_activity, "Activity");
         assert_eq!(fr.chat_error_activity, "Activité");
         assert_eq!(
             en.chat_error_bus_unavailable,
-            "Preview services aren't ready yet. Wait a moment and try again."
+            "Still starting up. Wait a moment and try again."
         );
         assert_eq!(
             fr.chat_error_bus_unavailable,
-            "Les services Preview ne sont pas prêts. Patientez un instant, puis réessayez."
+            "Démarrage en cours. Patientez un instant, puis réessayez."
+        );
+        assert_eq!(
+            en.agent_fail_unknown,
+            "This agent stopped on an error. Try again or check Activity."
+        );
+        assert_eq!(
+            fr.agent_fail_unknown,
+            "Cet agent s'est arrêté sur une erreur. Réessayez ou consultez l'Activité."
         );
         assert_eq!(
             en.chat_previous_in_progress,
@@ -5103,6 +5129,35 @@ mod tests {
             Some(aos_agent::actions::LEGACY_FAIL_STOPPED_ON_RESTART),
         );
         assert_eq!(legacy_fr, fr.agent_stopped_on_restart);
+    }
+
+    #[test]
+    fn agent_fail_reason_bus_connection_fr_en_no_technical_ids() {
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(fr.agent_retry, "Réessayer");
+        let raw = "connexion au bus — lancer aos-busd d'abord: Io(Os { code: 10061, kind: ConnectionRefused, message: \"…\" }) on 127.0.0.1:24701";
+        let resolved_en = resolve_agent_fail_reason(&en, Some(raw));
+        let resolved_fr = resolve_agent_fail_reason(&fr, Some(raw));
+        assert_eq!(resolved_en, en.chat_error_bus_unavailable);
+        assert_eq!(resolved_fr, fr.chat_error_bus_unavailable);
+        assert!(!resolved_en.contains("10061"));
+        assert!(!resolved_en.contains("24701"));
+        assert!(!resolved_en.contains("agent-"));
+        assert!(!resolved_fr.contains("127.0.0.1"));
+    }
+
+    #[test]
+    fn agent_fail_reason_unknown_fr_en_hides_raw_and_ids() {
+        let en = strings("en");
+        let fr = strings("fr");
+        let raw = "statut BadRequest: spawn agent-309 step failed";
+        let resolved_en = resolve_agent_fail_reason(&en, Some(raw));
+        let resolved_fr = resolve_agent_fail_reason(&fr, Some(raw));
+        assert_eq!(resolved_en, en.agent_fail_unknown);
+        assert_eq!(resolved_fr, fr.agent_fail_unknown);
+        assert!(!resolved_en.contains("BadRequest"));
+        assert!(!resolved_en.contains("agent-309"));
     }
 
     #[test]
