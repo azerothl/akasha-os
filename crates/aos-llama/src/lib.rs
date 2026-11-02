@@ -34,6 +34,9 @@ use thiserror::Error;
 use llama_cpp_sys_2 as sys;
 
 mod jinja_template;
+mod streaming_utf8;
+
+use streaming_utf8::StreamingUtf8;
 
 pub mod semantic;
 
@@ -752,7 +755,7 @@ impl LlamaContext {
         }
     }
 
-    fn token_to_piece(&self, token: sys::llama_token) -> String {
+    fn token_to_bytes(&self, token: sys::llama_token) -> Vec<u8> {
         let vocab = unsafe { sys::llama_model_get_vocab(self.model.ptr) };
         let mut buf = [0i8; 256];
         let n = unsafe {
@@ -767,10 +770,13 @@ impl LlamaContext {
             )
         };
         if n <= 0 {
-            return String::new();
+            return Vec::new();
         }
-        let bytes: Vec<u8> = buf[..n as usize].iter().map(|b| *b as u8).collect();
-        String::from_utf8_lossy(&bytes).into_owned()
+        buf[..n as usize].iter().map(|b| *b as u8).collect()
+    }
+
+    fn token_to_piece(&self, token: sys::llama_token) -> String {
+        String::from_utf8_lossy(&self.token_to_bytes(token)).into_owned()
     }
 
     /// Génère une réponse en streaming (texte seul).
@@ -871,10 +877,11 @@ impl LlamaContext {
         let mut generated = 0u32;
         let mut ttft_ms = f64::MAX;
         let mut cur: sys::llama_token;
+        let mut utf8 = StreamingUtf8::default();
 
         // Premier token.
         cur = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
-        let stopped = loop {
+        let mut stopped = loop {
             if self.abort.load(Ordering::SeqCst) {
                 break StopReason::Aborted;
             }
@@ -887,7 +894,7 @@ impl LlamaContext {
             if ttft_ms == f64::MAX {
                 ttft_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             }
-            let piece = self.token_to_piece(cur);
+            let piece = utf8.push(&self.token_to_bytes(cur));
             if !piece.is_empty() && !on_delta(&piece) {
                 break StopReason::Aborted;
             }
@@ -905,6 +912,13 @@ impl LlamaContext {
         };
 
         unsafe { sys::llama_sampler_free(smpl) };
+
+        if matches!(stopped, StopReason::Eog | StopReason::MaxTokens) {
+            let tail = utf8.finish();
+            if !tail.is_empty() && !on_delta(&tail) {
+                stopped = StopReason::Aborted;
+            }
+        }
 
         let total = t_start.elapsed().as_secs_f64();
         let ttft = if ttft_ms == f64::MAX {
@@ -1476,9 +1490,10 @@ impl LlamaContext {
         let mut plain_decode_tokens = 0u32;
         let mut speculation_enabled = speculative_cache_supported;
         let mut haystack = prompt_tokens.clone();
+        let mut utf8 = StreamingUtf8::default();
 
         let mut cur = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
-        let stopped = loop {
+        let mut stopped = loop {
             if abort.load(Ordering::SeqCst) || self.abort.load(Ordering::SeqCst) {
                 break StopReason::Aborted;
             }
@@ -1494,7 +1509,7 @@ impl LlamaContext {
             if ttft_ms == f64::MAX {
                 ttft_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             }
-            let piece = self.token_to_piece(cur);
+            let piece = utf8.push(&self.token_to_bytes(cur));
             if !piece.is_empty() && !on_delta(&piece) {
                 break StopReason::Aborted;
             }
@@ -1588,7 +1603,7 @@ impl LlamaContext {
                     break;
                 }
                 if unsafe { sys::llama_vocab_is_eog(vocab, d) } {
-                    let piece = self.token_to_piece(d);
+                    let piece = utf8.push(&self.token_to_bytes(d));
                     if !piece.is_empty() {
                         let _ = on_delta(&piece);
                     }
@@ -1600,7 +1615,7 @@ impl LlamaContext {
                     accepted = draft.len(); // force trim path as EOG
                     break;
                 }
-                let piece = self.token_to_piece(d);
+                let piece = utf8.push(&self.token_to_bytes(d));
                 if !piece.is_empty() && !on_delta(&piece) {
                     accepted += 1;
                     generated += 1;
@@ -1663,6 +1678,13 @@ impl LlamaContext {
 
         unsafe { sys::llama_sampler_free(smpl) };
         self.trim_seq0_to_prompt(n_prompt);
+
+        if matches!(stopped, StopReason::Eog | StopReason::MaxTokens) {
+            let tail = utf8.finish();
+            if !tail.is_empty() && !on_delta(&tail) {
+                stopped = StopReason::Aborted;
+            }
+        }
 
         let total = t_start.elapsed().as_secs_f64();
         let ttft = if ttft_ms == f64::MAX {
@@ -1756,6 +1778,7 @@ impl LlamaContext {
         }
 
         struct Slot {
+            utf8: StreamingUtf8,
             seq_id: sys::llama_seq_id,
             prompt_n: u32,
             generated: u32,
@@ -1803,6 +1826,7 @@ impl LlamaContext {
                     }
                     prompts.push(toks);
                     slots.push(Slot {
+                        utf8: StreamingUtf8::default(),
                         seq_id: i as sys::llama_seq_id,
                         prompt_n: 0,
                         generated: 0,
@@ -1927,6 +1951,7 @@ impl LlamaContext {
                         out.push(Err(LlamaError::Decode(-1)));
                         prompts.push(toks);
                         slots.push(Slot {
+                            utf8: StreamingUtf8::default(),
                             seq_id: idx as sys::llama_seq_id,
                             prompt_n: 0,
                             generated: 0,
@@ -2003,7 +2028,7 @@ impl LlamaContext {
                 if slot.ttft_ms == f64::MAX {
                     slot.ttft_ms = slot.t_start.elapsed().as_secs_f64() * 1000.0;
                 }
-                let piece = self.token_to_piece(slot.last);
+                let piece = slot.utf8.push(&self.token_to_bytes(slot.last));
                 if !piece.is_empty() && !on_delta(slot.seq_id as usize, &piece) {
                     slot.finish(StopReason::Aborted);
                     continue;
@@ -2068,11 +2093,18 @@ impl LlamaContext {
             }
         }
 
-        for slot in slots {
+        for mut slot in slots {
             let idx = slot.seq_id as usize;
             // Decode(-1) is both a real native error and the initial placeholder.
             // Keep failure state separate so an actual error is never made OK.
             if !slot.failed {
+                // Never emit a buffered tail after cancellation or pause.
+                if matches!(slot.done, Some(StopReason::Eog | StopReason::MaxTokens)) {
+                    let tail = slot.utf8.finish();
+                    if !tail.is_empty() && !on_delta(idx, &tail) {
+                        slot.done = Some(StopReason::Aborted);
+                    }
+                }
                 let total = slot
                     .t_done
                     .unwrap_or_else(Instant::now)

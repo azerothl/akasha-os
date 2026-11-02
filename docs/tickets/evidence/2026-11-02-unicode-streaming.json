@@ -1,0 +1,317 @@
+{
+  "scope": "Real model.infer before/after and three native generation paths. No installed UI acceptance.",
+  "source_base": "22563860e396e46df5984f5712238e3318ec134d",
+  "baseline_binary_source_revision": "not independently recorded; identify by SHA-256, not an asserted source commit",
+  "host": {
+    "os": "Windows",
+    "gpu": "NVIDIA GeForce RTX 4080 SUPER, 16 GiB",
+    "cuda_toolkit": "13.3"
+  },
+  "ipc_before_cpu": {
+    "cases": [
+      {
+        "model": "local:utf8-qwen",
+        "expected": "🧭",
+        "output": "���",
+        "done": true,
+        "exact": false,
+        "replacement_characters": 3
+      },
+      {
+        "model": "local:utf8-qwen",
+        "expected": "été 猫",
+        "output": "été 猫",
+        "done": true,
+        "exact": true,
+        "replacement_characters": 0
+      },
+      {
+        "model": "local:utf8-spark",
+        "expected": "🧭",
+        "output": "���",
+        "done": true,
+        "exact": false,
+        "replacement_characters": 3
+      },
+      {
+        "model": "local:utf8-spark",
+        "expected": "été 猫",
+        "output": "été 猫",
+        "done": true,
+        "exact": true,
+        "replacement_characters": 0
+      }
+    ],
+    "modeld_sha256": "944757cab57af2c1cfb64fea1d008efc0c9fdd83560e9b3207e28a0e415f5547",
+    "owned_processes_stopped": true
+  },
+  "ipc_after_cpu": {
+    "cases": [
+      {
+        "model": "local:utf8-qwen",
+        "expected": "🧭",
+        "output": "🧭",
+        "done": true,
+        "exact": true,
+        "replacement_characters": 0
+      },
+      {
+        "model": "local:utf8-qwen",
+        "expected": "été 猫",
+        "output": "été 猫",
+        "done": true,
+        "exact": true,
+        "replacement_characters": 0
+      },
+      {
+        "model": "local:utf8-spark",
+        "expected": "🧭",
+        "output": "🧭",
+        "done": true,
+        "exact": true,
+        "replacement_characters": 0
+      },
+      {
+        "model": "local:utf8-spark",
+        "expected": "été 猫",
+        "output": "été 猫",
+        "done": true,
+        "exact": true,
+        "replacement_characters": 0
+      }
+    ],
+    "modeld_sha256": "d3789190efbe3ce900367ad07e348d1b9e926649f9ae41e6431e931993b747f8",
+    "owned_processes_stopped": true
+  },
+  "native": [
+    {
+      "model": "qwen",
+      "mode": "cpu",
+      "report": {
+        "ok": true,
+        "gpu_layers": 0,
+        "cases": [
+          {
+            "path": "plain",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "plain",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          }
+        ],
+        "scope": "Unicode streaming regression through plain, lookup and paired batch generation with real GGUF; not native UI acceptance"
+      },
+      "native_log_sha256": "31a20f33555b6f83aa89478be2fd1f5f04f40489da2c058453af50c4556722ed",
+      "cuda_model_buffers": []
+    },
+    {
+      "model": "qwen",
+      "mode": "cuda",
+      "report": {
+        "ok": true,
+        "gpu_layers": 99,
+        "cases": [
+          {
+            "path": "plain",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "plain",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          }
+        ],
+        "scope": "Unicode streaming regression through plain, lookup and paired batch generation with real GGUF; not native UI acceptance"
+      },
+      "native_log_sha256": "2e9d2f0d4ccd4c109569c52bcfce137760a5aa3619b3b4a8e0e87937aee5a26a",
+      "cuda_model_buffers": [
+        "load_tensors:        CUDA0 model buffer size =  2603.50 MiB"
+      ]
+    },
+    {
+      "model": "spark",
+      "mode": "cpu",
+      "report": {
+        "ok": true,
+        "gpu_layers": 0,
+        "cases": [
+          {
+            "path": "plain",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "plain",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          }
+        ],
+        "scope": "Unicode streaming regression through plain, lookup and paired batch generation with real GGUF; not native UI acceptance"
+      },
+      "native_log_sha256": "c638360c335920053a861cf2b961be5fa6557c0a5cd3ebde69d00892fc7e74cc",
+      "cuda_model_buffers": []
+    },
+    {
+      "model": "spark",
+      "mode": "cuda",
+      "report": {
+        "ok": true,
+        "gpu_layers": 99,
+        "cases": [
+          {
+            "path": "plain",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "plain",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "lookup",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "🧭",
+            "output": "🧭",
+            "exact": true,
+            "generated_tokens": 3
+          },
+          {
+            "path": "batch",
+            "expected": "été 猫",
+            "output": "été 猫",
+            "exact": true,
+            "generated_tokens": 3
+          }
+        ],
+        "scope": "Unicode streaming regression through plain, lookup and paired batch generation with real GGUF; not native UI acceptance"
+      },
+      "native_log_sha256": "c616d8d8d4d7c7c990ef2d7f9bf0acf07fb4970ac50a4d99a03939334f2440af",
+      "cuda_model_buffers": [
+        "load_tensors:        CUDA0 model buffer size =  2474.63 MiB"
+      ]
+    }
+  ],
+  "native_probe_sha256": "4808c56f3057c3f8482721216f3ab296ec0834355237be1b45b2f13d2bbda209",
+  "native_source_sha256": "661aff06c67e04dcdcb3cc48ac9f2e79387e40fb43533ee891d27d102d6c673f",
+  "decoder_source_sha256": "8c5ff03dba3ed4f0e6242a7bd187141c902bd65fcd969d42e94b2ad6b92c6fb4",
+  "native_ui_validation": false,
+  "metal_validation": false
+}

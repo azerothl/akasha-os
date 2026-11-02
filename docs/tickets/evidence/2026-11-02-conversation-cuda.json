@@ -1,0 +1,1299 @@
+{
+  "assets": [
+    {
+      "bytes": 2740937888,
+      "filename": {
+        "Windows": [
+          81,
+          119,
+          101,
+          110,
+          51,
+          46,
+          53,
+          45,
+          52,
+          66,
+          45,
+          81,
+          52,
+          95,
+          75,
+          95,
+          77,
+          46,
+          103,
+          103,
+          117,
+          102
+        ]
+      },
+      "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+    },
+    {
+      "bytes": 2600224352,
+      "filename": {
+        "Windows": [
+          83,
+          112,
+          97,
+          114,
+          107,
+          45,
+          88,
+          50,
+          46,
+          53,
+          45,
+          52,
+          66,
+          45,
+          81,
+          52,
+          95,
+          75,
+          95,
+          77,
+          46,
+          103,
+          103,
+          117,
+          102
+        ]
+      },
+      "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428"
+    }
+  ],
+  "case_count": 12,
+  "configuration": {
+    "concurrent_requests": 2,
+    "default_kv_tokens": 4096,
+    "max_tokens": 128,
+    "mode": "cuda",
+    "n_seq_max": 4,
+    "passes": 2,
+    "seed": 42,
+    "temperature": 0
+  },
+  "contract_passed": 28,
+  "contract_total": 48,
+  "corpus_sha256": "9690679a7f4857af5da198d2b1743a2254e22eb6968766d81ef2cb3f97936e1a",
+  "cuda_model_buffers": [
+    "load_tensors:        CUDA0 model buffer size =  2533.17 MiB",
+    "load_tensors:        CUDA0 model buffer size =  2408.02 MiB"
+  ],
+  "modeld_sha256": "d3789190efbe3ce900367ad07e348d1b9e926649f9ae41e6431e931993b747f8",
+  "models": [
+    {
+      "has_vision": false,
+      "id": "local:conversation-spark",
+      "n_layers": 36,
+      "name": "local:conversation-spark",
+      "placement": "VRAM  2.70 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 36/0/0",
+      "privacy_class": "local",
+      "profile": "balanced",
+      "state": "Loaded"
+    },
+    {
+      "has_vision": false,
+      "id": "local:conversation-qwen",
+      "n_layers": 32,
+      "name": "local:conversation-qwen",
+      "placement": "VRAM  2.68 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+      "privacy_class": "local",
+      "profile": "balanced",
+      "state": "Loaded"
+    }
+  ],
+  "native_log_sha256": "3ffd4850ecc34ef0ce9bf3364e46a696ca7c05b3877040efae75e5b02900316d",
+  "native_log_valid_utf8": false,
+  "owned_modeld_stopped": true,
+  "replay_equal": 24,
+  "replays": [
+    {
+      "equal": true,
+      "id": "arithmetic",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "french-extraction",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "sort-with-duplicates",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "unicode-copy",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "rust-output",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "rust-boundary-order",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "project-caps",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "offline-choice",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "conversation-recall",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "conversation-revision",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "system-precedence",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "tool-call",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "arithmetic",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "french-extraction",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "sort-with-duplicates",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "unicode-copy",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "rust-output",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "rust-boundary-order",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "project-caps",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "offline-choice",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "conversation-recall",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "conversation-revision",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "system-precedence",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "tool-call",
+      "model_id": "local:conversation-spark"
+    }
+  ],
+  "results": [
+    {
+      "category": "reasoning",
+      "contract_ok": false,
+      "elapsed_ms": 2112,
+      "expected": {
+        "kind": "exact",
+        "value": "397"
+      },
+      "id": "arithmetic",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 32,
+        "tok_s": 54.66980349850298,
+        "ttft_ms": 130.4086
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "398",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "398"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": true,
+      "elapsed_ms": 2112,
+      "expected": {
+        "kind": "json",
+        "value": {
+          "jour": "mardi",
+          "ville": "Lyon"
+        }
+      },
+      "id": "french-extraction",
+      "metrics": {
+        "generated_tokens": 14,
+        "prompt_tokens": 48,
+        "tok_s": 75.43294469202614,
+        "ttft_ms": 130.2373
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "{\"ville\": \"Lyon\", \"jour\": \"mardi\"}",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "{\"ville\": \"Lyon\", \"jour\": \"mardi\"}"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": false,
+      "elapsed_ms": 389,
+      "expected": {
+        "kind": "json",
+        "value": [
+          -2,
+          0,
+          4,
+          4,
+          9
+        ]
+      },
+      "id": "sort-with-duplicates",
+      "metrics": {
+        "generated_tokens": 12,
+        "prompt_tokens": 39,
+        "tok_s": 74.50278702509131,
+        "ttft_ms": 65.0495
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "[[-2,0,4,4,9]]",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "[[-2,0,4,4,9]]"
+    },
+    {
+      "category": "unicode",
+      "contract_ok": true,
+      "elapsed_ms": 389,
+      "expected": {
+        "kind": "exact",
+        "value": "été 猫"
+      },
+      "id": "unicode-copy",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 31,
+        "tok_s": 57.36203474609652,
+        "ttft_ms": 64.9622
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "été 猫",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "été 猫"
+    },
+    {
+      "category": "code",
+      "contract_ok": true,
+      "elapsed_ms": 286,
+      "expected": {
+        "kind": "exact",
+        "value": "16"
+      },
+      "id": "rust-output",
+      "metrics": {
+        "generated_tokens": 2,
+        "prompt_tokens": 57,
+        "tok_s": 57.57383844780931,
+        "ttft_ms": 56.835499999999996
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "16",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "16"
+    },
+    {
+      "category": "code",
+      "contract_ok": true,
+      "elapsed_ms": 286,
+      "expected": {
+        "kind": "exact",
+        "value": "2048"
+      },
+      "id": "rust-boundary-order",
+      "metrics": {
+        "generated_tokens": 4,
+        "prompt_tokens": 48,
+        "tok_s": 61.186404380946556,
+        "ttft_ms": 56.6344
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "2048",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "2048"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": true,
+      "elapsed_ms": 252,
+      "expected": {
+        "kind": "exact",
+        "value": "false"
+      },
+      "id": "project-caps",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 101,
+        "tok_s": 50.11853032421676,
+        "ttft_ms": 62.0965
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "false",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "false"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": true,
+      "elapsed_ms": 252,
+      "expected": {
+        "kind": "exact",
+        "value": "local:a"
+      },
+      "id": "offline-choice",
+      "metrics": {
+        "generated_tokens": 2,
+        "prompt_tokens": 47,
+        "tok_s": 57.17193315457576,
+        "ttft_ms": 61.915400000000005
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "local:a",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "local:a"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 332,
+      "expected": {
+        "kind": "exact",
+        "value": "zephyr-17"
+      },
+      "id": "conversation-recall",
+      "metrics": {
+        "generated_tokens": 6,
+        "prompt_tokens": 54,
+        "tok_s": 57.81605628971239,
+        "ttft_ms": 62.3135
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "zephyr-17",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "zephyr-17"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 332,
+      "expected": {
+        "kind": "exact",
+        "value": "beta"
+      },
+      "id": "conversation-revision",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 76,
+        "tok_s": 39.2901063583179,
+        "ttft_ms": 62.0453
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "beta",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "beta"
+    },
+    {
+      "category": "instruction-hierarchy",
+      "contract_ok": true,
+      "elapsed_ms": 1733,
+      "expected": {
+        "kind": "exact",
+        "value": "BLUE"
+      },
+      "id": "system-precedence",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 42,
+        "tok_s": 53.084755120024624,
+        "ttft_ms": 59.912800000000004
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "BLUE",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "BLUE"
+    },
+    {
+      "category": "tool-format",
+      "contract_ok": false,
+      "elapsed_ms": 1733,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "tool-call",
+      "metrics": {
+        "generated_tokens": 90,
+        "prompt_tokens": 49,
+        "tok_s": 59.41305447398125,
+        "ttft_ms": 59.7843
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "I cannot execute external functions like `notes.list` directly as I do not have access to your local environment or a backend system to run custom code. Additionally, I do not have access to your personal notes.\n\nTo view your notes, please check the application or platform where you are using this service (e.g., a specific app, website, or database interface) and look for a \"Notes\" section or a command prompt within that environment.",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "I cannot execute external functions like `notes.list` directly as I do not have access to your local environment or a backend system to run custom code. Additionally, I do not have access to your personal notes.\n\nTo view your notes, please check the application or platform where you are using this service (e.g., a specific app, website, or database interface) and look for a \"Notes\" section or a command prompt within that environment."
+    },
+    {
+      "category": "reasoning",
+      "contract_ok": false,
+      "elapsed_ms": 536,
+      "expected": {
+        "kind": "exact",
+        "value": "397"
+      },
+      "id": "arithmetic",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 32,
+        "tok_s": 34.55452877413202,
+        "ttft_ms": 63.57300000000001
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "398",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "398"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": true,
+      "elapsed_ms": 536,
+      "expected": {
+        "kind": "json",
+        "value": {
+          "jour": "mardi",
+          "ville": "Lyon"
+        }
+      },
+      "id": "french-extraction",
+      "metrics": {
+        "generated_tokens": 14,
+        "prompt_tokens": 48,
+        "tok_s": 45.90120290659532,
+        "ttft_ms": 63.7228
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "{\"ville\": \"Lyon\", \"jour\": \"mardi\"}",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "{\"ville\": \"Lyon\", \"jour\": \"mardi\"}"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": false,
+      "elapsed_ms": 417,
+      "expected": {
+        "kind": "json",
+        "value": [
+          -2,
+          0,
+          4,
+          4,
+          9
+        ]
+      },
+      "id": "sort-with-duplicates",
+      "metrics": {
+        "generated_tokens": 12,
+        "prompt_tokens": 39,
+        "tok_s": 63.98150507959832,
+        "ttft_ms": 68.7271
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "[[-2,0,4,4,9]]",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "[[-2,0,4,4,9]]"
+    },
+    {
+      "category": "unicode",
+      "contract_ok": true,
+      "elapsed_ms": 417,
+      "expected": {
+        "kind": "exact",
+        "value": "été 猫"
+      },
+      "id": "unicode-copy",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 31,
+        "tok_s": 51.219449732378386,
+        "ttft_ms": 68.5921
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "été 猫",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "été 猫"
+    },
+    {
+      "category": "code",
+      "contract_ok": true,
+      "elapsed_ms": 295,
+      "expected": {
+        "kind": "exact",
+        "value": "16"
+      },
+      "id": "rust-output",
+      "metrics": {
+        "generated_tokens": 2,
+        "prompt_tokens": 57,
+        "tok_s": 51.59612616284769,
+        "ttft_ms": 56.0174
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "16",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "16"
+    },
+    {
+      "category": "code",
+      "contract_ok": true,
+      "elapsed_ms": 295,
+      "expected": {
+        "kind": "exact",
+        "value": "2048"
+      },
+      "id": "rust-boundary-order",
+      "metrics": {
+        "generated_tokens": 4,
+        "prompt_tokens": 48,
+        "tok_s": 51.639622565998664,
+        "ttft_ms": 55.9107
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "2048",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "2048"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": true,
+      "elapsed_ms": 254,
+      "expected": {
+        "kind": "exact",
+        "value": "false"
+      },
+      "id": "project-caps",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 101,
+        "tok_s": 51.84194428027829,
+        "ttft_ms": 58.0132
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "false",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "false"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": true,
+      "elapsed_ms": 254,
+      "expected": {
+        "kind": "exact",
+        "value": "local:a"
+      },
+      "id": "offline-choice",
+      "metrics": {
+        "generated_tokens": 2,
+        "prompt_tokens": 47,
+        "tok_s": 55.57763222613426,
+        "ttft_ms": 57.736000000000004
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "local:a",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "local:a"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 329,
+      "expected": {
+        "kind": "exact",
+        "value": "zephyr-17"
+      },
+      "id": "conversation-recall",
+      "metrics": {
+        "generated_tokens": 6,
+        "prompt_tokens": 54,
+        "tok_s": 58.06133212049661,
+        "ttft_ms": 72.68299999999999
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "zephyr-17",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "zephyr-17"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 329,
+      "expected": {
+        "kind": "exact",
+        "value": "beta"
+      },
+      "id": "conversation-revision",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 76,
+        "tok_s": 44.965241868036024,
+        "ttft_ms": 72.3452
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "beta",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "beta"
+    },
+    {
+      "category": "instruction-hierarchy",
+      "contract_ok": true,
+      "elapsed_ms": 2206,
+      "expected": {
+        "kind": "exact",
+        "value": "BLUE"
+      },
+      "id": "system-precedence",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 42,
+        "tok_s": 49.88277547762759,
+        "ttft_ms": 63.3408
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "BLUE",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "BLUE"
+    },
+    {
+      "category": "tool-format",
+      "contract_ok": false,
+      "elapsed_ms": 2206,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "tool-call",
+      "metrics": {
+        "generated_tokens": 90,
+        "prompt_tokens": 49,
+        "tok_s": 45.595664034732955,
+        "ttft_ms": 63.07889999999999
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "I cannot execute external functions like `notes.list` directly as I do not have access to your local environment or a backend system to run custom code. Additionally, I do not have access to your personal notes.\n\nTo view your notes, please check the application or platform where you are using this service (e.g., a specific app, website, or database interface) and look for a \"Notes\" section or a command prompt within that environment.",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "I cannot execute external functions like `notes.list` directly as I do not have access to your local environment or a backend system to run custom code. Additionally, I do not have access to your personal notes.\n\nTo view your notes, please check the application or platform where you are using this service (e.g., a specific app, website, or database interface) and look for a \"Notes\" section or a command prompt within that environment."
+    },
+    {
+      "category": "reasoning",
+      "contract_ok": false,
+      "elapsed_ms": 2780,
+      "expected": {
+        "kind": "exact",
+        "value": "397"
+      },
+      "id": "arithmetic",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 38,
+        "tok_s": 53.95644635650104,
+        "ttft_ms": 90.3022
+      },
+      "model_id": "local:conversation-spark",
+      "output": "199",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "199"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": false,
+      "elapsed_ms": 2779,
+      "expected": {
+        "kind": "json",
+        "value": {
+          "jour": "mardi",
+          "ville": "Lyon"
+        }
+      },
+      "id": "french-extraction",
+      "metrics": {
+        "generated_tokens": 27,
+        "prompt_tokens": 58,
+        "tok_s": 76.02654847072597,
+        "ttft_ms": 91.50999999999999
+      },
+      "model_id": "local:conversation-spark",
+      "output": "```json\n{\n  \"ville\": \"Lyon\",\n  \"jour\": \"mardi\"\n}\n```",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "```json\n{\n  \"ville\": \"Lyon\",\n  \"jour\": \"mardi\"\n}\n```"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": true,
+      "elapsed_ms": 431,
+      "expected": {
+        "kind": "json",
+        "value": [
+          -2,
+          0,
+          4,
+          4,
+          9
+        ]
+      },
+      "id": "sort-with-duplicates",
+      "metrics": {
+        "generated_tokens": 15,
+        "prompt_tokens": 43,
+        "tok_s": 76.95599040820535,
+        "ttft_ms": 76.1661
+      },
+      "model_id": "local:conversation-spark",
+      "output": "[-2, 0, 4, 4, 9]",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "[-2, 0, 4, 4, 9]"
+    },
+    {
+      "category": "unicode",
+      "contract_ok": true,
+      "elapsed_ms": 431,
+      "expected": {
+        "kind": "exact",
+        "value": "été 猫"
+      },
+      "id": "unicode-copy",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 36,
+        "tok_s": 59.758099214380195,
+        "ttft_ms": 74.2728
+      },
+      "model_id": "local:conversation-spark",
+      "output": "été 猫",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "été 猫"
+    },
+    {
+      "category": "code",
+      "contract_ok": false,
+      "elapsed_ms": 270,
+      "expected": {
+        "kind": "exact",
+        "value": "16"
+      },
+      "id": "rust-output",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 62,
+        "tok_s": 55.03880235566077,
+        "ttft_ms": 66.2746
+      },
+      "model_id": "local:conversation-spark",
+      "output": "8",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "8"
+    },
+    {
+      "category": "code",
+      "contract_ok": false,
+      "elapsed_ms": 270,
+      "expected": {
+        "kind": "exact",
+        "value": "2048"
+      },
+      "id": "rust-boundary-order",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 54,
+        "tok_s": 66.23891050240006,
+        "ttft_ms": 65.5008
+      },
+      "model_id": "local:conversation-spark",
+      "output": "128",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "128"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": false,
+      "elapsed_ms": 261,
+      "expected": {
+        "kind": "exact",
+        "value": "false"
+      },
+      "id": "project-caps",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 105,
+        "tok_s": 43.390159979519865,
+        "ttft_ms": 70.638
+      },
+      "model_id": "local:conversation-spark",
+      "output": "true",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "true"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": false,
+      "elapsed_ms": 261,
+      "expected": {
+        "kind": "exact",
+        "value": "local:a"
+      },
+      "id": "offline-choice",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 53,
+        "tok_s": 43.4914974122559,
+        "ttft_ms": 69.5412
+      },
+      "model_id": "local:conversation-spark",
+      "output": "local",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "local"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 330,
+      "expected": {
+        "kind": "exact",
+        "value": "zephyr-17"
+      },
+      "id": "conversation-recall",
+      "metrics": {
+        "generated_tokens": 6,
+        "prompt_tokens": 57,
+        "tok_s": 67.69334912844813,
+        "ttft_ms": 73.6134
+      },
+      "model_id": "local:conversation-spark",
+      "output": "zephyr-17",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "zephyr-17"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 330,
+      "expected": {
+        "kind": "exact",
+        "value": "beta"
+      },
+      "id": "conversation-revision",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 75,
+        "tok_s": 43.1540426707174,
+        "ttft_ms": 71.286
+      },
+      "model_id": "local:conversation-spark",
+      "output": "beta",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "beta"
+    },
+    {
+      "category": "instruction-hierarchy",
+      "contract_ok": true,
+      "elapsed_ms": 321,
+      "expected": {
+        "kind": "exact",
+        "value": "BLUE"
+      },
+      "id": "system-precedence",
+      "metrics": {
+        "generated_tokens": 2,
+        "prompt_tokens": 46,
+        "tok_s": 48.22961153459389,
+        "ttft_ms": 76.5159
+      },
+      "model_id": "local:conversation-spark",
+      "output": "BLUE",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "BLUE"
+    },
+    {
+      "category": "tool-format",
+      "contract_ok": false,
+      "elapsed_ms": 321,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "tool-call",
+      "metrics": {
+        "generated_tokens": 4,
+        "prompt_tokens": 109,
+        "tok_s": 50.25081437726051,
+        "ttft_ms": 74.8352
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>notes.list</tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>notes.list</tool_call>"
+    },
+    {
+      "category": "reasoning",
+      "contract_ok": false,
+      "elapsed_ms": 610,
+      "expected": {
+        "kind": "exact",
+        "value": "397"
+      },
+      "id": "arithmetic",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 38,
+        "tok_s": 56.222626608669906,
+        "ttft_ms": 64.8475
+      },
+      "model_id": "local:conversation-spark",
+      "output": "199",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "199"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": false,
+      "elapsed_ms": 609,
+      "expected": {
+        "kind": "json",
+        "value": {
+          "jour": "mardi",
+          "ville": "Lyon"
+        }
+      },
+      "id": "french-extraction",
+      "metrics": {
+        "generated_tokens": 27,
+        "prompt_tokens": 58,
+        "tok_s": 71.66137611075133,
+        "ttft_ms": 66.2358
+      },
+      "model_id": "local:conversation-spark",
+      "output": "```json\n{\n  \"ville\": \"Lyon\",\n  \"jour\": \"mardi\"\n}\n```",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "```json\n{\n  \"ville\": \"Lyon\",\n  \"jour\": \"mardi\"\n}\n```"
+    },
+    {
+      "category": "structured-output",
+      "contract_ok": true,
+      "elapsed_ms": 631,
+      "expected": {
+        "kind": "json",
+        "value": [
+          -2,
+          0,
+          4,
+          4,
+          9
+        ]
+      },
+      "id": "sort-with-duplicates",
+      "metrics": {
+        "generated_tokens": 15,
+        "prompt_tokens": 43,
+        "tok_s": 38.18283315094667,
+        "ttft_ms": 73.4278
+      },
+      "model_id": "local:conversation-spark",
+      "output": "[-2, 0, 4, 4, 9]",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "[-2, 0, 4, 4, 9]"
+    },
+    {
+      "category": "unicode",
+      "contract_ok": true,
+      "elapsed_ms": 631,
+      "expected": {
+        "kind": "exact",
+        "value": "été 猫"
+      },
+      "id": "unicode-copy",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 36,
+        "tok_s": 43.49244318799608,
+        "ttft_ms": 72.3563
+      },
+      "model_id": "local:conversation-spark",
+      "output": "été 猫",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "été 猫"
+    },
+    {
+      "category": "code",
+      "contract_ok": false,
+      "elapsed_ms": 339,
+      "expected": {
+        "kind": "exact",
+        "value": "16"
+      },
+      "id": "rust-output",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 62,
+        "tok_s": 19.92202519339306,
+        "ttft_ms": 61.5082
+      },
+      "model_id": "local:conversation-spark",
+      "output": "8",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "8"
+    },
+    {
+      "category": "code",
+      "contract_ok": false,
+      "elapsed_ms": 339,
+      "expected": {
+        "kind": "exact",
+        "value": "2048"
+      },
+      "id": "rust-boundary-order",
+      "metrics": {
+        "generated_tokens": 3,
+        "prompt_tokens": 54,
+        "tok_s": 27.20834244057018,
+        "ttft_ms": 60.3152
+      },
+      "model_id": "local:conversation-spark",
+      "output": "128",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "128"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": false,
+      "elapsed_ms": 483,
+      "expected": {
+        "kind": "exact",
+        "value": "false"
+      },
+      "id": "project-caps",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 105,
+        "tok_s": 3.9036257266111334,
+        "ttft_ms": 58.3158
+      },
+      "model_id": "local:conversation-spark",
+      "output": "true",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "true"
+    },
+    {
+      "category": "project-policy",
+      "contract_ok": false,
+      "elapsed_ms": 483,
+      "expected": {
+        "kind": "exact",
+        "value": "local:a"
+      },
+      "id": "offline-choice",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 53,
+        "tok_s": 3.905298083592125,
+        "ttft_ms": 56.412
+      },
+      "model_id": "local:conversation-spark",
+      "output": "local",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "local"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 372,
+      "expected": {
+        "kind": "exact",
+        "value": "zephyr-17"
+      },
+      "id": "conversation-recall",
+      "metrics": {
+        "generated_tokens": 6,
+        "prompt_tokens": 57,
+        "tok_s": 45.24549072128099,
+        "ttft_ms": 74.00139999999999
+      },
+      "model_id": "local:conversation-spark",
+      "output": "zephyr-17",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "zephyr-17"
+    },
+    {
+      "category": "conversation",
+      "contract_ok": true,
+      "elapsed_ms": 372,
+      "expected": {
+        "kind": "exact",
+        "value": "beta"
+      },
+      "id": "conversation-revision",
+      "metrics": {
+        "generated_tokens": 1,
+        "prompt_tokens": 75,
+        "tok_s": 32.663086792354214,
+        "ttft_ms": 72.6202
+      },
+      "model_id": "local:conversation-spark",
+      "output": "beta",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "beta"
+    },
+    {
+      "category": "instruction-hierarchy",
+      "contract_ok": true,
+      "elapsed_ms": 374,
+      "expected": {
+        "kind": "exact",
+        "value": "BLUE"
+      },
+      "id": "system-precedence",
+      "metrics": {
+        "generated_tokens": 2,
+        "prompt_tokens": 46,
+        "tok_s": 41.40023887937834,
+        "ttft_ms": 73.1495
+      },
+      "model_id": "local:conversation-spark",
+      "output": "BLUE",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "BLUE"
+    },
+    {
+      "category": "tool-format",
+      "contract_ok": false,
+      "elapsed_ms": 373,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "tool-call",
+      "metrics": {
+        "generated_tokens": 4,
+        "prompt_tokens": 109,
+        "tok_s": 29.99476591334812,
+        "ttft_ms": 71.2295
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>notes.list</tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>notes.list</tool_call>"
+    }
+  ],
+  "scope": "authored corpus via real model.infer; two paired-request passes; not a representative quality/security benchmark or installed UI acceptance",
+  "transport_ok": true,
+  "two_job_batches": 24,
+  "corpus_frozen_before_first_run": true,
+  "corpus_freeze_record_sha256": "0af473d23a1fa7100426c017beb323a78620a7440a9d5d7b13ff2c5bda6573ae",
+  "probe_source_sha256": "ae61a3f0533f55583ba34cd00e7d6b8f23d0c0add7943ff107d374c7954e2f19",
+  "probe_binary_sha256": "213c75c47a33b5669c1cbaa75800fffefc4f4210684794e76e5d84d39fac5870"
+}
