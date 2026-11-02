@@ -3706,9 +3706,7 @@ impl eframe::App for UiApp {
                             let recent_chat_errors = self
                                 .security_ui
                                 .recent_chat_errors
-                                .iter()
-                                .map(|e| (e.code.clone(), e.cause.clone()))
-                                .collect();
+                                .clone();
                             let _ = self.cmd_tx.send(Cmd::Troubleshoot { recent_chat_errors });
                             self.on_tab_open(Tab::Feedback);
                             self.status = t.troubleshooting_status.into();

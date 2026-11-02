@@ -327,6 +327,12 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         };
     }
     let lower = raw.to_ascii_lowercase();
+    if lower.contains("llama_decode") {
+        return ChatErrorClassified {
+            code: "model.decode_failed",
+            cause: t.chat_error_internal.to_string(),
+        };
+    }
     if lower.contains("indisponible en tour de salon")
         || lower.contains("indisponible en salon")
         || lower.contains("isn't available in the room")
@@ -711,6 +717,16 @@ pub(crate) fn user_visible_chat_error(t: &UiStrings, raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_decode_failure_keeps_a_diagnostic_code_without_native_details_in_chrome() {
+        for language in ["fr", "en"] {
+            let t = crate::i18n::strings(language);
+            let error = classify_chat_error(&t, "échec llama_decode (code -1)");
+            assert_eq!(error.code, "model.decode_failed");
+            assert!(!format_chat_error(&t, &error).contains("llama_decode"));
+        }
+    }
 
     #[test]
     fn host_path_sentinel_copy_names_folder_without_path() {

@@ -412,7 +412,7 @@ pub struct GenStats {
     pub draft_proposed: u32,
     /// Pas de vérification speculative (0 si pas de draft).
     pub draft_steps: u32,
-    /// True when adaptive speculation stopped itself after poor acceptance.
+    /// True when speculation stopped for compatibility or poor acceptance.
     pub draft_disabled: bool,
     /// Cause locale d'arrêt du spéculatif, sans contenu de prompt.
     pub draft_disable_reason: Option<DraftDisableReason>,
@@ -452,6 +452,7 @@ impl GenStats {
 pub enum DraftDisableReason {
     LowAcceptance,
     SlowerThanStandard,
+    IncompatibleCache,
 }
 
 impl DraftDisableReason {
@@ -459,6 +460,7 @@ impl DraftDisableReason {
         match self {
             Self::LowAcceptance => "low-acceptance",
             Self::SlowerThanStandard => "slower-than-standard",
+            Self::IncompatibleCache => "cache-incompatible",
         }
     }
 }
@@ -1263,18 +1265,21 @@ impl LlamaContext {
     /// avec ancrage sémantique aux frontières tour/outil/pensée (E21).
     /// Retourne le nombre de tokens déjà en cache (hit).
     fn prepare_seq0_prefix(&mut self, prompt_tokens: &[sys::llama_token]) -> usize {
-        let l = semantic_prefix_len(&self.seq0_tokens, prompt_tokens, &self.seq0_anchors);
+        // Always evaluate the last prompt token for fresh logits. Performing
+        // two consecutive rewinds (trim, then last-token refresh) is unsupported
+        // by recurrent caches with a pending, single-use rollback snapshot.
+        let l = semantic_prefix_len(&self.seq0_tokens, prompt_tokens, &self.seq0_anchors)
+            .min(prompt_tokens.len().saturating_sub(1));
         let mem = unsafe { sys::llama_get_memory(self.ptr) };
         if l == 0 {
-            unsafe { sys::llama_memory_clear(mem, true) };
-            self.seq0_tokens.clear();
-            self.seq0_anchors = vec![0];
+            self.reset_seq0_memory();
             return 0;
         }
         if l < self.seq0_tokens.len() {
             // Coupe le surplus (générations précédentes ou prompt raccourci).
-            unsafe {
-                sys::llama_memory_seq_rm(mem, 0, l as sys::llama_pos, -1);
+            if !unsafe { sys::llama_memory_seq_rm(mem, 0, l as sys::llama_pos, -1) } {
+                self.reset_seq0_memory();
+                return 0;
             }
             self.seq0_tokens.truncate(l);
             self.seq0_anchors.retain(|&p| p <= l);
@@ -1283,6 +1288,22 @@ impl LlamaContext {
             }
         }
         l
+    }
+
+    fn reset_seq0_memory(&mut self) {
+        unsafe { sys::llama_memory_clear(sys::llama_get_memory(self.ptr), true) };
+        self.seq0_tokens.clear();
+        self.seq0_anchors = vec![0];
+    }
+
+    /// Rebuild only committed tokens after an unsupported native rollback.
+    fn rebuild_seq0_memory(&mut self) -> Result<(), LlamaError> {
+        let committed = std::mem::take(&mut self.seq0_tokens);
+        self.reset_seq0_memory();
+        if !committed.is_empty() {
+            self.prefill_seq0_from(&committed, 0)?;
+        }
+        Ok(())
     }
 
     fn refresh_seq0_anchors(&mut self) {
@@ -1310,8 +1331,9 @@ impl LlamaContext {
             let last = prompt_tokens[n - 1];
             let last_pos = (n - 1) as sys::llama_pos;
             let mem = unsafe { sys::llama_get_memory(self.ptr) };
-            unsafe {
-                sys::llama_memory_seq_rm(mem, 0, last_pos, -1);
+            if !unsafe { sys::llama_memory_seq_rm(mem, 0, last_pos, -1) } {
+                self.reset_seq0_memory();
+                return self.prefill_seq0_from(prompt_tokens, 0);
             }
             self.seq0_tokens.truncate(n.saturating_sub(1));
             let mut batch = unsafe { sys::llama_batch_init(1, 0, 1) };
@@ -1362,8 +1384,11 @@ impl LlamaContext {
     fn trim_seq0_to_prompt(&mut self, n_prompt: usize) {
         if n_prompt < self.seq0_tokens.len() {
             let mem = unsafe { sys::llama_get_memory(self.ptr) };
-            unsafe {
-                sys::llama_memory_seq_rm(mem, 0, n_prompt as sys::llama_pos, -1);
+            if !unsafe { sys::llama_memory_seq_rm(mem, 0, n_prompt as sys::llama_pos, -1) } {
+                // The native cache still contains generated positions. Do not
+                // truncate the token mirror and falsely claim a reusable prefix.
+                self.reset_seq0_memory();
+                return;
             }
             self.seq0_tokens.truncate(n_prompt);
             self.seq0_anchors.retain(|&p| p <= n_prompt);
@@ -1435,13 +1460,21 @@ impl LlamaContext {
         let mut draft_accepted = 0u32;
         let mut draft_proposed = 0u32;
         let mut draft_steps = 0u32;
-        let mut draft_disabled = false;
-        let mut draft_disable_reason = None;
+        // Hybrid/recurrent models keep bounded state snapshots; arbitrary draft
+        // rejection cannot safely rewind their native cache. Use plain decoding
+        // while retaining the same model, template and sampling parameters.
+        let speculative_cache_supported = unsafe {
+            !sys::llama_model_is_recurrent(self.model.ptr)
+                && !sys::llama_model_is_hybrid(self.model.ptr)
+        };
+        let mut draft_disabled = !speculative_cache_supported;
+        let mut draft_disable_reason =
+            (!speculative_cache_supported).then_some(DraftDisableReason::IncompatibleCache);
         let mut draft_verify_ms = 0.0;
         let mut draft_committed_tokens = 0u32;
         let mut plain_decode_ms = 0.0;
         let mut plain_decode_tokens = 0u32;
-        let mut speculation_enabled = true;
+        let mut speculation_enabled = speculative_cache_supported;
         let mut haystack = prompt_tokens.clone();
 
         let mut cur = unsafe { sys::llama_sampler_sample(smpl, self.ptr, -1) };
@@ -1516,6 +1549,13 @@ impl LlamaContext {
             unsafe { sys::llama_batch_free(batch) };
             if rc != 0 {
                 // Fallback : un token sans speculative (évite échec dur sur batch multi-logits).
+                if let Err(error) = self.rebuild_seq0_memory() {
+                    unsafe { sys::llama_sampler_free(smpl) };
+                    return Err(error);
+                }
+                speculation_enabled = false;
+                draft_disabled = true;
+                draft_disable_reason = Some(DraftDisableReason::IncompatibleCache);
                 let mut tok = cur;
                 let batch = unsafe { sys::llama_batch_get_one(&mut tok, 1) };
                 let rc = unsafe { sys::llama_decode(self.ptr, batch) };
@@ -1586,8 +1626,14 @@ impl LlamaContext {
             if accepted < draft.len() {
                 let keep = self.seq0_tokens.len() as sys::llama_pos;
                 let mem = unsafe { sys::llama_get_memory(self.ptr) };
-                unsafe {
-                    sys::llama_memory_seq_rm(mem, 0, keep, -1);
+                if !unsafe { sys::llama_memory_seq_rm(mem, 0, keep, -1) } {
+                    if let Err(error) = self.rebuild_seq0_memory() {
+                        unsafe { sys::llama_sampler_free(smpl) };
+                        return Err(error);
+                    }
+                    speculation_enabled = false;
+                    draft_disabled = true;
+                    draft_disable_reason = Some(DraftDisableReason::IncompatibleCache);
                 }
             }
 
@@ -1720,6 +1766,7 @@ impl LlamaContext {
             abort: Arc<AtomicBool>,
             pause: Arc<AtomicBool>,
             done: Option<StopReason>,
+            failed: bool,
             ttft_ms: f64,
             t_start: Instant,
             t_done: Option<Instant>,
@@ -1766,6 +1813,7 @@ impl LlamaContext {
                         abort: item.abort.clone(),
                         pause: item.pause.clone(),
                         done: None,
+                        failed: false,
                         ttft_ms: f64::MAX,
                         t_start: Instant::now(),
                         t_done: None,
@@ -1889,6 +1937,7 @@ impl LlamaContext {
                             abort: item.abort.clone(),
                             pause: item.pause.clone(),
                             done: None,
+                            failed: false,
                             ttft_ms: f64::MAX,
                             t_start: Instant::now(),
                             t_done: None,
@@ -1896,6 +1945,7 @@ impl LlamaContext {
                         let si = slots.len() - 1;
                         if let Err(e) = prefill_slot(slf, batch, slots, prompts, si) {
                             out[idx] = Err(e);
+                            slots[si].failed = true;
                             slots[si].finish(StopReason::Aborted);
                         } else {
                             eprintln!(
@@ -2004,6 +2054,7 @@ impl LlamaContext {
                 for k in order {
                     if slots[k].done.is_none() {
                         out[slots[k].seq_id as usize] = Err(LlamaError::Decode(rc));
+                        slots[k].failed = true;
                         slots[k].finish(StopReason::Aborted);
                     }
                 }
@@ -2019,7 +2070,9 @@ impl LlamaContext {
 
         for slot in slots {
             let idx = slot.seq_id as usize;
-            if out[idx].is_err() && matches!(out[idx], Err(LlamaError::Decode(-1))) {
+            // Decode(-1) is both a real native error and the initial placeholder.
+            // Keep failure state separate so an actual error is never made OK.
+            if !slot.failed {
                 let total = slot
                     .t_done
                     .unwrap_or_else(Instant::now)
