@@ -930,8 +930,13 @@ fn extract_module_archive(bytes: &[u8], destination: &Path) -> Result<(), Catalo
                 "les liens symboliques sont refusés".into(),
             ));
         }
-        let archive_name = item.name();
-        if archive_name.contains('\\') || archive_name.contains(':') || archive_name.starts_with('/') {
+        let archive_name = item
+            .name()
+            .map_err(|e| CatalogueError::InvalidPackageArchive(e.to_string()))?;
+        if archive_name.contains('\\')
+            || archive_name.contains(':')
+            || archive_name.starts_with('/')
+        {
             return Err(CatalogueError::InvalidPackageArchive(
                 "chemin de fichier non portable".into(),
             ));
