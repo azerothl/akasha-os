@@ -398,7 +398,11 @@ pub(crate) fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
             Some(p) => dest.join(p),
             None => continue,
         };
-        if file.name().ends_with('/') {
+        let is_dir = file
+            .name()
+            .map(|n| n.ends_with('/'))
+            .unwrap_or(false);
+        if is_dir {
             fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
         } else {
             if let Some(p) = outpath.parent() {
