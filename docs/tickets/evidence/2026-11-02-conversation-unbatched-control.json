@@ -1,0 +1,146 @@
+{
+  "cases": [
+    {
+      "model": "local:utf8-qwen",
+      "id": "arithmetic",
+      "expected": {
+        "kind": "exact",
+        "value": "397"
+      },
+      "output": "398",
+      "done": true
+    },
+    {
+      "model": "local:utf8-qwen",
+      "id": "sort-with-duplicates",
+      "expected": {
+        "kind": "json",
+        "value": [
+          -2,
+          0,
+          4,
+          4,
+          9
+        ]
+      },
+      "output": "[[-2,0,4,4,9]]",
+      "done": true
+    },
+    {
+      "model": "local:utf8-qwen",
+      "id": "rust-output",
+      "expected": {
+        "kind": "exact",
+        "value": "16"
+      },
+      "output": "16",
+      "done": true
+    },
+    {
+      "model": "local:utf8-qwen",
+      "id": "rust-boundary-order",
+      "expected": {
+        "kind": "exact",
+        "value": "2048"
+      },
+      "output": "2048",
+      "done": true
+    },
+    {
+      "model": "local:utf8-qwen",
+      "id": "project-caps",
+      "expected": {
+        "kind": "exact",
+        "value": "false"
+      },
+      "output": "false",
+      "done": true
+    },
+    {
+      "model": "local:utf8-qwen",
+      "id": "tool-call",
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "name": "notes.list",
+          "arguments": {}
+        }
+      },
+      "output": "I cannot execute external functions like `notes.list` as I do not have access to your local environment or a backend system to run custom code. Additionally, I do not have access to your personal notes.\n\nTo view your notes, please check the application or platform where you are storing them (e.g., a specific app, database, or cloud service).",
+      "done": true
+    },
+    {
+      "model": "local:utf8-spark",
+      "id": "arithmetic",
+      "expected": {
+        "kind": "exact",
+        "value": "397"
+      },
+      "output": "199",
+      "done": true
+    },
+    {
+      "model": "local:utf8-spark",
+      "id": "sort-with-duplicates",
+      "expected": {
+        "kind": "json",
+        "value": [
+          -2,
+          0,
+          4,
+          4,
+          9
+        ]
+      },
+      "output": "[-2, 0, 4, 4, 9]",
+      "done": true
+    },
+    {
+      "model": "local:utf8-spark",
+      "id": "rust-output",
+      "expected": {
+        "kind": "exact",
+        "value": "16"
+      },
+      "output": "8",
+      "done": true
+    },
+    {
+      "model": "local:utf8-spark",
+      "id": "rust-boundary-order",
+      "expected": {
+        "kind": "exact",
+        "value": "2048"
+      },
+      "output": "128",
+      "done": true
+    },
+    {
+      "model": "local:utf8-spark",
+      "id": "project-caps",
+      "expected": {
+        "kind": "exact",
+        "value": "false"
+      },
+      "output": "true",
+      "done": true
+    },
+    {
+      "model": "local:utf8-spark",
+      "id": "tool-call",
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "name": "notes.list",
+          "arguments": {}
+        }
+      },
+      "output": "<tool_call>notes.list</tool_call>",
+      "done": true
+    }
+  ],
+  "n_seq_max": 1,
+  "modeld_sha256": "d3789190efbe3ce900367ad07e348d1b9e926649f9ae41e6431e931993b747f8",
+  "corpus_sha256": "9690679a7f4857af5da198d2b1743a2254e22eb6968766d81ef2cb3f97936e1a",
+  "owned_processes_stopped": true
+}
