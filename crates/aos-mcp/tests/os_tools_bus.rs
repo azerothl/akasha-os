@@ -54,7 +54,8 @@ async fn media_and_installed_module_calls_keep_caps_identity_and_audit() {
                 .lock()
                 .unwrap()
                 .push(ctx.payload::<AuditAppendRequest>().unwrap());
-            ctx.respond(Status::Ok, &true).await.unwrap();
+            // Canonical aos-auditd returns the appended sequence number.
+            ctx.respond(Status::Ok, &1_u64).await.unwrap();
         }
     });
     let service_addr = addr.clone();

@@ -374,7 +374,7 @@ impl BusState {
                         };
                         let _ = tokio::time::timeout(
                             Duration::from_secs(2),
-                            client.call::<_, bool>("audit.append", &audit, vec![]),
+                            client.call::<_, u64>("audit.append", &audit, vec![]),
                         )
                         .await;
                         return Err(error.into());
@@ -399,7 +399,7 @@ impl BusState {
         if !matches!(
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call::<_, bool>("audit.append", &audit, vec![])
+                client.call::<_, u64>("audit.append", &audit, vec![])
             )
             .await,
             Ok(Ok(_))

@@ -104,6 +104,9 @@ Akasha’s MCP client in `aos-agent`.
 
 ## Related
 
+- Real stdio/media verification: [ticket #439 probe](tickets/mcp-os-tools-439.md)
+  (isolated native services, installed image/video weights, permission refusals).
+
 - HTTP mem/secrets sibling: [sibling-bridge.md](sibling-bridge.md) (`aos-bridged`)
 - Akasha as MCP *client*: `share/mcp/servers.yaml.example`
 - Pull external coding CLIs *into* Akasha: Agents → `harness.run` / Runtime
