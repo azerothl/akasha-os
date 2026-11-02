@@ -327,6 +327,17 @@ pub(crate) fn classify_chat_error(t: &UiStrings, raw: &str) -> ChatErrorClassifi
         };
     }
     let lower = raw.to_ascii_lowercase();
+    if lower.contains("connectionrefused")
+        || lower.contains("kind: connectionrefused")
+        || (lower.contains("10061") && lower.contains("127.0.0.1"))
+        || lower.contains("bus unavailable")
+        || lower.contains("bus injoignable")
+    {
+        return ChatErrorClassified {
+            code: "chat.bus_unavailable",
+            cause: t.chat_error_bus_unavailable.to_string(),
+        };
+    }
     if lower.contains("indisponible en tour de salon")
         || lower.contains("indisponible en salon")
         || lower.contains("isn't available in the room")
@@ -768,6 +779,18 @@ mod tests {
             &en,
         );
         assert!(historical.is_empty());
+    }
+
+    #[test]
+    fn bus_connection_refused_classified_without_badrequest() {
+        let en = crate::i18n::strings("en");
+        let raw = "Io(Os { code: 10061, kind: ConnectionRefused, message: \"…\" })";
+        let classified = classify_chat_error(&en, raw);
+        assert_eq!(classified.code, "chat.bus_unavailable");
+        let visible = user_visible_chat_error(&en, raw);
+        assert!(!visible.contains("BadRequest"));
+        assert!(!visible.contains("10061"));
+        assert!(visible.contains(en.chat_error_bus_unavailable));
     }
 
     #[test]

@@ -539,6 +539,7 @@ pub struct UiStrings {
     pub chat_previous_in_progress: &'static str,
     pub chat_history_reloaded: &'static str,
     pub chat_error_generic: &'static str,
+    pub chat_error_bus_unavailable: &'static str,
     pub chat_error_retry: &'static str,
     pub chat_error_activity: &'static str,
     pub chat_error_timeout: &'static str,
@@ -1914,6 +1915,7 @@ const EN: UiStrings = UiStrings {
     chat_previous_in_progress: "The previous reply is still in progress.",
     chat_history_reloaded: "History reloaded.",
     chat_error_generic: "Something went wrong. Try again.",
+    chat_error_bus_unavailable: "Preview services aren't ready yet. Wait a moment and try again.",
     chat_error_retry: "Retry",
     chat_error_activity: "Activity",
     chat_error_timeout: "The reply timed out.",
@@ -3279,6 +3281,8 @@ const FR: UiStrings = UiStrings {
     chat_previous_in_progress: "La réponse précédente est encore en cours.",
     chat_history_reloaded: "Historique rechargé.",
     chat_error_generic: "Un problème est survenu. Réessayez.",
+    chat_error_bus_unavailable:
+        "Les services Preview ne sont pas prêts. Patientez un instant, puis réessayez.",
     chat_error_retry: "Réessayer",
     chat_error_activity: "Activité",
     chat_error_timeout: "Délai de réponse dépassé.",
@@ -4819,6 +4823,14 @@ mod tests {
         assert_eq!(fr.chat_error_retry, "Réessayer");
         assert_eq!(en.chat_error_activity, "Activity");
         assert_eq!(fr.chat_error_activity, "Activité");
+        assert_eq!(
+            en.chat_error_bus_unavailable,
+            "Preview services aren't ready yet. Wait a moment and try again."
+        );
+        assert_eq!(
+            fr.chat_error_bus_unavailable,
+            "Les services Preview ne sont pas prêts. Patientez un instant, puis réessayez."
+        );
         assert_eq!(
             en.chat_previous_in_progress,
             "The previous reply is still in progress."

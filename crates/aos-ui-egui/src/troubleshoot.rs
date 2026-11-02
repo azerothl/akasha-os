@@ -4,7 +4,7 @@ use crate::cmd::Evt;
 use crate::os_open::aos_home;
 use aos_ipc::BusClient;
 use aos_proto::{
-    AgentInfo, AgentState, FeedbackSubmitRequest, FeedbackSubmitResponse, HealthSnapshot, ModelInfo,
+    AgentInfo, FeedbackSubmitRequest, FeedbackSubmitResponse, HealthSnapshot, ModelInfo,
 };
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -57,7 +57,8 @@ pub(crate) async fn run_troubleshoot(
     // Logs daemons (dernières lignes)
     let run_dir = home.join("var/run");
     let mut log_block = String::from("## Logs daemons (var/run)\n");
-    let mut log_errors = 0usize;
+    let mut log_incidents = 0usize;
+    let mut critical_log_findings: Vec<String> = Vec::new();
     if let Ok(rd) = std::fs::read_dir(&run_dir) {
         let mut files: Vec<_> = rd.filter_map(|e| e.ok()).collect();
         files.sort_by_key(|e| e.file_name());
@@ -75,15 +76,17 @@ pub(crate) async fn run_troubleshoot(
             let start = lines.len().saturating_sub(40);
             let tail = lines[start..].join("\n");
             for line in &lines[start..] {
-                let lower = line.to_lowercase();
-                if lower.contains("error")
-                    || lower.contains("panic")
-                    || lower.contains("fatal")
-                    || lower.contains("échec")
-                    || lower.contains("failed")
-                {
-                    log_errors += 1;
+                if crate::troubleshoot_detect::log_line_is_incident(line) {
+                    log_incidents += 1;
                 }
+            }
+            if name == "daemon_restarts.log" {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                critical_log_findings
+                    .extend(crate::troubleshoot_detect::daemon_restart_loop_findings(&raw, now_ms));
             }
             if !tail.trim().is_empty() {
                 log_block.push_str(&format!("### {name}\n```\n{tail}\n```\n"));
@@ -93,27 +96,68 @@ pub(crate) async fn run_troubleshoot(
         log_block.push_str("(dossier var/run absent)\n");
         findings.push("var/run inaccessible".into());
     }
-    if log_errors > 0 {
+    if log_incidents > 0 {
         findings.push(format!(
-            "{log_errors} ligne(s) d'erreur détectée(s) dans les logs récents"
+            "{log_incidents} actionable log incident(s) in recent daemon output"
         ));
     }
+    findings.extend(critical_log_findings);
     sections.push(log_block);
 
+    let mut health_snap: Option<HealthSnapshot> = None;
     // Services via bus
     let mut svc = String::from("## Services (bus)\n");
+    match bus
+        .call::<(), HealthSnapshot>("health.snapshot", &(), vec![])
+        .await
+    {
+        Ok(h) => {
+            health_snap = Some(h.clone());
+            svc.push_str(&format!(
+                "- health canary : {} · steps {} · SLO breaches {} · anomaly {:.2}{}\n",
+                if h.canary_ok { "ok" } else { "FAILED" },
+                h.steps.len(),
+                h.slo.breaches.len(),
+                h.anomaly.score,
+                if h.anomaly.fitted {
+                    ""
+                } else {
+                    " (not fitted)"
+                }
+            ));
+            if !h.canary_ok {
+                findings.push("health canary failed".into());
+                for step in h.steps.iter().filter(|s| !s.ok) {
+                    findings.push(format!(
+                        "canary step {} : {}",
+                        step.name,
+                        step.error.as_deref().unwrap_or("failed")
+                    ));
+                }
+            }
+            for b in &h.slo.breaches {
+                findings.push(format!("SLO breach: {b}"));
+            }
+            let _ = evt_tx.send(Evt::Health(h));
+        }
+        Err(e) => {
+            findings.push(format!("health.snapshot inaccessible : {e}"));
+            svc.push_str(&format!("- health.snapshot ERREUR : {e}\n"));
+        }
+    }
     match bus
         .call::<(), Vec<AgentInfo>>(aos_agent::intents::LIST, &(), vec![])
         .await
     {
         Ok(agents) => {
             svc.push_str(&format!("- agents actifs : {}\n", agents.len()));
+            let infra_ok = crate::troubleshoot_detect::infra_is_healthy(health_snap.as_ref());
             for a in agents.iter().take(12) {
                 svc.push_str(&format!(
                     "  - {} [{:?}] step {}/{}\n",
                     a.agent_id, a.state, a.step, a.max_steps
                 ));
-                if matches!(a.state, AgentState::Failed) {
+                if crate::troubleshoot_detect::failed_agent_is_incident(a, infra_ok) {
                     findings.push(format!("agent {} en Failed", a.agent_id));
                 }
             }
@@ -146,43 +190,6 @@ pub(crate) async fn run_troubleshoot(
         Err(e) => {
             findings.push(format!("module.list inaccessible : {e}"));
             svc.push_str(&format!("- module.list ERREUR : {e}\n"));
-        }
-    }
-    match bus
-        .call::<(), HealthSnapshot>("health.snapshot", &(), vec![])
-        .await
-    {
-        Ok(h) => {
-            svc.push_str(&format!(
-                "- health canary : {} · steps {} · SLO breaches {} · anomaly {:.2}{}\n",
-                if h.canary_ok { "ok" } else { "FAILED" },
-                h.steps.len(),
-                h.slo.breaches.len(),
-                h.anomaly.score,
-                if h.anomaly.fitted {
-                    ""
-                } else {
-                    " (not fitted)"
-                }
-            ));
-            if !h.canary_ok {
-                findings.push("health canary failed".into());
-                for step in h.steps.iter().filter(|s| !s.ok) {
-                    findings.push(format!(
-                        "canary step {} : {}",
-                        step.name,
-                        step.error.as_deref().unwrap_or("failed")
-                    ));
-                }
-            }
-            for b in &h.slo.breaches {
-                findings.push(format!("SLO breach: {b}"));
-            }
-            let _ = evt_tx.send(Evt::Health(h));
-        }
-        Err(e) => {
-            findings.push(format!("health.snapshot inaccessible : {e}"));
-            svc.push_str(&format!("- health.snapshot ERREUR : {e}\n"));
         }
     }
     sections.push(svc);

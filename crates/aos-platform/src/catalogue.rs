@@ -930,11 +930,12 @@ fn extract_module_archive(bytes: &[u8], destination: &Path) -> Result<(), Catalo
                 "les liens symboliques sont refusés".into(),
             ));
         }
-        let archive_name = item.name();
-        if archive_name.contains('\\') || archive_name.contains(':') || archive_name.starts_with('/') {
-            return Err(CatalogueError::InvalidPackageArchive(
-                "chemin de fichier non portable".into(),
-            ));
+        if let Ok(archive_name) = item.name() {
+            if archive_name.contains('\\') || archive_name.contains(':') || archive_name.starts_with('/') {
+                return Err(CatalogueError::InvalidPackageArchive(
+                    "chemin de fichier non portable".into(),
+                ));
+            }
         }
         let relative = item.enclosed_name().ok_or_else(|| {
             CatalogueError::InvalidPackageArchive("chemin de fichier dangereux".into())

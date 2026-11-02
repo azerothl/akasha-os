@@ -17,7 +17,7 @@ use aos_agent::skills::{get_skill, list_skills, load_skills, merge_skill_tools};
 use aos_agent::tools::{caps_for_tools, default_agent_tools, select_tools, ToolDesc};
 use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload, SubscribeRequest};
 use aos_caps::{CapStore, HolderId};
-use aos_ipc::{BusClient, BusService};
+use aos_ipc::{BusClient, BusService, ConnectRetry};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentIdRequest, AgentInfo, AgentKind,
     AgentOutputEvent, AgentPolicyGetRequest, AgentPolicySetRequest, AgentPromptOptimizeRequest,
@@ -908,9 +908,14 @@ async fn main() {
     let bus_addr = std::env::args()
         .nth(1)
         .unwrap_or_else(|| format!("127.0.0.1:{}", aos_ipc::DEFAULT_BUS_PORT));
-    let bus = BusClient::connect(&bus_addr, "agentd")
-        .await
-        .expect("connexion au bus — lancer aos-busd d'abord");
+    let bus = match BusClient::connect_with_retry(&bus_addr, "agentd", ConnectRetry::daemon_boot()).await
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[aos-agentd] bus unavailable at {bus_addr}: {e}");
+            std::process::exit(1);
+        }
+    };
     eprintln!("[aos-agentd] connecté au bus {bus_addr}");
 
     let shared: Shared = Arc::new(Mutex::new(Runtime {
