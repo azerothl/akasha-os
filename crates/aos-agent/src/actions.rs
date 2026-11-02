@@ -1,6 +1,36 @@
 //! Parsing des actions agent (JSON structuré, DSML/XML tool_call, fallback TOOL:).
 
 use serde::{Deserialize, Serialize};
+mod qwen_xml;
+
+/// Native Qwen function calls require the offered argument schema. Other
+/// formats retain the existing parser and execution-time permission checks.
+pub fn parse_actions_with_tools(text: &str, tools: &[crate::tools::ToolDesc]) -> Vec<AgentAction> {
+    let (reasoning, clean) = split_reasoning(text);
+    let complete_json = action_from_json_str(&clean).or_else(|| {
+        let trimmed = clean.trim();
+        if trimmed.starts_with("```") && trimmed.ends_with("```") {
+            extract_json_fence(trimmed).and_then(action_from_json_str)
+        } else { None }
+    });
+    let mut actions = if let Some(action) = complete_json {
+        // Complete JSON must be decoded before stripping presentation markup:
+        // a quoted native example is argument data, not a second invocation.
+        vec![action]
+    } else if qwen_xml::contains_call(&clean) {
+        // Broken JSON quoting must not hide a native envelope and expose an
+        // argument object to legacy action-recovery heuristics.
+        qwen_xml::parse(&clean, tools).unwrap_or_default()
+    } else {
+        return parse_actions(text);
+    };
+    if let Some(first) = actions.first_mut() {
+        if first.thought.is_empty() {
+            first.thought = truncate_chars(&reasoning, 400);
+        }
+    }
+    actions
+}
 
 /// Sentinel `fail_reason` / thread content key — UI maps to localized copy.
 pub const THREAD_FAIL_COULD_NOT_ACT: &str = "agent_could_not_act";

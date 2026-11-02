@@ -34,13 +34,26 @@ enum Expected {
     ToolCall { name: String, arguments: Value },
 }
 
-fn matches_expected(raw: &str, expected: &Expected) -> bool {
+fn matches_expected(raw: &str, expected: &Expected, tools: &[Value]) -> bool {
     let answer = aos_agent::actions::strip_reasoning(raw);
     match expected {
         Expected::Exact(value) => answer.trim() == value,
         Expected::Json(value) => serde_json::from_str::<Value>(&answer).is_ok_and(|v| v == *value),
         Expected::ToolCall { name, arguments } => {
-            let actions = aos_agent::actions::parse_actions(raw);
+            let offered: Vec<_> = tools
+                .iter()
+                .filter_map(|tool| {
+                    let function = tool.get("function")?;
+                    Some(aos_agent::tools::ToolDesc {
+                        name: function.get("name")?.as_str()?.into(),
+                        description: String::new(),
+                        input_schema: function.get("parameters")?.clone(),
+                        backend: aos_agent::tools::ToolBackend::Native,
+                        required_caps: vec![],
+                    })
+                })
+                .collect();
+            let actions = aos_agent::actions::parse_actions_with_tools(raw, &offered);
             actions.len() == 1 && actions[0].action == *name && actions[0].args == *arguments
         }
     }
@@ -104,7 +117,7 @@ async fn infer(bus: &BusClient, model: &str, case: &Case, pass: usize) -> Result
     if !complete {
         return Err("stream closed without Done".into());
     }
-    let contract_ok = matches_expected(&text, &case.expected);
+    let contract_ok = matches_expected(&text, &case.expected, &case.tools);
     Ok(
         json!({"id":case.id,"category":case.category,"pass":pass,"transport_ok":true,"contract_ok":contract_ok,
         "expected":case.expected,"output":text,"visible_output":aos_agent::actions::strip_reasoning(&text),
@@ -308,19 +321,23 @@ mod tests {
     fn grader_uses_answer_not_reasoning_and_rejects_surplus_json() {
         assert!(matches_expected(
             "<think>not the answer</think>397",
-            &Expected::Exact("397".into())
+            &Expected::Exact("397".into()),
+            &[]
         ));
         assert!(!matches_expected(
             "<think>397",
-            &Expected::Exact("397".into())
+            &Expected::Exact("397".into()),
+            &[]
         ));
         assert!(!matches_expected(
             "{\"x\":1} extra",
-            &Expected::Json(json!({"x":1}))
+            &Expected::Json(json!({"x":1})),
+            &[]
         ));
         assert!(matches_expected(
             "{\"x\":1}",
-            &Expected::Json(json!({"x":1}))
+            &Expected::Json(json!({"x":1})),
+            &[]
         ));
     }
     #[test]
@@ -329,11 +346,29 @@ mod tests {
             name: "notes.list".into(),
             arguments: json!({}),
         };
+        let tools = vec![
+            json!({"type":"function","function":{"name":"notes.list","parameters":{"type":"object","properties":{}}}}),
+        ];
         assert!(matches_expected(
             "<tool_call>{\"name\":\"notes.list\",\"arguments\":{}}</tool_call>",
-            &e
+            &e,
+            &tools
         ));
-        assert!(!matches_expected("TOOL: notes.delete {}", &e));
-        assert!(!matches_expected("TOOL: notes.list {\"extra\":1}", &e));
+        assert!(matches_expected(
+            "<tool_call><function=notes.list></function></tool_call>",
+            &e,
+            &tools
+        ));
+        assert!(!matches_expected(
+            "<tool_call><function=notes.list>",
+            &e,
+            &tools
+        ));
+        assert!(!matches_expected("TOOL: notes.delete {}", &e, &tools));
+        assert!(!matches_expected(
+            "TOOL: notes.list {\"extra\":1}",
+            &e,
+            &tools
+        ));
     }
 }

@@ -4,8 +4,8 @@
 //!          [--restore]`
 
 use aos_agent::actions::{
-    parse_actions, parse_embedded_action_question, strip_reasoning, strip_tool_markup, AgentAction,
-    THREAD_FAIL_COULD_NOT_CONTINUE,
+    parse_actions_with_tools, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
+    AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
 use aos_agent::assess::{parse_assess_response, AssessResult};
 use aos_agent::canvas_scene::{
@@ -1197,7 +1197,7 @@ async fn main() {
             clean_text
         };
 
-        let mut batch_actions = parse_actions(&infer.text);
+        let mut batch_actions = parse_actions_with_tools(&infer.text, &tools);
         let parsed_ok = !batch_actions.is_empty();
         if canvas_agent && batch_actions.len() > 1 {
             // Canvas feedback is only meaningful after the previous op has

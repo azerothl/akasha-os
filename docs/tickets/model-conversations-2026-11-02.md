@@ -48,14 +48,15 @@ behavior is correct. Tool failures also exposed missing declarations in native
 prompt rendering: the C matcher accepts messages only, and the current Jinja
 fallback receives tools only when that matcher fails to recognize the template.
 
-A local renderer experiment confirmed that passing declarations through Jinja
+At the time of these initial measurements, a local renderer experiment confirmed that passing declarations through Jinja
 changes Qwen from refusing the tool request to producing
 `<tool_call><function=notes.list>...</function></tool_call>`. The production
-action parser does not support this dialect, so that renderer experiment is
-not included in the implementation. A follow-up must deliver rendering and
-schema-aware native argument parsing together, with end-to-end agent checks;
-changing rendering alone would leave tool handling incomplete. Spark's response
-remained unsupported. Neither result is counted as a successful tool contract.
+action parser did not support that dialect, so the renderer experiment was
+excluded from #474. The coordinated renderer/decoder follow-up is documented in
+[native tool contracts](native-tool-contracts-2026-11-02.md), including a real
+permission-gated worker and a separate four-case tool corpus. The scores above
+remain the historical initial results; they are not retroactively regraded.
+Spark's native dialect remains unsupported.
 
 Raw responses, expected values, per-case grades, replay comparisons, placement
 lines and source/binary hashes are in:
