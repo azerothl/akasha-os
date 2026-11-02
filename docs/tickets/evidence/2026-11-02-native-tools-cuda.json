@@ -1,0 +1,611 @@
+{
+  "assets": [
+    {
+      "bytes": 2740937888,
+      "filename": {
+        "Windows": [
+          81,
+          119,
+          101,
+          110,
+          51,
+          46,
+          53,
+          45,
+          52,
+          66,
+          45,
+          81,
+          52,
+          95,
+          75,
+          95,
+          77,
+          46,
+          103,
+          103,
+          117,
+          102
+        ]
+      },
+      "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+    },
+    {
+      "bytes": 2600224352,
+      "filename": {
+        "Windows": [
+          83,
+          112,
+          97,
+          114,
+          107,
+          45,
+          88,
+          50,
+          46,
+          53,
+          45,
+          52,
+          66,
+          45,
+          81,
+          52,
+          95,
+          75,
+          95,
+          77,
+          46,
+          103,
+          103,
+          117,
+          102
+        ]
+      },
+      "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428"
+    }
+  ],
+  "case_count": 4,
+  "configuration": {
+    "concurrent_requests": 2,
+    "default_kv_tokens": 4096,
+    "max_tokens": 128,
+    "mode": "cuda",
+    "n_seq_max": 4,
+    "passes": 2,
+    "seed": 42,
+    "temperature": 0
+  },
+  "contract_passed": 8,
+  "contract_total": 16,
+  "corpus_sha256": "21680303737ffae7a82c79a1f09065f6fc9cc84ecb272dc72cef4c59040449ba",
+  "cuda_model_buffers": [
+    "load_tensors:        CUDA0 model buffer size =  2533.17 MiB",
+    "load_tensors:        CUDA0 model buffer size =  2408.02 MiB"
+  ],
+  "modeld_sha256": "17ea2da9655f4e1622a5e71fe7511468d43ba5eeb8a417f8fd7901c2f67f8b3d",
+  "models": [
+    {
+      "has_vision": false,
+      "id": "local:conversation-qwen",
+      "n_layers": 32,
+      "name": "local:conversation-qwen",
+      "placement": "VRAM  2.68 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 32/0/0",
+      "privacy_class": "local",
+      "profile": "balanced",
+      "state": "Loaded"
+    },
+    {
+      "has_vision": false,
+      "id": "local:conversation-spark",
+      "n_layers": 36,
+      "name": "local:conversation-spark",
+      "placement": "VRAM  2.70 GiB | RAM  0.00 GiB | DISK  0.00 GiB | couches V/R/D: 36/0/0",
+      "privacy_class": "local",
+      "profile": "balanced",
+      "state": "Loaded"
+    }
+  ],
+  "native_log_sha256": "3c41c3f4fc9db0faa7f21e7ede26c14528ab1723dc0a9628019185ea343462e6",
+  "native_log_valid_utf8": false,
+  "owned_modeld_stopped": true,
+  "replay_equal": 8,
+  "replays": [
+    {
+      "equal": true,
+      "id": "zero-arguments",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "workspace-unicode-path",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "schema-strings",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "typed-values",
+      "model_id": "local:conversation-qwen"
+    },
+    {
+      "equal": true,
+      "id": "zero-arguments",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "workspace-unicode-path",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "schema-strings",
+      "model_id": "local:conversation-spark"
+    },
+    {
+      "equal": true,
+      "id": "typed-values",
+      "model_id": "local:conversation-spark"
+    }
+  ],
+  "results": [
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 2779,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "zero-arguments",
+      "metrics": {
+        "generated_tokens": 14,
+        "prompt_tokens": 294,
+        "tok_s": 63.80614599028506,
+        "ttft_ms": 176.35680000000002
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=notes.list>\n</function>\n</tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=notes.list>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 2779,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "path": "première.txt",
+            "root": "demo"
+          },
+          "name": "workspace.read"
+        }
+      },
+      "id": "workspace-unicode-path",
+      "metrics": {
+        "generated_tokens": 39,
+        "prompt_tokens": 313,
+        "tok_s": 48.74048342061213,
+        "ttft_ms": 174.9352
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=workspace.read>\n<parameter=root>\ndemo\n</parameter>\n<parameter=path>\npremière.txt\n</parameter>\n</function>\n</tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=workspace.read>\n<parameter=root>\ndemo\n</parameter>\n<parameter=path>\npremière.txt\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 1231,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "code": "0042",
+            "text": "null"
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "schema-strings",
+      "metrics": {
+        "generated_tokens": 40,
+        "prompt_tokens": 335,
+        "tok_s": 67.56356168747426,
+        "ttft_ms": 140.85510000000002
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=probe.echo>\n<parameter=code>\n0042\n</parameter>\n<parameter=text>\nnull\n</parameter>\n</function>\n</tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=probe.echo>\n<parameter=code>\n0042\n</parameter>\n<parameter=text>\nnull\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 1231,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "count": 7,
+            "enabled": false,
+            "meta": {
+              "label": "été"
+            },
+            "values": [
+              1,
+              2
+            ]
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "typed-values",
+      "metrics": {
+        "generated_tokens": 71,
+        "prompt_tokens": 388,
+        "tok_s": 76.27831442974063,
+        "ttft_ms": 138.2569
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=probe.echo>\n<parameter=count>\n7\n</parameter>\n<parameter=enabled>\nFalse\n</parameter>\n<parameter=values>\n[1, 2]\n</parameter>\n<parameter=meta>\n{\"label\": \"été\"}\n</parameter>\n</function>\n</tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=probe.echo>\n<parameter=count>\n7\n</parameter>\n<parameter=enabled>\nFalse\n</parameter>\n<parameter=values>\n[1, 2]\n</parameter>\n<parameter=meta>\n{\"label\": \"été\"}\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 709,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "zero-arguments",
+      "metrics": {
+        "generated_tokens": 14,
+        "prompt_tokens": 294,
+        "tok_s": 72.23234048261524,
+        "ttft_ms": 105.2192
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=notes.list>\n</function>\n</tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=notes.list>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 709,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "path": "première.txt",
+            "root": "demo"
+          },
+          "name": "workspace.read"
+        }
+      },
+      "id": "workspace-unicode-path",
+      "metrics": {
+        "generated_tokens": 39,
+        "prompt_tokens": 313,
+        "tok_s": 87.42279614416154,
+        "ttft_ms": 103.7855
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=workspace.read>\n<parameter=root>\ndemo\n</parameter>\n<parameter=path>\npremière.txt\n</parameter>\n</function>\n</tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=workspace.read>\n<parameter=root>\ndemo\n</parameter>\n<parameter=path>\npremière.txt\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 1265,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "code": "0042",
+            "text": "null"
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "schema-strings",
+      "metrics": {
+        "generated_tokens": 40,
+        "prompt_tokens": 335,
+        "tok_s": 62.37898476954708,
+        "ttft_ms": 115.1904
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=probe.echo>\n<parameter=code>\n0042\n</parameter>\n<parameter=text>\nnull\n</parameter>\n</function>\n</tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=probe.echo>\n<parameter=code>\n0042\n</parameter>\n<parameter=text>\nnull\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": true,
+      "elapsed_ms": 1264,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "count": 7,
+            "enabled": false,
+            "meta": {
+              "label": "été"
+            },
+            "values": [
+              1,
+              2
+            ]
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "typed-values",
+      "metrics": {
+        "generated_tokens": 71,
+        "prompt_tokens": 388,
+        "tok_s": 72.20840770290818,
+        "ttft_ms": 113.8095
+      },
+      "model_id": "local:conversation-qwen",
+      "output": "<tool_call>\n<function=probe.echo>\n<parameter=count>\n7\n</parameter>\n<parameter=enabled>\nFalse\n</parameter>\n<parameter=values>\n[1, 2]\n</parameter>\n<parameter=meta>\n{\"label\": \"été\"}\n</parameter>\n</function>\n</tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>\n<function=probe.echo>\n<parameter=count>\n7\n</parameter>\n<parameter=enabled>\nFalse\n</parameter>\n<parameter=values>\n[1, 2]\n</parameter>\n<parameter=meta>\n{\"label\": \"été\"}\n</parameter>\n</function>\n</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 1616,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "zero-arguments",
+      "metrics": {
+        "generated_tokens": 4,
+        "prompt_tokens": 109,
+        "tok_s": 89.62782047547559,
+        "ttft_ms": 70.87440000000001
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>notes.list</tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>notes.list</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 1616,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "path": "première.txt",
+            "root": "demo"
+          },
+          "name": "workspace.read"
+        }
+      },
+      "id": "workspace-unicode-path",
+      "metrics": {
+        "generated_tokens": 19,
+        "prompt_tokens": 129,
+        "tok_s": 108.34508022097833,
+        "ttft_ms": 71.8934
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>workspace.read<arg_key>root</arg_key><arg_value>demo</arg_value><arg_key>path</arg_key><arg_value>première.txt</arg_value></tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>workspace.read<arg_key>root</arg_key><arg_value>demo</arg_value><arg_key>path</arg_key><arg_value>première.txt</arg_value></tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 571,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "code": "0042",
+            "text": "null"
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "schema-strings",
+      "metrics": {
+        "generated_tokens": 21,
+        "prompt_tokens": 154,
+        "tok_s": 105.74902031086185,
+        "ttft_ms": 62.695600000000006
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>probe.echo<arg_key>code</arg_key><arg_value>0042</arg_value><arg_key>text</arg_key><arg_value>null</arg_value></tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>probe.echo<arg_key>code</arg_key><arg_value>0042</arg_value><arg_key>text</arg_key><arg_value>null</arg_value></tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 570,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "count": 7,
+            "enabled": false,
+            "meta": {
+              "label": "été"
+            },
+            "values": [
+              1,
+              2
+            ]
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "typed-values",
+      "metrics": {
+        "generated_tokens": 40,
+        "prompt_tokens": 208,
+        "tok_s": 113.67291981398563,
+        "ttft_ms": 61.528800000000004
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>probe.echo<arg_key>count</arg_key><arg_value>7</arg_value><arg_key>enabled</arg_key><arg_value>false</arg_value><arg_key>meta</arg_key><arg_value>{\"label\": \"été\"}</arg_value><arg_key>values</arg_key><arg_value>[1, 2]</arg_value></tool_call>",
+      "pass": 0,
+      "transport_ok": true,
+      "visible_output": "<tool_call>probe.echo<arg_key>count</arg_key><arg_value>7</arg_value><arg_key>enabled</arg_key><arg_value>false</arg_value><arg_key>meta</arg_key><arg_value>{\"label\": \"été\"}</arg_value><arg_key>values</arg_key><arg_value>[1, 2]</arg_value></tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 394,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {},
+          "name": "notes.list"
+        }
+      },
+      "id": "zero-arguments",
+      "metrics": {
+        "generated_tokens": 4,
+        "prompt_tokens": 109,
+        "tok_s": 88.29320407208256,
+        "ttft_ms": 55.925599999999996
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>notes.list</tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>notes.list</tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 394,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "path": "première.txt",
+            "root": "demo"
+          },
+          "name": "workspace.read"
+        }
+      },
+      "id": "workspace-unicode-path",
+      "metrics": {
+        "generated_tokens": 19,
+        "prompt_tokens": 129,
+        "tok_s": 107.19607233590962,
+        "ttft_ms": 54.9688
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>workspace.read<arg_key>root</arg_key><arg_value>demo</arg_value><arg_key>path</arg_key><arg_value>première.txt</arg_value></tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>workspace.read<arg_key>root</arg_key><arg_value>demo</arg_value><arg_key>path</arg_key><arg_value>première.txt</arg_value></tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 570,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "code": "0042",
+            "text": "null"
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "schema-strings",
+      "metrics": {
+        "generated_tokens": 21,
+        "prompt_tokens": 154,
+        "tok_s": 105.91377105981859,
+        "ttft_ms": 61.7291
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>probe.echo<arg_key>code</arg_key><arg_value>0042</arg_value><arg_key>text</arg_key><arg_value>null</arg_value></tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>probe.echo<arg_key>code</arg_key><arg_value>0042</arg_value><arg_key>text</arg_key><arg_value>null</arg_value></tool_call>"
+    },
+    {
+      "category": "native-tools",
+      "contract_ok": false,
+      "elapsed_ms": 570,
+      "expected": {
+        "kind": "tool_call",
+        "value": {
+          "arguments": {
+            "count": 7,
+            "enabled": false,
+            "meta": {
+              "label": "été"
+            },
+            "values": [
+              1,
+              2
+            ]
+          },
+          "name": "probe.echo"
+        }
+      },
+      "id": "typed-values",
+      "metrics": {
+        "generated_tokens": 40,
+        "prompt_tokens": 208,
+        "tok_s": 113.35982363478638,
+        "ttft_ms": 60.451499999999996
+      },
+      "model_id": "local:conversation-spark",
+      "output": "<tool_call>probe.echo<arg_key>count</arg_key><arg_value>7</arg_value><arg_key>enabled</arg_key><arg_value>false</arg_value><arg_key>meta</arg_key><arg_value>{\"label\": \"été\"}</arg_value><arg_key>values</arg_key><arg_value>[1, 2]</arg_value></tool_call>",
+      "pass": 1,
+      "transport_ok": true,
+      "visible_output": "<tool_call>probe.echo<arg_key>count</arg_key><arg_value>7</arg_value><arg_key>enabled</arg_key><arg_value>false</arg_value><arg_key>meta</arg_key><arg_value>{\"label\": \"été\"}</arg_value><arg_key>values</arg_key><arg_value>[1, 2]</arg_value></tool_call>"
+    }
+  ],
+  "scope": "authored corpus via real model.infer; two paired-request passes; not a representative quality/security benchmark or installed UI acceptance",
+  "transport_ok": true,
+  "two_job_batches": 8,
+  "fixture_frozen_before_first_inference": true,
+  "probe_source_sha256": "37eac86f26fa1ee60a1c8aca26b1778434b94c00d177b79676cf9e4efc48c45e",
+  "probe_binary_sha256": "f224cc22adde644bec4f422c76ed158f98180ab50208ca981e27a7ea7689bcc2",
+  "purpose": "Frozen four-case native-tool transport/decoding regression, two paired passes. Spark dialect is unsupported; failures are retained, no model ranking."
+}

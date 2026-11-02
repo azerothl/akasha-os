@@ -37,7 +37,7 @@ embedded JSON to execute; a Spark-specific parser is outside this change.
 
 ## Observed validation
 
-- 419 runtime-agent tests, 25 llama tests with CPU features, 25 with CUDA/mtmd,
+- 420 runtime-agent tests, 25 llama tests with CPU features, 25 with CUDA/mtmd,
   and two conversation-grader tests passed. Strict CPU Clippy passed for the
   agent/llama targets and the conversation example.
 - A real Qwen3.5-4B worker completed `workspace.inspect` → `workspace.read` →

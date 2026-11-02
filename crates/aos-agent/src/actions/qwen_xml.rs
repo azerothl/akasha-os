@@ -367,4 +367,52 @@ mod tests {
         .is_empty());
         assert!(parse_actions_with_tools(&call("").repeat(65), &tools).is_empty());
     }
+
+    #[test]
+    fn captured_cpu_cuda_tool_replies_keep_their_recorded_contract_results() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let fixture: Value = serde_json::from_slice(
+            &std::fs::read(root.join("fixtures/models/native-tools-v1.json")).unwrap(),
+        )
+        .unwrap();
+        let mut checked = 0;
+        for mode in ["cpu", "cuda"] {
+            let path = root.join(format!(
+                "docs/tickets/evidence/2026-11-02-native-tools-{mode}.json"
+            ));
+            let report: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+            for entry in report["results"].as_array().unwrap() {
+                let case = fixture["cases"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|c| c["id"] == entry["id"])
+                    .unwrap();
+                let offered: Vec<_> = case["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|t| {
+                        let mut desc = tool(t["function"]["parameters"].clone());
+                        desc.name = t["function"]["name"].as_str().unwrap().into();
+                        desc
+                    })
+                    .collect();
+                let actions = parse_actions_with_tools(entry["output"].as_str().unwrap(), &offered);
+                let expected = &case["expected"]["value"];
+                let matches = actions.len() == 1
+                    && actions[0].action == expected["name"].as_str().unwrap()
+                    && actions[0].args == expected["arguments"];
+                assert_eq!(
+                    matches,
+                    entry["contract_ok"].as_bool().unwrap(),
+                    "{mode}: {} {}",
+                    entry["model_id"],
+                    entry["id"]
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 32);
+    }
 }
