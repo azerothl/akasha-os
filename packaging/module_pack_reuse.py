@@ -11,13 +11,14 @@ import argparse
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import shutil
 import stat
-import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -26,6 +27,57 @@ from module_pack_inputs import MODULES, fingerprint
 from module_pack_release import catalogue_block, module_manifest, platform_id, replace_module_metadata
 
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
+logger = logging.getLogger(__name__)
+GITHUB_API = "https://api.github.com"
+RELEASES_PER_PAGE = 30
+MAX_RELEASE_PAGES = 10
+
+
+def github_token() -> str | None:
+    for key in ("GITHUB_TOKEN", "GH_TOKEN"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return None
+
+
+def github_api_json(path: str, token: str) -> object:
+    request = urllib.request.Request(
+        f"{GITHUB_API}{path}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "akasha-os-module-pack-reuse",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=90) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def list_github_releases(repository: str) -> list[dict] | None:
+    token = github_token()
+    if not token:
+        logger.warning("module pack reuse: no GITHUB_TOKEN/GH_TOKEN; skipping release index lookup")
+        return None
+    releases: list[dict] = []
+    try:
+        for page in range(1, MAX_RELEASE_PAGES + 1):
+            batch = github_api_json(
+                f"/repos/{repository}/releases?per_page={RELEASES_PER_PAGE}&page={page}",
+                token,
+            )
+            if not isinstance(batch, list):
+                raise ValueError("unexpected GitHub releases response")
+            if not batch:
+                break
+            releases.extend(batch)
+            if len(batch) < RELEASES_PER_PAGE:
+                break
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError, json.JSONDecodeError) as error:
+        logger.warning("module pack reuse: GitHub releases API unavailable (%s); skipping reuse", error)
+        return None
+    return releases
 
 
 def read_url(url: str, limit: int) -> bytes:
@@ -158,11 +210,12 @@ def restore(root: Path, module: str, input_hash: str, index: str, data: bytes, p
 
 def release_indexes(root: Path, platform: str, repository: str) -> list[tuple[str, str]]:
     name = f"aos-module-catalogue-{platform}.yaml"
-    response = subprocess.run(["gh", "api", f"repos/{repository}/releases?per_page=30"],
-        check=True, capture_output=True, text=True)
+    releases = list_github_releases(repository)
+    if releases is None:
+        return []
     pinned = (root / "share/modules/catalogue.pub").read_bytes()
     indexes = []
-    for release in json.loads(response.stdout):
+    for release in releases:
         if release.get("draft"):
             continue
         assets = {asset["name"]: asset["browser_download_url"] for asset in release.get("assets", [])}

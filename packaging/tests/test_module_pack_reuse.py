@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -89,6 +90,12 @@ class ModuleReuseTests(unittest.TestCase):
         meta = reuse.metadata((self.root / "share/modules/catalogue.yaml").read_text(), "notes")
         self.assertIn("/download/v2/", meta["url"])
         self.assertEqual(meta["sha256"].removeprefix("sha256:"), hashlib.sha256(self.archive).hexdigest())
+
+    def test_release_indexes_skips_reuse_without_github_token(self):
+        env = {key: value for key, value in os.environ.items() if key not in {"GITHUB_TOKEN", "GH_TOKEN"}}
+        with patch.dict("os.environ", env, clear=True), self.assertLogs("module_pack_reuse", level="WARNING") as logs:
+            self.assertEqual(reuse.release_indexes(self.root, "windows-x64", "azerothl/akasha-os"), [])
+        self.assertTrue(any("skipping release index lookup" in message for message in logs.output))
 
     def test_changed_inputs_are_a_miss_and_required_mode_fails(self):
         self.assertFalse(reuse.restore(self.root, "notes", "b" * 64, self.index, self.archive, "windows-x64"))
