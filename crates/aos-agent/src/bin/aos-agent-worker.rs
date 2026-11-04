@@ -2895,7 +2895,7 @@ async fn execute_action(
                     denied,
                 );
             }
-            maybe_post_web_access_notice(&bus, &spec, &shared).await;
+            maybe_post_web_access_notice(bus, spec, shared).await;
             ActResult::Continue(outcome)
         }
         other => {
@@ -3098,7 +3098,13 @@ async fn post_web_access_notice(
 async fn maybe_post_web_access_notice(bus: &BusClient, spec: &AgentSpec, shared: &Shared) {
     let kind = {
         let mut st = shared.state.lock().await;
-        aos_agent::capability_policy::take_web_notice_kind(&mut st.task_capability)
+        match aos_agent::capability_policy::next_web_notice_dispatch(&mut st.task_capability) {
+            Some(aos_agent::capability_policy::WebNoticeDispatch::Post(k)) => Some(k),
+            Some(aos_agent::capability_policy::WebNoticeDispatch::UpgradeToDenied) => {
+                Some(aos_agent::capability_policy::WebNoticeKind::Denied)
+            }
+            None => None,
+        }
     };
     if let Some(kind) = kind {
         post_web_access_notice(bus, spec, kind).await;

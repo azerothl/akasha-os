@@ -24,7 +24,9 @@ pub enum WebAccessMode {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskCapabilityState {
     pub web_access: WebAccessMode,
-    pub web_notice_posted: bool,
+    /// Which web-access banner was posted to chat (at most one; denied wins over unavailable).
+    #[serde(default)]
+    pub web_notice_shown: Option<WebNoticeKind>,
     #[serde(default)]
     pub cap_requests: HashSet<String>,
     #[serde(default)]
@@ -37,10 +39,19 @@ pub struct TaskCapabilityState {
     pub interactive_auth_notice_posted: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WebNoticeKind {
     Denied,
     Unavailable,
+}
+
+/// Chat side-effect after a web-access mode change (one banner per task).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebNoticeDispatch {
+    Post(WebNoticeKind),
+    /// Replace an earlier unavailable banner with denied (denied always wins).
+    UpgradeToDenied,
 }
 
 pub fn parse_web_notice_sentinel(text: &str) -> Option<WebNoticeKind> {
@@ -246,17 +257,50 @@ pub fn mark_web_unavailable(state: &mut TaskCapabilityState) {
     }
 }
 
-pub fn take_web_notice_kind(state: &mut TaskCapabilityState) -> Option<WebNoticeKind> {
-    if state.web_notice_posted {
-        return None;
+pub fn next_web_notice_dispatch(state: &mut TaskCapabilityState) -> Option<WebNoticeDispatch> {
+    match state.web_access {
+        WebAccessMode::Normal => None,
+        WebAccessMode::UnavailableForTask => {
+            if state.web_notice_shown.is_some() {
+                return None;
+            }
+            state.web_notice_shown = Some(WebNoticeKind::Unavailable);
+            Some(WebNoticeDispatch::Post(WebNoticeKind::Unavailable))
+        }
+        WebAccessMode::DeniedForTask => match state.web_notice_shown {
+            None => {
+                state.web_notice_shown = Some(WebNoticeKind::Denied);
+                Some(WebNoticeDispatch::Post(WebNoticeKind::Denied))
+            }
+            Some(WebNoticeKind::Unavailable) => {
+                state.web_notice_shown = Some(WebNoticeKind::Denied);
+                Some(WebNoticeDispatch::UpgradeToDenied)
+            }
+            Some(WebNoticeKind::Denied) => None,
+        },
     }
-    let kind = match state.web_access {
-        WebAccessMode::DeniedForTask => WebNoticeKind::Denied,
-        WebAccessMode::UnavailableForTask => WebNoticeKind::Unavailable,
-        WebAccessMode::Normal => return None,
-    };
-    state.web_notice_posted = true;
-    Some(kind)
+}
+
+/// Effective banner when multiple sentinels exist in transcript (denied beats unavailable).
+pub fn effective_web_notice_in_transcript<'a>(
+    lines: impl IntoIterator<Item = &'a str>,
+) -> Option<WebNoticeKind> {
+    let mut denied = false;
+    let mut unavailable = false;
+    for text in lines {
+        match parse_web_notice_sentinel(text) {
+            Some(WebNoticeKind::Denied) => denied = true,
+            Some(WebNoticeKind::Unavailable) => unavailable = true,
+            None => {}
+        }
+    }
+    if denied {
+        Some(WebNoticeKind::Denied)
+    } else if unavailable {
+        Some(WebNoticeKind::Unavailable)
+    } else {
+        None
+    }
 }
 
 pub fn should_append_cap_request_hint(
@@ -301,22 +345,23 @@ pub fn follow_up_missing_cap(
     if !outcome_looks_like_missing_cap(outcome) {
         return out;
     }
-    if state.web_access != WebAccessMode::Normal && (is_web_tool(tool) || is_net_capability(hint_cap)) {
-        if !out.to_ascii_lowercase().contains("indisponible") {
-            out.push_str(
-                "\n[runtime] Accès web indisponible pour le reste de la tâche — continue sans web ou termine.",
-            );
-        }
+    if state.web_access != WebAccessMode::Normal
+        && (is_web_tool(tool) || is_net_capability(hint_cap))
+        && !out.to_ascii_lowercase().contains("indisponible")
+    {
+        out.push_str(
+            "\n[runtime] Accès web indisponible pour le reste de la tâche — continue sans web ou termine.",
+        );
         return out;
     }
-    if is_web_tool(tool) || is_net_capability(hint_cap) {
-        if state.cap_requests.contains(hint_cap) || state.cap_denied.contains(hint_cap) {
-            mark_web_unavailable(state);
-            out.push_str(
-                "\n[runtime] Accès web indisponible pour le reste de la tâche — continue sans web ou termine.",
-            );
-            return out;
-        }
+    if (is_web_tool(tool) || is_net_capability(hint_cap))
+        && (state.cap_requests.contains(hint_cap) || state.cap_denied.contains(hint_cap))
+    {
+        mark_web_unavailable(state);
+        out.push_str(
+            "\n[runtime] Accès web indisponible pour le reste de la tâche — continue sans web ou termine.",
+        );
+        return out;
     }
     if let Some(hint) = cap_request_hint(state, tool, hint_cap) {
         out.push_str(&hint);
@@ -442,12 +487,65 @@ mod tests {
     }
 
     #[test]
-    fn take_web_notice_only_once() {
+    fn web_notice_posted_at_most_once_per_task() {
         let mut state = TaskCapabilityState {
             web_access: WebAccessMode::DeniedForTask,
             ..Default::default()
         };
-        assert_eq!(take_web_notice_kind(&mut state), Some(WebNoticeKind::Denied));
-        assert_eq!(take_web_notice_kind(&mut state), None);
+        assert_eq!(
+            next_web_notice_dispatch(&mut state),
+            Some(WebNoticeDispatch::Post(WebNoticeKind::Denied))
+        );
+        assert_eq!(next_web_notice_dispatch(&mut state), None);
+    }
+
+    #[test]
+    fn web_notice_denied_replaces_unavailable_regardless_of_order() {
+        let mut unavailable_first = TaskCapabilityState {
+            web_access: WebAccessMode::UnavailableForTask,
+            ..Default::default()
+        };
+        assert_eq!(
+            next_web_notice_dispatch(&mut unavailable_first),
+            Some(WebNoticeDispatch::Post(WebNoticeKind::Unavailable))
+        );
+        mark_web_denied(&mut unavailable_first);
+        assert_eq!(
+            next_web_notice_dispatch(&mut unavailable_first),
+            Some(WebNoticeDispatch::UpgradeToDenied)
+        );
+        assert_eq!(next_web_notice_dispatch(&mut unavailable_first), None);
+
+        let mut denied_first = TaskCapabilityState::default();
+        mark_web_denied(&mut denied_first);
+        assert_eq!(
+            next_web_notice_dispatch(&mut denied_first),
+            Some(WebNoticeDispatch::Post(WebNoticeKind::Denied))
+        );
+        mark_web_unavailable(&mut denied_first);
+        assert_eq!(next_web_notice_dispatch(&mut denied_first), None);
+        assert_eq!(denied_first.web_access, WebAccessMode::DeniedForTask);
+    }
+
+    #[test]
+    fn effective_web_notice_prefers_denied_in_transcript() {
+        assert_eq!(
+            effective_web_notice_in_transcript([
+                WEB_ACCESS_UNAVAILABLE_SENTINEL,
+                WEB_ACCESS_DENIED_SENTINEL,
+            ]),
+            Some(WebNoticeKind::Denied)
+        );
+        assert_eq!(
+            effective_web_notice_in_transcript([
+                WEB_ACCESS_DENIED_SENTINEL,
+                WEB_ACCESS_UNAVAILABLE_SENTINEL,
+            ]),
+            Some(WebNoticeKind::Denied)
+        );
+        assert_eq!(
+            effective_web_notice_in_transcript([WEB_ACCESS_UNAVAILABLE_SENTINEL]),
+            Some(WebNoticeKind::Unavailable)
+        );
     }
 }
