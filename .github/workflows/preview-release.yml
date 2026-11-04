@@ -136,6 +136,7 @@ jobs:
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}\aos-release-cost\timings.tsv
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           AOS_MODULE_PACK_PLATFORM: windows-x64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
           AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
@@ -302,6 +303,7 @@ jobs:
           AOS_RELEASE_CACHE_PROFILE: ${{ inputs.cache_profile || 'reuse' }}
           AOS_RELEASE_COST_TIMINGS: ${{ runner.temp }}/aos-release-cost/timings.tsv
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           AOS_MODULE_PACK_PLATFORM: linux-x64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
           AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
@@ -474,6 +476,7 @@ jobs:
           AOS_RELEASE_COST_COMPONENT_ZIPS: ${{ github.event_name == 'workflow_dispatch' && !inputs.macos_only && !inputs.create_release }}
           VERSION: ${{ steps.ver.outputs.version }}
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           AOS_MODULE_PACK_PLATFORM: macos-arm64
           AOS_OPTIONAL_MODULES: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && ((!inputs.macos_only && inputs.create_release) || (inputs.macos_only && inputs.upload_release)))) && 'canvas,create,illustration-studio' || '' }}
         run: |
