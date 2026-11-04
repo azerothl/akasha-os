@@ -11,12 +11,12 @@ pub const NET_TOOLS: &[&str] = &["web.search", "web.browse", "net.fetch"];
 
 /// Retourne le motif de refus, ou `None` si l'outil passe.
 pub fn policy_deny(policy: &AgentPolicy, tool: &str) -> Option<String> {
-    if matches!(policy.net, AgentNetPolicy::Deny) && NET_TOOLS.contains(&tool) {
+    if matches!(policy.net, AgentNetPolicy::Deny) && (NET_TOOLS.contains(&tool) || tool == "process.run") {
         return Some(format!(
             "outil {tool} bloqué par la politique réseau de l'agent (net:deny) — demandez à l'utilisateur de l'autoriser"
         ));
     }
-    if !policy.fs_write && tool == "fs.write" {
+    if !policy.fs_write && matches!(tool, "fs.write" | "fs.apply_patch" | "fs.undo_patch" | "process.run" | "git.commit") {
         return Some(format!(
             "outil {tool} bloqué par la politique de l'agent (fs.write:deny) — demandez à l'utilisateur de l'autoriser"
         ));
@@ -71,5 +71,16 @@ mod tests {
         assert!(policy_deny(&policy, "fs.write").is_some());
         assert_eq!(policy_deny(&policy, "fs.read"), None);
         assert!(policy_deny(&policy, "web.search").is_some());
+    }
+
+    #[test]
+    fn project_operations_obey_write_and_network_policy() {
+        let read_only = AgentPolicy { fs_write:false, ..Default::default() };
+        for tool in ["fs.apply_patch", "fs.undo_patch", "process.run", "git.commit"] {
+            assert!(policy_deny(&read_only, tool).is_some(), "{tool}");
+        }
+        let offline = AgentPolicy { net:AgentNetPolicy::Deny, ..Default::default() };
+        assert!(policy_deny(&offline, "process.run").is_some());
+        assert!(policy_deny(&offline, "fs.apply_patch").is_none());
     }
 }

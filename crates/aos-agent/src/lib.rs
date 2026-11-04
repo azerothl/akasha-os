@@ -38,6 +38,7 @@ pub mod tool_exec;
 pub mod tool_gate;
 pub mod tools;
 pub mod workspace_context;
+pub mod workspace_operations;
 
 pub use assess::{parse_assess_response, AssessResult};
 pub use deep_thinking::DeepThinkingEngine;

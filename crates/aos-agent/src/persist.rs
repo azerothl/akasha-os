@@ -542,23 +542,32 @@ pub fn compact_working_memory(
     if memory.len() <= keep_recent + 2 {
         return None;
     }
-    // Keep first system message(s) and last keep_recent
-    let system: Vec<_> = memory
-        .iter()
-        .take_while(|(r, _)| r == "system")
-        .cloned()
-        .collect();
-    let after_system = memory.len().saturating_sub(system.len());
-    if after_system <= keep_recent {
-        return None;
-    }
-    let drop_count = after_system - keep_recent;
+    // A tool loop may have no recent user turn. Retain the original directive
+    // and latest human correction as user messages, not just summary fragments:
+    // native chat templates require a user query and these instructions still
+    // govern execution. Overlapping recent/pinned messages occur only once.
+    let system_count = memory.iter().take_while(|(r, _)| r == "system").count();
+    let recent_start = memory.len().saturating_sub(keep_recent).max(system_count);
+    let first_user = memory.iter().position(|(r, _)| r == "user");
+    let last_user = memory.iter().rposition(|(r, _)| r == "user");
+    let is_summary =
+        |message: &(String, String)| message.0 == "system" && message.1.starts_with("[compaction]");
+    let pinned = |index: usize| {
+        (index < system_count && !is_summary(&memory[index]))
+            || first_user == Some(index)
+            || last_user == Some(index)
+    };
     let dropped: Vec<_> = memory
         .iter()
-        .skip(system.len())
-        .take(drop_count)
+        .enumerate()
+        .take(recent_start)
+        .filter(|(index, _)| !pinned(*index))
+        .map(|(_, message)| message)
         .cloned()
         .collect();
+    if dropped.is_empty() || (dropped.len() == 1 && is_summary(&dropped[0])) {
+        return None;
+    }
     let summary = format!(
         "[compaction] {} messages résumés : {}",
         dropped.len(),
@@ -568,9 +577,26 @@ pub fn compact_working_memory(
             .collect::<Vec<_>>()
             .join(" | ")
     );
-    let mut new_mem = system;
+    // Replace old leading summaries instead of permanently pinning one more
+    // system message on each pass through the compaction loop.
+    let mut new_mem: Vec<_> = memory
+        .iter()
+        .take(system_count)
+        .filter(|m| !is_summary(m))
+        .cloned()
+        .collect();
     new_mem.push(("system".into(), summary.clone()));
-    new_mem.extend(memory.iter().skip(memory.len() - keep_recent).cloned());
+    new_mem.extend(
+        memory
+            .iter()
+            .enumerate()
+            .take(recent_start)
+            .skip(system_count)
+            .filter(|(index, _)| pinned(*index))
+            .map(|(_, message)| message)
+            .cloned(),
+    );
+    new_mem.extend(memory.iter().skip(recent_start).cloned());
     *memory = new_mem;
     Some(summary)
 }
@@ -915,6 +941,63 @@ mod tests {
         assert!(s.is_some());
         assert!(mem[0].1.contains("base"));
         assert!(mem.last().unwrap().1.contains("a3"));
+    }
+
+    #[test]
+    fn compaction_retains_goal_and_latest_user_without_duplicate_summaries() {
+        for keep in [0, 1, 3] {
+            let mut mem = vec![
+                ("system".into(), "base".into()),
+                (
+                    "user".into(),
+                    "Corrige les deux fichiers échantillons".into(),
+                ),
+            ];
+            for i in 0..8 {
+                mem.push(("tool".into(), format!("read {i}")));
+            }
+            mem.push(("user".into(), "Conserve les signatures".into()));
+            for i in 0..8 {
+                mem.push(("assistant".into(), format!("action {i}")));
+            }
+            for _ in 0..4 {
+                compact_working_memory(&mut mem, keep);
+                let users = mem
+                    .iter()
+                    .filter(|(r, _)| r == "user")
+                    .map(|(_, c)| c.as_str())
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    users,
+                    [
+                        "Corrige les deux fichiers échantillons",
+                        "Conserve les signatures"
+                    ]
+                );
+                assert_eq!(
+                    mem.iter()
+                        .filter(|(r, c)| r == "system" && c.starts_with("[compaction]"))
+                        .count(),
+                    1
+                );
+                mem.push(("tool".into(), "next result".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn compaction_budget_keeps_a_user_query_in_tool_only_continuations() {
+        let goal = "Refactorise le projet et exécute la tâche verify";
+        let mut mem = vec![
+            ("system".into(), "base".into()),
+            ("user".into(), goal.into()),
+        ];
+        for _ in 0..40 {
+            mem.push(("tool".into(), "source résultat ".repeat(200)));
+        }
+        crate::context_budget::enforce_prompt_budget(&mut mem, 2048, 3);
+        assert!(mem.iter().any(|(r, c)| r == "user" && c == goal));
+        assert!(crate::context_budget::estimate_messages_tokens(&mem) <= 2048);
     }
 
     #[test]

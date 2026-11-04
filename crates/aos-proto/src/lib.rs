@@ -3028,6 +3028,8 @@ pub fn chat_user_wants_advisory(text: &str) -> bool {
         "quest-ce qu'il faudrait",
         "que faudrait-il",
         "que faudrait il",
+        "quels seraient",
+        "quelles seraient",
         "faudrait-il",
         "faudrait il",
         "faut-il",
@@ -3047,6 +3049,7 @@ pub fn chat_user_wants_advisory(text: &str) -> bool {
         "feature request",
         "should i ",
         "what would i need",
+        "what would it take",
         "what should i do",
         "what do i need to",
         "how would i ",
@@ -3439,6 +3442,10 @@ mod chat_delegation_tests {
 
     #[test]
     fn advisory_module_question_is_not_authoring() {
+        for question in ["Quels seraient les besoins pour créer un module ?", "Quelles seraient les limitations ?", "What would it take to build a module?"] {
+            assert!(chat_user_wants_advisory(question));
+            assert!(!chat_user_wants_module_authoring(question));
+        }
         let q = "Si je veux creer un module d'aide au développement pour des gros \
                  projet dans Akasha-os, qu'est ce qu'il faudrait que je fasse ? \
                  est ce qu'il y'a des limitation actuellement et dans ce cas \
