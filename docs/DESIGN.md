@@ -1,6 +1,6 @@
 ---
 name: Akasha OS
-description: Product chamber — Preview UI in the cloud chamber; ice tracks, signal chrome, hydrogen Install only.
+description: Cloud-chamber scroll field on the landing (Abyssal grammar); ice/signal/hydrogen ramps; plate pages keep cut-face docs chrome.
 colors:
   void: "#070b14"
   ice: "#5ee7ff"
@@ -119,21 +119,20 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Orrery"**
+**Creative North Star: "The Cloud Chamber"**
 
-The public site is a mechanical orrery in night ether, not an AI-OS product hero and not a radio correlator. A live 3D canvas draws the machine, cyan rails, and MEMORY / CAPS / GPU / AGENTS in one camera (pitch ~45°, shared perspective). The landing fold is that machine on the left and an honesty mill on the right: Fira lede on void, one paper sheet (HOST / NVIDIA / NOT BOOTABLE in void type), PREVIEW in cyan, then the hydrogen winding key. Inner pages are the same ether dimmed, with copy and cut-face stacks on void.
+The landing (`body.experience`) is a scroll-driven particle field in night void — Abyssal sticky-pin grammar fused to Akasha product truth. One WebGL seed cloud is reshaped by force-field presets as the visitor descends through Thesis → Caps → Surfaces → Local → Bound → Path → Install. Fixed mono chrome (wordmark, section index, Trace readout, progress rail) tints from the live field accent. Display type is set in authored line breaks (Archivo Narrow), not flowed paragraphs. Inner pages (`body.plate`) stay cut-face docs on void with the prior axis / lanes chrome.
 
-Personality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the same register as the thesis. Density is instrument-like: an 8px unit, flush square chrome, Archivo Narrow on the machine. Confirmed rejections: an AI-OS hero, a spectrogram correlator, a split-flap board, and a card grid of features. The header is the circular A-mark plus the words Akasha OS — never Station.
+Personality is precise and technical. Honesty about Preview (host app, NVIDIA recommended, not bootable) sits in the first beat, not as fine print. Confirmed rejections: app-store hero with screenshot collage, feature card grids, and implying a bootable OS.
 
 **Key Characteristics:**
 
-- Night void field; a live 3D canvas orrery (MEMORY, CAPS, GPU, AGENTS on a pitched plane). Plate weather dims the ether to 38% and tucks it to the corner
-- Archivo Narrow 700 on rails, headlines, and the winding key; Archivo Narrow 600 on canvas orbit IDs
-- Fira Sans 400 / 500 / 600 for lede, running copy, and honesty captions
-- Hydrogen reserved for the Install / Download winding key
-- Honesty as one paper mill (void type on paper) plus PREVIEW in cyan; inner pages continue in cyan, not hydrogen
-- Section contrast on plate weather: lifted `.grant` / `.section-plate` backgrounds, cyan rail under `h2`, paper `.callout` blocks for critical facts (`.callout-limit` uses hydrogen border)
-- Square bezels; integer unit `--u` (8px); two weathers (`body.sky` vs `body.plate`)
+- Landing: full-bleed additive point field; sticky 185vh beats; live `--accent` from the field hot stop
+- Archivo Narrow 700 uppercase display on landing titles; mono micro-labels for chrome / stats / links
+- Fira Sans for notes and plate running copy
+- Hydrogen appears as the Bound-beat field hot and alarm accent — not as a second primary button language on the landing (Install is a mono underline link)
+- Plate pages: integer `--u` (8px), square bezels, continue links, docs rail
+- Two weathers: `body.experience` (landing chamber) vs `body.plate` (procedures / docs)
 
 ## Colors
 
@@ -143,7 +142,7 @@ Night void, cyan rails, and a single hydrogen winding key. Cool paper for type a
 - **Cyan Rail** (`signal`): The orrery’s phosphor. Orbit strokes, rods, hub, canvas labels, links, selection, caret, scrollbar thumb, focus rings, current nav lane, inner `h2`, honesty `dt`, continue links, code, and skip-link fill. Live chrome speaks cyan.
 
 ### Secondary
-- **Hydrogen** (`hydrogen`): The winding key fill on Install (landing) and Download (install page) only. It is not a heading, link, hover, logo, or decorative accent.
+- **Hydrogen** (`hydrogen`): Bound-beat field highlight and alarm accent; Download winding key on the install page. It is not a heading, idle link, logo, or decorative hover on plate chrome.
 
 ### Neutral
 - **Night Void** (`void`): Page ground, honesty column, skip-link inverse, theme-color, orrery clear. Paper type sits on it.
@@ -152,7 +151,7 @@ Night void, cyan rails, and a single hydrogen winding key. Cool paper for type a
 - Plate (`plate` / `plate-edge`): Lifted section backgrounds and cyan-tinted edges for `.grant`, `.section-plate`, `.ticks`, and `.doc-band` so inner pages are not a flat void.
 
 ### Named Rules
-**The Hydrogen Key Rule.** Hydrogen fills the Install / Download winding key and nowhere else. Continue links, headings, the mark, and hover states stay cyan or paper.
+**The Hydrogen Key Rule.** On plate weather, hydrogen fills the Download winding key and nowhere else. On the landing field, hydrogen may tint the Bound preset only. Continue links, headings, the mark, and idle hover states stay cyan, ice, or paper.
 
 **The Cyan Rail Rule.** If a control is idle, it sits on mute; if it is live, current, or a destination, it goes to signal — except the one hydrogen key.
 
@@ -161,34 +160,31 @@ Night void, cyan rails, and a single hydrogen winding key. Cool paper for type a
 **Display Font:** Archivo Narrow (fallback Arial Narrow, sans-serif) at 600 and 700, self-hosted.
 **Body Font:** Fira Sans (fallback Segoe UI, sans-serif) at 400, 400 italic, 500, and 600, self-hosted.
 
-**Character:** Condensed machine lettering on the orrery and rails; humanist sans on plates and procedures. Archivo is uppercase on lanes, swipe, key, continue, and inner `h2`. The wordmark “Akasha OS” stays title case. Fira keeps the lede, plate captions, and running copy.
+**Character:** Condensed machine lettering on landing display and plate rails; mono micro-labels on experience chrome; humanist sans on notes and procedures. Archivo is uppercase on landing titles, lanes, key, continue, and inner `h2`. The experience wordmark is `(AKASHA OS)` in mono. Fira keeps notes and plate running copy.
 
 ### Hierarchy
-- **Display** (700, `clamp(1.8rem, 4vw, 2.6rem)`, line-height 0.9, tracking -0.02em, uppercase): Winding-key label (Install / Download). Continue labels use the same voice at `clamp(1.5rem, 3vw, 2.2rem)`.
-- **Headline** (700, `clamp(1.85rem, 3.4vw, 2.7rem)`, line-height 1.12, tracking -0.02em): Inner-page `h1` and 404. Paper on void. The landing `h1` is visually hidden; the canvas is the machine.
-- **Title** (700, 1.2rem, tracking 0.1em, uppercase, signal): Inner `h2` band labels (`hw.req`, `session GRANT`, chapter names).
-- **Rail** (700, 1.05rem, tracking 0.08em, uppercase): Nav lanes, language toggles, swipe, honesty `dt`. Wordmark is 1.15rem / tracking 0.04em / 700, not uppercase. Key hint is 1.05rem / 0.08em.
-- **Lede** (500, `clamp(1.15rem, 2vw, 1.45rem)`, line-height 1.35): Landing thesis and 404 line; max-width 22rem in the honesty column.
-- **Body** (400, 1.0625rem, line-height 1.55): Running copy, history, transcripts. Measure 42rem. Sky honesty facts are 0.98rem void type on a paper mill (`.sheet`). Honesty facts are `.fact` inside `.sheet` — never `.plate`, which is reserved for inner-page weather (`body.plate`).
-- **Label** (700, 1.05rem, tracking 0.1em, uppercase, signal): Honesty Host / NVIDIA / Boot in Archivo Narrow. Canvas orbit IDs are Archivo Narrow 600 in signal. Footer is 0.92rem mute.
+- **Display** (700, `clamp(2.5rem, 7vw, 7.2rem)`, line-height 0.86, tracking -0.045em, uppercase): Landing set titles (authored line breaks). Plate winding-key / continue stay at the smaller prior scale.
+- **Headline** (700, `clamp(1.85rem, 3.4vw, 2.7rem)`, line-height 1.12, tracking -0.02em): Inner-page `h1` and 404. Paper on void.
+- **Title** (700, 1.2rem, tracking 0.1em, uppercase, signal): Inner `h2` band labels.
+- **Rail / Mono** (10px–11.5px mono, tracking ~0.14–0.2em, uppercase): Experience chrome, section labels, stats, underline links. Plate nav lanes stay Archivo Narrow 700.
+- **Body** (400, 13px on landing notes; 1.0625rem on plate): Running copy. Plate measure 42rem.
+- **Label**: Experience stats in accent mono; plate honesty / footer mute as before.
 
 ### Named Rules
-**The Two Voices Rule.** Archivo Narrow speaks the machine (rails, swipe, titles, winding key, continue, Host / NVIDIA / Boot). Fira Sans speaks the log (lede, body, copy). Do not swap them.
+**The Two Voices Rule.** Archivo Narrow speaks display and plate machine chrome. Mono speaks experience instrumentation. Fira Sans speaks notes and log copy. Do not swap them.
 
-**The Hidden Landing Title Rule.** On sky weather the `h1` is a screen-reader title only. Do not paint collision-scale type over the orrery.
+**The Set Title Rule.** Landing display lines are authored breaks inside `.line` masks. Do not let a landing headline reflow under its reveal mask.
 
 ## Layout
 
-The site is a column: axis, then fold or plate-main, then footer. Inset is 3u (24px). The integer unit `--u` is 8px; all padding, gaps, and control heights are multiples of it.
+Landing: fixed canvas + fixed corner chrome + sticky pin sections (`--section-h: 185vh`). Corner / left / centre / closer layouts borrow Abyssal panel grammar. Footer follows the last beat.
 
-Sky fold is a 2fr / 1fr grid (machine | honesty) with the winding key spanning the bottom row. The canvas is fixed full-viewport behind the shell and draws the orrery in 3D (gears, rails, globes, one camera). Honesty is a transparent column: lede, paper mill, PREVIEW, repo link. Sky footer is hidden.
+Plate pages: axis, then plate-main, then footer. Inset is 3u (24px). The integer unit `--u` is 8px. Grants and chapter lists may run to 52rem; copy wraps at 42rem. Cut faces, not cards.
 
-Plate-main is ordinary flow under the dimmed orrery. Grants and chapter lists may run to 52rem; copy, steps, and pre wrap at 42rem. Grants, ticks, and doc-bands stack with void gutters (2u–3u plates, 3u chapters, 8u between grants) — cut faces, not cards.
-
-Below 820px the fold stacks, honesty comes first, the machine keeps 28dvh, orbit IDs appear as a four-item rail, and the sky key sticks to the bottom. Below 560px the key wraps so the hint takes a full row. Canvas orbit labels draw only when the canvas is at least 640px wide.
+Below 820px experience section nav hides; display scales down. Plate pages keep their prior stacking rules.
 
 ### Named Rules
-**The Two Weathers Rule.** `body.sky` is the night fold (full-bleed orrery, hydrogen key, no footer). `body.plate` is working copy: ether at 38% opacity, hub shifted to the corner, continue links instead of hydrogen — except install, which keeps the Download key. Do not run the sky fold layout on plate pages.
+**The Two Weathers Rule.** `body.experience` is the scroll chamber (full-bleed field, sticky beats, mono chrome). `body.plate` is working copy with axis/lanes and continue links — except install, which keeps the Download key. Do not run the experience pin layout on plate pages.
 
 **The Cut-Face Rule.** Honesty on sky is one paper mill on void, not a card grid. Inner grants, ticks, and chapter bands stay cut-face on void. Do not sit inner-page copy on paper sheets.
 
@@ -196,55 +192,51 @@ Below 820px the fold stacks, honesty comes first, the machine keeps 28dvh, orbit
 
 ## Elevation & Depth
 
-Depth is the ether: the orrery recedes in void; sky honesty is an opaque void column beside it; plate weather drops the canvas to 38%. Surfaces are flush rectangles. There is no reusable shadow scale and no card lift. Focus is a 2px signal outline offset 0.5u (4px). Selection is signal fill with void type.
+Depth is the field: additive particles in void, chrome lit by `--accent`, sticky copy floating above. Surfaces are flush. No card lift. Focus is a 1px accent outline. Selection uses a cool cyan wash.
 
 ### Named Rules
-**The Field Not Card Rule.** Do not lift content on drop shadows to imply a card grid. The sky honesty mill is one paper instrument on void; inner pages stay cut-face on void. The live 3D orrery and tonal wells (8% signal mix under `pre`) carry depth.
+**The Field Not Card Rule.** Do not lift content on drop shadows. The landing is a chamber, not a card grid. Plate pages stay cut-face on void; tonal wells under `pre` remain for code.
 
 ## Shapes
 
-Every control is a flush rectangle. No corner radius ships. The sky honesty mill is a square paper plate. The winding key is a full-width hydrogen rail (on plate-main it bleeds to the inset edges). The mark is a circular A inscribed in cyan rings on a void square — identity geometry, not a UI radius. The orrery itself is gears, ellipses, rods, and globes; that geometry stays on the canvas.
+Flush rectangles and hairline rules. No corner radius on chrome. Experience links are underline hairlines, not filled keys. The mark geometry (circular A) may still appear on plate pages; the landing wordmark is mono text `(AKASHA OS)`.
 
 ### Named Rules
-**The Square Bezel Rule.** `border-radius` stays 0 on chrome. Instruments are milled square. Do not round keys, lanes, plates, or bands. Circles belong to the mark and the orrery, not to buttons.
+**The Square Bezel Rule.** `border-radius` stays 0 on chrome. Do not round keys, lanes, plates, or bands.
 
 ## Components
 
 ### Buttons
-The winding key is the only primary control: hydrogen rail, Archivo Narrow 700 uppercase, key glyph, label, vertical rule, hint, arrow, min-height 10u. Hover and focus-visible invert to paper fill and void type, and wind the orrery (canvas speed target 3.4, lerp 0.08) unless `prefers-reduced-motion`. On sky it spans the fold; on install it bleeds the plate-main inset. There is no second hydrogen button.
-
-Continue is the inner-page pager: cyan Archivo uppercase, no fill, 8u top margin. Hover goes to paper. 404 uses continue (Home), not the key.
+Landing primary action is a mono underline `.link` (Get Preview / section CTAs). Install page keeps the hydrogen winding key. Continue remains the plate pager: cyan Archivo uppercase, no fill.
 
 ### Chips
-No filter chips. Language is a pair of rail buttons in the axis; the active language matches the current lane (void type on signal).
+No filter chips. Experience language is a mono EN/FR pair tinted by `--accent` when pressed. Plate language may still use void-on-signal wells.
 
 ### Cards / Containers
-Landing honesty uses one paper mill on void: Archivo Narrow void titles, Fira void body, hairline cuts, PREVIEW in cyan underneath. Inner pages do not reuse sheets for grants or chapters — those are cut-face stacks on void. Linked ticks go to signal on hover. `pre` is signal type on an 8% signal-into-void well, Fira 500, 0.95rem. Ordered procedures use Fira body with Archivo Narrow 700 leading-zero counters in signal.
+No cards on the landing. Inner pages stay cut-face stacks on void. `pre` is signal type on an 8% signal-into-void well.
 
 ### Inputs / Fields
 No text fields ship on the public site.
 
 ### Navigation
-Axis: mark (40px A-mark + “Akasha OS”), wrapping lanes, EN/FR. Lanes are Archivo Narrow 700 uppercase, mute at rest, paper on hover, void-on-signal when `aria-current="page"`. Docs chapters are stacked doc-bands (signal index + paper name; hover to signal), not inverted wells. Footer is mute Fira at 0.92rem; links stay signal.
+Experience: fixed top-left wordmark + Trace; top-right section index + Docs; top progress rail. Plate: axis mark + lanes + EN/FR. Docs chapters remain stacked doc-bands.
 
-### Orrery
-Fixed full-viewport WebGL canvas (Three.js). One 3D camera draws the gear deck, cyan orbital rails, rods, gimbals, and four bodies with sprite IDs: MEMORY, CAPS, GPU, AGENTS. Plate hub tucks upper-right at smaller span. Animates unless `prefers-reduced-motion: reduce`, which paints one frame. Hovering or focusing `.key` winds orbits and gears.
+### Field
+Fixed full-viewport WebGL points (`website/field.js`). Scroll blends neighbouring presets (forces + three-stop ramp). Accent CSS variable follows the hot stop. `prefers-reduced-motion: reduce` paints a static frame and skips Lenis / reveals.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** let the live orrery fill the sky fold; keep the landing `h1` visually hidden.
-- **Do** put HOST / NVIDIA / NOT BOOTABLE on one paper mill (void type), then PREVIEW in cyan.
-- **Do** keep hydrogen on the Install / Download winding key only; wind the orrery on key hover.
-- **Do** use cyan continue links on inner pages and 404.
-- **Do** set current nav and language as void type on a signal well.
-- **Do** use `body.sky` for the landing (and 404) and `body.plate` for procedures.
-- **Do** wrap running copy at 42rem, left-aligned; separate grants and chapters with void gutters.
+- **Do** let the particle field own the first viewport; brand wordmark is a hero-level signal in the chrome.
+- **Do** state host-app / not-bootable honesty in the first beat.
+- **Do** drive chrome accent from the live field palette.
+- **Do** use mono underline links on the landing and cyan continue on plate pages.
+- **Do** use `body.experience` for the landing and `body.plate` for procedures.
+- **Do** keep EN/FR equivalent claims.
 
 ### Don't:
-- **Don't** build an AI-OS hero, a spectrogram correlator, a split-flap board, or a feature card grid.
-- **Don't** label the header Station; the wordmark is Akasha OS.
-- **Don't** use hydrogen for headings, links, continue, the mark, or hover states.
+- **Don't** rebuild an app-store hero with inset screenshots or a feature card grid on the landing.
+- **Don't** label the header Station; the wordmark is Akasha OS / `(AKASHA OS)`.
 - **Don't** round corners or lift plates on card shadows.
-- **Don't** put Archivo Narrow on running copy, or Fira on the winding key.
-- **Don't** imply a bootable OS in chrome, imagery, or the swipe.
+- **Don't** put Archivo Narrow on running note copy, or Fira on set display titles.
+- **Don't** imply a bootable OS in chrome, imagery, or the closer.
