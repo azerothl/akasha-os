@@ -2168,6 +2168,19 @@ mod tests {
     use super::catalogue_module_names;
 
     #[test]
+    fn web_access_notice_settings_deeplink_targets_trust_section() {
+        use crate::ui_chat_transcript::CHAT_WEB_ACCESS_SETTINGS_SECTION;
+        assert_eq!(CHAT_WEB_ACCESS_SETTINGS_SECTION, "trust");
+        assert_ne!(CHAT_WEB_ACCESS_SETTINGS_SECTION, "network");
+        let main = [
+            "all", "me", "models", "image", "trust", "agent", "web",
+        ];
+        assert!(main.contains(&CHAT_WEB_ACCESS_SETTINGS_SECTION));
+        assert!(!main.contains(&"network"));
+        assert!(!super::SETTINGS_ADVANCED_IDS.contains(&"network"));
+    }
+
+    #[test]
     fn installed_catalogue_modules_are_not_repeated_in_the_local_list() {
         let catalogue = catalogue_module_names([("notes", "module"), ("morning-brief", "skill")]);
         let installed = ["notes", "cohortmod"];

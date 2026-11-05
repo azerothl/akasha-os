@@ -18,6 +18,8 @@ use eframe::egui;
 /// Comfortable gap between the last bubble and the composer when scrolled to the end.
 /// One full text line plus breathing room so the last line never sits under the input.
 pub(crate) const TRANSCRIPT_BOTTOM_PADDING: f32 = 36.0;
+/// Settings pill opened from the web-access notice link (#480 / #482).
+pub(crate) const CHAT_WEB_ACCESS_SETTINGS_SECTION: &str = "trust";
 /// Pixels from the bottom still treated as "following" the latest messages.
 const TRANSCRIPT_NEAR_BOTTOM_PX: f32 = 48.0;
 
@@ -387,7 +389,8 @@ impl UiApp {
                                 ui.label(i18n::chat_web_access_notice(t, kind));
                                 if ui.link(t.chat_web_settings_link).clicked() {
                                     self.tab = crate::Tab::Settings;
-                                    self.settings_ui.section = "network".into();
+                                    self.settings_ui.section =
+                                        CHAT_WEB_ACCESS_SETTINGS_SECTION.into();
                                 }
                             });
                         } else if !text.is_empty() {
