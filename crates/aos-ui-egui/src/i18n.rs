@@ -552,6 +552,12 @@ pub struct UiStrings {
     pub chat_error_module_scaffold_advisory: &'static str,
     pub chat_error_module_scaffold_denied: &'static str,
     pub chat_error_cap_denied: &'static str,
+    /// One-line notice when web access was denied for this task (#480).
+    pub chat_web_access_denied: &'static str,
+    /// One-line notice when web tools stay unavailable for this task (#480).
+    pub chat_web_access_unavailable: &'static str,
+    /// Settings link label beside web-access notices (#480).
+    pub chat_web_settings_link: &'static str,
     pub chat_error_policy_denied: &'static str,
     pub chat_error_tasks_open: &'static str,
     pub chat_error_create_install: &'static str,
@@ -1928,6 +1934,9 @@ const EN: UiStrings = UiStrings {
     chat_error_module_scaffold_advisory: "Module scaffolding isn't available for advisory questions.",
     chat_error_module_scaffold_denied: "Module scaffolding was refused.",
     chat_error_cap_denied: "A required capability was denied.",
+    chat_web_access_denied: "Web access denied — continuing without it.",
+    chat_web_access_unavailable: "Web access unavailable — continuing without it.",
+    chat_web_settings_link: "Settings",
     chat_error_policy_denied: "The action was blocked by policy.",
     chat_error_tasks_open: "Couldn't open Tasks.",
     chat_error_create_install: "Couldn't install Create.",
@@ -3295,6 +3304,9 @@ const FR: UiStrings = UiStrings {
     chat_error_module_scaffold_advisory: "Scaffolding module refusé pour une question consultative.",
     chat_error_module_scaffold_denied: "Scaffolding module refusé.",
     chat_error_cap_denied: "Capacité requise refusée.",
+    chat_web_access_denied: "Accès web refusé : je continue sans.",
+    chat_web_access_unavailable: "Accès web indisponible : je continue sans.",
+    chat_web_settings_link: "Réglages",
     chat_error_policy_denied: "Action bloquée par la politique.",
     chat_error_tasks_open: "Impossible d'ouvrir Tâches.",
     chat_error_create_install: "Impossible d'installer Créer.",
@@ -4336,6 +4348,14 @@ pub fn agent_could_not_act_message(t: &UiStrings) -> String {
     t.agent_could_not_act.to_string()
 }
 
+/// Localized one-line web-access notice for chat (#480).
+pub fn chat_web_access_notice(t: &UiStrings, kind: aos_agent::capability_policy::WebNoticeKind) -> &'static str {
+    match kind {
+        aos_agent::capability_policy::WebNoticeKind::Denied => t.chat_web_access_denied,
+        aos_agent::capability_policy::WebNoticeKind::Unavailable => t.chat_web_access_unavailable,
+    }
+}
+
 /// Human label for a tool id when one is defined (never the technical id).
 /// Returns `None` for unknown discovered module tools — paint nothing, not the id.
 pub fn tool_human_label<'a>(t: &'a UiStrings, tool_id: &str) -> Option<&'a str> {
@@ -4901,6 +4921,39 @@ mod tests {
         assert!(fr.room_host_path_disallowed_named.contains("{folder}"));
         assert!(!en.room_host_path_disallowed_named.contains("out of reach"));
         assert!(!fr.room_host_path_disallowed.contains("hors de portée"));
+    }
+
+    #[test]
+    fn locked_web_access_notice_copy_fr_en() {
+        use aos_agent::capability_policy::WebNoticeKind;
+        let en = strings("en");
+        let fr = strings("fr");
+        assert_eq!(
+            en.chat_web_access_denied,
+            "Web access denied — continuing without it."
+        );
+        assert_eq!(
+            fr.chat_web_access_denied,
+            "Accès web refusé : je continue sans."
+        );
+        assert_eq!(
+            en.chat_web_access_unavailable,
+            "Web access unavailable — continuing without it."
+        );
+        assert_eq!(
+            fr.chat_web_access_unavailable,
+            "Accès web indisponible : je continue sans."
+        );
+        assert_eq!(en.chat_web_settings_link, "Settings");
+        assert_eq!(fr.chat_web_settings_link, "Réglages");
+        assert_eq!(
+            chat_web_access_notice(&en, WebNoticeKind::Denied),
+            en.chat_web_access_denied
+        );
+        assert_eq!(
+            chat_web_access_notice(&fr, WebNoticeKind::Unavailable),
+            fr.chat_web_access_unavailable
+        );
     }
 
     #[test]

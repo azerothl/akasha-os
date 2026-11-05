@@ -1,5 +1,6 @@
 //! État cognitif d'un agent (§4.2) — sérialisable (snapshot/restore).
 
+use crate::capability_policy::TaskCapabilityState;
 use crate::canvas_scene::{canvas_op_succeeded, canvas_tool_completes_plan_node};
 use aos_proto::{AgentGoal, AgentStepRecord, CanvasGetResponse, TaskNode, TaskNodeStatus};
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,9 @@ pub struct CognitiveState {
     pub canvas_prepared: bool,
     /// Version de schéma (migration future).
     pub version: u32,
+    /// Capability / web-access guard for this task (issue #480).
+    #[serde(default)]
+    pub task_capability: TaskCapabilityState,
 }
 
 impl CognitiveState {
@@ -87,6 +91,7 @@ impl CognitiveState {
             canvas_draw_ops_on_current_task: 0,
             canvas_prepared: false,
             version: 2,
+            task_capability: TaskCapabilityState::default(),
         }
     }
 

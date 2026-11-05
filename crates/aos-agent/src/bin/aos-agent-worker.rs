@@ -235,20 +235,7 @@ async fn inherit_device_vision_model(bus: &BusClient, spec: &mut AgentSpec) {
 
 /// True for ActorDenied / PermissionDenied — not JSON fields like `os_permission`.
 fn outcome_looks_like_missing_cap(outcome: &str) -> bool {
-    let lower = outcome.to_ascii_lowercase();
-    if lower.contains("périphérique occupé")
-        || lower.contains("peripherique occupe")
-        || lower.contains("device busy")
-    {
-        return false;
-    }
-    lower.contains("permissiondenied")
-        || lower.contains("actordenied")
-        || lower.contains("permission refus")
-        || lower.contains("capacité requise")
-        || lower.contains("capacité manquante")
-        || lower.contains("confiance trop faible")
-        || lower.contains("confiance faible")
+    aos_agent::capability_policy::outcome_looks_like_missing_cap(outcome)
 }
 
 fn missing_cap_hint(canonical: &str) -> String {
@@ -617,6 +604,20 @@ async fn main() {
                 )
                 .await;
             }
+        }
+    }
+
+    if fresh_start {
+        let mut st = shared.state.lock().await;
+        if aos_agent::capability_policy::goal_needs_interactive_auth(&spec.goal.statement)
+            && !st.task_capability.interactive_auth_notice_posted
+        {
+            st.task_capability.interactive_auth_flagged = true;
+            st.task_capability.interactive_auth_notice_posted = true;
+            st.push_user(&format!(
+                "[runtime] {}",
+                aos_agent::capability_policy::interactive_auth_runtime_message()
+            ));
         }
     }
 
@@ -1198,6 +1199,10 @@ async fn main() {
         };
 
         let mut batch_actions = parse_actions_with_tools(&infer.text, &tools);
+        for action in &mut batch_actions {
+            action.action =
+                aos_agent::capability_policy::resolve_display_action_name(&action.action);
+        }
         let parsed_ok = !batch_actions.is_empty();
         if canvas_agent && batch_actions.len() > 1 {
             // Canvas feedback is only meaningful after the previous op has
@@ -1439,6 +1444,15 @@ async fn main() {
                         .await
                     }
                     GateWait::Denied => {
+                        if aos_agent::capability_policy::is_web_tool(&action.action) {
+                            {
+                                let mut st = shared.state.lock().await;
+                                aos_agent::capability_policy::mark_web_denied(
+                                    &mut st.task_capability,
+                                );
+                            }
+                            maybe_post_web_access_notice(&bus, &spec, &shared).await;
+                        }
                         ActResult::Continue("action refusée par l'utilisateur".into())
                     }
                     GateWait::Killed => {
@@ -1465,10 +1479,16 @@ async fn main() {
                     if outcome_looks_like_missing_cap(&outcome) {
                         let canonical = canonicalize_tool_name(&action.action);
                         let hint = missing_cap_hint(&canonical);
-                        outcome.push_str(&format!(
-                            "\n[hint] Essayez : TOOL: cap.request {{\"cap\":\"{hint}\",\"reason\":\"besoin pour {}\"}}",
-                            action.action
-                        ));
+                        {
+                            let mut st = shared.state.lock().await;
+                            outcome = aos_agent::capability_policy::follow_up_missing_cap(
+                                &mut st.task_capability,
+                                &canonical,
+                                &outcome,
+                                &hint,
+                            );
+                        }
+                        maybe_post_web_access_notice(&bus, &spec, &shared).await;
                     }
                     append_usb_busy_hint(&mut outcome, &action.action);
                     if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
@@ -1679,7 +1699,16 @@ async fn main() {
                             },
                         )
                         .await;
-                        tool_result = format!("réponse utilisateur : {answer}");
+                        tool_result = if aos_agent::capability_policy::question_looks_like_capability_prompt(
+                            &question,
+                        ) {
+                            format!(
+                                "réponse utilisateur : {answer}. {}",
+                                aos_agent::capability_policy::user_reply_not_os_grant_message()
+                            )
+                        } else {
+                            format!("réponse utilisateur : {answer}")
+                        };
                         shared
                             .state
                             .lock()
@@ -1693,10 +1722,16 @@ async fn main() {
                 if outcome_looks_like_missing_cap(&outcome) {
                     let canonical = canonicalize_tool_name(&action.action);
                     let hint = missing_cap_hint(&canonical);
-                    outcome.push_str(&format!(
-                        "\n[hint] Essayez : TOOL: cap.request {{\"cap\":\"{hint}\",\"reason\":\"besoin pour {}\"}}",
-                        action.action
-                    ));
+                    {
+                        let mut st = shared.state.lock().await;
+                        outcome = aos_agent::capability_policy::follow_up_missing_cap(
+                            &mut st.task_capability,
+                            &canonical,
+                            &outcome,
+                            &hint,
+                        );
+                    }
+                    maybe_post_web_access_notice(&bus, &spec, &shared).await;
                 }
                 append_usb_busy_hint(&mut outcome, &action.action);
                 if canvas_tool_mutates_scene(&action.action) && canvas_op_succeeded(&outcome) {
@@ -2382,7 +2417,7 @@ async fn execute_action(
     mcp_sessions: &mut HashMap<String, McpSession>,
     action: &AgentAction,
 ) -> ActResult {
-    let mut action_name = action.action.clone();
+    let mut action_name = aos_agent::capability_policy::resolve_display_action_name(&action.action);
     if agent_has_illust_tools(&spec.tools) {
         action_name = canonicalize_illust_alias(&action_name);
     }
@@ -2411,10 +2446,16 @@ async fn execute_action(
     // noop is a parser diagnostic, not an executable tool.
     if name != "noop" {
         if let Some(denial) = aos_agent::policy::policy_deny(&*shared.policy.lock().await, name) {
+            if aos_agent::capability_policy::is_web_tool(name) {
+                let mut st = shared.state.lock().await;
+                aos_agent::capability_policy::mark_web_unavailable(&mut st.task_capability);
+            }
             return ActResult::Continue(denial);
         }
         if !tool_in_catalog(name, tools) {
-            return ActResult::Continue(tool_unavailable_message(name, "absent du catalogue actif"));
+            return ActResult::Continue(aos_agent::capability_policy::unknown_catalog_action_message(
+                name,
+            ));
         }
     }
 
@@ -2527,6 +2568,12 @@ async fn execute_action(
                         .into(),
                 );
             }
+            if let Some(block) = {
+                let st = shared.state.lock().await;
+                aos_agent::capability_policy::block_capability_user_ask(&st.task_capability, &question)
+            } {
+                return ActResult::Continue(block);
+            }
             if question.is_empty() {
                 ActResult::Continue("user.ask : question vide".into())
             } else {
@@ -2540,6 +2587,13 @@ async fn execute_action(
                             .collect()
                     })
                     .unwrap_or_default();
+                {
+                    let mut st = shared.state.lock().await;
+                    aos_agent::capability_policy::note_capability_user_ask(
+                        &mut st.task_capability,
+                        &question,
+                    );
+                }
                 ActResult::AskUser { question, choices }
             }
         }
@@ -2772,6 +2826,78 @@ async fn execute_action(
             }
             ActResult::Continue(agent_await_still_running_message(&child_id, await_secs))
         }
+        "cap.request" => {
+            let cap = args
+                .get("cap")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if cap.is_empty() {
+                return ActResult::Continue("cap.request : cap vide".into());
+            }
+            {
+                let st = shared.state.lock().await;
+                if st.task_capability.interactive_auth_flagged {
+                    return ActResult::Continue(
+                        aos_agent::capability_policy::interactive_auth_block_message().into(),
+                    );
+                }
+                if !aos_agent::capability_policy::cap_request_allowed(&st.task_capability, &cap) {
+                    return ActResult::Continue(
+                        "cap.request déjà émise pour cette autorisation ou accès web clos — \
+                         n'enchaîne pas une nouvelle demande ; continue sans web ou termine."
+                            .into(),
+                    );
+                }
+            }
+            {
+                let mut st = shared.state.lock().await;
+                aos_agent::capability_policy::record_cap_request(&mut st.task_capability, &cap);
+            }
+            let reason = args
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let outcome = match bus
+                .call::<aos_proto::CapRequestRequest, aos_proto::CapRequestOutcome>(
+                    "cap.request",
+                    &aos_proto::CapRequestRequest {
+                        agent_id: agent_id.clone(),
+                        cap: cap.clone(),
+                        reason,
+                    },
+                    vec![],
+                )
+                .await
+            {
+                Ok(aos_proto::CapRequestOutcome::Granted) => {
+                    format!("cap accordée: {cap} (hot-grant en cours)")
+                }
+                Ok(aos_proto::CapRequestOutcome::Denied { reason }) => {
+                    format!("cap refusée: {cap} — {reason}")
+                }
+                Ok(aos_proto::CapRequestOutcome::ConfirmationRequired { confirmation_id }) => {
+                    format!("confirmation requise: {confirmation_id}")
+                }
+                Err(e) => format!("cap.request err: {e}"),
+            };
+            {
+                let lower = outcome.to_ascii_lowercase();
+                let granted = lower.contains("accordée");
+                let denied = lower.contains("refusée");
+                let mut st = shared.state.lock().await;
+                aos_agent::capability_policy::record_cap_outcome(
+                    &mut st.task_capability,
+                    &cap,
+                    granted,
+                    denied,
+                );
+            }
+            maybe_post_web_access_notice(bus, spec, shared).await;
+            ActResult::Continue(outcome)
+        }
         other => {
             // Path A: akasha-model gate → OS permissions → existing invoke_* only.
             let policy_snapshot = shared.policy.lock().await.clone();
@@ -2937,6 +3063,52 @@ fn ask_heading(spec: &AgentSpec) -> String {
         title.chars().take(80).collect()
     };
     format!("**Question — {title}**")
+}
+
+async fn post_web_access_notice(
+    bus: &BusClient,
+    spec: &AgentSpec,
+    kind: aos_agent::capability_policy::WebNoticeKind,
+) {
+    let Some(session_id) = spec.session_id.clone() else {
+        return;
+    };
+    let content = aos_agent::capability_policy::web_notice_sentinel(kind).to_string();
+    let _ = bus
+        .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+            "chat.session.append",
+            &ChatSessionAppendRequest {
+                session_id,
+                role: "assistant".into(),
+                content,
+                attachments: vec![ChatAttachment::AgentRef {
+                    agent_id: spec.agent_id.clone(),
+                    title: spec.goal.statement.clone(),
+                    origin: "web-access".into(),
+                }],
+                speaker_id: None,
+                speaker_name: None,
+                thinking: None,
+            },
+            vec![],
+        )
+        .await;
+}
+
+async fn maybe_post_web_access_notice(bus: &BusClient, spec: &AgentSpec, shared: &Shared) {
+    let kind = {
+        let mut st = shared.state.lock().await;
+        match aos_agent::capability_policy::next_web_notice_dispatch(&mut st.task_capability) {
+            Some(aos_agent::capability_policy::WebNoticeDispatch::Post(k)) => Some(k),
+            Some(aos_agent::capability_policy::WebNoticeDispatch::UpgradeToDenied) => {
+                Some(aos_agent::capability_policy::WebNoticeKind::Denied)
+            }
+            None => None,
+        }
+    };
+    if let Some(kind) = kind {
+        post_web_access_notice(bus, spec, kind).await;
+    }
 }
 
 async fn post_user_question(bus: &BusClient, spec: &AgentSpec, body: &str) {

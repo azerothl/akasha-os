@@ -121,9 +121,23 @@ impl UiApp {
                             None
                         }
                     });
+                let effective_web_notice =
+                    aos_agent::capability_policy::effective_web_notice_in_transcript(
+                        self.chat.iter().map(|line| line.text.as_str()),
+                    );
+                let mut web_notice_banner_shown = false;
                 let mut last_day: Option<i64> = None;
                 for i in 0..n {
                     let role = self.chat[i].role.clone();
+                    let web_notice = aos_agent::capability_policy::parse_web_notice_sentinel(
+                        self.chat[i].text.trim(),
+                    );
+                    if let Some(line_kind) = web_notice {
+                        if effective_web_notice != Some(line_kind) || web_notice_banner_shown {
+                            continue;
+                        }
+                        web_notice_banner_shown = true;
+                    }
                     let mut text = self.chat[i].text.clone();
                     if chat_error_copy::is_room_host_path_sentinel(&text) {
                         continue;
@@ -368,7 +382,15 @@ impl UiApp {
                                 );
                             }
                         }
-                        if !text.is_empty() {
+                        if let Some(kind) = web_notice {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(i18n::chat_web_access_notice(t, kind));
+                                if ui.link(t.chat_web_settings_link).clicked() {
+                                    self.tab = crate::Tab::Settings;
+                                    self.settings_ui.section = "network".into();
+                                }
+                            });
+                        } else if !text.is_empty() {
                             if room_mode && kind == ChatBubbleKind::User {
                                 ui.push_id(("room_bubble", i), |ui| {
                                     chat_room::paint_room_bubble_body(
