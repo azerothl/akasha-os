@@ -1,0 +1,8 @@
+{
+  "repository": "azerothl/akasha-os",
+  "branch": "main",
+  "path": "docs/documentalist/reference",
+  "format": "auto",
+  "locale": "fr",
+  "learnPath": "docs/documentalist/learn"
+}
