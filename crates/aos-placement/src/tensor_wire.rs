@@ -400,9 +400,7 @@ impl CpuTransformerBlock {
                 cache,
                 rope_theta,
             )?;
-            for row in 0..hidden {
-                output.push(result.values[row]);
-            }
+            output.extend_from_slice(&result.values[..hidden]);
         }
         F32Tensor::new(vec![hidden as u32, tokens as u32], output)
     }
