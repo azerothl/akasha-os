@@ -191,10 +191,7 @@ pub fn looks_like_secret(text: &str) -> bool {
         }
     }
     // IBAN-like : 2 lettres + 2 digits + ≥10 alphanum.
-    if iban_like(text) {
-        return true;
-    }
-    false
+    iban_like(text)
 }
 
 fn looks_like_high_entropy_token(tok: &str) -> bool {
