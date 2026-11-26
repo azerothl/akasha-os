@@ -342,10 +342,7 @@ pub fn setup_needed(home: &Path) -> bool {
     let legacy = home
         .join("share/models/qwen2.5-3b-instruct-q4_k_m.gguf")
         .exists();
-    if legacy {
-        return false;
-    }
-    true
+    !legacy
 }
 
 pub fn migrate_legacy_installed(home: &Path) -> Result<(), String> {
