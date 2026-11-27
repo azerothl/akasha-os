@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use tokio::sync::{mpsc, oneshot};
 
 const LONG_REASONING_MIN_TOKENS: u32 = 384;
@@ -113,6 +113,7 @@ pub struct ModelRuntime {
     dispatch: Option<mpsc::Sender<DispatchJob>>,
     pub loading: bool,
     pub load_error: Option<String>,
+    load_failure: Option<Arc<OnceLock<String>>>,
     pub last_ttft_ms: Option<f64>,
     pub last_tok_s: Option<f64>,
     pub est_tok_s: Option<f64>,
@@ -158,6 +159,7 @@ impl ModelRuntime {
             dispatch: None,
             loading: false,
             load_error: None,
+            load_failure: None,
             last_ttft_ms: None,
             last_tok_s: None,
             est_tok_s: None,
@@ -226,7 +228,7 @@ struct LayerBlockRuntime {
 enum LoadAction {
     Ready,
     Wait,
-    Start,
+    Start(Arc<OnceLock<String>>),
     Fail(String),
 }
 
@@ -471,9 +473,13 @@ impl ModelSubsystem {
         profile: PlacementProfile,
         kv_tokens: u32,
     ) -> Result<LoadResponse, String> {
+        let mut attempt: Option<Arc<OnceLock<String>>> = None;
         loop {
             let action = {
                 let mut inner = self.inner.lock().unwrap();
+                if let Some(error) = attempt.as_ref().and_then(|failure| failure.get()) {
+                    return Err(error.clone());
+                }
                 let m = inner
                     .models
                     .get_mut(model_id)
@@ -485,7 +491,6 @@ impl ModelSubsystem {
                     // request as an implicit unload/reload so the UI does not
                     // need to restart modeld (or issue two commands).
                     ModelState::Error if m.active == 0 && m.pending == 0 => {
-                        m.state = ModelState::OnDisk;
                         m.load_error = None;
                         m.plan = None;
                         m.inference_plan = None;
@@ -493,21 +498,20 @@ impl ModelSubsystem {
                         m.n_ctx = None;
                         m.model = None;
                         m.warm = None;
-                        m.loading = true;
-                        LoadAction::Start
+                        Self::begin_load(m, profile)
                     }
                     ModelState::Error => LoadAction::Fail(
                         m.load_error
                             .clone()
                             .unwrap_or_else(|| "erreur inconnue".into()),
                     ),
-                    _ if m.loading => LoadAction::Wait,
-                    _ => {
-                        m.loading = true;
-                        m.state = ModelState::Loading;
-                        m.profile = profile;
-                        LoadAction::Start
+                    _ if m.loading => {
+                        if attempt.is_none() {
+                            attempt = m.load_failure.clone();
+                        }
+                        LoadAction::Wait
                     }
+                    _ => Self::begin_load(m, profile),
                 }
             };
             match action {
@@ -523,12 +527,31 @@ impl ModelSubsystem {
                 }
                 LoadAction::Fail(e) => return Err(e),
                 LoadAction::Wait => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
-                LoadAction::Start => self.spawn_load_task(model_id, profile, kv_tokens),
+                LoadAction::Start(failure) => {
+                    attempt = Some(failure.clone());
+                    self.spawn_load_task(model_id, profile, kv_tokens, failure);
+                }
             }
         }
     }
 
-    fn spawn_load_task(&self, model_id: &str, profile: PlacementProfile, kv_tokens: u32) {
+    fn begin_load(model: &mut ModelRuntime, profile: PlacementProfile) -> LoadAction {
+        // Waiters keep the error from their attempt even if a new request retries.
+        let failure = Arc::new(OnceLock::new());
+        model.load_failure = Some(failure.clone());
+        model.loading = true;
+        model.state = ModelState::Loading;
+        model.profile = profile;
+        LoadAction::Start(failure)
+    }
+
+    fn spawn_load_task(
+        &self,
+        model_id: &str,
+        profile: PlacementProfile,
+        kv_tokens: u32,
+        failure: Arc<OnceLock<String>>,
+    ) {
         let inner = self.inner.clone();
         let sim = self.sim.clone();
         let config = self.config.clone();
@@ -545,10 +568,12 @@ impl ModelSubsystem {
             };
             let apply_err = |e: String| {
                 let mut g = inner.lock().unwrap();
+                let _ = failure.set(e.clone());
                 if let Some(m) = g.models.get_mut(&model_id) {
                     m.loading = false;
                     m.state = ModelState::Error;
                     m.load_error = Some(e.clone());
+                    m.load_failure = None;
                     m.ctx = None;
                     m.n_ctx = None;
                     m.model = None;
@@ -720,6 +745,7 @@ impl ModelSubsystem {
                 let mut g = inner.lock().unwrap();
                 let m = g.models.get_mut(&model_id).expect("modèle disparu");
                 m.loading = false;
+                m.load_failure = None;
                 m.state = ModelState::Loaded;
                 m.plan = Some(plan);
                 m.profile = adaptive_plan.placement;
@@ -831,6 +857,7 @@ impl ModelSubsystem {
             let mut g = inner.lock().unwrap();
             let m = g.models.get_mut(&model_id).expect("modèle disparu");
             m.loading = false;
+            m.load_failure = None;
             m.desc.weights_bytes = model.size_bytes;
             m.desc.n_layers = model.n_layer as u32;
             if let Some(format) = model.quantization {
@@ -2764,10 +2791,59 @@ mod tests {
     };
     use crate::config::ModeldConfig;
     use aos_llama::StopReason;
-    use aos_placement::{ModelDesc, PrivacyClass, WorkloadKind};
+    use aos_placement::{ModelDesc, PlacementProfile, PrivacyClass, WorkloadKind};
     use aos_proto::ModelState;
     use aos_registry::ModelRegistry;
     use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn failed_model_load_ends_the_request_and_allows_a_later_retry() {
+        let config: ModeldConfig =
+            serde_yaml::from_str("gpu: false\nadaptive_planner: false\n").unwrap();
+        let registry = ModelRegistry::from_yaml("models: []\n").unwrap();
+        let sub = ModelSubsystem::new(config, &registry, 8 << 30);
+        let id = "local:missing";
+        let path = std::env::temp_dir().join(format!("aos-missing-{}.gguf", std::process::id()));
+        assert!(!path.exists());
+        let runtime = ModelRuntime::new(
+            ModelDesc {
+                id: id.into(),
+                name: "Missing".into(),
+                n_layers: 4,
+                n_params: 1.0e8,
+                weights_bytes: 1_000_000,
+                embed_bytes: 10_000,
+                kv_bytes_per_token: 100,
+                context_length: 4096,
+                supports_layer_offload: true,
+                privacy_class: PrivacyClass::Local,
+                quantization: Default::default(),
+                backends_compatible: vec![],
+            },
+            Some(path),
+        );
+        sub.inner.lock().unwrap().models.insert(id.into(), runtime);
+        let load = || {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                sub.ensure_loaded(id, PlacementProfile::CpuOnly, 4096),
+            )
+        };
+        let (first, waiter) = tokio::join!(load(), load());
+        for result in [first, waiter] {
+            let error = result.expect("load request hung").unwrap_err();
+            assert!(error.contains("poids introuvables"), "{error}");
+        }
+        {
+            let mut inner = sub.inner.lock().unwrap();
+            let model = inner.models.get_mut(id).unwrap();
+            assert_eq!(model.state, ModelState::Error);
+            assert!(!model.loading);
+            model.path = None;
+        }
+        let error = load().await.expect("retry hung").unwrap_err();
+        assert_eq!(error, "aucun chemin de poids configuré");
+    }
 
     #[test]
     fn metrics_exposes_context_window_after_infer() {
