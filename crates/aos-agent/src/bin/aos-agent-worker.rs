@@ -476,7 +476,9 @@ async fn main() {
             .await;
             {
                 let mut st = shared.state.lock().await;
-                if assess.is_complex() {
+                if definition_only {
+                    st.push_user(&spec.goal.statement);
+                } else if assess.is_complex() {
                     let canvas_draw = agent_has_canvas_tools(&spec.tools);
                     let illust_draw = agent_has_illust_tools(&spec.tools);
                     let msg = if canvas_draw {
@@ -539,7 +541,7 @@ async fn main() {
                     ));
                 }
             }
-            if !assess.is_complex() {
+            if !definition_only && !assess.is_complex() {
                 bootstrap_memory_recall(
                     &bus,
                     &shared,
