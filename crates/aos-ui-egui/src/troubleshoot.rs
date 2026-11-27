@@ -578,6 +578,24 @@ mod tests {
     }
 
     #[test]
+    fn rust_backtrace_hint_does_not_count_as_a_second_incident() {
+        let f = Fixture::new();
+        let now = 2_000_000_000;
+        f.write(
+            "agentd.stderr.log",
+            concat!(
+                "thread 'main' panicked at crates/aos-agent/src/bin/aos-agentd.rs:883:10:\n",
+                "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+            ),
+            now - 100,
+        );
+
+        let report = summarize_logs(&f.0, now).unwrap();
+        assert_eq!(report.errors, 1);
+        assert!(report.text.contains("RUST_BACKTRACE=1"));
+    }
+
+    #[test]
     fn large_log_is_read_from_its_bounded_tail() {
         let f = Fixture::new();
         let now = 2_000_000_000;
