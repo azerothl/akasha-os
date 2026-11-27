@@ -2314,12 +2314,55 @@ body.experience .lang button[aria-pressed="true"] {
   }
 }
 
+.preloader[hidden] {
+  display: none;
+}
+
+.preloader {
+  pointer-events: none;
+}
+
+body.experience:focus-within .preloader {
+  visibility: hidden;
+}
+
+.experience:not(.experience-ready) :is(.rail, .depth, .depth-label, .chrome-tr) {
+  display: none;
+}
+
+.experience:not(.experience-ready) .chrome-tl {
+  position: relative;
+  inset: auto;
+  padding: var(--pad);
+}
+
+.experience:not(.experience-ready) .stage-section,
+.experience:not(.experience-ready) .stage-pin {
+  height: auto;
+}
+
+.experience:not(.experience-ready) .stage-pin {
+  position: static;
+  padding-top: clamp(2rem, 8vh, 5rem);
+}
+
+.experience:not(.experience-ready) .panel {
+  height: auto;
+  pointer-events: auto;
+}
+
+.experience:not(.experience-ready) .closer-stack {
+  gap: 0.6rem;
+}
+
+.experience:not(.experience-ready) .closer-line {
+  grid-area: auto;
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.experience * {
     transition-duration: 0.01ms !important;
-  }
-  .closer-line {
-    opacity: 1;
   }
 }
 
