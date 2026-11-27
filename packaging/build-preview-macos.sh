@@ -222,6 +222,7 @@ fi
 
 for pkg in notes ext-rt canvas create illustration-studio; do
   if is_optional_module "${pkg}"; then
+    rm -rf "${OUT:?}/share/modules/${pkg}.aospkg"
     echo "  ${pkg} is an external optional pack"
     continue
   fi

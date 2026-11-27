@@ -372,6 +372,7 @@ elif [ -d "${ROOT}/modules/ext-rt.aospkg" ]; then
   cp -a "${ROOT}/modules/ext-rt.aospkg" "${OUT}/share/modules/ext-rt.aospkg"
 fi
 if is_optional_module canvas; then
+  rm -rf "${OUT:?}/share/modules/canvas.aospkg"
   echo "  canvas is an external optional pack"
 elif [ -d "${ROOT}/share/modules/canvas.aospkg" ]; then
   rm -rf "${OUT}/share/modules/canvas.aospkg"
@@ -381,6 +382,7 @@ elif [ -d "${ROOT}/modules/canvas.aospkg" ]; then
   cp -a "${ROOT}/modules/canvas.aospkg" "${OUT}/share/modules/canvas.aospkg"
 fi
 if is_optional_module create; then
+  rm -rf "${OUT:?}/share/modules/create.aospkg"
   echo "  create is an external optional pack"
 elif [ -d "${ROOT}/share/modules/create.aospkg" ]; then
   rm -rf "${OUT}/share/modules/create.aospkg"
@@ -402,6 +404,7 @@ if ! is_optional_module create; then
 fi
 
 if is_optional_module illustration-studio; then
+  rm -rf "${OUT:?}/share/modules/illustration-studio.aospkg"
   echo "  illustration-studio is an external optional pack"
 elif [ -d "${ROOT}/share/modules/illustration-studio.aospkg" ]; then
   rm -rf "${OUT}/share/modules/illustration-studio.aospkg"
