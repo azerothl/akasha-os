@@ -236,12 +236,14 @@ fn compile_image_agent_prompt(input: &PromptCompileInput<'_>) -> String {
 }
 
 pub(crate) fn uses_gemma4_native_tools(spec: &AgentSpec, tools: &[ToolDesc]) -> bool {
-    if tools.is_empty() {
+    if tools.iter().all(|tool| {
+        matches!(tool.name.as_str(), "goal.complete" | "goal.fail" | "user.ask")
+    }) {
         return false;
     }
     spec.model_id.as_deref().is_some_and(|model_id| {
         let model_id = model_id.to_ascii_lowercase();
-        model_id.contains("gemma-4") || model_id.contains("gemma4")
+        model_id.starts_with("local:") && (model_id.contains("gemma-4") || model_id.contains("gemma4"))
     })
 }
 
