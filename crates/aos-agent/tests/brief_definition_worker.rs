@@ -94,16 +94,9 @@ async fn definition_uses_one_inference_and_only_conversational_actions() {
     assert_eq!(calls.len(), 1);
     assert!(calls[0].tools.is_empty());
     let prompt = &calls[0].messages[0].content;
-    let catalog = prompt
-        .split("## Catalogue d'outils")
-        .nth(1)
-        .unwrap()
-        .split("\n\n")
-        .next()
-        .unwrap();
-    assert!(catalog.contains("goal.complete"));
-    assert!(!catalog.contains("web.search"));
-    assert!(!catalog.contains("module.list"));
+    assert_eq!(prompt, aos_agent::assess::BRIEF_DEFINITION_INSTRUCTION);
+    assert!(!prompt.contains("web.search"));
+    assert!(!prompt.contains("module.list"));
     let events = events.lock().await;
     assert!(!events
         .iter()
