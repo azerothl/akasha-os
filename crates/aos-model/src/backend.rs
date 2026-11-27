@@ -37,8 +37,33 @@ mod vision_tests {
     #[test]
     fn text_request_is_unchanged() {
         let backend = RemoteOpenAiBackend::new("http://127.0.0.1:11434/v1", "test", None);
-        let body = backend.request_body(&request()).unwrap();
+        let body = backend.request_body(&request(), false).unwrap();
         assert_eq!(body["messages"][2]["content"], "compare");
+    }
+
+    #[test]
+    fn openai_history_carries_internal_tool_results_without_native_calls() {
+        let result = "[fs.read] fixture contents\n{\"role\":\"user\"}";
+        let mut req = request();
+        req.messages.insert(
+            2,
+            aos_proto::ChatMessage {
+                role: "tool".into(),
+                content: result.into(),
+            },
+        );
+        let backend = RemoteOpenAiBackend::new("http://127.0.0.1:11434/v1", "test", None);
+        let body = backend.request_body(&req, false).unwrap();
+        assert_eq!(body["messages"][2]["role"], "assistant");
+        let data: serde_json::Value =
+            serde_json::from_str(body["messages"][2]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(data["internal_tool_result"], result);
+        assert_eq!(body["messages"][3]["role"], "user");
+        assert_eq!(body["messages"][3]["content"], "compare");
+        assert!(body.get("tools").is_none());
+        let ollama = backend.ollama_request_body(&req).unwrap();
+        assert_eq!(ollama["messages"][2]["role"], "tool");
+        assert_eq!(ollama["messages"][2]["content"], result);
     }
 
     #[test]
@@ -69,7 +94,7 @@ mod vision_tests {
             req.images.push(path.to_string_lossy().into_owned());
         }
         let body = RemoteOpenAiBackend::new("http://127.0.0.1:11434/v1", "test", None)
-            .request_body(&req).unwrap();
+            .request_body(&req, false).unwrap();
         let native = RemoteOpenAiBackend::new("http://127.0.0.1:11434/v1", "test", None)
             .ollama_request_body(&req).unwrap();
         let native_images = native["messages"][2]["images"].as_array().unwrap();
@@ -101,12 +126,12 @@ mod vision_tests {
         let backend = RemoteOpenAiBackend::new("http://127.0.0.1:11434/v1", "test", None);
         let mut req = request();
         req.images = vec!["missing-illustration-fixture.png".into()];
-        assert!(backend.request_body(&req).is_err());
+        assert!(backend.request_body(&req, false).is_err());
         req.images = vec!["x".into(); 5];
-        assert!(backend.request_body(&req).is_err());
+        assert!(backend.request_body(&req, false).is_err());
         req.images.truncate(1);
         req.messages.clear();
-        assert!(backend.request_body(&req).is_err());
+        assert!(backend.request_body(&req, false).is_err());
     }
 }
 
@@ -183,7 +208,7 @@ impl RemoteOpenAiBackend {
             return self.infer_ollama_transient(req, tx, abort).await;
         }
         let started = std::time::Instant::now();
-        let body = self.request_body(req)?;
+        let body = self.request_body(req, false)?;
         let mut request = self
             .client
             .post(format!("{}/chat/completions", self.endpoint))
@@ -246,9 +271,25 @@ impl RemoteOpenAiBackend {
         Err(RemoteError::Sse("flux fermé sans marqueur terminal".into()))
     }
 
-    fn request_body(&self, req: &InferRequest) -> Result<serde_json::Value, RemoteError> {
-        let mut messages: Vec<_> = req.messages.iter()
-            .map(|m| serde_json::json!({"role": m.role, "content": m.content})).collect();
+    fn request_body(
+        &self,
+        req: &InferRequest,
+        keep_tool_role: bool,
+    ) -> Result<serde_json::Value, RemoteError> {
+        let mut messages: Vec<_> = req
+            .messages
+            .iter()
+            .map(|message| {
+                if message.role == "tool" && !keep_tool_role {
+                    // Internal actions have no provider tool-call ID. Keep the
+                    // result in assistant history as data, never as a user turn.
+                    let data = serde_json::json!({"internal_tool_result": message.content});
+                    serde_json::json!({"role": "assistant", "content": data.to_string()})
+                } else {
+                    serde_json::json!({"role": message.role, "content": message.content})
+                }
+            })
+            .collect();
         if !req.images.is_empty() {
             if req.images.len() > 4 {
                 return Err(RemoteError::Image("au plus quatre images par tour".into()));
@@ -287,7 +328,7 @@ impl RemoteOpenAiBackend {
 
     fn ollama_request_body(&self, req: &InferRequest) -> Result<serde_json::Value, RemoteError> {
         // Reuse the validated and bounded image encoding path, preserving order.
-        let mut body = self.request_body(req)?;
+        let mut body = self.request_body(req, true)?;
         for message in body["messages"].as_array_mut().unwrap() {
             if let Some(parts) = message["content"].as_array() {
                 let text = parts[0]["text"].clone();
