@@ -6,6 +6,7 @@
 use aos_ipc::{BusClient, DEFAULT_BUS_PORT};
 use std::fs;
 use std::io::Write;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -85,42 +86,58 @@ impl ProcessTree {
 
     /// Boot the Preview tree in [`crate::DAEMON_BOOT_ORDER`].
     pub fn start(&mut self, opts: &SpawnOptions) -> Result<(), String> {
+        if !self.daemons.is_empty() {
+            return Err("daemon tree is already running".into());
+        }
+        let result = self.spawn_daemons(opts);
+        if result.is_err() {
+            self.stop_owned_daemons();
+        }
+        result
+    }
+
+    fn spawn_daemons(&mut self, opts: &SpawnOptions) -> Result<(), String> {
         let home = self.home.clone();
         let log_tag = opts.log_tag;
         self.log_tag = log_tag;
         let bus = default_bus_addr();
-        let mut list = Vec::new();
 
         {
             let mut cmd = Command::new(bin_path(&home, "aos-busd"));
             cmd.arg(DEFAULT_BUS_PORT.to_string());
-            list.push(spawn_one(&home, log_tag, "aos-busd", cmd)?);
+            self.daemons
+                .push(spawn_one(&home, log_tag, "aos-busd", cmd)?);
         }
         wait_for_bus_listen(&bus, Duration::from_secs(15))?;
 
         {
             let mut cmd = Command::new(bin_path(&home, "aos-capkd"));
             cmd.arg(&bus);
-            list.push(spawn_one(&home, log_tag, "aos-capkd", cmd)?);
+            self.daemons
+                .push(spawn_one(&home, log_tag, "aos-capkd", cmd)?);
         }
         {
             let mut cmd = Command::new(bin_path(&home, "aos-auditd"));
             cmd.arg(&bus).arg("var/audit");
-            list.push(spawn_one(&home, log_tag, "aos-auditd", cmd)?);
+            self.daemons
+                .push(spawn_one(&home, log_tag, "aos-auditd", cmd)?);
         }
         {
             let cmd = modeld_command(&home, opts);
-            list.push(spawn_one(&home, log_tag, "aos-modeld", cmd)?);
+            self.daemons
+                .push(spawn_one(&home, log_tag, "aos-modeld", cmd)?);
         }
         {
             let mut cmd = Command::new(bin_path(&home, "aos-platformd"));
             cmd.arg("etc/platformd.yaml");
-            list.push(spawn_one(&home, log_tag, "aos-platformd", cmd)?);
+            self.daemons
+                .push(spawn_one(&home, log_tag, "aos-platformd", cmd)?);
         }
         {
             let mut cmd = Command::new(bin_path(&home, "aos-agentd"));
             cmd.arg(&bus);
-            list.push(spawn_one(&home, log_tag, "aos-agentd", cmd)?);
+            self.daemons
+                .push(spawn_one(&home, log_tag, "aos-agentd", cmd)?);
         }
 
         // P21.6 — opt-in optional daemons (default off). Skip if binary missing.
@@ -128,7 +145,8 @@ impl ProcessTree {
             let bin = bin_path(&home, "aos-bridged");
             if bin.exists() {
                 let cmd = bridged_command(&home);
-                list.push(spawn_one(&home, log_tag, "aos-bridged", cmd)?);
+                self.daemons
+                    .push(spawn_one(&home, log_tag, "aos-bridged", cmd)?);
             } else {
                 eprintln!("[{log_tag}] supervise_bridged set but {bin:?} missing — skip");
             }
@@ -137,20 +155,24 @@ impl ProcessTree {
             let bin = bin_path(&home, "aos-mcpd");
             if bin.exists() {
                 let cmd = mcpd_command(&home);
-                list.push(spawn_one(&home, log_tag, "aos-mcpd", cmd)?);
+                self.daemons
+                    .push(spawn_one(&home, log_tag, "aos-mcpd", cmd)?);
             } else {
                 eprintln!("[{log_tag}] supervise_mcpd set but {bin:?} missing — skip");
             }
         }
 
         thread::sleep(Duration::from_secs(2));
-        self.daemons = list;
         Ok(())
     }
 
     /// Stop in reverse order; also kills `aos-agent-worker`.
     pub fn stop(&mut self) {
         kill_by_name("aos-agent-worker");
+        self.stop_owned_daemons();
+    }
+
+    fn stop_owned_daemons(&mut self) {
         for d in self.daemons.iter_mut().rev() {
             let _ = d.child.kill();
             let _ = d.child.wait();
@@ -407,18 +429,36 @@ pub fn healthcheck_bus(bus_addr: &str) -> Result<(), String> {
 
 /// Block until the broker accepts TCP connections (or timeout).
 pub fn wait_for_bus_listen(bus_addr: &str, timeout: Duration) -> Result<(), String> {
+    const RETRY_INTERVAL: Duration = Duration::from_millis(100);
+    let addresses: Vec<_> = bus_addr
+        .to_socket_addrs()
+        .map_err(|err| format!("invalid bus address {bus_addr}: {err}"))?
+        .collect();
+    if addresses.is_empty() {
+        return Err(format!("bus address {bus_addr} resolved to no sockets"));
+    }
     let deadline = Instant::now() + timeout;
     let mut last = String::from("unknown");
-    while Instant::now() < deadline {
-        match std::net::TcpStream::connect(bus_addr) {
-            Ok(_) => return Ok(()),
-            Err(e) => {
-                last = e.to_string();
-                thread::sleep(Duration::from_millis(100));
+    'retry: while Instant::now() < deadline {
+        for address in &addresses {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break 'retry;
+            }
+            match TcpStream::connect_timeout(address, remaining.min(RETRY_INTERVAL)) {
+                Ok(_) => return Ok(()),
+                Err(err) => last = err.to_string(),
             }
         }
+        thread::sleep(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(RETRY_INTERVAL),
+        );
     }
-    Err(format!("bus not accepting connections on {bus_addr}: {last}"))
+    Err(format!(
+        "bus not accepting connections on {bus_addr}: {last}"
+    ))
 }
 
 pub fn kill_by_name(name: &str) {
@@ -545,6 +585,17 @@ mod tests {
         });
         wait_for_bus_listen(&addr, Duration::from_secs(2)).expect("bus should accept");
         let _ = server.join();
+    }
+
+    #[test]
+    fn wait_for_bus_listen_returns_after_timeout_if_port_is_closed() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        drop(listener);
+        let start = Instant::now();
+        let error = wait_for_bus_listen(&addr, Duration::from_millis(20)).unwrap_err();
+        assert!(error.contains("bus not accepting connections"));
+        assert!(start.elapsed() < Duration::from_secs(2));
     }
 
     #[test]
