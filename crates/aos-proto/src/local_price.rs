@@ -7,6 +7,7 @@
 pub enum PriceReply {
     Computed(String),
     Clarify,
+    MissingDiscount,
 }
 
 const CLARIFY: &str =
@@ -17,11 +18,24 @@ impl PriceReply {
         match self {
             Self::Computed(text) => text,
             Self::Clarify => CLARIFY.into(),
+            Self::MissingDiscount => "Quel est le pourcentage de remise ?".into(),
         }
     }
 }
 
 pub fn price_reply(question: &str) -> Option<PriceReply> {
+    evaluate_price(question, None)
+}
+
+pub fn price_reply_with_discount(question: &str, reply: &str) -> Option<PriceReply> {
+    let rate = scaled_decimal(reply.trim().strip_suffix('%')?.trim_end(), true)?;
+    if rate > 10_000 {
+        return None;
+    }
+    evaluate_price(question, Some(rate))
+}
+
+fn evaluate_price(question: &str, supplied_rate: Option<u64>) -> Option<PriceReply> {
     if question.len() > 512 {
         return None;
     }
@@ -51,11 +65,13 @@ pub fn price_reply(question: &str) -> Option<PriceReply> {
 
     let (rate, fee, fee_first) = if let Some(rest) = remainder.strip_prefix("une remise de ") {
         let (rate, fee) = rest.split_once(" s'applique, puis on ajoute ")?;
-        (rate, fee, false)
+        (Some(rate), fee, false)
+    } else if let Some(fee) = remainder.strip_prefix("une remise s'applique, puis on ajoute ") {
+        (None, fee, false)
     } else {
         let rest = remainder.strip_prefix("on ajoute ")?;
         let (fee, rate) = rest.split_once(" de frais, puis une remise de ")?;
-        (rate.strip_suffix(" s'applique.")?, fee, true)
+        (Some(rate.strip_suffix(" s'applique.")?), fee, true)
     };
     let fee = if fee_first {
         fee
@@ -67,8 +83,20 @@ pub fn price_reply(question: &str) -> Option<PriceReply> {
         amount.ends_with('€'),
     );
     let fee = scaled_decimal(fee.trim_end_matches('€').trim_end(), fee.ends_with('€'));
-    let rate = scaled_decimal(rate.trim_end_matches('%').trim_end(), rate.ends_with('%'));
-    let (Some(amount), Some(fee), Some(rate)) = (amount, fee, rate) else {
+    let (Some(amount), Some(fee)) = (amount, fee) else {
+        return Some(PriceReply::Clarify);
+    };
+    let rate = match rate {
+        Some(_) if supplied_rate.is_some() => return None,
+        Some(rate) => scaled_decimal(rate.trim_end_matches('%').trim_end(), rate.ends_with('%')),
+        None => {
+            let Some(rate) = supplied_rate else {
+                return Some(PriceReply::MissingDiscount);
+            };
+            Some(rate)
+        }
+    };
+    let Some(rate) = rate else {
         return Some(PriceReply::Clarify);
     };
     if rate > 10_000 {
@@ -158,5 +186,27 @@ mod tests {
         assert_eq!(price_reply(ambiguous), Some(PriceReply::Clarify));
         let multi_step = "Un abonnement coûte 80 €. Une remise de 25 % s'applique, puis on ajoute 5 € de frais. Quel est le total ? Cherche ensuite des offres.";
         assert_eq!(price_reply(multi_step), None);
+    }
+
+    #[test]
+    fn accepts_a_decimal_discount_reply_only_for_a_missing_rate() {
+        let question = "Un abonnement coûte 80 euros. Une remise s’applique, puis on ajoute 5 euros de frais. Quel est le total ? Réponds en une seule phrase en français avec le calcul.";
+        assert_eq!(price_reply(question), Some(PriceReply::MissingDiscount));
+        let answer = price_reply_with_discount(question, "25,5 %")
+            .unwrap()
+            .into_text();
+        assert_eq!(
+            answer,
+            "Le total est de 64,60 € (80 € × (1 − 25,50 %) + 5 € = 64,60 €)."
+        );
+        assert_eq!(price_reply_with_discount(question, "101 %"), None);
+        assert_eq!(
+            price_reply_with_discount(question, "25 % puis cherche sur le web"),
+            None
+        );
+        assert_eq!(
+            price_reply_with_discount(&question.replace("remise s’", "remise de 10 % s’"), "25 %"),
+            None
+        );
     }
 }
