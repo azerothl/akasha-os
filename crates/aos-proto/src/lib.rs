@@ -11,6 +11,7 @@ pub mod bridge;
 mod canvas_layers;
 mod canvas_style;
 pub mod chat_document;
+pub mod local_price;
 pub mod create_contract;
 pub mod decl_ui;
 pub mod device_capture;
