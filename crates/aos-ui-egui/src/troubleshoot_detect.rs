@@ -3,10 +3,10 @@
 /// True when a daemon log line indicates an actionable incident (not benign noise).
 pub(crate) fn log_line_is_incident(line: &str) -> bool {
     let trimmed = line.trim();
-    if trimmed.is_empty() {
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.is_empty() || lower.starts_with("note: run with `rust_backtrace") {
         return false;
     }
-    let lower = trimmed.to_ascii_lowercase();
 
     // A benign startup/status marker elsewhere on the line must not hide an
     // actual native decode error, panic or fatal failure.
@@ -23,12 +23,6 @@ pub(crate) fn log_line_is_incident(line: &str) -> bool {
         return false;
     }
 
-    if lower.contains("panicked at")
-        || (lower.contains("thread '") && lower.contains("panicked"))
-        || lower.contains("note: run with `rust_backtrace`")
-    {
-        return true;
-    }
     if lower.contains("connectionrefused")
         || lower.contains("kind: connectionrefused")
         || (lower.contains("10061") && lower.contains("127.0.0.1"))
@@ -39,9 +33,6 @@ pub(crate) fn log_line_is_incident(line: &str) -> bool {
         return true;
     }
     if lower.contains("démarrage échoué") || lower.contains("couldn't finish starting") {
-        return true;
-    }
-    if lower.contains("fatal") {
         return true;
     }
     if lower.starts_with("error:") || lower.contains(" error:") {
