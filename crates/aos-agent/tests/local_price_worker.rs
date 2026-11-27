@@ -1,4 +1,4 @@
-use aos_agent::{intents, ReportPayload};
+use aos_agent::{intents, ControlCmd, ControlResp, ReportPayload};
 use aos_ipc::{BusClient, BusService, Status};
 use aos_proto::{AgentOutputEvent, AgentState};
 use std::sync::Arc;
@@ -7,6 +7,15 @@ use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn worker_completes_price_calculation_without_model_or_tools() {
+    check_worker(false).await;
+}
+
+#[tokio::test]
+async fn worker_waits_for_the_missing_discount_then_calculates_without_a_model() {
+    check_worker(true).await;
+}
+
+async fn check_worker(clarify: bool) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let broker = tokio::spawn(aos_ipc::broker::serve(listener));
@@ -23,7 +32,9 @@ async fn worker_completes_price_calculation_without_model_or_tools() {
     });
     let service_address = address.clone();
     let service_task = tokio::spawn(async move { service.serve(&service_address).await });
-    let bus = BusClient::connect(&address, "price-test-client").await.unwrap();
+    let bus = BusClient::connect(&address, "price-test-client")
+        .await
+        .unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while !bus.lookup(intents::REPORT).await.unwrap() {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -39,10 +50,16 @@ async fn worker_completes_price_calculation_without_model_or_tools() {
         .as_nanos();
     let home = std::env::temp_dir().join(format!("aos-local-price-{}-{stamp}", std::process::id()));
     std::fs::create_dir(&home).unwrap();
+    let request = "Un abonnement coûte 80 euros. Une remise de 25 % s'applique, puis on ajoute 5 euros de frais. Quel est le total ? Réponds en une seule phrase en français avec le calcul.";
+    let request = if clarify {
+        request.replace(" de 25 %", "")
+    } else {
+        request.to_owned()
+    };
     let spec = serde_json::json!({
         "agent_id": id,
         "goal": {
-            "statement": "Un abonnement coûte 80 euros. Une remise de 25 % s'applique, puis on ajoute 5 euros de frais. Quel est le total ? Réponds en une seule phrase en français avec le calcul."
+            "statement": request
         },
         "skills": ["planner"]
     });
@@ -56,7 +73,37 @@ async fn worker_completes_price_calculation_without_model_or_tools() {
         .current_dir(&home)
         .env("AOS_HOME", &home)
         .kill_on_drop(true);
-    let status = tokio::time::timeout(Duration::from_secs(10), command.status())
+    let mut child = command.spawn().unwrap();
+    if clarify {
+        let control = format!("agent.{id}.control");
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !events.lock().await.iter().any(|event| {
+                matches!(
+                    event,
+                    AgentOutputEvent::StateChanged {
+                        state: AgentState::Blocked
+                    }
+                )
+            }) || !bus.lookup(&control).await.unwrap()
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let response = bus
+            .call::<_, ControlResp>(
+                &control,
+                &ControlCmd::Steer {
+                    directive: "25 %".into(),
+                },
+                vec![],
+            )
+            .await
+            .unwrap();
+        assert!(matches!(response, ControlResp::Ack));
+    }
+    let status = tokio::time::timeout(Duration::from_secs(10), child.wait())
         .await
         .unwrap()
         .unwrap();
@@ -67,18 +114,40 @@ async fn worker_completes_price_calculation_without_model_or_tools() {
     // Leave any failure evidence available in the isolated temporary home.
     assert!(status.success());
     let recorded = events.lock().await;
-    assert!(matches!(
-        recorded.as_slice(),
-        [
-            AgentOutputEvent::StateChanged { state: AgentState::Running },
-            AgentOutputEvent::Step(_),
-            AgentOutputEvent::Log { .. },
-            AgentOutputEvent::StateChanged { state: AgentState::Done }
+    let expected_states = if clarify {
+        vec![
+            AgentState::Running,
+            AgentState::Blocked,
+            AgentState::Running,
+            AgentState::Done,
         ]
-    ));
-    let AgentOutputEvent::Step(step) = &recorded[1] else {
-        unreachable!();
+    } else {
+        vec![AgentState::Running, AgentState::Done]
     };
+    let states: Vec<_> = recorded
+        .iter()
+        .filter_map(|event| match event {
+            AgentOutputEvent::StateChanged { state } => Some(state.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(states, expected_states);
+    let steps: Vec<_> = recorded
+        .iter()
+        .filter_map(|event| match event {
+            AgentOutputEvent::Step(step) => Some(step),
+            _ => None,
+        })
+        .collect();
+    if clarify {
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].action, "local.clarify");
+        assert!(steps[0].response.contains("pourcentage de remise"));
+        assert_eq!(steps[0].args["model_calls"], 0);
+    } else {
+        assert_eq!(steps.len(), 1);
+    }
+    let step = steps.last().unwrap();
     let answer = "Le total est de 65 € (80 € × (1 − 25 %) + 5 € = 65 €).";
     assert_eq!(step.action, "local.calculate");
     assert_eq!(step.response, answer);
