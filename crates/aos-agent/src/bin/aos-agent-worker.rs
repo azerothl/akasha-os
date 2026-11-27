@@ -370,8 +370,8 @@ async fn main() {
     restrict_canvas_tools(&mut spec.tools, &canvas_exported);
     let _ = persist::write_spec(&spec);
 
-    let mut definition_only = !restore && plain_native_goal(&spec)
-        && is_brief_definition(&spec.goal.statement);
+    let mut definition_only =
+        !restore && plain_native_goal(&spec) && is_brief_definition(&spec.goal.statement);
 
     // Skills + tools + MCP + modules installés (catalogue dynamique)
     let mut skill_docs = load_skills(&spec.skills);
@@ -389,15 +389,16 @@ async fn main() {
     let mut tools = select_tools_mode(&tool_ids, &module_tools, deep);
     strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
     strip_illust_blocked_runtime_tools(&mut tools, &spec.tools);
-    if definition_only {
-        retain_definition_tools(&mut tools);
-    }
     // Enrich caps from tools if create didn't set them all
     let derived = caps_for_tools(&tools, &spec.mcp_servers);
     for c in derived {
         if !spec.caps.contains(&c) {
             spec.caps.push(c);
         }
+    }
+
+    if definition_only {
+        retain_definition_tools(&mut tools);
     }
 
     // Optional prompt optimize
@@ -408,7 +409,14 @@ async fn main() {
         }
     }
 
-    install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+    install_system_prompt(
+        &bus,
+        &shared,
+        &spec,
+        if definition_only { &[] } else { &skill_docs },
+        &tools,
+    )
+    .await;
 
     // Index documents
     index_documents(&bus, &agent_id, &spec.caps, &spec.documents).await;
@@ -929,7 +937,14 @@ async fn main() {
             retain_definition_tools(&mut tools);
         }
         if shared.prompt_policy_dirty.swap(false, Ordering::SeqCst) {
-            install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+            install_system_prompt(
+                &bus,
+                &shared,
+                &spec,
+                if definition_only { &[] } else { &skill_docs },
+                &tools,
+            )
+            .await;
         }
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
@@ -2225,6 +2240,20 @@ fn is_brief_definition(statement: &str) -> bool {
             .find_map(|article| term.strip_prefix(article))
             .unwrap_or(term);
         (2..=40).contains(&term.chars().count())
+            && !matches!(
+                term,
+                "moi"
+                    | "toi"
+                    | "nous"
+                    | "vous"
+                    | "ça"
+                    | "cela"
+                    | "me"
+                    | "you"
+                    | "us"
+                    | "this"
+                    | "that"
+            )
             && term
                 .split('-')
                 .all(|part| !part.is_empty() && part.chars().all(char::is_alphabetic))
@@ -2236,7 +2265,10 @@ fn retain_definition_tools(tools: &mut Vec<ToolDesc>) {
 }
 
 fn is_conversational_action(tool: &ToolDesc) -> bool {
-    matches!(tool.name.as_str(), "goal.complete" | "goal.fail" | "user.ask")
+    matches!(
+        tool.name.as_str(),
+        "goal.complete" | "goal.fail" | "user.ask"
+    )
 }
 
 fn is_definition_answer(prose: &str) -> bool {
@@ -6649,6 +6681,8 @@ mod tests {
         for request in [
             "Définis un hexagone puis crée une note en une phrase.",
             "Définis mon projet en une phrase.",
+            "Définis moi en une phrase.",
+            "Define this in one sentence.",
             "Définis https://example.org en une phrase.",
             "Définis un hexagone en une phrase. Puis utilise le web.",
             "Lis le fichier puis vérifie son contenu.",
