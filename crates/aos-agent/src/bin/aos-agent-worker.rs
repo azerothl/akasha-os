@@ -409,14 +409,11 @@ async fn main() {
         }
     }
 
-    install_system_prompt(
-        &bus,
-        &shared,
-        &spec,
-        if definition_only { &[] } else { &skill_docs },
-        &tools,
-    )
-    .await;
+    if definition_only {
+        install_definition_prompt(&shared, &tools).await;
+    } else {
+        install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+    }
 
     // Index documents
     index_documents(&bus, &agent_id, &spec.caps, &spec.documents).await;
@@ -937,14 +934,11 @@ async fn main() {
             retain_definition_tools(&mut tools);
         }
         if shared.prompt_policy_dirty.swap(false, Ordering::SeqCst) {
-            install_system_prompt(
-                &bus,
-                &shared,
-                &spec,
-                if definition_only { &[] } else { &skill_docs },
-                &tools,
-            )
-            .await;
+            if definition_only {
+                install_definition_prompt(&shared, &tools).await;
+            } else {
+                install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+            }
         }
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
@@ -5300,6 +5294,21 @@ fn tools_allowed_by_policy(tools: &[ToolDesc], policy: &aos_proto::AgentPolicy) 
         .collect()
 }
 
+async fn install_definition_prompt(shared: &Shared, tools: &[ToolDesc]) {
+    let policy = shared.policy.lock().await.clone();
+    let mut system = String::from(
+        "Définis le terme demandé par l’utilisateur en une phrase factuelle, dans sa langue. \
+         Donne directement la définition, sans préambule ni plan. \
+         Si une précision est indispensable et que user.ask est autorisé, \
+         réponds par {\"action\":\"user.ask\",\"args\":{\"question\":\"...\"}}.\n\n\
+         ## Catalogue d'outils internes autorisés\n",
+    );
+    for tool in tools_allowed_by_policy(tools, &policy) {
+        system.push_str(&format!("- {}\n", tool.name));
+    }
+    set_system_prompt(shared, system).await;
+}
+
 async fn install_system_prompt(
     bus: &BusClient,
     shared: &Shared,
@@ -5339,6 +5348,10 @@ async fn install_system_prompt(
         system.push_str("\n\n");
         system.push_str(&illust_draw_strategy_hint());
     }
+    set_system_prompt(shared, system).await;
+}
+
+async fn set_system_prompt(shared: &Shared, system: String) {
     let mut st = shared.state.lock().await;
     if st.working_memory.is_empty() || st.working_memory[0].0 != "system" {
         st.working_memory.insert(0, ("system".into(), system));
