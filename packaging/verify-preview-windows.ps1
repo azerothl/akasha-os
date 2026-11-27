@@ -109,6 +109,9 @@ if ($previewProfile -ne "minimal") {
 }
 foreach ($module in $modulesToVerify) {
     if ($optionalModules -contains $module) {
+        if (Test-Path -LiteralPath (Join-Path $resolvedOut "share\modules\$module.aospkg")) {
+            throw "Optional module is still bundled in the Preview directory: $module"
+        }
         $escapedModule = [regex]::Escape($module)
         $entry = [regex]::Match(
             $catalogueText,
@@ -226,6 +229,10 @@ if ($ArchivePath) {
             $entryName = $entry.FullName.Replace('\', '/')
             if ([System.IO.Path]::IsPathRooted($entryName) -or $entryName -match '(^|/)\.\.(/|$)') {
                 throw "Unsafe archive path: $entryName"
+            }
+            if ($entryName -match '^share/modules/([^/]+)\.aospkg(/|$)' -and
+                $optionalModules -contains $Matches[1]) {
+                throw "Optional module is still bundled in the Preview archive: $($Matches[1])"
             }
             if (-not $entryName.EndsWith('/')) {
                 [void]$archiveFiles.Add($entryName)

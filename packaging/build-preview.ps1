@@ -301,6 +301,20 @@ if (Test-Path $extrt) {
     Write-Warning "ext-rt.aospkg absent — lancer modules\build-ext-rt.ps1"
 }
 
+# The same output directory can be reused for a full or a smaller package.
+$modulesOut = (Resolve-Path -LiteralPath (Join-Path $OutDir "share\modules")).Path
+foreach ($module in @("canvas", "create", "illustration-studio")) {
+    if ($optionalModules -notcontains $module) { continue }
+    $bundledPack = Join-Path $modulesOut "$module.aospkg"
+    if (Test-Path -LiteralPath $bundledPack) {
+        $resolvedPack = (Resolve-Path -LiteralPath $bundledPack).Path
+        if ((Split-Path -Parent $resolvedPack) -ne $modulesOut) {
+            throw "Optional package path escapes the output directory: $resolvedPack"
+        }
+        Remove-Item -LiteralPath $resolvedPack -Recurse -Force
+    }
+}
+
 if ($optionalModules -notcontains "canvas") {
     $canvasShare = Join-Path $root "share\modules\canvas.aospkg"
     $canvas = Join-Path $root "modules\canvas.aospkg"
