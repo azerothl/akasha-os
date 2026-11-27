@@ -97,6 +97,9 @@ async fn definition_uses_one_inference_and_only_conversational_actions() {
     assert_eq!(prompt, aos_agent::assess::BRIEF_DEFINITION_INSTRUCTION);
     assert!(!prompt.contains("web.search"));
     assert!(!prompt.contains("module.list"));
+    assert_eq!(calls[0].messages.len(), 2);
+    assert_eq!(calls[0].messages[1].role, "user");
+    assert_eq!(calls[0].messages[1].content, spec["goal"]["statement"]);
     let events = events.lock().await;
     assert!(!events
         .iter()
