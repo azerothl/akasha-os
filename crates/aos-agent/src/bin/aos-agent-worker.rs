@@ -7,7 +7,9 @@ use aos_agent::actions::{
     parse_actions_with_tools, parse_embedded_action_question, strip_reasoning, strip_tool_markup,
     AgentAction, THREAD_FAIL_COULD_NOT_CONTINUE,
 };
-use aos_agent::assess::{parse_assess_response, AssessResult};
+use aos_agent::assess::{
+    is_brief_definition, parse_assess_response, AssessResult, BRIEF_DEFINITION_INSTRUCTION,
+};
 use aos_agent::canvas_scene::{
     agent_has_canvas_tools, begin_canvas_vision, canvas_action_near_duplicate_reason,
     canvas_critic_approved, canvas_critic_system_prompt, canvas_draw_tool_applies_trait,
@@ -410,7 +412,7 @@ async fn main() {
     }
 
     if definition_only {
-        install_definition_prompt(&shared, &tools).await;
+        install_definition_prompt(&shared).await;
     } else {
         install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
     }
@@ -935,7 +937,7 @@ async fn main() {
         }
         if shared.prompt_policy_dirty.swap(false, Ordering::SeqCst) {
             if definition_only {
-                install_definition_prompt(&shared, &tools).await;
+                install_definition_prompt(&shared).await;
             } else {
                 install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
             }
@@ -1204,11 +1206,16 @@ async fn main() {
                         "summary": "Capture webcam enregistrée. Analyse visuelle impossible : aucun modèle vision (projecteur d'image) n'est chargé. Charge Gemma 4 ou LLaVA dans Modèles, puis redemande ce que montre la photo."
                     }),
                 });
-            } else if definition_only && is_definition_answer(prose) {
+            } else if definition_only && is_definition_sentence(prose) {
+                let (action, args) = if prose.ends_with('?') {
+                    ("user.ask", serde_json::json!({ "question": prose }))
+                } else {
+                    ("goal.complete", serde_json::json!({ "summary": prose }))
+                };
                 batch_actions.push(AgentAction {
                     thought: "réponse à la définition".into(),
-                    action: "goal.complete".into(),
-                    args: serde_json::json!({ "summary": prose }),
+                    action: action.into(),
+                    args,
                 });
             } else if (aos_proto::chat_user_wants_advisory(&spec.goal.statement)
                 || spec.cognitive_mode.is_deep_thinking())
@@ -2218,42 +2225,6 @@ fn local_price_reply(spec: &AgentSpec) -> Option<PriceReply> {
     }
 }
 
-fn is_brief_definition(statement: &str) -> bool {
-    let normalized = statement.trim().trim_end_matches(['.', '?']).to_lowercase();
-    let term = normalized
-        .strip_prefix("définis ")
-        .and_then(|query| query.strip_suffix(" en une phrase"))
-        .or_else(|| {
-            normalized
-                .strip_prefix("define ")
-                .and_then(|query| query.strip_suffix(" in one sentence"))
-        });
-    term.is_some_and(|term| {
-        let term = ["un ", "une ", "le ", "la ", "a ", "an ", "the "]
-            .iter()
-            .find_map(|article| term.strip_prefix(article))
-            .unwrap_or(term);
-        (2..=40).contains(&term.chars().count())
-            && !matches!(
-                term,
-                "moi"
-                    | "toi"
-                    | "nous"
-                    | "vous"
-                    | "ça"
-                    | "cela"
-                    | "me"
-                    | "you"
-                    | "us"
-                    | "this"
-                    | "that"
-            )
-            && term
-                .split('-')
-                .all(|part| !part.is_empty() && part.chars().all(char::is_alphabetic))
-    })
-}
-
 fn retain_definition_tools(tools: &mut Vec<ToolDesc>) {
     tools.retain(is_conversational_action);
 }
@@ -2265,9 +2236,9 @@ fn is_conversational_action(tool: &ToolDesc) -> bool {
     )
 }
 
-fn is_definition_answer(prose: &str) -> bool {
+fn is_definition_sentence(prose: &str) -> bool {
     prose.chars().count() >= 12
-        && prose.ends_with('.')
+        && prose.ends_with(['.', '?'])
         && !prose[..prose.len() - 1].contains(['.', '!', '?', '{', '}', '`', '\n'])
 }
 
@@ -5294,19 +5265,8 @@ fn tools_allowed_by_policy(tools: &[ToolDesc], policy: &aos_proto::AgentPolicy) 
         .collect()
 }
 
-async fn install_definition_prompt(shared: &Shared, tools: &[ToolDesc]) {
-    let policy = shared.policy.lock().await.clone();
-    let mut system = String::from(
-        "Définis le terme demandé par l’utilisateur en une phrase factuelle, dans sa langue. \
-         Donne directement la définition, sans préambule ni plan. \
-         Si une précision est indispensable et que user.ask est autorisé, \
-         réponds par {\"action\":\"user.ask\",\"args\":{\"question\":\"...\"}}.\n\n\
-         ## Catalogue d'outils internes autorisés\n",
-    );
-    for tool in tools_allowed_by_policy(tools, &policy) {
-        system.push_str(&format!("- {}\n", tool.name));
-    }
-    set_system_prompt(shared, system).await;
+async fn install_definition_prompt(shared: &Shared) {
+    set_system_prompt(shared, BRIEF_DEFINITION_INSTRUCTION.into()).await;
 }
 
 async fn install_system_prompt(
@@ -6682,14 +6642,14 @@ mod tests {
         assert!(super::is_brief_definition(
             "Define a polygon in one sentence."
         ));
-        assert!(super::is_definition_answer(
+        assert!(super::is_definition_sentence(
             "Un hexagone est un polygone à six côtés."
         ));
-        assert!(!super::is_definition_answer(
+        assert!(!super::is_definition_sentence(
             "Un hexagone est un polygone. Il a six côtés."
         ));
-        assert!(!super::is_definition_answer(
-            "Il est impossible de définir ce terme ?"
+        assert!(super::is_definition_sentence(
+            "De quel sens de ce terme parlez-vous ?"
         ));
         for request in [
             "Définis un hexagone puis crée une note en une phrase.",
