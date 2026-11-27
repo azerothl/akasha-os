@@ -78,15 +78,17 @@ pub fn price_reply(question: &str) -> Option<PriceReply> {
     let amount_label = money(amount);
     let rate = money(rate);
     let fee_label = money(fee);
-    let expression;
-    let unrounded;
-    if fee_first {
-        unrounded = (amount + fee) * kept;
-        expression = format!("({amount_label} € + {fee_label} €) × (1 − {rate} %)");
+    let (unrounded, expression) = if fee_first {
+        (
+            (amount + fee) * kept,
+            format!("({amount_label} € + {fee_label} €) × (1 − {rate} %)"),
+        )
     } else {
-        unrounded = amount * kept + fee * 10_000;
-        expression = format!("{amount_label} € × (1 − {rate} %) + {fee_label} €");
-    }
+        (
+            amount * kept + fee * 10_000,
+            format!("{amount_label} € × (1 − {rate} %) + {fee_label} €"),
+        )
+    };
     let relation = if unrounded % 10_000 == 0 { "=" } else { "≈" };
     let total = money((unrounded + 5_000) / 10_000);
     Some(PriceReply::Computed(format!(
