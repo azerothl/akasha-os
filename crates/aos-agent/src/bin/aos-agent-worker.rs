@@ -112,6 +112,7 @@ enum AskWait {
 struct Shared {
     state: Mutex<CognitiveState>,
     paused: AtomicBool,
+    prompt_policy_dirty: AtomicBool,
     current_inference: Mutex<Option<u64>>,
     cmd_tx: mpsc::Sender<WorkerCmd>,
     /// Résultats poussés par agentd quand un sous-agent atteint un état terminal.
@@ -332,6 +333,7 @@ async fn main() {
     let shared = Arc::new(Shared {
         state: Mutex::new(state),
         paused: AtomicBool::new(false),
+        prompt_policy_dirty: AtomicBool::new(false),
         current_inference: Mutex::new(None),
         cmd_tx: cmd_tx.clone(),
         child_results: Mutex::new(HashMap::new()),
@@ -368,6 +370,9 @@ async fn main() {
     restrict_canvas_tools(&mut spec.tools, &canvas_exported);
     let _ = persist::write_spec(&spec);
 
+    let mut definition_only = !restore && plain_native_goal(&spec)
+        && is_brief_definition(&spec.goal.statement);
+
     // Skills + tools + MCP + modules installés (catalogue dynamique)
     let mut skill_docs = load_skills(&spec.skills);
     let module_list = bus
@@ -384,6 +389,9 @@ async fn main() {
     let mut tools = select_tools_mode(&tool_ids, &module_tools, deep);
     strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
     strip_illust_blocked_runtime_tools(&mut tools, &spec.tools);
+    if definition_only {
+        retain_definition_tools(&mut tools);
+    }
     // Enrich caps from tools if create didn't set them all
     let derived = caps_for_tools(&tools, &spec.mcp_servers);
     for c in derived {
@@ -645,6 +653,10 @@ async fn main() {
         }
 
         if let Some(d) = pending_steer.take() {
+            if std::mem::take(&mut definition_only) {
+                tools = select_tools_mode(&tool_ids, &module_tools, deep);
+                install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+            }
             shared.state.lock().await.push_user(&format!("[steer] {d}"));
             steer_count = steer_count.saturating_add(1);
             recent_steers.push(d.clone());
@@ -903,12 +915,7 @@ async fn main() {
 
         let step_t0 = Instant::now();
         let infer_t0 = Instant::now();
-        // Refresh module catalog each turn (install/uninstall may change availability).
-        let module_list = bus
-            .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
-            .await
-            .unwrap_or_default();
-        let _installed_modules = active_module_names(&module_list);
+        // Refresh callable module tools after install/uninstall.
         module_tools = discover_module_tools(&bus).await;
         module_tools.extend(mcp_tools.clone());
         tools = select_tools_mode(
@@ -918,6 +925,12 @@ async fn main() {
         );
         strip_canvas_blocked_runtime_tools(&mut tools, &spec.tools);
         strip_illust_blocked_runtime_tools(&mut tools, &spec.tools);
+        if definition_only {
+            retain_definition_tools(&mut tools);
+        }
+        if shared.prompt_policy_dirty.swap(false, Ordering::SeqCst) {
+            install_system_prompt(&bus, &shared, &spec, &skill_docs, &tools).await;
+        }
         // Think (+ retry PromptTooLong : trim + réduction max_tokens)
         let mut prompt_retries = 0u32;
         let mut stall_retries = 0u32;
@@ -1181,6 +1194,12 @@ async fn main() {
                     args: serde_json::json!({
                         "summary": "Capture webcam enregistrée. Analyse visuelle impossible : aucun modèle vision (projecteur d'image) n'est chargé. Charge Gemma 4 ou LLaVA dans Modèles, puis redemande ce que montre la photo."
                     }),
+                });
+            } else if definition_only && is_definition_answer(prose) {
+                batch_actions.push(AgentAction {
+                    thought: "réponse à la définition".into(),
+                    action: "goal.complete".into(),
+                    args: serde_json::json!({ "summary": prose }),
                 });
             } else if (aos_proto::chat_user_wants_advisory(&spec.goal.statement)
                 || spec.cognitive_mode.is_deep_thinking())
@@ -2148,6 +2167,7 @@ fn register_worker_control(
                 }
                 ControlCmd::SetPolicy { policy } => {
                     *shared.policy.lock().await = policy;
+                    shared.prompt_policy_dirty.store(true, Ordering::SeqCst);
                     ControlResp::Ack
                 }
                 ControlCmd::ActDecision { act_id, approved } => {
@@ -2167,8 +2187,8 @@ fn register_worker_control(
     });
 }
 
-fn local_price_reply(spec: &AgentSpec) -> Option<PriceReply> {
-    if spec.parent_id.is_some()
+fn plain_native_goal(spec: &AgentSpec) -> bool {
+    !(spec.parent_id.is_some()
         || spec.cognitive_mode.is_deep_thinking()
         || spec.system_prompt.is_some()
         || spec.optimize_prompt
@@ -2178,11 +2198,51 @@ fn local_price_reply(spec: &AgentSpec) -> Option<PriceReply> {
         || !spec.mcp_servers.is_empty()
         || spec.skills.iter().any(|skill| skill != "planner")
         || spec.goal.max_steps == 0
-        || spec.goal.timeout_secs == 0
-    {
-        return None;
+        || spec.goal.timeout_secs == 0)
+}
+
+fn local_price_reply(spec: &AgentSpec) -> Option<PriceReply> {
+    if plain_native_goal(spec) {
+        price_reply(&spec.goal.statement)
+    } else {
+        None
     }
-    price_reply(&spec.goal.statement)
+}
+
+fn is_brief_definition(statement: &str) -> bool {
+    let normalized = statement.trim().trim_end_matches(['.', '?']).to_lowercase();
+    let term = normalized
+        .strip_prefix("définis ")
+        .and_then(|query| query.strip_suffix(" en une phrase"))
+        .or_else(|| {
+            normalized
+                .strip_prefix("define ")
+                .and_then(|query| query.strip_suffix(" in one sentence"))
+        });
+    term.is_some_and(|term| {
+        let term = ["un ", "une ", "le ", "la ", "a ", "an ", "the "]
+            .iter()
+            .find_map(|article| term.strip_prefix(article))
+            .unwrap_or(term);
+        (2..=40).contains(&term.chars().count())
+            && term
+                .split('-')
+                .all(|part| !part.is_empty() && part.chars().all(char::is_alphabetic))
+    })
+}
+
+fn retain_definition_tools(tools: &mut Vec<ToolDesc>) {
+    tools.retain(is_conversational_action);
+}
+
+fn is_conversational_action(tool: &ToolDesc) -> bool {
+    matches!(tool.name.as_str(), "goal.complete" | "goal.fail" | "user.ask")
+}
+
+fn is_definition_answer(prose: &str) -> bool {
+    prose.chars().count() >= 12
+        && prose.ends_with('.')
+        && !prose[..prose.len() - 1].contains(['.', '!', '?', '{', '}', '`', '\n'])
 }
 
 async fn run_local_price(
@@ -2447,10 +2507,20 @@ async fn infer_turn(
         .take(4)
         .cloned()
         .collect();
+    let is_provider = spec
+        .model_id
+        .as_deref()
+        .is_some_and(|id| id.starts_with("provider:"));
+    let native_tools = if !is_provider && !tools.iter().all(is_conversational_action) {
+        let policy = shared.policy.lock().await.clone();
+        chat_template_tool_definitions(&tools_allowed_by_policy(tools, &policy))
+    } else {
+        Vec::new()
+    };
     let req = InferRequest {
         model_id: spec.model_id.clone(),
         messages,
-        tools: chat_template_tool_definitions(tools),
+        tools: native_tools,
         params: InferParams {
             temperature: 0.2,
             max_tokens,
@@ -5190,6 +5260,14 @@ async fn maybe_enable_document_delivery(
     .await;
 }
 
+fn tools_allowed_by_policy(tools: &[ToolDesc], policy: &aos_proto::AgentPolicy) -> Vec<ToolDesc> {
+    tools
+        .iter()
+        .filter(|tool| aos_agent::policy::policy_deny(policy, &tool.name).is_none())
+        .cloned()
+        .collect()
+}
+
 async fn install_system_prompt(
     bus: &BusClient,
     shared: &Shared,
@@ -5203,10 +5281,12 @@ async fn install_system_prompt(
         .unwrap_or_default();
     let installed_modules = active_module_names(&module_list);
     let instincts = fetch_active_instincts(bus).await;
+    let policy = shared.policy.lock().await.clone();
+    let tools = tools_allowed_by_policy(tools, &policy);
     let mut system = compile_system_prompt(&PromptCompileInput {
         spec,
         skills,
-        tools,
+        tools: &tools,
         doc_index: &spec.documents,
         instincts: &instincts,
     });
@@ -5440,49 +5520,57 @@ async fn run_task_assess(
     reason: &str,
 ) -> AssessResult {
     let t0 = Instant::now();
-    let req = InferRequest {
-        model_id: spec.model_id.clone(),
-        messages: vec![
-            ChatMessage {
-                role: "system".into(),
-                content: "Tu classifies des tâches pour un agent OS. Réponds UNIQUEMENT par un JSON \
-                     {\"complexity\":\"simple\"|\"complex\",\"reason\":\"…\",\"needs_plan\":bool}. \
-                     complex/needs_plan=true si plusieurs étapes, livrables distincts, recherche+rédaction, \
-                     délégation, critères multiples, OU si plusieurs sous-travaux indépendants \
-                     peuvent avancer en parallèle (ex. chercher A et rédiger B, deux notes/fichiers distincts, \
-                     plusieurs recherches sans dépendance). simple seulement si une seule chaîne séquentielle courte. \
-                     Pas de balises <think>."
-                    .into(),
-            },
-            ChatMessage {
-                role: "user".into(),
-                content: format!("Tâche ({reason}) : {statement}"),
-            },
-        ],
-        tools: vec![],
-        params: InferParams {
-            max_tokens: 80,
-            temperature: 0.0,
-            ..InferParams::default()
-        },
-        priority: 2,
-        data_refs: vec![],
-        images: vec![],
-        routing: None,
-    };
-
+    let local = statement == spec.goal.statement
+        && reason == "démarrage"
+        && plain_native_goal(spec)
+        && is_brief_definition(statement);
     let mut text = String::new();
-    if let Ok(mut rx) = bus
-        .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
-        .await
-    {
-        while let Some(ev) = rx.recv().await {
-            if let Ok(TokenEvent::Delta { text: t }) = ev {
-                text.push_str(&t);
+    if !local {
+        let req = InferRequest {
+            model_id: spec.model_id.clone(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".into(),
+                    content: "Tu classifies des tâches pour un agent OS. Réponds UNIQUEMENT par un JSON \
+                         {\"complexity\":\"simple\"|\"complex\",\"reason\":\"…\",\"needs_plan\":bool}. \
+                         complex/needs_plan=true si plusieurs étapes, livrables distincts, recherche+rédaction, \
+                         délégation, critères multiples, OU si plusieurs sous-travaux indépendants \
+                         peuvent avancer en parallèle (ex. chercher A et rédiger B, deux notes/fichiers distincts, \
+                         plusieurs recherches sans dépendance). simple seulement si une seule chaîne séquentielle courte. \
+                         Pas de balises <think>."
+                        .into(),
+                },
+                ChatMessage {
+                    role: "user".into(),
+                    content: format!("Tâche ({reason}) : {statement}"),
+                },
+            ],
+            tools: vec![],
+            params: InferParams {
+                max_tokens: 80,
+                temperature: 0.0,
+                ..InferParams::default()
+            },
+            priority: 2,
+            data_refs: vec![],
+            images: vec![],
+            routing: None,
+        };
+
+        if let Ok(mut rx) = bus
+            .call_stream::<InferRequest, TokenEvent>("model.infer", &req, vec![])
+            .await
+        {
+            while let Some(ev) = rx.recv().await {
+                if let Ok(TokenEvent::Delta { text: t }) = ev {
+                    text.push_str(&t);
+                }
             }
         }
     }
-    let parsed_assess = if text.trim().is_empty() {
+    let parsed_assess = if local {
+        AssessResult::simple("définition courte sans étape externe")
+    } else if text.trim().is_empty() {
         AssessResult::complex("task.assess: pas de réponse modèle — plan par défaut")
     } else {
         parse_assess_response(&text)
@@ -5502,6 +5590,7 @@ async fn run_task_assess(
             "reason": reason,
             "complexity": assess.complexity,
             "needs_plan": assess.needs_plan,
+            "model_calls": u32::from(!local),
         }),
         tool_kind: "runtime".into(),
         mcp_server: None,
@@ -5512,7 +5601,7 @@ async fn run_task_assess(
         ),
         reflection: None,
         duration_ms: tool_ms,
-        infer_ms: tool_ms,
+        infer_ms: if local { 0 } else { tool_ms },
         tool_ms: 0,
         prompt_tokens: 0,
         generated_tokens: 0,
@@ -6540,6 +6629,34 @@ mod tests {
         assert_eq!(super::missing_cap_hint("device.usb.open"), "device.usb.io");
     }
 
+    #[test]
+    fn brief_definitions_leave_compound_or_contextual_requests_on_the_normal_route() {
+        assert!(super::is_brief_definition(
+            "Définis un hexagone en une phrase."
+        ));
+        assert!(super::is_brief_definition(
+            "Define a polygon in one sentence."
+        ));
+        assert!(super::is_definition_answer(
+            "Un hexagone est un polygone à six côtés."
+        ));
+        assert!(!super::is_definition_answer(
+            "Un hexagone est un polygone. Il a six côtés."
+        ));
+        assert!(!super::is_definition_answer(
+            "Il est impossible de définir ce terme ?"
+        ));
+        for request in [
+            "Définis un hexagone puis crée une note en une phrase.",
+            "Définis mon projet en une phrase.",
+            "Définis https://example.org en une phrase.",
+            "Définis un hexagone en une phrase. Puis utilise le web.",
+            "Lis le fichier puis vérifie son contenu.",
+        ] {
+            assert!(!super::is_brief_definition(request), "{request}");
+        }
+    }
+
     #[tokio::test]
     async fn runtime_actions_cannot_bypass_catalog_or_live_allowlist() {
         use super::*;
@@ -6553,6 +6670,7 @@ mod tests {
         let shared = Shared {
             state: Mutex::new(CognitiveState::new("runtime-policy-fixture", vec![])),
             paused: AtomicBool::new(false),
+            prompt_policy_dirty: AtomicBool::new(false),
             current_inference: Mutex::new(None),
             cmd_tx,
             child_results: Mutex::new(HashMap::new()),
@@ -6584,6 +6702,18 @@ mod tests {
             tool_allowlist: Some(vec!["workspace.read".into()]),
             ..Default::default()
         };
+        let offered = tools_allowed_by_policy(&tools, &shared.policy.lock().await.clone());
+        assert!(offered.is_empty());
+        let search = select_tools(&["web.search".into()], &[]);
+        let open = tools_allowed_by_policy(&search, &aos_proto::AgentPolicy::default());
+        assert!(open.iter().any(|tool| tool.name == "web.search"));
+        let offline = aos_proto::AgentPolicy {
+            net: aos_proto::AgentNetPolicy::Deny,
+            ..Default::default()
+        };
+        let offered = tools_allowed_by_policy(&search, &offline);
+        assert!(!offered.iter().any(|tool| tool.name == "web.search"));
+        assert!(offered.iter().any(|tool| tool.name == "goal.complete"));
         for name in ["agent.spawn", "cap.request", "plan.update"] {
             let action = AgentAction {
                 action: name.into(),
