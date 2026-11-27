@@ -26,7 +26,6 @@ export const view = {
   smoothY: 0,
   velocity: 0,
   ready: false,
-  reduced: false,
   intro: 0,
   field: makeBlendedField(),
 };
@@ -64,20 +63,9 @@ function currentDepth() {
   return Math.round(lerp(a, b, view.blend));
 }
 
-function revealPanel(el, reduced) {
+function revealPanel(el) {
   const lines = el.querySelectorAll(".line-in");
   const fades = el.querySelectorAll("[data-fade]");
-  if (reduced) {
-    lines.forEach((n) => {
-      n.style.transform = "translateY(0)";
-      n.style.opacity = "1";
-    });
-    fades.forEach((n) => {
-      n.style.opacity = "1";
-      n.style.transform = "translateY(0)";
-    });
-    return;
-  }
   lines.forEach((n, i) => {
     n.style.transition = "none";
     n.style.transform = "translateY(108%)";
@@ -103,66 +91,59 @@ function runPreloader() {
   const bar = document.querySelector("[data-pre-bar]");
   const num = document.querySelector("[data-pre-depth]");
   const label = document.querySelector("[data-pre-label]");
-  if (!root) {
-    view.intro = 1;
-    view.ready = true;
-    document.dispatchEvent(new CustomEvent("akasha:ready"));
-    return Promise.resolve();
-  }
-
-  if (view.reduced) {
-    root.remove();
-    view.intro = 1;
-    view.ready = true;
-    document.dispatchEvent(new CustomEvent("akasha:ready"));
-    return Promise.resolve();
-  }
-
-  document.documentElement.style.overflow = "hidden";
   const duration = 2000;
   const start = performance.now();
+  let lastLabel = -1;
+  let finished = false;
 
-  return new Promise((resolve) => {
-    let lastLabel = -1;
-    const tick = (now) => {
-      const t = clamp((now - start) / duration, 0, 1);
-      const eased = t * t * (3 - 2 * t);
-      const v = Math.round(eased * 6000);
-      if (num) num.textContent = v.toLocaleString("en-GB");
-      if (bar) bar.style.transform = `scaleX(${eased})`;
-      const idx = Math.min(PRESETS.length - 1, Math.floor(eased * PRESETS.length));
-      if (idx !== lastLabel && label) {
-        lastLabel = idx;
-        label.textContent = PRESETS[idx].label.toUpperCase();
-      }
-      if (t < 1) {
-        requestAnimationFrame(tick);
-        return;
-      }
-      root.style.transition = "clip-path 1.1s cubic-bezier(0.87, 0, 0.13, 1)";
-      root.style.clipPath = "inset(0% 0% 100% 0%)";
-      const introStart = performance.now();
-      const introTick = (tNow) => {
-        const it = clamp((tNow - introStart) / 2000, 0, 1);
-        view.intro = 1 - Math.pow(1 - it, 2);
-        if (it < 1) {
-          requestAnimationFrame(introTick);
-          return;
-        }
-        view.intro = 1;
-        view.ready = true;
-        document.documentElement.style.removeProperty("overflow");
-        root.remove();
-        document.dispatchEvent(new CustomEvent("akasha:ready"));
-        resolve();
-      };
-      requestAnimationFrame(introTick);
-      setTimeout(() => {
-        /* ensure resolve if intro path stalls */
-      }, 3200);
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(deadline);
+    view.intro = 1;
+    view.ready = true;
+    root?.remove();
+    document.dispatchEvent(new CustomEvent("akasha:ready"));
+  };
+
+  // A background tab can suspend animation frames. The overlay must still
+  // disappear when its allotted time has elapsed.
+  const deadline = setTimeout(finish, duration + 1100);
+  if (!root) {
+    finish();
+    return;
+  }
+
+  root.hidden = false;
+  const tick = (now) => {
+    if (finished) return;
+    const t = clamp((now - start) / duration, 0, 1);
+    const eased = t * t * (3 - 2 * t);
+    if (num) num.textContent = Math.round(eased * 6000).toLocaleString("en-GB");
+    if (bar) bar.style.transform = 'scaleX(' + eased + ')';
+    const idx = Math.min(PRESETS.length - 1, Math.floor(eased * PRESETS.length));
+    if (idx !== lastLabel && label) {
+      lastLabel = idx;
+      label.textContent = PRESETS[idx].label.toUpperCase();
+    }
+    if (t < 1) {
+      requestAnimationFrame(tick);
+      return;
+    }
+
+    root.style.transition = "clip-path 1.1s cubic-bezier(0.87, 0, 0.13, 1)";
+    root.style.clipPath = "inset(0% 0% 100% 0%)";
+    const revealStart = performance.now();
+    const reveal = (time) => {
+      if (finished) return;
+      const progress = clamp((time - revealStart) / 1100, 0, 1);
+      view.intro = 1 - (1 - progress) ** 2;
+      if (progress < 1) requestAnimationFrame(reveal);
+      else finish();
     };
-    requestAnimationFrame(tick);
-  });
+    requestAnimationFrame(reveal);
+  };
+  requestAnimationFrame(tick);
 }
 
 function visibleCloserLines(closer) {
@@ -232,7 +213,7 @@ function initScroll() {
       lastActive = view.index;
       document.dispatchEvent(new CustomEvent("akasha:section", { detail: lastActive }));
       const panel = panels[lastActive];
-      if (panel) revealPanel(panel, view.reduced);
+      if (panel) revealPanel(panel);
     }
 
     const accent = cssRGB(view.field.hot);
@@ -278,14 +259,13 @@ function initScroll() {
     { passive: true },
   );
 
-  let lenis = null;
+  const lenis = new Lenis({ duration: 1.15, smoothWheel: true });
   let rafId = 0;
 
   document.addEventListener("akasha:goto", (e) => {
     const index = clamp(e.detail, 0, SECTION_COUNT - 1);
     const to = stageTop + index * sectionH + sectionH * 0.05;
-    if (lenis) lenis.scrollTo(to, { duration: 1.5 });
-    else window.scrollTo({ top: to, behavior: "smooth" });
+    lenis.scrollTo(to, { duration: 1.5 });
   });
 
   document.addEventListener("akasha:ready", () => {
@@ -293,7 +273,7 @@ function initScroll() {
     apply(window.scrollY);
     document.dispatchEvent(new CustomEvent("akasha:section", { detail: view.index }));
     const panel = panels[view.index];
-    if (panel) revealPanel(panel, view.reduced);
+    if (panel) revealPanel(panel);
   });
 
   document.querySelectorAll("[data-goto]").forEach((btn) => {
@@ -317,19 +297,6 @@ function initScroll() {
     });
   });
 
-  if (view.reduced) {
-    window.addEventListener("scroll", () => apply(window.scrollY), { passive: true });
-    window.addEventListener("resize", () => {
-      measure();
-      apply(window.scrollY);
-    });
-    return;
-  }
-
-  lenis = new Lenis({
-    duration: 1.15,
-    smoothWheel: true,
-  });
   lenis.on("scroll", ({ scroll, velocity }) => {
     view.velocity = clamp(Math.abs(velocity) * 0.02, 0, 1);
     apply(scroll);
@@ -362,9 +329,12 @@ function initCursor() {
   delete document.body.dataset.cursor;
 }
 
-async function main() {
+function main() {
   if (!document.body.classList.contains("experience")) return;
-  view.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelector("[data-preloader]")?.remove();
+    return;
+  }
 
   const canvas = document.querySelector("[data-field]");
   if (canvas) {
@@ -372,8 +342,9 @@ async function main() {
   }
 
   initCursor();
+  document.body.classList.add("experience-ready");
   initScroll();
-  await runPreloader();
+  runPreloader();
 }
 
 main();
