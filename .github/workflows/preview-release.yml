@@ -411,7 +411,7 @@ jobs:
 
   macos:
     if: github.event_name != 'workflow_dispatch' || inputs.macos_only || inputs.create_release || inputs.include_macos_in_full_build
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     permissions:
       contents: read
