@@ -884,16 +884,17 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             return;
                         }
 
+                        let canvas_exported = if brief_definition {
+                            Vec::new()
+                        } else {
+                            bus.call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
+                                .await
+                                .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
+                                .unwrap_or_default()
+                        };
                         let mut delegate = if brief_definition {
                             None
                         } else {
-                            let canvas_exported: Vec<String> = bus
-                                .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
-                                .await
-                                .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
-                                .unwrap_or_default();
-
-                            // Délégation : agent.spawn / filet module → worker en fond
                             chat_delegate_agent_spec(
                                 &user_text,
                                 &full,
