@@ -311,6 +311,10 @@ async fn main() {
         return;
     }
 
+    if !restore && complete_local_price(&bus, &spec).await {
+        return;
+    }
+
     inherit_session_model(&bus, &mut spec).await;
     inherit_device_vision_model(&bus, &mut spec).await;
 
@@ -2141,6 +2145,79 @@ async fn main() {
         let _ = persist::write_state(&st);
     }
     // Exit process → agentd marks Done if not already
+}
+
+async fn complete_local_price(bus: &BusClient, spec: &AgentSpec) -> bool {
+    if spec.parent_id.is_some()
+        || spec.cognitive_mode.is_deep_thinking()
+        || spec.system_prompt.is_some()
+        || spec.optimize_prompt
+        || !spec.documents.is_empty()
+        || !spec.goal.success_criteria.is_empty()
+        || !spec.tools.is_empty()
+        || !spec.mcp_servers.is_empty()
+        || spec.skills.iter().any(|skill| skill != "planner")
+        || spec.goal.max_steps == 0
+        || spec.goal.timeout_secs == 0
+    {
+        return false;
+    }
+    let Some(aos_proto::local_price::PriceReply::Computed(answer)) =
+        aos_proto::local_price::price_reply(&spec.goal.statement)
+    else {
+        return false;
+    };
+    let record = AgentStepRecord {
+        step: 1,
+        response: answer.clone(),
+        action: "local.calculate".into(),
+        tool_kind: "runtime".into(),
+        tool_result: answer.clone(),
+        args: serde_json::json!({ "model_calls": 0 }),
+        ts_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or_default(),
+        ..Default::default()
+    };
+    let id = &spec.agent_id;
+    let mut state = CognitiveState::new(id.clone(), spec.caps.clone());
+    state.goal = Some(spec.goal.clone());
+    state.complexity = Some("simple".into());
+    state.needs_plan = false;
+    state.step = 1;
+    state.artifacts.push(answer.clone());
+    state.trace.push(record.clone());
+    if let Err(err) = persist::write_state(&state) {
+        report(bus, id, AgentOutputEvent::Error { message: err.to_string() }).await;
+        report(
+            bus,
+            id,
+            AgentOutputEvent::StateChanged { state: AgentState::Failed },
+        )
+        .await;
+        return true;
+    }
+    report(
+        bus,
+        id,
+        AgentOutputEvent::StateChanged { state: AgentState::Running },
+    )
+    .await;
+    report(bus, id, AgentOutputEvent::Step(record)).await;
+    report(
+        bus,
+        id,
+        AgentOutputEvent::Log { line: format!("goal.complete : {answer}") },
+    )
+    .await;
+    report(
+        bus,
+        id,
+        AgentOutputEvent::StateChanged { state: AgentState::Done },
+    )
+    .await;
+    true
 }
 
 enum InferOutcome {
