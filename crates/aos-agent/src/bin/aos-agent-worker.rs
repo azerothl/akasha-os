@@ -48,6 +48,7 @@ use aos_agent::tools::{
     strip_canvas_blocked_runtime_tools, strip_illust_blocked_runtime_tools, ToolBackend, ToolDesc,
 };
 use aos_agent::{intents, CognitiveState, ControlCmd, ControlResp, ReportPayload};
+use aos_proto::local_price::{price_reply, price_reply_with_discount, PriceReply};
 use aos_ipc::{BusClient, BusService, ConnectRetry};
 use aos_proto::{
     AgentCreateRequest, AgentCreateResponse, AgentGoal, AgentInfo, AgentOutputEvent, AgentSource,
@@ -311,21 +312,6 @@ async fn main() {
         return;
     }
 
-    if !restore && complete_local_price(&bus, &spec).await {
-        return;
-    }
-
-    inherit_session_model(&bus, &mut spec).await;
-    inherit_device_vision_model(&bus, &mut spec).await;
-
-    let canvas_exported: Vec<String> = bus
-        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
-        .await
-        .map(|list| canvas_tools_from_module_list(&list))
-        .unwrap_or_default();
-    restrict_canvas_tools(&mut spec.tools, &canvas_exported);
-    let _ = persist::write_spec(&spec);
-
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<WorkerCmd>(16);
 
     let mut state = if restore {
@@ -352,6 +338,35 @@ async fn main() {
         consumed_child_results: Mutex::new(HashSet::new()),
         policy: Mutex::new(spec.policy.clone().unwrap_or_default()),
     });
+
+    let restore_clarification = restore
+        && shared
+            .state
+            .lock()
+            .await
+            .trace
+            .last()
+            .is_some_and(|step| step.action == "local.clarify");
+    if !restore || restore_clarification {
+        if let Some(reply) = local_price_reply(&spec) {
+            if !matches!(reply, PriceReply::Computed(_)) {
+                register_worker_control(&bus_addr, &bus, &agent_id, &shared);
+            }
+            run_local_price(&bus, &spec, &shared, &mut cmd_rx, reply).await;
+            return;
+        }
+    }
+
+    inherit_session_model(&bus, &mut spec).await;
+    inherit_device_vision_model(&bus, &mut spec).await;
+
+    let canvas_exported: Vec<String> = bus
+        .call::<(), Vec<ModuleInfo>>("module.list", &(), vec![])
+        .await
+        .map(|list| canvas_tools_from_module_list(&list))
+        .unwrap_or_default();
+    restrict_canvas_tools(&mut spec.tools, &canvas_exported);
+    let _ = persist::write_spec(&spec);
 
     // Skills + tools + MCP + modules installés (catalogue dynamique)
     let mut skill_docs = load_skills(&spec.skills);
@@ -389,96 +404,7 @@ async fn main() {
 
     // Index documents
     index_documents(&bus, &agent_id, &spec.caps, &spec.documents).await;
-
-    // Control service
-    {
-        let mut svc = BusService::new(format!("agent-{agent_id}"));
-        let control_intent = format!("agent.{agent_id}.control");
-        let shared_c = shared.clone();
-        let bus_c = bus.clone();
-        svc.on(&control_intent, move |ctx| {
-            let shared = shared_c.clone();
-            let bus = bus_c.clone();
-            async move {
-                let cmd: ControlCmd = match ctx.payload() {
-                    Ok(c) => c,
-                    Err(_) => {
-                        let _ = ctx
-                            .respond(
-                                aos_ipc::msg::Status::BadRequest,
-                                &ControlResp::Error("payload invalide".into()),
-                            )
-                            .await;
-                        return;
-                    }
-                };
-                let resp = match cmd {
-                    ControlCmd::Pause => {
-                        shared.paused.store(true, Ordering::SeqCst);
-                        if let Some(id) = shared.current_inference.lock().await.take() {
-                            let _ = bus
-                                .call::<CancelRequest, bool>(
-                                    "model.cancel",
-                                    &CancelRequest { inference_id: id },
-                                    vec![],
-                                )
-                                .await;
-                        }
-                        ControlResp::Ack
-                    }
-                    ControlCmd::Resume => {
-                        shared.paused.store(false, Ordering::SeqCst);
-                        let _ = shared.cmd_tx.send(WorkerCmd::Resume).await;
-                        ControlResp::Ack
-                    }
-                    ControlCmd::Steer { directive } => {
-                        let _ = shared.cmd_tx.send(WorkerCmd::Steer(directive)).await;
-                        ControlResp::Ack
-                    }
-                    ControlCmd::ChildFinished {
-                        child_id,
-                        result,
-                        ok,
-                    } => {
-                        record_child_finished(&shared, child_id.clone(), result.clone(), ok).await;
-                        let _ = shared
-                            .cmd_tx
-                            .send(WorkerCmd::ChildFinished {
-                                child_id,
-                                result,
-                                ok,
-                            })
-                            .await;
-                        ControlResp::Ack
-                    }
-                    ControlCmd::Snapshot => ControlResp::State(shared.state.lock().await.clone()),
-                    ControlCmd::GrantCap { cap } => {
-                        let mut st = shared.state.lock().await;
-                        if !st.cap_set_snapshot.contains(&cap) {
-                            st.cap_set_snapshot.push(cap.clone());
-                        }
-                        ControlResp::Ack
-                    }
-                    ControlCmd::SetPolicy { policy } => {
-                        *shared.policy.lock().await = policy;
-                        ControlResp::Ack
-                    }
-                    ControlCmd::ActDecision { act_id, approved } => {
-                        let _ = shared
-                            .cmd_tx
-                            .send(WorkerCmd::ActDecision { act_id, approved })
-                            .await;
-                        ControlResp::Ack
-                    }
-                };
-                let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
-            }
-        });
-        let svc_bus = bus_addr.clone();
-        tokio::spawn(async move {
-            let _ = svc.serve(&svc_bus).await;
-        });
-    }
+    register_worker_control(&bus_addr, &bus, &agent_id, &shared);
 
     report(
         &bus,
@@ -2147,7 +2073,101 @@ async fn main() {
     // Exit process → agentd marks Done if not already
 }
 
-async fn complete_local_price(bus: &BusClient, spec: &AgentSpec) -> bool {
+fn register_worker_control(
+    bus_addr: &str,
+    bus: &Arc<BusClient>,
+    agent_id: &str,
+    shared: &Arc<Shared>,
+) {
+    let mut svc = BusService::new(format!("agent-{agent_id}"));
+    let control_intent = format!("agent.{agent_id}.control");
+    let shared_c = shared.clone();
+    let bus_c = bus.clone();
+    svc.on(&control_intent, move |ctx| {
+        let shared = shared_c.clone();
+        let bus = bus_c.clone();
+        async move {
+            let cmd: ControlCmd = match ctx.payload() {
+                Ok(c) => c,
+                Err(_) => {
+                    let _ = ctx
+                        .respond(
+                            aos_ipc::msg::Status::BadRequest,
+                            &ControlResp::Error("payload invalide".into()),
+                        )
+                        .await;
+                    return;
+                }
+            };
+            let resp = match cmd {
+                ControlCmd::Pause => {
+                    shared.paused.store(true, Ordering::SeqCst);
+                    if let Some(id) = shared.current_inference.lock().await.take() {
+                        let _ = bus
+                            .call::<CancelRequest, bool>(
+                                "model.cancel",
+                                &CancelRequest { inference_id: id },
+                                vec![],
+                            )
+                            .await;
+                    }
+                    ControlResp::Ack
+                }
+                ControlCmd::Resume => {
+                    shared.paused.store(false, Ordering::SeqCst);
+                    let _ = shared.cmd_tx.send(WorkerCmd::Resume).await;
+                    ControlResp::Ack
+                }
+                ControlCmd::Steer { directive } => {
+                    let _ = shared.cmd_tx.send(WorkerCmd::Steer(directive)).await;
+                    ControlResp::Ack
+                }
+                ControlCmd::ChildFinished {
+                    child_id,
+                    result,
+                    ok,
+                } => {
+                    record_child_finished(&shared, child_id.clone(), result.clone(), ok).await;
+                    let _ = shared
+                        .cmd_tx
+                        .send(WorkerCmd::ChildFinished {
+                            child_id,
+                            result,
+                            ok,
+                        })
+                        .await;
+                    ControlResp::Ack
+                }
+                ControlCmd::Snapshot => ControlResp::State(shared.state.lock().await.clone()),
+                ControlCmd::GrantCap { cap } => {
+                    let mut st = shared.state.lock().await;
+                    if !st.cap_set_snapshot.contains(&cap) {
+                        st.cap_set_snapshot.push(cap.clone());
+                    }
+                    ControlResp::Ack
+                }
+                ControlCmd::SetPolicy { policy } => {
+                    *shared.policy.lock().await = policy;
+                    ControlResp::Ack
+                }
+                ControlCmd::ActDecision { act_id, approved } => {
+                    let _ = shared
+                        .cmd_tx
+                        .send(WorkerCmd::ActDecision { act_id, approved })
+                        .await;
+                    ControlResp::Ack
+                }
+            };
+            let _ = ctx.respond(aos_ipc::msg::Status::Ok, &resp).await;
+        }
+    });
+    let svc_bus = bus_addr.to_owned();
+    tokio::spawn(async move {
+        let _ = svc.serve(&svc_bus).await;
+    });
+}
+
+fn local_price_reply(spec: &AgentSpec) -> Option<PriceReply> {
     if spec.parent_id.is_some()
         || spec.cognitive_mode.is_deep_thinking()
         || spec.system_prompt.is_some()
@@ -2160,64 +2180,188 @@ async fn complete_local_price(bus: &BusClient, spec: &AgentSpec) -> bool {
         || spec.goal.max_steps == 0
         || spec.goal.timeout_secs == 0
     {
-        return false;
+        return None;
     }
-    let Some(aos_proto::local_price::PriceReply::Computed(answer)) =
-        aos_proto::local_price::price_reply(&spec.goal.statement)
-    else {
-        return false;
-    };
-    let record = AgentStepRecord {
-        step: 1,
-        response: answer.clone(),
-        action: "local.calculate".into(),
-        tool_kind: "runtime".into(),
-        tool_result: answer.clone(),
-        args: serde_json::json!({ "model_calls": 0 }),
-        ts_ms: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or_default(),
-        ..Default::default()
-    };
+    price_reply(&spec.goal.statement)
+}
+
+async fn run_local_price(
+    bus: &BusClient,
+    spec: &AgentSpec,
+    shared: &Shared,
+    commands: &mut mpsc::Receiver<WorkerCmd>,
+    reply: PriceReply,
+) {
     let id = &spec.agent_id;
-    let mut state = CognitiveState::new(id.clone(), spec.caps.clone());
-    state.goal = Some(spec.goal.clone());
-    state.complexity = Some("simple".into());
-    state.needs_plan = false;
-    state.step = 1;
-    state.artifacts.push(answer.clone());
-    state.trace.push(record.clone());
-    if let Err(err) = persist::write_state(&state) {
-        report(bus, id, AgentOutputEvent::Error { message: err.to_string() }).await;
+    report(
+        bus,
+        id,
+        AgentOutputEvent::StateChanged {
+            state: AgentState::Running,
+        },
+    )
+    .await;
+
+    let answer = match reply {
+        PriceReply::Computed(answer) => answer,
+        clarification => {
+            let missing_discount = clarification == PriceReply::MissingDiscount;
+            let question = if missing_discount {
+                format!(
+                    "{} Indiquez le taux avec le signe %.",
+                    clarification.into_text()
+                )
+            } else {
+                format!(
+                    "{} Reformulez la demande avec toutes les valeurs.",
+                    clarification.into_text()
+                )
+            };
+            if !record_local_price(bus, id, shared, "local.clarify", &question).await {
+                return;
+            }
+            let deadline = tokio::time::Instant::now()
+                + USER_ASK_TIMEOUT.min(Duration::from_secs(spec.goal.timeout_secs));
+            loop {
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                if remaining.is_zero() {
+                    fail_local_price(bus, id, "Le calcul attend encore des valeurs précises.")
+                        .await;
+                    return;
+                }
+                shared.paused.store(true, Ordering::SeqCst);
+                report(
+                    bus,
+                    id,
+                    AgentOutputEvent::Log {
+                        line: format!("user.ask : {question}"),
+                    },
+                )
+                .await;
+                report(
+                    bus,
+                    id,
+                    AgentOutputEvent::StateChanged {
+                        state: AgentState::Blocked,
+                    },
+                )
+                .await;
+                post_user_question(bus, spec, &question).await;
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                let response = match wait_user_answer(shared, commands, remaining).await {
+                    AskWait::Answer(response) => response,
+                    AskWait::Timeout { .. } => {
+                        fail_local_price(bus, id, "Le calcul attend encore des valeurs précises.")
+                            .await;
+                        return;
+                    }
+                    AskWait::Killed => {
+                        report(
+                            bus,
+                            id,
+                            AgentOutputEvent::StateChanged {
+                                state: AgentState::Killed,
+                            },
+                        )
+                        .await;
+                        return;
+                    }
+                };
+                let parsed = if missing_discount {
+                    price_reply_with_discount(&spec.goal.statement, &response)
+                } else {
+                    price_reply(&response)
+                };
+                report(
+                    bus,
+                    id,
+                    AgentOutputEvent::StateChanged {
+                        state: AgentState::Running,
+                    },
+                )
+                .await;
+                if let Some(PriceReply::Computed(answer)) = parsed {
+                    break answer;
+                }
+            }
+        }
+    };
+    if record_local_price(bus, id, shared, "local.calculate", &answer).await {
         report(
             bus,
             id,
-            AgentOutputEvent::StateChanged { state: AgentState::Failed },
+            AgentOutputEvent::Log {
+                line: format!("goal.complete : {answer}"),
+            },
         )
         .await;
-        return true;
+        report(
+            bus,
+            id,
+            AgentOutputEvent::StateChanged {
+                state: AgentState::Done,
+            },
+        )
+        .await;
     }
-    report(
-        bus,
-        id,
-        AgentOutputEvent::StateChanged { state: AgentState::Running },
-    )
-    .await;
+}
+
+async fn record_local_price(
+    bus: &BusClient,
+    id: &str,
+    shared: &Shared,
+    action: &str,
+    text: &str,
+) -> bool {
+    let (record, persisted) = {
+        let mut state = shared.state.lock().await;
+        state.complexity = Some("simple".into());
+        state.needs_plan = false;
+        state.step += 1;
+        if action == "local.calculate" {
+            state.artifacts.push(text.into());
+        }
+        let record = AgentStepRecord {
+            step: state.step,
+            response: text.into(),
+            action: action.into(),
+            tool_kind: "runtime".into(),
+            tool_result: text.into(),
+            args: serde_json::json!({ "model_calls": 0 }),
+            ts_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        state.trace.push(record.clone());
+        (record, persist::write_state(&state))
+    };
+    if let Err(err) = persisted {
+        fail_local_price(bus, id, &err.to_string()).await;
+        return false;
+    }
     report(bus, id, AgentOutputEvent::Step(record)).await;
-    report(
-        bus,
-        id,
-        AgentOutputEvent::Log { line: format!("goal.complete : {answer}") },
-    )
-    .await;
-    report(
-        bus,
-        id,
-        AgentOutputEvent::StateChanged { state: AgentState::Done },
-    )
-    .await;
     true
+}
+
+async fn fail_local_price(bus: &BusClient, id: &str, message: &str) {
+    report(
+        bus,
+        id,
+        AgentOutputEvent::Error {
+            message: message.into(),
+        },
+    )
+    .await;
+    report(
+        bus,
+        id,
+        AgentOutputEvent::StateChanged {
+            state: AgentState::Failed,
+        },
+    )
+    .await;
 }
 
 enum InferOutcome {
