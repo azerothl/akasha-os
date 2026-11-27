@@ -602,6 +602,36 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                     .await;
             }
 
+            let local_reply = if !deep_thinking && images.is_empty() && documents.is_empty() {
+                aos_proto::local_price::price_reply(&user_text)
+            } else {
+                None
+            };
+            if let Some(reply) = local_reply {
+                let text = reply.into_text();
+                let _ = bus
+                    .call::<ChatSessionAppendRequest, aos_proto::ChatSessionMessage>(
+                        "chat.session.append",
+                        &ChatSessionAppendRequest {
+                            session_id: session_id.clone(),
+                            role: "assistant".into(),
+                            content: text.clone(),
+                            attachments: vec![],
+                            speaker_id: None,
+                            speaker_name: None,
+                            thinking: None,
+                        },
+                        vec![],
+                    )
+                    .await;
+                let _ = evt_tx.send(Evt::Done {
+                    text,
+                    session_id,
+                    attachments: vec![],
+                });
+                return;
+            }
+
             // Deep Thinking chip: spawn immediately — do not run a long supervisor
             // inference that times out mid-answer then re-delegates on "Continue…".
             // Partial-continuation turns stay in Direct chat to finish the stream.
