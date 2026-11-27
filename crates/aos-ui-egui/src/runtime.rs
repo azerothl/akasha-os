@@ -738,51 +738,69 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                 }
             }
 
-            let mem_block = bus
-                .call::<MemContextRequest, MemContextResponse>(
-                    "mem.context",
-                    &MemContextRequest {
-                        session_id: Some(session_id.clone()),
-                        namespace: None,
-                        query: user_content.clone(),
-                        k: 5,
-                        product_k: 4,
-                        user_doc_k: 0,
-                    },
-                    vec![],
-                )
-                .await
-                .ok()
-                .map(|r| r.prompt_block)
-                .unwrap_or_default();
+            let brief_definition = !deep_thinking
+                && !canvas_open
+                && !illustration_open
+                && images.is_empty()
+                && documents.is_empty()
+                && aos_agent::assess::is_brief_definition(&user_text);
+            let system = if brief_definition {
+                aos_agent::assess::BRIEF_DEFINITION_INSTRUCTION.into()
+            } else {
+                let mem_block = bus
+                    .call::<MemContextRequest, MemContextResponse>(
+                        "mem.context",
+                        &MemContextRequest {
+                            session_id: Some(session_id.clone()),
+                            namespace: None,
+                            query: user_content.clone(),
+                            k: 5,
+                            product_k: 4,
+                            user_doc_k: 0,
+                        },
+                        vec![],
+                    )
+                    .await
+                    .ok()
+                    .map(|r| r.prompt_block)
+                    .unwrap_or_default();
 
-            let version = std::env::var("AOS_PREVIEW_VERSION")
-                .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
-            let product = crate::product_context::chat_product_context(&version, &language);
+                let version = std::env::var("AOS_PREVIEW_VERSION")
+                    .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+                let product = crate::product_context::chat_product_context(&version, &language);
 
-            let mut system = format_system_assistant_prompt(&version);
-            system.push_str(CHAT_DELEGATION_PROMPT);
-            let roster_agents: Vec<AgentInfo> = bus
-                .call(aos_agent::intents::LIST, &(), vec![])
-                .await
-                .unwrap_or_default();
-            system.push_str(&format_roster_for_delegation_prompt(&roster_agents));
-            system.push_str(&format_chat_supervisor_lock(&version));
-            system.push_str("\n\n");
-            system.push_str(&product);
-            if !mem_block.trim().is_empty() {
+                let mut system = format_system_assistant_prompt(&version);
+                system.push_str(CHAT_DELEGATION_PROMPT);
+                let roster_agents: Vec<AgentInfo> = bus
+                    .call(aos_agent::intents::LIST, &(), vec![])
+                    .await
+                    .unwrap_or_default();
+                system.push_str(&format_roster_for_delegation_prompt(&roster_agents));
+                system.push_str(&format_chat_supervisor_lock(&version));
                 system.push_str("\n\n");
-                system.push_str(&mem_block);
-            }
+                system.push_str(&product);
+                if !mem_block.trim().is_empty() {
+                    system.push_str("\n\n");
+                    system.push_str(&mem_block);
+                }
+                system
+            };
             let mut messages = vec![ChatMessage {
                 role: "system".into(),
                 content: system,
             }];
             let history_for_consider = history.clone();
-            messages.extend(history.into_iter().map(|(r, c)| ChatMessage {
-                role: r,
-                content: c,
-            }));
+            if brief_definition {
+                messages.push(ChatMessage {
+                    role: "user".into(),
+                    content: user_text.clone(),
+                });
+            } else {
+                messages.extend(history.into_iter().map(|(r, c)| ChatMessage {
+                    role: r,
+                    content: c,
+                }));
+            }
             aos_proto::chat_document::apply_documents_to_infer_messages(&mut messages, &documents);
             let mut infer_images = images.clone();
             let canvas_png = if canvas_open {
@@ -866,21 +884,25 @@ async fn handle_cmd(bus: Arc<BusClient>, evt_tx: Sender<Evt>, egui_ctx: egui::Co
                             return;
                         }
 
-                        let canvas_exported: Vec<String> = bus
-                            .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
-                            .await
-                            .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
-                            .unwrap_or_default();
+                        let mut delegate = if brief_definition {
+                            None
+                        } else {
+                            let canvas_exported: Vec<String> = bus
+                                .call::<(), Vec<aos_proto::ModuleInfo>>("module.list", &(), vec![])
+                                .await
+                                .map(|list| aos_agent::tools::canvas_tools_from_module_list(&list))
+                                .unwrap_or_default();
 
-                        // Délégation : agent.spawn / filet module → worker en fond
-                        let mut delegate = chat_delegate_agent_spec(
-                            &user_text,
-                            &full,
-                            canvas_open,
-                            illustration_open,
-                            canvas_aspect,
-                            &canvas_exported,
-                        );
+                            // Délégation : agent.spawn / filet module → worker en fond
+                            chat_delegate_agent_spec(
+                                &user_text,
+                                &full,
+                                canvas_open,
+                                illustration_open,
+                                canvas_aspect,
+                                &canvas_exported,
+                            )
+                        };
                         if deep_thinking
                             && !crate::chat_delegate::chat_is_partial_continuation(&user_text)
                             && delegate.is_none()
