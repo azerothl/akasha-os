@@ -2,6 +2,47 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Instruction shared by the chat and the native worker for a short definition.
+pub const BRIEF_DEFINITION_INSTRUCTION: &str =
+    "Réponds en une seule phrase. Donne la définition minimale et suffisante. Par exemple, un quadrilatère est un polygone à quatre côtés, quelle que soit la longueur de ses côtés. Si le terme dénote une classe, utilise seulement les conditions nécessaires, valables pour chaque membre.";
+
+/// Recognize an explicit one-sentence definition of a single standalone term.
+pub fn is_brief_definition(statement: &str) -> bool {
+    let normalized = statement.trim().trim_end_matches(['.', '?']).to_lowercase();
+    let term = normalized
+        .strip_prefix("définis ")
+        .and_then(|query| query.strip_suffix(" en une phrase"))
+        .or_else(|| {
+            normalized
+                .strip_prefix("define ")
+                .and_then(|query| query.strip_suffix(" in one sentence"))
+        });
+    term.is_some_and(|term| {
+        let term = ["un ", "une ", "le ", "la ", "a ", "an ", "the "]
+            .iter()
+            .find_map(|article| term.strip_prefix(article))
+            .unwrap_or(term);
+        (2..=40).contains(&term.chars().count())
+            && !matches!(
+                term,
+                "moi"
+                    | "toi"
+                    | "nous"
+                    | "vous"
+                    | "ça"
+                    | "cela"
+                    | "me"
+                    | "you"
+                    | "us"
+                    | "this"
+                    | "that"
+            )
+            && term
+                .split('-')
+                .all(|part| !part.is_empty() && part.chars().all(char::is_alphabetic))
+    })
+}
+
 /// Résultat d'une évaluation de complexité.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssessResult {
